@@ -2,7 +2,7 @@
   "name": "sampledb",
   "version": "1.0.0",
   "private": true,
-  "description": "Laboratory Information Management System",
+  "description": "Laboratory Information Management System for sample tracking, experiment management, and SRA submissions",
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "dev:api": "pnpm --filter @sampledb/api dev",
@@ -14,7 +14,7 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
   },
-  "keywords": ["lims", "laboratory", "sample-management"],
+  "keywords": ["lims", "laboratory", "sample-management", "malaria", "research"],
   "author": "",
   "license": "MIT",
   "engines": {
