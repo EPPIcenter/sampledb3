@@ -14,10 +14,20 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
   },
-  "keywords": ["lims", "laboratory", "sample-management", "malaria", "research"],
+  "keywords": [
+    "lims",
+    "laboratory",
+    "sample-management",
+    "malaria",
+    "research"
+  ],
   "author": "",
   "license": "MIT",
   "engines": {
     "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "d3-quadtree": "^3.0.1",
+    "recharts": "^3.6.0"
   }
 }

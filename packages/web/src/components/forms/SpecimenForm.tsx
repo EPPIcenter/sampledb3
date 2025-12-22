@@ -1,0 +1,580 @@
+import { useState, useEffect } from 'react'
+import { 
+  specimensApi, 
+  type Specimen, 
+  specimenTypesApi, 
+  type SpecimenType,
+  studiesApi,
+  type Study,
+  type StudySubject,
+  controlsApi,
+  type ControlDefinition,
+  reagentsApi,
+  type Reagent,
+  cellLinesApi,
+  type CellLine,
+  plasmidsApi,
+  type Plasmid,
+  standardsApi,
+  type Standard,
+} from '../../lib/api'
+import { useNavigate } from 'react-router-dom'
+import StudyPicker from '../StudyPicker'
+import AliquotRegistration, { type AliquotData } from '../AliquotRegistration'
+import { subjectsApi } from '../../lib/api'
+
+interface SpecimenFormProps {
+  specimen?: Specimen
+  subjectId?: number
+  studyId?: number
+  studyShortCode?: string
+  subjectName?: string
+  controlBatchId?: number
+  controlBatchName?: string
+  onSuccess?: () => void
+}
+
+export default function SpecimenForm({ 
+  specimen, 
+  subjectId,
+  studyId,
+  studyShortCode,
+  subjectName,
+  controlBatchId,
+  controlBatchName,
+  onSuccess 
+}: SpecimenFormProps) {
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [studies, setStudies] = useState<Study[]>([])
+  const [subjects, setSubjects] = useState<StudySubject[]>([])
+  const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
+  const [controls, setControls] = useState<ControlDefinition[]>([])
+  const [reagents, setReagents] = useState<Reagent[]>([])
+  const [cellLines, setCellLines] = useState<CellLine[]>([])
+  const [plasmids, setPlasmids] = useState<Plasmid[]>([])
+  const [standards, setStandards] = useState<Standard[]>([])
+  const [formData, setFormData] = useState({
+    sourceType: (subjectId ? 'subject' : (controlBatchId ? 'control' : (specimen?.sourceType || 'subject'))) as 'subject' | 'control' | 'reagent' | 'cell_line' | 'plasmid' | 'standard',
+    sourceId: subjectId || controlBatchId || specimen?.sourceId || 0,
+    studyId: studyId || 0,
+    studyShortCode: studyShortCode || '',
+    subjectName: subjectName || controlBatchName || '',
+    createNewSubject: false,
+    specimenTypeId: specimen?.specimenTypeId || 0,
+    specimenTypeName: '',
+    collectionDate: specimen?.collectionDate || '',
+  })
+  const [aliquotData, setAliquotData] = useState<AliquotData | null>(null)
+  const [aliquotValid, setAliquotValid] = useState(true)
+
+  useEffect(() => {
+    loadStudies()
+    loadSpecimenTypes()
+    // If subjectId is provided, load subjects for the study
+    if (subjectId && studyId && studyId > 0) {
+      loadSubjects(studyId)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (studyId && studyId > 0 && formData.sourceType === 'subject') {
+      loadSubjects(studyId)
+    }
+  }, [studyId])
+
+  useEffect(() => {
+    if (formData.studyId > 0 && formData.sourceType === 'subject') {
+      loadSubjects(formData.studyId)
+    }
+  }, [formData.studyId, formData.sourceType])
+
+  useEffect(() => {
+    if (formData.sourceType !== 'subject') {
+      loadSourceEntities(formData.sourceType)
+    }
+  }, [formData.sourceType])
+
+  const loadStudies = async () => {
+    try {
+      const response = await studiesApi.list()
+      setStudies(response.data.studies)
+    } catch (error) {
+      console.error('Failed to load studies:', error)
+    }
+  }
+
+  const loadSpecimenTypes = async () => {
+    try {
+      const response = await specimenTypesApi.list()
+      setSpecimenTypes(response.data.specimenTypes || [])
+    } catch (error) {
+      console.error('Failed to load specimen types:', error)
+    }
+  }
+
+  const loadSubjects = async (studyId: number) => {
+    try {
+      const response = await studiesApi.getSubjects(studyId)
+      setSubjects(response.data.subjects)
+    } catch (error) {
+      console.error('Failed to load subjects:', error)
+    }
+  }
+
+  const loadSourceEntities = async (sourceType: 'control' | 'reagent' | 'cell_line' | 'plasmid' | 'standard') => {
+    try {
+      switch (sourceType) {
+        case 'control':
+          const controlsRes = await controlsApi.list()
+          setControls(controlsRes.data.controls || [])
+          break
+        case 'reagent':
+          const reagentsRes = await reagentsApi.list()
+          setReagents(reagentsRes.data.reagents || [])
+          break
+        case 'cell_line':
+          const cellLinesRes = await cellLinesApi.list()
+          setCellLines(cellLinesRes.data.cellLines || [])
+          break
+        case 'plasmid':
+          const plasmidsRes = await plasmidsApi.list()
+          setPlasmids(plasmidsRes.data.plasmids || [])
+          break
+        case 'standard':
+          const standardsRes = await standardsApi.list()
+          setStandards(standardsRes.data.standards || [])
+          break
+      }
+    } catch (error) {
+      console.error(`Failed to load ${sourceType} entities:`, error)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    try {
+      if (specimen) {
+        setError('Update not yet implemented')
+        setLoading(false)
+        return
+      }
+
+      // If creating new subject, create it first
+      let sourceId = formData.sourceId
+      if (formData.sourceType === 'subject' && formData.createNewSubject) {
+        if (!formData.studyId || !formData.subjectName.trim()) {
+          setError('Please select a study and enter a subject name')
+          setLoading(false)
+          return
+        }
+
+        try {
+          const subjectResponse = await subjectsApi.create({
+            studyId: formData.studyId,
+            name: formData.subjectName.trim(),
+          })
+          sourceId = subjectResponse.data.subject.id
+        } catch (err: any) {
+          setError(err.response?.data?.error || 'Failed to create subject')
+          setLoading(false)
+          return
+        }
+      }
+
+      // Build specimen data using human-readable identifiers
+      const data: any = {
+        sourceType: formData.sourceType,
+      }
+
+      if (formData.sourceType === 'subject') {
+        if (subjectId) {
+          // Use the subjectId provided as prop (from context)
+          data.sourceId = subjectId
+        } else if (formData.createNewSubject) {
+          // Use the newly created subject ID
+          data.sourceId = sourceId
+        } else if (formData.sourceId) {
+          // Use existing subject ID
+          data.sourceId = formData.sourceId
+        } else if (formData.studyShortCode && formData.subjectName) {
+          // Use human-readable identifiers
+          data.studyShortCode = formData.studyShortCode
+          data.subjectName = formData.subjectName
+        } else {
+          setError('Please select or create a subject')
+          setLoading(false)
+          return
+        }
+      } else if (formData.sourceType === 'control') {
+        data.sourceId = controlBatchId || formData.sourceId
+      } else {
+        data.sourceId = formData.sourceId
+      }
+
+      // Use specimen type name if available, otherwise use ID
+      if (formData.specimenTypeName) {
+        data.specimenTypeName = formData.specimenTypeName
+      } else if (formData.specimenTypeId) {
+        data.specimenTypeId = formData.specimenTypeId
+      } else {
+        setError('Please select a specimen type')
+        setLoading(false)
+        return
+      }
+
+      if (formData.collectionDate) {
+        data.collectionDate = formData.collectionDate
+      }
+
+      // Add aliquot data if provided
+      if (aliquotData && aliquotData.mode !== 'skip') {
+        data.aliquot = aliquotData
+      }
+
+      const response = await specimensApi.create(data)
+      if (onSuccess) {
+        onSuccess()
+      } else {
+        // Navigate to the newly created specimen's detail page
+        if (response.data.specimen?.id) {
+          navigate(`/specimens/${response.data.specimen.id}`)
+        } else {
+          navigate('/statistics')
+        }
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to save specimen')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-8">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
+
+      {!subjectId && !controlBatchId && (
+        <div className="space-y-6">
+          <h2 className="text-lg font-semibold text-gray-900">Source & Study</h2>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div>
+              <label htmlFor="specimen-source-type" className="block text-sm font-medium text-gray-700 mb-2">
+                Source Type *
+              </label>
+              <select
+                id="specimen-source-type"
+                value={formData.sourceType}
+                onChange={(e) => setFormData({ ...formData, sourceType: e.target.value as any, sourceId: 0 })}
+                required
+                className="form-select"
+              >
+                <option value="subject">Subject</option>
+                <option value="control">Control</option>
+                <option value="reagent">Reagent</option>
+                <option value="cell_line">Cell Line</option>
+                <option value="plasmid">Plasmid</option>
+                <option value="standard">Standard</option>
+              </select>
+            </div>
+          </div>
+
+          {formData.sourceType === 'control' && (
+            <div>
+              <label htmlFor="specimen-source" className="block text-sm font-medium text-gray-700 mb-2">
+                Control *
+              </label>
+              <select
+                id="specimen-source"
+                value={formData.sourceId || 0}
+                onChange={(e) => setFormData({ ...formData, sourceId: parseInt(e.target.value) || 0 })}
+                required
+                className="form-select"
+              >
+                <option value={0}>Select a control</option>
+                {controls.map((control) => (
+                  <option key={control.id} value={control.id}>
+                    {control.name} ({control.controlType})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {formData.sourceType === 'reagent' && (
+            <div>
+              <label htmlFor="specimen-source" className="block text-sm font-medium text-gray-700 mb-2">
+                Reagent *
+              </label>
+              <select
+                id="specimen-source"
+                value={formData.sourceId || 0}
+                onChange={(e) => setFormData({ ...formData, sourceId: parseInt(e.target.value) || 0 })}
+                required
+                className="form-select"
+              >
+                <option value={0}>Select a reagent</option>
+                {reagents.map((reagent) => (
+                  <option key={reagent.id} value={reagent.id}>
+                    {reagent.name} ({reagent.reagentType})
+                    {reagent.catalogNumber && ` - ${reagent.catalogNumber}`}
+                    {reagent.lotNumber && ` Lot: ${reagent.lotNumber}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {formData.sourceType === 'cell_line' && (
+            <div>
+              <label htmlFor="specimen-source" className="block text-sm font-medium text-gray-700 mb-2">
+                Cell Line *
+              </label>
+              <select
+                id="specimen-source"
+                value={formData.sourceId || 0}
+                onChange={(e) => setFormData({ ...formData, sourceId: parseInt(e.target.value) || 0 })}
+                required
+                className="form-select"
+              >
+                <option value={0}>Select a cell line</option>
+                {cellLines.map((cellLine) => (
+                  <option key={cellLine.id} value={cellLine.id}>
+                    {cellLine.name} ({cellLine.species}
+                    {cellLine.strain && ` - ${cellLine.strain}`})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {formData.sourceType === 'plasmid' && (
+            <div>
+              <label htmlFor="specimen-source" className="block text-sm font-medium text-gray-700 mb-2">
+                Plasmid *
+              </label>
+              <select
+                id="specimen-source"
+                value={formData.sourceId || 0}
+                onChange={(e) => setFormData({ ...formData, sourceId: parseInt(e.target.value) || 0 })}
+                required
+                className="form-select"
+              >
+                <option value={0}>Select a plasmid</option>
+                {plasmids.map((plasmid) => (
+                  <option key={plasmid.id} value={plasmid.id}>
+                    {plasmid.name}
+                    {plasmid.insertName && ` - ${plasmid.insertName}`}
+                    {plasmid.backbone && ` (${plasmid.backbone})`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {formData.sourceType === 'standard' && (
+            <div>
+              <label htmlFor="specimen-source" className="block text-sm font-medium text-gray-700 mb-2">
+                Standard *
+              </label>
+              <select
+                id="specimen-source"
+                value={formData.sourceId || 0}
+                onChange={(e) => setFormData({ ...formData, sourceId: parseInt(e.target.value) || 0 })}
+                required
+                className="form-select"
+              >
+                <option value={0}>Select a standard</option>
+                {standards.map((standard) => (
+                  <option key={standard.id} value={standard.id}>
+                    {standard.name} ({standard.standardType})
+                    {standard.manufacturer && ` - ${standard.manufacturer}`}
+                    {standard.catalogNumber && ` ${standard.catalogNumber}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {formData.sourceType === 'subject' && (
+            <div className="space-y-4">
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label htmlFor="specimen-study" className="block text-sm font-medium text-gray-700 mb-2">
+                    Study *
+                  </label>
+                  <StudyPicker
+                    value={formData.studyId || undefined}
+                    onChange={(id) => {
+                      const selectedStudy = studies.find(s => s.id === id)
+                      setFormData({
+                        ...formData,
+                        studyId: id,
+                        studyShortCode: selectedStudy?.shortCode || '',
+                        sourceId: 0,
+                        createNewSubject: false,
+                      })
+                    }}
+                  />
+                </div>
+
+                {formData.studyId > 0 && (
+                  <div>
+                    <div className="flex items-center space-x-2 mb-2">
+                      <label htmlFor="create-new-subject" className="block text-sm font-medium text-gray-700">
+                        Create New Subject
+                      </label>
+                      <input
+                        type="checkbox"
+                        id="create-new-subject"
+                        checked={formData.createNewSubject}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            createNewSubject: e.target.checked,
+                            sourceId: 0,
+                            subjectName: '',
+                          })
+                        }
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-100 rounded"
+                      />
+                    </div>
+
+                    {formData.createNewSubject ? (
+                      <div>
+                        <label htmlFor="new-subject-name" className="block text-sm font-medium text-gray-700 mb-2">
+                          Subject Name *
+                        </label>
+                        <input
+                          id="new-subject-name"
+                          type="text"
+                          value={formData.subjectName}
+                          onChange={(e) =>
+                            setFormData({ ...formData, subjectName: e.target.value })
+                          }
+                          required
+                          className="form-input"
+                          placeholder="Enter subject name"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label htmlFor="specimen-subject" className="block text-sm font-medium text-gray-700 mb-2">
+                          Subject *
+                        </label>
+                        <select
+                          id="specimen-subject"
+                          value={formData.sourceId}
+                          onChange={(e) => {
+                            const selectedSubject = subjects.find(s => s.id === parseInt(e.target.value))
+                            setFormData({
+                              ...formData,
+                              sourceId: parseInt(e.target.value),
+                              subjectName: selectedSubject?.name || '',
+                            })
+                          }}
+                          required
+                          className="form-select"
+                        >
+                          <option value={0}>Select a subject</option>
+                          {subjects
+                            .slice()
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map((subject) => (
+                              <option key={subject.id} value={subject.id}>
+                                {subject.name}
+                                {typeof subject.specimenCount === 'number'
+                                  ? ` (${subject.specimenCount} specimens)`
+                                  : ''}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-6">
+        <h2 className="text-lg font-semibold text-gray-900">Specimen Details</h2>
+        <div className="grid gap-6 md:grid-cols-2">
+          <div>
+            <label htmlFor="specimen-type" className="block text-sm font-medium text-gray-700 mb-2">
+              Specimen Type *
+            </label>
+            <select
+              id="specimen-type"
+              value={formData.specimenTypeName || formData.specimenTypeId || 0}
+              onChange={(e) => {
+                const selectedType = specimenTypes.find(t => t.id === parseInt(e.target.value) || t.name === e.target.value)
+                setFormData({
+                  ...formData,
+                  specimenTypeId: selectedType?.id || 0,
+                  specimenTypeName: selectedType?.name || '',
+                })
+              }}
+              required
+              className="form-select"
+            >
+              <option value={0}>Select a specimen type</option>
+              {specimenTypes.map((type) => (
+                <option key={type.id} value={type.name}>
+                  {type.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="collection-date" className="block text-sm font-medium text-gray-700 mb-2">
+              Collection Date
+            </label>
+            <input
+              id="collection-date"
+              type="date"
+              value={formData.collectionDate}
+              onChange={(e) => setFormData({ ...formData, collectionDate: e.target.value })}
+              className="form-input"
+            />
+          </div>
+        </div>
+      </div>
+
+      <AliquotRegistration
+        mode="optional"
+        defaultValue={aliquotData || undefined}
+        onChange={(data) => setAliquotData(data)}
+        onValidationChange={(isValid) => setAliquotValid(isValid)}
+      />
+
+      <div className="flex justify-end space-x-4">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="px-4 py-2 border border-gray-100 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={loading || !aliquotValid}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+        >
+          {loading ? 'Saving...' : specimen ? 'Update' : 'Create'}
+        </button>
+      </div>
+    </form>
+  )
+}

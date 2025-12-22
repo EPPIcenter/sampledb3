@@ -1,0 +1,99 @@
+import { serve } from '@hono/node-server'
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { logger } from 'hono/logger'
+import { serveStatic } from '@hono/node-server/serve-static'
+import { join } from 'path'
+import { fileURLToPath } from 'url'
+import { dirname } from 'path'
+import authRoutes from './routes/auth'
+import studiesRoutes from './routes/studies'
+import specimensRoutes from './routes/specimens'
+import controlsRoutes from './routes/controls'
+import reagentsRoutes from './routes/reagents'
+import locationsRoutes from './routes/locations'
+import exportRoutes from './routes/export'
+import searchRoutes from './routes/search'
+import containersRoutes from './routes/containers'
+import subjectsRoutes from './routes/subjects'
+import bulkRoutes from './routes/bulk'
+import activityRoutes from './routes/activity'
+import collectionsRoutes from './routes/collections'
+import specimenTypesRoutes from './routes/specimen-types'
+import statesRoutes from './routes/states'
+import storageTypesRoutes from './routes/storage-types'
+import sampleTypesRoutes from './routes/sample-types'
+import strainsRoutes from './routes/strains'
+import compositionsRoutes from './routes/compositions'
+import cellLinesRoutes from './routes/cell-lines'
+import plasmidsRoutes from './routes/plasmids'
+import standardsRoutes from './routes/standards'
+import statisticsRoutes from './routes/statistics'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+const app = new Hono()
+
+// Middleware
+app.use('*', logger())
+app.use('*', cors({
+  origin: ['http://localhost:5173', 'http://localhost:3000'],
+  credentials: true,
+}))
+
+// Health check
+app.get('/health', (c) => {
+  return c.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
+// API routes
+app.get('/api', (c) => {
+  return c.json({ message: 'SampleDB API', version: '1.0.0' })
+})
+
+// Auth routes
+app.route('/api/auth', authRoutes)
+
+// Data routes
+app.route('/api/studies', studiesRoutes)
+app.route('/api/specimens', specimensRoutes)
+app.route('/api/controls', controlsRoutes)
+app.route('/api/reagents', reagentsRoutes)
+app.route('/api/locations', locationsRoutes)
+app.route('/api/export', exportRoutes)
+app.route('/api/search', searchRoutes)
+app.route('/api/containers', containersRoutes)
+app.route('/api/subjects', subjectsRoutes)
+app.route('/api/bulk', bulkRoutes)
+app.route('/api/activity', activityRoutes)
+app.route('/api/collections', collectionsRoutes)
+app.route('/api/specimen-types', specimenTypesRoutes)
+app.route('/api/states', statesRoutes)
+app.route('/api/storage-types', storageTypesRoutes)
+app.route('/api/sample-types', sampleTypesRoutes)
+app.route('/api/strains', strainsRoutes)
+app.route('/api/compositions', compositionsRoutes)
+app.route('/api/cell-lines', cellLinesRoutes)
+app.route('/api/plasmids', plasmidsRoutes)
+app.route('/api/standards', standardsRoutes)
+app.route('/api/statistics', statisticsRoutes)
+
+// Serve static files from web build in production
+if (process.env.NODE_ENV === 'production') {
+  const staticPath = join(__dirname, '../../web/dist')
+  app.use('/*', serveStatic({ root: staticPath }))
+  app.get('*', serveStatic({ path: join(staticPath, 'index.html') }))
+}
+
+const port = Number(process.env.PORT) || 3000
+
+console.log(`🚀 SampleDB API server starting on port ${port}`)
+console.log(`📁 Database: ${process.env.DATABASE_PATH || './sampledb_database.sqlite'}`)
+
+serve({
+  fetch: app.fetch,
+  port,
+}, (info) => {
+  console.log(`✅ Server running at http://localhost:${info.port}`)
+})
