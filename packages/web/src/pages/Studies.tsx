@@ -32,12 +32,29 @@ export default function Studies() {
   const [filterLead, setFilterLead] = useState<string>('')
   const [summaryCache, setSummaryCache] = useState<Map<number, StudySummaryBasic>>(new Map())
   const [loadingSummaries, setLoadingSummaries] = useState<Set<number>>(new Set())
+  const [allLeadPersons, setAllLeadPersons] = useState<string[]>([])
   const limit = 50
   const [clientPage, setClientPage] = useState(1)
   const observerRef = useRef<IntersectionObserver | null>(null)
   const summaryObserverRef = useRef<IntersectionObserver | null>(null)
   const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
+
+  // Load all unique lead persons on mount
+  useEffect(() => {
+    const loadAllLeadPersons = async () => {
+      try {
+        // Fetch all studies to get all unique lead persons
+        const response = await studiesApi.list(undefined, { page: 1, limit: 10000 })
+        const allStudies = response.data.studies || []
+        const leads = new Set(allStudies.map(s => s.leadPerson).filter(Boolean))
+        setAllLeadPersons(Array.from(leads).sort())
+      } catch (error) {
+        console.error('Failed to load lead persons:', error)
+      }
+    }
+    loadAllLeadPersons()
+  }, [])
 
   // Check if we have active filters (client-side filtering)
   const hasActiveFilters = useMemo(() => {
@@ -269,12 +286,6 @@ export default function Studies() {
     }
   }, [hasMore, loading, loadingMore, hasActiveFilters])
 
-  // Get unique lead persons for filter
-  const leadPersons = useMemo(() => {
-    const leads = new Set(studies.map(s => s.leadPerson).filter(Boolean))
-    return Array.from(leads).sort()
-  }, [studies])
-
   // Filter and sort studies
   const filteredAndSortedStudies = useMemo(() => {
     let filtered = [...studies]
@@ -501,7 +512,7 @@ export default function Studies() {
             </select>
 
             {/* Lead Person Filter */}
-            {leadPersons.length > 0 && (
+            {allLeadPersons.length > 0 && (
               <select
                 value={filterLead}
                 onChange={(e) => {
@@ -510,7 +521,7 @@ export default function Studies() {
                 className="form-select text-sm"
               >
                 <option value="">All Lead Persons</option>
-                {leadPersons.map(lead => (
+                {allLeadPersons.map(lead => (
                   <option key={lead} value={lead}>{lead}</option>
                 ))}
               </select>
