@@ -14,7 +14,7 @@ locations.get('/', async (c) => {
     // Make pagination optional: if neither page nor limit is provided, return all locations
     const hasPagination = c.req.query('page') !== undefined || c.req.query('limit') !== undefined
     const page = hasPagination ? validatePage(c.req.query('page')) : 1
-    const limit = hasPagination ? validateLimit(c.req.query('limit')) : undefined
+    const limit = hasPagination ? await validateLimit(c.req.query('limit')) : undefined
     const offset = hasPagination ? (page - 1) * limit! : undefined
     
     let query = db.select().from(location)
@@ -95,19 +95,19 @@ locations.get('/:id', async (c) => {
   
   // Pagination parameters for each collection type
   const platesPage = validatePage(c.req.query('plates_page') || '1')
-  const platesLimit = validateLimit(c.req.query('plates_limit') || String(defaultLimit))
+  const platesLimit = await validateLimit(c.req.query('plates_limit') || String(defaultLimit))
   const platesOffset = (platesPage - 1) * platesLimit
 
   const cryovialBoxesPage = validatePage(c.req.query('cryovial_boxes_page') || '1')
-  const cryovialBoxesLimit = validateLimit(c.req.query('cryovial_boxes_limit') || String(defaultLimit))
+  const cryovialBoxesLimit = await validateLimit(c.req.query('cryovial_boxes_limit') || String(defaultLimit))
   const cryovialBoxesOffset = (cryovialBoxesPage - 1) * cryovialBoxesLimit
 
   const boxesPage = validatePage(c.req.query('boxes_page') || '1')
-  const boxesLimit = validateLimit(c.req.query('boxes_limit') || String(defaultLimit))
+  const boxesLimit = await validateLimit(c.req.query('boxes_limit') || String(defaultLimit))
   const boxesOffset = (boxesPage - 1) * boxesLimit
 
   const bagsPage = validatePage(c.req.query('bags_page') || '1')
-  const bagsLimit = validateLimit(c.req.query('bags_limit') || String(defaultLimit))
+  const bagsLimit = await validateLimit(c.req.query('bags_limit') || String(defaultLimit))
   const bagsOffset = (bagsPage - 1) * bagsLimit
 
   // Get total counts for pagination

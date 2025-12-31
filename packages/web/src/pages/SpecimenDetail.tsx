@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import { specimensApi, type Specimen } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import { getSpecimenTypeIcon, getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
+import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import { useModifierHotkey, useHotkey } from '../hooks/useHotkey'
 
 interface Container {
   id: number
@@ -38,6 +40,7 @@ interface SourceInfo {
 
 export default function SpecimenDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [specimen, setSpecimen] = useState<Specimen | null>(null)
   const [containers, setContainers] = useState<Container[]>([])
   const [sourceInfo, setSourceInfo] = useState<SourceInfo | null>(null)
@@ -115,12 +118,26 @@ export default function SpecimenDetail() {
     }
   }
 
+  // Hotkeys
+  // Backspace or Cmd/Ctrl+[ to go back
+  useHotkey('backspace', () => {
+    const activeElement = document.activeElement
+    if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+      return // Don't interfere if user is typing
+    }
+    navigate('/specimens')
+  }, { preventDefault: true })
+
+  useModifierHotkey('[', () => {
+    const activeElement = document.activeElement
+    if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+      return // Don't interfere if user is typing
+    }
+    navigate('/specimens')
+  }, { preventDefault: true })
+
   if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8">Loading...</div>
-      </div>
-    )
+    return <SkeletonDetailPage sections={1} />
   }
 
   if (!specimen) {

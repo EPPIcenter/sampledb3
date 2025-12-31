@@ -16,11 +16,9 @@ import exportRoutes from './routes/export'
 import searchRoutes from './routes/search'
 import containersRoutes from './routes/containers'
 import subjectsRoutes from './routes/subjects'
-import bulkRoutes from './routes/bulk'
 import activityRoutes from './routes/activity'
 import collectionsRoutes from './routes/collections'
 import specimenTypesRoutes from './routes/specimen-types'
-import statesRoutes from './routes/states'
 import storageTypesRoutes from './routes/storage-types'
 import sampleTypesRoutes from './routes/sample-types'
 import strainsRoutes from './routes/strains'
@@ -29,6 +27,9 @@ import cellLinesRoutes from './routes/cell-lines'
 import plasmidsRoutes from './routes/plasmids'
 import standardsRoutes from './routes/standards'
 import statisticsRoutes from './routes/statistics'
+import setupRoutes from './routes/setup'
+import tagsRoutes from './routes/tags'
+import settingsRoutes from './routes/settings'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -52,6 +53,9 @@ app.get('/api', (c) => {
   return c.json({ message: 'SampleDB API', version: '1.0.0' })
 })
 
+// Setup routes
+app.route('/api/setup', setupRoutes)
+
 // Auth routes
 app.route('/api/auth', authRoutes)
 
@@ -65,11 +69,10 @@ app.route('/api/export', exportRoutes)
 app.route('/api/search', searchRoutes)
 app.route('/api/containers', containersRoutes)
 app.route('/api/subjects', subjectsRoutes)
-app.route('/api/bulk', bulkRoutes)
 app.route('/api/activity', activityRoutes)
 app.route('/api/collections', collectionsRoutes)
 app.route('/api/specimen-types', specimenTypesRoutes)
-app.route('/api/states', statesRoutes)
+// States route removed - states deprecated
 app.route('/api/storage-types', storageTypesRoutes)
 app.route('/api/sample-types', sampleTypesRoutes)
 app.route('/api/strains', strainsRoutes)
@@ -78,6 +81,8 @@ app.route('/api/cell-lines', cellLinesRoutes)
 app.route('/api/plasmids', plasmidsRoutes)
 app.route('/api/standards', standardsRoutes)
 app.route('/api/statistics', statisticsRoutes)
+app.route('/api/tags', tagsRoutes)
+app.route('/api/settings', settingsRoutes)
 
 // Serve static files from web build in production
 if (process.env.NODE_ENV === 'production') {
@@ -89,7 +94,7 @@ if (process.env.NODE_ENV === 'production') {
 const port = Number(process.env.PORT) || 3000
 
 console.log(`🚀 SampleDB API server starting on port ${port}`)
-console.log(`📁 Database: ${process.env.DATABASE_PATH || './sampledb_database.sqlite'}`)
+console.log(`📁 Database: ${process.env.DATABASE_PATH || './sampledb_dev.sqlite (default)'}`)
 
 serve({
   fetch: app.fetch,

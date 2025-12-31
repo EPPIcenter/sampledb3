@@ -21,8 +21,17 @@ import {
   formatAsCSV,
   formatAsJSON,
   formatAsExcel,
+  buildExportSummary,
+  validateStudyCodes,
+  buildMultiStudyContainerQuery,
+  resolveMicronixBarcodesToContainers,
+  buildContainerQueryByMicronixBarcodes,
   type ExportFilters,
+  type ExportSummary,
+  type MultiStudyExportEntry,
 } from '../lib/export-helpers'
+import { resolveSubjectNamesByStudy } from '../lib/identifier-resolution'
+import { resolveStudyByShortCode } from '../lib/identifier-resolution'
 
 const export_ = new Hono()
 
@@ -205,6 +214,9 @@ export_.get('/containers', async (c) => {
     // Check if this is just a count request
     const countOnly = c.req.query('count_only') === 'true'
 
+    // Get config_name if provided
+    const configName = c.req.query('config_name')
+
     // Build query and get containers
     const { containers, study, specimens } = await buildContainerQuery(filters)
 
@@ -228,7 +240,7 @@ export_.get('/containers', async (c) => {
     }
 
     // Enrich container data (this also applies container type filtering)
-    const enrichedData = await enrichContainerData(containers, specimens || [], study, filters.container_types)
+    const enrichedData = await enrichContainerData(containers, specimens || [], study, filters.container_types, undefined)
 
     // Determine format
     const format = (c.req.query('format') || 'csv') as 'csv' | 'xlsx' | 'json'
@@ -238,21 +250,21 @@ export_.get('/containers', async (c) => {
     const filename = `study_${study.shortCode}_export_${timestamp}`
 
     if (format === 'json') {
-      const jsonData = formatAsJSON(enrichedData, filters, study)
+      const jsonData = await formatAsJSON(enrichedData, filters, study, configName)
       c.header('Content-Type', 'application/json')
       c.header('Content-Disposition', `attachment; filename="${filename}.json"`)
       return c.json(jsonData)
     }
 
     if (format === 'csv') {
-      const csv = formatAsCSV(enrichedData)
+      const csv = await formatAsCSV(enrichedData, configName)
       c.header('Content-Type', 'text/csv')
       c.header('Content-Disposition', `attachment; filename="${filename}.csv"`)
       return c.text(csv)
     }
 
     if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(enrichedData)
+      const excelBuffer = await formatAsExcel(enrichedData, configName)
       c.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       c.header('Content-Disposition', `attachment; filename="${filename}.xlsx"`)
       return c.body(new Uint8Array(excelBuffer), 200, {
@@ -263,6 +275,183 @@ export_.get('/containers', async (c) => {
     return c.json({ error: 'Invalid format. Use csv, xlsx, or json' }, 400)
   } catch (error: any) {
     console.error('Error exporting containers:', error)
+    return c.json({ error: 'Failed to export containers', details: error.message }, 500)
+  }
+})
+
+// Export containers by subject names (POST endpoint)
+export_.post('/containers', async (c) => {
+  try {
+    const body = await c.req.json()
+    const studyCode = body.study
+    if (!studyCode) {
+      return c.json({ error: 'Study parameter is required' }, 400)
+    }
+
+    // Resolve study
+    const studyId = await resolveStudyByShortCode(studyCode)
+    if (!studyId) {
+      return c.json({ error: 'Study not found' }, 404)
+    }
+
+    // Get subject names from request
+    const subjectNames = body.subject_names || []
+    if (!Array.isArray(subjectNames) || subjectNames.length === 0) {
+      return c.json({ error: 'subject_names array is required' }, 400)
+    }
+
+    // Resolve subject names to IDs
+    const subjectNameToId = await resolveSubjectNamesByStudy(subjectNames, studyId)
+    const subjectIds = Array.from(subjectNameToId.values())
+    
+    // Build subject ID to name map
+    const subjectIdToName = new Map<number, string>()
+    for (const [name, id] of subjectNameToId.entries()) {
+      subjectIdToName.set(id, name)
+    }
+
+    if (subjectIds.length === 0) {
+      // No subjects found - return empty result with summary
+      const summary: ExportSummary = {
+        total_containers: 0,
+        subjects_with_results: [],
+        subjects_no_results: [],
+        subjects_not_found: subjectNames,
+        errors: [],
+      }
+      return c.json({
+        summary,
+        data: [],
+        format: body.format || 'json',
+        filename: `study_${studyCode}_export_${Date.now()}`,
+      })
+    }
+
+    // Parse filter parameters
+    const filters: ExportFilters = {
+      study: studyCode,
+      subject_ids: subjectIds,
+      date_tolerance: body.date_tolerance || 0,
+    }
+
+    // Parse subject dates
+    if (body.subject_dates && typeof body.subject_dates === 'object') {
+      filters.subject_dates = {}
+      for (const [subjectName, dateFilter] of Object.entries(body.subject_dates)) {
+        const subjectId = subjectNameToId.get(subjectName)
+        if (subjectId) {
+          filters.subject_dates[subjectId] = dateFilter as any
+        }
+      }
+    }
+
+    // Parse other filter parameters
+    if (body.specimen_type_ids && Array.isArray(body.specimen_type_ids)) {
+      filters.specimen_type_ids = body.specimen_type_ids.map((id: any) => parseInt(String(id))).filter((id: number) => !isNaN(id))
+    }
+
+    if (body.container_types && Array.isArray(body.container_types)) {
+      filters.container_types = body.container_types
+    }
+
+    if (body.date_from) {
+      filters.date_from = body.date_from
+    }
+    if (body.date_to) {
+      filters.date_to = body.date_to
+    }
+    if (body.created_from) {
+      filters.created_from = body.created_from
+    }
+    if (body.created_to) {
+      filters.created_to = body.created_to
+    }
+
+    // Check if this is just a count request
+    const countOnly = body.count_only === true
+
+    // Build query and get containers
+    const { containers, study, specimens } = await buildContainerQuery(filters)
+
+    if (!study) {
+      return c.json({ error: 'Study not found' }, 404)
+    }
+
+    if (countOnly) {
+      // Apply container type filter if specified
+      let filteredContainers = containers
+      if (filters.container_types && filters.container_types.length > 0) {
+        const containerIds = containers.map(c => c.id)
+        const matchingIds = await filterContainersByType(containerIds, filters.container_types)
+        filteredContainers = containers.filter(c => matchingIds.includes(c.id))
+      }
+      
+      // Build summary for count
+      const summary: ExportSummary = {
+        total_containers: filteredContainers.length,
+        subjects_with_results: [],
+        subjects_no_results: [],
+        subjects_not_found: subjectNames.filter(name => !subjectNameToId.has(name)),
+        errors: [],
+      }
+      
+      return c.json({ count: filteredContainers.length, summary })
+    }
+
+    // Enrich container data
+    const enrichedData = await enrichContainerData(containers, specimens || [], study, filters.container_types, undefined)
+
+    // Build summary
+    const summary = await buildExportSummary(
+      enrichedData,
+      subjectNames,
+      subjectNameToId,
+      subjectIdToName
+    )
+
+    // Determine format
+    const format = (body.format || 'json') as 'csv' | 'xlsx' | 'json'
+    const configName = body.config_name
+
+    // Generate filename
+    const timestamp = Date.now()
+    const filename = `study_${study.shortCode}_export_${timestamp}`
+
+    if (format === 'json') {
+      const jsonData = await formatAsJSON(enrichedData, filters, study, configName)
+      return c.json({
+        summary,
+        data: jsonData.containers,
+        format: 'json',
+        filename: `${filename}.json`,
+      })
+    }
+
+        if (format === 'csv') {
+          const csv = await formatAsCSV(enrichedData, configName)
+          const base64Csv = Buffer.from(csv).toString('base64')
+      return c.json({
+        summary,
+        data: base64Csv,
+        format: 'csv',
+        filename: `${filename}.csv`,
+      })
+    }
+
+    if (format === 'xlsx') {
+      const excelBuffer = await formatAsExcel(enrichedData, configName)
+      const base64Excel = excelBuffer.toString('base64')
+      return c.json({
+        summary,
+        data: base64Excel,
+        format: 'xlsx',
+        filename: `${filename}.xlsx`,
+      })
+    }
+
+    return c.json({ error: 'Invalid format. Use csv, xlsx, or json' }, 400)
+  } catch (error: any) {
+    console.error('Error exporting containers by names:', error)
     return c.json({ error: 'Failed to export containers', details: error.message }, 500)
   }
 })
@@ -372,6 +561,252 @@ export_.get('/available-types', async (c) => {
   } catch (error: any) {
     console.error('Error fetching available types:', error)
     return c.json({ error: 'Failed to fetch available types', details: error.message }, 500)
+  }
+})
+
+// Validate study codes (for multi-study export)
+export_.post('/containers/validate-studies', async (c) => {
+  try {
+    const body = await c.req.json()
+    const studyCodes = body.study_codes || []
+    
+    if (!Array.isArray(studyCodes) || studyCodes.length === 0) {
+      return c.json({ error: 'study_codes array is required' }, 400)
+    }
+    
+    const validation = await validateStudyCodes(studyCodes)
+    
+    return c.json({
+      valid: Array.from(validation.valid.entries()).map(([code, id]) => ({
+        code,
+        id,
+        title: validation.studies.get(id)?.title,
+        lead_person: validation.studies.get(id)?.leadPerson,
+      })),
+      invalid: validation.invalid,
+      total_unique: studyCodes.length,
+      valid_count: validation.valid.size,
+      invalid_count: validation.invalid.length,
+    })
+  } catch (error: any) {
+    console.error('Error validating study codes:', error)
+    return c.json({ error: 'Failed to validate study codes', details: error.message }, 500)
+  }
+})
+
+// Multi-study export endpoint
+export_.post('/containers/multi-study', async (c) => {
+  try {
+    const body = await c.req.json()
+    const entries = body.entries || []
+    
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return c.json({ error: 'entries array is required' }, 400)
+    }
+    
+    // Validate entries structure
+    for (const entry of entries) {
+      if (!entry.study_short_code || !entry.subject_name) {
+        return c.json({ error: 'Each entry must have study_short_code and subject_name' }, 400)
+      }
+    }
+    
+    // Parse filter parameters
+    const filters: Omit<ExportFilters, 'study' | 'subject_ids' | 'subject_dates'> = {}
+    
+    if (body.specimen_type_ids && Array.isArray(body.specimen_type_ids)) {
+      filters.specimen_type_ids = body.specimen_type_ids.map((id: any) => parseInt(String(id))).filter((id: number) => !isNaN(id))
+    }
+    
+    if (body.container_types && Array.isArray(body.container_types)) {
+      filters.container_types = body.container_types
+    }
+    
+    if (body.date_from) {
+      filters.date_from = body.date_from
+    }
+    if (body.date_to) {
+      filters.date_to = body.date_to
+    }
+    if (body.created_from) {
+      filters.created_from = body.created_from
+    }
+    if (body.created_to) {
+      filters.created_to = body.created_to
+    }
+    
+    const dateTolerance = body.date_tolerance || 0
+    const countOnly = body.count_only === true
+    
+    // Build multi-study query
+    const result = await buildMultiStudyContainerQuery(entries as MultiStudyExportEntry[], filters, dateTolerance)
+    
+    if (countOnly) {
+      return c.json({
+        count: result.containers.length,
+        summary: result.summary,
+      })
+    }
+    
+    // Determine format
+    const format = (body.format || 'json') as 'csv' | 'xlsx' | 'json'
+    const configName = body.config_name
+    const timestamp = Date.now()
+    const filename = `multi_study_export_${timestamp}`
+    
+    if (format === 'json') {
+      // For multi-study, we need to create a dummy study object for formatAsJSON
+      // Since it's multi-study, we'll use the first study or create a generic one
+      const firstStudy = result.studies && result.studies.size > 0 
+        ? Array.from(result.studies.values())[0]
+        : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '' }
+      const dummyFilters: ExportFilters = { study: 'MULTI' }
+      const jsonData = await formatAsJSON(result.containers, dummyFilters, firstStudy, configName)
+      return c.json({
+        summary: result.summary,
+        data: jsonData.containers,
+        format: 'json',
+        filename: `${filename}.json`,
+      })
+    }
+    
+        if (format === 'csv') {
+          const csv = await formatAsCSV(result.containers, configName)
+          const base64Csv = Buffer.from(csv).toString('base64')
+      return c.json({
+        summary: result.summary,
+        data: base64Csv,
+        format: 'csv',
+        filename: `${filename}.csv`,
+      })
+    }
+    
+    if (format === 'xlsx') {
+      const excelBuffer = await formatAsExcel(result.containers, configName)
+      const base64Excel = excelBuffer.toString('base64')
+      return c.json({
+        summary: result.summary,
+        data: base64Excel,
+        format: 'xlsx',
+        filename: `${filename}.xlsx`,
+      })
+    }
+    
+    return c.json({ error: 'Invalid format. Use csv, xlsx, or json' }, 400)
+  } catch (error: any) {
+    console.error('Error exporting containers from multiple studies:', error)
+    return c.json({ error: 'Failed to export containers', details: error.message }, 500)
+  }
+})
+
+// Export containers by micronix barcodes (POST endpoint)
+export_.post('/containers/by-barcodes', async (c) => {
+  try {
+    const body = await c.req.json()
+    const barcodes = body.barcodes || []
+    
+    if (!Array.isArray(barcodes) || barcodes.length === 0) {
+      return c.json({ error: 'barcodes array is required and must not be empty' }, 400)
+    }
+
+    // Resolve barcodes to container IDs (only micronix tubes)
+    const barcodeToContainerId = await resolveMicronixBarcodesToContainers(barcodes)
+    const containerIds = Array.from(barcodeToContainerId.values())
+    
+    // Track which barcodes were found/not found
+    const foundBarcodes = Array.from(barcodeToContainerId.keys())
+    const notFoundBarcodes = barcodes.filter(b => !barcodeToContainerId.has(b))
+
+    if (containerIds.length === 0) {
+      // No containers found
+      const summary = {
+        total_containers: 0,
+        barcodes_found: [],
+        barcodes_not_found: notFoundBarcodes,
+      }
+      return c.json({
+        summary,
+        data: [],
+        format: body.format || 'json',
+        filename: `barcode_export_${Date.now()}`,
+      })
+    }
+
+    // Build query to get containers with specimen/subject data
+    const { containers, specimens, studies, subjectToStudyMap } = await buildContainerQueryByMicronixBarcodes(containerIds)
+
+    if (containers.length === 0) {
+      const summary = {
+        total_containers: 0,
+        barcodes_found: foundBarcodes,
+        barcodes_not_found: notFoundBarcodes,
+      }
+      return c.json({
+        summary,
+        data: [],
+        format: body.format || 'json',
+        filename: `barcode_export_${Date.now()}`,
+      })
+    }
+
+    // Enrich container data
+    // For multi-study, we use subjectToStudyMap to get the correct study for each container
+    const firstStudy = studies && studies.length > 0 
+      ? studies[0] 
+      : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '' }
+    
+    const enrichedData = await enrichContainerData(containers, specimens, firstStudy, undefined, subjectToStudyMap)
+
+    // Build summary
+    const summary = {
+      total_containers: enrichedData.length,
+      barcodes_found: foundBarcodes,
+      barcodes_not_found: notFoundBarcodes,
+    }
+
+    // Determine format
+    const format = (body.format || 'json') as 'csv' | 'xlsx' | 'json'
+    const configName = body.config_name
+    const timestamp = Date.now()
+    const filename = `barcode_export_${timestamp}`
+
+    if (format === 'json') {
+      const dummyFilters: ExportFilters = { study: 'MULTI' }
+      const jsonData = await formatAsJSON(enrichedData, dummyFilters, firstStudy, configName)
+      return c.json({
+        summary,
+        data: jsonData.containers,
+        format: 'json',
+        filename: `${filename}.json`,
+      })
+    }
+
+    if (format === 'csv') {
+      const csv = await formatAsCSV(enrichedData, configName)
+      const base64Csv = Buffer.from(csv).toString('base64')
+      return c.json({
+        summary,
+        data: base64Csv,
+        format: 'csv',
+        filename: `${filename}.csv`,
+      })
+    }
+
+    if (format === 'xlsx') {
+      const excelBuffer = await formatAsExcel(enrichedData, configName)
+      const base64Excel = excelBuffer.toString('base64')
+      return c.json({
+        summary,
+        data: base64Excel,
+        format: 'xlsx',
+        filename: `${filename}.xlsx`,
+      })
+    }
+
+    return c.json({ error: 'Invalid format. Use csv, xlsx, or json' }, 400)
+  } catch (error: any) {
+    console.error('Error exporting containers by barcodes:', error)
+    return c.json({ error: 'Failed to export containers', details: error.message }, 500)
   }
 })
 

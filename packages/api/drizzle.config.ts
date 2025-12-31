@@ -5,6 +5,6 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'sqlite',
   dbCredentials: {
-    url: process.env.DATABASE_PATH || './sampledb_database.sqlite',
+    url: process.env.DATABASE_PATH || './sampledb_dev.sqlite',
   },
 })

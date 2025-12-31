@@ -13,7 +13,6 @@ import {
   sheet,
   storageContainer,
   specimen,
-  state,
   location,
   studySubject,
   study,
@@ -23,18 +22,40 @@ import {
 } from '../db/schema'
 import { eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { executeMoves, resolveAliquotsByBarcodes, type BatchMoveRequest, type AliquotInfo } from '../lib/aliquot-move'
+import { executeMoves, resolveContainersByBarcodes, type BatchMoveRequest, type ContainerInfo } from '../lib/container-move'
 import { resolveCollection } from '../lib/collection-resolution'
+import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 
 const collections = new Hono()
 
 // Helper to build location path string
-function buildLocationPath(loc: any | null): string | undefined {
+function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | undefined {
   if (!loc) return undefined
   const parts = [loc.locationRoot, loc.levelI, loc.levelII]
   if (loc.levelIII) parts.push(loc.levelIII)
   return parts.filter(Boolean).join(' → ')
 }
+
+// Type for container source (subject or control)
+type ContainerSource =
+  | {
+      type: 'subject'
+      id: number
+      name: string
+      study: {
+        id: number
+        title: string
+        code: string
+      }
+    }
+  | {
+      type: 'control'
+      id: number
+      name: string
+      definitionName: string | null
+      controlType: string
+    }
+  | null
 
 // Helper to enrich a storage container
 async function enrichContainer(containerId: number) {
@@ -46,13 +67,12 @@ async function enrichContainer(containerId: number) {
 
   if (!container) return null
 
-  const [containerState, containerUnit, spec] = await Promise.all([
-    db.select().from(state).where(eq(state.id, container.stateId)).get(),
+  const [containerUnit, spec] = await Promise.all([
     db.select().from(unit).where(eq(unit.id, container.unitId)).get(),
     db.select().from(specimen).where(eq(specimen.id, container.specimenId)).get(),
   ])
 
-  let source: any = null
+  let source: ContainerSource = null
   if (spec?.studySubjectId) {
     const subject = await db
       .select({
@@ -67,7 +87,7 @@ async function enrichContainer(containerId: number) {
       .where(eq(studySubject.id, spec.studySubjectId))
       .get()
 
-    if (subject) {
+    if (subject && subject.studyTitle && subject.studyCode) {
       source = {
         type: 'subject',
         id: subject.id,
@@ -93,7 +113,7 @@ async function enrichContainer(containerId: number) {
       .where(eq(controlBatch.id, spec.controlBatchId))
       .get()
 
-    if (batch) {
+    if (batch && batch.definitionName && batch.controlType) {
       source = {
         type: 'control',
         id: batch.id,
@@ -107,7 +127,6 @@ async function enrichContainer(containerId: number) {
   return {
     id: container.id,
     specimenId: container.specimenId,
-    state: containerState || null,
     unit: containerUnit || null,
     totalQuantity: container.totalQuantity,
     remainingQuantity: container.remainingQuantity,
@@ -127,8 +146,8 @@ collections.get('/plates/micronix/:id', async (c) => {
 
   const [loc, tubes, wells] = await Promise.all([
     db.select().from(location).where(eq(location.id, plate.locationId)).get(),
-    db.select().from(micronixTube).where(eq(micronixTube.manifestId, id)),
-    db.select().from(staticWell).where(eq(staticWell.manifestId, id)),
+    db.select().from(micronixTube).where(eq(micronixTube.collectionId, id)),
+    db.select().from(staticWell).where(eq(staticWell.collectionId, id)),
   ])
 
   const locationPath = buildLocationPath(loc)
@@ -183,7 +202,7 @@ collections.get('/boxes/cryovial/:id', async (c) => {
   if (!boxRecord) return c.json({ error: 'Box not found' }, 404)
 
   const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
-  const tubes = await db.select().from(cryovialTube).where(eq(cryovialTube.manifestId, id))
+  const tubes = await db.select().from(cryovialTube).where(eq(cryovialTube.collectionId, id))
 
   const tubeEntries = await Promise.all(
     tubes.map(async (t) => {
@@ -335,19 +354,19 @@ collections.get('/sheets/:id', async (c) => {
   if (!sheetRecord) return c.json({ error: 'Sheet not found' }, 404)
 
   // Get location info from parent bag or box
-  let locationInfo: any = null
+  let locationInfo: typeof location.$inferSelect | null = null
   let locationPath: string | undefined
-  let parentBox: any = null
-  let parentBag: any = null
+  let parentBox: { id: number; name: string } | null = null
+  let parentBag: { id: number; name: string } | null = null
   
   if (sheetRecord.boxId) {
     const parent = await db.select({ box: box, location: location }).from(box).leftJoin(location, eq(box.locationId, location.id)).where(eq(box.id, sheetRecord.boxId)).get()
-    locationInfo = parent?.location
+    locationInfo = parent?.location ?? null
     locationPath = buildLocationPath(locationInfo)
     parentBox = parent?.box ? { id: parent.box.id, name: parent.box.name } : null
   } else if (sheetRecord.bagId) {
     const parent = await db.select({ bag: bag, location: location }).from(bag).leftJoin(location, eq(bag.locationId, location.id)).where(eq(bag.id, sheetRecord.bagId)).get()
-    locationInfo = parent?.location
+    locationInfo = parent?.location ?? null
     locationPath = buildLocationPath(locationInfo)
     parentBag = parent?.bag ? { id: parent.bag.id, name: parent.bag.name } : null
   }
@@ -439,8 +458,8 @@ collections.post('/plates/micronix', async (c) => {
   }
 })
 
-// Resolve multiple identifiers to aliquot info
-collections.post('/aliquots/resolve', async (c) => {
+// Resolve multiple identifiers to container info
+collections.post('/containers/resolve', async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -454,21 +473,21 @@ collections.post('/aliquots/resolve', async (c) => {
     })
     
     const data = schema.parse(body)
-    const { resolveAliquotsByIdentifiers } = await import('../lib/aliquot-move')
-    const aliquots = await resolveAliquotsByIdentifiers(data.identifiers)
+    const { resolveContainersByIdentifiers } = await import('../lib/container-move')
+    const containers = await resolveContainersByIdentifiers(data.identifiers)
     
-    const result: Array<{ identifier: any; aliquot: AliquotInfo }> = []
-    for (const [key, aliquot] of aliquots.entries()) {
+    const result: Array<{ identifier: any; container: ContainerInfo }> = []
+    for (const [key, container] of containers.entries()) {
       const identifier = data.identifiers.find(
         (id) =>
           (id.type === 'barcode' && id.barcode === key) ||
           (id.type === 'position' && `${id.sourceCollectionName}:${id.sourcePosition}` === key) ||
           (id.type === 'container_id' && `container_${id.containerId}` === key)
       )
-      result.push({ identifier: identifier || key, aliquot })
+      result.push({ identifier: identifier || key, container })
     }
     
-    return c.json({ aliquots: result })
+    return c.json({ containers: result })
   } catch (error) {
     if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
     return c.json({ error: 'Internal server error' }, 500)
@@ -487,14 +506,15 @@ collections.get('/list/:type', async (c) => {
           .select({
             plate: micronixPlate,
             location: location,
-            tubeCount: sql<number>`(SELECT COUNT(*) FROM ${micronixTube} WHERE ${micronixTube.manifestId} = ${micronixPlate.id})`,
-            wellCount: sql<number>`(SELECT COUNT(*) FROM ${staticWell} WHERE ${staticWell.manifestId} = ${micronixPlate.id})`,
+            tubeCount: sql<number>`(SELECT COUNT(*) FROM ${micronixTube} WHERE ${micronixTube.collectionId} = ${micronixPlate.id})`,
+            wellCount: sql<number>`(SELECT COUNT(*) FROM ${staticWell} WHERE ${staticWell.collectionId} = ${micronixPlate.id})`,
           })
           .from(micronixPlate)
           .leftJoin(location, eq(micronixPlate.locationId, location.id))
         result = plates.map((r) => ({
           id: r.plate.id,
           name: r.plate.name,
+          barcode: r.plate.barcode,
           locationId: r.plate.locationId,
           itemCount: (r.tubeCount || 0) + (r.wellCount || 0),
           location: r.location
@@ -511,13 +531,14 @@ collections.get('/list/:type', async (c) => {
           .select({
             box: cryovialBox,
             location: location,
-            tubeCount: sql<number>`(SELECT COUNT(*) FROM ${cryovialTube} WHERE ${cryovialTube.manifestId} = ${cryovialBox.id})`,
+            tubeCount: sql<number>`(SELECT COUNT(*) FROM ${cryovialTube} WHERE ${cryovialTube.collectionId} = ${cryovialBox.id})`,
           })
           .from(cryovialBox)
           .leftJoin(location, eq(cryovialBox.locationId, location.id))
         result = boxes.map((r) => ({
           id: r.box.id,
           name: r.box.name,
+          barcode: r.box.barcode,
           locationId: r.box.locationId,
           itemCount: r.tubeCount || 0,
           location: r.location
@@ -598,8 +619,8 @@ collections.get('/list/:type', async (c) => {
   }
 })
 
-// Move aliquots
-collections.post('/aliquots/move', async (c) => {
+// Move containers
+collections.post('/containers/move', async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -682,12 +703,74 @@ collections.post('/sheets/move', async (c) => {
     })
 
     return c.json({ success: true, moved: data.sheetIds.length })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error moving sheets:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorName = error instanceof Error ? error.name : 'Internal server error'
     return c.json(
       {
-        error: error.name || 'Internal server error',
-        message: error.message || String(error),
+        error: errorName,
+        message: errorMessage,
+      },
+      500
+    )
+  }
+})
+
+// Move collections
+collections.post('/move', async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      collectionType: z.enum(['micronix_plate', 'cryovial_box', 'box', 'bag']),
+      moves: z.array(z.object({
+        identifier: z.union([
+          z.object({ type: z.literal('id'), id: z.number().int().positive() }),
+          z.object({
+            type: z.literal('name'),
+            name: z.string().min(1),
+            locationId: z.number().int().positive().optional(),
+            locationPath: z.string().optional(),
+          }),
+          z.object({
+            type: z.literal('barcode'),
+            barcode: z.string().min(1),
+            locationId: z.number().int().positive().optional(),
+            locationPath: z.string().optional(),
+          }),
+        ]),
+        targetLocationId: z.number().int().positive(),
+      })),
+    })
+
+    const result = schema.safeParse(body)
+    if (!result.success) {
+      return c.json({ error: 'Invalid input', details: result.error.issues }, 400)
+    }
+    const data = result.data
+
+    const moveResult = await executeCollectionMoves(data as CollectionMoveRequest)
+
+    if (!moveResult.success) {
+      return c.json({
+        error: 'Move operation failed',
+        moved: moveResult.moved,
+        errors: moveResult.errors,
+      }, 400)
+    }
+
+    return c.json({
+      success: true,
+      moved: moveResult.moved,
+      errors: moveResult.errors,
+    })
+  } catch (error: unknown) {
+    console.error('Error moving collections:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    return c.json(
+      {
+        error: 'Internal server error',
+        message: errorMessage,
       },
       500
     )

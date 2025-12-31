@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { collectionsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import CollectionGrid from '../components/CollectionGrid'
+import SkeletonDetailPage from '../components/SkeletonDetailPage'
 
 function statusColor(name: string): string {
   const key = name.toLowerCase()
@@ -60,11 +61,7 @@ export default function MicronixPlateDetail() {
   }, [data])
 
   if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8">Loading...</div>
-      </div>
-    )
+    return <SkeletonDetailPage sections={1} />
   }
 
   if (!data?.plate) {

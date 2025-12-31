@@ -4,6 +4,7 @@ import { controlsApi, type ControlDefinitionSummaryResponse } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import DataTable, { Column } from '../components/DataTable'
 import StatCard from '../components/StatCard'
+import SkeletonDetailPage from '../components/SkeletonDetailPage'
 
 export default function ControlDefinitionDetail() {
   const { id } = useParams<{ id: string }>()
@@ -33,11 +34,7 @@ export default function ControlDefinitionDetail() {
   }
 
   if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8">Loading...</div>
-      </div>
-    )
+    return <SkeletonDetailPage sections={2} />
   }
 
   if (error || !summaryData) {
@@ -175,8 +172,8 @@ export default function ControlDefinitionDetail() {
           subtitle="Batches in stock"
         />
         <StatCard
-          title="Available Aliquots"
-          value={stats.totalAliquots || 0}
+          title="Available Containers"
+          value={stats.totalContainers || 0}
           subtitle={`${stats.totalSpots} spots, ${stats.totalTubes} tubes`}
         />
         <StatCard

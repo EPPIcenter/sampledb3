@@ -4,6 +4,7 @@ import { statisticsApi, type StatisticsData, type StatisticsFilters as ApiFilter
 import StatisticsFilter, { type StatisticsFilters } from '../components/StatisticsFilter'
 import StatCard from '../components/StatCard'
 import StatChart from '../components/StatChart'
+import SkeletonCard from '../components/SkeletonCard'
 
 type BinSize = 'day' | 'week' | 'month' | 'quarter' | 'year'
 
@@ -46,7 +47,9 @@ export default function Statistics() {
       if (filtersToApply.sourceType) apiFilters.source_type = filtersToApply.sourceType
       if (filtersToApply.specimenTypeId) apiFilters.specimen_type_id = filtersToApply.specimenTypeId
       if (filtersToApply.containerType) apiFilters.container_type = filtersToApply.containerType
-      if (filtersToApply.stateId) apiFilters.state_id = filtersToApply.stateId
+      if (filtersToApply.tagIds && filtersToApply.tagIds.length > 0) {
+        apiFilters.tag_ids = filtersToApply.tagIds.map(id => parseInt(id)).filter(id => !isNaN(id))
+      }
       if (filtersToApply.collectionDateFrom) apiFilters.collection_date_from = filtersToApply.collectionDateFrom
       if (filtersToApply.collectionDateTo) apiFilters.collection_date_to = filtersToApply.collectionDateTo
       if (filtersToApply.createdFrom) apiFilters.created_from = filtersToApply.createdFrom
@@ -103,9 +106,9 @@ export default function Statistics() {
     }))
   }, [data])
 
-  const containerStateChartData = useMemo(() => {
+  const containerTagChartData = useMemo(() => {
     if (!data) return []
-    return Object.entries(data.containers.byState).map(([name, value]) => ({
+    return Object.entries(data.containers.byTags || {}).map(([name, value]) => ({
       name,
       value,
     }))
@@ -324,100 +327,141 @@ export default function Statistics() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <StatCard
-          title="Total Specimens"
-          value={data.specimens.total}
-          subtitle={`Across ${Object.keys(data.specimens.byStudy).length} studies`}
-        />
-        <StatCard
-          title="Total Containers"
-          value={data.containers.total}
-          subtitle={`Avg ${data.containers.averagePerSpecimen.toFixed(2)} per specimen`}
-        />
-        <StatCard
-          title="Container Types"
-          value={Object.keys(data.containers.byType).length}
-          subtitle="Different container types in use"
-        />
-        <StatCard
-          title="Storage Locations"
-          value={data.storage.byLocation.length}
-          subtitle="Active storage locations"
-        />
+        {loading && !data ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} height="h-24" />
+          ))
+        ) : data ? (
+          <>
+            <StatCard
+              title="Total Specimens"
+              value={data.specimens.total}
+              subtitle={`Across ${Object.keys(data.specimens.byStudy).length} studies`}
+            />
+            <StatCard
+              title="Total Containers"
+              value={data.containers.total}
+              subtitle={`Avg ${data.containers.averagePerSpecimen.toFixed(2)} per specimen`}
+            />
+            <StatCard
+              title="Container Types"
+              value={Object.keys(data.containers.byType).length}
+              subtitle="Different container types in use"
+            />
+            <StatCard
+              title="Storage Locations"
+              value={data.storage.byLocation.length}
+              subtitle="Active storage locations"
+            />
+          </>
+        ) : null}
       </div>
 
       {/* Specimen Statistics */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Specimen Overview</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <StatChart
-            type="pie"
-            data={sourceTypeChartData}
-            title="Specimens by Source Type"
-            showPercentageList={true}
-          />
-          <StatChart
-            type="bar"
-            data={specimenTypeChartData}
-            title="Top Specimen Types"
-          />
-          <StatChart
-            type="bar"
-            data={studyChartData}
-            title="Specimens by Study"
-          />
-          <StatChart
-            type="bar"
-            data={collectionTimelineData}
-            title="Collection Timeline"
-            xKey="name"
-            yKey="value"
-          />
+      {loading && !data ? (
+        <div className="mb-8">
+          <div className="h-8 bg-gray-200 rounded w-48 mb-4 animate-pulse"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonCard key={i} height="h-64" />
+            ))}
+          </div>
         </div>
-      </div>
+      ) : data ? (
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Specimen Overview</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <StatChart
+              type="pie"
+              data={sourceTypeChartData}
+              title="Specimens by Source Type"
+              showPercentageList={true}
+            />
+            <StatChart
+              type="bar"
+              data={specimenTypeChartData}
+              title="Top Specimen Types"
+            />
+            <StatChart
+              type="bar"
+              data={studyChartData}
+              title="Specimens by Study"
+            />
+            <StatChart
+              type="bar"
+              data={collectionTimelineData}
+              title="Collection Timeline"
+              xKey="name"
+              yKey="value"
+            />
+          </div>
+        </div>
+      ) : null}
 
       {/* Container Statistics */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Container Overview</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <StatChart
-            type="pie"
-            data={containerTypeChartData}
-            title="Containers by Type"
-            showPercentageList={true}
-          />
-          <StatChart
-            type="bar"
-            data={containerStateChartData}
-            title="Containers by State"
-          />
-          <StatChart
-            type="bar"
-            data={creationTimelineData}
-            title="Creation Timeline"
-            xKey="name"
-            yKey="value"
-          />
+      {loading && !data ? (
+        <div className="mb-8">
+          <div className="h-8 bg-gray-200 rounded w-48 mb-4 animate-pulse"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <SkeletonCard key={i} height="h-64" />
+            ))}
+          </div>
         </div>
-      </div>
+      ) : data ? (
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Container Overview</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <StatChart
+              type="pie"
+              data={containerTypeChartData}
+              title="Containers by Type"
+              showPercentageList={true}
+            />
+            <StatChart
+              type="bar"
+              data={containerTagChartData}
+              title="Containers by Tags"
+            />
+            <StatChart
+              type="bar"
+              data={creationTimelineData}
+              title="Creation Timeline"
+              xKey="name"
+              yKey="value"
+            />
+          </div>
+        </div>
+      ) : null}
 
       {/* Storage Statistics */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Storage Utilization</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <StatChart
-            type="bar"
-            data={locationChartData}
-            title="Top Storage Locations"
-          />
-          <StatChart
-            type="pie"
-            data={locationRootChartData}
-            title="Containers by Location Root"
-            showPercentageList={true}
-          />
+      {loading && !data ? (
+        <div className="mb-8">
+          <div className="h-8 bg-gray-200 rounded w-48 mb-4 animate-pulse"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <SkeletonCard key={i} height="h-64" />
+            ))}
+          </div>
         </div>
-      </div>
+      ) : data ? (
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Storage Utilization</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <StatChart
+              type="bar"
+              data={locationChartData}
+              title="Top Storage Locations"
+            />
+            <StatChart
+              type="pie"
+              data={locationRootChartData}
+              title="Containers by Location Root"
+              showPercentageList={true}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

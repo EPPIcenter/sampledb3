@@ -69,7 +69,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
       .join(', ')
   }
 
-  const getManifestUrl = (type: string, id?: number) => {
+  const getCollectionUrl = (type: string, id?: number) => {
     if (!id) return '#'
     switch (type) {
       case 'micronix_tube':
@@ -136,7 +136,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                               </svg>
                               <span className="whitespace-nowrap">
-                                <strong>{specimen.aliquotCount}</strong> {specimen.aliquotCount === 1 ? 'container' : 'containers'}
+                                <strong>{specimen.containerCount}</strong> {specimen.containerCount === 1 ? 'container' : 'containers'}
                                 {unitsLabel && (
                                   <span className="ml-1 text-gray-500">
                                     ({unitsLabel} available)
@@ -145,7 +145,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                               </span>
                             </div>
 
-                            {specimen.aliquotCount > 0 && specimen.containerBreakdown && Object.keys(specimen.containerBreakdown).length > 0 && (
+                            {specimen.containerCount > 0 && specimen.containerBreakdown && Object.keys(specimen.containerBreakdown).length > 0 && (
                               <>
                                 <span className="text-gray-300">•</span>
                                 <div className="flex items-center text-xs text-gray-600 gap-1.5">
@@ -172,15 +172,15 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    const url = getManifestUrl(c.type, c.manifestId)
+                                    const url = getCollectionUrl(c.type, c.collectionId)
                                     if (url !== '#') {
                                       navigate(url)
                                     }
                                   }}
                                   className="px-1.5 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-[10px] font-mono text-gray-600 border border-gray-100 transition-colors cursor-pointer"
-                                  title={`${getContainerTypeName(c.type)} in ${c.manifestName}${c.position ? ` at ${c.position}` : ''}${c.locationPath ? ` (${c.locationPath})` : ''}`}
+                                  title={`${getContainerTypeName(c.type)} in ${c.collectionName}${c.position ? ` at ${c.position}` : ''}${c.locationPath ? ` (${c.locationPath})` : ''}`}
                                 >
-                                  {c.manifestName}{c.position ? `:${c.position}` : ''}
+                                  {c.collectionName}{c.position ? `:${c.position}` : ''}
                                   {c.locationPath && (
                                     <span className="ml-1 text-gray-400 font-sans">
                                       ({c.locationPath})

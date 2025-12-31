@@ -1,6 +1,6 @@
 import { db } from '../db/client'
 import { study, studySubject, specimenType, micronixTube, storageContainer, cryovialTube, paper } from '../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, inArray } from 'drizzle-orm'
 
 /**
  * Resolve study short code to study ID
@@ -127,6 +127,64 @@ export async function resolveSubjectsByNameAndStudy(
     if (subjectId) {
       result.set(key, subjectId)
     }
+  }
+  
+  return result
+}
+
+/**
+ * Batch resolve subject names to IDs for a single study (optimized)
+ */
+export async function resolveSubjectNamesByStudy(
+  subjectNames: string[],
+  studyId: number
+): Promise<Map<string, number>> {
+  const uniqueNames = [...new Set(subjectNames)]
+  if (uniqueNames.length === 0) return new Map()
+  
+  const subjects = await db
+    .select({
+      id: studySubject.id,
+      name: studySubject.name,
+    })
+    .from(studySubject)
+    .where(
+      and(
+        eq(studySubject.studyId, studyId),
+        inArray(studySubject.name, uniqueNames)
+      ) as any
+    )
+  
+  const result = new Map<string, number>()
+  for (const subject of subjects) {
+    result.set(subject.name, subject.id)
+  }
+  
+  return result
+}
+
+/**
+ * Batch resolve subjects grouped by study
+ * Returns a map of studyId -> Map<subjectName, subjectId>
+ */
+export async function resolveSubjectsByStudyGrouped(
+  entries: Array<{ studyId: number; subjectName: string }>
+): Promise<Map<number, Map<string, number>>> {
+  const result = new Map<number, Map<string, number>>()
+  
+  // Group entries by study
+  const byStudy = new Map<number, string[]>()
+  for (const entry of entries) {
+    if (!byStudy.has(entry.studyId)) {
+      byStudy.set(entry.studyId, [])
+    }
+    byStudy.get(entry.studyId)!.push(entry.subjectName)
+  }
+  
+  // Resolve subjects for each study
+  for (const [studyId, subjectNames] of byStudy.entries()) {
+    const subjectMap = await resolveSubjectNamesByStudy(subjectNames, studyId)
+    result.set(studyId, subjectMap)
   }
   
   return result

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useHotkey } from '../hooks/useHotkey'
 import { studiesApi, subjectsApi, type Study, type StudySubject, type StudySummary, type StudyTimelineData } from '../lib/api'
 import api from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
@@ -11,6 +12,7 @@ import StudyTimeline from '../components/StudyTimeline'
 import DateFilterControls from '../components/DateFilterControls'
 import SubjectForm from '../components/forms/SubjectForm'
 import StudyForm from '../components/forms/StudyForm'
+import SkeletonDetailPage from '../components/SkeletonDetailPage'
 
 export default function StudyDetail() {
   const { id } = useParams<{ id: string }>()
@@ -33,6 +35,7 @@ export default function StudyDetail() {
   const [editStudyModalOpen, setEditStudyModalOpen] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = (searchParams.get('tab') as 'overview' | 'timeline' | 'subjects') || 'overview'
+  const hasProcessedCreateSubject = useRef(false)
 
   const setActiveTab = (tab: 'overview' | 'timeline' | 'subjects') => {
     setSearchParams((prev) => {
@@ -41,6 +44,36 @@ export default function StudyDetail() {
       return next
     })
   }
+
+  // Check for createSubject query param and open modal (only once per mount)
+  useEffect(() => {
+    const createSubject = searchParams.get('createSubject')
+    if (createSubject === 'true' && !hasProcessedCreateSubject.current) {
+      hasProcessedCreateSubject.current = true
+      setCreateSubjectModalOpen(true)
+      // Remove the query param after opening modal
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('createSubject')
+        return next
+      })
+    }
+  }, [searchParams, setSearchParams])
+
+  // Reset the ref when the study ID changes
+  useEffect(() => {
+    hasProcessedCreateSubject.current = false
+  }, [id])
+
+  // Close modals on Escape
+  useHotkey('escape', () => {
+    if (createSubjectModalOpen) {
+      setCreateSubjectModalOpen(false)
+    }
+    if (editStudyModalOpen) {
+      setEditStudyModalOpen(false)
+    }
+  }, { enabled: createSubjectModalOpen || editStudyModalOpen, enableOnFormTags: true })
 
   const limit = 50 // Default page size, matches backend DEFAULT_PAGE_SIZE
 
@@ -127,12 +160,9 @@ export default function StudyDetail() {
     }
   }
 
+
   if (studyLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8">Loading...</div>
-      </div>
-    )
+    return <SkeletonDetailPage sections={2} />
   }
 
   if (!study) {
@@ -344,12 +374,14 @@ export default function StudyDetail() {
       />
 
       {createSubjectModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black bg-opacity-30"
-            onClick={() => setCreateSubjectModalOpen(false)}
-          />
-          <div className="relative z-50 w-full max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6">
+        <div className="fixed inset-0 z-[100] overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
+              onClick={() => setCreateSubjectModalOpen(false)}
+            />
+            <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Create Subject</h2>
               <button
@@ -369,18 +401,23 @@ export default function StudyDetail() {
                 loadSubjects()
                 navigate(`/subjects/${subjectId}`)
               }}
+              onCancel={() => setCreateSubjectModalOpen(false)}
             />
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {editStudyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black bg-opacity-30"
-            onClick={() => setEditStudyModalOpen(false)}
-          />
-          <div className="relative z-50 w-full max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6">
+        <div className="fixed inset-0 z-[100] overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
+              onClick={() => setEditStudyModalOpen(false)}
+            />
+            <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Edit Study</h2>
               <button
@@ -399,6 +436,8 @@ export default function StudyDetail() {
                 loadStudy()
               }}
             />
+              </div>
+            </div>
           </div>
         </div>
       )}

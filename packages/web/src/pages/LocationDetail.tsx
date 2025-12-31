@@ -4,6 +4,7 @@ import { locationsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import LocationHierarchyTree from '../components/LocationHierarchyTree'
 import Pagination from '../components/Pagination'
+import SkeletonDetailPage from '../components/SkeletonDetailPage'
 
 interface Location {
   id: number
@@ -134,11 +135,7 @@ export default function LocationDetail() {
   }, [location, allLocations])
 
   if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8">Loading...</div>
-      </div>
-    )
+    return <SkeletonDetailPage sections={2} />
   }
 
   if (!location) {

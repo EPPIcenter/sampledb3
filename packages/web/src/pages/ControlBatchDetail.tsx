@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { useHotkey } from '../hooks/useHotkey'
 import { controlsApi, type ControlBatchSummaryResponse } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SimpleTimeline from '../components/SimpleTimeline'
 import { getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
 import SpecimenForm from '../components/forms/SpecimenForm'
+import SkeletonDetailPage from '../components/SkeletonDetailPage'
 
 export default function ControlBatchDetail() {
   const { id } = useParams<{ id: string }>()
@@ -18,6 +20,13 @@ export default function ControlBatchDetail() {
       loadSummary()
     }
   }, [id])
+
+  // Close modal on Escape
+  useHotkey('escape', () => {
+    if (createSpecimenModalOpen) {
+      setCreateSpecimenModalOpen(false)
+    }
+  }, { enabled: createSpecimenModalOpen, enableOnFormTags: true })
 
   const loadSummary = async () => {
     try {
@@ -34,11 +43,7 @@ export default function ControlBatchDetail() {
   }
 
   if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8">Loading...</div>
-      </div>
-    )
+    return <SkeletonDetailPage sections={1} />
   }
 
   if (error || !summaryData) {
@@ -269,12 +274,14 @@ export default function ControlBatchDetail() {
       </div>
 
       {createSpecimenModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black bg-opacity-30"
-            onClick={() => setCreateSpecimenModalOpen(false)}
-          />
-          <div className="relative z-50 w-full max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[100] overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
+              onClick={() => setCreateSpecimenModalOpen(false)}
+            />
+            <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full max-h-[90vh] overflow-y-auto">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Add Specimen</h2>
               <button
@@ -293,7 +300,10 @@ export default function ControlBatchDetail() {
                 setCreateSpecimenModalOpen(false)
                 loadSummary()
               }}
+              onCancel={() => setCreateSpecimenModalOpen(false)}
             />
+              </div>
+            </div>
           </div>
         </div>
       )}

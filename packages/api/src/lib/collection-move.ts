@@ -1,0 +1,571 @@
+import { db } from '../db/client'
+import {
+  micronixPlate,
+  cryovialBox,
+  box,
+  bag,
+  location,
+} from '../db/schema'
+import { eq, and } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
+import { resolveCollectionByName, resolveCollectionByBarcode, type CollectionType } from './collection-resolution'
+
+export type MoveableCollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+
+export interface CollectionInfo {
+  collectionId: number
+  collectionType: MoveableCollectionType
+  name: string
+  barcode: string | null
+  currentLocationId: number | null
+  currentLocationPath: string | null
+}
+
+export interface CollectionIdentifier {
+  type: 'id' | 'name' | 'barcode'
+  id?: number
+  name?: string
+  barcode?: string
+  locationId?: number
+  locationPath?: string
+}
+
+export interface CollectionMoveOperation {
+  identifier: CollectionIdentifier
+  targetLocationId: number
+}
+
+export interface CollectionMoveRequest {
+  collectionType: MoveableCollectionType
+  moves: CollectionMoveOperation[]
+}
+
+export interface ValidationError {
+  row: number
+  error: string
+}
+
+export interface CollectionMoveResult {
+  success: boolean
+  moved: number
+  errors?: ValidationError[]
+}
+
+/**
+ * Build location path string from location record
+ */
+function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | null {
+  if (!loc) return null
+  const parts = [loc.locationRoot, loc.levelI, loc.levelII]
+  if (loc.levelIII) parts.push(loc.levelIII)
+  return parts.filter(Boolean).join(' → ')
+}
+
+/**
+ * Resolve location by path string
+ */
+export async function resolveLocationByPath(locationPath: string): Promise<number | null> {
+  const parts = locationPath.split(' → ').map(p => p.trim()).filter(Boolean)
+  if (parts.length < 3) return null
+
+  const [locationRoot, levelI, levelII, levelIII] = parts
+
+  const conditions = [
+    eq(location.locationRoot, locationRoot),
+    eq(location.levelI, levelI),
+    eq(location.levelII, levelII),
+  ]
+
+  if (levelIII) {
+    conditions.push(eq(location.levelIII, levelIII))
+  } else {
+    // If levelIII not provided, match locations with or without levelIII
+    conditions.push(sql`${location.levelIII} IS NULL`)
+  }
+
+  const loc = await db
+    .select({ id: location.id })
+    .from(location)
+    .where(and(...conditions))
+    .get()
+
+  return loc?.id ?? null
+}
+
+/**
+ * Resolve collection by name and location
+ */
+async function resolveCollectionByNameAndLocation(
+  name: string,
+  collectionType: MoveableCollectionType,
+  locationId?: number,
+  locationPath?: string
+): Promise<CollectionInfo | null> {
+  let resolvedLocationId: number | null = null
+
+  if (locationId) {
+    resolvedLocationId = locationId
+  } else if (locationPath) {
+    resolvedLocationId = await resolveLocationByPath(locationPath)
+    if (!resolvedLocationId) return null
+  }
+
+  switch (collectionType) {
+    case 'micronix_plate': {
+      const plates = await db.select().from(micronixPlate).where(eq(micronixPlate.name, name))
+
+      if (plates.length === 0) return null
+      if (plates.length === 1) {
+        const plate = plates[0]
+        const loc = await db.select().from(location).where(eq(location.id, plate.locationId)).get()
+        return {
+          collectionId: plate.id,
+          collectionType: 'micronix_plate',
+          name: plate.name,
+          barcode: plate.barcode,
+          currentLocationId: plate.locationId,
+          currentLocationPath: buildLocationPath(loc),
+        }
+      }
+
+      // Multiple matches - need location disambiguation
+      if (resolvedLocationId === null) {
+        return null // Ambiguous, need location
+      }
+
+      const plate = plates.find(p => p.locationId === resolvedLocationId)
+      if (!plate) return null
+
+      const loc = await db.select().from(location).where(eq(location.id, plate.locationId)).get()
+      return {
+        collectionId: plate.id,
+        collectionType: 'micronix_plate',
+        name: plate.name,
+        barcode: plate.barcode,
+        currentLocationId: plate.locationId,
+        currentLocationPath: buildLocationPath(loc),
+      }
+    }
+
+    case 'cryovial_box': {
+      const boxes = await db.select().from(cryovialBox).where(eq(cryovialBox.name, name))
+
+      if (boxes.length === 0) return null
+      if (boxes.length === 1) {
+        const boxRecord = boxes[0]
+        const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+        return {
+          collectionId: boxRecord.id,
+          collectionType: 'cryovial_box',
+          name: boxRecord.name,
+          barcode: boxRecord.barcode,
+          currentLocationId: boxRecord.locationId,
+          currentLocationPath: buildLocationPath(loc),
+        }
+      }
+
+      // Multiple matches - need location disambiguation
+      if (resolvedLocationId === null) {
+        return null // Ambiguous, need location
+      }
+
+      const boxRecord = boxes.find(b => b.locationId === resolvedLocationId)
+      if (!boxRecord) return null
+
+      const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+      return {
+        collectionId: boxRecord.id,
+        collectionType: 'cryovial_box',
+        name: boxRecord.name,
+        barcode: boxRecord.barcode,
+        currentLocationId: boxRecord.locationId,
+        currentLocationPath: buildLocationPath(loc),
+      }
+    }
+
+    case 'box': {
+      const boxRecord = await db
+        .select()
+        .from(box)
+        .where(eq(box.name, name))
+        .get()
+
+      if (!boxRecord) return null
+
+      // Box names are unique, but verify location if provided
+      if (resolvedLocationId !== null && boxRecord.locationId !== resolvedLocationId) {
+        return null // Location mismatch
+      }
+
+      const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+      return {
+        collectionId: boxRecord.id,
+        collectionType: 'box',
+        name: boxRecord.name,
+        barcode: null,
+        currentLocationId: boxRecord.locationId,
+        currentLocationPath: buildLocationPath(loc),
+      }
+    }
+
+    case 'bag': {
+      const bagRecord = await db
+        .select()
+        .from(bag)
+        .where(eq(bag.name, name))
+        .get()
+
+      if (!bagRecord) return null
+
+      // Bag names are unique, but verify location if provided
+      if (resolvedLocationId !== null && bagRecord.locationId !== resolvedLocationId) {
+        return null // Location mismatch
+      }
+
+      const loc = await db.select().from(location).where(eq(location.id, bagRecord.locationId)).get()
+      return {
+        collectionId: bagRecord.id,
+        collectionType: 'bag',
+        name: bagRecord.name,
+        barcode: null,
+        currentLocationId: bagRecord.locationId,
+        currentLocationPath: buildLocationPath(loc),
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Resolve collection by barcode and location
+ */
+async function resolveCollectionByBarcodeAndLocation(
+  barcode: string,
+  collectionType: MoveableCollectionType,
+  locationId?: number,
+  locationPath?: string
+): Promise<CollectionInfo | null> {
+  let resolvedLocationId: number | null = null
+
+  if (locationId) {
+    resolvedLocationId = locationId
+  } else if (locationPath) {
+    resolvedLocationId = await resolveLocationByPath(locationPath)
+    if (!resolvedLocationId) return null
+  }
+
+  switch (collectionType) {
+    case 'micronix_plate': {
+      const plate = await db
+        .select()
+        .from(micronixPlate)
+        .where(eq(micronixPlate.barcode, barcode))
+        .get()
+
+      if (!plate) return null
+
+      // If location specified, verify it matches
+      if (resolvedLocationId !== null && plate.locationId !== resolvedLocationId) {
+        return null // Location mismatch
+      }
+
+      const loc = await db.select().from(location).where(eq(location.id, plate.locationId)).get()
+      return {
+        collectionId: plate.id,
+        collectionType: 'micronix_plate',
+        name: plate.name,
+        barcode: plate.barcode,
+        currentLocationId: plate.locationId,
+        currentLocationPath: buildLocationPath(loc),
+      }
+    }
+
+    case 'cryovial_box': {
+      const boxRecord = await db
+        .select()
+        .from(cryovialBox)
+        .where(eq(cryovialBox.barcode, barcode))
+        .get()
+
+      if (!boxRecord) return null
+
+      // If location specified, verify it matches
+      if (resolvedLocationId !== null && boxRecord.locationId !== resolvedLocationId) {
+        return null // Location mismatch
+      }
+
+      const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+      return {
+        collectionId: boxRecord.id,
+        collectionType: 'cryovial_box',
+        name: boxRecord.name,
+        barcode: boxRecord.barcode,
+        currentLocationId: boxRecord.locationId,
+        currentLocationPath: buildLocationPath(loc),
+      }
+    }
+
+    default:
+      // Box and bag don't have barcodes
+      return null
+  }
+}
+
+/**
+ * Resolve collection by ID
+ */
+async function resolveCollectionById(
+  id: number,
+  collectionType: MoveableCollectionType
+): Promise<CollectionInfo | null> {
+  switch (collectionType) {
+    case 'micronix_plate': {
+      const plate = await db
+        .select()
+        .from(micronixPlate)
+        .where(eq(micronixPlate.id, id))
+        .get()
+
+      if (!plate) return null
+
+      const loc = await db.select().from(location).where(eq(location.id, plate.locationId)).get()
+      return {
+        collectionId: plate.id,
+        collectionType: 'micronix_plate',
+        name: plate.name,
+        barcode: plate.barcode,
+        currentLocationId: plate.locationId,
+        currentLocationPath: buildLocationPath(loc),
+      }
+    }
+
+    case 'cryovial_box': {
+      const boxRecord = await db
+        .select()
+        .from(cryovialBox)
+        .where(eq(cryovialBox.id, id))
+        .get()
+
+      if (!boxRecord) return null
+
+      const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+      return {
+        collectionId: boxRecord.id,
+        collectionType: 'cryovial_box',
+        name: boxRecord.name,
+        barcode: boxRecord.barcode,
+        currentLocationId: boxRecord.locationId,
+        currentLocationPath: buildLocationPath(loc),
+      }
+    }
+
+    case 'box': {
+      const boxRecord = await db
+        .select()
+        .from(box)
+        .where(eq(box.id, id))
+        .get()
+
+      if (!boxRecord) return null
+
+      const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+      return {
+        collectionId: boxRecord.id,
+        collectionType: 'box',
+        name: boxRecord.name,
+        barcode: null,
+        currentLocationId: boxRecord.locationId,
+        currentLocationPath: buildLocationPath(loc),
+      }
+    }
+
+    case 'bag': {
+      const bagRecord = await db
+        .select()
+        .from(bag)
+        .where(eq(bag.id, id))
+        .get()
+
+      if (!bagRecord) return null
+
+      const loc = await db.select().from(location).where(eq(location.id, bagRecord.locationId)).get()
+      return {
+        collectionId: bagRecord.id,
+        collectionType: 'bag',
+        name: bagRecord.name,
+        barcode: null,
+        currentLocationId: bagRecord.locationId,
+        currentLocationPath: buildLocationPath(loc),
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Resolve collection by identifier
+ */
+export async function resolveCollectionByIdentifier(
+  identifier: CollectionIdentifier,
+  collectionType: MoveableCollectionType
+): Promise<CollectionInfo | null> {
+  if (identifier.type === 'id' && identifier.id !== undefined) {
+    return resolveCollectionById(identifier.id, collectionType)
+  }
+
+  if (identifier.type === 'name' && identifier.name) {
+    return resolveCollectionByNameAndLocation(
+      identifier.name,
+      collectionType,
+      identifier.locationId,
+      identifier.locationPath
+    )
+  }
+
+  if (identifier.type === 'barcode' && identifier.barcode) {
+    return resolveCollectionByBarcodeAndLocation(
+      identifier.barcode,
+      collectionType,
+      identifier.locationId,
+      identifier.locationPath
+    )
+  }
+
+  return null
+}
+
+/**
+ * Validate collection move
+ */
+async function validateCollectionMove(
+  collectionInfo: CollectionInfo,
+  targetLocationId: number
+): Promise<{ valid: boolean; error?: string }> {
+  // Verify target location exists
+  const targetLocation = await db
+    .select()
+    .from(location)
+    .where(eq(location.id, targetLocationId))
+    .get()
+
+  if (!targetLocation) {
+    return { valid: false, error: `Target location ${targetLocationId} not found` }
+  }
+
+  // Can't move to the same location
+  if (collectionInfo.currentLocationId === targetLocationId) {
+    return { valid: false, error: `Collection is already at location ${targetLocationId}` }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Execute collection moves
+ */
+export async function executeCollectionMoves(
+  request: CollectionMoveRequest
+): Promise<CollectionMoveResult> {
+  try {
+    const { moves, collectionType } = request
+    const errors: ValidationError[] = []
+    const validMoves: Array<{ collectionInfo: CollectionInfo; targetLocationId: number }> = []
+
+    // Resolve all collections
+    for (let i = 0; i < moves.length; i++) {
+      const move = moves[i]
+      const collectionInfo = await resolveCollectionByIdentifier(move.identifier, collectionType)
+
+      if (!collectionInfo) {
+        errors.push({
+          row: i,
+          error: `Collection not found: ${move.identifier.type === 'id' ? `ID ${move.identifier.id}` : move.identifier.type === 'name' ? `name "${move.identifier.name}"` : `barcode "${move.identifier.barcode}"`}${move.identifier.locationId ? ` at location ${move.identifier.locationId}` : move.identifier.locationPath ? ` at ${move.identifier.locationPath}` : ''}. ${move.identifier.type === 'name' || move.identifier.type === 'barcode' ? 'If multiple collections match, provide locationId or locationPath for disambiguation.' : ''}`,
+        })
+        continue
+      }
+
+      // Validate move
+      const validation = await validateCollectionMove(collectionInfo, move.targetLocationId)
+      if (!validation.valid) {
+        errors.push({
+          row: i,
+          error: validation.error || 'Invalid move',
+        })
+        continue
+      }
+
+      validMoves.push({
+        collectionInfo,
+        targetLocationId: move.targetLocationId,
+      })
+    }
+
+    if (errors.length > 0 && validMoves.length === 0) {
+      return { success: false, moved: 0, errors }
+    }
+
+    // Execute moves in transaction
+    db.transaction((tx) => {
+      const now = new Date().toISOString()
+
+      for (const { collectionInfo, targetLocationId } of validMoves) {
+        switch (collectionInfo.collectionType) {
+          case 'micronix_plate':
+            tx.update(micronixPlate)
+              .set({
+                locationId: targetLocationId,
+                lastUpdated: now,
+              })
+              .where(eq(micronixPlate.id, collectionInfo.collectionId))
+              .run()
+            break
+
+          case 'cryovial_box':
+            tx.update(cryovialBox)
+              .set({
+                locationId: targetLocationId,
+                lastUpdated: now,
+              })
+              .where(eq(cryovialBox.id, collectionInfo.collectionId))
+              .run()
+            break
+
+          case 'box':
+            tx.update(box)
+              .set({
+                locationId: targetLocationId,
+                lastUpdated: now,
+              })
+              .where(eq(box.id, collectionInfo.collectionId))
+              .run()
+            break
+
+          case 'bag':
+            tx.update(bag)
+              .set({
+                locationId: targetLocationId,
+                lastUpdated: now,
+              })
+              .where(eq(bag.id, collectionInfo.collectionId))
+              .run()
+            break
+        }
+      }
+    })
+
+    return {
+      success: errors.length === 0,
+      moved: validMoves.length,
+      errors: errors.length > 0 ? errors : undefined,
+    }
+  } catch (error: any) {
+    return {
+      success: false,
+      moved: 0,
+      errors: [{ row: 0, error: error.message || 'Internal server error' }],
+    }
+  }
+}
+

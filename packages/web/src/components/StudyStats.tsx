@@ -322,8 +322,8 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
           subtitle="Collected samples"
         />
         <StatCard
-          title="Total Aliquots"
-          value={displaySummary.totalAliquots.toLocaleString()}
+          title="Total Containers"
+          value={displaySummary.totalContainers.toLocaleString()}
           subtitle="Storage containers"
         />
         <StatCard

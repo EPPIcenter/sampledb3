@@ -1,5 +1,8 @@
 import { sqliteTable, text, integer, real, check, primaryKey, unique } from 'drizzle-orm/sqlite-core'
-import { sql } from 'drizzle-orm'
+import { sql, type InferSelectModel } from 'drizzle-orm'
+
+export type SpecimenType = InferSelectModel<typeof specimenType>
+export type Study = InferSelectModel<typeof study>
 
 // Users and authentication
 export const users = sqliteTable('users', {
@@ -150,7 +153,12 @@ export const specimen = sqliteTable('specimen', {
   collectionDate: text('collection_date'),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
-})
+}, (table) => ({
+  specimenSubjectXorControl: check('specimen_subject_xor_control', sql`
+    (${table.studySubjectId} IS NOT NULL AND ${table.controlBatchId} IS NULL) OR
+    (${table.studySubjectId} IS NULL AND ${table.controlBatchId} IS NOT NULL)
+  `)
+}))
 
 // States (existing)
 export const state = sqliteTable('state', {
@@ -158,12 +166,10 @@ export const state = sqliteTable('state', {
   name: text('name').notNull().unique(),
 })
 
-// Storage containers (Refactored with quantity tracking)
 export const storageContainer = sqliteTable('storage_container', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   specimenId: integer('specimen_id').notNull().references(() => specimen.id),
   comment: text('comment'),
-  stateId: integer('state_id').notNull().references(() => state.id),
   totalQuantity: real('total_quantity').default(1.0),
   remainingQuantity: real('remaining_quantity').default(1.0),
   unitId: integer('unit_id').notNull().references(() => unit.id),
@@ -191,7 +197,7 @@ export const location = sqliteTable('location', {
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
 })
 
-// Container manifests
+// Container collections
 export const micronixPlate = sqliteTable('micronix_plate', {
   id: integer('id').primaryKey(),
   locationId: integer('location_id').notNull().references(() => location.id),
@@ -203,7 +209,7 @@ export const micronixPlate = sqliteTable('micronix_plate', {
 
 export const micronixTube = sqliteTable('micronix_tube', {
   id: integer('id').primaryKey().references(() => storageContainer.id),
-  manifestId: integer('manifest_id').notNull().references(() => micronixPlate.id),
+  collectionId: integer('collection_id').notNull().references(() => micronixPlate.id),
   barcode: text('barcode').notNull().unique(),
   position: text('position'),
 })
@@ -219,7 +225,7 @@ export const cryovialBox = sqliteTable('cryovial_box', {
 
 export const cryovialTube = sqliteTable('cryovial_tube', {
   id: integer('id').primaryKey().references(() => storageContainer.id),
-  manifestId: integer('manifest_id').notNull().references(() => cryovialBox.id),
+  collectionId: integer('collection_id').notNull().references(() => cryovialBox.id),
   barcode: text('barcode'),
   position: text('position'),
 })
@@ -248,6 +254,11 @@ export const sheet = sqliteTable('sheet', {
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
 }, (t) => ({
+  sheetParentCheck: check('sheet_parent_check', sql`
+    (${t.boxId} IS NOT NULL AND ${t.bagId} IS NULL) OR
+    (${t.boxId} IS NULL AND ${t.bagId} IS NOT NULL) OR
+    (${t.boxId} IS NULL AND ${t.bagId} IS NULL)
+  `),
   unq: unique().on(t.name, t.boxId, t.bagId)
 }))
 
@@ -267,7 +278,7 @@ export const paper = sqliteTable('paper', {
 
 export const staticWell = sqliteTable('static_well', {
   id: integer('id').primaryKey().references(() => storageContainer.id),
-  manifestId: integer('manifest_id').notNull().references(() => micronixPlate.id),
+  collectionId: integer('collection_id').notNull().references(() => micronixPlate.id),
   position: text('position'),
 })
 
@@ -307,4 +318,10 @@ export const storageType = sqliteTable('storage_type', {
 
 export const version = sqliteTable('version', {
   name: text('name').notNull(),
+})
+
+// Application settings (user-configurable defaults)
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value', { mode: 'json' }).notNull(),
 })

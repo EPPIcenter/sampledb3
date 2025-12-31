@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import DataTable, { Column } from '../components/DataTable'
 import Pagination from '../components/Pagination'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import SpecimenFilter, { type SpecimenFilters } from '../components/SpecimenFilter'
+import { getModifierKey } from '../lib/hotkeys'
 
 interface Specimen {
   id: number
@@ -31,6 +32,7 @@ interface Specimen {
 }
 
 export default function Specimens() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [specimens, setSpecimens] = useState<Specimen[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,6 +40,7 @@ export default function Specimens() {
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const limit = 50
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const [filters, setFilters] = useState<SpecimenFilters>({
     study: searchParams.get('study') || undefined,
@@ -110,6 +113,7 @@ export default function Specimens() {
     return new Date(dateString).toLocaleDateString()
   }
 
+
   const columns: Column<Specimen>[] = [
     {
       key: 'study',
@@ -150,10 +154,10 @@ export default function Specimens() {
         <h1 className="text-3xl font-bold text-gray-900">Specimens</h1>
         <Link
           to="/specimens/new"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap transition-colors"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap transition-colors inline-flex items-center"
         >
-          New Specimen
-        </Link>
+            New Specimen
+          </Link>
       </div>
 
       <SpecimenFilter

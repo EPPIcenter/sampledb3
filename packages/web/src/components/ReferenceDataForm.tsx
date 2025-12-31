@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useModifierHotkey, useHotkey } from '../hooks/useHotkey'
 
 interface ReferenceDataFormProps<T> {
   item: T | null
@@ -105,6 +106,21 @@ export default function ReferenceDataForm<T extends { id?: number }>({
     setFormData((prev) => ({ ...prev, [key]: value }))
   }
 
+  const formRef = useRef<HTMLFormElement>(null)
+
+  // Escape to cancel
+  useHotkey('escape', () => {
+    onCancel()
+  }, { preventDefault: true })
+
+  // Cmd/Ctrl+Enter to submit
+  useModifierHotkey('enter', (e) => {
+    if (!loading && formRef.current) {
+      e.preventDefault()
+      formRef.current.requestSubmit()
+    }
+  }, { preventDefault: true, enableOnFormTags: true })
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -117,60 +133,66 @@ export default function ReferenceDataForm<T extends { id?: number }>({
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {fields.map((field) => (
-              <div key={String(field.key)}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {field.label}
-                  {field.required && <span className="text-red-500 ml-1">*</span>}
-                </label>
-                {field.type === 'textarea' ? (
-                  <textarea
-                    value={(formData[field.key] as string) || ''}
-                    onChange={(e) => handleChange(field.key, e.target.value)}
-                    required={field.required}
-                    className="form-textarea"
-                    rows={3}
-                  />
-                ) : field.options || fieldOptions[String(field.key)] ? (
-                  <select
-                    value={formData[field.key] === null || formData[field.key] === undefined ? '' : String(formData[field.key])}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      if (field.type === 'number') {
-                        // For optional number fields, use null instead of undefined so updates can clear the value
-                        handleChange(field.key, value === '' ? null : parseInt(value))
-                      } else {
-                        handleChange(field.key, value === '' ? undefined : value)
+          <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
+            {fields.map((field) => {
+              const fieldId = `field-${String(field.key)}`
+              return (
+                <div key={String(field.key)}>
+                  <label htmlFor={fieldId} className="block text-sm font-medium text-gray-700 mb-2">
+                    {field.label}
+                    {field.required && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                  {field.type === 'textarea' ? (
+                    <textarea
+                      id={fieldId}
+                      value={(formData[field.key] as string) || ''}
+                      onChange={(e) => handleChange(field.key, e.target.value)}
+                      required={field.required}
+                      className="form-textarea"
+                      rows={3}
+                    />
+                  ) : field.options || fieldOptions[String(field.key)] ? (
+                    <select
+                      id={fieldId}
+                      value={formData[field.key] === null || formData[field.key] === undefined ? '' : String(formData[field.key])}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        if (field.type === 'number') {
+                          // For optional number fields, use null instead of undefined so updates can clear the value
+                          handleChange(field.key, value === '' ? null : parseInt(value))
+                        } else {
+                          handleChange(field.key, value === '' ? undefined : value)
+                        }
+                      }}
+                      required={field.required}
+                      disabled={loadingOptions[String(field.key)]}
+                      className="form-select disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Select...</option>
+                      {(field.options || fieldOptions[String(field.key)] || []).map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      id={fieldId}
+                      type={field.type || 'text'}
+                      value={(formData[field.key] as string | number) || ''}
+                      onChange={(e) =>
+                        handleChange(
+                          field.key,
+                          field.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value
+                        )
                       }
-                    }}
-                    required={field.required}
-                    disabled={loadingOptions[String(field.key)]}
-                    className="form-select disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">Select...</option>
-                    {(field.options || fieldOptions[String(field.key)] || []).map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type={field.type || 'text'}
-                    value={(formData[field.key] as string | number) || ''}
-                    onChange={(e) =>
-                      handleChange(
-                        field.key,
-                        field.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value
-                      )
-                    }
-                    required={field.required}
-                    className="form-input"
-                  />
-                )}
-              </div>
-            ))}
+                      required={field.required}
+                      className="form-input"
+                    />
+                  )}
+                </div>
+              )
+            })}
 
             <div className="flex justify-end space-x-3 pt-4">
               <button

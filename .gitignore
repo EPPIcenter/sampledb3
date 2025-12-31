@@ -60,3 +60,7 @@ coverage/
 *.temp
 .tmp/
 .temp/
+
+scripts/
+
+test-csvs/

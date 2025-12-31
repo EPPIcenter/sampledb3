@@ -1,20 +1,23 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { studiesApi, subjectsApi, type StudySubject } from '../../lib/api'
 import { useNavigate } from 'react-router-dom'
+import { useModifierHotkey } from '../../hooks/useHotkey'
 
 interface SubjectFormProps {
   studyId?: number
   studyShortCode?: string
   subject?: StudySubject
   onSuccess?: (subjectId: number) => void
+  onCancel: () => void
 }
 
-export default function SubjectForm({ studyId, studyShortCode, subject, onSuccess }: SubjectFormProps) {
+export default function SubjectForm({ studyId, studyShortCode, subject, onSuccess, onCancel }: SubjectFormProps) {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nameValidationError, setNameValidationError] = useState<string | null>(null)
   const [studyName, setStudyName] = useState<string | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
   const [formData, setFormData] = useState({
     name: subject?.name || '',
   })
@@ -33,7 +36,7 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
       const response = await studiesApi.list()
       const study = response.data.studies.find((s) => s.id === id)
       if (study) {
-        setStudyName(study.name)
+        setStudyName(study?.title || null)
       }
     } catch (error) {
       console.error('Failed to load study:', error)
@@ -43,7 +46,7 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
   const handleNameChange = (name: string) => {
     setFormData({ name })
     setNameValidationError(null)
-    
+
     // Basic validation
     const trimmed = name.trim()
     if (trimmed.length === 0) {
@@ -102,7 +105,7 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || (subject ? 'Failed to update subject' : 'Failed to create subject')
       setError(errorMessage)
-      
+
       // Check if it's a validation error about duplicate name
       if (errorMessage.includes('already exists')) {
         setNameValidationError(errorMessage)
@@ -112,8 +115,16 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
     }
   }
 
+  // Cmd/Ctrl+Enter to submit
+  useModifierHotkey('enter', (e) => {
+    if (!loading && !nameValidationError && formRef.current) {
+      e.preventDefault()
+      formRef.current.requestSubmit()
+    }
+  }, { preventDefault: true, enableOnFormTags: true })
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {error && !nameValidationError && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
           {error}
@@ -156,7 +167,7 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
       <div className="flex justify-end space-x-4">
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          onClick={onCancel}
           className="px-4 py-2 border border-gray-100 rounded-lg text-gray-700 hover:bg-gray-50"
         >
           Cancel

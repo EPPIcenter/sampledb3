@@ -6,20 +6,31 @@ import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { nanoid } from 'nanoid'
+import type { Database } from '../db/client'
+import { getPasswordRequirements, getSessionSettings } from '../lib/settings'
 
-const auth = new Hono()
+export function createAuthRoutes(database: Database = db) {
+  const auth = new Hono()
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 })
 
-const registerSchema = z.object({
-  email: z.string().email(),
-  name: z.string().min(1),
-  password: z.string().min(8),
-  role: z.enum(['admin', 'member', 'viewer']).default('member'),
-})
+// Dynamic register schema - password min length will be set based on settings
+const createRegisterSchema = async () => {
+  const passwordRequirements = await getPasswordRequirements()
+  if (!passwordRequirements) {
+    throw new Error('Password requirements are not configured. Please run database initialization.')
+  }
+  const minLength = passwordRequirements.minLength
+  return z.object({
+    email: z.string().email(),
+    name: z.string().min(1),
+    password: z.string().min(minLength),
+    role: z.enum(['admin', 'member', 'viewer']).default('member'),
+  })
+}
 
 // Login
 auth.post('/login', async (c) => {
@@ -27,7 +38,7 @@ auth.post('/login', async (c) => {
     const body = await c.req.json()
     const { email, password } = loginSchema.parse(body)
 
-    const user = await db
+    const user = await database
       .select()
       .from(users)
       .where(eq(users.email, email))
@@ -42,18 +53,25 @@ auth.post('/login', async (c) => {
       return c.json({ error: 'Invalid credentials' }, 401)
     }
 
+    // Get session settings
+    const sessionSettings = await getSessionSettings()
+    if (!sessionSettings) {
+      return c.json({ error: 'Session settings are not configured. Please run database initialization.' }, 500)
+    }
+    const maxAgeSeconds = sessionSettings.maxAgeSeconds
+
     // Create session
     const sessionId = nanoid()
-    const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 // 7 days
+    const expiresAt = Math.floor(Date.now() / 1000) + maxAgeSeconds
 
-    await db.insert(sessions).values({
+    await database.insert(sessions).values({
       id: sessionId,
       userId: user.id,
       expiresAt,
     })
 
     // Update last login
-    await db
+    await database
       .update(users)
       .set({ lastLogin: new Date().toISOString() })
       .where(eq(users.id, user.id))
@@ -62,7 +80,7 @@ auth.post('/login', async (c) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: maxAgeSeconds,
       path: '/',
     })
 
@@ -86,7 +104,7 @@ auth.post('/login', async (c) => {
 auth.post('/logout', async (c) => {
   const sessionId = getCookie(c, 'session_id')
   if (sessionId) {
-    await db.delete(sessions).where(eq(sessions.id, sessionId))
+    await database.delete(sessions).where(eq(sessions.id, sessionId))
   }
   deleteCookie(c, 'session_id')
   return c.json({ message: 'Logged out' })
@@ -105,24 +123,25 @@ auth.get('/me', async (c) => {
 auth.post('/register', async (c) => {
   try {
     const body = await c.req.json()
+    const registerSchema = await createRegisterSchema()
     const data = registerSchema.parse(body)
 
     // Check if user exists
-    const existing = await db
+    const existing = await database
       .select()
       .from(users)
       .where(eq(users.email, data.email))
       .get()
 
     if (existing) {
-      return c.json({ error: 'User already exists' }, 409)
+      return c.json({ error: 'User already exists' }, 400)
     }
 
     // Hash password
     const passwordHash = await bcrypt.hash(data.password, 10)
 
     // Create user
-    const [user] = await db
+    const [user] = await database
       .insert(users)
       .values({
         email: data.email,
@@ -146,6 +165,10 @@ auth.post('/register', async (c) => {
     }
     return c.json({ error: 'Internal server error' }, 500)
   }
-})
+  })
 
+  return auth
+}
+
+const auth = createAuthRoutes()
 export default auth

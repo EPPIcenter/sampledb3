@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState, useRef } from 'react'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useHotkey } from '../hooks/useHotkey'
 import { subjectsApi, type SubjectSummaryResponse } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SimpleTimeline from '../components/SimpleTimeline'
 import { getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
 import SpecimenForm from '../components/forms/SpecimenForm'
 import SubjectForm from '../components/forms/SubjectForm'
+import SkeletonDetailPage from '../components/SkeletonDetailPage'
 
 export default function SubjectDetail() {
   const { id } = useParams<{ id: string }>()
@@ -15,12 +17,44 @@ export default function SubjectDetail() {
   const [error, setError] = useState<string | null>(null)
   const [createSpecimenModalOpen, setCreateSpecimenModalOpen] = useState(false)
   const [editSubjectModalOpen, setEditSubjectModalOpen] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const hasProcessedCreateSpecimen = useRef(false)
 
   useEffect(() => {
     if (id) {
       loadSummary()
     }
   }, [id])
+
+  // Check for createSpecimen query param and open modal (only once per mount)
+  useEffect(() => {
+    const createSpecimen = searchParams.get('createSpecimen')
+    if (createSpecimen === 'true' && !hasProcessedCreateSpecimen.current) {
+      hasProcessedCreateSpecimen.current = true
+      setCreateSpecimenModalOpen(true)
+      // Remove the query param after opening modal
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('createSpecimen')
+        return next
+      })
+    }
+  }, [searchParams, setSearchParams])
+
+  // Reset the ref when the subject ID changes
+  useEffect(() => {
+    hasProcessedCreateSpecimen.current = false
+  }, [id])
+
+  // Close modals on Escape
+  useHotkey('escape', () => {
+    if (createSpecimenModalOpen) {
+      setCreateSpecimenModalOpen(false)
+    }
+    if (editSubjectModalOpen) {
+      setEditSubjectModalOpen(false)
+    }
+  }, { enabled: createSpecimenModalOpen || editSubjectModalOpen, enableOnFormTags: true })
 
   const loadSummary = async () => {
     try {
@@ -36,12 +70,9 @@ export default function SubjectDetail() {
     }
   }
 
+
   if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8">Loading...</div>
-      </div>
-    )
+    return <SkeletonDetailPage sections={1} />
   }
 
   if (error || !summaryData) {
@@ -77,9 +108,9 @@ export default function SubjectDetail() {
   }
 
   const formatContainerTypesSummary = () => {
-    const entries = Object.entries(summary.containerTypes)
+    const entries = Object.entries(summary?.containerTypes || {})
     if (entries.length === 0) return 'No containers'
-    
+
     return entries
       .map(([type, count]) => {
         const name = getContainerTypeName(type)
@@ -155,8 +186,8 @@ export default function SubjectDetail() {
               </svg>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Total Aliquots</p>
-              <p className="text-gray-900 font-medium">{summary.totalAliquots.toLocaleString()}</p>
+              <p className="text-sm text-gray-500">Total Containers</p>
+              <p className="text-gray-900 font-medium">{summary.totalContainers.toLocaleString()}</p>
             </div>
           </div>
 
@@ -174,7 +205,7 @@ export default function SubjectDetail() {
             </div>
           )}
 
-          {Object.keys(summary.containerTypes).length > 0 && (
+          {Object.keys(summary?.containerTypes || {}).length > 0 && (
             <div className="flex items-start space-x-3">
               <div className="text-orange-600 mt-0.5">
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -199,12 +230,14 @@ export default function SubjectDetail() {
       )}
 
       {createSpecimenModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black bg-opacity-30"
-            onClick={() => setCreateSpecimenModalOpen(false)}
-          />
-          <div className="relative z-50 w-full max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[100] overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
+              onClick={() => setCreateSpecimenModalOpen(false)}
+            />
+            <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full max-h-[90vh] overflow-y-auto">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Add Specimen</h2>
               <button
@@ -225,18 +258,23 @@ export default function SubjectDetail() {
                 setCreateSpecimenModalOpen(false)
                 loadSummary()
               }}
+              onCancel={() => setCreateSpecimenModalOpen(false)}
             />
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {editSubjectModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black bg-opacity-30"
-            onClick={() => setEditSubjectModalOpen(false)}
-          />
-          <div className="relative z-50 w-full max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6">
+        <div className="fixed inset-0 z-[100] overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
+              onClick={() => setEditSubjectModalOpen(false)}
+            />
+            <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Edit Subject</h2>
               <button
@@ -255,7 +293,10 @@ export default function SubjectDetail() {
                 setEditSubjectModalOpen(false)
                 loadSummary()
               }}
+              onCancel={() => setEditSubjectModalOpen(false)}
             />
+              </div>
+            </div>
           </div>
         </div>
       )}

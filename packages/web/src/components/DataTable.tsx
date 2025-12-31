@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import SkeletonTable from './SkeletonTable'
 
 export interface Column<T> {
   key: keyof T | string
@@ -30,6 +31,9 @@ export default function DataTable<T extends { id: number }>({
 }: DataTableProps<T>) {
   const [sortColumn, setSortColumn] = useState<keyof T | string | null>(initialSortColumn)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(initialSortDirection)
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null)
+  const tableRef = useRef<HTMLDivElement>(null)
+  const rowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map())
 
   const handleSort = (column: Column<T>) => {
     if (!column.sortable) return
@@ -56,12 +60,84 @@ export default function DataTable<T extends { id: number }>({
     return sortDirection === 'asc' ? comparison : -comparison
   })
 
+  // Reset selected row when data changes
+  useEffect(() => {
+    setSelectedRowIndex(null)
+  }, [data.length, sortColumn, sortDirection])
+
+  // Handle keyboard navigation
+  useEffect(() => {
+    if (!onRowClick || sortedData.length === 0) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if focus is within the table or no input is focused
+      const activeElement = document.activeElement
+      const isInputFocused = activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.isContentEditable
+      )
+
+      if (isInputFocused) return
+
+      // Check if focus is within the table
+      if (tableRef.current && !tableRef.current.contains(activeElement)) {
+        return
+      }
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedRowIndex(prev => {
+          if (prev === null) return 0
+          return Math.min(prev + 1, sortedData.length - 1)
+        })
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedRowIndex(prev => {
+          if (prev === null) return sortedData.length - 1
+          return Math.max(prev - 1, 0)
+        })
+      } else if (e.key === 'Enter' && selectedRowIndex !== null) {
+        e.preventDefault()
+        const selectedRow = sortedData[selectedRowIndex]
+        if (selectedRow) {
+          onRowClick(selectedRow)
+        }
+      } else if (e.key === 'Home') {
+        e.preventDefault()
+        setSelectedRowIndex(0)
+      } else if (e.key === 'End') {
+        e.preventDefault()
+        setSelectedRowIndex(sortedData.length - 1)
+      }
+    }
+
+    // Make table focusable
+    if (tableRef.current) {
+      tableRef.current.setAttribute('tabindex', '0')
+      tableRef.current.addEventListener('keydown', handleKeyDown)
+    }
+
+    return () => {
+      if (tableRef.current) {
+        tableRef.current.removeEventListener('keydown', handleKeyDown)
+      }
+    }
+  }, [sortedData, onRowClick, selectedRowIndex])
+
+  // Scroll selected row into view
+  useEffect(() => {
+    if (selectedRowIndex !== null && sortedData[selectedRowIndex]) {
+      const rowId = sortedData[selectedRowIndex].id
+      const rowElement = rowRefs.current.get(rowId)
+      if (rowElement) {
+        rowElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    }
+  }, [selectedRowIndex, sortedData])
+
   if (loading) {
-    return (
-      <div className="text-center py-8">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    )
+    return <SkeletonTable rows={5} columns={columns.length} density={density} />
   }
 
   if (data.length === 0) {
@@ -71,7 +147,7 @@ export default function DataTable<T extends { id: number }>({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div ref={tableRef} className="bg-white rounded-lg shadow overflow-hidden" tabIndex={0}>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50">
@@ -107,12 +183,21 @@ export default function DataTable<T extends { id: number }>({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {sortedData.map((row) => (
-              <tr
-                key={row.id}
-                onClick={() => onRowClick?.(row)}
-                className={onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''}
-              >
+            {sortedData.map((row, index) => {
+              const isSelected = selectedRowIndex === index
+              return (
+                <tr
+                  key={row.id}
+                  ref={(el) => {
+                    if (el) {
+                      rowRefs.current.set(row.id, el)
+                    } else {
+                      rowRefs.current.delete(row.id)
+                    }
+                  }}
+                  onClick={() => onRowClick?.(row)}
+                  className={onRowClick ? `cursor-pointer hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}` : ''}
+                >
                 {columns.map((column) => (
                   <td key={String(column.key)} className={`${density === 'compact' ? 'px-3 py-2 text-xs' : 'px-6 py-4 text-sm'} whitespace-nowrap text-gray-900`}>
                     {column.render
@@ -121,7 +206,8 @@ export default function DataTable<T extends { id: number }>({
                   </td>
                 ))}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>

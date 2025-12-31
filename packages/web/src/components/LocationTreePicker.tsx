@@ -123,14 +123,16 @@ export default function LocationTreePicker({ selected, onChange }: LocationTreeP
 
           return (
             <div key={root} className="mb-1">
-              <button
-                type="button"
-                onClick={() => toggleRoot(root)}
-                className={`flex items-center justify-between w-full px-2 py-1.5 rounded hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+              <div
+                className={`flex items-center justify-between w-full px-2 py-1.5 rounded hover:bg-gray-50 ${
                   rootSelected ? 'bg-blue-50 border border-blue-200' : ''
                 }`}
               >
-                <div className="flex items-center flex-1">
+                <button
+                  type="button"
+                  onClick={() => toggleRoot(root)}
+                  className="flex items-center flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
                   <span className="w-3 h-3 mr-2 text-gray-500">
                     {rootExpanded ? '▾' : '▸'}
                   </span>
@@ -140,7 +142,7 @@ export default function LocationTreePicker({ selected, onChange }: LocationTreeP
                   {rootSelected && (
                     <span className="ml-2 text-xs text-blue-600">(selected)</span>
                   )}
-                </div>
+                </button>
                 <button
                   type="button"
                   onClick={(e) => {
@@ -155,7 +157,7 @@ export default function LocationTreePicker({ selected, onChange }: LocationTreeP
                 >
                   {rootSelected ? 'Deselect' : 'Select'}
                 </button>
-              </button>
+              </div>
 
               {rootExpanded && (
                 <div className="ml-4 border-l border-gray-100 pl-3 mt-1">
@@ -171,14 +173,16 @@ export default function LocationTreePicker({ selected, onChange }: LocationTreeP
 
                     return (
                       <div key={levelI} className="mb-1">
-                        <button
-                          type="button"
-                          onClick={() => toggleLevelI(root, levelI)}
-                          className={`flex items-center justify-between w-full px-1 py-1 rounded hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                        <div
+                          className={`flex items-center justify-between w-full px-1 py-1 rounded hover:bg-gray-50 ${
                             levelISelected ? 'bg-blue-50 border border-blue-200' : ''
                           }`}
                         >
-                          <div className="flex items-center flex-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleLevelI(root, levelI)}
+                            className="flex items-center flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          >
                             <span className="w-3 h-3 mr-2 text-gray-400">
                               {l1Expanded ? '▾' : '▸'}
                             </span>
@@ -188,7 +192,7 @@ export default function LocationTreePicker({ selected, onChange }: LocationTreeP
                             {levelISelected && (
                               <span className="ml-2 text-xs text-blue-600">(selected)</span>
                             )}
-                          </div>
+                          </button>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -203,7 +207,7 @@ export default function LocationTreePicker({ selected, onChange }: LocationTreeP
                           >
                             {levelISelected ? 'Deselect' : 'Select'}
                           </button>
-                        </button>
+                        </div>
 
                         {l1Expanded && (
                           <div className="ml-4 border-l border-gray-100 pl-3 mt-1 space-y-1">

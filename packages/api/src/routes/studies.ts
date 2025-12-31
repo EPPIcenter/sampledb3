@@ -23,7 +23,7 @@ studies.get('/', async (c) => {
   try {
     const search = c.req.query('search')
     const page = validatePage(c.req.query('page'))
-    const limit = validateLimit(c.req.query('limit'))
+    const limit = await validateLimit(c.req.query('limit'))
     const offset = (page - 1) * limit
     
     let query = db.select().from(study)
@@ -91,7 +91,7 @@ studies.get('/summaries', async (c) => {
       studyId: number
       totalSubjects: number
       totalSpecimens: number
-      totalAliquots: number
+      totalContainers: number
       collectionDateRange: { earliest: string; latest: string } | null
     }> = []
 
@@ -102,7 +102,7 @@ studies.get('/summaries', async (c) => {
           studyId: id,
           totalSubjects: 0,
           totalSpecimens: 0,
-          totalAliquots: 0,
+          totalContainers: 0,
           collectionDateRange: null,
         })
       }
@@ -194,7 +194,7 @@ studies.get('/summaries', async (c) => {
       const subjectIds = studySubjectMap.get(id) || []
       const studySpecimens = studySpecimenMap.get(id) || []
       const totalSpecimens = studySpecimens.length
-      const totalAliquots = containerCounts[id] || 0
+      const totalContainers = containerCounts[id] || 0
 
       // Calculate collection date range
       const collectionDates = (studySpecimens
@@ -213,7 +213,7 @@ studies.get('/summaries', async (c) => {
         studyId: id,
         totalSubjects: subjectIds.length,
         totalSpecimens,
-        totalAliquots,
+        totalContainers,
         collectionDateRange,
       })
     }
@@ -261,7 +261,7 @@ studies.get('/:id/subjects', async (c) => {
     }
 
     const page = validatePage(c.req.query('page'))
-    const limit = validateLimit(c.req.query('limit'))
+    const limit = await validateLimit(c.req.query('limit'))
     const offset = (page - 1) * limit
 
     const whereClause = eq(studySubject.studyId, id)
@@ -369,7 +369,7 @@ studies.get('/:id/summary', async (c) => {
         summary: {
           totalSubjects: 0,
           totalSpecimens: 0,
-          totalAliquots: 0,
+          totalContainers: 0,
           averageSpecimensPerSubject: 0,
           specimenTypes: [],
           containerTypes: {},
@@ -429,7 +429,7 @@ studies.get('/:id/summary', async (c) => {
         summary: {
           totalSubjects,
           totalSpecimens: 0,
-          totalAliquots: 0,
+          totalContainers: 0,
           averageSpecimensPerSubject: 0,
           specimenTypes: [],
           containerTypes: {},
@@ -458,7 +458,7 @@ studies.get('/:id/summary', async (c) => {
       .from(storageContainer)
       .where(inArray(storageContainer.specimenId, specimenIds))
 
-    const totalAliquots = containers.length
+    const totalContainers = containers.length
     const containerIds = containers.map(c => c.id)
 
     // Get container type information
@@ -565,7 +565,7 @@ studies.get('/:id/summary', async (c) => {
       summary: {
         totalSubjects,
         totalSpecimens,
-        totalAliquots,
+        totalContainers,
         averageSpecimensPerSubject: totalSubjects > 0 ? totalSpecimens / totalSubjects : 0,
         specimenTypes: specimenTypesArray,
         containerTypes: containerTypeCounts,

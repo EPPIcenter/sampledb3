@@ -13,10 +13,21 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: process.env.API_TARGET || 'http://localhost:3000',
         changeOrigin: true,
       },
     },
+  },
+  optimizeDeps: {
+    // Pre-bundle these dependencies to prevent 504 errors during navigation
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      '@tanstack/react-query',
+    ],
+    // Don't hold requests until crawl ends - process optimizations in background
+    holdUntilCrawlEnd: false,
   },
   build: {
     outDir: 'dist',

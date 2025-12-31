@@ -37,6 +37,8 @@ export interface Specimen {
   created: string
   lastUpdated: string
   specimenType?: { id: number; name: string }
+  sourceType?: 'subject' | 'control' | 'reagent' | 'cell_line' | 'plasmid' | 'standard'
+  sourceId?: number
 }
 
 export interface SpecimenType {
@@ -86,7 +88,7 @@ export interface StudySummary {
   summary: {
     totalSubjects: number
     totalSpecimens: number
-    totalAliquots: number
+    totalContainers: number
     averageSpecimensPerSubject: number
     specimenTypes: Array<{ name: string; count: number; percentage: number }>
     containerTypes: Record<string, number>
@@ -116,25 +118,25 @@ export interface StudySummaryBasic {
   studyId: number
   totalSubjects: number
   totalSpecimens: number
-  totalAliquots: number
+  totalContainers: number
   collectionDateRange: { earliest: string; latest: string } | null
 }
 
 export const studiesApi = {
-  list: (search?: string, params?: { page?: number; limit?: number }) => 
-    api.get<{ studies: Study[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>('/studies', { 
-      params: { search, ...params } 
+  list: (search?: string, params?: { page?: number; limit?: number }) =>
+    api.get<{ studies: Study[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>('/studies', {
+      params: { search, ...params }
     }),
   get: (id: number) => api.get<{ study: Study }>(`/studies/${id}`),
-  getSubjects: (id: number, params?: { page?: number; limit?: number }) => 
+  getSubjects: (id: number, params?: { page?: number; limit?: number }) =>
     api.get<{ subjects: StudySubject[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>(`/studies/${id}/subjects`, { params }),
   getSummary: (id: number) => api.get<StudySummary>(`/studies/${id}/summary`),
-  getSummaries: (ids: number[]) => api.get<{ summaries: StudySummaryBasic[] }>('/studies/summaries', { 
-    params: { ids: ids.join(',') } 
+  getSummaries: (ids: number[]) => api.get<{ summaries: StudySummaryBasic[] }>('/studies/summaries', {
+    params: { ids: ids.join(',') }
   }),
   getTimeline: (id: number) => api.get<StudyTimelineData>(`/studies/${id}/timeline`),
   create: (data: Omit<Study, 'id' | 'created' | 'lastUpdated'>) => api.post<{ study: Study }>('/studies', data),
-  update: (id: number, data: Partial<Pick<Study, 'title' | 'leadPerson' | 'shortCode' | 'description' | 'isLongitudinal'>>) => 
+  update: (id: number, data: Partial<Pick<Study, 'title' | 'leadPerson' | 'shortCode' | 'description' | 'isLongitudinal'>>) =>
     api.put<{ study: Study }>(`/studies/${id}`, data),
 }
 
@@ -145,7 +147,7 @@ export interface SubjectSummarySpecimen {
   collectionDate?: string
   created: string
   lastUpdated: string
-  aliquotCount: number
+  containerCount: number
   totalRemainingQuantity?: number
   containerBreakdown: Record<string, number>
   unitBreakdown?: Record<string, number>
@@ -154,9 +156,9 @@ export interface SubjectSummarySpecimen {
     type: string
     remainingQuantity: number
     unit: string
-    manifestName?: string
+    collectionName?: string
     position?: string
-    manifestId?: number
+    collectionId?: number
     locationPath?: string
   }>
 }
@@ -167,13 +169,13 @@ export interface InventoryItem {
   totalQuantity: number
   remainingQuantity: number
   containerCount: number
-  manifests?: string[]
+  collections?: string[]
   locationPaths?: string[]
 }
 
 export interface SubjectSummary {
   totalSpecimens: number
-  totalAliquots: number
+  totalContainers: number
   totalRemainingQuantity?: number
   inventory?: InventoryItem[]
   specimenTypes: Array<{ name: string; count: number }>
@@ -238,7 +240,8 @@ export const specimensApi = {
     api.post<{ specimens: Specimen[]; created: number; errors?: Array<{ index: number; error: string }> }>('/specimens/bulk', data),
 }
 
-export interface State {
+// State interface removed - states deprecated in favor of tags
+export interface Tag {
   id: number
   name: string
 }
@@ -284,19 +287,20 @@ export interface Location {
 export const specimenTypesApi = {
   list: () => api.get<{ specimenTypes: SpecimenType[] }>('/specimen-types'),
   get: (id: number) => api.get<{ specimenType: SpecimenType }>(`/specimen-types/${id}`),
-  create: (data: Omit<SpecimenType, 'id' | 'created' | 'lastUpdated'>) => 
+  create: (data: Omit<SpecimenType, 'id' | 'created' | 'lastUpdated'>) =>
     api.post<{ specimenType: SpecimenType }>('/specimen-types', data),
-  update: (id: number, data: Partial<SpecimenType>) => 
+  update: (id: number, data: Partial<SpecimenType>) =>
     api.put<{ specimenType: SpecimenType }>(`/specimen-types/${id}`, data),
   delete: (id: number) => api.delete<{ message: string }>(`/specimen-types/${id}`),
 }
 
-export const statesApi = {
-  list: () => api.get<{ states: State[] }>('/states'),
-  get: (id: number) => api.get<{ state: State }>(`/states/${id}`),
-  create: (data: Omit<State, 'id'>) => api.post<{ state: State }>('/states', data),
-  update: (id: number, data: Partial<State>) => api.put<{ state: State }>(`/states/${id}`, data),
-  delete: (id: number) => api.delete<{ message: string }>(`/states/${id}`),
+// States API removed - replaced with tags
+export const tagsApi = {
+  list: () => api.get<{ tags: Tag[] }>('/tags'),
+  get: (id: number) => api.get<{ tag: Tag }>(`/tags/${id}`),
+  create: (data: Omit<Tag, 'id'>) => api.post<{ tag: Tag }>('/tags', data),
+  update: (id: number, data: Partial<Tag>) => api.put<{ tag: Tag }>(`/tags/${id}`, data),
+  delete: (id: number) => api.delete<{ message: string }>(`/tags/${id}`),
 }
 
 export const storageTypesApi = {
@@ -401,10 +405,10 @@ export interface ControlBatch {
 }
 
 export interface ControlBatchSummaryResponse {
-  batch: ControlBatch & { 
-    definition?: { 
-      id: number; 
-      name: string; 
+  batch: ControlBatch & {
+    definition?: {
+      id: number;
+      name: string;
       controlType: string;
       description?: string;
       targetDensity?: number;
@@ -449,7 +453,7 @@ export interface ControlDefinitionSummaryResponse {
   }>
   stats: {
     totalBatches: number
-    totalAliquots: number
+    totalContainers: number
     totalSpots: number
     totalTubes: number
     latestBatchDate?: string | null
@@ -467,7 +471,7 @@ export const controlsApi = {
   update: (id: number, data: Partial<ControlDefinition>) => api.patch<{ control: ControlDefinition }>(`/controls/${id}`, data),
   listAllBatches: () => api.get<{ batches: Array<ControlBatch & { definitionName?: string }> }>('/controls/batches'),
   getBatches: (id: number) => api.get<{ batches: ControlBatch[] }>(`/controls/${id}/batches`),
-  createBatch: (id: number, data: Omit<ControlBatch, 'id' | 'controlDefinitionId' | 'created' | 'lastUpdated'>) => 
+  createBatch: (id: number, data: Omit<ControlBatch, 'id' | 'controlDefinitionId' | 'created' | 'lastUpdated'>) =>
     api.post<{ batch: ControlBatch }>(`/controls/${id}/batches`, data),
   getBatch: (id: number) => api.get<{ batch: ControlBatch }>(`/controls/batches/${id}`),
   getBatchSummary: (id: number) => api.get<ControlBatchSummaryResponse>(`/controls/batches/${id}/summary`),
@@ -489,8 +493,8 @@ export const locationsApi = {
     if (search && search.trim()) params.search = search.trim()
     return api.get<{ locations: Location[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>('/locations', { params })
   },
-  get: (id: number, params?: { 
-    boxes_page?: number; 
+  get: (id: number, params?: {
+    boxes_page?: number;
     boxes_limit?: number;
     plates_page?: number;
     plates_limit?: number;
@@ -510,9 +514,9 @@ export const locationsApi = {
     if (params?.bags_limit) queryParams.bags_limit = params.bags_limit
     return api.get<{ location: Location; contents: any; pagination?: any }>(`/locations/${id}`, { params: queryParams })
   },
-  create: (data: Omit<Location, 'id' | 'created' | 'lastUpdated'>) => 
+  create: (data: Omit<Location, 'id' | 'created' | 'lastUpdated'>) =>
     api.post<{ location: Location }>('/locations', data),
-  update: (id: number, data: Partial<Omit<Location, 'id' | 'created' | 'lastUpdated'>>) => 
+  update: (id: number, data: Partial<Omit<Location, 'id' | 'created' | 'lastUpdated'>>) =>
     api.put<{ location: Location }>(`/locations/${id}`, data),
   delete: (id: number) => api.delete<{ message: string }>(`/locations/${id}`),
 }
@@ -538,16 +542,16 @@ export const collectionsApi = {
     api.post<{ box: any }>('/collections/boxes', data),
   createBag: (data: { name: string; locationId: number }) =>
     api.post<{ bag: any }>('/collections/bags', data),
-  resolveAliquots: (data: {
+  resolveContainers: (data: {
     identifiers: Array<
       | { type: 'barcode'; barcode: string }
       | { type: 'position'; sourceCollectionName: string; sourcePosition: string }
     >
   }) =>
-    api.post<{ aliquots: Array<{ identifier: any; aliquot: any }> }>('/collections/aliquots/resolve', data),
+    api.post<{ containers: Array<{ identifier: any; container: any }> }>('/collections/containers/resolve', data),
   listCollectionsByType: (type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet') =>
     api.get<{ collections: Array<{ id: number; name: string }> }>(`/collections/list/${type}`),
-  moveAliquots: (data: {
+  moveContainers: (data: {
     collectionType?: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet'
     mappings: Array<{
       fromCollectionName: string
@@ -555,14 +559,14 @@ export const collectionsApi = {
     }>
     moves: Array<{
       identifier:
-        | { type: 'barcode'; barcode: string }
-        | { type: 'position'; sourceCollectionName: string; sourcePosition: string }
-        | { type: 'container_id'; containerId: number }
+      | { type: 'barcode'; barcode: string }
+      | { type: 'position'; sourceCollectionName: string; sourcePosition: string }
+      | { type: 'container_id'; containerId: number }
       targetPosition?: string
     }>
   }) =>
     api.post<{ success: boolean; moved: number; errors?: Array<{ row: number; error: string }> }>(
-      '/collections/aliquots/move',
+      '/collections/containers/move',
       data
     ),
   moveSheets: (data: {
@@ -570,6 +574,20 @@ export const collectionsApi = {
     targetCollectionId: number
     targetCollectionType: 'box' | 'bag'
   }) => api.post<{ success: boolean; moved: number }>('/collections/sheets/move', data),
+  moveCollections: (data: {
+    collectionType: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+    moves: Array<{
+      identifier:
+        | { type: 'id'; id: number }
+        | { type: 'name'; name: string; locationId?: number; locationPath?: string }
+        | { type: 'barcode'; barcode: string; locationId?: number; locationPath?: string }
+      targetLocationId: number
+    }>
+  }) =>
+    api.post<{ success: boolean; moved: number; errors?: Array<{ row: number; error: string }> }>(
+      '/collections/move',
+      data
+    ),
 }
 
 export interface ExportFilters {
@@ -580,7 +598,7 @@ export interface ExportFilters {
   date_to?: string
   created_from?: string
   created_to?: string
-  state_ids?: number[]
+  tag_ids?: number[] // Replaces state_ids
   subject_ids?: number[]
 }
 
@@ -589,7 +607,9 @@ export interface ContainerExportData {
   container_type: string
   barcode?: string
   position?: string
-  state: string
+  label?: string
+  collection_name?: string
+  tags: string // Comma-separated tag names
   status: string
   comment?: string
   specimen_id: number
@@ -597,9 +617,17 @@ export interface ContainerExportData {
   collection_date?: string
   subject_id?: number
   subject_name?: string
+  control_batch_id?: number
+  control_batch_name?: string
+  control_definition_name?: string
+  control_type?: string
+  target_density?: number
+  target_density_unit?: string
+  strain_composition?: string
   study_id: number
   study_title: string
   study_code: string
+  study_lead_person?: string
   location_path?: string
   location_root?: string
   location_level_i?: string
@@ -613,7 +641,7 @@ export const exportApi = {
   specimens: (params?: { study?: string; source_type?: string }) =>
     api.get('/export/specimens.csv', { params, responseType: 'blob' }),
   inventory: () => api.get('/export/inventory.csv', { responseType: 'blob' }),
-  containers: (params: ExportFilters, format: 'csv' | 'xlsx' | 'json' = 'csv') => {
+  containers: (params: ExportFilters, format: 'csv' | 'xlsx' | 'json' = 'csv', configName?: string) => {
     const queryParams: any = { format }
     // Add study
     queryParams.study = params.study
@@ -622,6 +650,8 @@ export const exportApi = {
     if (params.date_to) queryParams.date_to = params.date_to
     if (params.created_from) queryParams.created_from = params.created_from
     if (params.created_to) queryParams.created_to = params.created_to
+    // Add config_name if provided
+    if (configName) queryParams.config_name = configName
     // Add arrays - axios will serialize these correctly
     if (params.specimen_type_ids && params.specimen_type_ids.length > 0) {
       queryParams.specimen_type_ids = params.specimen_type_ids
@@ -629,8 +659,8 @@ export const exportApi = {
     if (params.container_types && params.container_types.length > 0) {
       queryParams.container_types = params.container_types
     }
-    if (params.state_ids && params.state_ids.length > 0) {
-      queryParams.state_ids = params.state_ids
+    if (params.tag_ids && params.tag_ids.length > 0) {
+      queryParams.tag_ids = params.tag_ids
     }
     if (params.subject_ids && params.subject_ids.length > 0) {
       queryParams.subject_ids = params.subject_ids
@@ -659,8 +689,8 @@ export const exportApi = {
     if (params.container_types && params.container_types.length > 0) {
       queryParams.container_types = params.container_types
     }
-    if (params.state_ids && params.state_ids.length > 0) {
-      queryParams.state_ids = params.state_ids
+    if (params.tag_ids && params.tag_ids.length > 0) {
+      queryParams.tag_ids = params.tag_ids
     }
     if (params.subject_ids && params.subject_ids.length > 0) {
       queryParams.subject_ids = params.subject_ids
@@ -677,6 +707,154 @@ export const exportApi = {
       '/export/available-types',
       { params: { study: studyCode } }
     ),
+  containersByNames: (params: {
+    study: string
+    subject_names: string[]
+    subject_dates?: { [subjectName: string]: { exact?: string; from?: string; to?: string } }
+    date_tolerance?: number
+    format?: 'csv' | 'xlsx' | 'json'
+    config_name?: string
+    specimen_type_ids?: number[]
+    container_types?: string[]
+    date_from?: string
+    date_to?: string
+    created_from?: string
+    created_to?: string
+  }) => {
+    return api.post<{
+      summary: {
+        total_containers: number
+        subjects_with_results: Array<{ name: string; count: number }>
+        subjects_no_results: string[]
+        subjects_not_found: string[]
+        errors?: string[]
+      }
+      data: ContainerExportData[] | string
+      format: 'csv' | 'xlsx' | 'json'
+      filename?: string
+    }>('/export/containers', params)
+  },
+  containersCountByNames: (params: {
+    study: string
+    subject_names: string[]
+    subject_dates?: { [subjectName: string]: { exact?: string; from?: string; to?: string } }
+    date_tolerance?: number
+    specimen_type_ids?: number[]
+    container_types?: string[]
+    date_from?: string
+    date_to?: string
+    created_from?: string
+    created_to?: string
+  }) => {
+    return api.post<{
+      count: number
+      summary: {
+        total_containers: number
+        subjects_with_results: Array<{ name: string; count: number }>
+        subjects_no_results: string[]
+        subjects_not_found: string[]
+        errors?: string[]
+      }
+    }>('/export/containers', { ...params, count_only: true })
+  },
+  validateStudyCodes: (studyCodes: string[]) => {
+    return api.post<{
+      valid: Array<{ code: string; id: number; title?: string; lead_person?: string }>
+      invalid: string[]
+      total_unique: number
+      valid_count: number
+      invalid_count: number
+    }>('/export/containers/validate-studies', { study_codes: studyCodes })
+  },
+  containersByNamesMultiStudy: (params: {
+    entries: Array<{
+      study_short_code: string
+      subject_name: string
+      collection_date?: string
+      date_from?: string
+      date_to?: string
+    }>
+    subject_dates?: { [subjectName: string]: { exact?: string; from?: string; to?: string } }
+    date_tolerance?: number
+    format?: 'csv' | 'xlsx' | 'json'
+    config_name?: string
+    specimen_type_ids?: number[]
+    container_types?: string[]
+    date_from?: string
+    date_to?: string
+    created_from?: string
+    created_to?: string
+  }) => {
+    return api.post<{
+      summary: {
+        total_containers: number
+        studies: Array<{
+          study_code: string
+          study_title: string
+          study_lead_person: string
+          containers: number
+          subjects_with_results: Array<{ name: string; count: number }>
+          subjects_no_results: string[]
+          subjects_not_found: string[]
+        }>
+        invalid_study_codes: string[]
+        errors?: string[]
+      }
+      data: ContainerExportData[] | string
+      format: 'csv' | 'xlsx' | 'json'
+      filename?: string
+    }>('/export/containers/multi-study', params)
+  },
+  containersCountByNamesMultiStudy: (params: {
+    entries: Array<{
+      study_short_code: string
+      subject_name: string
+      collection_date?: string
+      date_from?: string
+      date_to?: string
+    }>
+    date_tolerance?: number
+    specimen_type_ids?: number[]
+    container_types?: string[]
+    date_from?: string
+    date_to?: string
+    created_from?: string
+    created_to?: string
+  }) => {
+    return api.post<{
+      count: number
+      summary: {
+        total_containers: number
+        studies: Array<{
+          study_code: string
+          study_title: string
+          study_lead_person: string
+          containers: number
+          subjects_with_results: Array<{ name: string; count: number }>
+          subjects_no_results: string[]
+          subjects_not_found: string[]
+        }>
+        invalid_study_codes: string[]
+        errors?: string[]
+      }
+    }>('/export/containers/multi-study', { ...params, count_only: true })
+  },
+  containersByBarcodes: (params: {
+    barcodes: string[]
+    format?: 'csv' | 'xlsx' | 'json'
+    config_name?: string
+  }) => {
+    return api.post<{
+      summary: {
+        total_containers: number
+        barcodes_found: string[]
+        barcodes_not_found: string[]
+      }
+      data: ContainerExportData[] | string
+      format: 'csv' | 'xlsx' | 'json'
+      filename?: string
+    }>('/export/containers/by-barcodes', params)
+  },
 }
 
 export const searchApi = {
@@ -719,7 +897,7 @@ export interface StatisticsFilters {
   source_type?: string
   specimen_type_id?: string
   container_type?: string
-  state_id?: string
+  tag_ids?: number[] // Array of tag IDs for filtering (axios serializes as multiple query params)
   collection_date_from?: string
   collection_date_to?: string
   created_from?: string
@@ -732,7 +910,93 @@ export interface StatisticsFilters {
 
 export const statisticsApi = {
   get: (filters?: StatisticsFilters) =>
-    api.get<StatisticsData>('/statistics', { params: filters }),
+    api.get<StatisticsData>('/statistics', {
+      params: filters,
+      paramsSerializer: {
+        indexes: null, // Use format: key=value1&key=value2 instead of key[]=value1&key[]=value2
+      },
+    }),
+}
+
+// Settings interfaces
+export interface ContainerDefaults {
+  micronix_tube: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
+  cryovial_tube: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
+  tube: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
+  paper: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
+  static_well: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
+}
+
+export interface PaginationSettings {
+  defaultPageSize: number
+  maxPageSize: number
+}
+
+export interface PasswordRequirements {
+  minLength: number
+}
+
+export interface SessionSettings {
+  maxAgeSeconds: number
+}
+
+export interface ExportConfiguration {
+  name: string
+  columns: string[]
+  isDefault?: boolean
+}
+
+export interface ExportConfigurations {
+  configurations: ExportConfiguration[]
+}
+
+export interface ScannerConfiguration {
+  id: string
+  name: string
+  barcodeColumn: string
+  positionType: 'single' | 'combined'
+  positionColumn?: string
+  rowColumn?: string
+  columnColumn?: string
+  skipRows: number
+  isDefault?: boolean
+}
+
+export interface ScannerConfigurations {
+  configurations: ScannerConfiguration[]
+}
+
+export interface AllSettings {
+  container_defaults: ContainerDefaults | null
+  pagination_settings: PaginationSettings | null
+  password_requirements: PasswordRequirements | null
+  session_settings: SessionSettings | null
+  export_configurations: ExportConfigurations | null
+  scanner_configurations: ScannerConfigurations | null
+}
+
+export interface Unit {
+  id: number
+  symbol: string
+  name: string
+  category: string
+}
+
+export const settingsApi = {
+  getAll: () => api.get<AllSettings>('/settings'),
+  get: (key: string) => api.get<{ key: string; value: any }>(`/settings/${key}`),
+  update: (key: string, value: any) => api.put<{ key: string; value: any }>(`/settings/${key}`, value),
+  getUnits: () => api.get<Unit[]>('/settings/units'),
+}
+
+export const exportConfigurationsApi = {
+  getAll: () => api.get<ExportConfigurations>('/settings/export_configurations'),
+  update: (configs: ExportConfigurations) => api.put<ExportConfigurations>('/settings/export_configurations', configs),
+}
+
+export const scannerConfigurationsApi = {
+  getAll: () => api.get<ScannerConfigurations>('/settings/scanner_configurations'),
+  update: (configs: ScannerConfigurations) => api.put<ScannerConfigurations>('/settings/scanner_configurations', configs),
 }
 
 export default api

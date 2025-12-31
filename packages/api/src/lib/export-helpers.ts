@@ -5,7 +5,12 @@ import {
   specimenType,
   studySubject,
   study,
-  state,
+  controlBatch,
+  controlDefinition,
+  unit,
+  composition,
+  compositionStrain,
+  strain,
   location,
   micronixTube,
   micronixPlate,
@@ -13,10 +18,17 @@ import {
   cryovialBox,
   tube,
   box,
+  bag,
+  sheet,
   paper,
   staticWell,
 } from '../db/schema'
-import { eq, and, inArray, gte, lte, sql } from 'drizzle-orm'
+import { eq, and, or, inArray, gte, lte, sql } from 'drizzle-orm'
+import type { InferSelectModel } from 'drizzle-orm'
+import { resolveSubjectsByStudyGrouped } from './identifier-resolution'
+import { getExportConfigurationByName, getDefaultExportConfiguration } from './settings'
+
+type StudyType = InferSelectModel<typeof study>
 
 export interface ExportFilters {
   study: string
@@ -28,6 +40,12 @@ export interface ExportFilters {
   created_to?: string
   state_ids?: number[]
   subject_ids?: number[]
+  date_tolerance?: number  // Global tolerance for all exact dates (defaults to 0)
+  subject_dates?: {  // Per-subject date filtering
+    [subjectId: number]: 
+      | { exact: string }  // Exact date match (tolerance applied from date_tolerance)
+      | { from?: string, to?: string }  // Date range
+  }
 }
 
 export interface ContainerExportData {
@@ -35,6 +53,8 @@ export interface ContainerExportData {
   container_type: string
   barcode?: string
   position?: string
+  label?: string
+  collection_name?: string
   state: string
   status: string
   comment?: string
@@ -43,9 +63,17 @@ export interface ContainerExportData {
   collection_date?: string
   subject_id?: number
   subject_name?: string
+  control_batch_id?: number
+  control_batch_name?: string
+  control_definition_name?: string
+  control_type?: string
+  target_density?: number
+  target_density_unit?: string
+  strain_composition?: string
   study_id: number
   study_title: string
   study_code: string
+  study_lead_person?: string
   location_path?: string
   location_root?: string
   location_level_i?: string
@@ -56,7 +84,7 @@ export interface ContainerExportData {
 }
 
 // Helper to build location path string
-function buildLocationPath(loc: any | null): string | undefined {
+function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | undefined {
   if (!loc) return undefined
   const parts = [loc.locationRoot, loc.levelI, loc.levelII]
   if (loc.levelIII) parts.push(loc.levelIII)
@@ -116,16 +144,62 @@ export async function buildContainerQuery(filters: ExportFilters) {
     )
   }
 
-  if (filters.date_from) {
-    specimenConditions.push(
-      gte(specimen.collectionDate, filters.date_from)
-    )
-  }
+  // Handle per-subject date filtering
+  if (filters.subject_dates && Object.keys(filters.subject_dates).length > 0) {
+    const tolerance = filters.date_tolerance || 0
+    const subjectDateConditions: any[] = []
+    
+    // Build conditions for each subject with date filters
+    for (const [subjectIdStr, dateFilter] of Object.entries(filters.subject_dates)) {
+      const subjectId = parseInt(subjectIdStr)
+      if (isNaN(subjectId) || !filteredSubjectIds.includes(subjectId)) continue
+      
+      const subjectConditions: any[] = [eq(specimen.studySubjectId, subjectId)]
+      
+      if ('exact' in dateFilter) {
+        // Convert exact date with tolerance to range
+        const exactDate = dateFilter.exact
+        const fromDate = new Date(exactDate)
+        fromDate.setDate(fromDate.getDate() - tolerance)
+        const toDate = new Date(exactDate)
+        toDate.setDate(toDate.getDate() + tolerance)
+        
+        subjectConditions.push(
+          and(
+            gte(specimen.collectionDate, fromDate.toISOString().split('T')[0]),
+            lte(specimen.collectionDate, toDate.toISOString().split('T')[0])
+          ) as any
+        )
+      } else if ('from' in dateFilter || 'to' in dateFilter) {
+        // Date range
+        if (dateFilter.from) {
+          subjectConditions.push(gte(specimen.collectionDate, dateFilter.from))
+        }
+        if (dateFilter.to) {
+          subjectConditions.push(lte(specimen.collectionDate, dateFilter.to))
+        }
+      }
+      
+      subjectDateConditions.push(and(...subjectConditions) as any)
+    }
+    
+    // If we have per-subject date conditions, use them (OR for different subjects)
+    if (subjectDateConditions.length > 0) {
+      specimenConditions.push(or(...subjectDateConditions) as any)
+    }
+  } else {
+    // Use global date filters if no per-subject dates
+    if (filters.date_from) {
+      specimenConditions.push(
+        gte(specimen.collectionDate, filters.date_from)
+      )
+    }
 
-  if (filters.date_to) {
-    specimenConditions.push(
-      lte(specimen.collectionDate, filters.date_to)
-    )
+    if (filters.date_to) {
+      specimenConditions.push(
+        lte(specimen.collectionDate, filters.date_to)
+      )
+    }
   }
 
   // Get matching specimens
@@ -158,10 +232,6 @@ export async function buildContainerQuery(filters: ExportFilters) {
     containerConditions.push(lte(storageContainer.created, filters.created_to))
   }
 
-  if (filters.state_ids && filters.state_ids.length > 0) {
-    containerConditions.push(inArray(storageContainer.stateId, filters.state_ids))
-  }
-
   // Get matching containers
   const containers = await db
     .select()
@@ -171,12 +241,114 @@ export async function buildContainerQuery(filters: ExportFilters) {
   return { containers, study: studyRecord, specimens }
 }
 
+/**
+ * Resolve micronix barcodes to container IDs
+ * Only queries micronix_tube table (barcodes are globally unique)
+ */
+export async function resolveMicronixBarcodesToContainers(
+  barcodes: string[]
+): Promise<Map<string, number>> {
+  const uniqueBarcodes = [...new Set(barcodes.filter(b => b && b.trim()))]
+  if (uniqueBarcodes.length === 0) return new Map()
+
+  const micronixTubes = await db
+    .select({ id: micronixTube.id, barcode: micronixTube.barcode })
+    .from(micronixTube)
+    .where(inArray(micronixTube.barcode, uniqueBarcodes))
+
+  const result = new Map<string, number>()
+  for (const tube of micronixTubes) {
+    if (tube.barcode) {
+      result.set(tube.barcode, tube.id)
+    }
+  }
+
+  return result
+}
+
+/**
+ * Build container query by micronix container IDs (multi-study support)
+ */
+export async function buildContainerQueryByMicronixBarcodes(
+  containerIds: number[]
+): Promise<{
+  containers: Array<typeof storageContainer.$inferSelect>
+  specimens: Array<{ id: number; studySubjectId: number | null; controlBatchId: number | null; specimenTypeId: number; collectionDate: string | null; created: string }>
+  studies: StudyType[]
+  subjectToStudyMap: Map<number, StudyType>
+}> {
+  if (containerIds.length === 0) {
+    return { containers: [], specimens: [], studies: [], subjectToStudyMap: new Map() }
+  }
+
+  // Get containers
+  const containers = await db
+    .select()
+    .from(storageContainer)
+    .where(inArray(storageContainer.id, containerIds))
+
+  if (containers.length === 0) {
+    return { containers: [], specimens: [], studies: [], subjectToStudyMap: new Map() }
+  }
+
+  // Get specimens for these containers
+  const specimenIds = [...new Set(containers.map(c => c.specimenId).filter(id => id !== null) as number[])]
+  if (specimenIds.length === 0) {
+    return { containers, specimens: [], studies: [], subjectToStudyMap: new Map() }
+  }
+
+  const specimens = await db
+    .select({
+      id: specimen.id,
+      studySubjectId: specimen.studySubjectId,
+      controlBatchId: specimen.controlBatchId,
+      specimenTypeId: specimen.specimenTypeId,
+      collectionDate: specimen.collectionDate,
+      created: specimen.created,
+    })
+    .from(specimen)
+    .where(inArray(specimen.id, specimenIds))
+
+  // Get unique study IDs from subjects
+  const subjectIds = [...new Set(specimens.filter(s => s.studySubjectId !== null).map(s => s.studySubjectId!))]
+  const studies: StudyType[] = []
+  const subjectToStudyMap = new Map<number, StudyType>()
+  
+  if (subjectIds.length > 0) {
+    const subjects = await db
+      .select({ id: studySubject.id, studyId: studySubject.studyId })
+      .from(studySubject)
+      .where(inArray(studySubject.id, subjectIds))
+
+    const uniqueStudyIds = [...new Set(subjects.map(s => s.studyId))]
+    if (uniqueStudyIds.length > 0) {
+      const studyRecords = await db
+        .select()
+        .from(study)
+        .where(inArray(study.id, uniqueStudyIds))
+      studies.push(...studyRecords)
+      
+      // Build subject to study map
+      const studyMap = new Map(studyRecords.map(s => [s.id, s]))
+      for (const subject of subjects) {
+        const studyRecord = studyMap.get(subject.studyId)
+        if (studyRecord) {
+          subjectToStudyMap.set(subject.id, studyRecord)
+        }
+      }
+    }
+  }
+
+  return { containers, specimens, studies, subjectToStudyMap }
+}
+
 // Enrich container data with all relationships
 export async function enrichContainerData(
-  containers: any[],
-  specimens: any[],
-  study: any,
-  containerTypeFilter?: string[]
+  containers: Array<typeof storageContainer.$inferSelect>,
+  specimens: Array<{ id: number; studySubjectId: number | null; controlBatchId: number | null; specimenTypeId: number; collectionDate: string | null; created: string }>,
+  study: StudyType,
+  containerTypeFilter?: string[],
+  subjectToStudyMap?: Map<number, StudyType>
 ): Promise<ContainerExportData[]> {
   // Create specimen lookup
   const specimenMap = new Map(specimens.map(s => [s.id, s]))
@@ -184,20 +356,15 @@ export async function enrichContainerData(
   // Get all unique IDs we need to look up
   const containerIds = containers.map(c => c.id)
   const specimenTypeIds = [...new Set(specimens.map(s => s.specimenTypeId))]
-  const stateIds = [...new Set(containers.map(c => c.stateId))]
 
   // Batch fetch lookups
-  const [specimenTypes, states] = await Promise.all([
-    db.select().from(specimenType).where(inArray(specimenType.id, specimenTypeIds)),
-    db.select().from(state).where(inArray(state.id, stateIds)),
-  ])
+  const specimenTypes = await db.select().from(specimenType).where(inArray(specimenType.id, specimenTypeIds))
 
   // Create lookup maps
   const specimenTypeMap = new Map(specimenTypes.map(st => [st.id, st.name]))
-  const stateMap = new Map(states.map(s => [s.id, s.name]))
 
   // Get subject information for all specimens
-  const subjectIds = [...new Set(specimens.filter(s => s.studySubjectId).map(s => s.studySubjectId))]
+  const subjectIds = [...new Set(specimens.filter(s => s.studySubjectId !== null).map(s => s.studySubjectId!))]
   const subjects = subjectIds.length > 0
     ? await db
         .select({
@@ -209,8 +376,124 @@ export async function enrichContainerData(
     : []
   const subjectMap = new Map(subjects.map(s => [s.id, s.name]))
 
+  // Get control batch information for all specimens
+  const controlBatchIds = [...new Set(specimens.filter(s => s.controlBatchId !== null).map(s => s.controlBatchId!))]
+  const controlBatches = controlBatchIds.length > 0
+    ? await db
+        .select({
+          id: controlBatch.id,
+          name: controlBatch.name,
+          controlDefinitionId: controlBatch.controlDefinitionId,
+        })
+        .from(controlBatch)
+        .where(inArray(controlBatch.id, controlBatchIds))
+    : []
+  const controlBatchMap = new Map(controlBatches.map(cb => [cb.id, cb.name]))
+  const controlBatchToDefinitionMap = new Map(controlBatches.map(cb => [cb.id, cb.controlDefinitionId]))
+
+  // Get control definitions for these batches
+  const controlDefinitionIds = [...new Set(Array.from(controlBatchToDefinitionMap.values()))]
+  const controlDefinitions = controlDefinitionIds.length > 0
+    ? await db
+        .select({
+          id: controlDefinition.id,
+          name: controlDefinition.name,
+          controlType: controlDefinition.controlType,
+          targetDensity: controlDefinition.targetDensity,
+          targetDensityUnitId: controlDefinition.targetDensityUnitId,
+          compositionId: controlDefinition.compositionId,
+          properties: controlDefinition.properties,
+          created: controlDefinition.created,
+          lastUpdated: controlDefinition.lastUpdated,
+        })
+        .from(controlDefinition)
+        .where(inArray(controlDefinition.id, controlDefinitionIds))
+    : []
+  const controlDefinitionMap = new Map(controlDefinitions.map(cd => [cd.id, cd]))
+
+  // Get units for target density
+  const unitIds = [...new Set(controlDefinitions.filter(cd => cd.targetDensityUnitId !== null).map(cd => cd.targetDensityUnitId!))]
+  const unitsResult = unitIds.length > 0
+    ? await db
+        .select({
+          id: unit.id,
+          symbol: unit.symbol,
+        })
+        .from(unit)
+        .where(inArray(unit.id, unitIds))
+    : []
+  const units = unitsResult as Array<{ id: number; symbol: string }>
+  const unitMap = new Map<number, string>(units.map(u => [u.id, u.symbol]))
+
+  // Get strain compositions for control definitions
+  const compositionIds = [...new Set(controlDefinitions.filter(cd => cd.compositionId !== null).map(cd => cd.compositionId!))]
+  const strainCompositions = compositionIds.length > 0
+    ? await db
+        .select({
+          compositionId: compositionStrain.compositionId,
+          strainId: compositionStrain.strainId,
+          percentage: compositionStrain.percentage,
+          strainName: strain.name,
+        })
+        .from(compositionStrain)
+        .innerJoin(strain, eq(compositionStrain.strainId, strain.id))
+        .where(inArray(compositionStrain.compositionId, compositionIds))
+    : []
+  
+  // Build composition map: compositionId -> array of {name, percentage}
+  const compositionMap = new Map<number, Array<{ name: string; percentage: number }>>()
+  for (const sc of strainCompositions) {
+    if (!compositionMap.has(sc.compositionId)) {
+      compositionMap.set(sc.compositionId, [])
+    }
+    compositionMap.get(sc.compositionId)!.push({ name: sc.strainName, percentage: sc.percentage })
+  }
+
+  // Build control batch to definition map for quick lookup
+  const batchToDefinitionMap = new Map<number, {
+    id: number
+    name: string
+    controlType: string
+    compositionId: number | null
+    targetDensity: number | null
+    targetDensityUnitId: number | null
+    properties: unknown
+    created: string
+    lastUpdated: string
+    unitSymbol?: string
+    strainComposition?: string
+  }>()
+  for (const cb of controlBatches) {
+    const def = controlDefinitionMap.get(cb.controlDefinitionId)
+    if (def) {
+      const unitSymbol: string | undefined = def.targetDensityUnitId ? unitMap.get(def.targetDensityUnitId) : undefined
+      const strains = def.compositionId ? compositionMap.get(def.compositionId) : undefined
+      const strainComposition: string | undefined = strains && strains.length > 0
+        ? strains.map(s => `${s.name} (${s.percentage}%)`).join('; ')
+        : undefined
+      
+      batchToDefinitionMap.set(cb.id, {
+        id: def.id,
+        name: def.name,
+        controlType: def.controlType,
+        compositionId: def.compositionId,
+        targetDensity: def.targetDensity,
+        targetDensityUnitId: def.targetDensityUnitId,
+        properties: def.properties,
+        created: def.created,
+        lastUpdated: def.lastUpdated,
+        unitSymbol,
+        strainComposition,
+      })
+    }
+  }
+
   // Get container type information - only query types we need if filter is specified
-  const shouldQueryType = (type: string) => !containerTypeFilter || containerTypeFilter.includes(type)
+  // If no filter or empty filter, query all types. Otherwise, only query filtered types.
+  const shouldQueryType = (type: string) => {
+    if (!containerTypeFilter || containerTypeFilter.length === 0) return true
+    return containerTypeFilter.includes(type)
+  }
   
   const [micronixTubes, cryovialTubes, tubes, papers, staticWells] = await Promise.all([
     shouldQueryType('micronix_tube') ? db.select().from(micronixTube).where(inArray(micronixTube.id, containerIds)) : [],
@@ -221,39 +504,85 @@ export async function enrichContainerData(
   ])
 
   // Create container type maps
-  const micronixMap = new Map(micronixTubes.map(t => [t.id, { type: 'micronix_tube', barcode: t.barcode, position: t.position, manifestId: t.manifestId }]))
-  const cryovialMap = new Map(cryovialTubes.map(t => [t.id, { type: 'cryovial_tube', barcode: t.barcode, position: t.position, manifestId: t.manifestId }]))
+  const micronixMap = new Map(micronixTubes.map(t => [t.id, { type: 'micronix_tube', barcode: t.barcode, position: t.position, collectionId: t.collectionId }]))
+  const cryovialMap = new Map(cryovialTubes.map(t => [t.id, { type: 'cryovial_tube', barcode: t.barcode, position: t.position, collectionId: t.collectionId }]))
   const tubeMap = new Map(tubes.map(t => [t.id, { type: 'tube', position: t.boxPosition, label: t.label, boxId: t.boxId }]))
   const paperMap = new Map(papers.map(p => [p.id, { type: 'paper', barcode: p.barcode, position: p.position, sheetId: p.sheetId }]))
-  const staticWellMap = new Map(staticWells.map(w => [w.id, { type: 'static_well', position: w.position, manifestId: w.manifestId }]))
+  const staticWellMap = new Map(staticWells.map(w => [w.id, { type: 'static_well', position: w.position, collectionId: w.collectionId }]))
 
-  // Get location information for manifests
-  const manifestIds = new Set<number>()
-  micronixTubes.forEach(t => manifestIds.add(t.manifestId))
-  cryovialTubes.forEach(t => manifestIds.add(t.manifestId))
-  tubes.forEach(t => manifestIds.add(t.boxId))
+  // Get location information for collections
+  const collectionIds = new Set<number>()
+  micronixTubes.forEach(t => collectionIds.add(t.collectionId))
+  cryovialTubes.forEach(t => collectionIds.add(t.collectionId))
+  tubes.forEach(t => collectionIds.add(t.boxId))
 
-  const [micronixPlates, cryovialBoxes, boxes] = await Promise.all([
-    manifestIds.size > 0 ? db.select().from(micronixPlate).where(inArray(micronixPlate.id, Array.from(manifestIds))) : [],
-    manifestIds.size > 0 ? db.select().from(cryovialBox).where(inArray(cryovialBox.id, Array.from(manifestIds))) : [],
-    manifestIds.size > 0 ? db.select().from(box).where(inArray(box.id, Array.from(manifestIds))) : [],
+  // Get sheet IDs for paper containers
+  const sheetIds = new Set<number>()
+  papers.forEach(p => {
+    if (p.sheetId) sheetIds.add(p.sheetId)
+  })
+
+  const [micronixPlates, cryovialBoxes, boxes, sheets] = await Promise.all([
+    collectionIds.size > 0 ? db.select().from(micronixPlate).where(inArray(micronixPlate.id, Array.from(collectionIds))) : [],
+    collectionIds.size > 0 ? db.select().from(cryovialBox).where(inArray(cryovialBox.id, Array.from(collectionIds))) : [],
+    collectionIds.size > 0 ? db.select().from(box).where(inArray(box.id, Array.from(collectionIds))) : [],
+    sheetIds.size > 0 ? db.select().from(sheet).where(inArray(sheet.id, Array.from(sheetIds))) : [],
   ])
 
+  // Get box and bag IDs from sheets
+  const sheetBoxIds = new Set<number>()
+  const sheetBagIds = new Set<number>()
+  sheets.forEach(s => {
+    if (s.boxId) sheetBoxIds.add(s.boxId)
+    if (s.bagId) sheetBagIds.add(s.bagId)
+  })
+
+  // Get boxes and bags for sheets
+  const [sheetBoxes, sheetBags] = await Promise.all([
+    sheetBoxIds.size > 0 ? db.select().from(box).where(inArray(box.id, Array.from(sheetBoxIds))) : [],
+    sheetBagIds.size > 0 ? db.select().from(bag).where(inArray(bag.id, Array.from(sheetBagIds))) : [],
+  ])
+
+  // Combine all boxes (from tubes and from sheets)
+  const allBoxes = [...boxes, ...sheetBoxes]
+
   const locationIds = new Set<number>()
-  micronixPlates.forEach(p => locationIds.add(p.locationId))
-  cryovialBoxes.forEach(b => locationIds.add(b.locationId))
-  boxes.forEach(b => locationIds.add(b.locationId))
+  micronixPlates.forEach(p => {
+    if (p.locationId) locationIds.add(p.locationId)
+  })
+  cryovialBoxes.forEach(b => {
+    if (b.locationId) locationIds.add(b.locationId)
+  })
+  allBoxes.forEach(b => {
+    if (b.locationId) locationIds.add(b.locationId)
+  })
+  sheetBags.forEach(b => {
+    if (b.locationId) locationIds.add(b.locationId)
+  })
 
   const locations = locationIds.size > 0
     ? await db.select().from(location).where(inArray(location.id, Array.from(locationIds)))
     : []
   const locationMap = new Map(locations.map(l => [l.id, l]))
 
-  // Create manifest to location map
-  const manifestLocationMap = new Map<number, any>()
-  micronixPlates.forEach(p => manifestLocationMap.set(p.id, locationMap.get(p.locationId)))
-  cryovialBoxes.forEach(b => manifestLocationMap.set(b.id, locationMap.get(b.locationId)))
-  boxes.forEach(b => manifestLocationMap.set(b.id, locationMap.get(b.locationId)))
+  // Create sheet to location map (for paper containers)
+  // Sheets can be in boxes or bags, so we need to look up their parent's location
+  const sheetLocationMap = new Map<number, any>()
+  sheets.forEach(s => {
+    if (s.boxId) {
+      const box = allBoxes.find(b => b.id === s.boxId)
+      if (box?.locationId) {
+        const loc = locationMap.get(box.locationId)
+        if (loc) sheetLocationMap.set(s.id, loc)
+      }
+    } else if (s.bagId) {
+      const bag = sheetBags.find(b => b.id === s.bagId)
+      if (bag?.locationId) {
+        const loc = locationMap.get(bag.locationId)
+        if (loc) sheetLocationMap.set(s.id, loc)
+      }
+    }
+  })
 
   // Build enriched data
   const enriched: ContainerExportData[] = []
@@ -266,43 +595,117 @@ export async function enrichContainerData(
     let containerType = 'unknown'
     let barcode: string | undefined
     let position: string | undefined
-    let locationInfo: any = null
+    let label: string | undefined
+    let collectionName: string | undefined
+    let locationInfo: typeof location.$inferSelect | null = null
 
     if (micronixMap.has(container.id)) {
       const info = micronixMap.get(container.id)!
       containerType = info.type
       barcode = info.barcode || undefined
       position = info.position || undefined
-      locationInfo = manifestLocationMap.get(info.manifestId)
+      // Direct lookup: find the micronix plate and get its location and name
+      const micronixPlate = micronixPlates.find(p => p.id === info.collectionId)
+      if (micronixPlate) {
+        collectionName = micronixPlate.name || undefined
+        if (micronixPlate.locationId) {
+          locationInfo = locationMap.get(micronixPlate.locationId) || null
+        }
+      }
     } else if (cryovialMap.has(container.id)) {
       const info = cryovialMap.get(container.id)!
       containerType = info.type
       barcode = info.barcode || undefined
       position = info.position || undefined
-      locationInfo = manifestLocationMap.get(info.manifestId)
+      // Direct lookup: find the cryovial box and get its location and name
+      const cryovialBox = cryovialBoxes.find(b => b.id === info.collectionId)
+      if (cryovialBox) {
+        collectionName = cryovialBox.name || undefined
+        if (cryovialBox.locationId) {
+          locationInfo = locationMap.get(cryovialBox.locationId) || null
+        }
+      }
     } else if (tubeMap.has(container.id)) {
       const info = tubeMap.get(container.id)!
       containerType = info.type
       position = info.position || undefined
-      locationInfo = manifestLocationMap.get(info.boxId)
+      label = info.label || undefined
+      // Direct lookup: find the box and get its location and name
+      const box = allBoxes.find(b => b.id === info.boxId)
+      if (box) {
+        collectionName = box.name || undefined
+        if (box.locationId) {
+          locationInfo = locationMap.get(box.locationId) || null
+        }
+      }
     } else if (paperMap.has(container.id)) {
       const info = paperMap.get(container.id)!
       containerType = info.type
       barcode = info.barcode || undefined
       position = info.position || undefined
+      // Find the sheet and get its name
+      const sheet = sheets.find(s => s.id === info.sheetId)
+      if (sheet) {
+        collectionName = sheet.name || undefined
+      }
+      locationInfo = info.sheetId ? sheetLocationMap.get(info.sheetId) : null
     } else if (staticWellMap.has(container.id)) {
       const info = staticWellMap.get(container.id)!
       containerType = info.type
       position = info.position || undefined
-      locationInfo = manifestLocationMap.get(info.manifestId)
+      // Direct lookup: find the micronix plate and get its location and name
+      const micronixPlate = micronixPlates.find(p => p.id === info.collectionId)
+      if (micronixPlate) {
+        collectionName = micronixPlate.name || undefined
+        if (micronixPlate.locationId) {
+          locationInfo = locationMap.get(micronixPlate.locationId) || null
+        }
+      }
     }
 
     const subjectId = spec.studySubjectId || undefined
-    const subjectName = subjectId ? subjectMap.get(subjectId) : undefined
+    const controlBatchId = spec.controlBatchId || undefined
+    // For control batches, use control batch name as subject_name; otherwise use actual subject name
+    const subjectName = subjectId 
+      ? subjectMap.get(subjectId) 
+      : controlBatchId 
+        ? controlBatchMap.get(controlBatchId) 
+        : undefined
+
+    // Get control batch details if this is a control batch
+    const controlBatchName = controlBatchId ? controlBatchMap.get(controlBatchId) : undefined
+    const controlBatchDetails = controlBatchId ? batchToDefinitionMap.get(controlBatchId) : undefined
+    const controlDefinitionName = controlBatchDetails?.name
+    const controlType = controlBatchDetails?.controlType
+    const targetDensity = controlBatchDetails?.targetDensity ?? undefined
+    const targetDensityUnit = controlBatchDetails?.unitSymbol
+    const strainComposition = controlBatchDetails?.strainComposition
 
     // Filter by container type if specified
     if (containerTypeFilter && containerTypeFilter.length > 0 && !containerTypeFilter.includes(containerType)) {
       continue
+    }
+
+    // Get study information - use subjectToStudyMap if provided (for multi-study), otherwise use the passed study
+    // For control batches, we don't have a study, so use a placeholder or the passed study
+    let containerStudy = study
+    if (subjectToStudyMap && subjectId) {
+      const subjectStudy = subjectToStudyMap.get(subjectId)
+      if (subjectStudy) {
+        containerStudy = subjectStudy
+      }
+    } else if (controlBatchId) {
+      // For control batches, use a placeholder study object
+      containerStudy = { 
+        id: 0, 
+        shortCode: 'CONTROL', 
+        title: 'Control Batch', 
+        description: null,
+        leadPerson: '', 
+        isLongitudinal: false, 
+        created: '', 
+        lastUpdated: '' 
+      } as StudyType
     }
 
     enriched.push({
@@ -310,22 +713,32 @@ export async function enrichContainerData(
       container_type: containerType,
       barcode,
       position,
-      state: stateMap.get(container.stateId) || '',
-      status: container.remainingQuantity > 0 ? 'In Use' : 'Exhausted',
+      label,
+      collection_name: collectionName,
+      state: '',
+      status: (container.remainingQuantity ?? 0) > 0 ? 'In Use' : 'Exhausted',
       comment: container.comment || undefined,
       specimen_id: spec.id,
       specimen_type: specimenTypeMap.get(spec.specimenTypeId) || '',
       collection_date: spec.collectionDate || undefined,
       subject_id: subjectId,
       subject_name: subjectName,
-      study_id: study.id,
-      study_title: study.title,
-      study_code: study.shortCode,
+      control_batch_id: controlBatchId,
+      control_batch_name: controlBatchName,
+      control_definition_name: controlDefinitionName,
+      control_type: controlType,
+      target_density: targetDensity,
+      target_density_unit: targetDensityUnit,
+      strain_composition: strainComposition,
+      study_id: containerStudy.id,
+      study_title: containerStudy.title,
+      study_code: containerStudy.shortCode,
+      study_lead_person: containerStudy.leadPerson,
       location_path: buildLocationPath(locationInfo),
       location_root: locationInfo?.locationRoot,
       location_level_i: locationInfo?.levelI,
       location_level_ii: locationInfo?.levelII,
-      location_level_iii: locationInfo?.levelIII,
+      location_level_iii: locationInfo?.levelIII ?? undefined,
       created: container.created,
       last_updated: container.lastUpdated,
     })
@@ -384,12 +797,44 @@ export async function filterContainersByType(
 }
 
 // Format as CSV
-export function formatAsCSV(data: ContainerExportData[]): string {
+export async function formatAsCSV(data: ContainerExportData[], configName?: string): Promise<string> {
   if (data.length === 0) {
     return ''
   }
 
-  const headers = Object.keys(data[0])
+  let headers: string[]
+  const availableKeys = Object.keys(data[0])
+
+  // Try to get named configuration first
+  if (configName) {
+    const namedConfig = await getExportConfigurationByName(configName)
+    if (namedConfig && namedConfig.columns && namedConfig.columns.length > 0) {
+      headers = namedConfig.columns.filter(col => availableKeys.includes(col))
+      if (headers.length > 0) {
+        // Use named config columns
+      } else {
+        // Named config has no valid columns, fall through to default
+        headers = availableKeys
+      }
+    } else {
+      // Named config not found, fall through to default
+      headers = availableKeys
+    }
+  } else {
+    // No config name specified, use default configuration
+    const defaultConfig = await getDefaultExportConfiguration()
+    if (defaultConfig && defaultConfig.columns && defaultConfig.columns.length > 0) {
+      headers = defaultConfig.columns.filter(col => availableKeys.includes(col))
+      // If no valid columns, fall back to all columns
+      if (headers.length === 0) {
+        headers = availableKeys
+      }
+    } else {
+      // No configuration, use all columns in default order
+      headers = availableKeys
+    }
+  }
+
   const rows = data.map(row => 
     headers.map(header => {
       const value = (row as any)[header]
@@ -406,25 +851,71 @@ export function formatAsCSV(data: ContainerExportData[]): string {
 }
 
 // Format as JSON
-export function formatAsJSON(
+export async function formatAsJSON(
   data: ContainerExportData[],
   filters: ExportFilters,
-  study: any
-): any {
+  study: StudyType,
+  configName?: string
+): Promise<{
+  export_metadata: {
+    study: string
+    study_title: string
+    filters: ExportFilters
+    exported_at: string
+    count: number
+  }
+  containers: ContainerExportData[]
+}> {
+  let filteredData = data
+
+  // Apply column filtering if config is specified
+  if (configName) {
+    const namedConfig = await getExportConfigurationByName(configName)
+    if (namedConfig && namedConfig.columns && namedConfig.columns.length > 0) {
+      const availableKeys = Object.keys(data[0] || {})
+      const validColumns = namedConfig.columns.filter(col => availableKeys.includes(col))
+      if (validColumns.length > 0) {
+        filteredData = data.map(row => {
+          const filtered: any = {}
+          for (const col of validColumns) {
+            filtered[col] = (row as any)[col]
+          }
+          return filtered as ContainerExportData
+        })
+      }
+    }
+  } else {
+    // Use default configuration
+    const defaultConfig = await getDefaultExportConfiguration()
+    if (defaultConfig && defaultConfig.columns && defaultConfig.columns.length > 0) {
+      const availableKeys = Object.keys(data[0] || {})
+      const validColumns = defaultConfig.columns.filter(col => availableKeys.includes(col))
+      if (validColumns.length > 0) {
+        filteredData = data.map(row => {
+          const filtered: any = {}
+          for (const col of validColumns) {
+            filtered[col] = (row as any)[col]
+          }
+          return filtered as ContainerExportData
+        })
+      }
+    }
+  }
+
   return {
     export_metadata: {
       study: study.shortCode,
       study_title: study.title,
       filters,
       exported_at: new Date().toISOString(),
-      count: data.length,
+      count: filteredData.length,
     },
-    containers: data,
+    containers: filteredData,
   }
 }
 
 // Format as Excel (XLSX)
-export async function formatAsExcel(data: ContainerExportData[]): Promise<Buffer> {
+export async function formatAsExcel(data: ContainerExportData[], configName?: string): Promise<Buffer> {
   // Dynamic import to avoid loading xlsx if not needed
   const XLSX = await import('xlsx')
   
@@ -435,8 +926,38 @@ export async function formatAsExcel(data: ContainerExportData[]): Promise<Buffer
     return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }))
   }
 
+  let headers: string[]
+  const availableKeys = Object.keys(data[0])
+
+  // Try to get named configuration first
+  if (configName) {
+    const namedConfig = await getExportConfigurationByName(configName)
+    if (namedConfig && namedConfig.columns && namedConfig.columns.length > 0) {
+      headers = namedConfig.columns.filter(col => availableKeys.includes(col))
+      if (headers.length === 0) {
+        // Named config has no valid columns, fall through to default
+        headers = availableKeys
+      }
+    } else {
+      // Named config not found, fall through to default
+      headers = availableKeys
+    }
+  } else {
+    // No config name specified, use default configuration
+    const defaultConfig = await getDefaultExportConfiguration()
+    if (defaultConfig && defaultConfig.columns && defaultConfig.columns.length > 0) {
+      headers = defaultConfig.columns.filter(col => availableKeys.includes(col))
+      // If no valid columns, fall back to all columns
+      if (headers.length === 0) {
+        headers = availableKeys
+      }
+    } else {
+      // No configuration, use all columns in default order
+      headers = availableKeys
+    }
+  }
+
   // Convert data to worksheet format
-  const headers = Object.keys(data[0])
   const rows = data.map(row => 
     headers.map(header => {
       const value = (row as any)[header]
@@ -463,5 +984,286 @@ export async function formatAsExcel(data: ContainerExportData[]): Promise<Buffer
 
   // Write to buffer
   return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }))
+}
+
+// Track results per subject and build summary
+export interface ExportSummary {
+  total_containers: number
+  subjects_with_results: Array<{ name: string; count: number }>
+  subjects_no_results: string[]  // Subject names with no matching containers
+  subjects_not_found: string[]  // Subject names not found in study
+  errors?: string[]  // Any other errors
+}
+
+export async function buildExportSummary(
+  enrichedData: ContainerExportData[],
+  requestedSubjectNames: string[],
+  subjectNameToId: Map<string, number>,
+  subjectIdToName: Map<number, string>
+): Promise<ExportSummary> {
+  const summary: ExportSummary = {
+    total_containers: enrichedData.length,
+    subjects_with_results: [],
+    subjects_no_results: [],
+    subjects_not_found: [],
+  }
+
+  // Count containers per subject
+  const subjectCounts = new Map<number, number>()
+  for (const container of enrichedData) {
+    if (container.subject_id) {
+      const count = subjectCounts.get(container.subject_id) || 0
+      subjectCounts.set(container.subject_id, count + 1)
+    }
+  }
+
+  // Build subjects_with_results
+  for (const [subjectId, count] of subjectCounts.entries()) {
+    const subjectName = subjectIdToName.get(subjectId)
+    if (subjectName) {
+      summary.subjects_with_results.push({ name: subjectName, count })
+    }
+  }
+
+  // Identify subjects not found
+  for (const subjectName of requestedSubjectNames) {
+    if (!subjectNameToId.has(subjectName)) {
+      summary.subjects_not_found.push(subjectName)
+    }
+  }
+
+  // Identify subjects with no results (found but no containers)
+  for (const subjectName of requestedSubjectNames) {
+    const subjectId = subjectNameToId.get(subjectName)
+    if (subjectId && !subjectCounts.has(subjectId)) {
+      summary.subjects_no_results.push(subjectName)
+    }
+  }
+
+  return summary
+}
+
+// Validate study codes
+export async function validateStudyCodes(studyCodes: string[]): Promise<{
+  valid: Map<string, number>  // studyCode -> studyId
+  invalid: string[]  // Invalid study codes
+  studies: Map<number, StudyType>  // studyId -> study record
+}> {
+  const uniqueCodes = [...new Set(studyCodes)]
+  const valid = new Map<string, number>()
+  const invalid: string[] = []
+  const studies = new Map<number, StudyType>()
+  
+  for (const code of uniqueCodes) {
+    const studyRecord = await db
+      .select()
+      .from(study)
+      .where(eq(study.shortCode, code))
+      .get()
+    
+    if (studyRecord) {
+      valid.set(code, studyRecord.id)
+      studies.set(studyRecord.id, studyRecord)
+    } else {
+      invalid.push(code)
+    }
+  }
+  
+  return { valid, invalid, studies }
+}
+
+// Multi-study container query builder
+export interface MultiStudyExportEntry {
+  study_short_code: string
+  subject_name: string
+  collection_date?: string
+  date_from?: string
+  date_to?: string
+}
+
+export interface MultiStudyExportResult {
+  containers: ContainerExportData[]
+  studies: Map<number, StudyType>
+  summary: MultiStudyExportSummary
+}
+
+export interface MultiStudyExportSummary {
+  total_containers: number
+  studies: Array<{
+    study_code: string
+    study_title: string
+    study_lead_person: string
+    containers: number
+    subjects_with_results: Array<{ name: string; count: number }>
+    subjects_no_results: string[]
+    subjects_not_found: string[]
+  }>
+  invalid_study_codes: string[]
+  errors?: string[]
+}
+
+export async function buildMultiStudyContainerQuery(
+  entries: MultiStudyExportEntry[],
+  filters: Omit<ExportFilters, 'study' | 'subject_ids' | 'subject_dates'>,
+  dateTolerance: number = 0
+): Promise<MultiStudyExportResult> {
+  // Validate all study codes
+  const studyCodes = entries.map(e => e.study_short_code)
+  const validation = await validateStudyCodes(studyCodes)
+  
+  if (validation.invalid.length > 0) {
+    // Return early with invalid study codes
+    return {
+      containers: [],
+      studies: validation.studies,
+      summary: {
+        total_containers: 0,
+        studies: [],
+        invalid_study_codes: validation.invalid,
+        errors: [`Invalid study codes: ${validation.invalid.join(', ')}`],
+      },
+    }
+  }
+  
+  // Group entries by study
+  const entriesByStudy = new Map<number, MultiStudyExportEntry[]>()
+  for (const entry of entries) {
+    const studyId = validation.valid.get(entry.study_short_code)
+    if (studyId) {
+      if (!entriesByStudy.has(studyId)) {
+        entriesByStudy.set(studyId, [])
+      }
+      entriesByStudy.get(studyId)!.push(entry)
+    }
+  }
+  
+  // Resolve subjects for each study
+  const subjectResolutionEntries: Array<{ studyId: number; subjectName: string }> = []
+  for (const [studyId, studyEntries] of entriesByStudy.entries()) {
+    for (const entry of studyEntries) {
+      subjectResolutionEntries.push({ studyId, subjectName: entry.subject_name })
+    }
+  }
+  
+  const subjectsByStudy = await resolveSubjectsByStudyGrouped(subjectResolutionEntries)
+  
+  // Build subject dates map (by study and subject name)
+  const subjectDatesByStudy = new Map<number, Map<string, { exact?: string; from?: string; to?: string }>>()
+  for (const [studyId, studyEntries] of entriesByStudy.entries()) {
+    const datesMap = new Map<string, { exact?: string; from?: string; to?: string }>()
+    for (const entry of studyEntries) {
+      if (entry.collection_date) {
+        datesMap.set(entry.subject_name, { exact: entry.collection_date })
+      } else if (entry.date_from || entry.date_to) {
+        datesMap.set(entry.subject_name, {
+          from: entry.date_from,
+          to: entry.date_to,
+        })
+      }
+    }
+    if (datesMap.size > 0) {
+      subjectDatesByStudy.set(studyId, datesMap)
+    }
+  }
+  
+  // Process each study separately
+  const allContainers: ContainerExportData[] = []
+  const studySummaries: MultiStudyExportSummary['studies'] = []
+  
+  for (const [studyId, studyEntries] of entriesByStudy.entries()) {
+    const studyRecord = validation.studies.get(studyId)!
+    const studyCode = studyRecord.shortCode
+    const subjectMap = subjectsByStudy.get(studyId) || new Map()
+    const subjectIds = Array.from(subjectMap.values())
+    
+    if (subjectIds.length === 0) {
+      // No subjects found for this study
+      studySummaries.push({
+        study_code: studyCode,
+        study_title: studyRecord.title,
+        study_lead_person: studyRecord.leadPerson,
+        containers: 0,
+        subjects_with_results: [],
+        subjects_no_results: [],
+        subjects_not_found: studyEntries.map(e => e.subject_name),
+      })
+      continue
+    }
+    
+    // Build filters for this study
+    const studyFilters: ExportFilters = {
+      study: studyCode,
+      subject_ids: subjectIds,
+      date_tolerance: dateTolerance,
+      ...filters,
+    }
+    
+    // Add subject dates if available
+    const studySubjectDates = subjectDatesByStudy.get(studyId)
+    if (studySubjectDates && studySubjectDates.size > 0) {
+      studyFilters.subject_dates = {}
+      for (const [subjectName, dateFilter] of studySubjectDates.entries()) {
+        const subjectId = subjectMap.get(subjectName)
+        if (subjectId) {
+          studyFilters.subject_dates[subjectId] = dateFilter
+        }
+      }
+    }
+    
+    // Query containers for this study
+    const { containers, specimens } = await buildContainerQuery(studyFilters)
+    
+    // Apply container type filter if specified
+    let filteredContainers = containers
+    if (filters.container_types && filters.container_types.length > 0) {
+      const containerIds = containers.map(c => c.id)
+      const matchingIds = await filterContainersByType(containerIds, filters.container_types)
+      filteredContainers = containers.filter(c => matchingIds.includes(c.id))
+    }
+    
+    // Enrich container data
+    const enrichedData = await enrichContainerData(
+      filteredContainers,
+      specimens || [],
+      studyRecord,
+      filters.container_types,
+      undefined
+    )
+    
+    allContainers.push(...enrichedData)
+    
+    // Build summary for this study
+    const subjectIdToName = new Map<number, string>()
+    for (const [name, id] of subjectMap.entries()) {
+      subjectIdToName.set(id, name)
+    }
+    
+    const studySummary = await buildExportSummary(
+      enrichedData,
+      studyEntries.map(e => e.subject_name),
+      subjectMap,
+      subjectIdToName
+    )
+    
+    studySummaries.push({
+      study_code: studyCode,
+      study_title: studyRecord.title,
+      study_lead_person: studyRecord.leadPerson,
+      containers: enrichedData.length,
+      subjects_with_results: studySummary.subjects_with_results,
+      subjects_no_results: studySummary.subjects_no_results,
+      subjects_not_found: studySummary.subjects_not_found,
+    })
+  }
+  
+  return {
+    containers: allContainers,
+    studies: validation.studies,
+    summary: {
+      total_containers: allContainers.length,
+      studies: studySummaries,
+      invalid_study_codes: validation.invalid,
+    },
+  }
 }
 

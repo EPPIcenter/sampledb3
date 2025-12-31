@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { studiesApi, type Study } from '../../lib/api'
 import { useNavigate } from 'react-router-dom'
+import { useModifierHotkey } from '../../hooks/useHotkey'
 
 interface StudyFormProps {
   study?: Study
@@ -11,6 +12,7 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
   const [formData, setFormData] = useState({
     title: study?.title || '',
     description: study?.description || '',
@@ -50,8 +52,16 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
     }
   }
 
+  // Cmd/Ctrl+Enter to submit
+  useModifierHotkey('enter', (e) => {
+    if (!loading && formRef.current) {
+      e.preventDefault()
+      formRef.current.requestSubmit()
+    }
+  }, { preventDefault: true, enableOnFormTags: true })
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
           {error}

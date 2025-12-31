@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api, { collectionsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
+import SkeletonDetailPage from '../components/SkeletonDetailPage'
 
 export default function SheetDetail() {
   const { id } = useParams<{ id: string }>()
@@ -29,11 +30,7 @@ export default function SheetDetail() {
   }, [id])
 
   if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8">Loading...</div>
-      </div>
-    )
+    return <SkeletonDetailPage sections={1} />
   }
 
   if (!data?.sheet) {

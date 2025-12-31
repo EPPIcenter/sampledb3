@@ -6,7 +6,8 @@ import {
   studySubject,
   study,
   specimenType,
-  state,
+  tag,
+  storageContainerTag,
   location,
   micronixTube,
   micronixPlate,
@@ -17,12 +18,13 @@ import {
   staticWell,
 } from '../db/schema'
 import { eq, and, or, sql, gte, lte, inArray } from 'drizzle-orm'
+import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 
 const statistics = new Hono()
 
 // Helper to build date filter conditions
-function buildDateFilter(column: any, dateFrom?: string, dateTo?: string) {
-  const conditions = []
+function buildDateFilter(column: SQLiteColumn, dateFrom?: string, dateTo?: string) {
+  const conditions: ReturnType<typeof gte>[] = []
   if (dateFrom) {
     conditions.push(gte(column, dateFrom))
   }
@@ -42,6 +44,7 @@ function chunkArray<T>(array: T[], chunkSize: number): T[][] {
 }
 
 // Helper to get container types for multiple container IDs (batched to avoid SQLite variable limit)
+// Optimized to use parallel queries instead of sequential
 async function getContainerTypes(containerIds: number[]): Promise<Map<number, string>> {
   if (containerIds.length === 0) return new Map()
   
@@ -50,34 +53,46 @@ async function getContainerTypes(containerIds: number[]): Promise<Map<number, st
   
   const typeMap = new Map<number, string>()
   
-  // Process each chunk
-  for (const chunk of chunks) {
-    const [micronixTubes, cryovialTubes, tubes, papers, staticWells] = await Promise.all([
-      db.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, chunk)),
-      db.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, chunk)),
-      db.select({ id: tube.id }).from(tube).where(inArray(tube.id, chunk)),
-      db.select({ id: paper.id }).from(paper).where(inArray(paper.id, chunk)),
-      db.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, chunk)),
-    ])
+  // Process all chunks in parallel for better performance
+  const chunkResults = await Promise.all(
+    chunks.map(async (chunk) => {
+      const [micronixTubes, cryovialTubes, tubes, papers, staticWells] = await Promise.all([
+        db.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, chunk)),
+        db.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, chunk)),
+        db.select({ id: tube.id }).from(tube).where(inArray(tube.id, chunk)),
+        db.select({ id: paper.id }).from(paper).where(inArray(paper.id, chunk)),
+        db.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, chunk)),
+      ])
 
-    micronixTubes.forEach(t => typeMap.set(t.id, 'micronix_tube'))
-    cryovialTubes.forEach(t => typeMap.set(t.id, 'cryovial_tube'))
-    tubes.forEach(t => typeMap.set(t.id, 'tube'))
-    papers.forEach(t => typeMap.set(t.id, 'paper'))
-    staticWells.forEach(t => typeMap.set(t.id, 'static_well'))
-  }
+      const chunkMap = new Map<number, string>()
+      micronixTubes.forEach(t => chunkMap.set(t.id, 'micronix_tube'))
+      cryovialTubes.forEach(t => chunkMap.set(t.id, 'cryovial_tube'))
+      tubes.forEach(t => chunkMap.set(t.id, 'tube'))
+      papers.forEach(t => chunkMap.set(t.id, 'paper'))
+      staticWells.forEach(t => chunkMap.set(t.id, 'static_well'))
+      return chunkMap
+    })
+  )
+  
+  // Merge all chunk maps
+  chunkResults.forEach(chunkMap => {
+    chunkMap.forEach((type, id) => typeMap.set(id, type))
+  })
   
   return typeMap
 }
 
 statistics.get('/', async (c) => {
   try {
+    console.log('[STATS] Starting statistics request')
     // Parse query parameters
     const studyCode = c.req.query('study')
     const sourceType = c.req.query('source_type')
     const specimenTypeId = c.req.query('specimen_type_id')
     const containerType = c.req.query('container_type')
-    const stateId = c.req.query('state_id')
+    // Parse tag_ids - handle both tag_ids=1&tag_ids=2 and tag_ids[]=1&tag_ids[]=2 formats
+    const tagIdsParam = c.req.queries('tag_ids') || c.req.queries('tag_ids[]')
+    const tagIds = tagIdsParam?.map(id => parseInt(id)).filter(id => !isNaN(id))
     const locationId = c.req.query('location_id')
     const locationRoot = c.req.query('location_root')
     const locationLevelI = c.req.query('location_level_i')
@@ -86,6 +101,23 @@ statistics.get('/', async (c) => {
     const collectionDateTo = c.req.query('collection_date_to')
     const createdFrom = c.req.query('created_from')
     const createdTo = c.req.query('created_to')
+    
+    console.log('[STATS] Query params:', {
+      studyCode,
+      sourceType,
+      specimenTypeId,
+      containerType,
+      tagIds,
+      tagIdsLength: tagIds?.length,
+      locationId,
+      locationRoot,
+      locationLevelI,
+      locationLevelII,
+    })
+    
+    // Debug: Check raw query params
+    const rawTagIds = c.req.queries('tag_ids')
+    console.log('[STATS] Raw tag_ids query param:', rawTagIds)
 
     // Build specimen filter conditions
     const specimenConditions = []
@@ -129,7 +161,7 @@ statistics.get('/', async (c) => {
             containers: {
               total: 0,
               byType: {},
-              byState: {},
+              byTags: {},
               byStatus: {},
               averagePerSpecimen: 0,
             },
@@ -161,11 +193,13 @@ statistics.get('/', async (c) => {
     specimenConditions.push(...collectionDateFilters, ...createdDateFilters)
 
     // Get filtered specimens
+    console.log('[STATS] Querying filtered specimens, conditions:', specimenConditions.length)
     let specimenQuery = db.select().from(specimen)
     if (specimenConditions.length > 0) {
       specimenQuery = specimenQuery.where(and(...specimenConditions) as any) as any
     }
     const filteredSpecimens = await specimenQuery
+    console.log('[STATS] Found', filteredSpecimens.length, 'specimens')
 
     const specimenIds = filteredSpecimens.map(s => s.id)
 
@@ -266,11 +300,14 @@ statistics.get('/', async (c) => {
         creationTimeline.push({ date, count })
       })
 
-    // Location Filtering - Build location conditions for use in joins
+    // Location Filtering - Query matching location IDs first to avoid circular references
     const hasLocationFilter = locationId || locationRoot || locationLevelI || locationLevelII
-    const locationConditions: any[] = []
+    let filteredLocationIds: number[] = []
     
     if (hasLocationFilter) {
+      console.log('[STATS] Processing location filter')
+      const locationConditions: any[] = []
+      
       if (locationId) {
         const id = parseInt(locationId)
         if (!isNaN(id)) {
@@ -289,6 +326,98 @@ statistics.get('/', async (c) => {
       if (locationLevelII) {
         locationConditions.push(eq(location.levelII, locationLevelII))
       }
+      
+      if (locationConditions.length > 0) {
+        console.log('[STATS] Querying locations with', locationConditions.length, 'conditions')
+        const matchingLocations = await db
+          .select({ id: location.id })
+          .from(location)
+          .where(and(...locationConditions) as any)
+        filteredLocationIds = matchingLocations.map(l => l.id)
+        console.log('[STATS] Found', filteredLocationIds.length, 'matching locations')
+        
+        if (filteredLocationIds.length === 0) {
+          console.log('[STATS] No locations match, returning empty results')
+          // No locations match, return empty results
+          return c.json({
+            specimens: {
+              total: 0,
+              bySourceType: {},
+              bySpecimenType: {},
+              byStudy: {},
+              collectionTimeline: [],
+              creationTimeline: [],
+            },
+            containers: {
+              total: 0,
+              byType: {},
+              byTags: {},
+              byStatus: {},
+              averagePerSpecimen: 0,
+            },
+            storage: {
+              byLocation: [],
+              byLocationRoot: [],
+            },
+          })
+        }
+      }
+    }
+
+    // Get container IDs filtered by tags if tag filter is provided
+    // Using AND logic: containers must have ALL selected tags
+    let tagFilteredContainerIds: number[] | null = null
+    if (tagIds && tagIds.length > 0) {
+      console.log('[STATS] Querying containers by tags (AND logic):', tagIds)
+      
+      // For AND logic, find containers that have all selected tags
+      // Query containers for each tag and find the intersection
+      const containerSets: Set<number>[] = []
+      
+      for (const tagId of tagIds) {
+        const containersWithTag = await db
+          .select({ containerId: storageContainerTag.storageContainerId })
+          .from(storageContainerTag)
+          .where(eq(storageContainerTag.tagId, tagId))
+        containerSets.push(new Set(containersWithTag.map(ct => ct.containerId)))
+      }
+      
+      // Find intersection: containers that appear in all sets
+      if (containerSets.length > 0) {
+        let intersection = containerSets[0]
+        for (let i = 1; i < containerSets.length; i++) {
+          intersection = new Set([...intersection].filter(id => containerSets[i].has(id)))
+        }
+        tagFilteredContainerIds = Array.from(intersection)
+      } else {
+        tagFilteredContainerIds = []
+      }
+      
+      console.log('[STATS] Found', tagFilteredContainerIds.length, 'containers with all selected tags')
+      if (tagFilteredContainerIds.length === 0) {
+        // No containers match all the tags, return empty results
+        return c.json({
+          specimens: {
+            total: 0,
+            bySourceType: {},
+            bySpecimenType: {},
+            byStudy: {},
+            collectionTimeline: [],
+            creationTimeline: [],
+          },
+          containers: {
+            total: 0,
+            byType: {},
+            byTags: {},
+            byStatus: {},
+            averagePerSpecimen: 0,
+          },
+          storage: {
+            byLocation: [],
+            byLocationRoot: [],
+          },
+        })
+      }
     }
 
     // Container Statistics
@@ -296,94 +425,86 @@ statistics.get('/', async (c) => {
     let filteredContainers: Array<typeof storageContainer.$inferSelect> = []
 
     if (specimenIds.length > 0) {
-      // Batch query if too many specimen IDs to avoid SQLite variable limit
-      const specimenChunks = chunkArray(specimenIds, 500)
-      
-      for (const specimenChunk of specimenChunks) {
-        let containersForSpecimens: Array<typeof storageContainer.$inferSelect> = []
+      // Get location-filtered container IDs once (if location filter is active)
+      let locationFilteredContainerIds: number[] | null = null
+      if (hasLocationFilter && filteredLocationIds.length > 0) {
+        console.log('[STATS] Querying containers by location (all specimens)')
+        // Query container IDs by matching location IDs (avoiding circular references)
+        // First, get plates/boxes that match the location IDs
+        console.log('[STATS] Step 1: Querying plates/boxes for', filteredLocationIds.length, 'locations')
+        const [matchingPlates, matchingBoxes] = await Promise.all([
+          db.select({ id: micronixPlate.id })
+            .from(micronixPlate)
+            .where(inArray(micronixPlate.locationId, filteredLocationIds)),
+          db.select({ id: cryovialBox.id })
+            .from(cryovialBox)
+            .where(inArray(cryovialBox.locationId, filteredLocationIds)),
+        ])
+        console.log('[STATS] Found', matchingPlates.length, 'plates and', matchingBoxes.length, 'boxes')
         
-        if (hasLocationFilter && locationConditions.length > 0) {
-          // Use efficient query with joins to get container IDs in one go
-          // Query micronix containers
-          const micronixContainerIds = await db
-            .select({ id: micronixTube.id })
-            .from(micronixTube)
-            .leftJoin(micronixPlate, eq(micronixTube.manifestId, micronixPlate.id))
-            .leftJoin(location, eq(micronixPlate.locationId, location.id))
-            .where(
-              and(
-                ...locationConditions,
-                sql`${micronixTube.id} IS NOT NULL`,
-                sql`${micronixPlate.id} IS NOT NULL`,
-                sql`${location.id} IS NOT NULL`,
-              ) as any
-            )
-          
-          // Query cryovial containers
-          const cryovialContainerIds = await db
-            .select({ id: cryovialTube.id })
-            .from(cryovialTube)
-            .leftJoin(cryovialBox, eq(cryovialTube.manifestId, cryovialBox.id))
-            .leftJoin(location, eq(cryovialBox.locationId, location.id))
-            .where(
-              and(
-                ...locationConditions,
-                sql`${cryovialTube.id} IS NOT NULL`,
-                sql`${cryovialBox.id} IS NOT NULL`,
-                sql`${location.id} IS NOT NULL`,
-              ) as any
-            )
-          
-          // Combine container IDs
-          const locationFilteredContainerIds = [
-            ...new Set([
-              ...micronixContainerIds.map(r => r.id),
-              ...cryovialContainerIds.map(r => r.id),
-            ])
-          ]
-          
-          if (locationFilteredContainerIds.length === 0) {
-            containersForSpecimens = []
-          } else {
-            // Fetch containers matching both specimen and location filters
-            const containerIdChunks = chunkArray(locationFilteredContainerIds, 500)
-            for (const containerIdChunk of containerIdChunks) {
-              let containerQuery = db.select().from(storageContainer)
-              const containerConditions = [
-                inArray(storageContainer.specimenId, specimenChunk),
-                inArray(storageContainer.id, containerIdChunk),
-              ]
-              
-              if (stateId) {
-                const id = parseInt(stateId)
-                if (!isNaN(id)) {
-                  containerConditions.push(eq(storageContainer.stateId, id))
-                }
-              }
-
-              containerQuery = containerQuery.where(and(...containerConditions) as any) as any
-              const chunkContainers = await containerQuery
-              containersForSpecimens.push(...chunkContainers)
-            }
-          }
-        } else {
-          // No location filter, just query by specimen chunk
+        const plateIds = matchingPlates.map(p => p.id)
+        const boxIds = matchingBoxes.map(b => b.id)
+        
+        // Then get container IDs from those plates/boxes
+        console.log('[STATS] Step 2: Querying containers from plates/boxes')
+        const [micronixContainerIds, cryovialContainerIds] = await Promise.all([
+          plateIds.length > 0
+            ? db.select({ id: micronixTube.id })
+                .from(micronixTube)
+                .where(inArray(micronixTube.collectionId, plateIds))
+            : Promise.resolve([]),
+          boxIds.length > 0
+            ? db.select({ id: cryovialTube.id })
+                .from(cryovialTube)
+                .where(inArray(cryovialTube.collectionId, boxIds))
+            : Promise.resolve([]),
+        ])
+        console.log('[STATS] Found', micronixContainerIds.length, 'micronix and', cryovialContainerIds.length, 'cryovial containers')
+        
+        // Combine container IDs
+        locationFilteredContainerIds = [
+          ...new Set([
+            ...micronixContainerIds.map(r => r.id),
+            ...cryovialContainerIds.map(r => r.id),
+          ])
+        ]
+        
+        // Apply tag filter if provided
+        if (tagFilteredContainerIds) {
+          locationFilteredContainerIds = locationFilteredContainerIds.filter(id => tagFilteredContainerIds!.includes(id))
+        }
+        console.log('[STATS] Total location-filtered container IDs:', locationFilteredContainerIds.length)
+      }
+      
+      // Batch query if too many specimen IDs to avoid SQLite variable limit
+      // Use Promise.all to parallelize queries for better performance
+      const specimenChunks = chunkArray(specimenIds, 500)
+      console.log('[STATS] Processing', specimenChunks.length, 'specimen chunks in parallel')
+      
+      const chunkResults = await Promise.all(
+        specimenChunks.map(async (specimenChunk, chunkIndex) => {
           let containerQuery = db.select().from(storageContainer)
           const containerConditions = [inArray(storageContainer.specimenId, specimenChunk)]
           
-          if (stateId) {
-            const id = parseInt(stateId)
-            if (!isNaN(id)) {
-              containerConditions.push(eq(storageContainer.stateId, id))
-            }
+          // Apply location filter if provided
+          if (locationFilteredContainerIds) {
+            containerConditions.push(inArray(storageContainer.id, locationFilteredContainerIds))
+          }
+          
+          // Apply tag filter if provided
+          if (tagFilteredContainerIds) {
+            containerConditions.push(inArray(storageContainer.id, tagFilteredContainerIds))
           }
 
           containerQuery = containerQuery.where(and(...containerConditions) as any) as any
-          containersForSpecimens = await containerQuery
-        }
-        
-        filteredContainers.push(...containersForSpecimens)
-      }
+          const containers = await containerQuery
+          console.log('[STATS] Chunk', chunkIndex + 1, 'of', specimenChunks.length, 'found', containers.length, 'containers')
+          return containers
+        })
+      )
+      
+      // Flatten results
+      filteredContainers = chunkResults.flat()
       
       // Remove duplicates (in case a container appears in multiple chunks - shouldn't happen, but be safe)
       const seenIds = new Set<number>()
@@ -419,35 +540,39 @@ statistics.get('/', async (c) => {
       })
     } else {
       // No specimen filter, but we might have state/status/location filters
-      if (hasLocationFilter && locationConditions.length > 0) {
-        // Use efficient query with joins to get container IDs
-        const micronixContainerIds = await db
-          .select({ id: micronixTube.id })
-          .from(micronixTube)
-          .leftJoin(micronixPlate, eq(micronixTube.manifestId, micronixPlate.id))
-          .leftJoin(location, eq(micronixPlate.locationId, location.id))
-          .where(
-            and(
-              ...locationConditions,
-              sql`${micronixTube.id} IS NOT NULL`,
-              sql`${micronixPlate.id} IS NOT NULL`,
-              sql`${location.id} IS NOT NULL`,
-            ) as any
-          )
+      if (hasLocationFilter && filteredLocationIds.length > 0) {
+        console.log('[STATS] Querying containers by location (no specimen filter)')
+        // Query container IDs by matching location IDs (avoiding circular references)
+        // First, get plates/boxes that match the location IDs
+        console.log('[STATS] Step 1: Querying plates/boxes for', filteredLocationIds.length, 'locations')
+        const [matchingPlates, matchingBoxes] = await Promise.all([
+          db.select({ id: micronixPlate.id })
+            .from(micronixPlate)
+            .where(inArray(micronixPlate.locationId, filteredLocationIds)),
+          db.select({ id: cryovialBox.id })
+            .from(cryovialBox)
+            .where(inArray(cryovialBox.locationId, filteredLocationIds)),
+        ])
+        console.log('[STATS] Found', matchingPlates.length, 'plates and', matchingBoxes.length, 'boxes')
         
-        const cryovialContainerIds = await db
-          .select({ id: cryovialTube.id })
-          .from(cryovialTube)
-          .leftJoin(cryovialBox, eq(cryovialTube.manifestId, cryovialBox.id))
-          .leftJoin(location, eq(cryovialBox.locationId, location.id))
-          .where(
-            and(
-              ...locationConditions,
-              sql`${cryovialTube.id} IS NOT NULL`,
-              sql`${cryovialBox.id} IS NOT NULL`,
-              sql`${location.id} IS NOT NULL`,
-            ) as any
-          )
+        const plateIds = matchingPlates.map(p => p.id)
+        const boxIds = matchingBoxes.map(b => b.id)
+        
+        // Then get container IDs from those plates/boxes
+        console.log('[STATS] Step 2: Querying containers from plates/boxes')
+        const [micronixContainerIds, cryovialContainerIds] = await Promise.all([
+          plateIds.length > 0
+            ? db.select({ id: micronixTube.id })
+                .from(micronixTube)
+                .where(inArray(micronixTube.collectionId, plateIds))
+            : Promise.resolve([]),
+          boxIds.length > 0
+            ? db.select({ id: cryovialTube.id })
+                .from(cryovialTube)
+                .where(inArray(cryovialTube.collectionId, boxIds))
+            : Promise.resolve([]),
+        ])
+        console.log('[STATS] Found', micronixContainerIds.length, 'micronix and', cryovialContainerIds.length, 'cryovial containers')
         
         // Combine container IDs
         const locationFilteredContainerIds = [
@@ -466,11 +591,9 @@ statistics.get('/', async (c) => {
             let containerQuery = db.select().from(storageContainer)
             const containerConditions = [inArray(storageContainer.id, containerIdChunk)]
 
-            if (stateId) {
-              const id = parseInt(stateId)
-              if (!isNaN(id)) {
-                containerConditions.push(eq(storageContainer.stateId, id))
-              }
+            // Apply tag filter if provided
+            if (tagFilteredContainerIds) {
+              containerConditions.push(inArray(storageContainer.id, tagFilteredContainerIds))
             }
 
             containerQuery = containerQuery.where(and(...containerConditions) as any) as any
@@ -483,11 +606,9 @@ statistics.get('/', async (c) => {
         let containerQuery = db.select().from(storageContainer)
         const containerConditions = []
 
-        if (stateId) {
-          const id = parseInt(stateId)
-          if (!isNaN(id)) {
-            containerConditions.push(eq(storageContainer.stateId, id))
-          }
+        // Apply tag filter if provided
+        if (tagFilteredContainerIds) {
+          containerConditions.push(inArray(storageContainer.id, tagFilteredContainerIds))
         }
 
         if (containerConditions.length > 0) {
@@ -518,7 +639,7 @@ statistics.get('/', async (c) => {
     let adjustedSpecimens = filteredSpecimens
     
     // If we filtered containers (by type, state, or location), recalculate specimen stats
-    if (containerType || stateId || hasLocationFilter) {
+    if (containerType || tagFilteredContainerIds || hasLocationFilter) {
       // If we filtered containers, only count specimens that have matching containers
       adjustedSpecimenTotal = filteredSpecimenIds.length
       
@@ -642,17 +763,37 @@ statistics.get('/', async (c) => {
       }
     })
 
-    // Containers by state
-    const stateIds = [...new Set(finalContainers.map(c => c.stateId))]
-    const states = stateIds.length > 0
-      ? await db.select().from(state).where(inArray(state.id, stateIds))
-      : []
-    const stateMap = new Map(states.map(s => [s.id, s.name]))
+    // Containers by tags
+    const finalContainerIds = finalContainers.map(c => c.id)
+    console.log('[STATS] Querying container tags for', finalContainerIds.length, 'containers')
+    const containerTags: Array<{ containerId: number; tagId: number; tagName: string }> = []
     
-    const byState: Record<string, number> = {}
-    finalContainers.forEach(c => {
-      const stateName = stateMap.get(c.stateId) || 'Unknown'
-      byState[stateName] = (byState[stateName] || 0) + 1
+    if (finalContainerIds.length > 0) {
+      // Batch query to avoid SQLite variable limit and stack overflow
+      const containerIdChunks = chunkArray(finalContainerIds, 500)
+      console.log('[STATS] Processing', containerIdChunks.length, 'chunks for container tags')
+      
+      for (let i = 0; i < containerIdChunks.length; i++) {
+        const chunk = containerIdChunks[i]
+        console.log('[STATS] Querying container tags chunk', i + 1, 'of', containerIdChunks.length, 'with', chunk.length, 'container IDs')
+        const chunkTags = await db
+          .select({
+            containerId: storageContainerTag.storageContainerId,
+            tagId: tag.id,
+            tagName: tag.name,
+          })
+          .from(storageContainerTag)
+          .innerJoin(tag, eq(storageContainerTag.tagId, tag.id))
+          .where(inArray(storageContainerTag.storageContainerId, chunk))
+        console.log('[STATS] Found', chunkTags.length, 'tags in chunk')
+        containerTags.push(...chunkTags)
+      }
+    }
+    console.log('[STATS] Found', containerTags.length, 'total container tags')
+    
+    const byTags: Record<string, number> = {}
+    containerTags.forEach(ct => {
+      byTags[ct.tagName] = (byTags[ct.tagName] || 0) + 1
     })
 
     // Containers by status (Inferred from remaining quantity)
@@ -664,7 +805,8 @@ statistics.get('/', async (c) => {
 
     // Storage Statistics
     // Get location IDs from containers via micronix/cryovial plates/boxes
-    const finalContainerIds = finalContainers.map(c => c.id)
+    // Reuse finalContainerIds from above (line 673)
+    console.log('[STATS] Querying storage statistics for', finalContainerIds.length, 'containers')
     
     let micronixTubes: Array<{ containerId: number; locationId: number | null }> = []
     let cryovialTubes: Array<{ containerId: number; locationId: number | null }> = []
@@ -672,18 +814,22 @@ statistics.get('/', async (c) => {
     if (finalContainerIds.length > 0) {
       // Batch queries to avoid SQLite variable limit
       const containerChunks = chunkArray(finalContainerIds, 500)
+      console.log('[STATS] Processing', containerChunks.length, 'chunks for storage statistics')
       
-      for (const chunk of containerChunks) {
+      for (let i = 0; i < containerChunks.length; i++) {
+        const chunk = containerChunks[i]
+        console.log('[STATS] Querying storage chunk', i + 1, 'of', containerChunks.length, 'with', chunk.length, 'container IDs')
         const [micronixBatch, cryovialBatch] = await Promise.all([
           db.select({ containerId: micronixTube.id, locationId: micronixPlate.locationId })
             .from(micronixTube)
-            .leftJoin(micronixPlate, eq(micronixTube.manifestId, micronixPlate.id))
+            .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
             .where(inArray(micronixTube.id, chunk)),
           db.select({ containerId: cryovialTube.id, locationId: cryovialBox.locationId })
             .from(cryovialTube)
-            .leftJoin(cryovialBox, eq(cryovialTube.manifestId, cryovialBox.id))
+            .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
             .where(inArray(cryovialTube.id, chunk)),
         ])
+        console.log('[STATS] Found', micronixBatch.length, 'micronix and', cryovialBatch.length, 'cryovial in chunk')
         micronixTubes.push(...micronixBatch)
         cryovialTubes.push(...cryovialBatch)
       }
@@ -698,15 +844,19 @@ statistics.get('/', async (c) => {
     const byLocationRoot: Record<string, number> = {}
 
     if (locationIds.length > 0) {
+      console.log('[STATS] Querying', locationIds.length, 'locations for storage statistics')
       // Batch query to avoid SQLite variable limit
       const locationChunks = chunkArray(locationIds, 500)
       const allLocations: Array<typeof location.$inferSelect> = []
       
-      for (const chunk of locationChunks) {
+      for (let i = 0; i < locationChunks.length; i++) {
+        const chunk = locationChunks[i]
+        console.log('[STATS] Querying location chunk', i + 1, 'of', locationChunks.length, 'with', chunk.length, 'location IDs')
         const locations = await db
           .select()
           .from(location)
           .where(inArray(location.id, chunk))
+        console.log('[STATS] Found', locations.length, 'locations in chunk')
         allLocations.push(...locations)
       }
       
@@ -742,6 +892,7 @@ statistics.get('/', async (c) => {
       })
     }
 
+    console.log('[STATS] Successfully completed statistics request')
     return c.json({
       specimens: {
         total: adjustedSpecimenTotal,
@@ -754,7 +905,7 @@ statistics.get('/', async (c) => {
       containers: {
         total: containerTotal,
         byType,
-        byState,
+        byTags,
         byStatus,
         averagePerSpecimen: Math.round(averagePerSpecimen * 100) / 100,
       },
@@ -763,9 +914,13 @@ statistics.get('/', async (c) => {
         byLocationRoot,
       },
     })
-  } catch (error: any) {
-    console.error('Error fetching statistics:', error)
-    return c.json({ error: 'Failed to fetch statistics', details: error.message }, 500)
+  } catch (error: unknown) {
+    console.error('[STATS] Error fetching statistics:', error)
+    if (error instanceof Error) {
+      console.error('[STATS] Error stack:', error.stack)
+    }
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    return c.json({ error: 'Failed to fetch statistics', details: errorMessage }, 500)
   }
 })
 

@@ -1,105 +1,86 @@
 import { db } from '../db/client'
-import { state, unit } from '../db/schema'
+import { unit } from '../db/schema'
 import { eq } from 'drizzle-orm'
+import { getContainerDefaults, clearSettingsCache } from './settings'
+import type { ContainerType } from './container-creation'
 
-// Cache for defaults to avoid repeated queries
-let defaultStateCache: { id: number; name: string } | null = null
-let defaultUnitCache: { id: number; symbol: string } | null = null
+// Cache for defaults to avoid repeated queries (per container type)
+const defaultUnitCache = new Map<ContainerType, { id: number; symbol: string }>()
 
 /**
- * Get default state (e.g., "Active")
- * Looks for common default state names
+ * Get default unit for a container type
+ * @param containerType The type of container
+ * @returns The unit ID
+ * @throws Error if unit settings are not configured or unit not found
  */
-export async function getDefaultState(): Promise<number | null> {
-  if (defaultStateCache) {
-    return defaultStateCache.id
+export async function getDefaultUnit(containerType: ContainerType): Promise<number> {
+  // Check cache first
+  const cached = defaultUnitCache.get(containerType)
+  if (cached) {
+    return cached.id
   }
 
-  // Try common default state names
-  const defaultNames = ['Active', 'active', 'Available', 'available', 'In Use', 'in use']
+  const defaults = await getContainerDefaults()
+  if (!defaults) {
+    throw new Error('Container defaults are not configured. Please run database initialization.')
+  }
+
+  const containerDefaults = defaults[containerType]
+  if (!containerDefaults || !containerDefaults.defaultUnitSymbol) {
+    throw new Error(`Default unit symbol not configured for container type '${containerType}'. Please update settings.`)
+  }
+
+  const unitSymbol = containerDefaults.defaultUnitSymbol
   
-  for (const name of defaultNames) {
-    const stateRecord = await db
-      .select()
-      .from(state)
-      .where(eq(state.name, name))
-      .get()
-    
-    if (stateRecord) {
-      defaultStateCache = { id: stateRecord.id, name: stateRecord.name }
-      return stateRecord.id
-    }
-  }
-
-  // If no default found, use the first state
-  const firstState = await db
+  const unitRecord = await db
     .select()
-    .from(state)
-    .limit(1)
+    .from(unit)
+    .where(eq(unit.symbol, unitSymbol))
     .get()
   
-  if (firstState) {
-    defaultStateCache = { id: firstState.id, name: firstState.name }
-    return firstState.id
+  if (!unitRecord) {
+    throw new Error(`Unit symbol '${unitSymbol}' not found for container type '${containerType}'. Please update settings or create the unit.`)
   }
 
-  return null
+  const unitId = unitRecord.id as number
+  defaultUnitCache.set(containerType, { id: unitId, symbol: unitSymbol })
+  return unitId
 }
 
 /**
- * Get default unit (e.g., "items")
+ * Get default total quantity for a container type
+ * @throws Error if container defaults are not configured
  */
-export async function getDefaultUnit(): Promise<number | null> {
-  if (defaultUnitCache) {
-    return defaultUnitCache.id
+export async function getDefaultTotalQuantity(containerType: ContainerType): Promise<number> {
+  const defaults = await getContainerDefaults()
+  if (!defaults) {
+    throw new Error('Container defaults are not configured. Please run database initialization.')
   }
-
-  // Try common default unit symbols
-  const defaultSymbols = ['items', 'tubes', 'spots']
-  
-  for (const symbol of defaultSymbols) {
-    const unitRecord = await db
-      .select()
-      .from(unit)
-      .where(eq(unit.symbol, symbol))
-      .get()
-    
-    if (unitRecord) {
-      defaultUnitCache = { id: unitRecord.id as number, symbol: unitRecord.symbol as string }
-      return unitRecord.id as number
-    }
+  if (!defaults[containerType]) {
+    throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
   }
-
-  // Fallback to any unit
-  const firstUnit = await db.select().from(unit).limit(1).get()
-  if (firstUnit) {
-    defaultUnitCache = { id: firstUnit.id as number, symbol: firstUnit.symbol as string }
-    return firstUnit.id as number
-  }
-
-  return null
+  return defaults[containerType].totalQuantity
 }
 
 /**
- * Get default state and unit as a pair
+ * Get default remaining quantity for a container type
+ * @throws Error if container defaults are not configured
  */
-export async function getDefaultStateAndUnit(): Promise<{ stateId: number; unitId: number } | null> {
-  const [stateId, unitId] = await Promise.all([
-    getDefaultState(),
-    getDefaultUnit(),
-  ])
-
-  if (stateId && unitId) {
-    return { stateId, unitId }
+export async function getDefaultRemainingQuantity(containerType: ContainerType): Promise<number> {
+  const defaults = await getContainerDefaults()
+  if (!defaults) {
+    throw new Error('Container defaults are not configured. Please run database initialization.')
   }
-
-  return null
+  if (!defaults[containerType]) {
+    throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
+  }
+  return defaults[containerType].remainingQuantity
 }
 
 /**
  * Clear the cache
  */
 export function clearDefaultsCache() {
-  defaultStateCache = null
-  defaultUnitCache = null
+  defaultUnitCache.clear()
+  clearSettingsCache()
 }

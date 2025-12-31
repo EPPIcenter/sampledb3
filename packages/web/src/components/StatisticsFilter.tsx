@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { studiesApi, type Study } from '../lib/api'
 import { specimenTypesApi, type SpecimenType } from '../lib/api'
-import { statesApi, type State } from '../lib/api'
+import { tagsApi, type Tag } from '../lib/api'
 import LocationTreePicker, { type LocationSelection } from './LocationTreePicker'
 
 export interface StatisticsFilters {
@@ -9,7 +9,7 @@ export interface StatisticsFilters {
   sourceType?: string
   specimenTypeId?: string
   containerType?: string
-  stateId?: string
+  tagIds?: string[] // Array of tag IDs for filtering
   collectionDateFrom?: string
   collectionDateTo?: string
   createdFrom?: string
@@ -52,7 +52,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
   const [localFilters, setLocalFilters] = useState<StatisticsFilters>(filters)
   const [studies, setStudies] = useState<Study[]>([])
   const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
-  const [states, setStates] = useState<State[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
   const [loading, setLoading] = useState(false)
   const [studyPickerOpen, setStudyPickerOpen] = useState(false)
   const [studySearch, setStudySearch] = useState('')
@@ -72,12 +72,12 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
   const loadReferenceData = async () => {
     try {
       setLoading(true)
-      const [specimenTypesRes, statesRes] = await Promise.all([
+      const [specimenTypesRes, tagsRes] = await Promise.all([
         specimenTypesApi.list().catch(() => ({ data: { specimenTypes: [] } })),
-        statesApi.list().catch(() => ({ data: { states: [] } })),
+        tagsApi.list().catch(() => ({ data: { tags: [] } })),
       ])
       setSpecimenTypes(specimenTypesRes.data.specimenTypes || [])
-      setStates(statesRes.data.states || [])
+      setTags(tagsRes.data.tags || [])
     } catch (error) {
       console.error('Failed to load reference data:', error)
     } finally {
@@ -118,7 +118,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
     if (value === '') {
       delete newFilters[key]
     } else {
-      newFilters[key] = value
+      newFilters[key] = value as any
     }
     setLocalFilters(newFilters)
     // Update parent for display purposes (e.g., showing active filter count)
@@ -131,10 +131,10 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
     if (localFilters.locationSelections && localFilters.locationSelections.length > 0) {
       return localFilters.locationSelections
     }
-    
+
     // Otherwise, build from legacy filter values for backward compatibility
     const selections: LocationSelection[] = []
-    
+
     if (localFilters.locationRoot && !localFilters.locationLevelI && !localFilters.locationLevelII && !localFilters.locationId) {
       selections.push({
         type: 'root',
@@ -163,34 +163,34 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
         levelI: localFilters.locationLevelI,
         levelII: localFilters.locationLevelII,
         locationId: parseInt(localFilters.locationId),
-        path: localFilters.locationRoot 
+        path: localFilters.locationRoot
           ? `${localFilters.locationRoot}${localFilters.locationLevelI ? ` → ${localFilters.locationLevelI}` : ''}${localFilters.locationLevelII ? ` → ${localFilters.locationLevelII}` : ''}`
           : `Location #${localFilters.locationId}`,
       })
     }
-    
+
     return selections
   }, [localFilters.locationRoot, localFilters.locationLevelI, localFilters.locationLevelII, localFilters.locationId, localFilters.locationSelections])
 
   const handleLocationChange = (selections: LocationSelection[]) => {
     const newFilters = { ...localFilters }
-    
+
     // Clear legacy location filters
     delete newFilters.locationRoot
     delete newFilters.locationLevelI
     delete newFilters.locationLevelII
     delete newFilters.locationId
-    
+
     // Store all selections - support multiple locations
     if (selections.length > 0) {
       newFilters.locationSelections = selections
       // For backward compatibility with API, also set the first selection as the primary filter
       // The API currently only supports single location, so we use the most specific one
-      const mostSpecific = selections.find(s => s.type === 'location') || 
-                          selections.find(s => s.type === 'levelII') ||
-                          selections.find(s => s.type === 'levelI') ||
-                          selections[0]
-      
+      const mostSpecific = selections.find(s => s.type === 'location') ||
+        selections.find(s => s.type === 'levelII') ||
+        selections.find(s => s.type === 'levelI') ||
+        selections[0]
+
       if (mostSpecific) {
         newFilters.locationRoot = mostSpecific.root
         if (mostSpecific.levelI) newFilters.locationLevelI = mostSpecific.levelI
@@ -200,7 +200,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
     } else {
       delete newFilters.locationSelections
     }
-    
+
     setLocalFilters(newFilters)
     onChange(newFilters)
   }
@@ -449,24 +449,51 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
               </select>
             </div>
 
-            {/* State Filter */}
+            {/* Tag Filter (checkboxes) */}
             <div>
-              <label htmlFor="filter-state" className="block text-sm font-medium mb-2 text-gray-700">
-                State
+              <label className="block text-sm font-medium mb-2 text-gray-700">
+                Tags (must have all selected)
               </label>
-              <select
-                id="filter-state"
-                value={localFilters.stateId || ''}
-                onChange={(e) => updateFilter('stateId', e.target.value)}
-                className="w-full form-select"
-              >
-                <option value="">All States</option>
-                {states.map((state) => (
-                  <option key={state.id} value={state.id.toString()}>
-                    {state.name}
-                  </option>
-                ))}
-              </select>
+              <div className="border border-gray-300 rounded-md p-2 max-h-40 overflow-y-auto">
+                {tags.length === 0 ? (
+                  <p className="text-sm text-gray-500">No tags available</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {tags.map((tag) => {
+                      const isChecked = localFilters.tagIds?.includes(tag.id.toString()) || false
+                      return (
+                        <label
+                          key={tag.id}
+                          className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const currentTagIds = localFilters.tagIds || []
+                              const newTagIds = e.target.checked
+                                ? [...currentTagIds, tag.id.toString()]
+                                : currentTagIds.filter(id => id !== tag.id.toString())
+                              updateFilter('tagIds', newTagIds)
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-700">{tag.name}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+              {localFilters.tagIds && localFilters.tagIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => updateFilter('tagIds', [])}
+                  className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                >
+                  Clear all tags
+                </button>
+              )}
             </div>
 
             {/* Collection Date From */}

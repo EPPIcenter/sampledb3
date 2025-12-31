@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
-import { 
-  specimensApi, 
-  type Specimen, 
-  specimenTypesApi, 
+import { useState, useEffect, useRef } from 'react'
+import {
+  specimensApi,
+  type Specimen,
+  specimenTypesApi,
   type SpecimenType,
   studiesApi,
   type Study,
@@ -20,8 +20,9 @@ import {
 } from '../../lib/api'
 import { useNavigate } from 'react-router-dom'
 import StudyPicker from '../StudyPicker'
-import AliquotRegistration, { type AliquotData } from '../AliquotRegistration'
+import ContainerRegistration, { type ContainerData } from '../ContainerRegistration'
 import { subjectsApi } from '../../lib/api'
+import { useModifierHotkey } from '../../hooks/useHotkey'
 
 interface SpecimenFormProps {
   specimen?: Specimen
@@ -32,21 +33,24 @@ interface SpecimenFormProps {
   controlBatchId?: number
   controlBatchName?: string
   onSuccess?: () => void
+  onCancel: () => void
 }
 
-export default function SpecimenForm({ 
-  specimen, 
+export default function SpecimenForm({
+  specimen,
   subjectId,
   studyId,
   studyShortCode,
   subjectName,
   controlBatchId,
   controlBatchName,
-  onSuccess 
+  onSuccess,
+  onCancel
 }: SpecimenFormProps) {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
   const [studies, setStudies] = useState<Study[]>([])
   const [subjects, setSubjects] = useState<StudySubject[]>([])
   const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
@@ -66,8 +70,8 @@ export default function SpecimenForm({
     specimenTypeName: '',
     collectionDate: specimen?.collectionDate || '',
   })
-  const [aliquotData, setAliquotData] = useState<AliquotData | null>(null)
-  const [aliquotValid, setAliquotValid] = useState(true)
+  const [containerData, setContainerData] = useState<ContainerData | null>(null)
+  const [containerValid, setContainerValid] = useState(true)
 
   useEffect(() => {
     loadStudies()
@@ -231,9 +235,9 @@ export default function SpecimenForm({
         data.collectionDate = formData.collectionDate
       }
 
-      // Add aliquot data if provided
-      if (aliquotData && aliquotData.mode !== 'skip') {
-        data.aliquot = aliquotData
+      // Add container data if provided
+      if (containerData && containerData.mode !== 'skip') {
+        data.container = containerData
       }
 
       const response = await specimensApi.create(data)
@@ -254,8 +258,16 @@ export default function SpecimenForm({
     }
   }
 
+  // Cmd/Ctrl+Enter to submit
+  useModifierHotkey('enter', (e) => {
+    if (!loading && containerValid && formRef.current) {
+      e.preventDefault()
+      formRef.current.requestSubmit()
+    }
+  }, { preventDefault: true, enableOnFormTags: true })
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-8">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
           {error}
@@ -552,24 +564,24 @@ export default function SpecimenForm({
         </div>
       </div>
 
-      <AliquotRegistration
+      <ContainerRegistration
         mode="optional"
-        defaultValue={aliquotData || undefined}
-        onChange={(data) => setAliquotData(data)}
-        onValidationChange={(isValid) => setAliquotValid(isValid)}
+        defaultValue={containerData || undefined}
+        onChange={(data) => setContainerData(data)}
+        onValidationChange={(isValid) => setContainerValid(isValid)}
       />
 
       <div className="flex justify-end space-x-4">
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          onClick={onCancel}
           className="px-4 py-2 border border-gray-100 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
         >
           Cancel
         </button>
         <button
           type="submit"
-          disabled={loading || !aliquotValid}
+          disabled={loading || !containerValid}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
           {loading ? 'Saving...' : specimen ? 'Update' : 'Create'}

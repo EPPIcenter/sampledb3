@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import api from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import { getContainerTypeIcon, getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
+import SkeletonDetailPage from '../components/SkeletonDetailPage'
 
 interface ContainerDetail {
   id?: number
@@ -12,7 +13,7 @@ interface ContainerDetail {
   location?: any
   locationPath?: string
   containerType?: string
-  manifest?: {
+  collection?: {
     type: string
     id: number
     name: string
@@ -54,11 +55,7 @@ export default function ContainerDetail() {
   }
 
   if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8">Loading...</div>
-      </div>
-    )
+    return <SkeletonDetailPage sections={1} />
   }
 
   if (!data || (!data.container && !data.id)) {
@@ -71,22 +68,22 @@ export default function ContainerDetail() {
 
   // Handle both flattened and nested formats from API
   const container = data.container || data
-  const { specimen, source, location, locationPath, containerType, manifest } = data
+  const { specimen, source, location, locationPath, containerType, collection } = data
   
   // If we're using flattened format, some properties might be on data directly
   const effectiveLocation = location || container.location
   const effectiveLocationPath = locationPath || container.locationPath
   const effectiveContainerType = containerType || container.containerType
-  const effectiveManifest = manifest || container.manifest
+  const effectiveCollection = collection || container.collection
 
   const containerTypeName = getContainerTypeName(effectiveContainerType)
   const containerTypeIcon = getContainerTypeIcon(effectiveContainerType)
 
   // Get identifier for header (position, barcode, or type)
   const containerIdentifier = 
-    effectiveManifest?.position || 
-    effectiveManifest?.barcode || 
-    effectiveManifest?.label ||
+    effectiveCollection?.position || 
+    effectiveCollection?.barcode || 
+    effectiveCollection?.label ||
     containerTypeName
 
   // Build breadcrumbs - use identifier instead of ID
@@ -117,7 +114,7 @@ export default function ContainerDetail() {
   const displayLocationPath = effectiveLocationPath || 
     (effectiveLocation ? `${effectiveLocation.locationRoot} → ${effectiveLocation.levelI} → ${effectiveLocation.levelII}${effectiveLocation.levelIII ? ` → ${effectiveLocation.levelIII}` : ''}` : null)
 
-  const getManifestUrl = (type: string, id: number) => {
+  const getCollectionUrl = (type: string, id: number) => {
     switch (type) {
       case 'micronix_plate':
         return `/collections/micronix-plates/${id}`
@@ -151,11 +148,11 @@ export default function ContainerDetail() {
           </div>
 
           {/* Position/Barcode */}
-          {(effectiveManifest?.position || effectiveManifest?.barcode || effectiveManifest?.label) && (
+          {(effectiveCollection?.position || effectiveCollection?.barcode || effectiveCollection?.label) && (
             <div className="flex items-center gap-2 text-sm">
               <span className="text-gray-500">•</span>
               <span className="font-mono text-gray-700">
-                {effectiveManifest?.position || effectiveManifest?.barcode || effectiveManifest?.label}
+                {effectiveCollection?.position || effectiveCollection?.barcode || effectiveCollection?.label}
               </span>
             </div>
           )}
@@ -203,17 +200,17 @@ export default function ContainerDetail() {
 
         <div className="space-y-4">
           {/* Container Type-Specific Information */}
-          {effectiveManifest && (
+          {effectiveCollection && (
             <div className="flex flex-wrap items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <span className="text-gray-500 capitalize">{getContainerTypeName(effectiveManifest.type)}:</span>
-                <span className="font-mono text-gray-900">{effectiveManifest.name}</span>
+                <span className="text-gray-500 capitalize">{getContainerTypeName(effectiveCollection.type)}:</span>
+                <span className="font-mono text-gray-900">{effectiveCollection.name}</span>
               </div>
               <Link
-                to={getManifestUrl(effectiveManifest.type, effectiveManifest.id)}
+                to={getCollectionUrl(effectiveCollection.type, effectiveCollection.id)}
                 className="text-blue-600 hover:text-blue-800 hover:underline text-xs"
               >
-                View {getContainerTypeName(effectiveManifest.type).toLowerCase()} details →
+                View {getContainerTypeName(effectiveCollection.type).toLowerCase()} details →
               </Link>
             </div>
           )}

@@ -4,15 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "DATABASE_PATH=../../sampledb_database.sqlite tsx watch src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "dev:production": "DATABASE_PATH=../../sampledb_database.sqlite tsx watch src/index.ts",
     "build": "tsc && tsc-alias",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
-    "migrate:specimens": "DATABASE_PATH=../../sampledb_database.sqlite tsx src/lib/migrate-specimens.ts"
+    "migrate:specimens": "DATABASE_PATH=../../sampledb_database.sqlite tsx src/lib/migrate-specimens.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.7",
+    "@hono/zod-validator": "^0.7.6",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.5.0",
     "drizzle-kit": "^0.31.8",
@@ -27,9 +33,12 @@
     "@types/node": "^25.0.3",
     "@typescript-eslint/eslint-plugin": "^8.50.0",
     "@typescript-eslint/parser": "^8.50.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "@vitest/ui": "^2.1.8",
     "eslint": "^9.39.2",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.8"
   }
 }

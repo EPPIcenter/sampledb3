@@ -1,12 +1,15 @@
 import { useState } from 'react'
+import SkeletonTable from './SkeletonTable'
+
+export interface Column<T> {
+  key: keyof T
+  label: string
+  render?: (value: any, item: T) => React.ReactNode
+}
 
 interface ReferenceDataTableProps<T extends { id: number }> {
   data: T[]
-  columns: Array<{
-    key: keyof T
-    label: string
-    render?: (value: any, item: T) => React.ReactNode
-  }>
+  columns: Column<T>[]
   onEdit: (item: T) => void
   onDelete: (id: number) => Promise<void>
   searchPlaceholder?: string
@@ -31,34 +34,34 @@ export default function ReferenceDataTable<T extends { id: number }>({
 }: ReferenceDataTableProps<T>) {
   const [internalSearch, setInternalSearch] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
-  
+
   // Use external search if provided, otherwise use internal state
   const search = externalSearch !== undefined ? externalSearch : internalSearch
   const setSearch = onSearchChange || setInternalSearch
 
-  const filteredData = disableClientFilter 
+  const filteredData = disableClientFilter
     ? data // No client-side filtering when backend handles it
     : data.filter((item) => {
-        if (!search.trim()) return true
-        
-        // Split search into words (handle multiple spaces)
-        const searchWords = search.trim().split(/\s+/).filter(word => word.length > 0)
-        if (searchWords.length === 0) return true
-        
-        // For each word, check if it matches any column
-        // ALL words must match (AND logic)
-        return searchWords.every(word => {
-          const wordLower = word.toLowerCase()
-          return columns.some((col) => {
-            const value = item[col.key]
-            // Use rendered value if render function exists, otherwise use raw value
-            const displayValue = col.render 
-              ? String(col.render(value, item))
-              : String(value || '')
-            return displayValue.toLowerCase().includes(wordLower)
-          })
+      if (!search.trim()) return true
+
+      // Split search into words (handle multiple spaces)
+      const searchWords = search.trim().split(/\s+/).filter(word => word.length > 0)
+      if (searchWords.length === 0) return true
+
+      // For each word, check if it matches any column
+      // ALL words must match (AND logic)
+      return searchWords.every(word => {
+        const wordLower = word.toLowerCase()
+        return columns.some((col) => {
+          const value = item[col.key]
+          // Use rendered value if render function exists, otherwise use raw value
+          const displayValue = col.render
+            ? String(col.render(value, item))
+            : String(value || '')
+          return displayValue.toLowerCase().includes(wordLower)
         })
       })
+    })
 
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this item?')) {
@@ -89,12 +92,7 @@ export default function ReferenceDataTable<T extends { id: number }>({
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-lg shadow p-8">
-          <div className="text-center text-gray-500">
-            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
-            Loading...
-          </div>
-        </div>
+        <SkeletonTable rows={5} columns={columns.length + 1} />
       ) : filteredData.length === 0 ? (
         <div className="text-center py-8 text-gray-500">{emptyMessage}</div>
       ) : (

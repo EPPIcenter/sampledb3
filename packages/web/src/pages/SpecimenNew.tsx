@@ -1,7 +1,10 @@
+import { useNavigate } from 'react-router-dom'
 import SpecimenForm from '../components/forms/SpecimenForm'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 
 export default function SpecimenNew() {
+  const navigate = useNavigate()
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
@@ -19,7 +22,7 @@ export default function SpecimenNew() {
       </div>
 
       <div className="bg-white rounded-lg shadow p-6 max-w-5xl mx-auto">
-        <SpecimenForm />
+        <SpecimenForm onCancel={() => navigate('/specimens')} />
       </div>
     </div>
   )

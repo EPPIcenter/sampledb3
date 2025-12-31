@@ -31,12 +31,12 @@ const DEFAULT_COLORS = [
   '#84cc16', // lime
 ]
 
-export default function StatChart({ 
-  type, 
-  data, 
-  title, 
-  dataKey = 'value', 
-  xKey = 'name', 
+export default function StatChart({
+  type,
+  data,
+  title,
+  dataKey = 'value',
+  xKey = 'name',
   yKey = 'value',
   dateKey,
   colors = DEFAULT_COLORS,
@@ -58,12 +58,12 @@ export default function StatChart({
   const total = data.reduce((sum, entry) => sum + (entry[dataKey] as number), 0)
 
   // Calculate percentages for pie chart
-  const pieDataWithPercentages = type === 'pie' 
+  const pieDataWithPercentages = type === 'pie'
     ? data.map((entry, index) => ({
-        ...entry,
-        percentage: total > 0 ? ((entry[dataKey] as number) / total) * 100 : 0,
-        color: colors[index % colors.length],
-      }))
+      ...entry,
+      percentage: total > 0 ? ((entry[dataKey] as number) / total) * 100 : 0,
+      color: colors[index % colors.length],
+    }))
     : []
 
   // Create a map of date values to formatted names for efficient lookup
@@ -85,32 +85,32 @@ export default function StatChart({
     if (!dateKey) return undefined
     const allTicks = data.map(entry => entry[dateKey] as number).filter((val): val is number => val != null)
     if (allTicks.length === 0) return undefined
-    
+
     // Limit to max 8 ticks for better readability
     if (allTicks.length <= 8) {
       return allTicks
     }
-    
+
     // Show subset: first, last, and evenly spaced in between
     const maxTicks = 8
     const step = Math.ceil(allTicks.length / (maxTicks - 1))
     const selectedTicks: number[] = []
-    
+
     // Always include first tick
     selectedTicks.push(allTicks[0])
-    
+
     // Add evenly spaced ticks in the middle
     for (let i = step; i < allTicks.length - 1; i += step) {
       if (selectedTicks.length < maxTicks - 1) {
         selectedTicks.push(allTicks[i])
       }
     }
-    
+
     // Always include last tick if not already included
     if (selectedTicks[selectedTicks.length - 1] !== allTicks[allTicks.length - 1]) {
       selectedTicks.push(allTicks[allTicks.length - 1])
     }
-    
+
     return selectedTicks
   }, [data, dateKey])
 
@@ -119,14 +119,14 @@ export default function StatChart({
     if (!dateKey) return undefined
     const dateValues = data.map(entry => entry[dateKey] as number).filter((val): val is number => val != null)
     if (dateValues.length === 0) return undefined
-    
+
     const min = Math.min(...dateValues)
     const max = Math.max(...dateValues)
     const range = max - min
-    
+
     // Add 5% padding on each side, but at least 1 day worth of milliseconds
     const padding = Math.max(range * 0.05, 24 * 60 * 60 * 1000) // 1 day in milliseconds
-    
+
     return [min - padding, max + padding]
   }, [data, dateKey])
 
@@ -138,7 +138,7 @@ export default function StatChart({
     if (name) return name
     // If no exact match, find the closest data point
     const sortedDates = Array.from(dateValueToNameMap.keys()).sort((a, b) => a - b)
-    const closest = sortedDates.reduce((prev, curr) => 
+    const closest = sortedDates.reduce((prev, curr) =>
       Math.abs(curr - tickItem) < Math.abs(prev - tickItem) ? curr : prev
     )
     return dateValueToNameMap.get(closest) || new Date(tickItem).toLocaleDateString()
@@ -149,7 +149,7 @@ export default function StatChart({
       {type === 'bar' && (
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis 
+          <XAxis
             dataKey={dateKey || xKey}
             type={dateKey ? 'number' : 'category'}
             domain={dateKey ? dateDomain : undefined}
@@ -160,11 +160,11 @@ export default function StatChart({
             height={dateKey ? 80 : undefined}
           />
           <YAxis />
-          <Tooltip 
-            formatter={dateKey ? (value: number) => value : undefined}
-            labelFormatter={dateKey ? (label: number) => {
-              const name = dateValueToNameMap.get(label)
-              return name || new Date(label).toLocaleDateString()
+          <Tooltip
+            formatter={dateKey ? ((value: any) => [value] as [number]) : undefined}
+            labelFormatter={dateKey ? (label: any) => {
+              const name = dateValueToNameMap.get(label as number)
+              return name || new Date(label as number).toLocaleDateString()
             } : undefined}
           />
           <Legend />
@@ -187,7 +187,7 @@ export default function StatChart({
               <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
             ))}
           </Pie>
-          <Tooltip formatter={(value: number, name: string, props: any) => {
+          <Tooltip formatter={(value: any, name: any) => {
             const percentage = total > 0 ? (value / total) * 100 : 0
             return [`${value} (${percentage.toFixed(1)}%)`, name]
           }} />
@@ -196,7 +196,7 @@ export default function StatChart({
       {type === 'line' && (
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis 
+          <XAxis
             dataKey={dateKey || xKey}
             type={dateKey ? 'number' : 'category'}
             domain={dateKey ? dateDomain : undefined}
@@ -207,11 +207,11 @@ export default function StatChart({
             height={dateKey ? 80 : undefined}
           />
           <YAxis />
-          <Tooltip 
-            formatter={dateKey ? (value: number) => value : undefined}
-            labelFormatter={dateKey ? (label: number) => {
-              const name = dateValueToNameMap.get(label)
-              return name || new Date(label).toLocaleDateString()
+          <Tooltip
+            formatter={dateKey ? ((value: any) => [value] as [number]) : undefined}
+            labelFormatter={dateKey ? (label: any) => {
+              const name = dateValueToNameMap.get(label as number)
+              return name || new Date(label as number).toLocaleDateString()
             } : undefined}
           />
           <Legend />
@@ -234,8 +234,8 @@ export default function StatChart({
                 .sort((a, b) => b.percentage - a.percentage)
                 .map((entry, index) => (
                   <div key={index} className="flex items-center gap-2 text-sm">
-                    <div 
-                      className="w-3 h-3 rounded-full flex-shrink-0" 
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0"
                       style={{ backgroundColor: entry.color }}
                     />
                     <span className="text-gray-600 flex-1">{entry.name}</span>

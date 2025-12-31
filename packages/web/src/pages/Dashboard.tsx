@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import api from '../lib/api'
 import { activityApi } from '../lib/api'
 import { Link, useNavigate } from 'react-router-dom'
+import SkeletonCard from '../components/SkeletonCard'
+import SkeletonList from '../components/SkeletonList'
 
 interface ActivityItem {
   id: number
@@ -31,7 +33,7 @@ export default function Dashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true)
-      
+
       // Load all stats in parallel
       const [studiesRes, specimensRes, subjectsRes, containersRes, locationsRes, activityRes, studiesListRes] = await Promise.all([
         api.get('/studies', { params: { limit: 1 } }),
@@ -42,7 +44,7 @@ export default function Dashboard() {
         activityApi.recent(10).catch(() => ({ data: { activity: [] } })),
         api.get('/studies', { params: { limit: 20 } }),
       ])
-      
+
       setStats({
         studies: studiesRes.data.pagination?.total || studiesRes.data.studies?.length || 0,
         specimens: specimensRes.data.pagination?.total || specimensRes.data.specimens?.length || 0,
@@ -50,8 +52,8 @@ export default function Dashboard() {
         containers: containersRes.data.pagination?.total || containersRes.data.containers?.length || 0,
         locations: locationsRes.data.pagination?.total || locationsRes.data.locations?.length || 0,
       })
-      
-      setRecentActivity(activityRes.data.activity || [])
+
+      setRecentActivity((activityRes.data.activity || []) as any)
       setStudies(studiesListRes.data.studies || [])
     } catch (error) {
       console.error('Failed to load dashboard data:', error)
@@ -111,7 +113,58 @@ export default function Dashboard() {
       <h1 className="text-3xl font-bold mb-6 text-gray-900">Dashboard</h1>
 
       {loading ? (
-        <div className="text-center py-8">Loading...</div>
+        <>
+          {/* Key Metrics Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SkeletonCard key={i} height="h-20" />
+            ))}
+          </div>
+
+          {/* Quick Actions Skeleton */}
+          <div className="bg-white rounded-lg shadow p-6 mb-8">
+            <div className="h-6 bg-gray-200 rounded w-32 mb-4 animate-pulse"></div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-12 bg-gray-200 rounded-lg animate-pulse"></div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* Search Shortcuts Skeleton */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="h-6 bg-gray-200 rounded w-40 mb-4 animate-pulse"></div>
+              <div className="space-y-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
+                    <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Recent Activity Skeleton */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="h-6 bg-gray-200 rounded w-40 mb-4 animate-pulse"></div>
+              <SkeletonList count={5} itemHeight="h-16" />
+            </div>
+          </div>
+
+          {/* Workflow Links Skeleton */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="h-6 bg-gray-200 rounded w-32 mb-4 animate-pulse"></div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="p-4 border border-gray-100 rounded-lg">
+                  <div className="h-4 bg-gray-200 rounded w-24 mb-2 animate-pulse"></div>
+                  <div className="h-3 bg-gray-200 rounded w-full animate-pulse"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       ) : (
         <>
           {/* Key Metrics */}
@@ -172,12 +225,6 @@ export default function Dashboard() {
                 className="px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-center font-medium transition-colors"
               >
                 Bulk Import
-              </Link>
-              <Link
-                to="/bulk"
-                className="px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-center font-medium transition-colors"
-              >
-                Bulk Operations
               </Link>
             </div>
           </div>
@@ -267,11 +314,10 @@ export default function Dashboard() {
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                            item.type === 'specimen' ? 'bg-green-100 text-green-800' :
-                            item.type === 'study' ? 'bg-blue-100 text-blue-800' :
-                            'bg-orange-100 text-orange-800'
-                          }`}>
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded ${item.type === 'specimen' ? 'bg-green-100 text-green-800' :
+                              item.type === 'study' ? 'bg-blue-100 text-blue-800' :
+                                'bg-orange-100 text-orange-800'
+                            }`}>
                             {item.type}
                           </span>
                           <span className="ml-2 font-medium text-gray-900">{getActivityLabel(item)}</span>

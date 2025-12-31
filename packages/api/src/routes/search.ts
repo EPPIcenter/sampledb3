@@ -64,12 +64,12 @@ search.get('/', async (c) => {
           id: micronixTube.id,
           barcode: micronixTube.barcode,
           position: micronixTube.position,
-          plateId: micronixTube.manifestId,
+          plateId: micronixTube.collectionId,
           plateName: micronixPlate.name,
           type: sql<string>`'micronix_tube'`.as('type'),
         })
         .from(micronixTube)
-        .leftJoin(micronixPlate, eq(micronixTube.manifestId, micronixPlate.id))
+        .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
         .where(like(micronixTube.barcode, `%${query}%`))
         .limit(10)
       
@@ -90,12 +90,12 @@ search.get('/', async (c) => {
           id: cryovialTube.id,
           barcode: cryovialTube.barcode,
           position: cryovialTube.position,
-          boxId: cryovialTube.manifestId,
+          boxId: cryovialTube.collectionId,
           boxName: cryovialBox.name,
           type: sql<string>`'cryovial_tube'`.as('type'),
         })
         .from(cryovialTube)
-        .leftJoin(cryovialBox, eq(cryovialTube.manifestId, cryovialBox.id))
+        .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
         .where(like(cryovialTube.barcode, `%${query}%`))
         .limit(10)
       
@@ -126,7 +126,7 @@ search.get('/', async (c) => {
             type: 'container',
             id: tube.id,
             title: `Micronix Tube #${tube.id}`,
-            subtitle: tube.barcode ? `Barcode: ${tube.barcode}` : `Plate: ${tube.manifestId}`,
+            subtitle: tube.barcode ? `Barcode: ${tube.barcode}` : `Plate: ${tube.collectionId}`,
             url: `/containers/${tube.id}`,
             data: tube,
           })
@@ -144,7 +144,7 @@ search.get('/', async (c) => {
               type: 'container',
               id: tube.id,
               title: `Cryovial Tube #${tube.id}`,
-              subtitle: tube.barcode ? `Barcode: ${tube.barcode}` : `Box: ${tube.manifestId}`,
+              subtitle: tube.barcode ? `Barcode: ${tube.barcode}` : `Box: ${tube.collectionId}`,
               url: `/containers/${tube.id}`,
               data: tube,
             })

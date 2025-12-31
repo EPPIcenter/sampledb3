@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { locationsApi, searchApi } from '../lib/api'
 import { buildLocationTree, getLocationLabel } from '../lib/location-tree'
+import SkeletonCard from '../components/SkeletonCard'
 
 interface Location {
   id: number
@@ -804,7 +805,20 @@ export default function Locations() {
       </div>
 
       {loading ? (
-        <div className="text-center py-16">Loading locations…</div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white rounded-lg shadow p-4">
+            <div className="h-6 bg-gray-200 rounded w-32 mb-4 animate-pulse"></div>
+            <div className="space-y-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-8 bg-gray-200 rounded animate-pulse"></div>
+              ))}
+            </div>
+          </div>
+          <div className="lg:col-span-2 space-y-4">
+            <SkeletonCard height="h-48" />
+            <SkeletonCard height="h-24" />
+          </div>
+        </div>
       ) : locations.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
           No locations have been configured yet.

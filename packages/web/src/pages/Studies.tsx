@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { studiesApi, type Study, type StudySummaryBasic } from '../lib/api'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import StudyCard from '../components/StudyCard'
 import StudyCardSkeleton from '../components/StudyCardSkeleton'
+import { getModifierKey } from '../lib/hotkeys'
 
 type ViewMode = 'grid' | 'list' | 'compact'
-type SortOption = 'title' | 'date' | 'subjects' | 'specimens' | 'aliquots' | 'lead'
+type SortOption = 'title' | 'date' | 'subjects' | 'specimens' | 'containers' | 'lead'
 type FilterType = 'all' | 'longitudinal' | 'cross-sectional'
 
 interface StudyWithSummary extends Study {
@@ -14,6 +15,7 @@ interface StudyWithSummary extends Study {
 }
 
 export default function Studies() {
+  const navigate = useNavigate()
   const [studies, setStudies] = useState<StudyWithSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -39,6 +41,7 @@ export default function Studies() {
   const summaryObserverRef = useRef<IntersectionObserver | null>(null)
   const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   // Load all unique lead persons on mount
   useEffect(() => {
@@ -332,8 +335,8 @@ export default function Studies() {
         case 'specimens':
           result = (b.summary?.totalSpecimens || 0) - (a.summary?.totalSpecimens || 0)
           break
-        case 'aliquots':
-          result = (b.summary?.totalAliquots || 0) - (a.summary?.totalAliquots || 0)
+        case 'containers':
+          result = (b.summary?.totalContainers || 0) - (a.summary?.totalContainers || 0)
           break
         default:
           return 0
@@ -359,6 +362,7 @@ export default function Studies() {
       loadSummaries([studyId])
     }
   }, [summaryCache, loadingSummaries, loadSummaries])
+
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -399,6 +403,7 @@ export default function Studies() {
                 Search studies
               </label>
               <input
+                ref={searchInputRef}
                 id="studies-search"
                 type="text"
                 placeholder="Search by title, code, lead person, or description..."
@@ -473,7 +478,7 @@ export default function Studies() {
                 <option value="lead">Sort by Lead</option>
                 <option value="subjects">Sort by Subjects</option>
                 <option value="specimens">Sort by Specimens</option>
-                <option value="aliquots">Sort by Aliquots</option>
+                <option value="containers">Sort by Containers</option>
               </select>
               <button
                 onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}

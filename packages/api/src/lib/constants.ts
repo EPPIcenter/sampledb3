@@ -1,22 +1,40 @@
+// Cache for pagination settings
+let paginationCache: { defaultPageSize: number; maxPageSize: number } | null = null
+
 /**
- * Pagination constants for API endpoints
+ * Get pagination settings from cache or database
+ * @throws Error if pagination settings are not configured
  */
-export const DEFAULT_PAGE_SIZE = 50
-export const MAX_PAGE_SIZE = 1000
+async function getPaginationSettings(): Promise<{ defaultPageSize: number; maxPageSize: number }> {
+  if (paginationCache) {
+    return paginationCache
+  }
+
+  const { getPaginationSettings } = await import('./settings')
+  const settings = await getPaginationSettings()
+  
+  if (!settings) {
+    throw new Error('Pagination settings are not configured. Please run database initialization.')
+  }
+
+  paginationCache = settings
+  return settings
+}
 
 /**
  * Validates and normalizes a pagination limit value
  * @param limit - The limit value to validate (can be string or number)
  * @returns A valid limit value between 1 and MAX_PAGE_SIZE
  */
-export function validateLimit(limit: string | number | undefined): number {
+export async function validateLimit(limit: string | number | undefined): Promise<number> {
+  const settings = await getPaginationSettings()
   const parsed = typeof limit === 'string' ? parseInt(limit, 10) : limit
   if (isNaN(parsed as number) || parsed === undefined || parsed === null) {
-    return DEFAULT_PAGE_SIZE
+    return settings.defaultPageSize
   }
   const num = Number(parsed)
-  if (num < 1) return DEFAULT_PAGE_SIZE
-  if (num > MAX_PAGE_SIZE) return MAX_PAGE_SIZE
+  if (num < 1) return settings.defaultPageSize
+  if (num > settings.maxPageSize) return settings.maxPageSize
   return num
 }
 

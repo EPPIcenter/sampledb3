@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import { resolveContainerByBarcode } from '../lib/identifier-resolution'
 import { validateSpecimenData, checkDuplicateSpecimens } from '../lib/validation'
-import { createAliquotForSpecimen, type AliquotData } from '../lib/aliquot-creation'
+import { createContainerForSpecimen, type ContainerData } from '../lib/container-creation'
 
 const specimens = new Hono()
 
@@ -135,7 +135,7 @@ specimens.get('/', async (c) => {
     }
     
     const page = validatePage(c.req.query('page'))
-    const limit = validateLimit(c.req.query('limit'))
+    const limit = await validateLimit(c.req.query('limit'))
     const offset = (page - 1) * limit
     
     const countQuery = db
@@ -211,7 +211,7 @@ specimens.post('/', async (c) => {
   try {
     const body = await c.req.json()
     
-    const aliquotSchema = z.object({
+    const containerSchema = z.object({
       mode: z.enum(['create', 'link', 'skip']).default('skip'),
       containerType: z.enum(['micronix_tube', 'cryovial_tube', 'tube', 'paper', 'static_well']).optional(),
       containerBarcode: z.string().optional(),
@@ -236,7 +236,7 @@ specimens.post('/', async (c) => {
       specimenTypeId: z.number().int().optional(),
       specimenTypeName: z.string().optional(),
       collectionDate: z.string().optional(),
-      aliquot: aliquotSchema,
+      container: containerSchema,
     })
     
     const data = schema.parse(body)
@@ -273,19 +273,19 @@ specimens.post('/', async (c) => {
       .values(insertData)
       .returning()
     
-    let aliquotResult: { success: boolean; containerId?: number; error?: string } | null = null
+    let containerResult: { success: boolean; containerId?: number; error?: string } | null = null
     
-    if (data.aliquot && data.aliquot.mode !== 'skip') {
-      aliquotResult = await createAliquotForSpecimen(newSpecimen.id, data.aliquot as AliquotData)
-      if (!aliquotResult.success) {
+    if (data.container && data.container.mode !== 'skip') {
+      containerResult = await createContainerForSpecimen(newSpecimen.id, data.container as ContainerData)
+      if (!containerResult.success) {
         await db.delete(specimen).where(eq(specimen.id, newSpecimen.id))
-        return c.json({ error: aliquotResult.error || 'Failed to create aliquot' }, 400)
+        return c.json({ error: containerResult.error || 'Failed to create container' }, 400)
       }
     }
     
     return c.json({
       specimen: newSpecimen,
-      aliquot: aliquotResult ? { containerId: aliquotResult.containerId } : null,
+      container: containerResult ? { containerId: containerResult.containerId } : null,
     }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) {

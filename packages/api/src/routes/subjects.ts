@@ -31,7 +31,7 @@ const subjects = new Hono()
 subjects.get('/', async (c) => {
   try {
     const page = validatePage(c.req.query('page'))
-    const limit = validateLimit(c.req.query('limit'))
+    const limit = await validateLimit(c.req.query('limit'))
     const offset = (page - 1) * limit
     
     const [subjectsList, countResult] = await Promise.all([
@@ -146,7 +146,7 @@ subjects.get('/:id/summary', async (c) => {
         specimens: [],
         summary: {
           totalSpecimens: 0,
-          totalAliquots: 0,
+          totalContainers: 0,
           specimenTypes: [],
           containerTypes: {},
           collectionDateRange: null,
@@ -201,17 +201,17 @@ subjects.get('/:id/summary', async (c) => {
         ? db
             .select({ 
               id: micronixTube.id, 
-              manifestId: micronixTube.manifestId,
+              collectionId: micronixTube.collectionId,
               barcode: micronixTube.barcode,
               position: micronixTube.position,
-              manifestName: micronixPlate.name,
+              collectionName: micronixPlate.name,
               locationRoot: location.locationRoot,
               levelI: location.levelI,
               levelII: location.levelII,
               levelIII: location.levelIII,
             })
             .from(micronixTube)
-            .leftJoin(micronixPlate, eq(micronixTube.manifestId, micronixPlate.id))
+            .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
             .leftJoin(location, eq(micronixPlate.locationId, location.id))
             .where(inArray(micronixTube.id, containerIds))
         : []) as Promise<any[]>,
@@ -219,17 +219,17 @@ subjects.get('/:id/summary', async (c) => {
         ? db
             .select({ 
               id: cryovialTube.id, 
-              manifestId: cryovialTube.manifestId,
+              collectionId: cryovialTube.collectionId,
               barcode: cryovialTube.barcode,
               position: cryovialTube.position,
-              manifestName: cryovialBox.name,
+              collectionName: cryovialBox.name,
               locationRoot: location.locationRoot,
               levelI: location.levelI,
               levelII: location.levelII,
               levelIII: location.levelIII,
             })
             .from(cryovialTube)
-            .leftJoin(cryovialBox, eq(cryovialTube.manifestId, cryovialBox.id))
+            .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
             .leftJoin(location, eq(cryovialBox.locationId, location.id))
             .where(inArray(cryovialTube.id, containerIds))
         : []) as Promise<any[]>,
@@ -240,7 +240,7 @@ subjects.get('/:id/summary', async (c) => {
               boxId: tube.boxId,
               boxPosition: tube.boxPosition,
               label: tube.label,
-              manifestName: box.name,
+              collectionName: box.name,
               locationRoot: location.locationRoot,
               levelI: location.levelI,
               levelII: location.levelII,
@@ -258,7 +258,7 @@ subjects.get('/:id/summary', async (c) => {
               sheetId: paper.sheetId,
               barcode: paper.barcode,
               position: paper.position,
-              manifestName: sheet.name,
+              collectionName: sheet.name,
               boxId: sheet.boxId,
               bagId: sheet.bagId,
             })
@@ -270,22 +270,22 @@ subjects.get('/:id/summary', async (c) => {
         ? db
             .select({ 
               id: staticWell.id, 
-              manifestId: staticWell.manifestId,
+              collectionId: staticWell.collectionId,
               position: staticWell.position,
-              manifestName: micronixPlate.name,
+              collectionName: micronixPlate.name,
               locationRoot: location.locationRoot,
               levelI: location.levelI,
               levelII: location.levelII,
               levelIII: location.levelIII,
             })
             .from(staticWell)
-            .leftJoin(micronixPlate, eq(staticWell.manifestId, micronixPlate.id))
+            .leftJoin(micronixPlate, eq(staticWell.collectionId, micronixPlate.id))
             .leftJoin(location, eq(micronixPlate.locationId, location.id))
             .where(inArray(staticWell.id, containerIds))
         : []) as Promise<any[]>,
     ])
 
-    const containerInfoMap = new Map<number, { type: string; manifestName: string; position?: string; id: number; locationPath?: string }>()
+    const containerInfoMap = new Map<number, { type: string; collectionName: string; position?: string; id: number; locationPath?: string }>()
     
     function formatLocPath(loc: any, parentName?: string) {
       if (!loc || !loc.locationRoot) return parentName
@@ -297,10 +297,10 @@ subjects.get('/:id/summary', async (c) => {
       }
       return path
     }
-
-    micronixTubesList.forEach(t => containerInfoMap.set(t.id, { type: 'micronix_tube', manifestName: t.manifestName || 'Unknown', position: t.position || undefined, id: t.manifestId, locationPath: formatLocPath(t) }))
-    cryovialBoxesList.forEach(t => containerInfoMap.set(t.id, { type: 'cryovial_tube', manifestName: t.manifestName || 'Unknown', position: t.position || undefined, id: t.manifestId, locationPath: formatLocPath(t) }))
-    boxesList.forEach(t => containerInfoMap.set(t.id, { type: 'tube', manifestName: t.manifestName || 'Unknown', position: t.boxPosition || undefined, id: t.boxId, locationPath: formatLocPath(t) }))
+    
+    micronixTubesList.forEach(t => containerInfoMap.set(t.id, { type: 'micronix_tube', collectionName: t.collectionName || 'Unknown', position: t.position || undefined, id: t.collectionId, locationPath: formatLocPath(t) }))
+    cryovialBoxesList.forEach(t => containerInfoMap.set(t.id, { type: 'cryovial_tube', collectionName: t.collectionName || 'Unknown', position: t.position || undefined, id: t.collectionId, locationPath: formatLocPath(t) }))
+    boxesList.forEach(t => containerInfoMap.set(t.id, { type: 'tube', collectionName: t.collectionName || 'Unknown', position: t.boxPosition || undefined, id: t.boxId, locationPath: formatLocPath(t) }))
     
     // For papers, we need to fetch the parent location separately if it's nested
     for (const t of sheetsList) {
@@ -312,22 +312,22 @@ subjects.get('/:id/summary', async (c) => {
         const res = await db.select({ bag: bag, location: location }).from(bag).leftJoin(location, eq(bag.locationId, location.id)).where(eq(bag.id, t.bagId)).get()
         locPath = formatLocPath(res?.location, res?.bag.name)
       }
-      containerInfoMap.set(t.id, { type: 'paper', manifestName: t.manifestName || 'Unknown', position: t.position || undefined, id: t.sheetId, locationPath: locPath })
+      containerInfoMap.set(t.id, { type: 'paper', collectionName: t.collectionName || 'Unknown', position: t.position || undefined, id: t.sheetId, locationPath: locPath })
     }
 
-    staticWellsList.forEach(t => containerInfoMap.set(t.id, { type: 'static_well', manifestName: t.manifestName || 'Unknown', position: t.position || undefined, id: t.manifestId, locationPath: formatLocPath(t) }))
+    staticWellsList.forEach(t => containerInfoMap.set(t.id, { type: 'static_well', collectionName: t.collectionName || 'Unknown', position: t.position || undefined, id: t.collectionId, locationPath: formatLocPath(t) }))
 
     // Build enriched specimen list
     const enrichedSpecimens = specimens.map(spec => {
       const specContainers = containersBySpecimen.get(spec.id) || []
-      const aliquotCount = specContainers.length
+      const containerCount = specContainers.length
       
       const containerBreakdown: Record<string, number> = {}
       const unitBreakdown: Record<string, number> = {}
       const specimenContainersDetailed: any[] = []
       
       specContainers.forEach(c => {
-        const info = containerInfoMap.get(c.id) || { type: 'unknown', manifestName: 'Unknown', position: undefined, id: 0, locationPath: undefined }
+        const info = containerInfoMap.get(c.id) || { type: 'unknown', collectionName: 'Unknown', position: undefined, id: 0, locationPath: undefined }
         containerBreakdown[info.type] = (containerBreakdown[info.type] || 0) + 1
         unitBreakdown[c.unit] = (unitBreakdown[c.unit] || 0) + c.remainingQuantity
         specimenContainersDetailed.push({
@@ -335,9 +335,9 @@ subjects.get('/:id/summary', async (c) => {
           type: info.type,
           remainingQuantity: c.remainingQuantity,
           unit: c.unit,
-          manifestName: info.manifestName,
+          collectionName: info.collectionName,
           position: info.position,
-          manifestId: info.id,
+          collectionId: info.id,
           locationPath: info.locationPath
         })
       })
@@ -349,7 +349,7 @@ subjects.get('/:id/summary', async (c) => {
         collectionDate: spec.collectionDate,
         created: spec.created,
         lastUpdated: spec.lastUpdated,
-        aliquotCount,
+        containerCount,
         containerBreakdown,
         unitBreakdown,
         containers: specimenContainersDetailed
@@ -357,7 +357,7 @@ subjects.get('/:id/summary', async (c) => {
     })
 
     // Calculate summary statistics
-    const totalAliquots = containers.length
+    const totalContainers = containers.length
     
     // Specimen type breakdown
     const specimenTypeCounts: Record<string, number> = {}
@@ -400,7 +400,7 @@ subjects.get('/:id/summary', async (c) => {
       specimens: enrichedSpecimens,
       summary: {
         totalSpecimens: specimens.length,
-        totalAliquots,
+        totalContainers,
         specimenTypes: Object.entries(specimenTypeCounts).map(([name, count]) => ({
           name,
           count,

@@ -3,6 +3,7 @@ import { controlsApi, strainsApi, type ControlDefinition, type ControlBatch, typ
 import DataTable, { Column } from '../components/DataTable'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import StatCard from '../components/StatCard'
+import SkeletonCard from '../components/SkeletonCard'
 
 export default function Controls() {
   const navigate = useNavigate()
@@ -341,26 +342,34 @@ export default function Controls() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <StatCard
-          title="Total Definitions"
-          value={stats.totalDefinitions}
-          subtitle="Unique control types"
-        />
-        <StatCard
-          title="Total Batches"
-          value={stats.totalBatches}
-          subtitle="Cumulative production"
-        />
-        <StatCard
-          title="Total Spots"
-          value={stats.totalSpots}
-          subtitle="DBS / Paper spots available"
-        />
-        <StatCard
-          title="Total Tubes"
-          value={stats.totalTubes}
-          subtitle="Vials and tubes in stock"
-        />
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} height="h-24" />
+          ))
+        ) : (
+          <>
+            <StatCard
+              title="Total Definitions"
+              value={stats.totalDefinitions}
+              subtitle="Unique control types"
+            />
+            <StatCard
+              title="Total Batches"
+              value={stats.totalBatches}
+              subtitle="Cumulative production"
+            />
+            <StatCard
+              title="Total Spots"
+              value={stats.totalSpots}
+              subtitle="DBS / Paper spots available"
+            />
+            <StatCard
+              title="Total Tubes"
+              value={stats.totalTubes}
+              subtitle="Vials and tubes in stock"
+            />
+          </>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-8 overflow-hidden">
