@@ -5,7 +5,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import StatCard from '../components/StatCard'
 import SkeletonCard from '../components/SkeletonCard'
 
-export default function Controls() {
+export default function BloodControls() {
   const navigate = useNavigate()
   const [definitions, setDefinitions] = useState<ControlDefinition[]>([])
   const [batches, setBatches] = useState<Array<ControlBatch & { definitionName?: string }>>([])
@@ -16,7 +16,6 @@ export default function Controls() {
 
   // Filtering state
   const [searchTerm, setSearchTerm] = useState('')
-  const [typeFilter, setTypeFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   
@@ -83,23 +82,21 @@ export default function Controls() {
     return definitions.filter((def) => {
       const matchesSearch = def.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                            (def.description || '').toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesType = !typeFilter || def.controlType === typeFilter
       
       // Blood control specific definition filters
       const matchesStrain = strainFilters.length === 0 || strainFilters.every(id => def.strains?.some(s => s.id.toString() === id))
       const matchesMinDensity = !minDensity || (def.targetDensity !== undefined && def.targetDensity >= parseFloat(minDensity))
       const matchesMaxDensity = !maxDensity || (def.targetDensity !== undefined && def.targetDensity <= parseFloat(maxDensity))
 
-      return matchesSearch && matchesType && matchesStrain && matchesMinDensity && matchesMaxDensity
+      return matchesSearch && matchesStrain && matchesMinDensity && matchesMaxDensity
     })
-  }, [definitions, searchTerm, typeFilter, strainFilters, minDensity, maxDensity])
+  }, [definitions, searchTerm, strainFilters, minDensity, maxDensity])
 
   // Filtered batches
   const filteredBatches = useMemo(() => {
     return batches.filter((batch) => {
       const matchesSearch = batch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            (batch.definitionName || '').toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesType = !typeFilter || batch.controlType === typeFilter
       const matchesDateFrom = !dateFrom || (batch.productionDate && batch.productionDate >= dateFrom)
       const matchesDateTo = !dateTo || (batch.productionDate && batch.productionDate <= dateTo)
       
@@ -108,31 +105,10 @@ export default function Controls() {
       const matchesMinDensity = !minDensity || (batch.targetDensity !== undefined && batch.targetDensity >= parseFloat(minDensity))
       const matchesMaxDensity = !maxDensity || (batch.targetDensity !== undefined && batch.targetDensity <= parseFloat(maxDensity))
       
-      return matchesSearch && matchesType && matchesDateFrom && matchesDateTo && matchesStrain && matchesMinDensity && matchesMaxDensity
+      return matchesSearch && matchesDateFrom && matchesDateTo && matchesStrain && matchesMinDensity && matchesMaxDensity
     })
-  }, [batches, searchTerm, typeFilter, dateFrom, dateTo, strainFilters, minDensity, maxDensity])
+  }, [batches, searchTerm, dateFrom, dateTo, strainFilters, minDensity, maxDensity])
 
-  const controlTypes = useMemo(() => {
-    const types = new Set(definitions.map(d => d.controlType))
-    return Array.from(types).sort()
-  }, [definitions])
-
-  const getTypeBadgeColor = (type: string) => {
-    switch (type) {
-      case 'plasma_positive':
-      case 'blood':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-      case 'plasma_negative':
-      case 'negative':
-        return 'bg-rose-50 text-red-700 border-rose-200'
-      case 'extraction':
-        return 'bg-purple-50 text-purple-700 border-purple-200'
-      case 'antibody':
-        return 'bg-sky-50 text-blue-700 border-sky-200'
-      default:
-        return 'bg-slate-50 text-slate-700 border-slate-200'
-    }
-  }
 
   const definitionColumns: Column<ControlDefinition>[] = [
     {
@@ -140,19 +116,9 @@ export default function Controls() {
       label: 'Name',
       sortable: true,
       render: (value, row) => (
-        <Link to={`/controls/${row.id}`} className="text-blue-600 font-medium hover:underline">
+        <Link to={`/blood-controls/${row.id}`} className="text-blue-600 font-medium hover:underline">
           {value}
         </Link>
-      ),
-    },
-    {
-      key: 'controlType',
-      label: 'Type',
-      sortable: true,
-      render: (value) => (
-        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wider ${getTypeBadgeColor(value)}`}>
-          {value.replace('_', ' ')}
-        </span>
       ),
     },
     {
@@ -160,16 +126,7 @@ export default function Controls() {
       label: 'Biological Content',
       render: (_, row) => {
         if (!row.strains || row.strains.length === 0) {
-          // Placeholder for future serology designations
-          if (row.controlType.includes('plasma')) {
-            const isPositive = row.controlType.includes('positive');
-            return (
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${isPositive ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-                {isPositive ? 'POSITIVE' : 'NEGATIVE'}
-              </span>
-            );
-          }
-          return <span className="text-gray-400 italic text-xs">Standard</span>;
+          return <span className="text-gray-400 italic text-xs">No strains</span>;
         }
         return (
           <div className="flex flex-wrap gap-1.5 max-w-sm">
@@ -243,7 +200,7 @@ export default function Controls() {
       label: 'Batch Name',
       sortable: true,
       render: (value, row) => (
-        <Link to={`/controls/batches/${row.id}`} className="text-blue-600 font-medium hover:underline">
+        <Link to={`/blood-controls/batches/${row.id}`} className="text-blue-600 font-medium hover:underline">
           {value}
         </Link>
       ),
@@ -253,35 +210,17 @@ export default function Controls() {
       label: 'Definition',
       sortable: true,
       render: (value, row) => (
-        <Link to={`/controls/${row.controlDefinitionId}`} className="text-gray-900 font-medium hover:text-blue-600">
+        <Link to={`/blood-controls/${row.controlDefinitionId}`} className="text-gray-900 font-medium hover:text-blue-600">
           {value}
         </Link>
       )
-    },
-    {
-      key: 'controlType',
-      label: 'Type',
-      sortable: true,
-      render: (value) => (
-        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wider ${getTypeBadgeColor(value || '')}`}>
-          {(value || '').replace('_', ' ')}
-        </span>
-      ),
     },
     {
       key: 'strains',
       label: 'Biological Content',
       render: (_, row) => {
         if (!row.strains || row.strains.length === 0) {
-          if (row.controlType?.includes('plasma')) {
-            const isPositive = row.controlType.includes('positive');
-            return (
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${isPositive ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-                {isPositive ? 'POSITIVE' : 'NEGATIVE'}
-              </span>
-            );
-          }
-          return <span className="text-gray-400 italic text-xs">Standard</span>;
+          return <span className="text-gray-400 italic text-xs">No strains</span>;
         }
         return (
           <div className="flex flex-wrap gap-1.5 max-w-sm">
@@ -336,9 +275,31 @@ export default function Controls() {
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
-        <h1 className="text-3xl font-bold text-gray-900">Controls Management</h1>
-          <p className="text-gray-500 mt-1">Manage and track control definitions and their production batches.</p>
+        <h1 className="text-3xl font-bold text-gray-900">Blood Controls Management</h1>
+          <p className="text-gray-500 mt-1">Manage and track blood control definitions and their production batches.</p>
         </div>
+        {activeTab === 'definitions' && (
+          <button
+            onClick={() => navigate('/blood-controls/new')}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New Blood Control Definition
+          </button>
+        )}
+        {activeTab === 'batches' && (
+          <button
+            onClick={() => navigate('/blood-controls/batches/new')}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Create Batch
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -421,112 +382,92 @@ export default function Controls() {
                 </div>
               </div>
 
-              <div className="col-span-1 lg:col-span-3">
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Control Type</label>
-                <select
-                  className="block w-full px-3 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                >
-                  <option value="">All Types</option>
-                  {controlTypes.map(type => (
-                    <option key={type} value={type}>{type.replace('_', ' ').charAt(0).toUpperCase() + type.replace('_', ' ').slice(1)}</option>
-                  ))}
-                </select>
-              </div>
             </div>
 
-            {/* Second Row: Contextual Filters (e.g. Blood controls, Dates) */}
-            {(typeFilter === 'blood' || activeTab === 'batches') && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-6 pt-6 border-t border-gray-100">
-                {typeFilter === 'blood' && (
-                  <>
-                    <div className="lg:col-span-6">
-                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                        Strains <span className="normal-case font-medium">(Must contain ALL selected)</span>
-                      </label>
-                      <div className="flex flex-wrap gap-2 p-2 border border-gray-100 rounded-lg min-h-[42px] bg-white shadow-sm">
-                        {strains.map(s => {
-                          const isSelected = strainFilters.includes(s.id.toString());
-                          return (
-                            <button
-                              key={s.id}
-                              onClick={() => {
-                                if (isSelected) {
-                                  setStrainFilters(prev => prev.filter(id => id !== s.id.toString()));
-                                } else {
-                                  setStrainFilters(prev => [...prev, s.id.toString()]);
-                                }
-                              }}
-                              className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                                isSelected 
-                                  ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
-                                  : 'bg-gray-50 text-gray-600 border-gray-100 hover:bg-gray-100'
-                              }`}
-                            >
-                              {s.name}
-                            </button>
-                          );
-                        })}
-                        {strainFilters.length === 0 && <span className="text-gray-400 text-sm ml-1 self-center italic">No strains selected...</span>}
-                      </div>
-                    </div>
-                    
-                    <div className="lg:col-span-3">
-                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                        Density Range <span className="normal-case font-medium">(parasites/µL)</span>
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          placeholder="Min"
-                          className="block w-full px-3 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow min-w-0"
-                          value={minDensity}
-                          onChange={(e) => setMinDensity(e.target.value)}
-                        />
-                        <span className="text-gray-400 font-medium text-xs">to</span>
-                        <input
-                          type="number"
-                          placeholder="Max"
-                          className="block w-full px-3 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow min-w-0"
-                          value={maxDensity}
-                          onChange={(e) => setMaxDensity(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {activeTab === 'batches' && (
-                  <div className={`lg:col-span-3 ${typeFilter === 'blood' ? '' : 'lg:col-start-1 lg:col-span-4'}`}>
-                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Production Date Range</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="date"
-                        className="block w-full px-2 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow min-w-0"
-                        value={dateFrom}
-                        onChange={(e) => setDateFrom(e.target.value)}
-                      />
-                      <span className="text-gray-400 font-medium">to</span>
-                      <input
-                        type="date"
-                        className="block w-full px-2 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow min-w-0"
-                        value={dateTo}
-                        onChange={(e) => setDateTo(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
+            {/* Second Row: Blood Control Filters and Dates */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-6 pt-6 border-t border-gray-100">
+              <div className="lg:col-span-6">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  Strains <span className="normal-case font-medium">(Must contain ALL selected)</span>
+                </label>
+                <div className="flex flex-wrap gap-2 p-2 border border-gray-100 rounded-lg min-h-[42px] bg-white shadow-sm">
+                  {strains.map(s => {
+                    const isSelected = strainFilters.includes(s.id.toString());
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          if (isSelected) {
+                            setStrainFilters(prev => prev.filter(id => id !== s.id.toString()));
+                          } else {
+                            setStrainFilters(prev => [...prev, s.id.toString()]);
+                          }
+                        }}
+                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                          isSelected 
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
+                            : 'bg-gray-50 text-gray-600 border-gray-100 hover:bg-gray-100'
+                        }`}
+                      >
+                        {s.name}
+                      </button>
+                    );
+                  })}
+                  {strainFilters.length === 0 && <span className="text-gray-400 text-sm ml-1 self-center italic">No strains selected...</span>}
+                </div>
               </div>
-            )}
+              
+              <div className="lg:col-span-3">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  Density Range <span className="normal-case font-medium">(parasites/µL)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    placeholder="Min"
+                    className="block w-full px-3 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow min-w-0"
+                    value={minDensity}
+                    onChange={(e) => setMinDensity(e.target.value)}
+                  />
+                  <span className="text-gray-400 font-medium text-xs">to</span>
+                  <input
+                    type="number"
+                    placeholder="Max"
+                    className="block w-full px-3 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow min-w-0"
+                    value={maxDensity}
+                    onChange={(e) => setMaxDensity(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {activeTab === 'batches' && (
+                <div className="lg:col-span-3">
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Production Date Range</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      className="block w-full px-2 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow min-w-0"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                    />
+                    <span className="text-gray-400 font-medium">to</span>
+                    <input
+                      type="date"
+                      className="block w-full px-2 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow min-w-0"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Clear All Action */}
-            {(searchTerm || typeFilter || dateFrom || dateTo || strainFilters.length > 0 || minDensity || maxDensity) && (
+            {(searchTerm || dateFrom || dateTo || strainFilters.length > 0 || minDensity || maxDensity) && (
               <div className="flex justify-end items-center pt-2 border-t border-gray-50">
                 <button
                   onClick={() => {
                     setSearchTerm('')
-                    setTypeFilter('')
                     setDateFrom('')
                     setDateTo('')
                     setStrainFilters([])
@@ -553,8 +494,8 @@ export default function Controls() {
               loading={loading}
               initialSortColumn="productionDate"
               initialSortDirection="desc"
-              onRowClick={(batch) => navigate(`/controls/batches/${batch.id}`)}
-              emptyMessage={searchTerm || typeFilter || dateFrom || dateTo ? "No batches matching your filters" : "No control batches found"}
+              onRowClick={(batch) => navigate(`/blood-controls/batches/${batch.id}`)}
+              emptyMessage={searchTerm || dateFrom || dateTo ? "No batches matching your filters" : "No blood control batches found"}
             />
           ) : (
             <DataTable
@@ -563,8 +504,8 @@ export default function Controls() {
               loading={loading}
               initialSortColumn="name"
               initialSortDirection="asc"
-              onRowClick={(def) => navigate(`/controls/${def.id}`)}
-              emptyMessage={searchTerm || typeFilter || minDensity || maxDensity ? "No definitions matching your filters" : "No control definitions found"}
+              onRowClick={(def) => navigate(`/blood-controls/${def.id}`)}
+              emptyMessage={searchTerm || minDensity || maxDensity ? "No definitions matching your filters" : "No blood control definitions found"}
             />
           )}
         </div>

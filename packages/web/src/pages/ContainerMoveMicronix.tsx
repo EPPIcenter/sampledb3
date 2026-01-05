@@ -27,6 +27,12 @@ interface ResolvedContainer {
   container: ContainerInfo
 }
 
+interface UnresolvedContainer {
+  barcode: string
+  rowIndex: number
+  targetPosition: string
+}
+
 interface FileData {
   file: File
   inferredPlateName: string | null
@@ -34,6 +40,7 @@ interface FileData {
   selectedPlateName: string | null
   csvRows: CSVRow[]
   resolvedContainers: ResolvedContainer[]
+  unresolvedContainers: UnresolvedContainer[]
   validationErrors: ValidationError[]
   isResolved: boolean
   preview: CSVRow[]
@@ -263,6 +270,7 @@ export default function ContainerMoveMicronix() {
           selectedPlateName,
           csvRows,
           resolvedContainers: [],
+          unresolvedContainers: [],
           validationErrors: validation.errors,
           isResolved: false,
           preview,
@@ -286,46 +294,6 @@ export default function ContainerMoveMicronix() {
 
   const removeFile = (fileIndex: number) => {
     setFiles(prev => prev.filter((_, i) => i !== fileIndex))
-  }
-
-  const downloadTemplate = () => {
-    const selectedConfig = scannerConfigurations.find(c => c.id === selectedConfigId)
-    if (!selectedConfig) {
-      // Fallback to default format if no config selected
-      const csvContent = `container_barcode,target_position
-MTX-12345,A01
-MTX-12346,B01
-MTX-12347,C01`
-      const blob = new Blob([csvContent], { type: 'text/csv' })
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'micronix_move_template.csv'
-      a.click()
-      window.URL.revokeObjectURL(url)
-      return
-    }
-
-    // Generate template based on selected configuration
-    let headerRow = selectedConfig.barcodeColumn
-    if (selectedConfig.positionType === 'single') {
-      headerRow += `,${selectedConfig.positionColumn}`
-    } else {
-      headerRow += `,${selectedConfig.rowColumn},${selectedConfig.columnColumn}`
-    }
-
-    const csvContent = `${headerRow}
-MTX-12345,A01
-MTX-12346,B01
-MTX-12347,C01`
-
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'micronix_move_template.csv'
-    a.click()
-    window.URL.revokeObjectURL(url)
   }
 
   const handleValidateAndResolve = async () => {
@@ -378,24 +346,64 @@ MTX-12347,C01`
 
       const resolved = resolveResponse.data.containers
       
+      // Create a set of resolved barcodes for quick lookup
+      // The API returns { identifier, container } where identifier can be the object or the barcode string
+      const resolvedBarcodes = new Set<string>()
+      resolved.forEach((r: any) => {
+        if (r.container) {
+          const barcode = typeof r.identifier === 'string' 
+            ? r.identifier 
+            : r.identifier?.barcode
+          if (barcode) {
+            resolvedBarcodes.add(barcode)
+          }
+        }
+      })
+      
       // Group resolved containers by file
       const resolvedByFile = new Map<number, ResolvedContainer[]>()
-      allIdentifiers.forEach((id, idx) => {
-        if (idx < resolved.length && resolved[idx].container) {
-          if (!resolvedByFile.has(id.fileIndex)) {
-            resolvedByFile.set(id.fileIndex, [])
+      resolved.forEach((r: any) => {
+        if (!r.container) return
+        
+        const barcode = typeof r.identifier === 'string' 
+          ? r.identifier 
+          : r.identifier?.barcode
+        if (!barcode) return
+        
+        // Find the identifier in allIdentifiers to get fileIndex
+        const identifier = allIdentifiers.find(id => id.barcode === barcode)
+        if (identifier) {
+          if (!resolvedByFile.has(identifier.fileIndex)) {
+            resolvedByFile.set(identifier.fileIndex, [])
           }
-          resolvedByFile.get(id.fileIndex)!.push({
-            barcode: id.barcode,
-            container: resolved[idx].container,
+          resolvedByFile.get(identifier.fileIndex)!.push({
+            barcode: barcode,
+            container: r.container,
           })
         }
       })
 
-      // Update files with resolved containers
+      // Track unresolved containers by file
+      const unresolvedByFile = new Map<number, UnresolvedContainer[]>()
+      allIdentifiers.forEach((id) => {
+        if (!resolvedBarcodes.has(id.barcode)) {
+          if (!unresolvedByFile.has(id.fileIndex)) {
+            unresolvedByFile.set(id.fileIndex, [])
+          }
+          const csvRow = files[id.fileIndex].csvRows[id.rowIndex]
+          unresolvedByFile.get(id.fileIndex)!.push({
+            barcode: id.barcode,
+            rowIndex: id.rowIndex + 1, // Convert to 1-based for display
+            targetPosition: csvRow.target_position || '',
+          })
+        }
+      })
+
+      // Update files with resolved and unresolved containers
       setFiles(prev => prev.map((f, i) => ({
         ...f,
         resolvedContainers: resolvedByFile.get(i) || [],
+        unresolvedContainers: unresolvedByFile.get(i) || [],
         isResolved: true,
       })))
 
@@ -543,33 +551,22 @@ MTX-12347,C01`
         setCurrentStep('execute')
       }
     } catch (error: any) {
-      let errorMessages: ValidationError[] = []
+      // Standardized error format from backend: { error, moved, errors }
+      const errorData = error.response?.data || {}
+      const errorMessages: ValidationError[] = errorData.errors || []
+      const moved = errorData.moved || 0
       
-      if (error.response?.data) {
-        const errorData = error.response.data
-        
-        if (errorData.errors && Array.isArray(errorData.errors)) {
-          errorMessages = errorData.errors
-        } else if (errorData.details && Array.isArray(errorData.details)) {
-          errorMessages = errorData.details.map((detail: any) => ({
-            row: detail.path?.[0] || 0,
-            error: detail.message || 'Validation error',
-          }))
-        } else if (errorData.error) {
-          errorMessages = [{ row: 0, error: errorData.error }]
-        }
-      }
-      
+      // If no errors array, create one from the error message
       if (errorMessages.length === 0) {
-        errorMessages = [{
+        errorMessages.push({
           row: 0,
-          error: error.response?.data?.error || error.message || 'Failed to move containers',
-        }]
+          error: errorData.error || error.message || 'Failed to move containers',
+        })
       }
       
       setMoveResult({
         success: false,
-        moved: error.response?.data?.moved || 0,
+        moved,
         errors: errorMessages,
       })
       setCurrentStep('execute')
@@ -704,15 +701,7 @@ MTX-12347,C01`
             </div>
 
             <div className="bg-white rounded-lg shadow p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">Upload CSV Files</h2>
-                <button
-                  onClick={downloadTemplate}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                >
-                  Download Template
-                </button>
-              </div>
+              <h2 className="text-xl font-semibold mb-4">Upload CSV Files</h2>
 
               {/* Scanner Configuration Selector */}
               <div className="mb-4">
@@ -727,7 +716,6 @@ MTX-12347,C01`
                       required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="">-- Select Configuration --</option>
                       {scannerConfigurations.map((config) => (
                         <option key={config.id} value={config.id}>
                           {config.name}{config.isDefault ? ' (Default)' : ''}
@@ -890,8 +878,13 @@ MTX-12347,C01`
                   <strong>Total Files:</strong> {files.length}
                 </p>
                 <p className="text-gray-700">
-                  <strong>Total Tubes:</strong> {files.reduce((sum, f) => sum + f.resolvedContainers.length, 0)} of {files.reduce((sum, f) => sum + f.csvRows.length, 0)}
+                  <strong>Total Tubes:</strong> {files.reduce((sum, f) => sum + f.resolvedContainers.length, 0)} of {files.reduce((sum, f) => sum + f.csvRows.length, 0)} resolved
                 </p>
+                {files.reduce((sum, f) => sum + f.unresolvedContainers.length, 0) > 0 && (
+                  <p className="text-red-600 font-semibold mt-1">
+                    <strong>Unresolved:</strong> {files.reduce((sum, f) => sum + f.unresolvedContainers.length, 0)} tube(s) could not be found in the database
+                  </p>
+                )}
               </div>
 
               <div className="mb-4">
@@ -911,13 +904,44 @@ MTX-12347,C01`
                     <p className="text-sm text-gray-700 mb-2">
                       Destination: <span className="font-semibold">{fileData.selectedPlateName}</span>
                     </p>
-                    <p className="text-sm text-gray-700">
+                    <p className="text-sm text-gray-700 mb-2">
                       Resolved: {fileData.resolvedContainers.length} of {fileData.csvRows.length} tubes
                     </p>
-                    {fileData.resolvedContainers.length < fileData.csvRows.length && (
-                      <p className="text-sm text-red-600 mt-1">
-                        Some tubes could not be resolved. Check barcodes.
-                      </p>
+                    {fileData.unresolvedContainers.length > 0 && (
+                      <div className="mt-3 bg-red-50 border border-red-200 rounded p-3">
+                        <h5 className="text-sm font-semibold text-red-800 mb-2">
+                          Unresolved Tubes ({fileData.unresolvedContainers.length}):
+                        </h5>
+                        <p className="text-xs text-red-700 mb-2">
+                          The following barcodes were not found in the database. Please check for typos or verify the barcodes exist.
+                        </p>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-red-200 text-xs">
+                            <thead className="bg-red-100">
+                              <tr>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-red-800 uppercase">Row</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-red-800 uppercase">Barcode</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-red-800 uppercase">Target Position</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-red-200">
+                              {fileData.unresolvedContainers.map((unresolved, i) => (
+                                <tr key={i}>
+                                  <td className="px-3 py-2 whitespace-nowrap text-red-900 font-medium">
+                                    {unresolved.rowIndex}
+                                  </td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-red-900 font-mono">
+                                    {unresolved.barcode}
+                                  </td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-red-700">
+                                    {unresolved.targetPosition || <span className="text-gray-400 italic">N/A</span>}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
                     )}
                   </div>
                 ))}

@@ -48,23 +48,8 @@ export default function ControlDefinitionDetail() {
   }
 
   const { control, composition, batches, stats } = summaryData
+  const strains = composition?.strains || []
 
-  const getTypeBadgeColor = (type: string) => {
-    switch (type) {
-      case 'plasma_positive':
-      case 'blood':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-      case 'plasma_negative':
-      case 'negative':
-        return 'bg-rose-50 text-red-700 border-rose-200'
-      case 'extraction':
-        return 'bg-purple-50 text-purple-700 border-purple-200'
-      case 'antibody':
-        return 'bg-sky-50 text-blue-700 border-sky-200'
-      default:
-        return 'bg-slate-50 text-slate-700 border-slate-200'
-    }
-  }
 
   const batchColumns: Column<any>[] = [
     {
@@ -72,7 +57,7 @@ export default function ControlDefinitionDetail() {
       label: 'Batch Name',
       sortable: true,
       render: (value, row) => (
-        <Link to={`/controls/batches/${row.id}`} className="text-blue-600 hover:underline font-medium">
+        <Link to={`/blood-controls/batches/${row.id}`} className="text-blue-600 hover:underline font-medium">
           {value}
         </Link>
       ),
@@ -134,7 +119,7 @@ export default function ControlDefinitionDetail() {
       <div className="mb-6">
         <EntityBreadcrumbs
           items={[
-            { label: 'Controls', to: '/controls' },
+            { label: 'Blood Controls', to: '/blood-controls' },
             { label: control.name },
           ]}
         />
@@ -143,15 +128,15 @@ export default function ControlDefinitionDetail() {
             <h1 className="text-3xl font-bold text-gray-900">{control.name}</h1>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-sm text-gray-500">Type:</span>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wider ${getTypeBadgeColor(control.controlType)}`}>
-                {control.controlType.replace('_', ' ')}
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wider bg-emerald-50 text-emerald-700 border-emerald-200">
+                Blood
               </span>
             </div>
           </div>
           <div className="flex space-x-3">
             {/* TODO: Implement Create New Batch workflow */}
             {/* <button
-              onClick={() => navigate(`/controls/batches/new?definitionId=${control.id}`)}
+              onClick={() => navigate(`/blood-controls/batches/new?definitionId=${control.id}`)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
             >
               Create New Batch
@@ -192,9 +177,9 @@ export default function ControlDefinitionDetail() {
               <div>
                 <p className="text-sm text-gray-500">Target Density</p>
                 <p className="text-gray-900 font-medium">
-                  {control.targetDensity ? (
+                  {control.targetDensity !== undefined && control.targetDensity !== null ? (
                     <>
-                      {control.targetDensity.toLocaleString()} <span className="text-gray-500 text-sm">{control.unitSymbol}</span>
+                      {control.targetDensity.toLocaleString()} <span className="text-gray-500 text-sm">{control.unitSymbol || ''}</span>
                     </>
                   ) : (
                     'Not specified'
@@ -202,13 +187,12 @@ export default function ControlDefinitionDetail() {
                 </p>
               </div>
 
-              {/* Composition Breakdown */}
-              {composition && (
+              {/* Strain Composition - Only for Blood Controls */}
+              {strains.length > 0 && (
                 <div className="pt-6 border-t border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-1">Composition</h3>
-                  <p className="text-xs text-gray-500 mb-4 font-medium">{composition.label}</p>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Biological Content (Parasite Strains)</h3>
                   <div className="space-y-4">
-                    {composition.strains.map((s) => (
+                    {strains.map((s) => (
                       <div key={s.id} className="space-y-1.5">
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-700 font-medium">{s.name}</span>
@@ -242,7 +226,7 @@ export default function ControlDefinitionDetail() {
                 columns={batchColumns}
                 initialSortColumn="productionDate"
                 initialSortDirection="desc"
-                onRowClick={(row) => navigate(`/controls/batches/${row.id}`)}
+                onRowClick={(row) => navigate(`/blood-controls/batches/${row.id}`)}
                 emptyMessage="No batches produced for this definition yet."
               />
             </div>

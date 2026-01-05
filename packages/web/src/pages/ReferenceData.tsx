@@ -9,7 +9,7 @@ import {
   type ReferenceDataType,
 } from '../config/reference-data-config'
 import { useStorageTypes } from '../hooks/useReferenceData'
-import { locationsApi } from '../lib/api'
+import { locationsApi, specimenTypesApi, type Location, type SpecimenType } from '../lib/api'
 
 export default function ReferenceData() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -41,6 +41,14 @@ export default function ReferenceData() {
   // Search state (for locations)
   const [search, setSearch] = useState('')
   const [searchDebounced, setSearchDebounced] = useState('')
+
+  // All locations (without pagination) for parent name lookups
+  const [allLocations, setAllLocations] = useState<Location[]>([])
+
+  // Container type relationships for specimen types
+  const [containerTypeRelationships, setContainerTypeRelationships] = useState<Record<number, string[]>>({})
+  // Container type usage info (which types are in use and cannot be removed)
+  const [containerTypeUsageInfo, setContainerTypeUsageInfo] = useState<Record<number, Record<string, boolean>>>({})
 
   // Load dependencies if needed
   const { data: storageTypes } = useStorageTypes()
@@ -90,6 +98,97 @@ export default function ReferenceData() {
     loadDependencies()
   }, [activeTab, config.requiresDependencies])
 
+  // Load all locations (without pagination) for parent name lookups
+  useEffect(() => {
+    if (activeTab === 'locations') {
+      const loadAllLocations = async () => {
+        try {
+          // Load all locations without pagination
+          const res = await locationsApi.list()
+          setAllLocations(res.data.locations || [])
+        } catch (error) {
+          console.error('Failed to load all locations:', error)
+        }
+      }
+      loadAllLocations()
+    } else {
+      setAllLocations([])
+    }
+  }, [activeTab])
+
+  // Load container type relationships for specimen types
+  useEffect(() => {
+    if (activeTab === 'specimen-types') {
+      loadContainerTypeRelationships()
+    } else {
+      setContainerTypeRelationships({})
+      setContainerTypeUsageInfo({})
+    }
+  }, [activeTab, data])
+
+  const loadContainerTypeRelationships = async () => {
+    if (activeTab !== 'specimen-types' || data.length === 0) return
+
+    try {
+      const relationships: Record<number, string[]> = {}
+      const usageInfo: Record<number, Record<string, boolean>> = {}
+      const specimenTypes = data as SpecimenType[]
+      
+      // Load container types for all specimen types in parallel
+      const promises = specimenTypes.map(async (st) => {
+        try {
+          const response = await specimenTypesApi.getContainerTypes(st.id)
+          relationships[st.id] = response.data.containerTypes || []
+          // Store usage info if provided by API
+          if (response.data.usageInfo) {
+            usageInfo[st.id] = response.data.usageInfo
+          } else {
+            usageInfo[st.id] = {}
+          }
+        } catch (error) {
+          console.error(`Failed to load container types for specimen type ${st.id}:`, error)
+          relationships[st.id] = []
+          usageInfo[st.id] = {}
+        }
+      })
+
+      await Promise.all(promises)
+      setContainerTypeRelationships(relationships)
+      setContainerTypeUsageInfo(usageInfo)
+    } catch (error) {
+      console.error('Failed to load container type relationships:', error)
+    }
+  }
+
+  const handleToggleContainerType = async (specimenTypeId: number, containerType: string, isAdding: boolean) => {
+    try {
+      // Optimistically update state
+      setContainerTypeRelationships((prev) => {
+        const current = prev[specimenTypeId] || []
+        const updated = isAdding
+          ? [...current, containerType]
+          : current.filter((ct) => ct !== containerType)
+        return { ...prev, [specimenTypeId]: updated }
+      })
+
+      // Make API call
+      if (isAdding) {
+        await specimenTypesApi.addContainerType(specimenTypeId, containerType)
+      } else {
+        await specimenTypesApi.removeContainerType(specimenTypeId, containerType)
+      }
+
+      // Refresh to ensure consistency
+      await loadContainerTypeRelationships()
+    } catch (error: any) {
+      // Rollback on error
+      await loadContainerTypeRelationships()
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to update container type'
+      alert(errorMessage)
+      throw error
+    }
+  }
+
   // Load data
   useEffect(() => {
     loadData()
@@ -121,20 +220,30 @@ export default function ReferenceData() {
   const handleSave = async (saveData: any) => {
     try {
       if (editingItem?.id) {
-        await config.update(editingItem.id, saveData)
+        if (config.update) {
+          await config.update(editingItem.id, saveData)
+        }
       } else {
-        await config.create(saveData)
+        if (config.create) {
+          await config.create(saveData)
+        }
       }
       setEditingItem(null)
       await loadData()
+      // Refresh container type relationships after save if on specimen types tab
+      if (activeTab === 'specimen-types') {
+        await loadContainerTypeRelationships()
+      }
     } catch (error: any) {
       throw error
     }
   }
 
   const handleDelete = async (id: number) => {
-    await config.delete(id)
-    await loadData()
+    if (config.delete) {
+      await config.delete(id)
+      await loadData()
+    }
   }
 
   const getColumns = () => {
@@ -151,11 +260,30 @@ export default function ReferenceData() {
     if (storageTypes) {
       deps.storageTypes = storageTypes
     }
+    // Add all locations (without pagination) for parent name lookups
+    if (activeTab === 'locations' && allLocations.length > 0) {
+      deps.locations = allLocations
+    }
+    // Add container type relationships for specimen types
+    if (activeTab === 'specimen-types') {
+      deps.containerTypeRelationships = containerTypeRelationships
+      deps.containerTypeUsageInfo = containerTypeUsageInfo
+      deps.onToggleContainerType = handleToggleContainerType
+    }
     return config.getColumns(deps)
   }
 
   const getFormFields = () => {
-    return config.getFormFields(editingItem)
+    // Pass editingItem as both the editing item and initial form data
+    // The form component will manage its own formData state, but this gives
+    // getFormFields the initial values to compute conditional fields
+    const deps: any = {}
+    if (activeTab === 'specimen-types') {
+      deps.containerTypeRelationships = containerTypeRelationships
+      deps.containerTypeUsageInfo = containerTypeUsageInfo
+      deps.onToggleContainerType = handleToggleContainerType
+    }
+    return config.getFormFields(editingItem, editingItem, deps)
   }
 
   const getTitle = () => {

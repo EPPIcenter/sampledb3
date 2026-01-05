@@ -89,11 +89,11 @@ export default function ContainerDetail() {
   // Build breadcrumbs - use identifier instead of ID
   const breadcrumbItems = []
   if (source?.type === 'control') {
-    breadcrumbItems.push({ label: 'Controls', to: '/controls' })
+    breadcrumbItems.push({ label: 'Blood Controls', to: '/blood-controls' })
     if (source.definition) {
-      breadcrumbItems.push({ label: source.definition.name, to: `/controls/${source.definition.id}` })
+      breadcrumbItems.push({ label: source.definition.name, to: `/blood-controls/${source.definition.id}` })
     }
-    breadcrumbItems.push({ label: source.name, to: `/controls/batches/${source.id}` })
+    breadcrumbItems.push({ label: source.name, to: `/blood-controls/batches/${source.id}` })
   } else if (source?.type === 'subject') {
     breadcrumbItems.push({ label: 'Studies', to: '/studies' })
     if (source.study) {
@@ -112,7 +112,7 @@ export default function ContainerDetail() {
 
   // Build location path
   const displayLocationPath = effectiveLocationPath || 
-    (effectiveLocation ? `${effectiveLocation.locationRoot} → ${effectiveLocation.levelI} → ${effectiveLocation.levelII}${effectiveLocation.levelIII ? ` → ${effectiveLocation.levelIII}` : ''}` : null)
+    (effectiveLocation ? (effectiveLocation.path || effectiveLocation.name) : null)
 
   const getCollectionUrl = (type: string, id: number) => {
     switch (type) {
@@ -250,7 +250,7 @@ export default function ContainerDetail() {
                   </Link>
                 ) : source.type === 'control' ? (
                   <Link
-                    to={`/controls/batches/${source.id}`}
+                    to={`/blood-controls/batches/${source.id}`}
                     className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
                   >
                     {source.name}
@@ -279,7 +279,7 @@ export default function ContainerDetail() {
                   <span className="text-gray-400">•</span>
                   <span className="text-gray-500">Control Definition:</span>
                   <Link
-                    to={`/controls/${source.definition.id}`}
+                    to={`/blood-controls/${source.definition.id}`}
                     className="text-blue-600 hover:text-blue-800 hover:underline"
                   >
                     {source.definition.name}

@@ -13,6 +13,7 @@ import DateFilterControls from '../components/DateFilterControls'
 import SubjectForm from '../components/forms/SubjectForm'
 import StudyForm from '../components/forms/StudyForm'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import SubjectMergeModal from '../components/SubjectMergeModal'
 
 export default function StudyDetail() {
   const { id } = useParams<{ id: string }>()
@@ -33,6 +34,7 @@ export default function StudyDetail() {
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [createSubjectModalOpen, setCreateSubjectModalOpen] = useState(false)
   const [editStudyModalOpen, setEditStudyModalOpen] = useState(false)
+  const [mergeModalOpen, setMergeModalOpen] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = (searchParams.get('tab') as 'overview' | 'timeline' | 'subjects') || 'overview'
   const hasProcessedCreateSubject = useRef(false)
@@ -73,7 +75,10 @@ export default function StudyDetail() {
     if (editStudyModalOpen) {
       setEditStudyModalOpen(false)
     }
-  }, { enabled: createSubjectModalOpen || editStudyModalOpen, enableOnFormTags: true })
+    if (mergeModalOpen) {
+      setMergeModalOpen(false)
+    }
+  }, { enabled: createSubjectModalOpen || editStudyModalOpen || mergeModalOpen, enableOnFormTags: true })
 
   const limit = 50 // Default page size, matches backend DEFAULT_PAGE_SIZE
 
@@ -180,6 +185,11 @@ export default function StudyDetail() {
     subject.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  const handleMergeSuccess = () => {
+    loadSubjects() // Refresh the subjects list
+    setMergeModalOpen(false)
+  }
+
   // Define columns for the DataTable
   const subjectColumns: Column<StudySubject>[] = [
     {
@@ -233,6 +243,12 @@ export default function StudyDetail() {
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
             >
               Create Subject
+            </button>
+            <button
+              onClick={() => setMergeModalOpen(true)}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium"
+            >
+              Merge Subjects
             </button>
             <button
               onClick={() => setExportModalOpen(true)}
@@ -371,6 +387,13 @@ export default function StudyDetail() {
         studyCode={study.shortCode}
         studyId={study.id}
         subjects={subjects}
+      />
+
+      <SubjectMergeModal
+        isOpen={mergeModalOpen}
+        onClose={() => setMergeModalOpen(false)}
+        studyId={study.id}
+        onSuccess={handleMergeSuccess}
       />
 
       {createSubjectModalOpen && (

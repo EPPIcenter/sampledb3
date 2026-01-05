@@ -8,15 +8,12 @@ import {
   controlBatch,
   controlDefinition,
   unit,
-  composition,
-  compositionStrain,
   strain,
   location,
   micronixTube,
   micronixPlate,
   cryovialTube,
   cryovialBox,
-  tube,
   box,
   bag,
   sheet,
@@ -38,7 +35,6 @@ export interface ExportFilters {
   date_to?: string
   created_from?: string
   created_to?: string
-  state_ids?: number[]
   subject_ids?: number[]
   date_tolerance?: number  // Global tolerance for all exact dates (defaults to 0)
   subject_dates?: {  // Per-subject date filtering
@@ -75,10 +71,8 @@ export interface ContainerExportData {
   study_code: string
   study_lead_person?: string
   location_path?: string
-  location_root?: string
-  location_level_i?: string
-  location_level_ii?: string
-  location_level_iii?: string
+  location_id?: number
+  location_name?: string
   created: string
   last_updated: string
 }
@@ -86,9 +80,14 @@ export interface ContainerExportData {
 // Helper to build location path string
 function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | undefined {
   if (!loc) return undefined
-  const parts = [loc.locationRoot, loc.levelI, loc.levelII]
-  if (loc.levelIII) parts.push(loc.levelIII)
-  return parts.filter(Boolean).join(' → ')
+  // Use the materialized path if available, otherwise use name
+  if (loc.path) {
+    return loc.path
+  }
+  if (loc.name) {
+    return loc.name
+  }
+  return undefined
 }
 
 // Build the base query with all necessary joins
@@ -101,7 +100,7 @@ export async function buildContainerQuery(filters: ExportFilters) {
     .get()
 
   if (!studyRecord) {
-    return { containers: [], study: null }
+    throw new Error(`Study with short code '${filters.study}' not found`)
   }
 
   // Get subject IDs for this study
@@ -119,7 +118,7 @@ export async function buildContainerQuery(filters: ExportFilters) {
   }
 
   if (filteredSubjectIds.length === 0) {
-    return { containers: [], study: studyRecord }
+    throw new Error(`No subjects found for study '${filters.study}'${filters.subject_ids && filters.subject_ids.length > 0 ? ' matching the specified subject IDs' : ''}`)
   }
 
   // Build conditions for specimen query
@@ -399,9 +398,6 @@ export async function enrichContainerData(
           id: controlDefinition.id,
           name: controlDefinition.name,
           controlType: controlDefinition.controlType,
-          targetDensity: controlDefinition.targetDensity,
-          targetDensityUnitId: controlDefinition.targetDensityUnitId,
-          compositionId: controlDefinition.compositionId,
           properties: controlDefinition.properties,
           created: controlDefinition.created,
           lastUpdated: controlDefinition.lastUpdated,
@@ -411,42 +407,48 @@ export async function enrichContainerData(
     : []
   const controlDefinitionMap = new Map(controlDefinitions.map(cd => [cd.id, cd]))
 
-  // Get units for target density
-  const unitIds = [...new Set(controlDefinitions.filter(cd => cd.targetDensityUnitId !== null).map(cd => cd.targetDensityUnitId!))]
-  const unitsResult = unitIds.length > 0
+  // Get units for target density (extract from properties)
+  const unitIds = new Set<number>()
+  for (const cd of controlDefinitions) {
+    const props = cd.properties as any
+    if (props?.targetDensityUnitId) {
+      unitIds.add(props.targetDensityUnitId)
+    }
+  }
+  const unitsResult = unitIds.size > 0
     ? await db
         .select({
           id: unit.id,
           symbol: unit.symbol,
         })
         .from(unit)
-        .where(inArray(unit.id, unitIds))
+        .where(inArray(unit.id, Array.from(unitIds)))
     : []
   const units = unitsResult as Array<{ id: number; symbol: string }>
   const unitMap = new Map<number, string>(units.map(u => [u.id, u.symbol]))
 
-  // Get strain compositions for control definitions
-  const compositionIds = [...new Set(controlDefinitions.filter(cd => cd.compositionId !== null).map(cd => cd.compositionId!))]
-  const strainCompositions = compositionIds.length > 0
-    ? await db
-        .select({
-          compositionId: compositionStrain.compositionId,
-          strainId: compositionStrain.strainId,
-          percentage: compositionStrain.percentage,
-          strainName: strain.name,
-        })
-        .from(compositionStrain)
-        .innerJoin(strain, eq(compositionStrain.strainId, strain.id))
-        .where(inArray(compositionStrain.compositionId, compositionIds))
-    : []
+  // Get all strains for name lookup
+  const allStrains = await db.select().from(strain)
+  const strainNameMap = new Map(allStrains.map(s => [s.id, s.name]))
   
-  // Build composition map: compositionId -> array of {name, percentage}
-  const compositionMap = new Map<number, Array<{ name: string; percentage: number }>>()
-  for (const sc of strainCompositions) {
-    if (!compositionMap.has(sc.compositionId)) {
-      compositionMap.set(sc.compositionId, [])
+  // Build strain map from properties JSON: controlDefinitionId -> array of {name, percentage}
+  const strainMap = new Map<number, Array<{ name: string; percentage: number }>>()
+  for (const cd of controlDefinitions) {
+    const props = cd.properties as any
+    if (props?.strains && Array.isArray(props.strains)) {
+      const strains = props.strains.map((s: any) => {
+        if (typeof s === 'number') {
+          return { name: strainNameMap.get(s) || `Strain ${s}`, percentage: 0 }
+        }
+        return {
+          name: s.name || strainNameMap.get(s.id) || `Strain ${s.id}`,
+          percentage: s.percentage || 0,
+        }
+      })
+      if (strains.length > 0) {
+        strainMap.set(cd.id, strains)
+      }
     }
-    compositionMap.get(sc.compositionId)!.push({ name: sc.strainName, percentage: sc.percentage })
   }
 
   // Build control batch to definition map for quick lookup
@@ -454,7 +456,6 @@ export async function enrichContainerData(
     id: number
     name: string
     controlType: string
-    compositionId: number | null
     targetDensity: number | null
     targetDensityUnitId: number | null
     properties: unknown
@@ -466,8 +467,11 @@ export async function enrichContainerData(
   for (const cb of controlBatches) {
     const def = controlDefinitionMap.get(cb.controlDefinitionId)
     if (def) {
-      const unitSymbol: string | undefined = def.targetDensityUnitId ? unitMap.get(def.targetDensityUnitId) : undefined
-      const strains = def.compositionId ? compositionMap.get(def.compositionId) : undefined
+      const props = def.properties as any
+      const targetDensity = props?.targetDensity
+      const targetDensityUnitId = props?.targetDensityUnitId
+      const unitSymbol: string | undefined = targetDensityUnitId ? unitMap.get(targetDensityUnitId) : props?.targetDensityUnitSymbol
+      const strains = strainMap.get(def.id)
       const strainComposition: string | undefined = strains && strains.length > 0
         ? strains.map(s => `${s.name} (${s.percentage}%)`).join('; ')
         : undefined
@@ -476,9 +480,8 @@ export async function enrichContainerData(
         id: def.id,
         name: def.name,
         controlType: def.controlType,
-        compositionId: def.compositionId,
-        targetDensity: def.targetDensity,
-        targetDensityUnitId: def.targetDensityUnitId,
+        targetDensity: targetDensity || null,
+        targetDensityUnitId: targetDensityUnitId || null,
         properties: def.properties,
         created: def.created,
         lastUpdated: def.lastUpdated,
@@ -495,10 +498,9 @@ export async function enrichContainerData(
     return containerTypeFilter.includes(type)
   }
   
-  const [micronixTubes, cryovialTubes, tubes, papers, staticWells] = await Promise.all([
+  const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
     shouldQueryType('micronix_tube') ? db.select().from(micronixTube).where(inArray(micronixTube.id, containerIds)) : [],
     shouldQueryType('cryovial_tube') ? db.select().from(cryovialTube).where(inArray(cryovialTube.id, containerIds)) : [],
-    shouldQueryType('tube') ? db.select().from(tube).where(inArray(tube.id, containerIds)) : [],
     shouldQueryType('paper') ? db.select().from(paper).where(inArray(paper.id, containerIds)) : [],
     shouldQueryType('static_well') ? db.select().from(staticWell).where(inArray(staticWell.id, containerIds)) : [],
   ])
@@ -506,7 +508,6 @@ export async function enrichContainerData(
   // Create container type maps
   const micronixMap = new Map(micronixTubes.map(t => [t.id, { type: 'micronix_tube', barcode: t.barcode, position: t.position, collectionId: t.collectionId }]))
   const cryovialMap = new Map(cryovialTubes.map(t => [t.id, { type: 'cryovial_tube', barcode: t.barcode, position: t.position, collectionId: t.collectionId }]))
-  const tubeMap = new Map(tubes.map(t => [t.id, { type: 'tube', position: t.boxPosition, label: t.label, boxId: t.boxId }]))
   const paperMap = new Map(papers.map(p => [p.id, { type: 'paper', barcode: p.barcode, position: p.position, sheetId: p.sheetId }]))
   const staticWellMap = new Map(staticWells.map(w => [w.id, { type: 'static_well', position: w.position, collectionId: w.collectionId }]))
 
@@ -514,7 +515,6 @@ export async function enrichContainerData(
   const collectionIds = new Set<number>()
   micronixTubes.forEach(t => collectionIds.add(t.collectionId))
   cryovialTubes.forEach(t => collectionIds.add(t.collectionId))
-  tubes.forEach(t => collectionIds.add(t.boxId))
 
   // Get sheet IDs for paper containers
   const sheetIds = new Set<number>()
@@ -522,10 +522,9 @@ export async function enrichContainerData(
     if (p.sheetId) sheetIds.add(p.sheetId)
   })
 
-  const [micronixPlates, cryovialBoxes, boxes, sheets] = await Promise.all([
+  const [micronixPlates, cryovialBoxes, sheets] = await Promise.all([
     collectionIds.size > 0 ? db.select().from(micronixPlate).where(inArray(micronixPlate.id, Array.from(collectionIds))) : [],
     collectionIds.size > 0 ? db.select().from(cryovialBox).where(inArray(cryovialBox.id, Array.from(collectionIds))) : [],
-    collectionIds.size > 0 ? db.select().from(box).where(inArray(box.id, Array.from(collectionIds))) : [],
     sheetIds.size > 0 ? db.select().from(sheet).where(inArray(sheet.id, Array.from(sheetIds))) : [],
   ])
 
@@ -543,8 +542,8 @@ export async function enrichContainerData(
     sheetBagIds.size > 0 ? db.select().from(bag).where(inArray(bag.id, Array.from(sheetBagIds))) : [],
   ])
 
-  // Combine all boxes (from tubes and from sheets)
-  const allBoxes = [...boxes, ...sheetBoxes]
+  // Combine all boxes (from sheets)
+  const allBoxes = [...sheetBoxes]
 
   const locationIds = new Set<number>()
   micronixPlates.forEach(p => {
@@ -625,19 +624,6 @@ export async function enrichContainerData(
           locationInfo = locationMap.get(cryovialBox.locationId) || null
         }
       }
-    } else if (tubeMap.has(container.id)) {
-      const info = tubeMap.get(container.id)!
-      containerType = info.type
-      position = info.position || undefined
-      label = info.label || undefined
-      // Direct lookup: find the box and get its location and name
-      const box = allBoxes.find(b => b.id === info.boxId)
-      if (box) {
-        collectionName = box.name || undefined
-        if (box.locationId) {
-          locationInfo = locationMap.get(box.locationId) || null
-        }
-      }
     } else if (paperMap.has(container.id)) {
       const info = paperMap.get(container.id)!
       containerType = info.type
@@ -716,7 +702,11 @@ export async function enrichContainerData(
       label,
       collection_name: collectionName,
       state: '',
-      status: (container.remainingQuantity ?? 0) > 0 ? 'In Use' : 'Exhausted',
+      status: container.remainingQuantity === null || container.remainingQuantity === undefined
+        ? 'Unknown'
+        : container.remainingQuantity > 0
+        ? 'In Use'
+        : 'Exhausted',
       comment: container.comment || undefined,
       specimen_id: spec.id,
       specimen_type: specimenTypeMap.get(spec.specimenTypeId) || '',
@@ -735,10 +725,8 @@ export async function enrichContainerData(
       study_code: containerStudy.shortCode,
       study_lead_person: containerStudy.leadPerson,
       location_path: buildLocationPath(locationInfo),
-      location_root: locationInfo?.locationRoot,
-      location_level_i: locationInfo?.levelI,
-      location_level_ii: locationInfo?.levelII,
-      location_level_iii: locationInfo?.levelIII ?? undefined,
+      location_id: locationInfo?.id,
+      location_name: locationInfo?.name,
       created: container.created,
       last_updated: container.lastUpdated,
     })
@@ -757,15 +745,12 @@ export async function filterContainersByType(
   }
 
   // Query each container type table to see which containers match
-  const [micronixTubes, cryovialTubes, tubes, papers, staticWells] = await Promise.all([
+  const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
     containerTypeFilter.includes('micronix_tube') && containerIds.length > 0
       ? db.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, containerIds))
       : [],
     containerTypeFilter.includes('cryovial_tube') && containerIds.length > 0
       ? db.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, containerIds))
-      : [],
-    containerTypeFilter.includes('tube') && containerIds.length > 0
-      ? db.select({ id: tube.id }).from(tube).where(inArray(tube.id, containerIds))
       : [],
     containerTypeFilter.includes('paper') && containerIds.length > 0
       ? db.select({ id: paper.id }).from(paper).where(inArray(paper.id, containerIds))
@@ -782,9 +767,6 @@ export async function filterContainersByType(
   }
   if (containerTypeFilter.includes('cryovial_tube')) {
     cryovialTubes.forEach(t => matchingIds.add(t.id))
-  }
-  if (containerTypeFilter.includes('tube')) {
-    tubes.forEach(t => matchingIds.add(t.id))
   }
   if (containerTypeFilter.includes('paper')) {
     papers.forEach(p => matchingIds.add(p.id))

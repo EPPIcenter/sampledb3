@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
 import { createTestClient } from '../../__tests__/helpers/test-client'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
-import { createTestStrain, createTestComposition, createTestCompositionStrain } from '../../__tests__/helpers/factories'
+import { createTestStrain } from '../../__tests__/helpers/factories'
 import type { Database } from '../../db/client'
 import { createCrudRoutes } from '../../lib/crud-routes'
-import { strain, compositionStrain } from '../../db/schema'
+import { strain } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
@@ -26,16 +26,9 @@ describe('Strains API', () => {
     })
 
     async function checkStrainInUse(id: number, database: any): Promise<string | null> {
-      const inUse = await database
-        .select()
-        .from(compositionStrain)
-        .where(eq(compositionStrain.strainId, id))
-        .limit(1)
-        .get()
-
-      if (inUse) {
-        return 'Cannot delete strain: it is in use by compositions'
-      }
+      // Note: Compositions are no longer used - strains are now embedded in control definitions via properties JSON
+      // This check is kept for backward compatibility but always returns null since compositions don't exist
+      // In the future, if we need to check for "in use" scenarios, we would check control definitions' properties JSON
       return null
     }
 
@@ -178,23 +171,8 @@ describe('Strains API', () => {
       expect(res.status).toBe(200)
     })
 
-    it('should reject deletion when in use by compositions', async () => {
-      const testStrain = await createTestStrain(testDb, { name: 'In Use Strain' })
-      const testComposition = await createTestComposition(testDb, { label: 'Test Comp' })
-      await createTestCompositionStrain(testDb, testComposition.id, testStrain.id)
-
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
-
-      const res = await client.api.strains[':id'].$delete({
-        param: { id: String(testStrain.id) },
-      })
-
-      expect(res.status).toBe(400)
-      const data = await res.json()
-      expect(data.error).toContain('in use')
-    })
+    // Note: Compositions are no longer used - strains are now embedded in control definitions via properties JSON
+    // If we need to check for "in use" scenarios in the future, we would check control definitions' properties JSON
   })
 })
 

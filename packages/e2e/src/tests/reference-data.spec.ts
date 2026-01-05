@@ -115,7 +115,6 @@ test.describe('Reference Data Management', () => {
             'Storage Types',
             'Units',
             'Strains',
-            'Compositions',
         ];
         
         for (const tabName of tabs) {

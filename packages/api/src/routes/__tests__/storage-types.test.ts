@@ -6,7 +6,7 @@ import { createTestStorageType, createTestLocation } from '../../__tests__/helpe
 import type { Database } from '../../db/client'
 import { createCrudRoutes } from '../../lib/crud-routes'
 import { storageType, location } from '../../db/schema'
-import { eq, or } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 describe('Storage Types API', () => {
@@ -39,10 +39,7 @@ describe('Storage Types API', () => {
       const inUse = await database
         .select()
         .from(location)
-        .where(or(
-          eq(location.storageTypeId, String(typeRecord.id)),
-          eq(location.storageTypeId, typeRecord.name)
-        ) as any)
+        .where(eq(location.storageTypeId, String(typeRecord.id)))
         .limit(1)
         .get()
 
@@ -222,10 +219,11 @@ describe('Storage Types API', () => {
     it('should reject deletion when in use by locations (by ID)', async () => {
       const testType = await createTestStorageType(testDb, { name: 'In Use Type' })
       await createTestLocation(testDb, {
-        locationRoot: 'Root',
-        levelI: 'Level1',
-        levelII: 'Level2',
+        name: 'Root',
+        parentId: null,
         storageTypeId: String(testType.id),
+        canContainCollections: false,
+        path: 'Root',
       })
 
       const app = new Hono()
@@ -241,27 +239,6 @@ describe('Storage Types API', () => {
       expect(data.error).toContain('in use')
     })
 
-    it('should reject deletion when in use by locations (by name)', async () => {
-      const testType = await createTestStorageType(testDb, { name: 'In Use By Name' })
-      await createTestLocation(testDb, {
-        locationRoot: 'Root',
-        levelI: 'Level1',
-        levelII: 'Level2',
-        storageTypeId: testType.name, // Location uses name, not ID
-      })
-
-      const app = new Hono()
-      app.route('/api/storage-types', storageTypesRoutes)
-      const client = createTestClient(app) as any
-
-      const res = await client.api['storage-types'][':id'].$delete({
-        param: { id: String(testType.id) },
-      })
-
-      expect(res.status).toBe(400)
-      const data = await res.json()
-      expect(data.error).toContain('in use')
-    })
   })
 })
 

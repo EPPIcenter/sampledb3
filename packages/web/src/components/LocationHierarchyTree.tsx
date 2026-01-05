@@ -1,10 +1,10 @@
 import { type Location } from '../lib/api'
-import { buildLocationTree, getLocationLabel } from '../lib/location-tree'
+import { buildLocationTree, getLocationLabel, getRootLocations, getLocationChildren } from '../lib/location-tree'
 
 interface LocationHierarchyTreeProps {
   locations: Location[]
   currentLocationId?: number
-  filterByRoot?: string
+  filterByRoot?: number  // Filter by root location ID instead of root name
   onLocationClick?: (location: Location) => void
   renderLocation?: (location: Location, isCurrent: boolean) => React.ReactNode
   className?: string
@@ -12,7 +12,7 @@ interface LocationHierarchyTreeProps {
 
 /**
  * Reusable component for displaying location hierarchy trees.
- * Shows simplified structure: root -> levelI -> locations (with levelIII or levelII as terminal label)
+ * Shows parent-child structure recursively.
  */
 export default function LocationHierarchyTree({
   locations,
@@ -25,9 +25,10 @@ export default function LocationHierarchyTree({
   const tree = buildLocationTree(locations)
 
   // Filter by root if specified
-  const displayTree = filterByRoot
-    ? { [filterByRoot]: tree[filterByRoot] || {} }
-    : tree
+  const rootLocations = getRootLocations(locations)
+  const displayRoots = filterByRoot
+    ? rootLocations.filter(loc => loc.id === filterByRoot)
+    : rootLocations
 
   const defaultRenderLocation = (location: Location, isCurrent: boolean) => {
     const label = getLocationLabel(location)
@@ -54,49 +55,51 @@ export default function LocationHierarchyTree({
     )
   }
 
+  const renderLocationNode = (loc: Location, depth: number = 0): React.ReactNode => {
+    const children = getLocationChildren(locations, loc.id)
+    const isCurrent = loc.id === currentLocationId
+    const content = renderLocation
+      ? renderLocation(loc, isCurrent)
+      : defaultRenderLocation(loc, isCurrent)
+
+    return (
+      <div key={loc.id} className={depth > 0 ? 'ml-4 border-l border-gray-100 pl-3' : ''}>
+        {onLocationClick ? (
+          <div onClick={() => onLocationClick(loc)} className="cursor-pointer">
+            {content}
+          </div>
+        ) : (
+          content
+        )}
+        {children.length > 0 && (
+          <div className="mt-1 space-y-1">
+            {children.map(child => renderLocationNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className={`text-sm ${className}`}>
-      {Object.entries(displayTree).map(([root, levelIGroup]) => (
-        <div key={root} className="mb-2">
-          <div className="font-semibold text-gray-800 flex items-center">
-            <span className="w-2 h-2 rounded-full bg-gray-400 mr-2" />
-            {root}
+      {displayRoots.map((root) => (
+        <div key={root.id} className="mb-2">
+          <div className="font-semibold text-gray-800 flex items-center justify-between">
+            <div className="flex items-center">
+              <span className="w-2 h-2 rounded-full bg-gray-400 mr-2" />
+              <span>{root.name}</span>
+            </div>
+            {(root.effectiveStorageTypeName || root.storageTypeName) && (
+              <span className="text-xs font-normal text-gray-500 ml-2">
+                ({root.effectiveStorageTypeName || root.storageTypeName})
+              </span>
+            )}
           </div>
           <div className="ml-4 border-l border-gray-100 pl-3">
-            {Object.entries(levelIGroup).map(([levelI, locs]) => (
-              <div key={levelI} className="mb-2">
-                <div className="font-semibold text-gray-700 flex items-center">
-                  <span className="w-2 h-2 rounded-full bg-gray-300 mr-2" />
-                  {levelI}
-                </div>
-                <div className="ml-4 border-l border-gray-100 pl-3 space-y-1">
-                  {locs.map((loc) => {
-                    const isCurrent = loc.id === currentLocationId
-                    const content = renderLocation
-                      ? renderLocation(loc, isCurrent)
-                      : defaultRenderLocation(loc, isCurrent)
-
-                    if (onLocationClick) {
-                      return (
-                        <div
-                          key={loc.id}
-                          onClick={() => onLocationClick(loc)}
-                          className="cursor-pointer"
-                        >
-                          {content}
-                        </div>
-                      )
-                    }
-
-                    return <div key={loc.id}>{content}</div>
-                  })}
-                </div>
-              </div>
-            ))}
+            {getLocationChildren(locations, root.id).map(child => renderLocationNode(child, 1))}
           </div>
         </div>
       ))}
     </div>
   )
 }
-

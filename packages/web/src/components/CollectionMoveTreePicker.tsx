@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { type Location } from '../lib/api'
-import { buildLocationTree, getLocationLabel } from '../lib/location-tree'
+import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
 
 export interface Collection {
   id: number
@@ -37,9 +37,7 @@ export default function CollectionMoveTreePicker({
   filterEmptyLocations = false,
 }: CollectionMoveTreePickerProps) {
   const [search, setSearch] = useState('')
-  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({})
-
-  const tree = useMemo(() => buildLocationTree(locations), [locations])
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
   // Map collections by location ID
   const collectionsByLocation = useMemo(() => {
@@ -53,97 +51,70 @@ export default function CollectionMoveTreePicker({
     return map
   }, [collections])
 
-  const toggleNode = (id: string) => {
-    setExpandedNodes((prev) => ({ ...prev, [id]: !prev[id] }))
+  const toggleExpanded = (locationId: number) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(locationId)) {
+        next.delete(locationId)
+      } else {
+        next.add(locationId)
+      }
+      return next
+    })
   }
 
-  const filteredTree = useMemo(() => {
-    // First, filter tree to only include locations that have collections (if filterEmptyLocations is true)
-    let baseTree = tree
+  // Filter locations based on search and filterEmptyLocations
+  const filteredLocations = useMemo(() => {
+    let filtered = locations
+
+    // Filter by collections if needed
     if (filterEmptyLocations) {
-      const filteredByCollections: any = {}
-
-      Object.entries(tree).forEach(([root, levelIGroup]) => {
-        const filteredLevelI: any = {}
-        let rootHasCollections = false
-
-        Object.entries(levelIGroup).forEach(([levelI, locs]) => {
-          const filteredLocs = locs.filter((loc) => {
-            const hasCollections = (collectionsByLocation[loc.id] || []).length > 0
-            return hasCollections
-          })
-
-          if (filteredLocs.length > 0) {
-            filteredLevelI[levelI] = filteredLocs
-            rootHasCollections = true
-          }
-        })
-
-        if (rootHasCollections) {
-          filteredByCollections[root] = filteredLevelI
-        }
+      filtered = filtered.filter((loc) => {
+        return (collectionsByLocation[loc.id] || []).length > 0
       })
-      baseTree = filteredByCollections
     }
 
-    // Then apply search filter if there's a search term
-    if (!search.trim()) return baseTree
+    // Apply search filter
+    if (search.trim()) {
+      const term = search.toLowerCase()
+      filtered = filtered.filter((loc) => {
+        const locMatch =
+          loc.name.toLowerCase().includes(term) ||
+          (loc.path || '').toLowerCase().includes(term) ||
+          (loc.description || '').toLowerCase().includes(term)
 
-    const term = search.toLowerCase()
-    const result: any = {}
+        const collectionsMatch = (collectionsByLocation[loc.id] || []).some(
+          (c) =>
+            c.name.toLowerCase().includes(term) ||
+            (c.barcode || '').toLowerCase().includes(term)
+        )
 
-    Object.entries(baseTree).forEach(([root, levelIGroup]) => {
-      const filteredLevelI: any = {}
-      let rootMatches = false
-
-      Object.entries(levelIGroup).forEach(([levelI, locs]) => {
-        const filteredLocs = (locs as Location[]).filter((loc) => {
-          const locMatch =
-            loc.locationRoot.toLowerCase().includes(term) ||
-            loc.levelI.toLowerCase().includes(term) ||
-            loc.levelII.toLowerCase().includes(term) ||
-            (loc.levelIII || '').toLowerCase().includes(term) ||
-            (loc.description || '').toLowerCase().includes(term)
-
-          const collectionsMatch = (collectionsByLocation[loc.id] || []).some(
-            (c) =>
-              c.name.toLowerCase().includes(term) ||
-              (c.barcode || '').toLowerCase().includes(term)
-          )
-
-          return locMatch || collectionsMatch
-        })
-
-        if (filteredLocs.length > 0) {
-          filteredLevelI[levelI] = filteredLocs
-          rootMatches = true
-        }
+        return locMatch || collectionsMatch
       })
+    }
 
-      if (rootMatches) {
-        result[root] = filteredLevelI
-      }
-    })
-
-    return result
-  }, [tree, search, collectionsByLocation, filterEmptyLocations])
+    return filtered
+  }, [locations, search, collectionsByLocation, filterEmptyLocations])
 
   // Automatically expand all nodes when searching
   useMemo(() => {
     if (search.trim()) {
-      const all: Record<string, boolean> = {}
-      Object.entries(filteredTree).forEach(([root, levelIGroup]) => {
-        all[root] = true
-        Object.keys(levelIGroup as any).forEach((levelI) => {
-          all[`${root}-${levelI}`] = true
-          ;(levelIGroup as any)[levelI].forEach((loc: Location) => {
-            all[`loc-${loc.id}`] = true
-          })
-        })
+      const all = new Set<number>()
+      filteredLocations.forEach((loc) => {
+        // Expand all ancestors to show matching locations
+        let current: Location | undefined = loc
+        while (current) {
+          all.add(current.id)
+          if (current.parentId !== null) {
+            current = locations.find((l) => l.id === current!.parentId)
+          } else {
+            break
+          }
+        }
       })
-      setExpandedNodes(all)
+      setExpandedIds(all)
     }
-  }, [search, filteredTree])
+  }, [search, filteredLocations, locations])
 
   const getCollectionTypeLabel = (type: string) => {
     switch (type) {
@@ -158,6 +129,115 @@ export default function CollectionMoveTreePicker({
       default:
         return type.toUpperCase()
     }
+  }
+
+  const renderLocationNode = (loc: Location, depth: number = 0): React.ReactNode => {
+    const children = getLocationChildren(locations, loc.id)
+    const isExpanded = expandedIds.has(loc.id)
+    const locCollections = collectionsByLocation[loc.id] || []
+    const hasCollections = locCollections.length > 0
+    const isVisible = filteredLocations.some((f) => {
+      if (f.id === loc.id) return true
+      // Check if any descendant is in filtered list
+      const checkDescendants = (parentId: number | null): boolean => {
+        const directChildren = locations.filter((l) => l.parentId === parentId)
+        return directChildren.some((child) => {
+          if (filteredLocations.some((f) => f.id === child.id)) return true
+          return checkDescendants(child.id)
+        })
+      }
+      return checkDescendants(loc.id)
+    })
+
+    if (!isVisible && depth > 0) return null
+
+    return (
+      <div key={loc.id} className="mb-1">
+        <div className="flex items-center gap-2 py-1">
+          <button
+            type="button"
+            onClick={() => toggleExpanded(loc.id)}
+            className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-gray-900"
+            disabled={children.length === 0 && !hasCollections}
+          >
+            {children.length > 0 || hasCollections ? (
+              <span className="text-gray-400">
+                {isExpanded ? '▼' : '▶'}
+              </span>
+            ) : (
+              <span className="w-3" />
+            )}
+            <span className="font-medium">{loc.name}</span>
+            {loc.path && loc.path !== loc.name && (
+              <span className="text-xs text-gray-500">({loc.path})</span>
+            )}
+          </button>
+        </div>
+
+        {hasCollections && isExpanded && (
+          <div className="ml-6 mt-1 space-y-1">
+            {locCollections.map((col) => (
+              <label
+                key={col.id}
+                className="flex items-center gap-2 py-1 px-2 hover:bg-gray-50 rounded cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(col.id)}
+                  onChange={() => onToggle(col.id)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <div className="flex-1 text-sm">
+                  <div className="font-medium text-gray-900">{col.name}</div>
+                  <div className="text-xs text-gray-500">
+                    {getCollectionTypeLabel(col.type)} • {col.itemCount} item{col.itemCount !== 1 ? 's' : ''}
+                  </div>
+                  {col.barcode && (
+                    <div>Barcode: {col.barcode}</div>
+                  )}
+                  <div>
+                    {col.itemCount} item{col.itemCount !== 1 ? 's' : ''}
+                  </div>
+                  {col.location?.path && (
+                    <div className="text-gray-400">
+                      {col.location.path}
+                    </div>
+                  )}
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+
+        {children.length > 0 && isExpanded && (
+          <div className="mt-1">
+            {children.map((child) => renderLocationNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const renderLocationTree = () => {
+    const rootLocations = getRootLocations(locations)
+    
+    if (rootLocations.length === 0 && !loading) {
+      return (
+        <div className="p-4 text-center text-gray-500 text-sm">
+          No matching locations or collections found.
+        </div>
+      )
+    }
+
+    if (loading) {
+      return <div className="p-4 text-center text-gray-500 text-sm">Loading...</div>
+    }
+
+    return (
+      <>
+        {rootLocations.map((root) => renderLocationNode(root, 0))}
+      </>
+    )
   }
 
   return (
@@ -207,139 +287,7 @@ export default function CollectionMoveTreePicker({
       )}
 
       <div className="border border-gray-100 rounded-lg overflow-y-auto max-h-[500px] p-2 bg-white">
-        {Object.entries(filteredTree).map(([root, levelIGroup]) => {
-          const rootId = root
-          const isExpanded = expandedNodes[rootId] ?? false
-
-          return (
-            <div key={root} className="mb-2">
-              <button
-                onClick={() => toggleNode(rootId)}
-                className="flex items-center w-full text-left font-semibold text-gray-800 hover:bg-gray-50 p-1 rounded"
-              >
-                <span className="w-4 text-gray-400 text-xs">
-                  {isExpanded ? '▼' : '▶'}
-                </span>
-                {root}
-              </button>
-
-              {isExpanded && (
-                <div className="ml-4 pl-2 border-l border-gray-100">
-                  {Object.entries(levelIGroup as any).map(([levelI, locs]) => {
-                    const l1Id = `${root}-${levelI}`
-                    const isL1Expanded = expandedNodes[l1Id] ?? false
-
-                    return (
-                      <div key={levelI} className="mb-1">
-                        <button
-                          onClick={() => toggleNode(l1Id)}
-                          className="flex items-center w-full text-left font-medium text-gray-700 hover:bg-gray-50 p-1 rounded text-sm"
-                        >
-                          <span className="w-4 text-gray-300 text-[10px]">
-                            {isL1Expanded ? '▼' : '▶'}
-                          </span>
-                          {levelI}
-                        </button>
-
-                        {isL1Expanded && (
-                          <div className="ml-4 pl-2 border-l border-gray-50">
-                            {(locs as Location[]).map((loc) => {
-                              const locId = `loc-${loc.id}`
-                              const isLocExpanded = expandedNodes[locId] ?? false
-                              const locCollections = collectionsByLocation[loc.id] || []
-                              const hasCollections = locCollections.length > 0
-
-                              return (
-                                <div key={loc.id} className="mb-1">
-                                  <button
-                                    onClick={() => toggleNode(locId)}
-                                    className={`flex items-center w-full text-left p-1 rounded text-sm ${
-                                      hasCollections
-                                        ? 'text-gray-600 hover:bg-gray-50'
-                                        : 'text-gray-400 cursor-default'
-                                    }`}
-                                  >
-                                    <span className="w-4 text-gray-300 text-[10px]">
-                                      {hasCollections ? (isLocExpanded ? '▼' : '▶') : '•'}
-                                    </span>
-                                    {getLocationLabel(loc)}
-                                    {loc.description && (
-                                      <span className="ml-2 text-[10px] text-gray-400 italic truncate">
-                                        ({loc.description})
-                                      </span>
-                                    )}
-                                  </button>
-
-                                  {isLocExpanded && hasCollections && (
-                                    <div className="ml-4 space-y-1 mt-1">
-                                      {locCollections.map((col) => {
-                                        const isSelected = selectedIds.has(col.id)
-                                        return (
-                                          <div
-                                            key={`${col.type}-${col.id}`}
-                                            className={`w-full px-3 py-2 border rounded-lg transition-colors ${
-                                              isSelected
-                                                ? 'border-blue-500 bg-blue-50'
-                                                : 'border-gray-100 hover:border-blue-300 hover:bg-blue-50'
-                                            }`}
-                                          >
-                                            <label className="flex items-start cursor-pointer">
-                                              <input
-                                                type="checkbox"
-                                                checked={isSelected}
-                                                onChange={() => onToggle(col.id)}
-                                                className="mt-1 mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                              />
-                                              <div className="flex-1 min-w-0">
-                                                <div className="flex items-center justify-between">
-                                                  <span className="font-medium text-xs text-gray-900">
-                                                    {col.name}
-                                                  </span>
-                                                  <span className="text-[10px] uppercase tracking-wider text-gray-400 px-1.5 py-0.5 bg-gray-100 rounded ml-2">
-                                                    {getCollectionTypeLabel(col.type)}
-                                                  </span>
-                                                </div>
-                                                <div className="text-[10px] text-gray-500 mt-0.5 space-y-0.5">
-                                                  {col.barcode && (
-                                                    <div>Barcode: {col.barcode}</div>
-                                                  )}
-                                                  <div>
-                                                    {col.itemCount} item{col.itemCount !== 1 ? 's' : ''}
-                                                  </div>
-                                                  {col.location?.path && (
-                                                    <div className="text-gray-400">
-                                                      {col.location.path}
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            </label>
-                                          </div>
-                                        )
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )
-        })}
-        {Object.keys(filteredTree).length === 0 && !loading && (
-          <div className="p-4 text-center text-gray-500 text-sm">
-            No matching locations or collections found.
-          </div>
-        )}
-        {loading && (
-          <div className="p-4 text-center text-gray-500 text-sm">Loading...</div>
-        )}
+        {renderLocationTree()}
       </div>
     </div>
   )

@@ -1,9 +1,18 @@
 import { Hono } from 'hono'
 import { db } from '../db/client'
-import { location, micronixPlate, cryovialBox, box, bag } from '../db/schema'
-import { eq, and, sql, or, like, desc } from 'drizzle-orm'
+import { location, micronixPlate, cryovialBox, box, bag, storageType } from '../db/schema'
+import { eq, and, sql, or, like, desc, isNull, inArray } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../lib/constants'
 import { z } from 'zod'
+import {
+  buildLocationPath,
+  getLocationAncestors,
+  getLocationDescendants,
+  getLocationChildren,
+  validateLocationHierarchy,
+  updateLocationPath,
+  getLocationStorageTypeId,
+} from '../lib/location-helpers'
 
 const locations = new Hono()
 
@@ -26,14 +35,13 @@ locations.get('/', async (c) => {
       
       if (searchWords.length > 0) {
         // Build conditions for each word - each word must match at least one field
+        // Note: storageTypeId is only on root locations, so we search it but it may be null
         const wordConditions = searchWords.map(word => {
           const pattern = `%${word}%`
           return or(
-            like(location.locationRoot, pattern),
-            like(location.levelI, pattern),
-            like(location.levelII, pattern),
-            like(location.levelIII, pattern),
-            like(location.storageTypeId, pattern),
+            like(location.name, pattern),
+            like(location.path, pattern),
+            sql`${location.storageTypeId} LIKE ${pattern}`, // Handle nullable storageTypeId
             like(location.description, pattern)
           )!
         })
@@ -57,8 +65,33 @@ locations.get('/', async (c) => {
     
     const total = countResult[0]?.count || 0
     
+    // Get storage type names for all locations that have storageTypeId
+    const storageTypeIds = [...new Set(locationsList.map(l => l.storageTypeId).filter(Boolean) as string[])]
+    const storageTypes = storageTypeIds.length > 0
+      ? await db.select().from(storageType).where(inArray(storageType.id, storageTypeIds.map(id => parseInt(id))))
+      : []
+    const storageTypeMap = new Map(storageTypes.map(st => [String(st.id), st.name]))
+    
+    // Enrich locations with storage type names and effective storage types
+    const enrichedLocations = await Promise.all(
+      locationsList.map(async (loc) => {
+        // Get effective storage type (from root)
+        const effectiveStorageTypeId = await getLocationStorageTypeId(loc.id)
+        const effectiveStorageTypeName = effectiveStorageTypeId
+          ? storageTypeMap.get(effectiveStorageTypeId) || null
+          : null
+        
+        return {
+          ...loc,
+          storageTypeName: loc.storageTypeId ? storageTypeMap.get(loc.storageTypeId) || null : null,
+          effectiveStorageTypeId,
+          effectiveStorageTypeName,
+        }
+      })
+    )
+    
     return c.json({
-      locations: locationsList,
+      locations: enrichedLocations,
       pagination: {
         page,
         limit: limit || total,
@@ -88,6 +121,25 @@ locations.get('/:id', async (c) => {
 
   if (!locationRecord) {
     return c.json({ error: 'Location not found' }, 404)
+  }
+
+  // Get children, ancestors, path, and effective storage type
+  const [children, ancestors, computedPath, effectiveStorageTypeId] = await Promise.all([
+    getLocationChildren(id),
+    getLocationAncestors(id),
+    buildLocationPath(id),
+    getLocationStorageTypeId(id),
+  ])
+
+  // Get storage type name if we have a storage type ID
+  let storageTypeName: string | null = null
+  if (effectiveStorageTypeId) {
+    const st = await db
+      .select()
+      .from(storageType)
+      .where(eq(storageType.id, parseInt(effectiveStorageTypeId)))
+      .get()
+    storageTypeName = st?.name || null
   }
 
   // Get contents of this location with pagination support for all collection types
@@ -154,7 +206,14 @@ locations.get('/:id', async (c) => {
     .offset(bagsOffset)
 
   return c.json({
-    location: locationRecord,
+    location: {
+      ...locationRecord,
+      path: locationRecord.path || computedPath,
+      effectiveStorageTypeId: effectiveStorageTypeId || locationRecord.storageTypeId, // Include effective storage type
+      effectiveStorageTypeName: storageTypeName, // Include storage type name
+    },
+    children,
+    ancestors,
     contents: {
       micronixPlates: plates,
       cryovialBoxes: cryovialBoxes,
@@ -194,28 +253,85 @@ locations.get('/:id', async (c) => {
 locations.post('/', async (c) => {
   try {
     const body = await c.req.json()
+    // Only root locations (parentId is null) require storageTypeId
     const schema = z.object({
-      locationRoot: z.string().min(1, 'Location root is required'),
-      storageTypeId: z.coerce.string().min(1, 'Storage type ID is required'),
+      parentId: z.number().nullable().optional(),
+      name: z.string().min(1, 'Name is required'),
+      storageTypeId: z.coerce.string().optional().nullable(),
       description: z.string().optional().nullable(),
-      levelI: z.string().min(1, 'Level I is required'),
-      levelII: z.string().min(1, 'Level II is required'),
-      levelIII: z.string().optional().nullable(),
-    })
+      canContainCollections: z.boolean().optional().default(false),
+    }).refine(
+      (data) => {
+        // If parentId is null (root location), storageTypeId is required
+        // If parentId is not null (child location), storageTypeId must be null
+        if (data.parentId === null || data.parentId === undefined) {
+          return data.storageTypeId !== null && data.storageTypeId !== undefined && data.storageTypeId !== ''
+        } else {
+          return data.storageTypeId === null || data.storageTypeId === undefined || data.storageTypeId === ''
+        }
+      },
+      {
+        message: 'Storage type ID is required for root locations and must be null for child locations',
+      }
+    )
 
     const data = schema.parse(body)
+
+    // Validate parent exists and no circular reference
+    const validationError = await validateLocationHierarchy(data.parentId ?? null)
+    if (validationError) {
+      return c.json({ error: validationError }, 400)
+    }
+
+    // Check for duplicate name under same parent
+    const existing = await db
+      .select()
+      .from(location)
+      .where(
+        and(
+          eq(location.name, data.name),
+          data.parentId === null || data.parentId === undefined 
+            ? isNull(location.parentId) 
+            : eq(location.parentId, data.parentId)
+        )
+      )
+      .get()
+
+    if (existing) {
+      return c.json({ error: 'Location with this name already exists under the same parent' }, 400)
+    }
 
     const now = new Date().toISOString()
     const result = await db
       .insert(location)
       .values({
-        ...data,
+        parentId: data.parentId ?? null,
+        name: data.name,
+        storageTypeId: data.parentId === null ? data.storageTypeId : null, // Only set for root locations
+        description: data.description ?? null,
+        canContainCollections: data.canContainCollections ?? false,
         created: now,
         lastUpdated: now,
       })
       .returning()
 
-    return c.json({ location: result[0] }, 201)
+    // Handle RunResult type - could be array or single result
+    const insertResult = Array.isArray(result) ? result : [result]
+    if (insertResult.length === 0) {
+      return c.json({ error: 'Failed to create location' }, 500)
+    }
+
+    // Update path for this location and descendants
+    await updateLocationPath(insertResult[0].id)
+
+    // Fetch the created location with updated path
+    const created = await db
+      .select()
+      .from(location)
+      .where(eq(location.id, insertResult[0].id))
+      .get()
+
+    return c.json({ location: created }, 201)
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Validation error', details: error.issues }, 400)
@@ -235,14 +351,34 @@ locations.put('/:id', async (c) => {
 
   try {
     const body = await c.req.json()
+    // Only root locations (parentId is null) require storageTypeId
     const schema = z.object({
-      locationRoot: z.string().min(1, 'Location root is required'),
-      storageTypeId: z.coerce.string().min(1, 'Storage type ID is required'),
+      parentId: z.number().nullable().optional(),
+      name: z.string().min(1, 'Name is required').optional(),
+      storageTypeId: z.coerce.string().optional().nullable(),
       description: z.string().optional().nullable(),
-      levelI: z.string().min(1, 'Level I is required'),
-      levelII: z.string().min(1, 'Level II is required'),
-      levelIII: z.string().optional().nullable(),
-    })
+      canContainCollections: z.boolean().optional(),
+    }).refine(
+      (data) => {
+        // If parentId is being set to null (becoming root), storageTypeId is required
+        // If parentId is being set to non-null (becoming child), storageTypeId must be null
+        // If parentId is not being changed, validate based on current state
+        if (data.parentId !== undefined) {
+          if (data.parentId === null) {
+            return data.storageTypeId !== null && data.storageTypeId !== undefined && data.storageTypeId !== ''
+          } else {
+            return data.storageTypeId === null || data.storageTypeId === undefined || data.storageTypeId === ''
+          }
+        } else {
+          // parentId not being changed - validate based on existing location
+          // This will be checked after we fetch the existing location
+          return true
+        }
+      },
+      {
+        message: 'Storage type ID is required for root locations and must be null for child locations',
+      }
+    )
 
     const data = schema.parse(body)
 
@@ -257,16 +393,82 @@ locations.put('/:id', async (c) => {
       return c.json({ error: 'Location not found' }, 404)
     }
 
+    // Validate parent if being changed
+    if (data.parentId !== undefined) {
+      const validationError = await validateLocationHierarchy(data.parentId ?? null, id)
+      if (validationError) {
+        return c.json({ error: validationError }, 400)
+      }
+    }
+
+    // Determine final parentId and storageTypeId
+    const finalParentId = data.parentId !== undefined ? (data.parentId ?? null) : existing.parentId
+    const isRoot = finalParentId === null
+    
+    // Validate storageTypeId based on whether location is root or child
+    if (data.storageTypeId !== undefined) {
+      if (isRoot && (data.storageTypeId === null || data.storageTypeId === '')) {
+        return c.json({ error: 'Storage type ID is required for root locations' }, 400)
+      }
+      if (!isRoot && data.storageTypeId !== null && data.storageTypeId !== '') {
+        return c.json({ error: 'Storage type ID must be null for child locations' }, 400)
+      }
+    }
+
+    // Check for duplicate name if name or parent is being changed
+    if (data.name !== undefined || data.parentId !== undefined) {
+      const newName = data.name ?? existing.name
+      const newParentId = finalParentId
+      
+      const duplicate = await db
+        .select()
+        .from(location)
+        .where(
+          and(
+            eq(location.name, newName),
+            newParentId === null ? isNull(location.parentId) : eq(location.parentId, newParentId),
+            sql`${location.id} != ${id}`
+          )
+        )
+        .get()
+
+      if (duplicate) {
+        return c.json({ error: 'Location with this name already exists under the same parent' }, 400)
+      }
+    }
+
+    // Build update object
+    const updateData: any = {
+      lastUpdated: new Date().toISOString(),
+    }
+    if (data.parentId !== undefined) updateData.parentId = data.parentId ?? null
+    if (data.name !== undefined) updateData.name = data.name
+    // Only set storageTypeId for root locations
+    if (data.storageTypeId !== undefined) {
+      updateData.storageTypeId = isRoot ? data.storageTypeId : null
+    }
+    if (data.description !== undefined) updateData.description = data.description ?? null
+    if (data.canContainCollections !== undefined) updateData.canContainCollections = data.canContainCollections
+
     const result = await db
       .update(location)
-      .set({
-        ...data,
-        lastUpdated: new Date().toISOString(),
-      })
+      .set(updateData)
       .where(eq(location.id, id))
       .returning()
 
-    return c.json({ location: result[0] })
+    // Update paths if parent or name changed
+    if (data.parentId !== undefined || data.name !== undefined) {
+      await updateLocationPath(id)
+    }
+
+    // Fetch updated location
+    const updated = await db
+      .select()
+      .from(location)
+      .where(eq(location.id, id))
+      .get()
+
+    return c.json({ location: updated })
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Validation error', details: error.issues }, 400)
@@ -285,7 +487,13 @@ locations.delete('/:id', async (c) => {
   }
 
   try {
-    // Check if location is in use
+    // Check if location has children
+    const children = await getLocationChildren(id)
+    if (children.length > 0) {
+      return c.json({ error: 'Cannot delete location: it has child locations' }, 400)
+    }
+
+    // Check if location is in use by collections
     const [hasPlates, hasCryovialBoxes, hasBoxes, hasBags] = await Promise.all([
       db.select().from(micronixPlate).where(eq(micronixPlate.locationId, id)).limit(1).get(),
       db.select().from(cryovialBox).where(eq(cryovialBox.locationId, id)).limit(1).get(),
@@ -302,7 +510,9 @@ locations.delete('/:id', async (c) => {
       .where(eq(location.id, id))
       .returning()
 
-    if (result.length === 0) {
+    // Handle RunResult type - could be array or single result
+    const deleteResult = Array.isArray(result) ? result : [result]
+    if (deleteResult.length === 0) {
       return c.json({ error: 'Location not found' }, 404)
     }
 

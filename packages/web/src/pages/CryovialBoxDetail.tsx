@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { collectionsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import CollectionGrid from '../components/CollectionGrid'
@@ -17,8 +17,12 @@ function statusColor(name: string): string {
 export default function CryovialBoxDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
+  
+  // Get target position from URL query params
+  const targetPosition = searchParams.get('position')
 
   useEffect(() => {
     if (!id) return
@@ -38,6 +42,19 @@ export default function CryovialBoxDetail() {
 
     fetchData()
   }, [id])
+
+  // Scroll to highlighted container when page loads
+  useEffect(() => {
+    if (targetPosition && data?.positions) {
+      // Small delay to ensure DOM is rendered
+      setTimeout(() => {
+        const highlightedElement = document.querySelector('[data-highlighted-position="true"]')
+        if (highlightedElement) {
+          highlightedElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 100)
+    }
+  }, [targetPosition, data])
 
   const layout = useMemo(() => {
     if (!data?.positions) return null
@@ -152,7 +169,7 @@ export default function CryovialBoxDetail() {
               const key = `${row}${col.padStart(2, '0')}`
               return positions[key] || []
             }}
-            renderCell={(value) => {
+            renderCell={(value, coords) => {
               const entries: any[] = Array.isArray(value) ? value : value ? [value as any] : []
               if (entries.length === 0) {
                 return (
@@ -173,6 +190,27 @@ export default function CryovialBoxDetail() {
               const containerId = entry.id
               const label = 'Cryovial'
 
+              // Check if this cell should be highlighted
+              const cellKey = `${coords.row}${coords.column.padStart(2, '0')}`
+              const entryPosition = entry.position
+              // Normalize position for comparison (handle both "A1" and "A01" formats)
+              const normalizePosition = (pos: string | null | undefined) => {
+                if (!pos) return null
+                const match = pos.match(/^([A-Z]+)(\d+)$/i)
+                if (match) {
+                  return `${match[1].toUpperCase()}${parseInt(match[2], 10).toString().padStart(2, '0')}`
+                }
+                return pos.toUpperCase()
+              }
+              const normalizedTarget = normalizePosition(targetPosition)
+              const isHighlighted = targetPosition && (
+                normalizedTarget === cellKey ||
+                (entryPosition && (
+                  normalizedTarget === normalizePosition(entryPosition) ||
+                  targetPosition.toUpperCase() === entryPosition.toUpperCase()
+                ))
+              )
+
               const isClickable = !!hasContainer && !!containerId
               const tooltipParts: string[] = []
               if (entry.position) tooltipParts.push(`Position: ${entry.position}`)
@@ -190,7 +228,9 @@ export default function CryovialBoxDetail() {
                   onClick={() => {
                     if (containerId) navigate(`/containers/${containerId}`)
                   }}
-                  className={`h-16 w-16 mx-auto flex flex-col items-center justify-center rounded border text-[10px] px-1 py-1 bg-white space-y-0.5
+                  data-highlighted-position={isHighlighted ? 'true' : 'false'}
+                  className={`h-16 w-16 mx-auto flex flex-col items-center justify-center rounded border text-[10px] px-1 py-1 bg-white space-y-0.5 transition-all
+                    ${isHighlighted ? 'ring-4 ring-yellow-400 ring-offset-2 border-yellow-500 shadow-lg bg-yellow-50' : ''}
                     ${isClickable ? 'hover:border-blue-300 hover:shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400' : ''}`}
                   title={title}
                 >

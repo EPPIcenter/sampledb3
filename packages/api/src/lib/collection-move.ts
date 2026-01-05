@@ -56,40 +56,32 @@ export interface CollectionMoveResult {
  */
 function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | null {
   if (!loc) return null
-  const parts = [loc.locationRoot, loc.levelI, loc.levelII]
-  if (loc.levelIII) parts.push(loc.levelIII)
-  return parts.filter(Boolean).join(' → ')
+  // Use the materialized path if available, otherwise use name
+  if (loc.path) {
+    return loc.path
+  }
+  if (loc.name) {
+    return loc.name
+  }
+  return null
 }
 
 /**
  * Resolve location by path string
+ * Note: Users should provide locationId directly. This function is only used
+ * for programmatic API calls that provide locationPath strings.
  */
 export async function resolveLocationByPath(locationPath: string): Promise<number | null> {
-  const parts = locationPath.split(' → ').map(p => p.trim()).filter(Boolean)
-  if (parts.length < 3) return null
+  if (!locationPath) return null
 
-  const [locationRoot, levelI, levelII, levelIII] = parts
-
-  const conditions = [
-    eq(location.locationRoot, locationRoot),
-    eq(location.levelI, levelI),
-    eq(location.levelII, levelII),
-  ]
-
-  if (levelIII) {
-    conditions.push(eq(location.levelIII, levelIII))
-  } else {
-    // If levelIII not provided, match locations with or without levelIII
-    conditions.push(sql`${location.levelIII} IS NULL`)
-  }
-
-  const loc = await db
+  // Find by exact path match
+  const locByPath = await db
     .select({ id: location.id })
     .from(location)
-    .where(and(...conditions))
+    .where(eq(location.path, locationPath))
     .get()
 
-  return loc?.id ?? null
+  return locByPath?.id || null
 }
 
 /**
@@ -452,6 +444,11 @@ async function validateCollectionMove(
 
   if (!targetLocation) {
     return { valid: false, error: `Target location ${targetLocationId} not found` }
+  }
+
+  // Verify target location can contain collections
+  if (!targetLocation.canContainCollections) {
+    return { valid: false, error: `Target location cannot contain collections. Only locations with canContainCollections=true can hold collections.` }
   }
 
   // Can't move to the same location

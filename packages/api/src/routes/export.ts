@@ -8,7 +8,6 @@ import {
   storageContainer,
   micronixTube,
   cryovialTube,
-  tube,
   paper,
   staticWell,
 } from '../db/schema'
@@ -183,13 +182,6 @@ export_.get('/containers', async (c) => {
       filters.container_types = containerTypes
     }
 
-    const stateIds = c.req.queries('state_ids')
-    if (stateIds && stateIds.length > 0) {
-      filters.state_ids = stateIds
-        .map(id => parseInt(id))
-        .filter(id => !isNaN(id))
-    }
-
     const subjectIds = c.req.queries('subject_ids')
     if (subjectIds && subjectIds.length > 0) {
       filters.subject_ids = subjectIds
@@ -218,10 +210,14 @@ export_.get('/containers', async (c) => {
     const configName = c.req.query('config_name')
 
     // Build query and get containers
-    const { containers, study, specimens } = await buildContainerQuery(filters)
-
-    if (!study) {
-      return c.json({ error: 'Study not found' }, 404)
+    let containers, study, specimens
+    try {
+      const result = await buildContainerQuery(filters)
+      containers = result.containers
+      study = result.study
+      specimens = result.specimens
+    } catch (error: any) {
+      return c.json({ error: error.message || 'Failed to build export query' }, 404)
     }
 
     if (!containers || containers.length === 0) {
@@ -371,10 +367,14 @@ export_.post('/containers', async (c) => {
     const countOnly = body.count_only === true
 
     // Build query and get containers
-    const { containers, study, specimens } = await buildContainerQuery(filters)
-
-    if (!study) {
-      return c.json({ error: 'Study not found' }, 404)
+    let containers, study, specimens
+    try {
+      const result = await buildContainerQuery(filters)
+      containers = result.containers
+      study = result.study
+      specimens = result.specimens
+    } catch (error: any) {
+      return c.json({ error: error.message || 'Failed to build export query' }, 404)
     }
 
     if (countOnly) {
@@ -539,10 +539,9 @@ export_.get('/available-types', async (c) => {
     }
 
     // Check which container types exist
-    const [micronixTubes, cryovialTubes, tubes, papers, staticWells] = await Promise.all([
+    const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
       db.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, containerIds)),
       db.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, containerIds)),
-      db.select({ id: tube.id }).from(tube).where(inArray(tube.id, containerIds)),
       db.select({ id: paper.id }).from(paper).where(inArray(paper.id, containerIds)),
       db.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, containerIds)),
     ])
@@ -550,7 +549,6 @@ export_.get('/available-types', async (c) => {
     const containerTypes: string[] = []
     if (micronixTubes.length > 0) containerTypes.push('micronix_tube')
     if (cryovialTubes.length > 0) containerTypes.push('cryovial_tube')
-    if (tubes.length > 0) containerTypes.push('tube')
     if (papers.length > 0) containerTypes.push('paper')
     if (staticWells.length > 0) containerTypes.push('static_well')
 
@@ -659,7 +657,7 @@ export_.post('/containers/multi-study', async (c) => {
       // Since it's multi-study, we'll use the first study or create a generic one
       const firstStudy = result.studies && result.studies.size > 0 
         ? Array.from(result.studies.values())[0]
-        : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '' }
+        : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', description: null, leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '' }
       const dummyFilters: ExportFilters = { study: 'MULTI' }
       const jsonData = await formatAsJSON(result.containers, dummyFilters, firstStudy, configName)
       return c.json({
@@ -733,7 +731,16 @@ export_.post('/containers/by-barcodes', async (c) => {
     }
 
     // Build query to get containers with specimen/subject data
-    const { containers, specimens, studies, subjectToStudyMap } = await buildContainerQueryByMicronixBarcodes(containerIds)
+    let containers, specimens, studies, subjectToStudyMap
+    try {
+      const result = await buildContainerQueryByMicronixBarcodes(containerIds)
+      containers = result.containers
+      specimens = result.specimens
+      studies = result.studies
+      subjectToStudyMap = result.subjectToStudyMap
+    } catch (error: any) {
+      return c.json({ error: error.message || 'Failed to build export query' }, 404)
+    }
 
     if (containers.length === 0) {
       const summary = {
@@ -753,7 +760,7 @@ export_.post('/containers/by-barcodes', async (c) => {
     // For multi-study, we use subjectToStudyMap to get the correct study for each container
     const firstStudy = studies && studies.length > 0 
       ? studies[0] 
-      : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '' }
+      : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', description: null, leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '' }
     
     const enrichedData = await enrichContainerData(containers, specimens, firstStudy, undefined, subjectToStudyMap)
 
@@ -772,7 +779,8 @@ export_.post('/containers/by-barcodes', async (c) => {
 
     if (format === 'json') {
       const dummyFilters: ExportFilters = { study: 'MULTI' }
-      const jsonData = await formatAsJSON(enrichedData, dummyFilters, firstStudy, configName)
+      const studyWithDescription = firstStudy.description !== undefined ? firstStudy : { ...firstStudy, description: null }
+      const jsonData = await formatAsJSON(enrichedData, dummyFilters, studyWithDescription, configName)
       return c.json({
         summary,
         data: jsonData.containers,

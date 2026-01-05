@@ -23,6 +23,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@sampledb/api/*": [
+        "../api/src/*"
       ]
     }
   },

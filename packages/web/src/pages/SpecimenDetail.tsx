@@ -10,12 +10,10 @@ import { useModifierHotkey, useHotkey } from '../hooks/useHotkey'
 interface Container {
   id: number
   specimenId: number
-  stateId: number
   totalQuantity: number
   remainingQuantity: number
   comment?: string
   containerType?: string
-  state?: { id: number; name: string }
   unit?: { id: number; symbol: string; name: string }
   location?: any
   locationPath?: string
@@ -81,10 +79,10 @@ export default function SpecimenDetail() {
         }
       } else if (specData.controlBatchId) {
         try {
-          const batchResponse = await api.get(`/controls/batches/${specData.controlBatchId}`)
+          const batchResponse = await api.get(`/blood-controls/batches/${specData.controlBatchId}`)
           if (batchResponse.data.batch) {
             const batch = batchResponse.data.batch
-            const defResponse = await api.get(`/controls/${batch.controlDefinitionId}`)
+            const defResponse = await api.get(`/blood-controls/${batch.controlDefinitionId}`)
             setSourceInfo({
               type: 'control',
               id: specData.controlBatchId,
@@ -163,16 +161,16 @@ export default function SpecimenDetail() {
       }
     )
   } else if (sourceInfo?.type === 'control') {
-    breadcrumbItems.push({ label: 'Controls', to: '/controls' })
+    breadcrumbItems.push({ label: 'Blood Controls', to: '/blood-controls' })
     if (sourceInfo.definition) {
       breadcrumbItems.push({
         label: sourceInfo.definition.name,
-        to: `/controls/${sourceInfo.definition.id}`,
+        to: `/blood-controls/${sourceInfo.definition.id}`,
       })
     }
     breadcrumbItems.push({
       label: sourceInfo.name || `Batch #${sourceInfo.id}`,
-      to: `/controls/batches/${sourceInfo.id}`,
+      to: `/blood-controls/batches/${sourceInfo.id}`,
     })
   } else {
     breadcrumbItems.push({ label: 'Specimens', to: '/specimens' })
@@ -241,7 +239,7 @@ export default function SpecimenDetail() {
                       {sourceInfo.name}
                     </Link>
                   ) : sourceInfo.type === 'control' ? (
-                    <Link to={`/controls/batches/${sourceInfo.id}`} className="text-blue-600 hover:underline">
+                    <Link to={`/blood-controls/batches/${sourceInfo.id}`} className="text-blue-600 hover:underline">
                       {sourceInfo.name}
                     </Link>
                   ) : (
@@ -263,7 +261,7 @@ export default function SpecimenDetail() {
                 <div>
                   <dt className="text-xs font-medium text-gray-500">Control Definition</dt>
                   <dd className="text-sm text-gray-900">
-                    <Link to={`/controls/${sourceInfo.definition.id}`} className="text-blue-600 hover:underline">
+                    <Link to={`/blood-controls/${sourceInfo.definition.id}`} className="text-blue-600 hover:underline">
                       {sourceInfo.definition.name}
                     </Link>
                   </dd>
@@ -320,11 +318,7 @@ export default function SpecimenDetail() {
                   </div>
                   
                   <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                    {container.state && (
-                      <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded">
-                        {container.state.name}
-                      </span>
-                    )}
+                    {/* Note: container.state is deprecated - states are no longer used */}
                     <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${container.remainingQuantity > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                       {container.remainingQuantity > 0 ? 'In Use' : 'Exhausted'}
                     </span>
@@ -346,8 +340,7 @@ export default function SpecimenDetail() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
                       <span className="font-mono truncate">
-                        {container.location.locationRoot} → {container.location.levelI} → {container.location.levelII}
-                        {container.location.levelIII && ` → ${container.location.levelIII}`}
+                        {container.location.path || container.location.name}
                       </span>
                     </div>
                   )}

@@ -75,7 +75,6 @@ export default function Import() {
         return 'micronix_plate'
       case 'cryovial_tube':
         return 'cryovial_box'
-      case 'tube':
       case 'paper':
         return 'box'
       default:
@@ -92,7 +91,6 @@ export default function Import() {
     const containerFields: Record<ContainerType, string[]> = {
       micronix_tube: ['collection_name', 'barcode', 'position'],
       cryovial_tube: ['collection_name', 'position'],
-      tube: ['collection_name', 'label', 'position'],
       paper: ['collection_name', 'label'],
       static_well: ['collection_name', 'position'],
     }
@@ -106,7 +104,6 @@ export default function Import() {
     const optionalFields: Record<ContainerType, string[]> = {
       micronix_tube: [],
       cryovial_tube: ['barcode'],
-      tube: [],
       paper: [],
       static_well: [],
     }
@@ -150,6 +147,20 @@ export default function Import() {
     }
   }
 
+  const handleClearFile = () => {
+    setFile(null)
+    setPreview([])
+    setValidationErrors([])
+    setImportResult(null)
+    setCsvRows([])
+    setMissingCollections([])
+    // Reset file input
+    const fileInput = document.getElementById('import-csv-file') as HTMLInputElement
+    if (fileInput) {
+      fileInput.value = ''
+    }
+  }
+
   const downloadTemplate = () => {
     let csvContent = ''
     let filename = ''
@@ -186,8 +197,6 @@ export default function Import() {
         return 'collection_name,barcode,position'
       case 'cryovial_tube':
         return 'collection_name,barcode,position'
-      case 'tube':
-        return 'collection_name,label,position'
       case 'paper':
         return 'collection_name,label'
       case 'static_well':
@@ -203,8 +212,6 @@ export default function Import() {
         return 'NAM15,SUBJ-001,Whole Blood,2024-01-15,PLATE-001,MTX-12345,A01'
       case 'cryovial_tube':
         return 'NAM15,SUBJ-001,Plasma,2024-01-15,BOX-001,,B5'
-      case 'tube':
-        return 'NAM15,SUBJ-001,Serum,2024-01-15,BOX-002,TUBE-001,1'
       case 'paper':
         return 'NAM15,SUBJ-001,Blood Spot,2024-01-15,BOX-003,SPOT-001'
       case 'static_well':
@@ -293,13 +300,6 @@ export default function Import() {
         } else if (containerType === 'static_well') {
           if (!row.position || row.position.trim() === '') {
             rowErrors.push('Position is required for static wells')
-          }
-        } else if (containerType === 'tube') {
-          if (!row.label || row.label.trim() === '') {
-            rowErrors.push('Label is required for generic tubes')
-          }
-          if (!row.position || row.position.trim() === '') {
-            rowErrors.push('Position is required for generic tubes')
           }
         } else if (containerType === 'paper') {
           if (!row.label || row.label.trim() === '') {
@@ -550,19 +550,52 @@ export default function Import() {
         // Combined: group by subject
         const subjectMap = new Map<string, any[]>()
 
+        // Create a map of collection names to location IDs from missingCollections
+        const collectionLocationMap = new Map<string, number>()
+        for (const coll of missingCollections) {
+          if (coll.locationId && coll.name) {
+            collectionLocationMap.set(coll.name, coll.locationId)
+          }
+          if (coll.locationId && coll.barcode) {
+            collectionLocationMap.set(coll.barcode, coll.locationId)
+          }
+        }
+
         for (const spec of data) {
           const key = `${spec.studyShortCode}:${spec.subjectName}`
           if (!subjectMap.has(key)) {
             subjectMap.set(key, [])
           }
+          
+          // Prepare container data with location if available
+          let containerData = spec.container
+          if (containerData && containerData.collectionName) {
+            const locationId = collectionLocationMap.get(containerData.collectionName)
+            if (locationId) {
+              containerData = {
+                ...containerData,
+                collectionLocationId: locationId,
+              }
+            }
+          } else if (containerData && containerData.collectionBarcode) {
+            const locationId = collectionLocationMap.get(containerData.collectionBarcode)
+            if (locationId) {
+              containerData = {
+                ...containerData,
+                collectionLocationId: locationId,
+              }
+            }
+          }
+          
           subjectMap.get(key)!.push({
             specimenTypeName: spec.specimenTypeName,
             collectionDate: spec.collectionDate,
-            container: spec.container,
+            container: containerData,
           })
         }
 
         let totalCreated = 0
+        let totalContainersCreated = 0
         const allErrors: Array<{ index: number; error: string }> = []
         let rowIndex = 0
 
@@ -574,7 +607,10 @@ export default function Import() {
               subjectName,
               specimens,
             })
-            totalCreated += 1 + response.data.specimens.length
+            
+            // Count created items from summary
+            totalCreated += response.data.summary.subjectsCreated + response.data.summary.specimensCreated
+            totalContainersCreated += response.data.summary.containersCreated
           } catch (error: any) {
             allErrors.push({
               index: rowIndex,
@@ -586,7 +622,7 @@ export default function Import() {
 
         setImportResult({
           success: allErrors.length === 0,
-          created: totalCreated,
+          created: totalCreated + totalContainersCreated,
           errors: allErrors.length > 0 ? allErrors : undefined,
         })
       }
@@ -597,34 +633,63 @@ export default function Import() {
     }
   }
 
-  const getFieldHelp = () => {
-    if (!containerType || containerType === 'none' || importType === 'subjects') return null
-
-    const required = getRequiredFields().filter(f => !['study_short_code', 'subject_name', 'specimen_type_name'].includes(f))
+  const getRequiredColumnsDisplay = () => {
+    const required = getRequiredFields()
     const optional = getOptionalFields()
+    const allFields = [...required, ...optional]
+    
+    if (importType === 'subjects') {
+      return (
+        <div className="bg-blue-50 border border-blue-200 rounded p-4 text-sm">
+          <h4 className="font-semibold text-blue-900 mb-2">Required CSV Columns</h4>
+          <div className="space-y-1">
+            <div>
+              <span className="font-medium text-blue-800">Required:</span>
+              <span className="text-blue-700 ml-2 font-mono">{required.join(', ')}</span>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    if (!containerType || containerType === 'none') {
+      return (
+        <div className="bg-blue-50 border border-blue-200 rounded p-4 text-sm">
+          <h4 className="font-semibold text-blue-900 mb-2">Required CSV Columns</h4>
+          <div className="space-y-1">
+            <div>
+              <span className="font-medium text-blue-800">Required:</span>
+              <span className="text-blue-700 ml-2 font-mono">{required.join(', ')}</span>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    const containerSpecific = required.filter(f => !['study_short_code', 'subject_name', 'specimen_type_name'].includes(f))
+    const baseRequired = required.filter(f => ['study_short_code', 'subject_name', 'specimen_type_name'].includes(f))
 
     return (
       <div className="bg-blue-50 border border-blue-200 rounded p-4 text-sm">
-        <h4 className="font-semibold text-blue-900 mb-2">Field Requirements for {containerType.replace('_', ' ')}</h4>
-        <div className="space-y-1">
+        <h4 className="font-semibold text-blue-900 mb-2">Required CSV Columns for {containerType.replace('_', ' ')}</h4>
+        <div className="space-y-2">
           <div>
-            <span className="font-medium text-blue-800">Required:</span>
-            <span className="text-blue-700 ml-2">{required.join(', ')}</span>
+            <span className="font-medium text-blue-800">Base Required:</span>
+            <span className="text-blue-700 ml-2 font-mono">{baseRequired.join(', ')}</span>
+          </div>
+          <div>
+            <span className="font-medium text-blue-800">Container Required:</span>
+            <span className="text-blue-700 ml-2 font-mono">{containerSpecific.join(', ')}</span>
           </div>
           {optional.length > 0 && (
             <div>
               <span className="font-medium text-blue-800">Optional:</span>
-              <span className="text-blue-700 ml-2">{optional.join(', ')}</span>
+              <span className="text-blue-700 ml-2 font-mono">{optional.join(', ')}</span>
             </div>
           )}
-          {(containerType === 'micronix_tube' || containerType === 'static_well') && (
-            <div className="text-blue-700 mt-2">
+          {(containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'static_well') && (
+            <div className="text-blue-700 mt-2 pt-2 border-t border-blue-300">
               <strong>Position format:</strong> A01, B12 (letter + 2 digits) - <strong>Required</strong>
-            </div>
-          )}
-          {containerType === 'cryovial_tube' && (
-            <div className="text-blue-700 mt-2">
-              <strong>Position format:</strong> A1, B5, 1 (flexible) - <strong>Required</strong>
             </div>
           )}
         </div>
@@ -718,6 +783,7 @@ export default function Import() {
                     setContainerType(e.target.value as ContainerType | 'none')
                     setFile(null)
                     setPreview([])
+                    handleClearFile()
                   }}
                   className="form-select"
                   required
@@ -726,45 +792,71 @@ export default function Import() {
                   <option value="none">No Containers</option>
                   <option value="micronix_tube">Micronix Tubes</option>
                   <option value="cryovial_tube">Cryovial Tubes</option>
-                  <option value="tube">Generic Tubes</option>
                   <option value="paper">Papers</option>
                   <option value="static_well">Static Wells</option>
                 </select>
                 <p className="text-sm text-gray-500 mt-1">
                   All specimens in this batch will use the same container type. Select the container type for containers, or "No Containers" to skip container creation.
                 </p>
-                {getFieldHelp()}
               </div>
             )}
 
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label
-                  htmlFor="import-csv-file"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  CSV File *
-                </label>
-                <button
-                  type="button"
-                  onClick={downloadTemplate}
-                  className="text-sm text-blue-600 hover:text-blue-700 underline"
-                >
-                  Download Template
-                </button>
+            {/* Show required columns before file upload */}
+            {(importType === 'subjects' || ((importType === 'specimens' || importType === 'combined') && containerType)) && (
+              <div>
+                {getRequiredColumnsDisplay()}
               </div>
-              <input
-                id="import-csv-file"
-                type="file"
-                accept=".csv"
-                onChange={handleFileChange}
-                className="form-input"
-                required
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                Upload a CSV file. Use study short codes, specimen type names, subject names, and collection names/barcodes as identifiers.
-              </p>
-            </div>
+            )}
+
+            {/* Only show file upload after import type (and container type if needed) is selected */}
+            {(importType === 'subjects' || ((importType === 'specimens' || importType === 'combined') && containerType)) && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label
+                    htmlFor="import-csv-file"
+                    className="block text-sm font-medium text-gray-700"
+                  >
+                    CSV File *
+                  </label>
+                  <div className="flex items-center gap-3">
+                    {file && (
+                      <button
+                        type="button"
+                        onClick={handleClearFile}
+                        className="text-sm text-red-600 hover:text-red-700 underline"
+                      >
+                        Clear File
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={downloadTemplate}
+                      className="text-sm text-blue-600 hover:text-blue-700 underline"
+                    >
+                      Download Template
+                    </button>
+                  </div>
+                </div>
+                <input
+                  id="import-csv-file"
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  className="form-input"
+                  required
+                />
+                {file && (
+                  <p className="text-sm text-green-600 mt-1">
+                    Selected: {file.name}
+                  </p>
+                )}
+                {!file && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    Upload a CSV file. Use study short codes, specimen type names, subject names, and collection names/barcodes as identifiers.
+                  </p>
+                )}
+              </div>
+            )}
 
             {preview.length > 0 && (
               <div>
@@ -882,10 +974,11 @@ export default function Import() {
                       className="form-select w-full"
                     >
                       <option value="">Select location</option>
-                      {locations.map((loc) => (
+                      {locations
+                        .filter(loc => loc.canContainCollections)
+                        .map((loc) => (
                         <option key={loc.id} value={loc.id}>
-                          {loc.locationRoot} → {loc.levelI} → {loc.levelII}
-                          {loc.levelIII && ` → ${loc.levelIII}`}
+                          {loc.path || loc.name}
                         </option>
                       ))}
                     </select>

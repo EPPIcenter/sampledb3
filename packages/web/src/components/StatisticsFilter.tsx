@@ -14,9 +14,6 @@ export interface StatisticsFilters {
   collectionDateTo?: string
   createdFrom?: string
   createdTo?: string
-  locationRoot?: string
-  locationLevelI?: string
-  locationLevelII?: string
   locationId?: string
   locationSelections?: LocationSelection[]
 }
@@ -42,7 +39,6 @@ const CONTAINER_TYPES = [
   { value: '', label: 'All' },
   { value: 'micronix_tube', label: 'Micronix Tube' },
   { value: 'cryovial_tube', label: 'Cryovial Tube' },
-  { value: 'tube', label: 'Tube' },
   { value: 'paper', label: 'Paper' },
   { value: 'static_well', label: 'Static Well' },
 ]
@@ -113,9 +109,9 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
 
   const selectedStudy = studies.find((s) => s.shortCode === localFilters.study)
 
-  const updateFilter = (key: keyof StatisticsFilters, value: string) => {
+  const updateFilter = (key: keyof StatisticsFilters, value: string | string[]) => {
     const newFilters = { ...localFilters }
-    if (value === '') {
+    if (value === '' || (Array.isArray(value) && value.length === 0)) {
       delete newFilters[key]
     } else {
       newFilters[key] = value as any
@@ -125,77 +121,42 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
     onChange(newFilters)
   }
 
-  // Convert location selections to filter format (backward compatibility)
+  // Convert location selections to filter format
   const locationSelections = useMemo(() => {
     // If we have stored selections, use those
     if (localFilters.locationSelections && localFilters.locationSelections.length > 0) {
       return localFilters.locationSelections
     }
 
-    // Otherwise, build from legacy filter values for backward compatibility
+    // Otherwise, build from locationId if available
     const selections: LocationSelection[] = []
 
-    if (localFilters.locationRoot && !localFilters.locationLevelI && !localFilters.locationLevelII && !localFilters.locationId) {
+    if (localFilters.locationId) {
       selections.push({
-        type: 'root',
-        root: localFilters.locationRoot,
-        path: localFilters.locationRoot,
-      })
-    } else if (localFilters.locationRoot && localFilters.locationLevelI && !localFilters.locationLevelII && !localFilters.locationId) {
-      selections.push({
-        type: 'levelI',
-        root: localFilters.locationRoot,
-        levelI: localFilters.locationLevelI,
-        path: `${localFilters.locationRoot} → ${localFilters.locationLevelI}`,
-      })
-    } else if (localFilters.locationRoot && localFilters.locationLevelI && localFilters.locationLevelII && !localFilters.locationId) {
-      selections.push({
-        type: 'levelII',
-        root: localFilters.locationRoot,
-        levelI: localFilters.locationLevelI,
-        levelII: localFilters.locationLevelII,
-        path: `${localFilters.locationRoot} → ${localFilters.locationLevelI} → ${localFilters.locationLevelII}`,
-      })
-    } else if (localFilters.locationId) {
-      selections.push({
-        type: 'location',
-        root: localFilters.locationRoot || '',
-        levelI: localFilters.locationLevelI,
-        levelII: localFilters.locationLevelII,
         locationId: parseInt(localFilters.locationId),
-        path: localFilters.locationRoot
-          ? `${localFilters.locationRoot}${localFilters.locationLevelI ? ` → ${localFilters.locationLevelI}` : ''}${localFilters.locationLevelII ? ` → ${localFilters.locationLevelII}` : ''}`
-          : `Location #${localFilters.locationId}`,
+        path: `Location #${localFilters.locationId}`,
+        name: `Location #${localFilters.locationId}`,
       })
     }
 
     return selections
-  }, [localFilters.locationRoot, localFilters.locationLevelI, localFilters.locationLevelII, localFilters.locationId, localFilters.locationSelections])
+  }, [localFilters.locationId, localFilters.locationSelections])
 
   const handleLocationChange = (selections: LocationSelection[]) => {
     const newFilters = { ...localFilters }
 
-    // Clear legacy location filters
-    delete newFilters.locationRoot
-    delete newFilters.locationLevelI
-    delete newFilters.locationLevelII
+    // Clear location filters
     delete newFilters.locationId
 
     // Store all selections - support multiple locations
     if (selections.length > 0) {
       newFilters.locationSelections = selections
-      // For backward compatibility with API, also set the first selection as the primary filter
-      // The API currently only supports single location, so we use the most specific one
-      const mostSpecific = selections.find(s => s.type === 'location') ||
-        selections.find(s => s.type === 'levelII') ||
-        selections.find(s => s.type === 'levelI') ||
-        selections[0]
+      // For API compatibility, also set the first location selection as the primary filter
+      // The API currently only supports single location, so we use the first one
+      const firstSelection = selections[0]
 
-      if (mostSpecific) {
-        newFilters.locationRoot = mostSpecific.root
-        if (mostSpecific.levelI) newFilters.locationLevelI = mostSpecific.levelI
-        if (mostSpecific.levelII) newFilters.locationLevelII = mostSpecific.levelII
-        if (mostSpecific.locationId) newFilters.locationId = mostSpecific.locationId.toString()
+      if (firstSelection && firstSelection.locationId) {
+        newFilters.locationId = firstSelection.locationId.toString()
       }
     } else {
       delete newFilters.locationSelections

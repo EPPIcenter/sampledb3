@@ -3,18 +3,37 @@ import {
   storageContainer,
   micronixTube,
   cryovialTube,
-  tube,
   paper,
   staticWell,
   sheet,
+  specimen,
 } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } from './defaults'
+import { validateUnitForContainerType, validateContainerTypeForSpecimenType } from './validation'
 import {
   resolveCollection,
 } from './collection-resolution'
 
-export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'tube' | 'paper' | 'static_well'
+/**
+ * Normalize position string to match frontend format (e.g., "B1" -> "B01")
+ */
+function normalizePosition(position: string | null | undefined): string | null {
+  if (!position || !position.trim()) return null
+  
+  const trimmed = position.trim()
+  const match = trimmed.match(/^([A-Z]+)(\d+)$/i)
+  if (match) {
+    const row = match[1].toUpperCase()
+    const col = match[2]
+    return `${row}${col.padStart(2, '0')}`
+  }
+  
+  // If it doesn't match the pattern, return as-is
+  return trimmed
+}
+
+export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
 export interface ContainerData {
   mode: 'create' | 'link' | 'skip'
@@ -88,16 +107,6 @@ export async function validateContainerData(
         return { valid: false, error: `Barcode '${data.barcode}' already exists` }
       }
     }
-  } else if (containerType === 'tube') {
-    if (!data.collectionName) {
-      return { valid: false, error: 'Collection name is required for generic tubes' }
-    }
-    if (!data.label) {
-      return { valid: false, error: 'Label is required for generic tubes' }
-    }
-    if (!data.position) {
-      return { valid: false, error: 'Box position is required for generic tubes' }
-    }
   } else if (containerType === 'paper') {
     if (!data.collectionName) {
       return { valid: false, error: 'Collection name is required for papers' }
@@ -164,6 +173,13 @@ async function createMicronixTube(
     if (!collectionId) return { success: false, error: 'Micronix plate not found' }
 
     const defaultUnitId = await getDefaultUnit('micronix_tube')
+    const finalUnitId = data.unitId || defaultUnitId
+
+    // Validate unit is allowed for container type
+    const unitValidation = await validateUnitForContainerType('micronix_tube', finalUnitId)
+    if (!unitValidation.valid) {
+      return { success: false, error: unitValidation.error }
+    }
 
     const defaultTotalQty = await getDefaultTotalQuantity('micronix_tube')
     const defaultRemainingQty = await getDefaultRemainingQuantity('micronix_tube')
@@ -171,7 +187,7 @@ async function createMicronixTube(
     const now = new Date().toISOString()
     const [container] = await db.insert(storageContainer).values({
       specimenId,
-      unitId: data.unitId || defaultUnitId,
+      unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
       remainingQuantity: data.remainingQuantity ?? data.totalQuantity ?? defaultRemainingQty,
       comment: data.comment,
@@ -183,7 +199,7 @@ async function createMicronixTube(
       id: container.id,
       collectionId: collectionId,
       barcode: data.barcode!,
-      position: data.position || null,
+      position: normalizePosition(data.position),
     })
 
     return { success: true, containerId: container.id }
@@ -204,6 +220,13 @@ async function createCryovialTube(
     if (!collectionId) return { success: false, error: 'Cryovial box not found' }
 
     const defaultUnitId = await getDefaultUnit('cryovial_tube')
+    const finalUnitId = data.unitId || defaultUnitId
+
+    // Validate unit is allowed for container type
+    const unitValidation = await validateUnitForContainerType('cryovial_tube', finalUnitId)
+    if (!unitValidation.valid) {
+      return { success: false, error: unitValidation.error }
+    }
 
     const defaultTotalQty = await getDefaultTotalQuantity('cryovial_tube')
     const defaultRemainingQty = await getDefaultRemainingQuantity('cryovial_tube')
@@ -211,7 +234,7 @@ async function createCryovialTube(
     const now = new Date().toISOString()
     const [container] = await db.insert(storageContainer).values({
       specimenId,
-      unitId: data.unitId || defaultUnitId,
+      unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
       remainingQuantity: data.remainingQuantity ?? data.totalQuantity ?? defaultRemainingQty,
       comment: data.comment,
@@ -223,52 +246,12 @@ async function createCryovialTube(
       id: container.id,
       collectionId: collectionId,
       barcode: data.barcode || null,
-      position: data.position || null,
+      position: normalizePosition(data.position),
     })
 
     return { success: true, containerId: container.id }
   } catch (error: any) {
     return { success: false, error: error.message || 'Failed to create cryovial tube' }
-  }
-}
-
-/**
- * Create generic tube container
- */
-async function createGenericTube(
-  specimenId: number,
-  data: ContainerData
-): Promise<{ success: boolean; containerId?: number; error?: string }> {
-  try {
-    const collectionId = await resolveCollection(data.collectionName!, 'box')
-    if (!collectionId) return { success: false, error: 'Box not found' }
-
-    const defaultUnitId = await getDefaultUnit('tube')
-
-    const defaultTotalQty = await getDefaultTotalQuantity('tube')
-    const defaultRemainingQty = await getDefaultRemainingQuantity('tube')
-
-    const now = new Date().toISOString()
-    const [container] = await db.insert(storageContainer).values({
-      specimenId,
-      unitId: data.unitId || defaultUnitId,
-      totalQuantity: data.totalQuantity ?? defaultTotalQty,
-      remainingQuantity: data.remainingQuantity ?? data.totalQuantity ?? defaultRemainingQty,
-      comment: data.comment,
-      created: now,
-      lastUpdated: now,
-    }).returning()
-
-    await db.insert(tube).values({
-      id: container.id,
-      boxId: collectionId,
-      boxPosition: data.position!,
-      label: data.label!,
-    })
-
-    return { success: true, containerId: container.id }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'Failed to create generic tube' }
   }
 }
 
@@ -285,6 +268,13 @@ async function createPaper(
     if (!sheetRecord) return { success: false, error: 'Sheet not found' }
 
     const defaultUnitId = await getDefaultUnit('paper')
+    const finalUnitId = data.unitId || defaultUnitId
+
+    // Validate unit is allowed for container type
+    const unitValidation = await validateUnitForContainerType('paper', finalUnitId)
+    if (!unitValidation.valid) {
+      return { success: false, error: unitValidation.error }
+    }
 
     const defaultTotalQty = await getDefaultTotalQuantity('paper')
     const defaultRemainingQty = await getDefaultRemainingQuantity('paper')
@@ -292,7 +282,7 @@ async function createPaper(
     const now = new Date().toISOString()
     const [container] = await db.insert(storageContainer).values({
       specimenId,
-      unitId: data.unitId || defaultUnitId,
+      unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
       remainingQuantity: data.remainingQuantity ?? data.totalQuantity ?? defaultRemainingQty,
       comment: data.comment,
@@ -304,7 +294,7 @@ async function createPaper(
       id: container.id,
       sheetId: sheetRecord.id,
       barcode: data.barcode || null,
-      position: data.position || null,
+      position: normalizePosition(data.position),
     })
 
     return { success: true, containerId: container.id }
@@ -325,6 +315,13 @@ async function createStaticWell(
     if (!collectionId) return { success: false, error: 'Micronix plate not found' }
 
     const defaultUnitId = await getDefaultUnit('static_well')
+    const finalUnitId = data.unitId || defaultUnitId
+
+    // Validate unit is allowed for container type
+    const unitValidation = await validateUnitForContainerType('static_well', finalUnitId)
+    if (!unitValidation.valid) {
+      return { success: false, error: unitValidation.error }
+    }
 
     const defaultTotalQty = await getDefaultTotalQuantity('static_well')
     const defaultRemainingQty = await getDefaultRemainingQuantity('static_well')
@@ -332,7 +329,7 @@ async function createStaticWell(
     const now = new Date().toISOString()
     const [container] = await db.insert(storageContainer).values({
       specimenId,
-      unitId: data.unitId || defaultUnitId,
+      unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
       remainingQuantity: data.remainingQuantity ?? data.totalQuantity ?? defaultRemainingQty,
       comment: data.comment,
@@ -343,7 +340,7 @@ async function createStaticWell(
     await db.insert(staticWell).values({
       id: container.id,
       collectionId: collectionId,
-      position: data.position || null,
+      position: normalizePosition(data.position),
     })
 
     return { success: true, containerId: container.id }
@@ -364,6 +361,20 @@ export async function createContainerForSpecimen(
 
   if (data.mode === 'skip') return { success: true }
 
+  // Get specimen to find specimen type ID for validation
+  const specimenRecord = await db.select({ specimenTypeId: specimen.specimenTypeId }).from(specimen).where(eq(specimen.id, specimenId)).get()
+  if (!specimenRecord) {
+    return { success: false, error: 'Specimen not found' }
+  }
+
+  // Validate container type is allowed for specimen type
+  if (data.containerType) {
+    const containerTypeValidation = await validateContainerTypeForSpecimenType(specimenRecord.specimenTypeId, data.containerType)
+    if (!containerTypeValidation.valid) {
+      return { success: false, error: containerTypeValidation.error }
+    }
+  }
+
   if (data.mode === 'link') {
     if (data.containerType === 'micronix_tube' && data.containerBarcode) {
       const container = await db.select({ id: micronixTube.id }).from(micronixTube).where(eq(micronixTube.barcode, data.containerBarcode)).get()
@@ -379,7 +390,6 @@ export async function createContainerForSpecimen(
   switch (data.containerType) {
     case 'micronix_tube': return createMicronixTube(specimenId, data)
     case 'cryovial_tube': return createCryovialTube(specimenId, data)
-    case 'tube': return createGenericTube(specimenId, data)
     case 'paper': return createPaper(specimenId, data)
     case 'static_well': return createStaticWell(specimenId, data)
     default: return { success: false, error: `Unsupported container type: ${data.containerType}` }

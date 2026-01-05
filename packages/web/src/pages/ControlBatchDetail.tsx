@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useHotkey } from '../hooks/useHotkey'
 import { controlsApi, type ControlBatchSummaryResponse } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
@@ -10,10 +10,12 @@ import SkeletonDetailPage from '../components/SkeletonDetailPage'
 
 export default function ControlBatchDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [summaryData, setSummaryData] = useState<ControlBatchSummaryResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [createSpecimenModalOpen, setCreateSpecimenModalOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -39,6 +41,24 @@ export default function ControlBatchDetail() {
       setError(err.response?.data?.error || 'Failed to load batch summary')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDeleteBatch = async () => {
+    if (!summaryData) return
+
+    if (!window.confirm(`Are you sure you want to delete batch "${summaryData.batch.name}"? This will delete all associated specimens and containers. This action cannot be undone.`)) {
+      return
+    }
+
+    setDeleting(true)
+    try {
+      await controlsApi.deleteBatch(summaryData.batch.id)
+      navigate('/blood-controls?tab=batches')
+    } catch (err: any) {
+      console.error('Failed to delete batch:', err)
+      alert(err.response?.data?.error || 'Failed to delete batch. It may be in use.')
+      setDeleting(false)
     }
   }
 
@@ -138,8 +158,8 @@ export default function ControlBatchDetail() {
       <div className="mb-6">
         <EntityBreadcrumbs
           items={[
-            { label: 'Controls', to: '/controls' },
-            ...(definition ? [{ label: definition.name, to: `/controls/${definition.id}` }] : []),
+            { label: 'Blood Controls', to: '/blood-controls' },
+            ...(definition ? [{ label: definition.name, to: `/blood-controls/${definition.id}` }] : []),
             { label: batch.name },
           ]}
         />
@@ -163,10 +183,23 @@ export default function ControlBatchDetail() {
           </div>
           <div className="flex space-x-3">
             <button
-              onClick={() => setCreateSpecimenModalOpen(true)}
+              onClick={() => navigate(`/blood-controls/batches/${batch.id}/add-specimens`)}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-sm"
             >
-              Add Specimen
+              Add Specimens
+            </button>
+            <button
+              onClick={() => setCreateSpecimenModalOpen(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm"
+            >
+              Add Single Specimen
+            </button>
+            <button
+              onClick={handleDeleteBatch}
+              disabled={deleting}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
+            >
+              {deleting ? 'Deleting...' : 'Delete Batch'}
             </button>
           </div>
         </div>
@@ -310,4 +343,5 @@ export default function ControlBatchDetail() {
     </div>
   )
 }
+
 

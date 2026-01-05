@@ -213,7 +213,7 @@ specimens.post('/', async (c) => {
     
     const containerSchema = z.object({
       mode: z.enum(['create', 'link', 'skip']).default('skip'),
-      containerType: z.enum(['micronix_tube', 'cryovial_tube', 'tube', 'paper', 'static_well']).optional(),
+      containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', 'static_well']).optional(),
       containerBarcode: z.string().optional(),
       containerId: z.number().int().optional(),
       collectionName: z.string().optional(),
@@ -221,7 +221,6 @@ specimens.post('/', async (c) => {
       barcode: z.string().optional(),
       position: z.string().optional(),
       label: z.string().optional(),
-      stateId: z.number().int().optional(),
       unitId: z.number().int().optional(),
       totalQuantity: z.number().optional(),
       remainingQuantity: z.number().optional(),

@@ -48,15 +48,32 @@ sampledb/
 ├── packages/
 │   ├── api/          # Hono API server
 │   └── web/          # React frontend
-├── data/             # Database files
-└── sampledb_database.sqlite  # Existing SQLite database
+├── sampledb_dev.sqlite        # Default empty dev database (for testing setup)
+└── sampledb_database.sqlite  # Production database (use with DATABASE_PATH)
 ```
 
 ## Environment Variables
 
-- `DATABASE_PATH` - Path to SQLite database (default: `./sampledb_database.sqlite`)
+- `DATABASE_PATH` - Path to SQLite database (default: `./sampledb_dev.sqlite`)
+  - For development/testing: Uses empty `sampledb_dev.sqlite` by default (allows testing setup flow)
+  - For production data: Set `DATABASE_PATH=sampledb_database.sqlite` to use production database
 - `PORT` - API server port (default: `3000`)
 - `NODE_ENV` - `production` or `development`
+
+## Database Configuration
+
+By default, the application uses an empty development database (`sampledb_dev.sqlite`) which is perfect for testing the setup functionality. To use the production database with real data:
+
+```bash
+# Use production database (API only)
+pnpm dev:api:production
+
+# Use production database (API + Web)
+pnpm dev:production
+
+# Or with environment variable
+DATABASE_PATH=sampledb_database.sqlite pnpm dev:api
+```
 
 ## License
 

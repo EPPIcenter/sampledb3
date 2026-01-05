@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { db } from '../db/client'
-import { storageContainer, specimen, location, unit, micronixTube, cryovialTube, micronixPlate, cryovialBox, studySubject, study, specimenType, controlBatch, controlDefinition, tube, box, paper, sheet, bag, staticWell, tag, storageContainerTag } from '../db/schema'
+import { storageContainer, specimen, location, unit, micronixTube, cryovialTube, micronixPlate, cryovialBox, studySubject, study, specimenType, controlBatch, controlDefinition, box, paper, sheet, bag, staticWell, tag, storageContainerTag } from '../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
@@ -10,13 +10,14 @@ const containers = new Hono()
 // Helper function to build full location path
 function buildLocationPath(loc: any, parentName?: string): string {
   if (!loc) return parentName || ''
-  const parts = [loc.locationRoot, loc.levelI, loc.levelII]
-  if (loc.levelIII) parts.push(loc.levelIII)
-  let path = parts.filter(Boolean).join(' → ')
-  if (parentName) {
-    path += ` → ${parentName}`
+  // Use the materialized path if available, otherwise use name
+  if (loc.locationPath) {
+    return parentName ? `${loc.locationPath} → ${parentName}` : loc.locationPath
   }
-  return path
+  if (loc.locationName) {
+    return parentName ? `${loc.locationName} → ${parentName}` : loc.locationName
+  }
+  return parentName || ''
 }
 
 async function enrichContainerDetailed(container: any) {
@@ -32,7 +33,7 @@ async function enrichContainerDetailed(container: any) {
   ])
 
   // Check all possible subtypes
-  const [micronixInfo, cryovialInfo, tubeInfo, paperInfo, staticWellInfo] = await Promise.all([
+  const [micronixInfo, cryovialInfo, paperInfo, staticWellInfo] = await Promise.all([
     db.select({
       barcode: micronixTube.barcode,
       position: micronixTube.position,
@@ -48,14 +49,6 @@ async function enrichContainerDetailed(container: any) {
       boxName: cryovialBox.name,
       locationId: cryovialBox.locationId,
     }).from(cryovialTube).leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id)).where(eq(cryovialTube.id, id)).get(),
-
-    db.select({
-      boxPosition: tube.boxPosition,
-      label: tube.label,
-      boxId: box.id,
-      boxName: box.name,
-      locationId: box.locationId,
-    }).from(tube).leftJoin(box, eq(tube.boxId, box.id)).where(eq(tube.id, id)).get(),
 
     db.select({
       barcode: paper.barcode,
@@ -87,10 +80,6 @@ async function enrichContainerDetailed(container: any) {
     containerType = 'cryovial_tube'
     locationId = cryovialInfo.locationId
     collectionInfo = { type: 'cryovial_box', id: cryovialInfo.boxId, name: cryovialInfo.boxName, position: cryovialInfo.position, barcode: cryovialInfo.barcode }
-  } else if (tubeInfo) {
-    containerType = 'tube'
-    locationId = tubeInfo.locationId
-    collectionInfo = { type: 'box', id: tubeInfo.boxId, name: tubeInfo.boxName, position: tubeInfo.boxPosition, label: tubeInfo.label }
   } else if (paperInfo) {
     containerType = 'paper'
     collectionInfo = { type: 'sheet', id: paperInfo.sheetId, name: paperInfo.sheetName, position: paperInfo.position, barcode: paperInfo.barcode }
@@ -127,7 +116,6 @@ async function enrichContainerDetailed(container: any) {
     collection: collectionInfo,
     micronixTube: micronixInfo,
     cryovialTube: cryovialInfo,
-    tube: tubeInfo,
     paper: paperInfo,
     staticWell: staticWellInfo,
   }

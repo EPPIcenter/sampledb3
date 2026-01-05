@@ -20,41 +20,41 @@ export default function ContainerDefaultsForm({
   const [saving, setSaving] = useState(false)
   const [units, setUnits] = useState<Unit[]>([])
   const [loadingUnits, setLoadingUnits] = useState(true)
+  const [unitsError, setUnitsError] = useState<string | null>(null)
 
   // Helper to get safe defaults when no data exists
   const getDefaultFormData = (availableUnits: Unit[]): ContainerDefaults => {
+    if (availableUnits.length === 0) {
+      throw new Error('No units available. Please create units before configuring container defaults.')
+    }
     const unitSymbols = new Set(availableUnits.map(u => u.symbol))
-    const getSafeUnitSymbol = (preferred: string, fallback: string) => {
+    const getSafeUnitSymbol = (preferred: string) => {
       if (unitSymbols.has(preferred)) return preferred
-      if (unitSymbols.has(fallback)) return fallback
-      return availableUnits[0]?.symbol || fallback
+      // If preferred unit doesn't exist, use first available unit
+      // This is a fallback but user should be aware
+      return availableUnits[0].symbol
     }
 
     return {
       micronix_tube: {
         totalQuantity: 1.0,
         remainingQuantity: 1.0,
-        defaultUnitSymbol: getSafeUnitSymbol('items', 'items'),
+        defaultUnitSymbol: getSafeUnitSymbol('items'),
       },
       cryovial_tube: {
         totalQuantity: 1.0,
         remainingQuantity: 1.0,
-        defaultUnitSymbol: getSafeUnitSymbol('items', 'items'),
-      },
-      tube: {
-        totalQuantity: 1.0,
-        remainingQuantity: 1.0,
-        defaultUnitSymbol: getSafeUnitSymbol('items', 'items'),
+        defaultUnitSymbol: getSafeUnitSymbol('items'),
       },
       paper: {
         totalQuantity: 1.0,
         remainingQuantity: 1.0,
-        defaultUnitSymbol: getSafeUnitSymbol('spots', 'spots'),
+        defaultUnitSymbol: getSafeUnitSymbol('spots'),
       },
       static_well: {
         totalQuantity: 1.0,
         remainingQuantity: 1.0,
-        defaultUnitSymbol: getSafeUnitSymbol('spots', 'spots'),
+        defaultUnitSymbol: getSafeUnitSymbol('spots'),
       },
     }
   }
@@ -84,28 +84,21 @@ export default function ContainerDefaultsForm({
             remainingQuantity: data.cryovial_tube?.remainingQuantity ?? 1.0,
             defaultUnitSymbol: (data.cryovial_tube?.defaultUnitSymbol && unitSymbols.has(data.cryovial_tube.defaultUnitSymbol)) 
               ? data.cryovial_tube.defaultUnitSymbol 
-              : (unitSymbols.has('items') ? 'items' : units[0]?.symbol || 'items'),
-          },
-          tube: {
-            totalQuantity: data.tube?.totalQuantity ?? 1.0,
-            remainingQuantity: data.tube?.remainingQuantity ?? 1.0,
-            defaultUnitSymbol: (data.tube?.defaultUnitSymbol && unitSymbols.has(data.tube.defaultUnitSymbol)) 
-              ? data.tube.defaultUnitSymbol 
-              : (unitSymbols.has('items') ? 'items' : units[0]?.symbol || 'items'),
+              : (unitSymbols.has('items') ? 'items' : (units.length > 0 ? units[0].symbol : 'items')),
           },
           paper: {
             totalQuantity: data.paper?.totalQuantity ?? 1.0,
             remainingQuantity: data.paper?.remainingQuantity ?? 1.0,
             defaultUnitSymbol: (data.paper?.defaultUnitSymbol && unitSymbols.has(data.paper.defaultUnitSymbol)) 
               ? data.paper.defaultUnitSymbol 
-              : (unitSymbols.has('spots') ? 'spots' : units[0]?.symbol || 'spots'),
+              : (unitSymbols.has('spots') ? 'spots' : (units.length > 0 ? units[0].symbol : 'spots')),
           },
           static_well: {
             totalQuantity: data.static_well?.totalQuantity ?? 1.0,
             remainingQuantity: data.static_well?.remainingQuantity ?? 1.0,
             defaultUnitSymbol: (data.static_well?.defaultUnitSymbol && unitSymbols.has(data.static_well.defaultUnitSymbol)) 
               ? data.static_well.defaultUnitSymbol 
-              : (unitSymbols.has('spots') ? 'spots' : units[0]?.symbol || 'spots'),
+              : (unitSymbols.has('spots') ? 'spots' : (units.length > 0 ? units[0].symbol : 'spots')),
           },
         }
         setFormData(safeData)
@@ -121,9 +114,13 @@ export default function ContainerDefaultsForm({
 
   const loadUnits = async () => {
     try {
+      setUnitsError(null)
       const res = await settingsApi.getUnits()
       setUnits(res.data)
-    } catch (err) {
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.error || err?.message || 'Failed to load units'
+      setUnitsError(errorMessage)
+      setUnits([])
       console.error('Failed to load units:', err)
     } finally {
       setLoadingUnits(false)
@@ -194,7 +191,6 @@ export default function ContainerDefaultsForm({
   const containerTypes: Array<{ key: keyof ContainerDefaults; label: string }> = [
     { key: 'micronix_tube', label: 'Micronix Tube' },
     { key: 'cryovial_tube', label: 'Cryovial Tube' },
-    { key: 'tube', label: 'Generic Tube' },
     { key: 'paper', label: 'Paper' },
     { key: 'static_well', label: 'Static Well' },
   ]
@@ -228,6 +224,19 @@ export default function ContainerDefaultsForm({
           Default quantity values and unit symbols pre-filled when creating new containers. <InfoTooltip text="These values are pre-filled but can be changed during container creation." />
         </p>
       </div>
+
+      {unitsError && (
+        <div className="rounded-md bg-red-50 border border-red-200 p-3">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm font-medium text-red-800">
+              {unitsError}. Please refresh the page or contact support if the problem persists.
+            </p>
+          </div>
+        </div>
+      )}
 
       {hasUnsavedChanges && (
         <div className="rounded-md bg-yellow-50 border border-yellow-200 p-3">
@@ -314,9 +323,9 @@ export default function ContainerDefaultsForm({
       <div className="flex justify-end pt-2">
         <button
           type="submit"
-          disabled={saving || !hasUnsavedChanges}
+          disabled={saving || !hasUnsavedChanges || unitsError !== null}
           className={`px-3 py-1.5 text-xs rounded transition-all ${
-            hasUnsavedChanges
+            hasUnsavedChanges && !unitsError
               ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
           } disabled:opacity-50 disabled:cursor-not-allowed`}

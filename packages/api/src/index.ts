@@ -20,9 +20,7 @@ import activityRoutes from './routes/activity'
 import collectionsRoutes from './routes/collections'
 import specimenTypesRoutes from './routes/specimen-types'
 import storageTypesRoutes from './routes/storage-types'
-import sampleTypesRoutes from './routes/sample-types'
 import strainsRoutes from './routes/strains'
-import compositionsRoutes from './routes/compositions'
 import cellLinesRoutes from './routes/cell-lines'
 import plasmidsRoutes from './routes/plasmids'
 import standardsRoutes from './routes/standards'
@@ -30,6 +28,7 @@ import statisticsRoutes from './routes/statistics'
 import setupRoutes from './routes/setup'
 import tagsRoutes from './routes/tags'
 import settingsRoutes from './routes/settings'
+import unitsRoutes from './routes/units'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -62,7 +61,7 @@ app.route('/api/auth', authRoutes)
 // Data routes
 app.route('/api/studies', studiesRoutes)
 app.route('/api/specimens', specimensRoutes)
-app.route('/api/controls', controlsRoutes)
+app.route('/api/blood-controls', controlsRoutes)
 app.route('/api/reagents', reagentsRoutes)
 app.route('/api/locations', locationsRoutes)
 app.route('/api/export', exportRoutes)
@@ -74,15 +73,14 @@ app.route('/api/collections', collectionsRoutes)
 app.route('/api/specimen-types', specimenTypesRoutes)
 // States route removed - states deprecated
 app.route('/api/storage-types', storageTypesRoutes)
-app.route('/api/sample-types', sampleTypesRoutes)
 app.route('/api/strains', strainsRoutes)
-app.route('/api/compositions', compositionsRoutes)
 app.route('/api/cell-lines', cellLinesRoutes)
 app.route('/api/plasmids', plasmidsRoutes)
 app.route('/api/standards', standardsRoutes)
 app.route('/api/statistics', statisticsRoutes)
 app.route('/api/tags', tagsRoutes)
 app.route('/api/settings', settingsRoutes)
+app.route('/api/units', unitsRoutes)
 
 // Serve static files from web build in production
 if (process.env.NODE_ENV === 'production') {

@@ -1,33 +1,39 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { setupApi } from '../lib/api'
 
 // Types
-type SpecimenTypeItem = { name: string }
+type SpecimenTypeItem = { name: string; containerTypes?: string[] }
 type UnitItem = { name: string; symbol: string; category: string }
 // StateItem removed - status is now derived from remainingQuantity
 type StorageTypeItem = { name: string; description: string; id?: string } // id temp for UI linkage
 type LocationItem = { name: string; storageTypeId: string; description: string }
 type StrainItem = { name: string; description: string }
-type CompositionStrainItem = { strainName: string; percentage: number }
-type CompositionItem = { label: string; index?: number; legacy: number; strains: CompositionStrainItem[] }
 
-// Defaults
-const defaultSpecimenTypes: SpecimenTypeItem[] = [
-    { name: 'Blood' }, { name: 'Plasma' }, { name: 'Serum' }, { name: 'Saliva' }, { name: 'DNA' }
-]
-const defaultUnits: UnitItem[] = [
-    { name: 'Milliliter', symbol: 'mL', category: 'volume' },
-    { name: 'Microliter', symbol: 'µL', category: 'volume' },
-    { name: 'Gram', symbol: 'g', category: 'mass' },
-    { name: 'Count', symbol: 'cnt', category: 'count' }
-]
-// States removed - status is now derived from remainingQuantity (In Use/Exhausted)
-const defaultStorageTypes: StorageTypeItem[] = [
-    { name: 'Freezer -80°C', description: 'Ultra-low temperature freezer' },
-    { name: 'Freezer -20°C', description: 'Standard freezer' },
-    { name: 'Refrigerator 4°C', description: 'Standard fridge' },
-    { name: 'Room Temperature', description: 'Ambient storage' }
-]
+// Container types available
+const CONTAINER_TYPES = [
+    { value: 'paper', label: 'Paper (DBS Sheet)' },
+    { value: 'cryovial_tube', label: 'Cryovial Tube' },
+    { value: 'micronix_tube', label: 'Micronix Tube' },
+    { value: 'static_well', label: 'Static Well' },
+] as const
+
+// Import defaults from config
+import {
+    defaultSpecimenTypes as configDefaultSpecimenTypes,
+    defaultUnits as configDefaultUnits,
+    defaultStorageTypes as configDefaultStorageTypes,
+} from '../config/setup-defaults'
+
+// Map config types to frontend types
+const defaultSpecimenTypes: SpecimenTypeItem[] = configDefaultSpecimenTypes.map((st: { name: string; containerTypes?: string[] }) => ({
+    name: st.name,
+    containerTypes: st.containerTypes || []
+}))
+
+const defaultUnits: UnitItem[] = configDefaultUnits
+
+const defaultStorageTypes: StorageTypeItem[] = configDefaultStorageTypes
 
 export default function Setup() {
     const navigate = useNavigate()
@@ -53,16 +59,18 @@ export default function Setup() {
 
     // Biology Data
     const [strains, setStrains] = useState<StrainItem[]>([])
-    const [compositions, setCompositions] = useState<CompositionItem[]>([])
 
     // Check status on mount
     useEffect(() => {
-        fetch('/api/setup/status')
-            .then(res => res.json())
-            .then(data => {
-                if (data.initialized) navigate('/')
+        setupApi.status()
+            .then(res => {
+                if (res.data.initialized) navigate('/')
             })
-            .catch(console.error)
+            .catch((err) => {
+                console.error('Failed to check setup status:', err)
+                // Show error to user
+                setError(err?.response?.data?.error || err?.message || 'Failed to check system status')
+            })
     }, [navigate])
 
     const handleSubmit = async () => {
@@ -74,29 +82,17 @@ export default function Setup() {
                 adminName: adminData.name,
                 adminEmail: adminData.email,
                 adminPassword: adminData.password,
-                seedData: false, // We exist as the source of truth now
                 specimenTypes,
                 units,
                 storageTypes,
                 locations,
                 strains,
-                compositions: compositions.length > 0 ? compositions : undefined
             }
 
-            const response = await fetch('/api/setup/initialize', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-
-            if (!response.ok) {
-                const err = await response.json()
-                throw new Error(err.message || err.error || 'Setup failed')
-            }
-
+            await setupApi.initialize(payload)
             navigate('/')
         } catch (err: any) {
-            setError(err.message)
+            setError(err.response?.data?.error || err.message || 'Setup failed')
             setLoading(false)
         }
     }
@@ -147,22 +143,21 @@ export default function Setup() {
                     {step === 1 && (
                         <div className="space-y-4 max-w-md mx-auto">
                             <h3 className="text-lg font-medium text-gray-900">Create Administrator</h3>
-                            <Input label="Full Name" name="name" value={adminData.name} onChange={v => setAdminData({ ...adminData, name: v })} required />
-                            <Input label="Email Address" name="email" type="email" value={adminData.email} onChange={v => setAdminData({ ...adminData, email: v })} required />
-                            <Input label="Password" name="password" type="password" value={adminData.password} onChange={v => setAdminData({ ...adminData, password: v })} required minLength={8} />
-                            <Input label="Confirm Password" name="confirmPassword" type="password" value={adminData.confirmPassword} onChange={v => setAdminData({ ...adminData, confirmPassword: v })} required />
+                            <Input label="Full Name" name="name" value={adminData.name} onChange={(v: string) => setAdminData({ ...adminData, name: v })} required />
+                            <Input label="Email Address" name="email" type="email" value={adminData.email} onChange={(v: string) => setAdminData({ ...adminData, email: v })} required />
+                            <Input label="Password" name="password" type="password" value={adminData.password} onChange={(v: string) => setAdminData({ ...adminData, password: v })} required minLength={8} />
+                            <Input label="Confirm Password" name="confirmPassword" type="password" value={adminData.confirmPassword} onChange={(v: string) => setAdminData({ ...adminData, confirmPassword: v })} required />
                         </div>
                     )}
 
                     {/* STEP 2: CORE DEFINITIONS */}
                     {step === 2 && (
                         <div className="space-y-8">
-                            <ListEditor
+                            <SpecimenTypeEditor
                                 title="Specimen Types"
-                                description="What kind of samples will you collect?"
+                                description="What kind of samples will you collect? Select allowed container types for each."
                                 items={specimenTypes}
                                 onUpdate={setSpecimenTypes}
-                                fields={[{ name: 'name', placeholder: 'e.g. Blood' }]}
                             />
                             <ListEditor
                                 title="Units"
@@ -269,46 +264,6 @@ export default function Setup() {
                                 ]}
                             />
                             
-                            <div className="border-t pt-6">
-                                <h4 className="text-sm font-bold text-gray-900 mb-2">Compositions (Optional)</h4>
-                                <p className="text-xs text-gray-500 mb-4">Define strain compositions for control definitions. Requires strains to be defined above.</p>
-                                
-                                {compositions.length === 0 && (
-                                    <div className="text-sm text-gray-500 italic mb-4">No compositions defined. You can add them later.</div>
-                                )}
-                                
-                                <ul className="space-y-3 mb-4 max-h-64 overflow-y-auto">
-                                    {compositions.map((comp, idx) => (
-                                        <li key={idx} className="bg-gray-50 p-3 rounded border border-gray-200">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <div className="flex-1">
-                                                    <span className="font-medium text-sm">{comp.label}</span>
-                                                    {comp.strains.length > 0 && (
-                                                        <div className="text-xs text-gray-600 mt-1">
-                                                            {comp.strains.map((s, i) => (
-                                                                <span key={i}>
-                                                                    {s.strainName} ({s.percentage}%){i < comp.strains.length - 1 ? ', ' : ''}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <button 
-                                                    onClick={() => setCompositions(compositions.filter((_, i) => i !== idx))}
-                                                    className="text-red-600 hover:text-red-800 font-bold px-2"
-                                                >
-                                                    ×
-                                                </button>
-                                            </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                                
-                                <CompositionEditor
-                                    strains={strains}
-                                    onAdd={(comp) => setCompositions([...compositions, comp])}
-                                />
-                            </div>
                         </div>
                     )}
 
@@ -349,6 +304,135 @@ export default function Setup() {
 }
 
 // Helpers
+
+function SpecimenTypeEditor({ title, description, items, onUpdate }: {
+    title: string,
+    description: string,
+    items: SpecimenTypeItem[],
+    onUpdate: (items: SpecimenTypeItem[]) => void,
+}) {
+    const [newItem, setNewItem] = useState<SpecimenTypeItem>({ name: '', containerTypes: [] })
+    const listRef = useRef<HTMLUListElement>(null)
+    const prevItemsLengthRef = useRef(items.length)
+
+    // Scroll to bottom when new items are added
+    useEffect(() => {
+        if (items.length > prevItemsLengthRef.current && listRef.current) {
+            listRef.current.scrollTop = listRef.current.scrollHeight
+        }
+        prevItemsLengthRef.current = items.length
+    }, [items.length])
+
+    const handleAdd = () => {
+        if (!newItem.name) return
+        onUpdate([...items, { ...newItem, containerTypes: newItem.containerTypes || [] }])
+        setNewItem({ name: '', containerTypes: [] })
+    }
+
+    const handleToggleContainerType = (itemIndex: number | null, containerType: string) => {
+        if (itemIndex === null) {
+            // Toggle for new item
+            const currentTypes = newItem.containerTypes || []
+            const newTypes = currentTypes.includes(containerType)
+                ? currentTypes.filter(ct => ct !== containerType)
+                : [...currentTypes, containerType]
+            setNewItem({ ...newItem, containerTypes: newTypes })
+        } else {
+            // Toggle for existing item
+            const updatedItems = [...items]
+            const currentTypes = updatedItems[itemIndex].containerTypes || []
+            const newTypes = currentTypes.includes(containerType)
+                ? currentTypes.filter(ct => ct !== containerType)
+                : [...currentTypes, containerType]
+            updatedItems[itemIndex] = { ...updatedItems[itemIndex], containerTypes: newTypes }
+            onUpdate(updatedItems)
+        }
+    }
+
+    return (
+        <div>
+            <h4 className="text-sm font-bold text-gray-900">{title}</h4>
+            <p className="text-xs text-gray-500 mb-2">{description}</p>
+
+            <ul ref={listRef} className="space-y-1.5 mb-3 max-h-80 overflow-y-auto">
+                {items.length === 0 && <li className="text-xs text-gray-400 italic py-2">No items defined</li>}
+                {items.map((item, idx) => (
+                    <li key={idx} className="flex items-center gap-2 text-sm p-1.5 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100">
+                        <span className="font-medium min-w-[140px]">{item.name}</span>
+                        <div className="flex-1 flex flex-wrap gap-1 items-center">
+                            {CONTAINER_TYPES.map(ct => {
+                                const isSelected = (item.containerTypes || []).includes(ct.value)
+                                return (
+                                    <button
+                                        key={ct.value}
+                                        type="button"
+                                        onClick={() => handleToggleContainerType(idx, ct.value)}
+                                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                                            isSelected
+                                                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                                : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                        }`}
+                                        title={isSelected ? 'Click to remove' : 'Click to add'}
+                                    >
+                                        {ct.label}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                        <button 
+                            onClick={() => onUpdate(items.filter((_, i) => i !== idx))} 
+                            className="text-gray-400 hover:text-red-600 font-bold px-1.5 text-lg leading-none"
+                            title="Remove"
+                        >
+                            ×
+                        </button>
+                    </li>
+                ))}
+            </ul>
+
+            <div className="border-t pt-2 space-y-2">
+                <div className="flex gap-2 items-center">
+                    <input
+                        className="flex-1 text-xs border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 p-1.5 shadow-sm"
+                        placeholder="Specimen type name (e.g. Blood)"
+                        value={newItem.name}
+                        onChange={e => setNewItem({ ...newItem, name: e.target.value })}
+                        onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                    />
+                    <button
+                        onClick={handleAdd}
+                        disabled={!newItem.name}
+                        className="p-1.5 border border-transparent rounded bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50 font-bold px-2 text-sm"
+                    >
+                        +
+                    </button>
+                </div>
+                {newItem.name && (
+                    <div className="flex flex-wrap gap-1.5 pl-1">
+                        <span className="text-xs text-gray-500 self-center mr-1">Containers:</span>
+                        {CONTAINER_TYPES.map(ct => {
+                            const isSelected = (newItem.containerTypes || []).includes(ct.value)
+                            return (
+                                <button
+                                    key={ct.value}
+                                    type="button"
+                                    onClick={() => handleToggleContainerType(null, ct.value)}
+                                    className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                                        isSelected
+                                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                            : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                    }`}
+                                >
+                                    {ct.label}
+                                </button>
+                            )
+                        })}
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
 
 function Input({ label, onChange, ...props }: any) {
     const inputId = props.id || props.name || `input-${label.toLowerCase().replace(/\s+/g, '-')}`
@@ -441,9 +525,25 @@ function ListEditor({ title, description, items, onUpdate, fields }: {
 }
 
 // Composition Editor Component
+interface CompositionItem {
+  label: string
+  strains: CompositionStrainItem[]
+}
+
+interface CompositionStrainItem {
+  strainId: number
+  percentage: number
+}
+
+// Internal representation for UI (uses strain names)
+interface CompositionStrainItemUI {
+  strainName: string
+  percentage: number
+}
+
 function CompositionEditor({ strains, onAdd }: { strains: StrainItem[], onAdd: (comp: CompositionItem) => void }) {
     const [label, setLabel] = useState('')
-    const [compositionStrains, setCompositionStrains] = useState<CompositionStrainItem[]>([])
+    const [compositionStrains, setCompositionStrains] = useState<CompositionStrainItemUI[]>([])
     const [selectedStrain, setSelectedStrain] = useState('')
     const [percentage, setPercentage] = useState('')
 
@@ -489,10 +589,16 @@ function CompositionEditor({ strains, onAdd }: { strains: StrainItem[], onAdd: (
             return
         }
         
+        // Convert strain names to IDs (for now, use -1 as placeholder since strains are created during setup)
+        // The actual conversion should happen when submitting to the backend
+        const strainsWithIds: CompositionStrainItem[] = compositionStrains.map(cs => ({
+            strainId: -1, // Placeholder - will need to be resolved when submitting
+            percentage: cs.percentage
+        }))
+        
         onAdd({
             label,
-            legacy: 0,
-            strains: compositionStrains
+            strains: strainsWithIds
         })
         setLabel('')
         setCompositionStrains([])

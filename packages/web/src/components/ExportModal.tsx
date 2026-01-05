@@ -23,7 +23,6 @@ interface ExportModalProps {
 const CONTAINER_TYPES = [
   { value: 'micronix_tube', label: 'Micronix Tube' },
   { value: 'cryovial_tube', label: 'Cryovial Tube' },
-  { value: 'tube', label: 'Tube' },
   { value: 'paper', label: 'Paper' },
   { value: 'static_well', label: 'Static Well' },
 ]

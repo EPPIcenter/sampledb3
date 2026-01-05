@@ -13,11 +13,10 @@ import {
   micronixPlate,
   cryovialTube,
   cryovialBox,
-  tube,
   paper,
   staticWell,
 } from '../db/schema'
-import { eq, and, or, sql, gte, lte, inArray } from 'drizzle-orm'
+import { eq, and, or, sql, gte, lte, inArray, isNull } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 
 const statistics = new Hono()
@@ -56,10 +55,9 @@ async function getContainerTypes(containerIds: number[]): Promise<Map<number, st
   // Process all chunks in parallel for better performance
   const chunkResults = await Promise.all(
     chunks.map(async (chunk) => {
-      const [micronixTubes, cryovialTubes, tubes, papers, staticWells] = await Promise.all([
+      const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
         db.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, chunk)),
         db.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, chunk)),
-        db.select({ id: tube.id }).from(tube).where(inArray(tube.id, chunk)),
         db.select({ id: paper.id }).from(paper).where(inArray(paper.id, chunk)),
         db.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, chunk)),
       ])
@@ -67,7 +65,6 @@ async function getContainerTypes(containerIds: number[]): Promise<Map<number, st
       const chunkMap = new Map<number, string>()
       micronixTubes.forEach(t => chunkMap.set(t.id, 'micronix_tube'))
       cryovialTubes.forEach(t => chunkMap.set(t.id, 'cryovial_tube'))
-      tubes.forEach(t => chunkMap.set(t.id, 'tube'))
       papers.forEach(t => chunkMap.set(t.id, 'paper'))
       staticWells.forEach(t => chunkMap.set(t.id, 'static_well'))
       return chunkMap
@@ -94,9 +91,6 @@ statistics.get('/', async (c) => {
     const tagIdsParam = c.req.queries('tag_ids') || c.req.queries('tag_ids[]')
     const tagIds = tagIdsParam?.map(id => parseInt(id)).filter(id => !isNaN(id))
     const locationId = c.req.query('location_id')
-    const locationRoot = c.req.query('location_root')
-    const locationLevelI = c.req.query('location_level_i')
-    const locationLevelII = c.req.query('location_level_ii')
     const collectionDateFrom = c.req.query('collection_date_from')
     const collectionDateTo = c.req.query('collection_date_to')
     const createdFrom = c.req.query('created_from')
@@ -110,9 +104,6 @@ statistics.get('/', async (c) => {
       tagIds,
       tagIdsLength: tagIds?.length,
       locationId,
-      locationRoot,
-      locationLevelI,
-      locationLevelII,
     })
     
     // Debug: Check raw query params
@@ -167,7 +158,7 @@ statistics.get('/', async (c) => {
             },
             storage: {
               byLocation: [],
-              byLocationRoot: [],
+              byRootLocation: {},
             },
           })
         }
@@ -300,45 +291,30 @@ statistics.get('/', async (c) => {
         creationTimeline.push({ date, count })
       })
 
-    // Location Filtering - Query matching location IDs first to avoid circular references
-    const hasLocationFilter = locationId || locationRoot || locationLevelI || locationLevelII
+    // Location Filtering - Query matching location IDs and their descendants
+    const hasLocationFilter = !!locationId
     let filteredLocationIds: number[] = []
     
     if (hasLocationFilter) {
       console.log('[STATS] Processing location filter')
-      const locationConditions: any[] = []
-      
-      if (locationId) {
-        const id = parseInt(locationId)
-        if (!isNaN(id)) {
-          locationConditions.push(eq(location.id, id))
-        }
-      }
-      
-      if (locationRoot) {
-        locationConditions.push(eq(location.locationRoot, locationRoot))
-      }
-      
-      if (locationLevelI) {
-        locationConditions.push(eq(location.levelI, locationLevelI))
-      }
-      
-      if (locationLevelII) {
-        locationConditions.push(eq(location.levelII, locationLevelII))
-      }
-      
-      if (locationConditions.length > 0) {
-        console.log('[STATS] Querying locations with', locationConditions.length, 'conditions')
-        const matchingLocations = await db
-          .select({ id: location.id })
+      const id = parseInt(locationId!)
+      if (!isNaN(id)) {
+        // Get the location and all its descendants
+        const targetLocation = await db
+          .select()
           .from(location)
-          .where(and(...locationConditions) as any)
-        filteredLocationIds = matchingLocations.map(l => l.id)
-        console.log('[STATS] Found', filteredLocationIds.length, 'matching locations')
+          .where(eq(location.id, id))
+          .get()
         
-        if (filteredLocationIds.length === 0) {
-          console.log('[STATS] No locations match, returning empty results')
-          // No locations match, return empty results
+        if (targetLocation) {
+          // Get all descendants of this location
+          const { getLocationDescendants } = await import('../lib/location-helpers')
+          const descendants = await getLocationDescendants(id)
+          filteredLocationIds = [id, ...descendants.map(d => d.id)]
+          console.log('[STATS] Found', filteredLocationIds.length, 'locations (including descendants)')
+        } else {
+          console.log('[STATS] Location not found, returning empty results')
+          // Location not found, return empty results
           return c.json({
             specimens: {
               total: 0,
@@ -357,7 +333,7 @@ statistics.get('/', async (c) => {
             },
             storage: {
               byLocation: [],
-              byLocationRoot: [],
+              byRootLocation: {},
             },
           })
         }
@@ -414,7 +390,7 @@ statistics.get('/', async (c) => {
           },
           storage: {
             byLocation: [],
-            byLocationRoot: [],
+            byRootLocation: {},
           },
         })
       }
@@ -535,7 +511,7 @@ statistics.get('/', async (c) => {
         },
         storage: {
           byLocation: [],
-          byLocationRoot: [],
+          byRootLocation: {},
         },
       })
     } else {
@@ -799,7 +775,14 @@ statistics.get('/', async (c) => {
     // Containers by status (Inferred from remaining quantity)
     const byStatus: Record<string, number> = {}
     finalContainers.forEach(c => {
-      const statusName = (c.remainingQuantity ?? 0) > 0 ? 'In Use' : 'Exhausted'
+      let statusName: string
+      if (c.remainingQuantity === null || c.remainingQuantity === undefined) {
+        statusName = 'Unknown'
+      } else if (c.remainingQuantity > 0) {
+        statusName = 'In Use'
+      } else {
+        statusName = 'Exhausted'
+      }
       byStatus[statusName] = (byStatus[statusName] || 0) + 1
     })
 
@@ -841,7 +824,7 @@ statistics.get('/', async (c) => {
     ]
 
     const byLocation: { location: string; count: number }[] = []
-    const byLocationRoot: Record<string, number> = {}
+    const byRootLocation: Record<string, number> = {}
 
     if (locationIds.length > 0) {
       console.log('[STATS] Querying', locationIds.length, 'locations for storage statistics')
@@ -864,14 +847,86 @@ statistics.get('/', async (c) => {
 
       const locationMap = new Map(locations.map(l => [l.id, l]))
 
-      // Count by location
+      // Collect all parent IDs we need to query
+      const parentIdsToLoad = new Set<number>()
+      locations.forEach(loc => {
+        let current: typeof location.$inferSelect | undefined = loc
+        while (current?.parentId !== null && current.parentId !== undefined) {
+          if (!locationMap.has(current.parentId)) {
+            parentIdsToLoad.add(current.parentId)
+          }
+          // Try to get parent from map, or we'll need to query it
+          current = locationMap.get(current.parentId)
+          if (!current) break
+        }
+      })
+
+      // Load missing parent locations
+      if (parentIdsToLoad.size > 0) {
+        console.log('[STATS] Loading', parentIdsToLoad.size, 'missing parent locations')
+        const parentChunks = chunkArray(Array.from(parentIdsToLoad), 500)
+        for (const chunk of parentChunks) {
+          const parentLocations = await db
+            .select()
+            .from(location)
+            .where(inArray(location.id, chunk))
+          parentLocations.forEach(loc => {
+            locationMap.set(loc.id, loc)
+            locations.push(loc)
+          })
+        }
+        
+        // Recursively load any additional parents we discovered
+        let additionalParents = new Set<number>()
+        locations.forEach(loc => {
+          if (loc.parentId !== null && !locationMap.has(loc.parentId)) {
+            additionalParents.add(loc.parentId)
+          }
+        })
+        
+        // Keep loading until we have all ancestors
+        while (additionalParents.size > 0) {
+          const parentChunks = chunkArray(Array.from(additionalParents), 500)
+          additionalParents = new Set<number>()
+          for (const chunk of parentChunks) {
+            const parentLocations = await db
+              .select()
+              .from(location)
+              .where(inArray(location.id, chunk))
+            parentLocations.forEach(loc => {
+              if (!locationMap.has(loc.id)) {
+                locationMap.set(loc.id, loc)
+                locations.push(loc)
+                if (loc.parentId !== null && !locationMap.has(loc.parentId)) {
+                  additionalParents.add(loc.parentId)
+                }
+              }
+            })
+          }
+        }
+      }
+
+      // Helper function to find root location by walking up parent chain
+      const getRootLocation = (loc: typeof location.$inferSelect): typeof location.$inferSelect => {
+        let current = loc
+        while (current.parentId !== null && current.parentId !== undefined) {
+          const parent = locationMap.get(current.parentId)
+          if (!parent) {
+            // If parent not found, current is as high as we can go
+            break
+          }
+          current = parent
+        }
+        return current
+      }
+
+      // Count by location path
       const locationCountMap = new Map<string, number>()
       locationIds.forEach(id => {
         const loc = locationMap.get(id)
         if (loc) {
-          const path = [loc.locationRoot, loc.levelI, loc.levelII, loc.levelIII]
-            .filter(Boolean)
-            .join(' → ')
+          // Use materialized path if available, otherwise build from name
+          const path = loc.path || loc.name || `Location ${loc.id}`
           locationCountMap.set(path, (locationCountMap.get(path) || 0) + 1)
         }
       })
@@ -883,11 +938,13 @@ statistics.get('/', async (c) => {
           byLocation.push({ location, count })
         })
 
-      // Count by location root
+      // Count by root location (root location name)
       locationIds.forEach(id => {
         const loc = locationMap.get(id)
         if (loc) {
-          byLocationRoot[loc.locationRoot] = (byLocationRoot[loc.locationRoot] || 0) + 1
+          const rootLoc = getRootLocation(loc)
+          const rootName = rootLoc.name || `Location ${rootLoc.id}`
+          byRootLocation[rootName] = (byRootLocation[rootName] || 0) + 1
         }
       })
     }
@@ -911,7 +968,7 @@ statistics.get('/', async (c) => {
       },
       storage: {
         byLocation,
-        byLocationRoot,
+        byRootLocation,
       },
     })
   } catch (error: unknown) {
@@ -920,7 +977,17 @@ statistics.get('/', async (c) => {
       console.error('[STATS] Error stack:', error.stack)
     }
     const errorMessage = error instanceof Error ? error.message : String(error)
-    return c.json({ error: 'Failed to fetch statistics', details: errorMessage }, 500)
+    const isDevelopment = process.env.NODE_ENV !== 'production'
+    return c.json({ 
+      error: 'Failed to fetch statistics',
+      ...(isDevelopment && { 
+        details: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      }),
+      ...(!isDevelopment && { 
+        errorCode: 'STATISTICS_ERROR'
+      })
+    }, 500)
   }
 })
 

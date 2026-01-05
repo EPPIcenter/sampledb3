@@ -82,7 +82,6 @@ export function getSpecimenTypeIcon(typeName: string): ReactNode {
 export const CONTAINER_TYPE_ICONS: Record<string, ReactNode> = {
   micronix_tube: createIcon("M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z", "w-3.5 h-3.5"),
   cryovial_tube: createIcon("M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z", "w-3.5 h-3.5"),
-  tube: createIcon("M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z", "w-3.5 h-3.5"),
   paper: createIcon("M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z", "w-3.5 h-3.5"),
   static_well: createIcon("M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z", "w-3.5 h-3.5"),
   whole_blood_tube: createIcon("M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 01-8 0V7a4 4 0 118 0v3zm-4 1a2 2 0 100-4 2 2 0 000 4z", "w-3.5 h-3.5"),
@@ -98,11 +97,35 @@ export function getContainerTypeName(containerType: string): string {
   const names: Record<string, string> = {
     micronix_tube: 'micronix tube',
     cryovial_tube: 'cryovial tube',
-    tube: 'tube',
     paper: 'paper',
     static_well: 'static well',
     whole_blood_tube: 'whole blood tube',
   }
   return names[containerType] || containerType
+}
+
+// Collection type icon configuration
+// Maps collection types (plates, boxes, bags) to appropriate icons
+export const COLLECTION_TYPE_ICONS: Record<string, ReactNode> = {
+  micronix_plate: createIcon("M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z", "w-4 h-4"),
+  cryovial_box: createIcon("M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z", "w-4 h-4"),
+  box: createIcon("M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z", "w-4 h-4"),
+  bag: createIcon("M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z", "w-4 h-4"),
+}
+
+// Collection type icons mapping
+export function getCollectionTypeIcon(collectionType: string): ReactNode {
+  return COLLECTION_TYPE_ICONS[collectionType] || createIcon("M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z", "w-4 h-4")
+}
+
+// Collection type display names
+export function getCollectionTypeName(collectionType: string): string {
+  const names: Record<string, string> = {
+    micronix_plate: 'Micronix Plate',
+    cryovial_box: 'Cryovial Box',
+    box: 'Box',
+    bag: 'Bag',
+  }
+  return names[collectionType] || collectionType
 }
 

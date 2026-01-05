@@ -8,7 +8,6 @@ import {
   cryovialTube,
   box,
   bag,
-  tube,
   paper,
   sheet,
   storageContainer,
@@ -31,9 +30,7 @@ const collections = new Hono()
 // Helper to build location path string
 function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | undefined {
   if (!loc) return undefined
-  const parts = [loc.locationRoot, loc.levelI, loc.levelII]
-  if (loc.levelIII) parts.push(loc.levelIII)
-  return parts.filter(Boolean).join(' → ')
+  return loc.path || undefined
 }
 
 // Type for container source (subject or control)
@@ -219,7 +216,16 @@ collections.get('/boxes/cryovial/:id', async (c) => {
 
   const positions: Record<string, any[]> = {}
   tubeEntries.forEach((entry) => {
-    const pos = entry.position || ''
+    let pos = entry.position || ''
+    // Normalize position to match frontend format (e.g., "B1" -> "B01")
+    if (pos) {
+      const match = pos.match(/^([A-Z]+)(\d+)$/i)
+      if (match) {
+        const row = match[1].toUpperCase()
+        const col = match[2]
+        pos = `${row}${col.padStart(2, '0')}`
+      }
+    }
     if (!positions[pos]) positions[pos] = []
     positions[pos].push(entry)
   })
@@ -243,20 +249,6 @@ collections.get('/boxes/:id', async (c) => {
   if (!boxRecord) return c.json({ error: 'Box not found' }, 404)
 
   const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
-  const tubes = await db.select().from(tube).where(eq(tube.boxId, id))
-
-  const tubeEntries = await Promise.all(
-    tubes.map(async (t) => {
-      const containerInfo = await enrichContainer(t.id)
-      return {
-        type: 'tube',
-        id: t.id,
-        boxPosition: t.boxPosition,
-        label: t.label,
-        container: containerInfo,
-      }
-    })
-  )
 
   // Get all sheets in this box
   const sheets = await db.select().from(sheet).where(eq(sheet.boxId, id))
@@ -291,7 +283,6 @@ collections.get('/boxes/:id', async (c) => {
       locationPath: buildLocationPath(loc),
     },
     contents: {
-      tubes: tubeEntries,
       sheets: sheetContents,
     },
   })
@@ -440,6 +431,15 @@ collections.post('/plates/micronix', async (c) => {
     
     const data = schema.parse(body)
     
+    // Validate location can contain collections
+    const loc = await db.select().from(location).where(eq(location.id, data.locationId)).get()
+    if (!loc) {
+      return c.json({ error: 'Location not found' }, 404)
+    }
+    if (!loc.canContainCollections) {
+      return c.json({ error: 'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.' }, 400)
+    }
+    
     const existing = await db.select().from(micronixPlate).where(eq(micronixPlate.name, data.name)).get()
     if (existing) return c.json({ error: 'Plate with this name already exists' }, 400)
     
@@ -452,6 +452,119 @@ collections.post('/plates/micronix', async (c) => {
     }).returning()
     
     return c.json({ plate: newPlate }, 201)
+  } catch (error) {
+    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// Create cryovial box
+collections.post('/boxes/cryovial', async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      name: z.string().min(1),
+      locationId: z.number().int(),
+      barcode: z.string().optional(),
+    })
+    
+    const data = schema.parse(body)
+    
+    // Validate location can contain collections
+    const loc = await db.select().from(location).where(eq(location.id, data.locationId)).get()
+    if (!loc) {
+      return c.json({ error: 'Location not found' }, 404)
+    }
+    if (!loc.canContainCollections) {
+      return c.json({ error: 'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.' }, 400)
+    }
+    
+    const existing = await db.select().from(cryovialBox).where(eq(cryovialBox.name, data.name)).get()
+    if (existing) return c.json({ error: 'Cryovial box with this name already exists' }, 400)
+    
+    const now = new Date().toISOString()
+    const [newBox] = await db.insert(cryovialBox).values({
+      ...data,
+      barcode: data.barcode || null,
+      created: now,
+      lastUpdated: now,
+    }).returning()
+    
+    return c.json({ box: newBox }, 201)
+  } catch (error) {
+    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// Create regular box
+collections.post('/boxes', async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      name: z.string().min(1),
+      locationId: z.number().int(),
+    })
+    
+    const data = schema.parse(body)
+    
+    // Validate location can contain collections
+    const loc = await db.select().from(location).where(eq(location.id, data.locationId)).get()
+    if (!loc) {
+      return c.json({ error: 'Location not found' }, 404)
+    }
+    if (!loc.canContainCollections) {
+      return c.json({ error: 'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.' }, 400)
+    }
+    
+    const existing = await db.select().from(box).where(eq(box.name, data.name)).get()
+    if (existing) return c.json({ error: 'Box with this name already exists' }, 400)
+    
+    const now = new Date().toISOString()
+    const [newBox] = await db.insert(box).values({
+      ...data,
+      created: now,
+      lastUpdated: now,
+    }).returning()
+    
+    return c.json({ box: newBox }, 201)
+  } catch (error) {
+    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// Create bag
+collections.post('/bags', async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      name: z.string().min(1),
+      locationId: z.number().int(),
+    })
+    
+    const data = schema.parse(body)
+    
+    // Validate location can contain collections
+    const loc = await db.select().from(location).where(eq(location.id, data.locationId)).get()
+    if (!loc) {
+      return c.json({ error: 'Location not found' }, 404)
+    }
+    if (!loc.canContainCollections) {
+      return c.json({ error: 'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.' }, 400)
+    }
+    
+    const existing = await db.select().from(bag).where(eq(bag.name, data.name)).get()
+    if (existing) return c.json({ error: 'Bag with this name already exists' }, 400)
+    
+    const now = new Date().toISOString()
+    const [newBag] = await db.insert(bag).values({
+      ...data,
+      created: now,
+      lastUpdated: now,
+    }).returning()
+    
+    return c.json({ bag: newBag }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
     return c.json({ error: 'Internal server error' }, 500)
@@ -488,9 +601,22 @@ collections.post('/containers/resolve', async (c) => {
     }
     
     return c.json({ containers: result })
-  } catch (error) {
-    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    return c.json({ error: 'Internal server error' }, 500)
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    console.error('Error resolving containers:', error)
+    const isDevelopment = process.env.NODE_ENV !== 'production'
+    return c.json({ 
+      error: error?.message || 'Failed to resolve containers',
+      ...(isDevelopment && { 
+        details: error?.message,
+        stack: error?.stack 
+      }),
+      ...(!isDevelopment && { 
+        errorCode: 'RESOLVE_CONTAINERS_ERROR'
+      })
+    }, 500)
   }
 })
 
@@ -556,7 +682,6 @@ collections.get('/list/:type', async (c) => {
             box: box,
             location: location,
             sheetCount: sql<number>`(SELECT COUNT(*) FROM ${sheet} WHERE ${sheet.boxId} = ${box.id})`,
-            tubeCount: sql<number>`(SELECT COUNT(*) FROM ${tube} WHERE ${tube.boxId} = ${box.id})`,
           })
           .from(box)
           .leftJoin(location, eq(box.locationId, location.id))
@@ -564,7 +689,7 @@ collections.get('/list/:type', async (c) => {
           id: r.box.id,
           name: r.box.name,
           locationId: r.box.locationId,
-          itemCount: (r.sheetCount || 0) + (r.tubeCount || 0),
+          itemCount: r.sheetCount || 0,
           location: r.location
             ? {
                 id: r.location.id,
@@ -647,9 +772,24 @@ collections.post('/containers/move', async (c) => {
     }
     
     return c.json({ success: true, moved: result.moved })
-  } catch (error) {
-    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    return c.json({ error: 'Internal server error' }, 500)
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    console.error('Error moving containers:', error)
+    const isDevelopment = process.env.NODE_ENV !== 'production'
+    return c.json({ 
+      error: error?.message || 'Failed to move containers',
+      moved: 0,
+      errors: [{ row: 0, error: error?.message || 'Internal server error' }],
+      ...(isDevelopment && { 
+        details: error?.message,
+        stack: error?.stack 
+      }),
+      ...(!isDevelopment && { 
+        errorCode: 'MOVE_CONTAINERS_ERROR'
+      })
+    }, 500)
   }
 })
 

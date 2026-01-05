@@ -1,22 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
-import { locationsApi } from '../lib/api'
+import { locationsApi, type Location } from '../lib/api'
+import { getLocationAncestors, getLocationDescendants } from '../lib/location-tree'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import LocationHierarchyTree from '../components/LocationHierarchyTree'
 import Pagination from '../components/Pagination'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
-
-interface Location {
-  id: number
-  locationRoot: string
-  storageTypeId: string
-  description?: string
-  levelI: string
-  levelII: string
-  levelIII?: string
-  created: string
-  lastUpdated: string
-}
+import ContentCard from '../components/ContentCard'
 
 interface LocationContents {
   micronixPlates?: any[]
@@ -35,11 +25,11 @@ export default function LocationDetail() {
   const [loadingContext, setLoadingContext] = useState(true)
   const defaultLimit = 25
   
-  // Pagination state for all collection types
-  const [platesPage, setPlatesPage] = useState(parseInt(searchParams.get('plates_page') || '1'))
-  const [cryovialBoxesPage, setCryovialBoxesPage] = useState(parseInt(searchParams.get('cryovial_boxes_page') || '1'))
-  const [boxesPage, setBoxesPage] = useState(parseInt(searchParams.get('boxes_page') || '1'))
-  const [bagsPage, setBagsPage] = useState(parseInt(searchParams.get('bags_page') || '1'))
+  // Derive page values directly from URL params to avoid circular dependencies
+  const platesPage = parseInt(searchParams.get('plates_page') || '1')
+  const cryovialBoxesPage = parseInt(searchParams.get('cryovial_boxes_page') || '1')
+  const boxesPage = parseInt(searchParams.get('boxes_page') || '1')
+  const bagsPage = parseInt(searchParams.get('bags_page') || '1')
   
   const [pagination, setPagination] = useState<{
     micronixPlates?: { page: number; totalPages: number; total: number; limit: number }
@@ -48,36 +38,29 @@ export default function LocationDetail() {
     bags?: { page: number; totalPages: number; total: number; limit: number }
   } | null>(null)
 
-  // Sync page states with URL params
-  useEffect(() => {
-    const platesPageFromUrl = parseInt(searchParams.get('plates_page') || '1')
-    const cryovialBoxesPageFromUrl = parseInt(searchParams.get('cryovial_boxes_page') || '1')
-    const boxesPageFromUrl = parseInt(searchParams.get('boxes_page') || '1')
-    const bagsPageFromUrl = parseInt(searchParams.get('bags_page') || '1')
-    
-    if (platesPageFromUrl !== platesPage) setPlatesPage(platesPageFromUrl)
-    if (cryovialBoxesPageFromUrl !== cryovialBoxesPage) setCryovialBoxesPage(cryovialBoxesPageFromUrl)
-    if (boxesPageFromUrl !== boxesPage) setBoxesPage(boxesPageFromUrl)
-    if (bagsPageFromUrl !== bagsPage) setBagsPage(bagsPageFromUrl)
-  }, [searchParams, platesPage, cryovialBoxesPage, boxesPage, bagsPage])
-
   useEffect(() => {
     if (!id) return
 
     const numericId = parseInt(id)
     if (Number.isNaN(numericId)) return
 
+    // Derive page values from URL params inside the effect to ensure fresh values
+    const currentPlatesPage = parseInt(searchParams.get('plates_page') || '1')
+    const currentCryovialBoxesPage = parseInt(searchParams.get('cryovial_boxes_page') || '1')
+    const currentBoxesPage = parseInt(searchParams.get('boxes_page') || '1')
+    const currentBagsPage = parseInt(searchParams.get('bags_page') || '1')
+
     const fetchData = async () => {
       try {
         const [detailResponse, listResponse] = await Promise.all([
           locationsApi.get(numericId, { 
-            plates_page: platesPage,
+            plates_page: currentPlatesPage,
             plates_limit: defaultLimit,
-            cryovial_boxes_page: cryovialBoxesPage,
+            cryovial_boxes_page: currentCryovialBoxesPage,
             cryovial_boxes_limit: defaultLimit,
-            boxes_page: boxesPage,
+            boxes_page: currentBoxesPage,
             boxes_limit: defaultLimit,
-            bags_page: bagsPage,
+            bags_page: currentBagsPage,
             bags_limit: defaultLimit,
           }),
           locationsApi.list(),
@@ -98,13 +81,11 @@ export default function LocationDetail() {
     }
 
     fetchData()
-  }, [id, platesPage, cryovialBoxesPage, boxesPage, bagsPage])
+  }, [id, searchParams])
 
   const pathLabel = useMemo(() => {
     if (!location) return ''
-    const parts = [location.locationRoot, location.levelI, location.levelII]
-    if (location.levelIII) parts.push(location.levelIII)
-    return parts.filter(Boolean).join(' \u2192 ')
+    return location.path || location.name
   }, [location])
 
   const stats = useMemo(() => {
@@ -126,12 +107,30 @@ export default function LocationDetail() {
     }
   }, [contents, pagination])
 
-  // Filter locations to same root for hierarchy display
+  // Get all locations in the same hierarchy tree (ancestors + descendants + siblings)
   const sameRootLocations = useMemo(() => {
     if (!location || allLocations.length === 0) return []
-    return allLocations.filter(
-      (loc) => loc.locationRoot === location.locationRoot
-    )
+    
+    // Get all ancestors
+    const ancestors = getLocationAncestors(allLocations, location.id)
+    
+    // Get all descendants
+    const descendants = getLocationDescendants(allLocations, location.id)
+    
+    // Get root location (first ancestor or location itself if it's a root)
+    const rootLocation = ancestors.length > 0 ? ancestors[0] : location
+    
+    // Get all locations in the same tree (all descendants of the root)
+    const rootDescendants = getLocationDescendants(allLocations, rootLocation.id)
+    
+    // Combine root, ancestors, descendants, and all root descendants
+    const allRelated = new Set<number>()
+    allRelated.add(rootLocation.id)
+    ancestors.forEach(a => allRelated.add(a.id))
+    descendants.forEach(d => allRelated.add(d.id))
+    rootDescendants.forEach(d => allRelated.add(d.id))
+    
+    return allLocations.filter(loc => allRelated.has(loc.id))
   }, [location, allLocations])
 
   if (loading) {
@@ -163,7 +162,9 @@ export default function LocationDetail() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white rounded-lg shadow p-4">
           <h2 className="text-sm font-medium text-gray-500 mb-1">Storage Type</h2>
-          <p className="text-lg font-semibold text-gray-900">{location.storageTypeId}</p>
+          <p className="text-lg font-semibold text-gray-900">
+            {location.effectiveStorageTypeName || location.storageTypeName || location.storageTypeId || 'N/A'}
+          </p>
           {location.description && (
             <p className="mt-1 text-xs text-gray-500">{location.description}</p>
           )}
@@ -203,8 +204,7 @@ export default function LocationDetail() {
               <h3 className="text-sm font-medium text-gray-500 mb-1">Path</h3>
               <p className="text-sm text-gray-900">{pathLabel || 'N/A'}</p>
               <p className="text-xs text-gray-500 mt-1">
-                Tree shows all locations in storage root{' '}
-                <span className="font-mono text-gray-700">{location.locationRoot}</span>.
+                Tree shows all locations in the same hierarchy.
               </p>
             </div>
 
@@ -219,7 +219,6 @@ export default function LocationDetail() {
                   <LocationHierarchyTree
                     locations={sameRootLocations}
                     currentLocationId={location.id}
-                    filterByRoot={location.locationRoot}
                     renderLocation={(loc, isCurrent) => (
                       <Link
                         to={`/locations/${loc.id}`}
@@ -234,8 +233,13 @@ export default function LocationDetail() {
                         >
                           <div>
                             <p className="text-xs text-gray-900">
-                              {loc.levelIII || loc.levelII}
+                              {loc.name}
                             </p>
+                            {loc.path && (
+                              <p className="text-[10px] text-gray-400 font-mono truncate">
+                                {loc.path}
+                              </p>
+                            )}
                             {loc.description && (
                               <p className="text-[11px] text-gray-500 truncate">
                                 {loc.description}
@@ -259,7 +263,7 @@ export default function LocationDetail() {
 
         {/* Contents breakdown */}
         <div className="bg-white rounded-lg shadow p-6 lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-900">Contents</h2>
           </div>
 
@@ -268,44 +272,37 @@ export default function LocationDetail() {
           )}
 
           {contents && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               {stats.micronixCount > 0 && (
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-gray-900">
-                      Micronix Plates ({stats.micronixCount})
-                    </h3>
+                  <div className="flex items-center gap-2 mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Micronix Plates</h3>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {stats.micronixCount}
+                    </span>
                   </div>
-                  <div className="space-y-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {contents.micronixPlates?.map((plate: any) => (
-                      <Link
+                      <ContentCard
                         key={plate.id}
-                        to={`/collections/micronix-plates/${plate.id}`}
-                        className="flex items-center justify-between text-sm text-gray-700 border-b last:border-b-0 py-1 hover:bg-blue-50"
-                      >
-                        <div>
-                          <span className="font-medium text-blue-700">{plate.name}</span>
-                          {plate.barcode && (
-                            <span className="ml-2 text-xs text-gray-500">
-                              ({plate.barcode})
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-blue-600 font-semibold">
-                          View
-                        </span>
-                      </Link>
+                        id={plate.id}
+                        name={plate.name}
+                        barcode={plate.barcode}
+                        created={plate.created}
+                        lastUpdated={plate.lastUpdated}
+                        collectionType="micronix_plate"
+                        detailUrl={`/collections/micronix-plates/${plate.id}`}
+                      />
                     ))}
                   </div>
                   {pagination?.micronixPlates && pagination.micronixPlates.totalPages > 1 && (
-                    <div className="mt-4">
+                    <div className="mt-6">
                       <Pagination
                         currentPage={platesPage}
                         totalPages={pagination.micronixPlates.totalPages}
                         totalItems={pagination.micronixPlates.total}
                         itemsPerPage={pagination.micronixPlates.limit}
                         onPageChange={(page) => {
-                          setPlatesPage(page)
                           setSearchParams((prev) => {
                             const next = new URLSearchParams(prev)
                             next.set('plates_page', page.toString())
@@ -320,41 +317,34 @@ export default function LocationDetail() {
 
               {stats.cryovialBoxCount > 0 && (
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-gray-900">
-                      Cryovial Boxes ({stats.cryovialBoxCount})
-                    </h3>
+                  <div className="flex items-center gap-2 mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Cryovial Boxes</h3>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                      {stats.cryovialBoxCount}
+                    </span>
                   </div>
-                  <div className="space-y-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {contents.cryovialBoxes?.map((box: any) => (
-                      <Link
+                      <ContentCard
                         key={box.id}
-                        to={`/collections/cryovial-boxes/${box.id}`}
-                        className="flex items-center justify-between text-sm text-gray-700 border-b last:border-b-0 py-1 hover:bg-blue-50"
-                      >
-                        <div>
-                          <span className="font-medium text-blue-700">{box.name}</span>
-                          {box.barcode && (
-                            <span className="ml-2 text-xs text-gray-500">
-                              ({box.barcode})
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-blue-600 font-semibold">
-                          View
-                        </span>
-                      </Link>
+                        id={box.id}
+                        name={box.name}
+                        barcode={box.barcode}
+                        created={box.created}
+                        lastUpdated={box.lastUpdated}
+                        collectionType="cryovial_box"
+                        detailUrl={`/collections/cryovial-boxes/${box.id}`}
+                      />
                     ))}
                   </div>
                   {pagination?.cryovialBoxes && pagination.cryovialBoxes.totalPages > 1 && (
-                    <div className="mt-4">
+                    <div className="mt-6">
                       <Pagination
                         currentPage={cryovialBoxesPage}
                         totalPages={pagination.cryovialBoxes.totalPages}
                         totalItems={pagination.cryovialBoxes.total}
                         itemsPerPage={pagination.cryovialBoxes.limit}
                         onPageChange={(page) => {
-                          setCryovialBoxesPage(page)
                           setSearchParams((prev) => {
                             const next = new URLSearchParams(prev)
                             next.set('cryovial_boxes_page', page.toString())
@@ -369,36 +359,34 @@ export default function LocationDetail() {
 
               {stats.boxCount > 0 && (
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-gray-900">
-                      Boxes ({stats.boxCount})
-                    </h3>
+                  <div className="flex items-center gap-2 mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Boxes</h3>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      {stats.boxCount}
+                    </span>
                   </div>
-                  <div className="space-y-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {contents.boxes?.map((box: any) => (
-                      <Link
+                      <ContentCard
                         key={box.id}
-                        to={`/collections/boxes/${box.id}`}
-                        className="flex items-center justify-between text-sm text-gray-700 border-b last:border-b-0 py-1 hover:bg-blue-50"
-                      >
-                        <div>
-                          <span className="font-medium text-blue-700">{box.name}</span>
-                        </div>
-                        <span className="text-[10px] text-blue-600 font-semibold">
-                          View
-                        </span>
-                      </Link>
+                        id={box.id}
+                        name={box.name}
+                        barcode={box.barcode}
+                        created={box.created}
+                        lastUpdated={box.lastUpdated}
+                        collectionType="box"
+                        detailUrl={`/collections/boxes/${box.id}`}
+                      />
                     ))}
                   </div>
                   {pagination?.boxes && pagination.boxes.totalPages > 1 && (
-                    <div className="mt-4">
+                    <div className="mt-6">
                       <Pagination
                         currentPage={boxesPage}
                         totalPages={pagination.boxes.totalPages}
                         totalItems={pagination.boxes.total}
                         itemsPerPage={pagination.boxes.limit}
                         onPageChange={(page) => {
-                          setBoxesPage(page)
                           setSearchParams((prev) => {
                             const next = new URLSearchParams(prev)
                             next.set('boxes_page', page.toString())
@@ -413,36 +401,34 @@ export default function LocationDetail() {
 
               {stats.bagCount > 0 && (
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-gray-900">
-                      Bags ({stats.bagCount})
-                    </h3>
+                  <div className="flex items-center gap-2 mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Bags</h3>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                      {stats.bagCount}
+                    </span>
                   </div>
-                  <div className="space-y-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {contents.bags?.map((bag: any) => (
-                      <Link
+                      <ContentCard
                         key={bag.id}
-                        to={`/collections/bags/${bag.id}`}
-                        className="flex items-center justify-between text-sm text-gray-700 border-b last:border-b-0 py-1 hover:bg-blue-50"
-                      >
-                        <div>
-                          <span className="font-medium text-blue-700">{bag.name}</span>
-                        </div>
-                        <span className="text-[10px] text-blue-600 font-semibold">
-                          View
-                        </span>
-                      </Link>
+                        id={bag.id}
+                        name={bag.name}
+                        barcode={bag.barcode}
+                        created={bag.created}
+                        lastUpdated={bag.lastUpdated}
+                        collectionType="bag"
+                        detailUrl={`/collections/bags/${bag.id}`}
+                      />
                     ))}
                   </div>
                   {pagination?.bags && pagination.bags.totalPages > 1 && (
-                    <div className="mt-4">
+                    <div className="mt-6">
                       <Pagination
                         currentPage={bagsPage}
                         totalPages={pagination.bags.totalPages}
                         totalItems={pagination.bags.total}
                         itemsPerPage={pagination.bags.limit}
                         onPageChange={(page) => {
-                          setBagsPage(page)
                           setSearchParams((prev) => {
                             const next = new URLSearchParams(prev)
                             next.set('bags_page', page.toString())
@@ -460,17 +446,6 @@ export default function LocationDetail() {
               )}
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Actions and navigation back to hierarchy view */}
-      <div className="bg-white rounded-lg shadow p-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-gray-600">
-          Manage storage locations and inventory from the{' '}
-          <Link to="/locations" className="text-blue-600 hover:underline">
-            Locations overview
-          </Link>
-          .
         </div>
       </div>
     </div>

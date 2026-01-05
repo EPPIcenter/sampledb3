@@ -3,10 +3,8 @@ import { db } from '../db/client'
 import {
   controlDefinition,
   controlBatch,
-  unit,
-  composition,
-  compositionStrain,
   strain,
+  unit,
   specimen,
   specimenType,
   storageContainer,
@@ -15,17 +13,61 @@ import {
   cryovialBox,
   cryovialTube,
   box,
-  tube,
   sheet,
   paper,
   staticWell,
   location,
   bag,
+  storageContainerTag,
 } from '../db/schema'
 import { eq, and, like, desc, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 const controls = new Hono()
+
+// Helper function to extract strain/density data from properties JSON
+function parseControlProperties(properties: any, strainMap?: Map<number, { name: string }>) {
+  if (!properties) return { strains: [], targetDensity: undefined, unitSymbol: undefined, targetDensityUnitId: undefined }
+  
+  let props: any
+  try {
+    props = typeof properties === 'string' ? JSON.parse(properties) : properties
+  } catch (e) {
+    // If parsing fails, return empty data
+    return { strains: [], targetDensity: undefined, unitSymbol: undefined, targetDensityUnitId: undefined }
+  }
+  
+  const strains = (props.strains || []).map((s: any) => {
+    if (typeof s === 'number') {
+      // Just strain ID - look up name if available
+      return { id: s, name: strainMap?.get(s)?.name || `Strain ${s}` }
+    }
+    // Full strain object with id, name, percentage
+    return s
+  })
+  
+  // Extract target density - handle both number and string formats
+  const targetDensity = props.targetDensity !== undefined && props.targetDensity !== null
+    ? (typeof props.targetDensity === 'string' ? parseFloat(props.targetDensity) : props.targetDensity)
+    : undefined
+  
+  // Extract unit symbol - check multiple possible locations
+  const unitSymbol = props.targetDensityUnit?.symbol 
+    || props.targetDensityUnitSymbol 
+    || (props.targetDensityUnit && typeof props.targetDensityUnit === 'string' ? props.targetDensityUnit : undefined)
+  
+  // Extract unit ID
+  const targetDensityUnitId = props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null
+    ? (typeof props.targetDensityUnitId === 'string' ? parseInt(props.targetDensityUnitId) : props.targetDensityUnitId)
+    : undefined
+  
+  return {
+    strains,
+    targetDensity,
+    unitSymbol,
+    targetDensityUnitId,
+  }
+}
 
 // --- Control Batches ---
 
@@ -50,8 +92,7 @@ controls.get('/batches', async (c) => {
     .from(specimen)
     .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
     .where(
-      sql`EXISTS (SELECT 1 FROM tube WHERE tube.id = ${storageContainer.id}) OR 
-          EXISTS (SELECT 1 FROM micronix_tube WHERE micronix_tube.id = ${storageContainer.id}) OR 
+      sql`EXISTS (SELECT 1 FROM micronix_tube WHERE micronix_tube.id = ${storageContainer.id}) OR 
           EXISTS (SELECT 1 FROM cryovial_tube WHERE cryovial_tube.id = ${storageContainer.id}) OR
           EXISTS (SELECT 1 FROM static_well WHERE static_well.id = ${storageContainer.id})`
     )
@@ -67,16 +108,7 @@ controls.get('/batches', async (c) => {
     .groupBy(specimen.controlBatchId)
     .as('specimen_counts')
 
-  const batchStrainsSubquery = db
-    .select({
-      definitionId: controlDefinition.id,
-      strainsJson: sql<string>`json_group_array(json_object('id', ${strain.id}, 'name', ${strain.name}))`.as('strains_json'),
-    })
-    .from(controlDefinition)
-    .innerJoin(compositionStrain, eq(controlDefinition.compositionId, compositionStrain.compositionId))
-    .innerJoin(strain, eq(compositionStrain.strainId, strain.id))
-    .groupBy(controlDefinition.id)
-    .as('batch_strains')
+  // Strains are now stored in properties JSON, so we'll parse them in the response
 
   const batchesResults = await db
     .select({
@@ -88,45 +120,163 @@ controls.get('/batches', async (c) => {
       lastUpdated: controlBatch.lastUpdated,
       definitionName: controlDefinition.name,
       controlType: controlDefinition.controlType,
-      targetDensity: controlDefinition.targetDensity,
-      unitSymbol: unit.symbol,
+      properties: controlDefinition.properties,
       specimenCount: sql<number>`COALESCE(${specimenCountSubquery.count}, 0)`,
       spotCount: sql<number>`COALESCE(${spotCountSubquery.count}, 0)`,
       tubeCount: sql<number>`COALESCE(${tubeCountSubquery.count}, 0)`,
       inventoryTotal: sql<number>`COALESCE(${spotCountSubquery.count}, 0) + COALESCE(${tubeCountSubquery.count}, 0)`,
-      strainsJson: batchStrainsSubquery.strainsJson,
     })
     .from(controlBatch)
     .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
-    .leftJoin(unit, eq(controlDefinition.targetDensityUnitId, unit.id))
     .leftJoin(specimenCountSubquery, eq(controlBatch.id, specimenCountSubquery.batchId))
     .leftJoin(spotCountSubquery, eq(controlBatch.id, spotCountSubquery.batchId))
     .leftJoin(tubeCountSubquery, eq(controlBatch.id, tubeCountSubquery.batchId))
-    .leftJoin(batchStrainsSubquery, eq(controlBatch.controlDefinitionId, batchStrainsSubquery.definitionId))
+    .where(eq(controlDefinition.controlType, 'blood'))
     .orderBy(desc(controlBatch.created))
 
-  const batches = batchesResults.map(row => ({
-    ...row,
-    strains: row.strainsJson ? JSON.parse(row.strainsJson).filter((s: any) => s.id !== null) : []
-  }))
+  // Parse strains from properties JSON
+  const batches = batchesResults.map(row => {
+    const props = row.properties as any
+    const strains = props?.strains || []
+    return {
+      ...row,
+      strains: strains.map((s: any) => typeof s === 'number' ? { id: s } : s),
+      targetDensity: props?.targetDensity,
+      unitSymbol: props?.targetDensityUnit?.symbol || props?.targetDensityUnitSymbol,
+    }
+  })
 
   return c.json({ batches })
 })
 
-// Get batch detail
+// Get batch detail (only for blood control batches)
 controls.get('/batches/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
-  const batch = await db
-    .select()
+  const result = await db
+    .select({
+      batch: controlBatch,
+      definition: controlDefinition,
+    })
     .from(controlBatch)
-    .where(eq(controlBatch.id, id))
+    .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
+    .where(and(
+      eq(controlBatch.id, id),
+      eq(controlDefinition.controlType, 'blood')
+    ))
     .get()
 
-  if (!batch) return c.json({ error: 'Batch not found' }, 404)
+  if (!result) return c.json({ error: 'Blood control batch not found' }, 404)
 
-  return c.json({ batch })
+  return c.json({ batch: result.batch })
+})
+
+// Delete batch and all associated data
+controls.delete('/batches/:id', async (c) => {
+  const id = parseInt(c.req.param('id'))
+  if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
+
+  try {
+    // Check if batch exists and is associated with a blood control definition
+    const batchWithDefinition = await db
+      .select({
+        batch: controlBatch,
+        definition: controlDefinition,
+      })
+      .from(controlBatch)
+      .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
+      .where(and(
+        eq(controlBatch.id, id),
+        eq(controlDefinition.controlType, 'blood')
+      ))
+      .get()
+
+    if (!batchWithDefinition) {
+      return c.json({ error: 'Blood control batch not found' }, 404)
+    }
+
+    const batch = batchWithDefinition.batch
+
+    // Find all specimens for this batch
+    const specimens = await db
+      .select({ id: specimen.id })
+      .from(specimen)
+      .where(eq(specimen.controlBatchId, id))
+
+    const specimenIds = specimens.map(s => s.id)
+
+    // If there are specimens, find all containers
+    let containerIds: number[] = []
+    if (specimenIds.length > 0) {
+      const containers = await db
+        .select({ id: storageContainer.id })
+        .from(storageContainer)
+        .where(inArray(storageContainer.specimenId, specimenIds))
+      
+      containerIds = containers.map(c => c.id)
+    }
+
+    // Delete in transaction to ensure atomicity
+    db.transaction((tx) => {
+      // 1. Delete storageContainerTag records for all containers
+      if (containerIds.length > 0) {
+        tx.delete(storageContainerTag)
+          .where(inArray(storageContainerTag.storageContainerId, containerIds))
+          .run()
+      }
+
+      // 2. Delete container-specific records
+      if (containerIds.length > 0) {
+        // Delete paper records
+        tx.delete(paper)
+          .where(inArray(paper.id, containerIds))
+          .run()
+
+        // Delete micronixTube records
+        tx.delete(micronixTube)
+          .where(inArray(micronixTube.id, containerIds))
+          .run()
+
+        // Delete cryovialTube records
+        tx.delete(cryovialTube)
+          .where(inArray(cryovialTube.id, containerIds))
+          .run()
+
+        // Delete staticWell records
+        tx.delete(staticWell)
+          .where(inArray(staticWell.id, containerIds))
+          .run()
+      }
+
+      // 3. Delete storageContainer records
+      if (containerIds.length > 0) {
+        tx.delete(storageContainer)
+          .where(inArray(storageContainer.id, containerIds))
+          .run()
+      }
+
+      // 4. Delete specimen records
+      if (specimenIds.length > 0) {
+        tx.delete(specimen)
+          .where(inArray(specimen.id, specimenIds))
+          .run()
+      }
+
+      // 5. Delete controlBatch record
+      tx.delete(controlBatch)
+        .where(eq(controlBatch.id, id))
+        .run()
+    })
+
+    return c.json({ message: 'Batch deleted successfully' })
+  } catch (error: any) {
+    console.error('Error deleting batch:', error)
+    return c.json({ 
+      error: 'Failed to delete batch', 
+      details: error.message 
+    }, 500)
+  }
 })
 
 // Get batch summary with enriched specimen data
@@ -135,36 +285,44 @@ controls.get('/batches/:id/summary', async (c) => {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
-    // Get batch
-    const batchDataRaw = await db
-      .select()
+    // Get batch with definition (filtered to blood controls)
+    const batchWithDefinition = await db
+      .select({
+        batch: controlBatch,
+        definition: controlDefinition,
+      })
       .from(controlBatch)
-      .where(eq(controlBatch.id, id))
+      .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
+      .where(and(
+        eq(controlBatch.id, id),
+        eq(controlDefinition.controlType, 'blood')
+      ))
       .get()
 
-    if (!batchDataRaw) {
-      return c.json({ error: 'Batch not found' }, 404)
+    if (!batchWithDefinition) {
+      return c.json({ error: 'Blood control batch not found' }, 404)
     }
 
-    // Get definition if exists
-    let definitionData = null
-    if (batchDataRaw.controlDefinitionId) {
-      definitionData = await db
-        .select()
-        .from(controlDefinition)
-        .where(eq(controlDefinition.id, batchDataRaw.controlDefinitionId))
-        .get()
-    }
+    const batchDataRaw = batchWithDefinition.batch
+    const definitionData = batchWithDefinition.definition
 
-    // Get unit if exists
-    let unitSymbol = undefined
-    if (definitionData?.targetDensityUnitId) {
-      const unitData = await db
+    // Parse properties to get strain/density info
+    const allStrains = await db.select().from(strain)
+    const strainMap = new Map(allStrains.map(s => [s.id, { name: s.name }]))
+    
+    const parsedProps = definitionData ? parseControlProperties(definitionData.properties, strainMap) : null
+
+    // If we have targetDensityUnitId but no unitSymbol, look it up from the database
+    let unitSymbol = parsedProps?.unitSymbol
+    if (parsedProps?.targetDensityUnitId && !unitSymbol) {
+      const unitRecord = await db
         .select({ symbol: unit.symbol })
         .from(unit)
-        .where(eq(unit.id, definitionData.targetDensityUnitId))
+        .where(eq(unit.id, parsedProps.targetDensityUnitId))
         .get()
-      unitSymbol = unitData?.symbol
+      if (unitRecord) {
+        unitSymbol = unitRecord.symbol
+      }
     }
 
     const batchData = {
@@ -173,46 +331,15 @@ controls.get('/batches/:id/summary', async (c) => {
         id: definitionData.id,
         name: definitionData.name,
         controlType: definitionData.controlType,
-        targetDensity: definitionData.targetDensity || undefined,
-        targetDensityUnitId: definitionData.targetDensityUnitId || undefined,
-        compositionId: definitionData.compositionId || undefined,
+        targetDensity: parsedProps?.targetDensity,
+        targetDensityUnitId: parsedProps?.targetDensityUnitId,
         unitSymbol: unitSymbol,
       } : undefined
     }
 
-    // Get composition details if available
-    let compositionDetails = null
-    if (batchData.definition?.compositionId) {
-      const comp = await db
-        .select({
-          id: composition.id,
-          label: composition.label,
-        })
-        .from(composition)
-        .where(eq(composition.id, batchData.definition.compositionId))
-        .get()
-
-      if (comp) {
-        const strainsList = await db
-          .select({
-            id: strain.id,
-            name: strain.name,
-            percentage: compositionStrain.percentage,
-          })
-          .from(compositionStrain)
-          .leftJoin(strain, eq(compositionStrain.strainId, strain.id))
-          .where(eq(compositionStrain.compositionId, batchData.definition.compositionId))
-        
-        compositionDetails = {
-          ...comp,
-          strains: strainsList,
-        }
-      }
-    }
-
     const batch = {
       ...batchData,
-      composition: compositionDetails
+      composition: parsedProps && parsedProps.strains.length > 0 ? { strains: parsedProps.strains } : null
     }
 
     // Get all specimens for this batch
@@ -271,8 +398,8 @@ controls.get('/batches/:id/summary', async (c) => {
 
     const containerIds = containers.map(c => c.id)
 
-    // Get container type information with manifest names and locations
-    const [micronixTubesList, cryovialBoxesList, boxesList, sheetsList, bagsList, staticWellsList] = await Promise.all([
+    // Get container type information with collection names and locations
+    const [micronixTubesList, cryovialBoxesList, sheetsList, bagsList, staticWellsList] = await Promise.all([
       (containerIds.length > 0
         ? db
             .select({ 
@@ -281,10 +408,8 @@ controls.get('/batches/:id/summary', async (c) => {
               barcode: micronixTube.barcode,
               position: micronixTube.position,
               collectionName: micronixPlate.name,
-              locationRoot: location.locationRoot,
-              levelI: location.levelI,
-              levelII: location.levelII,
-              levelIII: location.levelIII,
+              locationPath: location.path,
+              locationName: location.name,
             })
             .from(micronixTube)
             .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
@@ -299,33 +424,13 @@ controls.get('/batches/:id/summary', async (c) => {
               barcode: cryovialTube.barcode,
               position: cryovialTube.position,
               collectionName: cryovialBox.name,
-              locationRoot: location.locationRoot,
-              levelI: location.levelI,
-              levelII: location.levelII,
-              levelIII: location.levelIII,
+              locationPath: location.path,
+              locationName: location.name,
             })
             .from(cryovialTube)
             .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
             .leftJoin(location, eq(cryovialBox.locationId, location.id))
             .where(inArray(cryovialTube.id, containerIds))
-        : []) as Promise<any[]>,
-      (containerIds.length > 0
-        ? db
-            .select({ 
-              id: tube.id, 
-              boxId: tube.boxId,
-              boxPosition: tube.boxPosition,
-              label: tube.label,
-              collectionName: box.name,
-              locationRoot: location.locationRoot,
-              levelI: location.levelI,
-              levelII: location.levelII,
-              levelIII: location.levelIII,
-            })
-            .from(tube)
-            .leftJoin(box, eq(tube.boxId, box.id))
-            .leftJoin(location, eq(box.locationId, location.id))
-            .where(inArray(tube.id, containerIds))
         : []) as Promise<any[]>,
       (containerIds.length > 0
         ? db
@@ -350,10 +455,8 @@ controls.get('/batches/:id/summary', async (c) => {
               collectionId: staticWell.collectionId,
               position: staticWell.position,
               collectionName: micronixPlate.name,
-              locationRoot: location.locationRoot,
-              levelI: location.levelI,
-              levelII: location.levelII,
-              levelIII: location.levelIII,
+              locationPath: location.path,
+              locationName: location.name,
             })
             .from(staticWell)
             .leftJoin(micronixPlate, eq(staticWell.collectionId, micronixPlate.id))
@@ -366,29 +469,47 @@ controls.get('/batches/:id/summary', async (c) => {
     const containerInfoMap = new Map<number, { type: string; collectionName: string; position?: string; id: number; locationPath?: string }>()
     
     function formatLocPath(loc: any, parentName?: string) {
-      if (!loc || !loc.locationRoot) return parentName
-      const parts = [loc.locationRoot, loc.levelI, loc.levelII]
-      if (loc.levelIII) parts.push(loc.levelIII)
-      let path = parts.filter(Boolean).join(' → ')
-      if (parentName) {
-        path += ` → ${parentName}`
+      if (!loc) return parentName || undefined
+      // Use the materialized path if available, otherwise use name
+      if (loc.locationPath) {
+        return parentName ? `${loc.locationPath} → ${parentName}` : loc.locationPath
       }
-      return path
+      if (loc.locationName) {
+        return parentName ? `${loc.locationName} → ${parentName}` : loc.locationName
+      }
+      return parentName || undefined
     }
     
     micronixTubesList.forEach(t => containerInfoMap.set(t.id, { type: 'micronix_tube', collectionName: t.collectionName || 'Unknown', position: t.position || undefined, id: t.collectionId, locationPath: formatLocPath(t) }))
     cryovialBoxesList.forEach(t => containerInfoMap.set(t.id, { type: 'cryovial_tube', collectionName: t.collectionName || 'Unknown', position: t.position || undefined, id: t.collectionId, locationPath: formatLocPath(t) }))
-    boxesList.forEach(t => containerInfoMap.set(t.id, { type: 'tube', collectionName: t.collectionName || 'Unknown', position: t.boxPosition || undefined, id: t.boxId, locationPath: formatLocPath(t) }))
     
     // For papers, we need to fetch the parent location separately if it's nested
     for (const t of sheetsList) {
       let locPath: string | undefined
       if (t.boxId) {
-        const res = await db.select({ box: box, location: location }).from(box).leftJoin(location, eq(box.locationId, location.id)).where(eq(box.id, t.boxId)).get()
-        locPath = formatLocPath(res?.location, res?.box.name)
+        const res = await db
+          .select({ 
+            box: box, 
+            locationPath: location.path,
+            locationName: location.name,
+          })
+          .from(box)
+          .leftJoin(location, eq(box.locationId, location.id))
+          .where(eq(box.id, t.boxId))
+          .get()
+        locPath = formatLocPath(res, res?.box.name)
       } else if (t.bagId) {
-        const res = await db.select({ bag: bag, location: location }).from(bag).leftJoin(location, eq(bag.locationId, location.id)).where(eq(bag.id, t.bagId)).get()
-        locPath = formatLocPath(res?.location, res?.bag.name)
+        const res = await db
+          .select({ 
+            bag: bag, 
+            locationPath: location.path,
+            locationName: location.name,
+          })
+          .from(bag)
+          .leftJoin(location, eq(bag.locationId, location.id))
+          .where(eq(bag.id, t.bagId))
+          .get()
+        locPath = formatLocPath(res, res?.bag.name)
       }
       containerInfoMap.set(t.id, { type: 'paper', collectionName: t.collectionName || 'Unknown', position: t.position || undefined, id: t.sheetId, locationPath: locPath })
     }
@@ -457,7 +578,7 @@ controls.get('/batches/:id/summary', async (c) => {
       totalQuantity: number
       remainingQuantity: number
       containerCount: number
-      manifests: Set<string>
+      collections: Set<string>
       locationPaths: Set<string>
     }>()
 
@@ -552,10 +673,8 @@ controls.get('/batches/:id/summary', async (c) => {
 
 // --- Control Definitions ---
 
-// List all control definitions
+// List all control definitions (filtered to blood controls)
 controls.get('/', async (c) => {
-  const type = c.req.query('type')
-  
   const batchCountSubquery = db
     .select({
       definitionId: controlBatch.controlDefinitionId,
@@ -596,82 +715,74 @@ controls.get('/', async (c) => {
     .innerJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
     .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
     .where(
-      sql`EXISTS (SELECT 1 FROM tube WHERE tube.id = ${storageContainer.id}) OR 
-          EXISTS (SELECT 1 FROM micronix_tube WHERE micronix_tube.id = ${storageContainer.id}) OR 
+      sql`EXISTS (SELECT 1 FROM micronix_tube WHERE micronix_tube.id = ${storageContainer.id}) OR 
           EXISTS (SELECT 1 FROM cryovial_tube WHERE cryovial_tube.id = ${storageContainer.id}) OR
           EXISTS (SELECT 1 FROM static_well WHERE static_well.id = ${storageContainer.id})`
     )
     .groupBy(controlBatch.controlDefinitionId)
     .as('tube_counts')
 
-  const definitionStrainsSubquery = db
-    .select({
-      definitionId: controlDefinition.id,
-      strainsJson: sql<string>`json_group_array(json_object('id', ${strain.id}, 'name', ${strain.name}))`.as('strains_json'),
-    })
-    .from(controlDefinition)
-    .innerJoin(compositionStrain, eq(controlDefinition.compositionId, compositionStrain.compositionId))
-    .innerJoin(strain, eq(compositionStrain.strainId, strain.id))
-    .groupBy(controlDefinition.id)
-    .as('definition_strains')
+  // Get all strains for name lookup
+  const allStrains = await db.select().from(strain)
+  const strainMap = new Map(allStrains.map(s => [s.id, { name: s.name }]))
 
-  let query = db
+  const query = db
     .select({
       id: controlDefinition.id,
       name: controlDefinition.name,
       controlType: controlDefinition.controlType,
-      compositionId: controlDefinition.compositionId,
-      targetDensity: controlDefinition.targetDensity,
-      targetDensityUnitId: controlDefinition.targetDensityUnitId,
       properties: controlDefinition.properties,
       created: controlDefinition.created,
       lastUpdated: controlDefinition.lastUpdated,
-      unitSymbol: unit.symbol,
       batchCount: sql<number>`COALESCE(${batchCountSubquery.count}, 0)`,
       specimenCount: sql<number>`COALESCE(${specimenCountSubquery.count}, 0)`,
       spotCount: sql<number>`COALESCE(${spotCountSubquery.count}, 0)`,
       tubeCount: sql<number>`COALESCE(${tubeCountSubquery.count}, 0)`,
       inventoryTotal: sql<number>`COALESCE(${spotCountSubquery.count}, 0) + COALESCE(${tubeCountSubquery.count}, 0)`,
-      strainsJson: definitionStrainsSubquery.strainsJson,
     })
     .from(controlDefinition)
-    .leftJoin(unit, eq(controlDefinition.targetDensityUnitId, unit.id))
     .leftJoin(batchCountSubquery, eq(controlDefinition.id, batchCountSubquery.definitionId))
     .leftJoin(specimenCountSubquery, eq(controlDefinition.id, specimenCountSubquery.definitionId))
     .leftJoin(spotCountSubquery, eq(controlDefinition.id, spotCountSubquery.definitionId))
     .leftJoin(tubeCountSubquery, eq(controlDefinition.id, tubeCountSubquery.definitionId))
-    .leftJoin(definitionStrainsSubquery, eq(controlDefinition.id, definitionStrainsSubquery.definitionId))
-  
-  if (type) {
-    query = query.where(eq(controlDefinition.controlType, type)) as any
-  }
+    .where(eq(controlDefinition.controlType, 'blood'))
   
   const results = await query
 
-  const controls = results.map(row => ({
-    ...row,
-    strains: row.strainsJson ? JSON.parse(row.strainsJson).filter((s: any) => s.id !== null) : []
-  }))
+  // Parse properties to extract strains and density
+  const controls = results.map(row => {
+    const parsed = parseControlProperties(row.properties, strainMap)
+    return {
+      ...row,
+      strains: parsed.strains,
+      targetDensity: parsed.targetDensity,
+      targetDensityUnitId: parsed.targetDensityUnitId,
+      unitSymbol: parsed.unitSymbol,
+    }
+  })
   
   return c.json({ controls })
 })
 
-// Get control definition by ID
+// Get control definition by ID (filtered to blood controls)
 controls.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
   
   if (isNaN(id)) {
-    return c.json({ error: 'Invalid control ID' }, 400)
+    return c.json({ error: 'Invalid blood control ID' }, 400)
   }
 
   const control = await db
     .select()
     .from(controlDefinition)
-    .where(eq(controlDefinition.id, id))
+    .where(and(
+      eq(controlDefinition.id, id),
+      eq(controlDefinition.controlType, 'blood')
+    ))
     .get()
 
   if (!control) {
-    return c.json({ error: 'Control not found' }, 404)
+    return c.json({ error: 'Blood control not found' }, 404)
   }
 
   return c.json({ control })
@@ -683,54 +794,49 @@ controls.get('/:id/summary', async (c) => {
   if (isNaN(id)) return c.json({ error: 'Invalid control ID' }, 400)
 
   try {
-    // 1. Get control definition and unit
+    // 1. Get control definition (filtered to blood controls)
     const control = await db
       .select({
         id: controlDefinition.id,
         name: controlDefinition.name,
         controlType: controlDefinition.controlType,
-        targetDensity: controlDefinition.targetDensity,
-        unitSymbol: unit.symbol,
-        compositionId: controlDefinition.compositionId,
         properties: controlDefinition.properties,
         created: controlDefinition.created,
       })
       .from(controlDefinition)
-      .leftJoin(unit, eq(controlDefinition.targetDensityUnitId, unit.id))
-      .where(eq(controlDefinition.id, id))
+      .where(and(
+        eq(controlDefinition.id, id),
+        eq(controlDefinition.controlType, 'blood')
+      ))
       .get()
 
-    if (!control) return c.json({ error: 'Control not found' }, 404)
+    if (!control) return c.json({ error: 'Blood control not found' }, 404)
 
-    // 2. Get composition details if available
-    let compositionDetails = null
-    if (control.compositionId) {
-      const comp = await db
-        .select({
-          id: composition.id,
-          label: composition.label,
-        })
-        .from(composition)
-        .where(eq(composition.id, control.compositionId))
+    // 2. Parse properties to get strain/density info
+    const allStrains = await db.select().from(strain)
+    const strainMap = new Map(allStrains.map(s => [s.id, { name: s.name }]))
+    const parsed = parseControlProperties(control.properties, strainMap)
+    
+    // If we have targetDensityUnitId but no unitSymbol, look it up from the database
+    let unitSymbol = parsed.unitSymbol
+    if (parsed.targetDensityUnitId && !unitSymbol) {
+      const unitRecord = await db
+        .select({ symbol: unit.symbol })
+        .from(unit)
+        .where(eq(unit.id, parsed.targetDensityUnitId))
         .get()
-
-      if (comp) {
-        const strainsList = await db
-          .select({
-            id: strain.id,
-            name: strain.name,
-            percentage: compositionStrain.percentage,
-          })
-          .from(compositionStrain)
-          .leftJoin(strain, eq(compositionStrain.strainId, strain.id))
-          .where(eq(compositionStrain.compositionId, control.compositionId))
-        
-        compositionDetails = {
-          ...comp,
-          strains: strainsList,
-        }
+      if (unitRecord) {
+        unitSymbol = unitRecord.symbol
       }
     }
+    
+    const controlWithParsed = {
+      ...control,
+      targetDensity: parsed.targetDensity,
+      unitSymbol: unitSymbol,
+    }
+    
+    const compositionDetails = parsed.strains.length > 0 ? { strains: parsed.strains } : null
 
     // 3. Get all batches and calculate stock levels
     const spotCountSubquery = db
@@ -753,8 +859,7 @@ controls.get('/:id/summary', async (c) => {
       .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
       .where(
         and(
-          sql`EXISTS (SELECT 1 FROM tube WHERE tube.id = ${storageContainer.id}) OR 
-              EXISTS (SELECT 1 FROM micronix_tube WHERE micronix_tube.id = ${storageContainer.id}) OR 
+          sql`EXISTS (SELECT 1 FROM micronix_tube WHERE micronix_tube.id = ${storageContainer.id}) OR 
               EXISTS (SELECT 1 FROM cryovial_tube WHERE cryovial_tube.id = ${storageContainer.id}) OR
               EXISTS (SELECT 1 FROM static_well WHERE static_well.id = ${storageContainer.id})`,
           sql`${storageContainer.remainingQuantity} > 0`
@@ -849,16 +954,6 @@ controls.get('/:id/summary', async (c) => {
             .select({ locationId: location.id })
             .from(location)
             .innerJoin(box, eq(location.id, box.locationId))
-            .innerJoin(tube, eq(box.id, tube.boxId))
-            .innerJoin(storageContainer, eq(tube.id, storageContainer.id))
-            .innerJoin(specimen, eq(storageContainer.specimenId, specimen.id))
-            .where(inArray(specimen.controlBatchId, batchIds))
-        )
-        .union(
-          db
-            .select({ locationId: location.id })
-            .from(location)
-            .innerJoin(box, eq(location.id, box.locationId))
             .innerJoin(sheet, eq(box.id, sheet.boxId))
             .innerJoin(paper, eq(sheet.id, paper.sheetId))
             .innerJoin(storageContainer, eq(paper.id, storageContainer.id))
@@ -881,7 +976,7 @@ controls.get('/:id/summary', async (c) => {
     }
     
     return c.json({
-      control,
+      control: controlWithParsed,
       composition: compositionDetails,
       batches: enrichedBatches,
       stats: {
@@ -901,27 +996,88 @@ controls.get('/:id/summary', async (c) => {
   }
 })
 
-// Create control definition
-controls.post('/', async (c) => {
+// Check for duplicate control definition (only checks blood controls)
+controls.post('/check-unique', async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
-      name: z.string().min(1),
-      controlType: z.enum(['blood', 'plasma_positive', 'plasma_negative', 'antibody', 'extraction', 'negative']),
-      compositionId: z.number().int().optional(),
+      controlType: z.enum(['blood', 'plasma_positive', 'plasma_negative', 'antibody', 'extraction', 'negative']).optional().default('blood'),
       targetDensity: z.number().optional(),
       targetDensityUnitId: z.number().int().optional(),
-      properties: z.record(z.string(), z.any()).optional(),
+      strains: z.array(z.object({
+        strainId: z.number().int(),
+        percentage: z.number().min(0).max(100),
+      })).optional(),
     })
     
     const data = schema.parse(body)
+    // Only check blood controls
+    const controlType = 'blood'
     
-    const [newControl] = await db
-      .insert(controlDefinition)
-      .values(data)
-      .returning()
+    // Get all definitions of blood type
+    const allDefinitions = await db
+      .select()
+      .from(controlDefinition)
+      .where(eq(controlDefinition.controlType, controlType))
     
-    return c.json({ control: newControl }, 201)
+    // Check each definition's properties
+    for (const def of allDefinitions) {
+      const props = def.properties as any
+      if (!props) continue
+      
+      // Check density match
+      if (data.targetDensity !== undefined) {
+        if (props.targetDensity !== data.targetDensity) continue
+      } else {
+        if (props.targetDensity !== undefined && props.targetDensity !== null) continue
+      }
+      
+      // Check unit match
+      if (data.targetDensityUnitId !== undefined) {
+        if (props.targetDensityUnitId !== data.targetDensityUnitId) continue
+      } else {
+        if (props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null) continue
+      }
+      
+      // Check strain composition match
+      if (data.strains && data.strains.length > 0) {
+        const defStrains = props.strains || []
+        if (defStrains.length !== data.strains.length) continue
+        
+        const strainIds = data.strains.map(s => s.strainId).sort()
+        const defStrainIds = defStrains.map((s: any) => (typeof s === 'object' ? s.id : s)).sort()
+        
+        if (strainIds.length !== defStrainIds.length) continue
+        
+        const idsMatch = strainIds.every((id, idx) => id === defStrainIds[idx])
+        if (!idsMatch) continue
+        
+        // Check percentages match
+        const strainMap = new Map(data.strains.map(s => [s.strainId, s.percentage]))
+        const defStrainMap = new Map(defStrains.map((s: any) => [
+          typeof s === 'object' ? s.id : s,
+          typeof s === 'object' ? s.percentage : undefined
+        ]))
+        
+        const percentagesMatch = strainIds.every(id => {
+          const pct = strainMap.get(id)
+          const defPct = defStrainMap.get(id)
+          return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+        })
+        
+        if (percentagesMatch) {
+          return c.json({ exists: true, controlDefinition: def })
+        }
+      } else {
+        // No strains provided, check if definition also has no strains
+        const defStrains = props.strains || []
+        if (defStrains.length === 0) {
+          return c.json({ exists: true, controlDefinition: def })
+        }
+      }
+    }
+    
+    return c.json({ exists: false })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
@@ -930,10 +1086,229 @@ controls.post('/', async (c) => {
   }
 })
 
-// List batches for a definition
+// Create control definition (defaults to blood)
+controls.post('/', async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      name: z.string().min(1),
+      controlType: z.enum(['blood', 'plasma_positive', 'plasma_negative', 'antibody', 'extraction', 'negative']).optional().default('blood'),
+      targetDensity: z.number().optional(),
+      targetDensityUnitId: z.number().int().optional(),
+      strains: z.array(z.object({
+        strainId: z.number().int(),
+        percentage: z.number().min(0).max(100),
+      })).optional(),
+      properties: z.record(z.string(), z.any()).optional(),
+    })
+    
+    const data = schema.parse(body)
+    // Ensure controlType is 'blood' for this endpoint
+    const controlType = 'blood'
+    const { strains, targetDensity, targetDensityUnitId, properties, ...baseData } = data
+    
+    // Build properties JSON
+    const props: any = { ...(properties || {}) }
+    
+    // For blood controls, add strains and density to properties
+    if (controlType === 'blood') {
+      if (strains && strains.length > 0) {
+        // Get strain names for storage
+        const strainIds = strains.map(s => s.strainId)
+        const strainRecords = await db
+          .select()
+          .from(strain)
+          .where(inArray(strain.id, strainIds))
+        const strainNameMap = new Map(strainRecords.map(s => [s.id, s.name]))
+        
+        // Validate all strains exist
+        const missingStrains = strainIds.filter(id => !strainNameMap.has(id))
+        if (missingStrains.length > 0) {
+          return c.json({ error: `Invalid strain IDs: ${missingStrains.join(', ')}` }, 400)
+        }
+        
+        props.strains = strains.map(s => ({
+          id: s.strainId,
+          name: strainNameMap.get(s.strainId)!,
+          percentage: s.percentage,
+        }))
+      }
+      if (targetDensity !== undefined && targetDensity !== null) {
+        props.targetDensity = targetDensity
+      }
+      if (targetDensityUnitId !== undefined) {
+        // Validate unit exists
+        const unitRecord = await db.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
+        if (!unitRecord) {
+          return c.json({ error: `Invalid unit ID: ${targetDensityUnitId}` }, 400)
+        }
+        props.targetDensityUnitId = targetDensityUnitId
+        props.targetDensityUnitSymbol = unitRecord.symbol
+      }
+    }
+    
+    const result = await db
+      .insert(controlDefinition)
+      .values({
+        ...baseData,
+        controlType,
+        properties: Object.keys(props).length > 0 ? props : null,
+      })
+      .returning()
+    
+    const newControl = result[0]
+    if (!newControl) {
+      throw new Error('Failed to create control definition: insert returned no result')
+    }
+    
+    return c.json({ control: newControl }, 201)
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    console.error('Error creating control definition:', error)
+    // Check for unique constraint violation
+    if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+      return c.json({ error: 'A control definition with this name already exists' }, 409)
+    }
+    return c.json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) }, 500)
+  }
+})
+
+// Update control definition (only blood controls)
+controls.patch('/:id', async (c) => {
+  try {
+    const id = parseInt(c.req.param('id'))
+    if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
+
+    // Get existing control to merge properties (filtered to blood controls)
+    const existing = await db
+      .select()
+      .from(controlDefinition)
+      .where(and(
+        eq(controlDefinition.id, id),
+        eq(controlDefinition.controlType, 'blood')
+      ))
+      .get()
+    
+    if (!existing) {
+      return c.json({ error: 'Blood control definition not found' }, 404)
+    }
+
+    const body = await c.req.json()
+    const schema = z.object({
+      name: z.string().min(1).optional(),
+      controlType: z.enum(['blood', 'plasma_positive', 'plasma_negative', 'antibody', 'extraction', 'negative']).optional(),
+      targetDensity: z.number().optional(),
+      targetDensityUnitId: z.number().int().optional(),
+      strains: z.array(z.object({
+        strainId: z.number().int(),
+        percentage: z.number().min(0).max(100),
+      })).optional(),
+      properties: z.record(z.string(), z.any()).optional(),
+    })
+    
+    const data = schema.parse(body)
+    const { strains, targetDensity, targetDensityUnitId, properties, ...baseData } = data
+    
+    // Merge properties
+    const existingProps = (existing.properties as any) || {}
+    const newProps: any = { ...existingProps, ...(properties || {}) }
+    
+    // Ensure controlType remains 'blood' (don't allow changing it)
+    const controlType = 'blood'
+    // For blood controls, update strains and density in properties
+    if (controlType === 'blood') {
+      if (strains !== undefined) {
+        if (strains.length > 0) {
+          // Get strain names
+          const strainIds = strains.map(s => s.strainId)
+          const strainRecords = await db
+            .select()
+            .from(strain)
+            .where(inArray(strain.id, strainIds))
+          const strainNameMap = new Map(strainRecords.map(s => [s.id, s.name]))
+          
+          newProps.strains = strains.map(s => ({
+            id: s.strainId,
+            name: strainNameMap.get(s.strainId) || `Strain ${s.strainId}`,
+            percentage: s.percentage,
+          }))
+        } else {
+          // Remove strains
+          delete newProps.strains
+        }
+      }
+      if (targetDensity !== undefined) {
+        if (targetDensity === null) {
+          delete newProps.targetDensity
+        } else {
+          newProps.targetDensity = targetDensity
+        }
+      }
+      if (targetDensityUnitId !== undefined) {
+        if (targetDensityUnitId === null) {
+          delete newProps.targetDensityUnitId
+          delete newProps.targetDensityUnitSymbol
+        } else {
+          newProps.targetDensityUnitId = targetDensityUnitId
+          const unitRecord = await db.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
+          if (unitRecord) {
+            newProps.targetDensityUnitSymbol = unitRecord.symbol
+          }
+        }
+      }
+    }
+    
+    // Update control definition
+    const [updatedControl] = await db
+      .update(controlDefinition)
+      .set({
+        ...baseData,
+        properties: Object.keys(newProps).length > 0 ? newProps : null,
+        lastUpdated: sql`current_timestamp`,
+      })
+      .where(eq(controlDefinition.id, id))
+      .returning()
+    
+    return c.json({ control: updatedControl })
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    console.error('Error updating control definition:', error)
+    const isDevelopment = process.env.NODE_ENV !== 'production'
+    return c.json({ 
+      error: error?.message || 'Failed to update control definition',
+      ...(isDevelopment && { 
+        details: error?.message,
+        stack: error?.stack 
+      }),
+      ...(!isDevelopment && { 
+        errorCode: 'UPDATE_CONTROL_ERROR'
+      })
+    }, 500)
+  }
+})
+
+// List batches for a definition (filtered to blood controls)
 controls.get('/:id/batches', async (c) => {
   const id = parseInt(c.req.param('id'))
-  if (isNaN(id)) return c.json({ error: 'Invalid control ID' }, 400)
+  if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
+
+  // Verify definition is a blood control
+  const definition = await db
+    .select()
+    .from(controlDefinition)
+    .where(and(
+      eq(controlDefinition.id, id),
+      eq(controlDefinition.controlType, 'blood')
+    ))
+    .get()
+
+  if (!definition) {
+    return c.json({ error: 'Blood control definition not found' }, 404)
+  }
 
   const batches = await db
     .select()
@@ -944,11 +1319,25 @@ controls.get('/:id/batches', async (c) => {
   return c.json({ batches })
 })
 
-// Create a new batch
+// Create a new batch (only for blood controls)
 controls.post('/:id/batches', async (c) => {
   try {
     const definitionId = parseInt(c.req.param('id'))
-    if (isNaN(definitionId)) return c.json({ error: 'Invalid control ID' }, 400)
+    if (isNaN(definitionId)) return c.json({ error: 'Invalid blood control ID' }, 400)
+
+    // Verify definition is a blood control
+    const definition = await db
+      .select()
+      .from(controlDefinition)
+      .where(and(
+        eq(controlDefinition.id, definitionId),
+        eq(controlDefinition.controlType, 'blood')
+      ))
+      .get()
+
+    if (!definition) {
+      return c.json({ error: 'Blood control definition not found' }, 404)
+    }
 
     const body = await c.req.json()
     const schema = z.object({
@@ -973,6 +1362,113 @@ controls.post('/:id/batches', async (c) => {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
     return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// Create batch with specimens
+controls.post('/batches/create-with-specimens', async (c) => {
+  try {
+    const body = await c.req.json()
+    const { createBatchWithSpecimens } = await import('../lib/control-batch-creation')
+    const result = await createBatchWithSpecimens(body)
+    return c.json(result, 201)
+  } catch (error: any) {
+    console.error('Error creating batch with specimens:', error)
+    return c.json({ error: error.message || 'Failed to create batch with specimens' }, 500)
+  }
+})
+
+// Add specimens to existing batch
+controls.post('/batches/:id/specimens/bulk', async (c) => {
+  try {
+    const batchId = parseInt(c.req.param('id'))
+    if (isNaN(batchId)) return c.json({ error: 'Invalid batch ID' }, 400)
+
+    const body = await c.req.json()
+    const { addSpecimensToBatch } = await import('../lib/control-batch-creation')
+    const result = await addSpecimensToBatch(batchId, body)
+    return c.json(result, 201)
+  } catch (error: any) {
+    console.error('Error adding specimens to batch:', error)
+    return c.json({ error: error.message || 'Failed to add specimens to batch' }, 500)
+  }
+})
+
+// Validate CSV
+controls.post('/batches/validate-csv', async (c) => {
+  try {
+    const body = await c.req.json()
+    const { csvText } = body
+
+    if (!csvText || typeof csvText !== 'string') {
+      return c.json({ error: 'CSV text is required' }, 400)
+    }
+
+    // Parse CSV (simplified - just check format)
+    const lines = csvText.split('\n').filter(line => line.trim())
+    if (lines.length < 2) {
+      return c.json({
+        valid: false,
+        errors: [{ row: 0, error: 'CSV must have at least a header and one data row' }],
+        preview: [],
+      })
+    }
+
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase())
+    const requiredColumns = ['specimen_type_name']
+    const missingColumns = requiredColumns.filter(col => !header.includes(col))
+
+    if (missingColumns.length > 0) {
+      return c.json({
+        valid: false,
+        errors: [{ row: 0, error: `Missing required columns: ${missingColumns.join(', ')}` }],
+        preview: [],
+      })
+    }
+
+    // Validate specimen types exist
+    const specimenTypeNames = new Set<string>()
+    const errors: Array<{ row: number; field?: string; error: string }> = []
+
+    for (let i = 1; i < Math.min(lines.length, 11); i++) {
+      const row = lines[i].split(',')
+      const specimenTypeIdx = header.indexOf('specimen_type_name')
+      if (specimenTypeIdx >= 0 && row[specimenTypeIdx]) {
+        const typeName = row[specimenTypeIdx].trim()
+        if (typeName) {
+          specimenTypeNames.add(typeName)
+        }
+      }
+    }
+
+    // Check if specimen types exist
+    const allSpecimenTypes = await db.select().from(specimenType)
+    const existingTypeNames = new Set(allSpecimenTypes.map(t => t.name))
+
+    for (const typeName of specimenTypeNames) {
+      if (!existingTypeNames.has(typeName)) {
+        errors.push({ row: 0, error: `Unknown specimen type: ${typeName}` })
+      }
+    }
+
+    // Generate preview
+    const preview = lines.slice(1, 6).map((line, idx) => {
+      const values = line.split(',')
+      const obj: Record<string, any> = {}
+      header.forEach((h, i) => {
+        obj[h] = values[i]?.trim() || ''
+      })
+      return obj
+    })
+
+    return c.json({
+      valid: errors.length === 0,
+      errors,
+      preview,
+    })
+  } catch (error: any) {
+    console.error('Error validating CSV:', error)
+    return c.json({ error: 'Failed to validate CSV', details: error.message }, 500)
   }
 })
 

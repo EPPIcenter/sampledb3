@@ -6,7 +6,6 @@ import { eq } from 'drizzle-orm'
 export interface ContainerDefaults {
   micronix_tube: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
   cryovial_tube: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
-  tube: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
   paper: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
   static_well: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
 }

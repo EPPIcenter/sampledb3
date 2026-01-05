@@ -3,7 +3,7 @@ import CollectionPicker, { type CollectionType } from './CollectionPicker'
 import LocationPicker from './LocationPicker'
 import api, { settingsApi, type Unit, type ContainerDefaults } from '../lib/api'
 
-export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'tube' | 'paper' | 'static_well'
+export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
 export interface ContainerData {
   mode: 'create' | 'link' | 'skip'
@@ -15,9 +15,9 @@ export interface ContainerData {
   barcode?: string
   position?: string
   label?: string
-  stateId?: number
   statusId?: number
   comment?: string
+  unitId?: number
 }
 
 interface ContainerRegistrationProps {
@@ -55,6 +55,8 @@ export default function ContainerRegistration({
   const [units, setUnits] = useState<Unit[]>([])
   const [defaultUnitSymbol, setDefaultUnitSymbol] = useState<string | null>(null)
   const [selectedUnitId, setSelectedUnitId] = useState<number | undefined>(defaultValue?.unitId)
+  const [unitsError, setUnitsError] = useState<string | null>(null)
+  const [defaultUnitError, setDefaultUnitError] = useState<string | null>(null)
 
   useEffect(() => {
     loadUnits()
@@ -63,15 +65,22 @@ export default function ContainerRegistration({
 
   const loadUnits = async () => {
     try {
-      const res = await settingsApi.getUnits()
-      setUnits(res.data)
-    } catch (err) {
+      setUnitsError(null)
+      // Load units filtered by container type
+      const res = await settingsApi.getContainerTypeUnits(containerType)
+      setUnits(res.data.units || [])
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.error || err?.message || 'Failed to load units for this container type'
+      setUnitsError(errorMessage)
+      setUnits([])
       console.error('Failed to load units:', err)
+      // Don't fallback - show error to user instead
     }
   }
 
   const loadDefaultUnit = async () => {
     try {
+      setDefaultUnitError(null)
       const res = await settingsApi.get('container_defaults')
       const defaults = res.data.value as ContainerDefaults | null
       if (defaults && defaults[containerType]) {
@@ -86,8 +95,11 @@ export default function ContainerRegistration({
           }
         }
       }
-    } catch (err) {
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.error || err?.message || 'Failed to load default unit settings'
+      setDefaultUnitError(errorMessage)
       console.error('Failed to load default unit:', err)
+      // Show warning but don't block form usage
     }
   }
 
@@ -114,7 +126,6 @@ export default function ContainerRegistration({
         return 'micronix_plate'
       case 'cryovial_tube':
         return 'cryovial_box'
-      case 'tube':
       case 'paper':
         return 'box'
       default:
@@ -148,14 +159,6 @@ export default function ContainerRegistration({
 
       if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && !formData.position) {
         errors.position = 'Position is required for ' + (containerType === 'micronix_tube' ? 'micronix tubes' : 'cryovial tubes')
-      }
-
-      if (containerType === 'tube' && !formData.label) {
-        errors.label = 'Label is required for generic tubes'
-      }
-
-      if (containerType === 'tube' && !formData.position) {
-        errors.position = 'Box position is required for generic tubes'
       }
 
       if (containerType === 'paper' && !formData.label) {
@@ -232,7 +235,6 @@ export default function ContainerRegistration({
               >
                 <option value="micronix_tube">Micronix Tube</option>
                 <option value="cryovial_tube">Cryovial Tube</option>
-                <option value="tube">Generic Tube</option>
                 <option value="paper">Paper</option>
                 <option value="static_well">Static Well</option>
               </select>
@@ -437,48 +439,13 @@ export default function ContainerRegistration({
                     type="text"
                     value={formData.position || ''}
                     onChange={(e) => handleFieldChange('position', e.target.value)}
-                    placeholder={containerType === 'micronix_tube' ? 'e.g., A01, B12' : 'e.g., A1, B5'}
+                    placeholder="e.g., A01, B12"
                     className={`form-input ${validationErrors.position ? 'border-red-300' : ''}`}
                   />
                   {validationErrors.position && (
                     <p className="mt-1 text-sm text-red-600">{validationErrors.position}</p>
                   )}
                 </div>
-              )}
-
-              {containerType === 'tube' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Label *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.label || ''}
-                      onChange={(e) => handleFieldChange('label', e.target.value)}
-                      placeholder="Enter label"
-                      className={`form-input ${validationErrors.label ? 'border-red-300' : ''}`}
-                    />
-                    {validationErrors.label && (
-                      <p className="mt-1 text-sm text-red-600">{validationErrors.label}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Box Position *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.position || ''}
-                      onChange={(e) => handleFieldChange('position', e.target.value)}
-                      placeholder="e.g., 1, A1"
-                      className={`form-input ${validationErrors.position ? 'border-red-300' : ''}`}
-                    />
-                    {validationErrors.position && (
-                      <p className="mt-1 text-sm text-red-600">{validationErrors.position}</p>
-                    )}
-                  </div>
-                </>
               )}
 
               {containerType === 'paper' && (
@@ -504,6 +471,16 @@ export default function ContainerRegistration({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Unit (Optional)
                 </label>
+                {unitsError && (
+                  <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                    {unitsError}
+                  </div>
+                )}
+                {defaultUnitError && (
+                  <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-700">
+                    Warning: {defaultUnitError}
+                  </div>
+                )}
                 <select
                   value={selectedUnitId || ''}
                   onChange={(e) => {
@@ -511,6 +488,7 @@ export default function ContainerRegistration({
                     setSelectedUnitId(unitId)
                   }}
                   className="form-select"
+                  disabled={unitsError !== null}
                 >
                   <option value="">Use default ({defaultUnitSymbol || 'not set'})</option>
                   {units.map((unit) => (

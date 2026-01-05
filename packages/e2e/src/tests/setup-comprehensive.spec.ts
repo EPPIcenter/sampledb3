@@ -77,8 +77,7 @@ test.describe('Comprehensive Setup Flow', () => {
         await page.getByPlaceholder('Name (e.g. E. coli K12)').press('Enter');
         await expect(page.locator('text=Test Strain')).toBeVisible();
         
-        // Add composition with strain
-        // This would require interacting with the CompositionEditor component
+        // Compositions are no longer used - strain data is now embedded in control definitions via properties JSON
         // For now, we'll just verify the step is accessible
         
         // Finish setup

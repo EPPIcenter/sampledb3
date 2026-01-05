@@ -88,7 +88,7 @@ describe('ContainerMovePapers', () => {
             return Promise.resolve({ data: { collections: [{ id: 2, name: 'Source Bag', itemCount: 5, locationId: 10 }] } } as any)
         })
         vi.mocked(locationsApi.list).mockResolvedValue({
-            data: { locations: [{ id: 10, locationRoot: 'Freezer', levelI: 'Shelf 1', levelII: '', storageTypeId: '1' }] }
+            data: { locations: [{ id: 10, name: 'Freezer', parentId: null, storageTypeId: '1', canContainCollections: true, path: 'Freezer' }] }
         } as any)
 
         render(<ContainerMovePapers />, { wrapper: Wrapper })

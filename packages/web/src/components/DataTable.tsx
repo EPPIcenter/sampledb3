@@ -75,7 +75,7 @@ export default function DataTable<T extends { id: number }>({
       const isInputFocused = activeElement && (
         activeElement.tagName === 'INPUT' ||
         activeElement.tagName === 'TEXTAREA' ||
-        activeElement.isContentEditable
+        (activeElement instanceof HTMLElement && activeElement.isContentEditable)
       )
 
       if (isInputFocused) return

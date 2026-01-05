@@ -107,13 +107,6 @@ export default function BoxDetail() {
       <div className="bg-white rounded-lg shadow p-3 mb-4">
         <div className="flex flex-wrap items-center gap-4 text-xs">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-700">Tubes:</span>
-            <span className="text-gray-900">{tubes.length}</span>
-            {activeTubes > 0 && (
-              <span className="text-green-600">({activeTubes} active)</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
             <span className="font-semibold text-gray-700">Sheets:</span>
             <span className="text-gray-900">{sheets.length}</span>
           </div>
@@ -128,56 +121,6 @@ export default function BoxDetail() {
       </div>
 
       <div className="space-y-4">
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-base font-semibold text-gray-900 mb-2">Tubes</h2>
-          {tubes.length === 0 && (
-            <p className="text-xs text-gray-500">No tubes in this box.</p>
-          )}
-          {tubes.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-              {tubes.map((tube: any) => {
-                const hasContainer = !!tube.container
-                const isClickable = hasContainer && !!tube.id
-                
-                return (
-                  <button
-                    key={tube.id}
-                    type="button"
-                    onClick={() => {
-                      if (tube.id) navigate(`/containers/${tube.id}`)
-                    }}
-                    disabled={!isClickable}
-                    className={`flex items-center justify-between rounded border px-2 py-1.5 text-xs text-left transition-colors ${
-                      isClickable
-                        ? 'hover:border-blue-300 hover:bg-blue-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400'
-                        : 'bg-gray-50 opacity-50 cursor-default'
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-gray-900 truncate">
-                        {tube.boxPosition}
-                      </div>
-                      <div className="text-[10px] text-gray-600 truncate">
-                        {tube.label}
-                      </div>
-                      {tube.container?.specimenId && (
-                        <div className="mt-0.5 text-[9px] text-gray-500 truncate">
-                          Spec: {tube.container.specimenId}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-0.5 flex-shrink-0 ml-1">
-                      <div className={`px-1 py-0.5 rounded text-[8px] font-bold ${tube.container?.remainingQuantity > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {tube.container?.remainingQuantity > 0 ? 'ACTIVE' : 'EMPTY'}
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
         <div className="space-y-3">
           <h2 className="text-base font-semibold text-gray-900">Sheets in this Box</h2>
           {sheets.length === 0 && (

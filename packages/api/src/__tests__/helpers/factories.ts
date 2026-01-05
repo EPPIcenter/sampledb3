@@ -1,5 +1,5 @@
 import type { Database } from '../../db/client'
-import { tag, storageType, specimenType, sampleType, strain, composition, storageContainer, location, compositionStrain, controlDefinition, specimen, unit, study, studySubject, controlBatch } from '../../db/schema'
+import { tag, storageType, specimenType, strain, storageContainer, location, controlDefinition, specimen, unit, study, studySubject, controlBatch } from '../../db/schema'
 
 /**
  * Test data factories for creating test entities
@@ -19,21 +19,9 @@ export interface TestSpecimenType {
   name: string
 }
 
-export interface TestSampleType {
-  name: string
-  description?: string
-  parentId?: number
-}
-
 export interface TestStrain {
   name: string
   description?: string
-}
-
-export interface TestComposition {
-  index?: number
-  label: string
-  legacy?: number
 }
 
 /**
@@ -66,29 +54,10 @@ export async function createTestSpecimenType(db: Database, data: TestSpecimenTyp
 }
 
 /**
- * Create a test sample type
- */
-export async function createTestSampleType(db: Database, data: TestSampleType) {
-  const [result] = await db.insert(sampleType).values(data).returning()
-  return result
-}
-
-/**
  * Create a test strain
  */
 export async function createTestStrain(db: Database, data: TestStrain) {
   const [result] = await db.insert(strain).values(data).returning()
-  return result
-}
-
-/**
- * Create a test composition
- */
-export async function createTestComposition(db: Database, data: TestComposition) {
-  const [result] = await db.insert(composition).values({
-    ...data,
-    legacy: data.legacy ?? 0,
-  }).returning()
   return result
 }
 
@@ -145,33 +114,42 @@ export async function createTestStorageContainer(
  * Create a test location (for testing storage type "in use")
  */
 export async function createTestLocation(db: Database, data: {
-  locationRoot: string
-  levelI: string
-  levelII: string
-  levelIII?: string
-  storageTypeId: string
+  name: string
+  parentId?: number | null
+  storageTypeId?: string | null
   description?: string
+  canContainCollections?: boolean
+  path?: string
 }) {
-  const [result] = await db.insert(location).values(data).returning()
+  const now = new Date().toISOString()
+  const insertResult = await db.insert(location).values({
+    name: data.name,
+    parentId: data.parentId ?? null,
+    storageTypeId: data.storageTypeId ?? null,
+    description: data.description,
+    canContainCollections: data.canContainCollections ?? false,
+    path: data.path ?? data.name,
+    created: now,
+    lastUpdated: now,
+  }).returning()
+  
+  const result = Array.isArray(insertResult) ? insertResult[0] : insertResult
   return result
 }
 
 /**
- * Create a test composition-strain relationship
+ * Create a test control definition
  */
-export async function createTestCompositionStrain(db: Database, compositionId: number, strainId: number, percentage: number = 0.0) {
-  await db.insert(compositionStrain).values({ compositionId, strainId, percentage })
-}
-
-/**
- * Create a test control definition (for testing composition "in use")
- */
-export async function createTestControlDefinition(db: Database, compositionId: number) {
+export async function createTestControlDefinition(db: Database, data?: {
+  name?: string
+  controlType?: 'blood' | 'plasma_positive' | 'plasma_negative' | 'antibody' | 'extraction' | 'negative'
+  properties?: any
+}) {
   const now = new Date().toISOString()
   const [result] = await db.insert(controlDefinition).values({
-    name: `Control ${compositionId}`,
-    controlType: 'blood',
-    compositionId,
+    name: data?.name || `Control ${Date.now()}`,
+    controlType: data?.controlType || 'blood',
+    properties: data?.properties ? JSON.stringify(data.properties) : null,
     created: now,
     lastUpdated: now,
   }).returning()

@@ -12,7 +12,6 @@ import {
 const CONTAINER_TYPES = [
   { value: 'micronix_tube', label: 'Micronix Tube' },
   { value: 'cryovial_tube', label: 'Cryovial Tube' },
-  { value: 'tube', label: 'Tube' },
   { value: 'paper', label: 'Paper' },
   { value: 'static_well', label: 'Static Well' },
 ]
@@ -95,8 +94,8 @@ export default function Export() {
       ])
       
       setSpecimenTypes(
-        Array.isArray(specimenTypesRes?.data?.specimen_types)
-          ? specimenTypesRes.data.specimen_types.map((st: any) => ({
+        Array.isArray(specimenTypesRes?.data?.specimenTypes)
+          ? specimenTypesRes.data.specimenTypes.map((st: any) => ({
               id: st.id,
               name: st.name,
               created: st.created || '',

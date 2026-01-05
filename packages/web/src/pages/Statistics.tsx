@@ -54,9 +54,6 @@ export default function Statistics() {
       if (filtersToApply.collectionDateTo) apiFilters.collection_date_to = filtersToApply.collectionDateTo
       if (filtersToApply.createdFrom) apiFilters.created_from = filtersToApply.createdFrom
       if (filtersToApply.createdTo) apiFilters.created_to = filtersToApply.createdTo
-      if (filtersToApply.locationRoot) apiFilters.location_root = filtersToApply.locationRoot
-      if (filtersToApply.locationLevelI) apiFilters.location_level_i = filtersToApply.locationLevelI
-      if (filtersToApply.locationLevelII) apiFilters.location_level_ii = filtersToApply.locationLevelII
       if (filtersToApply.locationId) apiFilters.location_id = filtersToApply.locationId
 
       const response = await statisticsApi.get(apiFilters)
@@ -108,10 +105,9 @@ export default function Statistics() {
 
   const containerTagChartData = useMemo(() => {
     if (!data) return []
-    return Object.entries(data.containers.byTags || {}).map(([name, value]) => ({
-      name,
-      value,
-    }))
+    return Object.entries(data.containers.byTags)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, value]) => ({ name, value }))
   }, [data])
 
   // Helper function to get bin key for a date based on bin size
@@ -237,9 +233,9 @@ export default function Statistics() {
     }))
   }, [data])
 
-  const locationRootChartData = useMemo(() => {
+  const byRootLocationChartData = useMemo(() => {
     if (!data) return []
-    return Object.entries(data.storage.byLocationRoot).map(([name, value]) => ({
+    return Object.entries(data.storage.byRootLocation).map(([name, value]) => ({
       name,
       value,
     }))
@@ -455,8 +451,8 @@ export default function Statistics() {
             />
             <StatChart
               type="pie"
-              data={locationRootChartData}
-              title="Containers by Location Root"
+              data={byRootLocationChartData}
+              title="Containers by Root Location"
               showPercentageList={true}
             />
           </div>

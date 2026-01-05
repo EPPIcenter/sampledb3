@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import api, { collectionsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
@@ -7,8 +7,13 @@ import SkeletonDetailPage from '../components/SkeletonDetailPage'
 export default function SheetDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
+  
+  // Get target position and containerId from URL query params
+  const targetPosition = searchParams.get('position')
+  const targetContainerId = searchParams.get('containerId')
 
   useEffect(() => {
     if (!id) return
@@ -28,6 +33,19 @@ export default function SheetDetail() {
 
     fetchData()
   }, [id])
+
+  // Scroll to highlighted container when page loads
+  useEffect(() => {
+    if (targetPosition && data?.papers) {
+      // Small delay to ensure DOM is rendered
+      setTimeout(() => {
+        const highlightedElement = document.querySelector('[data-highlighted-position="true"]')
+        if (highlightedElement) {
+          highlightedElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 100)
+    }
+  }, [targetPosition, data])
 
   if (loading) {
     return <SkeletonDetailPage sections={1} />
@@ -81,14 +99,41 @@ export default function SheetDetail() {
               const hasContainer = !!p.container
               const isActive = p.container?.remainingQuantity > 0
               
+              // Check if this paper should be highlighted
+              // Normalize positions for comparison (trim whitespace, handle null/undefined)
+              const normalizePos = (pos: string | null | undefined) => {
+                if (!pos) return null
+                return pos.toString().trim().toUpperCase()
+              }
+              
+              const normalizedTarget = normalizePos(targetPosition)
+              const normalizedPaper = normalizePos(p.position)
+              
+              // Try multiple matching strategies
+              const isHighlighted = (targetPosition || targetContainerId) && (
+                // 1. Direct normalized position match (case-insensitive, trimmed)
+                (normalizedTarget && normalizedPaper && normalizedTarget === normalizedPaper) ||
+                // 2. Match by ID if target is #ID format
+                (targetPosition && targetPosition.trim().startsWith('#') && targetPosition.trim() === `#${p.id}`) ||
+                // 3. Match if paper has no position but target matches the ID format
+                (!p.position && normalizedTarget === `#${p.id}`.toUpperCase()) ||
+                // 4. Match by container ID (fallback when position is missing)
+                (targetContainerId && targetContainerId === String(p.id)) ||
+                // 5. If position is null/empty, try matching by container ID from position param
+                (!p.position && targetPosition && !normalizedTarget?.startsWith('#') && targetPosition.trim() === String(p.id))
+              )
+              
               return (
                 <button
                   key={p.id}
                   onClick={() => navigate(`/containers/${p.id}`)}
+                  data-highlighted-position={isHighlighted ? 'true' : 'false'}
                   className={`p-3 rounded-lg border text-left transition-all ${
-                    isActive 
-                      ? 'border-green-200 bg-green-50 hover:border-green-400 hover:shadow-md' 
-                      : 'border-gray-100 bg-gray-50 hover:border-gray-200 hover:shadow-md'
+                    isHighlighted
+                      ? 'ring-4 ring-yellow-400 ring-offset-2 border-yellow-500 shadow-lg bg-yellow-50'
+                      : isActive 
+                        ? 'border-green-200 bg-green-50 hover:border-green-400 hover:shadow-md' 
+                        : 'border-gray-100 bg-gray-50 hover:border-gray-200 hover:shadow-md'
                   }`}
                 >
                   <div className="flex justify-between items-start mb-1">

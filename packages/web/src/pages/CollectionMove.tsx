@@ -105,34 +105,12 @@ export default function CollectionMove() {
 
     // Use the last selection (most specific)
     const selection = selections[selections.length - 1]
-    if (selection.type === 'location' && selection.locationId) {
-      setTargetLocationId(selection.locationId)
-      setTargetLocationPath(selection.path)
-      setCurrentStep('confirm')
-    } else {
-      // If not a specific location, find the location from the tree
-      const location = locations.find((loc) => {
-        if (selection.type === 'location' && selection.locationId) {
-          return loc.id === selection.locationId
-        }
-        // Match by hierarchy
-        return (
-          loc.locationRoot === selection.root &&
-          (selection.type === 'root' ||
-            (loc.levelI === selection.levelI &&
-              (selection.type === 'levelI' ||
-                (loc.levelII === selection.levelII &&
-                  (selection.type === 'levelII' || loc.id === selection.locationId)))))
-        )
-      })
-
+    if (selection.locationId) {
+      // Find the location to get its path
+      const location = locations.find((loc) => loc.id === selection.locationId)
       if (location) {
-        // Build location path
-        const parts = [location.locationRoot, location.levelI, location.levelII]
-        if (location.levelIII) parts.push(location.levelIII)
-        const path = parts.filter(Boolean).join(' → ')
-        setTargetLocationId(location.id)
-        setTargetLocationPath(path)
+        setTargetLocationId(selection.locationId)
+        setTargetLocationPath(location.path || selection.path || location.name)
         setCurrentStep('confirm')
       }
     }
@@ -389,10 +367,9 @@ export default function CollectionMove() {
                 targetLocationId
                   ? [
                       {
-                        type: 'location',
-                        root: locations.find((l) => l.id === targetLocationId)?.locationRoot || '',
                         locationId: targetLocationId,
                         path: targetLocationPath,
+                        name: locations.find(l => l.id === targetLocationId)?.name || '',
                       },
                     ]
                   : []

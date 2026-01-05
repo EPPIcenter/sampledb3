@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../db/client'
-import { unit } from '../db/schema'
-import { eq, inArray } from 'drizzle-orm'
+import { unit, containerTypeUnit } from '../db/schema'
+import { eq, inArray, and } from 'drizzle-orm'
 import {
   getContainerDefaults,
   setContainerDefaults,
@@ -124,11 +124,6 @@ const containerDefaultsSchema = z.object({
     remainingQuantity: z.number().positive(),
     defaultUnitSymbol: z.string().min(1),
   }),
-  tube: z.object({
-    totalQuantity: z.number().positive(),
-    remainingQuantity: z.number().positive(),
-    defaultUnitSymbol: z.string().min(1),
-  }),
   paper: z.object({
     totalQuantity: z.number().positive(),
     remainingQuantity: z.number().positive(),
@@ -200,7 +195,6 @@ settings.put('/:key', async (c) => {
         const unitSymbols = [
           validated.micronix_tube.defaultUnitSymbol,
           validated.cryovial_tube.defaultUnitSymbol,
-          validated.tube.defaultUnitSymbol,
           validated.paper.defaultUnitSymbol,
           validated.static_well.defaultUnitSymbol,
         ]
@@ -267,6 +261,127 @@ settings.put('/:key', async (c) => {
       }, 400)
     }
     return c.json({ error: 'Internal server error', details: error.message }, 500)
+  }
+})
+
+// Container Type / Unit Relationship Endpoints
+
+const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', 'static_well'])
+
+// GET /api/settings/container-types/:containerType/units - Get allowed units for a container type
+settings.get('/container-types/:containerType/units', async (c) => {
+  try {
+    const containerType = c.req.param('containerType')
+    
+    if (!containerTypeSchema.safeParse(containerType).success) {
+      return c.json({ error: 'Invalid container type' }, 400)
+    }
+
+    const relationships = await db
+      .select({
+        id: unit.id,
+        symbol: unit.symbol,
+        name: unit.name,
+        category: unit.category,
+      })
+      .from(containerTypeUnit)
+      .innerJoin(unit, eq(containerTypeUnit.unitId, unit.id))
+      .where(eq(containerTypeUnit.containerType, containerType as any))
+
+    return c.json({ units: relationships })
+  } catch (error) {
+    console.error('Error fetching units:', error)
+    return c.json({ error: 'Failed to fetch units' }, 500)
+  }
+})
+
+// POST /api/settings/container-types/:containerType/units - Add allowed unit for a container type
+settings.post('/container-types/:containerType/units', async (c) => {
+  try {
+    const containerType = c.req.param('containerType')
+    
+    if (!containerTypeSchema.safeParse(containerType).success) {
+      return c.json({ error: 'Invalid container type' }, 400)
+    }
+
+    const body = await c.req.json()
+    const { unitId } = z.object({ unitId: z.number().int().positive() }).parse(body)
+
+    // Verify unit exists
+    const unitRecord = await db.select().from(unit).where(eq(unit.id, unitId)).get()
+    if (!unitRecord) {
+      return c.json({ error: 'Unit not found' }, 404)
+    }
+
+    await db.insert(containerTypeUnit).values({
+      containerType: containerType as any,
+      unitId,
+    }).onConflictDoNothing()
+
+    return c.json({ success: true, unitId })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    console.error('Error adding unit:', error)
+    return c.json({ error: 'Failed to add unit' }, 500)
+  }
+})
+
+// DELETE /api/settings/container-types/:containerType/units/:unitId - Remove allowed unit
+settings.delete('/container-types/:containerType/units/:unitId', async (c) => {
+  try {
+    const containerType = c.req.param('containerType')
+    const unitId = parseInt(c.req.param('unitId'))
+    
+    if (!containerTypeSchema.safeParse(containerType).success) {
+      return c.json({ error: 'Invalid container type' }, 400)
+    }
+
+    if (isNaN(unitId)) {
+      return c.json({ error: 'Invalid unit ID' }, 400)
+    }
+
+    await db
+      .delete(containerTypeUnit)
+      .where(
+        and(
+          eq(containerTypeUnit.containerType, containerType as any),
+          eq(containerTypeUnit.unitId, unitId)
+        )
+      )
+
+    return c.json({ success: true })
+  } catch (error) {
+    console.error('Error removing unit:', error)
+    return c.json({ error: 'Failed to remove unit' }, 500)
+  }
+})
+
+// GET /api/settings/units/container-types/:containerType - Get all units allowed for a container type (alias for above)
+settings.get('/units/container-types/:containerType', async (c) => {
+  try {
+    const containerType = c.req.param('containerType')
+    
+    if (!containerTypeSchema.safeParse(containerType).success) {
+      return c.json({ error: 'Invalid container type' }, 400)
+    }
+
+    const relationships = await db
+      .select({
+        id: unit.id,
+        symbol: unit.symbol,
+        name: unit.name,
+        category: unit.category,
+      })
+      .from(containerTypeUnit)
+      .innerJoin(unit, eq(containerTypeUnit.unitId, unit.id))
+      .where(eq(containerTypeUnit.containerType, containerType as any))
+
+    return c.json({ units: relationships })
+  } catch (error) {
+    console.error('Error fetching units:', error)
+    return c.json({ error: 'Failed to fetch units' }, 500)
   }
 })
 

@@ -15,7 +15,6 @@ import Export from './pages/Export'
 import BarcodeExport from './pages/BarcodeExport'
 import ContainerMoveMicronix from './pages/ContainerMoveMicronix'
 import ContainerMoveCryovial from './pages/ContainerMoveCryovial'
-import ContainerMoveGenericTubes from './pages/ContainerMoveGenericTubes'
 import ContainerMovePapers from './pages/ContainerMovePapers'
 import CollectionMove from './pages/CollectionMove'
 import Sidebar from './components/Sidebar'
@@ -27,10 +26,13 @@ import BoxDetail from './pages/BoxDetail'
 import BagDetail from './pages/BagDetail'
 import SheetDetail from './pages/SheetDetail'
 import ControlBatchDetail from './pages/ControlBatchDetail'
+import ControlBatchWizard from './pages/ControlBatchWizard'
 import ControlDefinitionDetail from './pages/ControlDefinitionDetail'
-import Controls from './pages/Controls'
+import BloodControls from './pages/BloodControls'
+import ControlDefinitionForm from './components/forms/ControlDefinitionForm'
 import ReferenceData from './pages/ReferenceData'
 import Settings from './pages/Settings'
+import SetupGuard from './components/SetupGuard'
 import { DateFilterProvider } from './contexts/DateFilterContext'
 import { HotkeyProvider, useHotkeyContext } from './contexts/HotkeyContext'
 import HotkeyHelpModal from './components/HotkeyHelpModal'
@@ -176,10 +178,10 @@ function AppContent() {
       },
       {
         id: 'nav-controls',
-        label: 'Go to Controls',
+        label: 'Go to Blood Controls',
         category: 'Navigation',
-        keywords: ['controls', 'control'],
-        action: () => navigate('/controls'),
+        keywords: ['controls', 'control', 'blood controls'],
+        action: () => navigate('/blood-controls'),
       },
       {
         id: 'nav-settings',
@@ -231,13 +233,6 @@ function AppContent() {
         category: 'Bulk Operations',
         keywords: ['move cryovial', 'container move cryovial'],
         action: () => navigate('/container-move/cryovial'),
-      },
-      {
-        id: 'move-tubes',
-        label: 'Move Generic Tubes',
-        category: 'Bulk Operations',
-        keywords: ['move tubes', 'container move tubes', 'move generic tubes'],
-        action: () => navigate('/container-move/generic-tubes'),
       },
       {
         id: 'move-papers',
@@ -432,7 +427,7 @@ function AppContent() {
   useHotkey('?', () => toggleHelpModal(), { preventDefault: true })
 
   return (
-    <>
+    <SetupGuard>
       <div className="min-h-screen bg-gray-50 flex">
         {/* Sidebar */}
         <Sidebar
@@ -441,7 +436,7 @@ function AppContent() {
         />
 
         {/* Main content area */}
-        <div className="flex-1 flex flex-col lg:ml-0 min-w-0">
+        <div className="flex-1 flex flex-col lg:ml-52 min-w-0">
           {/* Mobile menu button - floating */}
           <button
             onClick={() => setIsMobileSidebarOpen(true)}
@@ -474,7 +469,6 @@ function AppContent() {
           <Route path="/barcode-export" element={<BarcodeExport />} />
           <Route path="/container-move/micronix" element={<ContainerMoveMicronix />} />
           <Route path="/container-move/cryovial" element={<ContainerMoveCryovial />} />
-          <Route path="/container-move/generic-tubes" element={<ContainerMoveGenericTubes />} />
           <Route path="/container-move/papers" element={<ContainerMovePapers />} />
           <Route path="/collection-move" element={<CollectionMove />} />
           <Route path="/collections/micronix-plates/:id" element={<MicronixPlateDetail />} />
@@ -482,9 +476,13 @@ function AppContent() {
           <Route path="/collections/boxes/:id" element={<BoxDetail />} />
           <Route path="/collections/bags/:id" element={<BagDetail />} />
           <Route path="/collections/sheets/:id" element={<SheetDetail />} />
-          <Route path="/controls" element={<Controls />} />
-          <Route path="/controls/:id" element={<ControlDefinitionDetail />} />
-          <Route path="/controls/batches/:id" element={<ControlBatchDetail />} />
+          <Route path="/blood-controls" element={<BloodControls />} />
+          <Route path="/blood-controls/new" element={<ControlDefinitionForm />} />
+          <Route path="/blood-controls/:id" element={<ControlDefinitionDetail />} />
+          <Route path="/blood-controls/:id/edit" element={<ControlDefinitionForm />} />
+          <Route path="/blood-controls/batches/new" element={<ControlBatchWizard />} />
+          <Route path="/blood-controls/batches/:id" element={<ControlBatchDetail />} />
+          <Route path="/blood-controls/batches/:id/add-specimens" element={<ControlBatchWizard />} />
               <Route path="/reference-data" element={<ReferenceData />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
@@ -538,7 +536,7 @@ function AppContent() {
         onClose={closeCommandPalette}
         commands={commands}
       />
-    </>
+    </SetupGuard>
   )
 }
 

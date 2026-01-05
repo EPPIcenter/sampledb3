@@ -10,17 +10,6 @@ CREATE TABLE IF NOT EXISTS "study_subject" (
 	CONSTRAINT "study_subject_study_uc" UNIQUE("name","study_id"),
 	PRIMARY KEY("id")
 );
-CREATE TABLE IF NOT EXISTS "tube" (
-	"id"	INTEGER NOT NULL,
-	"box_id"	INTEGER NOT NULL,
-	"box_position"	VARCHAR NOT NULL,
-	"label"	VARCHAR NOT NULL,
-
-	FOREIGN KEY("id") REFERENCES "storage_container"("id"),
-	FOREIGN KEY("box_id") REFERENCES "box"("id"),
-	PRIMARY KEY("id"),
-	CONSTRAINT "box_position_plate_uc" UNIQUE("box_position","box_id")
-);
 CREATE TABLE IF NOT EXISTS "specimen_type" (
 	"created"	DATETIME NOT NULL,
 	"last_updated"	DATETIME NOT NULL,
@@ -60,13 +49,6 @@ CREATE TABLE IF NOT EXISTS "state_status_relationship" (
 
 	FOREIGN KEY("status_id") REFERENCES "status"("id"),
 	FOREIGN KEY("state_id") REFERENCES "state"("id")
-);
-CREATE TABLE IF NOT EXISTS "sample_type" (
-	"id"			INTEGER NOT NULL,
-	"name"			VARCHAR NOT NULL UNIQUE,
-	"description"	TEXT, "parent_id" INTEGER DEFAULT NULL REFERENCES "sample_type"("id"),
-
-	PRIMARY KEY("id")
 );
 CREATE TABLE IF NOT EXISTS "storage_type" (
 	"id"			INTEGER NOT NULL,
@@ -182,15 +164,21 @@ CREATE TABLE IF NOT EXISTS "location" (
     created DATETIME NOT NULL DEFAULT current_timestamp,
     last_updated DATETIME NOT NULL DEFAULT current_timestamp,
     id INTEGER NOT NULL,
-    location_root VARCHAR NOT NULL,
-    storage_type_id VARCHAR NOT NULL,
+    parent_id INTEGER,
+    name VARCHAR NOT NULL,
+    storage_type_id VARCHAR,
     description TEXT,
-    level_I VARCHAR NOT NULL,
-    level_II VARCHAR NOT NULL,
-    level_III VARCHAR,
+    can_contain_collections BOOLEAN NOT NULL DEFAULT 0,
+    path VARCHAR,
     PRIMARY KEY(id),
-    FOREIGN KEY(storage_type_id) REFERENCES storage_type(id)
+    FOREIGN KEY(parent_id) REFERENCES location(id),
+    FOREIGN KEY(storage_type_id) REFERENCES storage_type(id),
+    UNIQUE(parent_id, name),
+    CHECK(can_contain_collections IN (0, 1)),
+    CHECK((parent_id IS NULL AND storage_type_id IS NOT NULL) OR (parent_id IS NOT NULL AND storage_type_id IS NULL))
 );
+CREATE INDEX idx_location_parent_id ON location(parent_id);
+CREATE INDEX idx_location_path ON location(path);
 CREATE INDEX idx_study_subject_study_id 
 ON study_subject(study_id);
 CREATE INDEX idx_study_subject_name 

@@ -135,9 +135,16 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
       return c.json({ [pluralName]: transformed })
     } catch (error: any) {
       console.error(`Error fetching ${pluralName}:`, error)
+      const isDevelopment = process.env.NODE_ENV !== 'production'
       return c.json({ 
-        error: `Failed to fetch ${pluralName}`, 
-        details: error.message 
+        error: `Failed to fetch ${pluralName}`,
+        ...(isDevelopment && { 
+          details: error.message,
+          stack: error.stack 
+        }),
+        ...(!isDevelopment && { 
+          errorCode: 'FETCH_ERROR'
+        })
       }, 500)
     }
   })
@@ -165,9 +172,16 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
       return c.json({ [singularName]: transformed })
     } catch (error: any) {
       console.error(`Error fetching ${entityName}:`, error)
+      const isDevelopment = process.env.NODE_ENV !== 'production'
       return c.json({ 
-        error: `Failed to fetch ${entityName}`, 
-        details: error.message 
+        error: `Failed to fetch ${entityName}`,
+        ...(isDevelopment && { 
+          details: error.message,
+          stack: error.stack 
+        }),
+        ...(!isDevelopment && { 
+          errorCode: 'FETCH_ERROR'
+        })
       }, 500)
     }
   })
@@ -220,9 +234,16 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
         return c.json({ error: 'Validation error', details: error.issues }, 400)
       }
       console.error(`Error creating ${entityName}:`, error)
+      const isDevelopment = process.env.NODE_ENV !== 'production'
       return c.json({ 
-        error: `Failed to create ${entityName}`, 
-        details: error.message 
+        error: `Failed to create ${entityName}`,
+        ...(isDevelopment && { 
+          details: error.message,
+          stack: error.stack 
+        }),
+        ...(!isDevelopment && { 
+          errorCode: 'CREATE_ERROR'
+        })
       }, 500)
     }
   })
@@ -296,9 +317,16 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
         return c.json({ error: 'Validation error', details: error.issues }, 400)
       }
       console.error(`Error updating ${entityName}:`, error)
+      const isDevelopment = process.env.NODE_ENV !== 'production'
       return c.json({ 
-        error: `Failed to update ${entityName}`, 
-        details: error.message 
+        error: `Failed to update ${entityName}`,
+        ...(isDevelopment && { 
+          details: error.message,
+          stack: error.stack 
+        }),
+        ...(!isDevelopment && { 
+          errorCode: 'UPDATE_ERROR'
+        })
       }, 500)
     }
   })
@@ -332,9 +360,16 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
       return c.json({ message: `${entityName} deleted successfully` })
     } catch (error: any) {
       console.error(`Error deleting ${entityName}:`, error)
+      const isDevelopment = process.env.NODE_ENV !== 'production'
       return c.json({ 
-        error: `Failed to delete ${entityName}`, 
-        details: error.message 
+        error: `Failed to delete ${entityName}`,
+        ...(isDevelopment && { 
+          details: error.message,
+          stack: error.stack 
+        }),
+        ...(!isDevelopment && { 
+          errorCode: 'DELETE_ERROR'
+        })
       }, 500)
     }
   })

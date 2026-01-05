@@ -8,7 +8,6 @@ import {
   storageContainer,
   micronixTube,
   cryovialTube,
-  tube,
   paper,
   staticWell,
 } from '../db/schema'
@@ -462,15 +461,12 @@ studies.get('/:id/summary', async (c) => {
     const containerIds = containers.map(c => c.id)
 
     // Get container type information
-    const [micronixTubes, cryovialTubes, tubes, papers, staticWells] = await Promise.all([
+    const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
       containerIds.length > 0
         ? db.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, containerIds))
         : [],
       containerIds.length > 0
         ? db.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, containerIds))
-        : [],
-      containerIds.length > 0
-        ? db.select({ id: tube.id }).from(tube).where(inArray(tube.id, containerIds))
         : [],
       containerIds.length > 0
         ? db.select({ id: paper.id }).from(paper).where(inArray(paper.id, containerIds))
@@ -484,7 +480,6 @@ studies.get('/:id/summary', async (c) => {
     const containerTypeMap = new Map<number, string>()
     micronixTubes.forEach(t => containerTypeMap.set(t.id, 'micronix_tube'))
     cryovialTubes.forEach(t => containerTypeMap.set(t.id, 'cryovial_tube'))
-    tubes.forEach(t => containerTypeMap.set(t.id, 'tube'))
     papers.forEach(t => containerTypeMap.set(t.id, 'paper'))
     staticWells.forEach(t => containerTypeMap.set(t.id, 'static_well'))
 

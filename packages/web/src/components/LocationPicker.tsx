@@ -1,31 +1,93 @@
 import { useState, useEffect, useMemo } from 'react'
 import { locationsApi, type Location } from '../lib/api'
-import { buildLocationTree, filterLocationTree, getLocationLabel } from '../lib/location-tree'
+import { buildLocationTree, filterLocationTree, getLocationLabel, getRootLocations, getLocationChildren, getLocationAncestors } from '../lib/location-tree'
 
 interface LocationPickerProps {
   value: number | null
   onChange: (locationId: number | null) => void
+  filterCollectionsOnly?: boolean  // Only show locations that can contain collections
+  disabled?: boolean  // Disable the location picker
 }
 
-export default function LocationPicker({ value, onChange }: LocationPickerProps) {
+export default function LocationPicker({ value, onChange, filterCollectionsOnly = false, disabled = false }: LocationPickerProps) {
+  const [open, setOpen] = useState(false)
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
-  const [expandedRoots, setExpandedRoots] = useState<Record<string, boolean>>({})
-  const [expandedLevelI, setExpandedLevelI] = useState<Record<string, Record<string, boolean>>>({})
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     loadLocations()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterCollectionsOnly])
+
+  // Auto-expand all nodes when searching to show matches
+  useEffect(() => {
+    if (search.trim() && locations.length > 0) {
+      const allIds = new Set(locations.map(loc => loc.id))
+      setExpandedIds(allIds)
+    }
+  }, [search, locations])
+
+  // Auto-expand ancestors of selected location
+  useEffect(() => {
+    if (value && locations.length > 0) {
+      const ancestors = getLocationAncestors(locations, value)
+      setExpandedIds(prev => {
+        const next = new Set(prev)
+        ancestors.forEach(a => next.add(a.id))
+        next.add(value)
+        return next
+      })
+    }
+  }, [value, locations])
 
   const loadLocations = async () => {
     try {
       setLoading(true)
-      // Fetch all locations in a single request (no pagination params)
+      // Call without pagination params to get all locations
+      // The API returns all locations when page/limit are not provided
       const response = await locationsApi.list()
-      setLocations(response.data.locations || [])
+      let allLocations = response.data.locations || []
+      
+      // Filter to collection-capable locations if requested
+      // Include locations that can contain collections AND their ancestors (so we can navigate to them)
+      if (filterCollectionsOnly) {
+        const collectionCapable = allLocations.filter(loc => loc.canContainCollections)
+        
+        if (collectionCapable.length === 0) {
+          // No collection-capable locations found - show all locations with a note
+          console.warn('No locations with canContainCollections=true found. Showing all locations.')
+        } else {
+          const collectionCapableIds = new Set(collectionCapable.map(loc => loc.id))
+          
+          // Include all ancestors of collection-capable locations
+          const locationMap = new Map(allLocations.map(loc => [loc.id, loc]))
+          const locationsToInclude = new Set(collectionCapableIds)
+          
+          // Recursively add all ancestors up to root
+          for (const locId of collectionCapableIds) {
+            let current = locationMap.get(locId)
+            while (current && current.parentId !== null) {
+              const parent = locationMap.get(current.parentId)
+              if (parent) {
+                locationsToInclude.add(parent.id)
+                current = parent
+              } else {
+                break
+              }
+            }
+          }
+          
+          allLocations = allLocations.filter(loc => locationsToInclude.has(loc.id))
+        }
+      }
+      
+      setLocations(allLocations)
     } catch (error) {
       console.error('Failed to load locations:', error)
+      // Set empty array on error so UI shows appropriate message
+      setLocations([])
     } finally {
       setLoading(false)
     }
@@ -39,117 +101,234 @@ export default function LocationPicker({ value, onChange }: LocationPickerProps)
 
   const selectedLocation = locations.find(loc => loc.id === value)
 
-  const toggleRoot = (root: string) => {
-    setExpandedRoots(prev => ({ ...prev, [root]: !prev[root] }))
+  const toggleExpanded = (locationId: number) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(locationId)) {
+        next.delete(locationId)
+      } else {
+        next.add(locationId)
+      }
+      return next
+    })
   }
 
-  const toggleLevelI = (root: string, levelI: string) => {
-    setExpandedLevelI(prev => ({
-      ...prev,
-      [root]: {
-        ...prev[root],
-        [levelI]: !prev[root]?.[levelI],
-      },
-    }))
-  }
+  const renderLocationNode = (loc: Location, depth: number = 0): React.ReactNode => {
+    // When searching, use filtered tree to get children; otherwise use all locations
+    const children = search.trim() 
+      ? Array.from(filteredTree.get(loc.id) || [])
+      : getLocationChildren(locations, loc.id)
+    const hasChildren = children.length > 0
+    const isExpanded = expandedIds.has(loc.id)
+    const isSelected = value === loc.id
 
+    const handleNodeClick = () => {
+      if (isSelected && hasChildren) {
+        // If already selected and has children, toggle expansion
+        toggleExpanded(loc.id)
+      } else {
+        // Otherwise, select the node (but don't close modal - let user click Done)
+        onChange(loc.id)
+      }
+    }
 
-  if (loading) {
-    return <div className="text-sm text-gray-500">Loading locations...</div>
-  }
-
-  return (
-    <div className="space-y-2">
-      <div>
-        <input
-          type="text"
-          placeholder="Search locations..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full form-input text-sm"
-        />
-      </div>
-
-      {selectedLocation && (
-        <div className="text-sm text-gray-700 bg-blue-50 border border-blue-200 rounded p-2">
-          <span className="font-medium">Selected: </span>
-          {selectedLocation.locationRoot} → {selectedLocation.levelI} → {getLocationLabel(selectedLocation)}
+    return (
+      <div key={loc.id} className={depth > 0 ? 'ml-4 border-l border-gray-100 pl-3 mt-1' : 'mb-2'}>
+        <div className="flex items-center">
+          {hasChildren ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleExpanded(loc.id)
+              }}
+              className="w-3 h-3 mr-2 text-gray-500 flex-shrink-0 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+              aria-label={isExpanded ? 'Collapse' : 'Expand'}
+            >
+              {isExpanded ? '▾' : '▸'}
+            </button>
+          ) : (
+            <span className="w-3 h-3 mr-2"></span>
+          )}
+          <button
+            type="button"
+            onClick={handleNodeClick}
+            className={`flex items-center justify-between flex-1 px-2 py-1 rounded text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors ${
+              isSelected
+                ? 'bg-blue-50 border border-blue-200 shadow-sm'
+                : 'hover:bg-gray-50 border border-transparent'
+            }`}
+          >
+            <div className="text-left flex-1 min-w-0">
+              <p className={`truncate ${isSelected ? 'text-blue-900 font-medium' : 'text-gray-900'}`}>
+                {getLocationLabel(loc)}
+              </p>
+              {loc.path && (
+                <p className="text-[10px] text-gray-400 font-mono truncate">
+                  {loc.path}
+                </p>
+              )}
+            </div>
+            {isSelected && (
+              <span className="text-[10px] font-mono text-blue-700 ml-2 flex-shrink-0">
+                selected
+              </span>
+            )}
+          </button>
         </div>
-      )}
 
-      <div className="border border-gray-100 rounded-lg max-h-96 overflow-y-auto">
-        {Object.entries(filteredTree).length === 0 ? (
-          <div className="p-4 text-sm text-gray-500 text-center">
-            {search ? 'No locations found' : 'No locations available'}
-          </div>
-        ) : (
-          <div className="p-2">
-            {Object.entries(filteredTree).map(([root, levelIGroup]) => (
-              <div key={root} className="mb-2">
-                <button
-                  type="button"
-                  onClick={() => toggleRoot(root)}
-                  className="w-full flex items-center justify-between p-2 hover:bg-gray-50 rounded text-left"
-                >
-                  <span className="font-medium text-gray-900">{root}</span>
-                  <span className="text-gray-400">
-                    {expandedRoots[root] ? '▼' : '▶'}
-                  </span>
-                </button>
-
-                {expandedRoots[root] && (
-                  <div className="ml-4 mt-1">
-                    {Object.entries(levelIGroup).map(([l1, locs]) => (
-                      <div key={l1} className="mb-1">
-                        <button
-                          type="button"
-                          onClick={() => toggleLevelI(root, l1)}
-                          className="w-full flex items-center justify-between p-2 hover:bg-gray-50 rounded text-left"
-                        >
-                          <span className="text-gray-700">{l1}</span>
-                          <span className="text-gray-400">
-                            {expandedLevelI[root]?.[l1] ? '▼' : '▶'}
-                          </span>
-                        </button>
-
-                        {expandedLevelI[root]?.[l1] && (
-                          <div className="ml-4 mt-1 space-y-1">
-                            {locs.map((loc) => (
-                              <button
-                                key={loc.id}
-                                type="button"
-                                onClick={() => onChange(loc.id)}
-                                className={`w-full text-left p-2 rounded text-sm ${
-                                  value === loc.id
-                                    ? 'bg-blue-100 border border-blue-300 font-medium'
-                                    : 'hover:bg-gray-50 border border-transparent'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span>{getLocationLabel(loc)}</span>
-                                  {value === loc.id && (
-                                    <span className="text-blue-600">✓</span>
-                                  )}
-                                </div>
-                                {loc.description && (
-                                  <div className="text-xs text-gray-500 mt-1">
-                                    {loc.description}
-                                  </div>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+        {hasChildren && isExpanded && (
+          <div className="mt-1">
+            {children.map((child) => renderLocationNode(child, depth + 1))}
           </div>
         )}
       </div>
-    </div>
+    )
+  }
+
+  const renderTree = () => {
+    const rootLocations = getRootLocations(locations)
+    let displayRoots = search.trim()
+      ? Array.from(filteredTree.get(null) || [])
+      : rootLocations
+
+    // Fallback: if no root locations but we have locations, find "effective roots"
+    // (locations whose parent is not in the current set)
+    if (displayRoots.length === 0 && locations.length > 0) {
+      const locationIds = new Set(locations.map(loc => loc.id))
+      displayRoots = locations.filter(loc => 
+        loc.parentId === null || !locationIds.has(loc.parentId)
+      )
+    }
+
+    if (displayRoots.length === 0) {
+      return (
+        <div className="p-4 text-center">
+          <p className="text-sm text-gray-500">
+            {search ? 'No locations match this search.' : 'No locations available.'}
+          </p>
+          {!search && locations.length === 0 && (
+            <p className="text-xs text-gray-400 mt-2">
+              {filterCollectionsOnly 
+                ? 'Try removing the collection filter or ensure locations have canContainCollections set to true.'
+                : 'Please check that locations exist in the database.'}
+            </p>
+          )}
+          {!search && locations.length > 0 && rootLocations.length === 0 && (
+            <div className="text-xs text-gray-400 mt-2 space-y-1 text-left max-w-md mx-auto">
+              <p className="font-medium">No root locations found (locations with parentId === null).</p>
+              <p className="mt-1">This may indicate that:</p>
+              <ul className="list-disc list-inside mt-1 space-y-0.5">
+                <li>All locations have a parent set (no root locations exist)</li>
+                <li>The location hierarchy needs to be fixed in the database</li>
+                {filterCollectionsOnly && (
+                  <li>Root locations were filtered out - try removing the collection filter</li>
+                )}
+              </ul>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <div className="text-sm p-2">
+        {displayRoots.map((root) => renderLocationNode(root, 0))}
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen(true)}
+        disabled={disabled}
+        className={`w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+          disabled ? 'bg-gray-50 cursor-not-allowed opacity-60' : ''
+        }`}
+      >
+        {loading ? (
+          <span className="text-gray-400">Loading locations...</span>
+        ) : selectedLocation ? (
+          <span className="text-gray-900">{selectedLocation.path || selectedLocation.name}</span>
+        ) : (
+          <span className="text-gray-400">Select location...</span>
+        )}
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm"
+            onClick={() => setOpen(false)}
+          />
+          <div className="relative bg-white rounded-lg shadow-lg p-6 max-h-[90vh] flex flex-col w-full max-w-3xl mx-4" style={{ zIndex: 60 }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Select Location</h2>
+              <button
+                type="button"
+                className="text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                onClick={() => setOpen(false)}
+                aria-label="Close location selection dialog"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label htmlFor="location-search" className="sr-only">
+                Search locations
+              </label>
+              <input
+                id="location-search"
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, path, or description…"
+                className="w-full form-input"
+                autoFocus
+              />
+            </div>
+
+            {selectedLocation && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="text-sm">
+                  <span className="font-medium text-gray-700">Selected: </span>
+                  <span className="text-gray-900">{selectedLocation.path || selectedLocation.name}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="border border-gray-200 rounded-md overflow-y-auto flex-1 min-h-0 bg-white">
+              {loading ? (
+                <div className="p-4 text-sm text-gray-500 text-center">Loading locations…</div>
+              ) : (
+                renderTree()
+              )}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => onChange(null)}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
-

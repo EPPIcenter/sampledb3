@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { collectionsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import CollectionGrid from '../components/CollectionGrid'
@@ -17,8 +17,12 @@ function statusColor(name: string): string {
 export default function MicronixPlateDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
+  
+  // Get target position from URL query params
+  const targetPosition = searchParams.get('position')
 
   useEffect(() => {
     if (!id) return
@@ -38,6 +42,19 @@ export default function MicronixPlateDetail() {
 
     fetchData()
   }, [id])
+
+  // Scroll to highlighted container when page loads
+  useEffect(() => {
+    if (targetPosition && data?.wells) {
+      // Small delay to ensure DOM is rendered
+      setTimeout(() => {
+        const highlightedElement = document.querySelector('[data-highlighted-position="true"]')
+        if (highlightedElement) {
+          highlightedElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 100)
+    }
+  }, [targetPosition, data])
 
   const layout = useMemo(() => {
     // Always return the full 96-well plate format (8 rows × 12 columns)
@@ -125,7 +142,7 @@ export default function MicronixPlateDetail() {
               const key = `${row}${col.padStart(2, '0')}`
               return wells[key]
             }}
-            renderCell={(value) => {
+            renderCell={(value, coords) => {
               if (!value) {
                 return (
                   <div className="h-16 w-16 mx-auto flex items-center justify-center rounded border border-dashed border-gray-100 text-[11px] text-gray-300">
@@ -141,6 +158,27 @@ export default function MicronixPlateDetail() {
               const source = entry.container?.source
               const subjectName = source?.type === 'subject' ? source.name : source?.type === 'control' ? source.name : null
               const containerId = entry.id
+
+              // Check if this cell should be highlighted
+              const cellKey = `${coords.row}${coords.column.padStart(2, '0')}`
+              const entryPosition = entry.position
+              // Normalize position for comparison (handle both "A1" and "A01" formats)
+              const normalizePosition = (pos: string | null | undefined) => {
+                if (!pos) return null
+                const match = pos.match(/^([A-Z]+)(\d+)$/i)
+                if (match) {
+                  return `${match[1].toUpperCase()}${parseInt(match[2], 10).toString().padStart(2, '0')}`
+                }
+                return pos.toUpperCase()
+              }
+              const normalizedTarget = normalizePosition(targetPosition)
+              const isHighlighted = targetPosition && (
+                normalizedTarget === cellKey ||
+                (entryPosition && (
+                  normalizedTarget === normalizePosition(entryPosition) ||
+                  targetPosition.toUpperCase() === entryPosition.toUpperCase()
+                ))
+              )
 
               const isClickable = !!hasContainer && !!containerId
               const tooltipParts: string[] = []
@@ -158,7 +196,9 @@ export default function MicronixPlateDetail() {
                   onClick={() => {
                     if (containerId) navigate(`/containers/${containerId}`)
                   }}
-                  className={`h-16 w-16 mx-auto flex flex-col items-center justify-center rounded border text-[10px] px-1 py-1 bg-white space-y-0.5
+                  data-highlighted-position={isHighlighted ? 'true' : 'false'}
+                  className={`h-16 w-16 mx-auto flex flex-col items-center justify-center rounded border text-[10px] px-1 py-1 bg-white space-y-0.5 transition-all
+                    ${isHighlighted ? 'ring-4 ring-yellow-400 ring-offset-2 border-yellow-500 shadow-lg bg-yellow-50' : ''}
                     ${isClickable ? 'hover:shadow-sm hover:border-blue-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400' : ''}`}
                   title={title}
                 >

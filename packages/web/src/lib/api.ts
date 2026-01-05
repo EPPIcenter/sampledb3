@@ -52,20 +52,20 @@ export interface ControlDefinition {
   id: number
   name: string
   controlType: 'blood' | 'plasma_positive' | 'plasma_negative' | 'antibody' | 'extraction' | 'negative'
-  compositionId?: number
-  targetDensity?: number
-  targetDensityUnitId?: number
   description?: string
-  properties?: Record<string, any>
+  properties?: Record<string, any> // For blood controls: { strains: [...], targetDensity, targetDensityUnitId, targetDensityUnitSymbol }
   created: string
   lastUpdated: string
+  // Parsed from properties for convenience
+  targetDensity?: number
+  targetDensityUnitId?: number
   unitSymbol?: string
   batchCount?: number
   specimenCount?: number
   spotCount?: number
   tubeCount?: number
   inventoryTotal?: number
-  strains?: Array<{ id: number; name: string }>
+  strains?: Array<{ id: number; name: string; percentage?: number }>
 }
 
 export interface Reagent {
@@ -207,9 +207,51 @@ export const subjectsApi = {
   createWithSpecimens: (data: {
     studyShortCode: string
     subjectName: string
-    specimens: Array<{ specimenTypeName: string; collectionDate?: string }>
+    specimens: Array<{
+      specimenTypeName: string
+      collectionDate?: string
+      container?: {
+        mode?: 'create' | 'link' | 'skip'
+        containerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+        containerBarcode?: string
+        containerId?: number
+        collectionName?: string
+        collectionBarcode?: string
+        barcode?: string
+        position?: string
+        label?: string
+        unitId?: number
+        totalQuantity?: number
+        remainingQuantity?: number
+        comment?: string
+        collectionLocationId?: number
+      }
+    }>
   }) =>
-    api.post<{ subject: StudySubject; specimens: Specimen[] }>('/subjects/with-specimens', data),
+    api.post<{
+      subject: StudySubject
+      subjectCreated: boolean
+      specimens: Array<{
+        specimen: Specimen
+        containerCreated: boolean
+        containerId?: number
+      }>
+      summary: {
+        subjectsCreated: number
+        subjectsUpdated: number
+        specimensCreated: number
+        containersCreated: number
+      }
+    }>('/subjects/with-specimens', data),
+  merge: (targetId: number, sourceId: number) =>
+    api.post<{
+      success: boolean
+      specimensTransferred: number
+      specimensMerged: number
+      containersMerged: number
+      totalContainersTransferred: number
+      targetSubject: StudySubject
+    }>(`/subjects/${targetId}/merge`, { sourceId }),
 }
 
 export const specimensApi = {
@@ -252,34 +294,23 @@ export interface StorageType {
   description?: string
 }
 
-export interface SampleType {
-  id: number
-  name: string
-  description?: string
-  parentId?: number
-}
-
 export interface Strain {
   id: number
   name: string
   description?: string
 }
 
-export interface Composition {
-  id: number
-  index?: number
-  label: string
-  legacy: number
-}
-
 export interface Location {
   id: number
-  locationRoot: string
-  storageTypeId: string
+  parentId: number | null
+  name: string
+  storageTypeId: string | null  // Only root locations have storage_type_id
+  storageTypeName?: string | null  // Storage type name (for root locations)
+  effectiveStorageTypeId?: string | null  // Effective storage type ID (from root)
+  effectiveStorageTypeName?: string | null  // Effective storage type name (from root)
   description?: string
-  levelI: string
-  levelII: string
-  levelIII?: string
+  canContainCollections: boolean
+  path?: string  // Full path string
   created: string
   lastUpdated: string
 }
@@ -292,6 +323,13 @@ export const specimenTypesApi = {
   update: (id: number, data: Partial<SpecimenType>) =>
     api.put<{ specimenType: SpecimenType }>(`/specimen-types/${id}`, data),
   delete: (id: number) => api.delete<{ message: string }>(`/specimen-types/${id}`),
+  getContainerTypes: (id: number) => api.get<{ containerTypes: string[]; usageInfo?: Record<string, boolean> }>(`/specimen-types/${id}/container-types`),
+  addContainerType: (id: number, containerType: string) =>
+    api.post<{ success: boolean; containerType: string }>(`/specimen-types/${id}/container-types`, { containerType }),
+  removeContainerType: (id: number, containerType: string) =>
+    api.delete<{ success: boolean }>(`/specimen-types/${id}/container-types/${containerType}`),
+  getByContainerType: (containerType: string) =>
+    api.get<{ specimenTypes: SpecimenType[] }>(`/specimen-types/container-types/${containerType}`),
 }
 
 // States API removed - replaced with tags
@@ -311,14 +349,6 @@ export const storageTypesApi = {
   delete: (id: number) => api.delete<{ message: string }>(`/storage-types/${id}`),
 }
 
-export const sampleTypesApi = {
-  list: () => api.get<{ sampleTypes: SampleType[] }>('/sample-types'),
-  get: (id: number) => api.get<{ sampleType: SampleType }>(`/sample-types/${id}`),
-  create: (data: Omit<SampleType, 'id'>) => api.post<{ sampleType: SampleType }>('/sample-types', data),
-  update: (id: number, data: Partial<SampleType>) => api.put<{ sampleType: SampleType }>(`/sample-types/${id}`, data),
-  delete: (id: number) => api.delete<{ message: string }>(`/sample-types/${id}`),
-}
-
 export const strainsApi = {
   list: () => api.get<{ strains: Strain[] }>('/strains'),
   get: (id: number) => api.get<{ strain: Strain }>(`/strains/${id}`),
@@ -327,13 +357,14 @@ export const strainsApi = {
   delete: (id: number) => api.delete<{ message: string }>(`/strains/${id}`),
 }
 
-export const compositionsApi = {
-  list: () => api.get<{ compositions: Composition[] }>('/compositions'),
-  get: (id: number) => api.get<{ composition: Composition }>(`/compositions/${id}`),
-  create: (data: Omit<Composition, 'id'>) => api.post<{ composition: Composition }>('/compositions', data),
-  update: (id: number, data: Partial<Composition>) => api.put<{ composition: Composition }>(`/compositions/${id}`, data),
-  delete: (id: number) => api.delete<{ message: string }>(`/compositions/${id}`),
+export const unitsApi = {
+  list: () => api.get<{ units: Unit[] }>('/units'),
+  get: (id: number) => api.get<{ unit: Unit }>(`/units/${id}`),
+  create: (data: Omit<Unit, 'id'>) => api.post<{ unit: Unit }>('/units', data),
+  update: (id: number, data: Partial<Unit>) => api.put<{ unit: Unit }>(`/units/${id}`, data),
+  delete: (id: number) => api.delete<{ message: string }>(`/units/${id}`),
 }
+
 
 export interface CellLine {
   id: number
@@ -464,17 +495,72 @@ export interface ControlDefinitionSummaryResponse {
 }
 
 export const controlsApi = {
-  list: (type?: string) => api.get<{ controls: ControlDefinition[] }>('/controls', { params: { type } }),
-  get: (id: number) => api.get<{ control: ControlDefinition }>(`/controls/${id}`),
-  getDefinitionSummary: (id: number) => api.get<ControlDefinitionSummaryResponse>(`/controls/${id}/summary`),
-  create: (data: Omit<ControlDefinition, 'id' | 'created' | 'lastUpdated'>) => api.post<{ control: ControlDefinition }>('/controls', data),
-  update: (id: number, data: Partial<ControlDefinition>) => api.patch<{ control: ControlDefinition }>(`/controls/${id}`, data),
-  listAllBatches: () => api.get<{ batches: Array<ControlBatch & { definitionName?: string }> }>('/controls/batches'),
-  getBatches: (id: number) => api.get<{ batches: ControlBatch[] }>(`/controls/${id}/batches`),
+  list: (type?: string) => api.get<{ controls: ControlDefinition[] }>('/blood-controls', { params: { type } }),
+  get: (id: number) => api.get<{ control: ControlDefinition }>(`/blood-controls/${id}`),
+  getDefinitionSummary: (id: number) => api.get<ControlDefinitionSummaryResponse>(`/blood-controls/${id}/summary`),
+  checkUnique: (data: { controlType: ControlDefinition['controlType']; targetDensity?: number; targetDensityUnitId?: number; strains?: Array<{ strainId: number; percentage: number }> }) => api.post<{ exists: boolean; controlDefinition?: ControlDefinition }>('/blood-controls/check-unique', data),
+  create: (data: Omit<ControlDefinition, 'id' | 'created' | 'lastUpdated' | 'strains'> & { strains?: Array<{ strainId: number; percentage: number }> }) => api.post<{ control: ControlDefinition }>('/blood-controls', data),
+  update: (id: number, data: Partial<ControlDefinition> & { strains?: Array<{ strainId: number; percentage: number }> }) => api.patch<{ control: ControlDefinition }>(`/blood-controls/${id}`, data),
+  listAllBatches: () => api.get<{ batches: Array<ControlBatch & { definitionName?: string }> }>('/blood-controls/batches'),
+  getBatches: (id: number) => api.get<{ batches: ControlBatch[] }>(`/blood-controls/${id}/batches`),
   createBatch: (id: number, data: Omit<ControlBatch, 'id' | 'controlDefinitionId' | 'created' | 'lastUpdated'>) =>
-    api.post<{ batch: ControlBatch }>(`/controls/${id}/batches`, data),
-  getBatch: (id: number) => api.get<{ batch: ControlBatch }>(`/controls/batches/${id}`),
-  getBatchSummary: (id: number) => api.get<ControlBatchSummaryResponse>(`/controls/batches/${id}/summary`),
+    api.post<{ batch: ControlBatch }>(`/blood-controls/${id}/batches`, data),
+  getBatch: (id: number) => api.get<{ batch: ControlBatch }>(`/blood-controls/batches/${id}`),
+  getBatchSummary: (id: number) => api.get<ControlBatchSummaryResponse>(`/blood-controls/batches/${id}/summary`),
+  createBatchWithSpecimens: (data: {
+    batch: {
+      controlDefinitionId: number
+      name: string
+      productionDate?: string
+      properties?: Record<string, any>
+    }
+    specimens: Array<{
+      specimenTypeName: string
+      collectionDate?: string
+      containers: Array<{
+        type: 'paper' | 'cryovial_tube' | 'micronix_tube'
+        collectionId?: number
+        collectionName?: string
+        collectionLocationId?: number
+        collectionType?: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+        containerBarcode?: string
+        position?: string
+        quantity?: number
+        unitSymbol?: string
+      }>
+    }>
+    createCollections?: Array<{
+      type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+      name: string
+      locationId: number
+      barcode?: string
+    }>
+  }) => api.post<{ batch: ControlBatch; specimens: Array<{ id: number; specimenTypeName: string; containerCount: number; containerIds: number[] }>; createdCollections: Array<{ type: string; id: number; name: string }> }>('/blood-controls/batches/create-with-specimens', data),
+  addSpecimensToBatch: (batchId: number, data: {
+    specimens: Array<{
+      specimenTypeName: string
+      collectionDate?: string
+      containers: Array<{
+        type: 'paper' | 'cryovial_tube' | 'micronix_tube'
+        collectionId?: number
+        collectionName?: string
+        collectionLocationId?: number
+        collectionType?: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+        containerBarcode?: string
+        position?: string
+        quantity?: number
+        unitSymbol?: string
+      }>
+    }>
+    createCollections?: Array<{
+      type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+      name: string
+      locationId: number
+      barcode?: string
+    }>
+  }) => api.post<{ specimens: Array<{ id: number; specimenTypeName: string; containerCount: number; containerIds: number[] }>; createdCollections: Array<{ type: string; id: number; name: string }> }>(`/blood-controls/batches/${batchId}/specimens/bulk`, data),
+  validateCSV: (data: { csvText: string }) => api.post<{ valid: boolean; errors: Array<{ row: number; field?: string; error: string }>; preview: Array<Record<string, any>> }>('/blood-controls/batches/validate-csv', data),
+  deleteBatch: (id: number) => api.delete<{ message: string }>(`/blood-controls/batches/${id}`),
 }
 
 export const reagentsApi = {
@@ -883,12 +969,13 @@ export interface StatisticsData {
   containers: {
     total: number
     byType: Record<string, number>
+    byTags: Record<string, number>
     byState: Record<string, number>
     averagePerSpecimen: number
   }
   storage: {
     byLocation: Array<{ location: string; count: number }>
-    byLocationRoot: Record<string, number>
+    byRootLocation: Record<string, number>
   }
 }
 
@@ -922,7 +1009,6 @@ export const statisticsApi = {
 export interface ContainerDefaults {
   micronix_tube: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
   cryovial_tube: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
-  tube: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
   paper: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
   static_well: { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }
 }
@@ -987,6 +1073,14 @@ export const settingsApi = {
   get: (key: string) => api.get<{ key: string; value: any }>(`/settings/${key}`),
   update: (key: string, value: any) => api.put<{ key: string; value: any }>(`/settings/${key}`, value),
   getUnits: () => api.get<Unit[]>('/settings/units'),
+  getContainerTypeUnits: (containerType: string) =>
+    api.get<{ units: Unit[] }>(`/settings/container-types/${containerType}/units`),
+  addContainerTypeUnit: (containerType: string, unitId: number) =>
+    api.post<{ success: boolean; unitId: number }>(`/settings/container-types/${containerType}/units`, { unitId }),
+  removeContainerTypeUnit: (containerType: string, unitId: number) =>
+    api.delete<{ success: boolean }>(`/settings/container-types/${containerType}/units/${unitId}`),
+  getUnitsByContainerType: (containerType: string) =>
+    api.get<{ units: Unit[] }>(`/settings/units/container-types/${containerType}`),
 }
 
 export const exportConfigurationsApi = {
@@ -997,6 +1091,21 @@ export const exportConfigurationsApi = {
 export const scannerConfigurationsApi = {
   getAll: () => api.get<ScannerConfigurations>('/settings/scanner_configurations'),
   update: (configs: ScannerConfigurations) => api.put<ScannerConfigurations>('/settings/scanner_configurations', configs),
+}
+
+export const setupApi = {
+  status: () => api.get<{ initialized: boolean }>('/setup/status'),
+  initialize: (data: {
+    adminName: string
+    adminEmail: string
+    adminPassword: string
+    seedData?: boolean
+    locations?: Array<{ name: string; storageTypeId?: string; description?: string }>
+    specimenTypes?: Array<{ name: string }>
+    units?: Array<{ name: string; symbol: string; category: string }>
+    storageTypes?: Array<{ name: string; description?: string }>
+    strains?: Array<{ name: string; description?: string }>
+  }) => api.post<{ success: boolean; message: string }>('/setup/initialize', data),
 }
 
 export default api

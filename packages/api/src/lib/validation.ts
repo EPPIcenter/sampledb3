@@ -1,5 +1,5 @@
 import { db } from '../db/client'
-import { studySubject, study, specimen, specimenType, controlBatch } from '../db/schema'
+import { studySubject, study, specimen, specimenType, controlBatch, specimenTypeContainerType, containerTypeUnit, unit } from '../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { resolveStudyByShortCode, resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
 
@@ -141,7 +141,7 @@ export async function validateSpecimenData(data: {
     if (!resolvedId) {
       return { valid: false, error: `Specimen type '${data.specimenTypeName}' not found` }
     }
-    specimenTypeId = resolvedId ?? undefined
+    specimenTypeId = resolvedId
   } else if (!specimenTypeId) {
     return { valid: false, error: 'Specimen type name or ID required' }
   }
@@ -194,4 +194,70 @@ export function checkDuplicateSpecimens(
   }
   
   return errors
+}
+
+/**
+ * Validate that a container type is allowed for a specimen type
+ */
+export async function validateContainerTypeForSpecimenType(
+  specimenTypeId: number,
+  containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well'
+): Promise<{ valid: boolean; error?: string }> {
+  // Check if relationship exists
+  const relationship = await db
+    .select()
+    .from(specimenTypeContainerType)
+    .where(
+      and(
+        eq(specimenTypeContainerType.specimenTypeId, specimenTypeId),
+        eq(specimenTypeContainerType.containerType, containerType)
+      ) as any
+    )
+    .get()
+
+  if (!relationship) {
+    // Get specimen type name for error message
+    const specType = await db.select().from(specimenType).where(eq(specimenType.id, specimenTypeId)).get()
+    const specTypeName = specType?.name || `ID ${specimenTypeId}`
+    
+    return {
+      valid: false,
+      error: `Container type '${containerType}' is not allowed for specimen type '${specTypeName}'. Please configure allowed container types for this specimen type.`
+    }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Validate that a unit is allowed for a container type
+ */
+export async function validateUnitForContainerType(
+  containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well',
+  unitId: number
+): Promise<{ valid: boolean; error?: string }> {
+  // Check if relationship exists
+  const relationship = await db
+    .select()
+    .from(containerTypeUnit)
+    .where(
+      and(
+        eq(containerTypeUnit.containerType, containerType),
+        eq(containerTypeUnit.unitId, unitId)
+      ) as any
+    )
+    .get()
+
+  if (!relationship) {
+    // Get unit symbol for error message
+    const unitRecord = await db.select().from(unit).where(eq(unit.id, unitId)).get()
+    const unitSymbol = unitRecord?.symbol || `ID ${unitId}`
+    
+    return {
+      valid: false,
+      error: `Unit '${unitSymbol}' is not allowed for container type '${containerType}'. Please configure allowed units for this container type.`
+    }
+  }
+
+  return { valid: true }
 }

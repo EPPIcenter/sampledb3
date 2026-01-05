@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { locationsApi, searchApi } from '../lib/api'
-import { buildLocationTree, getLocationLabel } from '../lib/location-tree'
+import { getRootLocations, getLocationChildren, getLocationDescendants, getLocationAncestors, getLocationLabel } from '../lib/location-tree'
 import SkeletonCard from '../components/SkeletonCard'
+import LocationForm from '../components/LocationForm'
 
 interface Location {
   id: number
-  locationRoot: string
-  storageTypeId: string
+  parentId: number | null
+  name: string
+  storageTypeId: string | null
+  storageTypeName?: string | null
+  effectiveStorageTypeId?: string | null
+  effectiveStorageTypeName?: string | null
   description?: string
-  levelI: string
-  levelII: string
-  levelIII?: string
+  canContainCollections: boolean
+  path?: string
   created: string
   lastUpdated: string
 }
@@ -23,14 +27,8 @@ interface LocationContents {
   bags?: any[]
 }
 
-type TreeNodeType = 'root' | 'levelI' | 'levelII' | 'location'
-
 interface SelectedNode {
-  type: TreeNodeType
-  root: string
-  levelI?: string
-  levelII?: string
-  locationId?: number
+  locationId: number
 }
 
 interface CollectionSearchResult {
@@ -46,15 +44,14 @@ export default function Locations() {
   const navigate = useNavigate()
   const searchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const treeRef = useRef<HTMLDivElement>(null)
+  const selectedNodeRef = useRef<HTMLButtonElement>(null)
 
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null)
-  const [expandedRoots, setExpandedRoots] = useState<Record<string, boolean>>({})
-  const [expandedLevelI, setExpandedLevelI] = useState<
-    Record<string, Record<string, boolean>>
-  >({})
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
   const [locationDetailsCache, setLocationDetailsCache] = useState<
     Record<number, { location: Location; contents: LocationContents }>
@@ -66,37 +63,124 @@ export default function Locations() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
 
-  useEffect(() => {
-    const loadLocations = async () => {
-      try {
-        // Fetch all locations in a single request (no pagination params)
-        const response = await locationsApi.list()
-        const allLocations = response.data.locations as Location[]
+  // Location management state
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null)
+  const [formParentId, setFormParentId] = useState<number | null>(null)
+  const [formParentLocation, setFormParentLocation] = useState<Location | null>(null)
+  const [showFormModal, setShowFormModal] = useState(false)
+  const [deletingLocationId, setDeletingLocationId] = useState<number | null>(null)
+  const [mutationLoading, setMutationLoading] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-        setLocations(allLocations)
+  const loadLocations = useCallback(async (preserveState = true) => {
+    try {
+      setLoading(true)
+      // Fetch all locations in a single request (no pagination params)
+      const response = await locationsApi.list()
+      const allLocations = response.data.locations as Location[]
 
-        // Default selection: first location if any
+      setLocations(allLocations)
+
+      if (preserveState) {
+        // Preserve expanded state
+        setExpandedIds((prevExpandedIds) => {
+          const preservedExpandedIds = new Set<number>()
+          prevExpandedIds.forEach((id) => {
+            if (allLocations.find((l) => l.id === id)) {
+              preservedExpandedIds.add(id)
+            }
+          })
+          return preservedExpandedIds
+        })
+
+        // Preserve selection if location still exists
+        setSelectedNode((prevSelectedNode) => {
+          if (prevSelectedNode) {
+            const selectedLocation = allLocations.find((l) => l.id === prevSelectedNode.locationId)
+            if (selectedLocation) {
+              // Expand ancestors of the selected location
+              const ancestors = getLocationAncestors(allLocations, prevSelectedNode.locationId)
+              setExpandedIds((prev) => {
+                const next = new Set(prev)
+                ancestors.forEach((a) => next.add(a.id))
+                return next
+              })
+              return prevSelectedNode
+            } else {
+              // Selected location was deleted, select first if available
+              if (allLocations.length > 0) {
+                const first = allLocations[0]
+                const ancestors = getLocationAncestors(allLocations, first.id)
+                setExpandedIds(new Set(ancestors.map((a) => a.id)))
+                return { locationId: first.id }
+              } else {
+                return null
+              }
+            }
+          }
+          return prevSelectedNode
+        })
+      } else {
+        // Initial load - select first location
         if (allLocations.length > 0) {
           const first = allLocations[0]
-          setSelectedNode({
-            type: 'location',
-            root: first.locationRoot,
-            levelI: first.levelI,
-            levelII: first.levelII,
-            locationId: first.id,
-          })
+          const ancestors = getLocationAncestors(allLocations, first.id)
+          setExpandedIds(new Set(ancestors.map((a) => a.id)))
+          setSelectedNode({ locationId: first.id })
         }
-      } catch (error) {
-        console.error('Failed to load locations:', error)
-      } finally {
-        setLoading(false)
       }
+    } catch (error) {
+      console.error('Failed to load locations:', error)
+    } finally {
+      setLoading(false)
     }
-
-    loadLocations()
   }, [])
 
-  const tree = useMemo(() => buildLocationTree(locations), [locations])
+  useEffect(() => {
+    loadLocations(false) // Initial load, don't preserve state
+  }, [loadLocations])
+
+  // Define ensureLocationLoaded before useEffects that use it
+  const ensureLocationLoaded = useCallback(async (locationId: number) => {
+    if (locationDetailsCache[locationId]) return
+    setLoadingSelection(true)
+    try {
+      const response = await locationsApi.get(locationId)
+      setLocationDetailsCache((prev) => ({
+        ...prev,
+        [locationId]: {
+          location: response.data.location as Location,
+          contents: (response.data.contents || {}) as LocationContents,
+        },
+      }))
+    } catch (error) {
+      console.error('Failed to load location details:', error)
+    } finally {
+      setLoadingSelection(false)
+    }
+  }, [locationDetailsCache])
+
+  // Load details when a location is selected
+  useEffect(() => {
+    if (selectedNode) {
+      ensureLocationLoaded(selectedNode.locationId)
+    }
+  }, [selectedNode, ensureLocationLoaded])
+
+  // Scroll selected node into view when it changes
+  useEffect(() => {
+    if (selectedNodeRef.current && treeRef.current) {
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        selectedNodeRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'nearest',
+        })
+      }, 100)
+    }
+  }, [selectedNode])
+
   
   // Collection search effect
   useEffect(() => {
@@ -155,194 +239,281 @@ export default function Locations() {
 
   const globalStats = useMemo(() => {
     const totalLocations = locations.length
-    const distinctRoots = new Set(locations.map((l) => l.locationRoot)).size
+    const rootLocations = getRootLocations(locations)
     return {
       totalLocations,
-      distinctRoots,
+      distinctRoots: rootLocations.length,
     }
   }, [locations])
 
   const selectedDetails = useMemo(() => {
     if (!selectedNode) return null
 
-    if (selectedNode.type === 'location' && selectedNode.locationId) {
-      const cached = locationDetailsCache[selectedNode.locationId]
-      if (cached) return { mode: 'location' as const, ...cached }
-      const fallbackLocation = locations.find((l) => l.id === selectedNode.locationId) || null
-      return { mode: 'location' as const, location: fallbackLocation, contents: null }
-    }
-
-    // Aggregate selection: compute subtree locations
-    const matches: Location[] = []
-    locations.forEach((loc) => {
-      if (loc.locationRoot !== selectedNode.root) return
-      if (
-        selectedNode.type === 'levelI' &&
-        loc.levelI === selectedNode.levelI
-      ) {
-        matches.push(loc)
-      } else if (
-        selectedNode.type === 'levelII' &&
-        loc.levelI === selectedNode.levelI &&
-        loc.levelII === selectedNode.levelII
-      ) {
-        matches.push(loc)
-      } else if (selectedNode.type === 'root') {
-        matches.push(loc)
-      }
-    })
-
-    return { mode: 'aggregate' as const, locations: matches }
+    const cached = locationDetailsCache[selectedNode.locationId]
+    if (cached) return { mode: 'location' as const, ...cached }
+    const fallbackLocation = locations.find((l) => l.id === selectedNode.locationId) || null
+    return { mode: 'location' as const, location: fallbackLocation, contents: null }
   }, [selectedNode, locationDetailsCache, locations])
-
-  const ensureLocationLoaded = async (locationId: number) => {
-    if (locationDetailsCache[locationId]) return
-    setLoadingSelection(true)
-    try {
-      const response = await locationsApi.get(locationId)
-      setLocationDetailsCache((prev) => ({
-        ...prev,
-        [locationId]: {
-          location: response.data.location as Location,
-          contents: (response.data.contents || {}) as LocationContents,
-        },
-      }))
-    } catch (error) {
-      console.error('Failed to load location details:', error)
-    } finally {
-      setLoadingSelection(false)
-    }
-  }
 
   const handleSelectNode = async (node: SelectedNode) => {
     setSelectedNode(node)
-    if (node.type === 'location' && node.locationId) {
-      await ensureLocationLoaded(node.locationId)
+    
+    // Expand all ancestors of the selected location so it's visible
+    const ancestors = getLocationAncestors(locations, node.locationId)
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      ancestors.forEach(a => next.add(a.id))
+      // Also expand the selected location itself if it has children
+      const selectedLocation = locations.find(l => l.id === node.locationId)
+      if (selectedLocation) {
+        const children = getLocationChildren(locations, selectedLocation.id)
+        if (children.length > 0) {
+          next.add(node.locationId)
+        }
+      }
+      return next
+    })
+    
+    await ensureLocationLoaded(node.locationId)
+  }
+
+  const toggleExpanded = (locationId: number) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(locationId)) {
+        next.delete(locationId)
+      } else {
+        next.add(locationId)
+      }
+      return next
+    })
+  }
+
+  // Handle opening form for adding root location
+  const handleAddRoot = () => {
+    setEditingLocation(null)
+    setFormParentId(null)
+    setFormParentLocation(null)
+    setShowFormModal(true)
+  }
+
+  // Handle opening form for adding child location
+  const handleAddChild = (parentId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const parentLocation = locations.find(l => l.id === parentId) || null
+    setEditingLocation(null)
+    setFormParentId(parentId)
+    setFormParentLocation(parentLocation)
+    setShowFormModal(true)
+  }
+
+  // Handle opening form for editing location
+  const handleEdit = (location: Location, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const parentLocation = location.parentId ? locations.find(l => l.id === location.parentId) || null : null
+    setEditingLocation(location)
+    setFormParentId(location.parentId ?? null)
+    setFormParentLocation(parentLocation)
+    setShowFormModal(true)
+  }
+
+  // Handle delete confirmation
+  const handleDeleteClick = async (location: Location, e: React.MouseEvent) => {
+    e.stopPropagation()
+    // Ensure location details are loaded for delete confirmation
+    if (!locationDetailsCache[location.id]) {
+      await ensureLocationLoaded(location.id)
+    }
+    setDeletingLocationId(location.id)
+  }
+
+  // Handle form save
+  const handleFormSave = async (data: any) => {
+    setMutationLoading(true)
+    setSuccessMessage(null)
+    try {
+      if (editingLocation) {
+        await locationsApi.update(editingLocation.id, data)
+        setSuccessMessage('Location updated successfully')
+      } else {
+        await locationsApi.create(data)
+        setSuccessMessage('Location created successfully')
+      }
+      setShowFormModal(false)
+      setEditingLocation(null)
+      setFormParentId(null)
+      setFormParentLocation(null)
+      // Clear location details cache to force refresh
+      setLocationDetailsCache({})
+      await loadLocations(true) // Preserve state after mutation
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000)
+    } catch (error) {
+      throw error // Re-throw to let form handle error display
+    } finally {
+      setMutationLoading(false)
     }
   }
 
-  const toggleRoot = (root: string) => {
-    setExpandedRoots((prev) => ({ ...prev, [root]: !prev[root] }))
+  // Handle form cancel
+  const handleFormCancel = () => {
+    setShowFormModal(false)
+    setEditingLocation(null)
+    setFormParentId(null)
+    setFormParentLocation(null)
   }
 
-  const toggleLevelI = (root: string, levelI: string) => {
-    setExpandedLevelI((prev) => ({
-      ...prev,
-      [root]: {
-        ...(prev[root] || {}),
-        [levelI]: !(prev[root]?.[levelI]),
-      },
-    }))
+  // Handle delete confirmation
+  const handleDeleteConfirm = async () => {
+    if (!deletingLocationId) return
+
+    setMutationLoading(true)
+    setSuccessMessage(null)
+    try {
+      await locationsApi.delete(deletingLocationId)
+      setSuccessMessage('Location deleted successfully')
+      setDeletingLocationId(null)
+      // Clear location details cache
+      setLocationDetailsCache({})
+      // Clear selection if deleted location was selected
+      if (selectedNode?.locationId === deletingLocationId) {
+        setSelectedNode(null)
+      }
+      await loadLocations(true) // Preserve state after mutation
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000)
+    } catch (error: any) {
+      const errorMessage =
+        error.response?.data?.error ||
+        error.message ||
+        'Failed to delete location'
+      alert(errorMessage)
+    } finally {
+      setMutationLoading(false)
+    }
   }
 
+  // Handle delete cancel
+  const handleDeleteCancel = () => {
+    setDeletingLocationId(null)
+  }
+
+
+  const renderLocationNode = (loc: Location, depth: number = 0): React.ReactNode => {
+    const children = getLocationChildren(locations, loc.id)
+    const isExpanded = expandedIds.has(loc.id)
+    const isSelected = selectedNode?.locationId === loc.id
+
+    const handleNodeClick = () => {
+      if (isSelected && children.length > 0) {
+        // If already selected and has children, toggle expansion
+        toggleExpanded(loc.id)
+      } else {
+        // Otherwise, select the node
+        handleSelectNode({ locationId: loc.id })
+      }
+    }
+
+    return (
+      <div key={loc.id} className={depth > 0 ? 'ml-3 border-l border-gray-100 pl-2 mt-1' : 'mb-2'}>
+        <div className="group flex items-center gap-0.5">
+          <button
+            ref={isSelected ? selectedNodeRef : null}
+            type="button"
+            onClick={handleNodeClick}
+            className={`flex items-center flex-1 min-w-0 px-1.5 py-0.5 rounded text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors ${
+              isSelected
+                ? 'bg-blue-50 border border-blue-200 shadow-sm'
+                : 'hover:bg-gray-50 border border-transparent'
+            }`}
+          >
+            <div className="flex items-center flex-1">
+              {children.length > 0 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleExpanded(loc.id)
+                  }}
+                  className="w-3 h-3 mr-1.5 text-gray-500 flex-shrink-0 hover:text-gray-700"
+                >
+                  {isExpanded ? '▾' : '▸'}
+                </button>
+              )}
+              {children.length === 0 && <span className="w-3 h-3 mr-1.5"></span>}
+              <div className="text-left flex-1 min-w-0">
+                <p className="text-gray-900 truncate">
+                  {getLocationLabel(loc)}
+                </p>
+                {loc.description && (
+                  <p className="text-[11px] text-gray-500 truncate">
+                    {loc.description}
+                  </p>
+                )}
+                {loc.path && (
+                  <p className="text-[10px] text-gray-400 font-mono break-words">
+                    {loc.path}
+                  </p>
+                )}
+              </div>
+            </div>
+          </button>
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+            <button
+              type="button"
+              onClick={(e) => handleAddChild(loc.id, e)}
+              className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+              title="Add child location"
+              disabled={mutationLoading}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => handleEdit(loc, e)}
+              className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+              title="Edit location"
+              disabled={mutationLoading}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => handleDeleteClick(loc, e)}
+              className="p-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+              title="Delete location"
+              disabled={mutationLoading}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {children.length > 0 && isExpanded && (
+          <div className="mt-1">
+            {children.map((child) => renderLocationNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const renderTree = () => {
-    if (Object.keys(tree).length === 0) {
+    const rootLocations = getRootLocations(locations)
+    
+    if (rootLocations.length === 0) {
       return <p className="text-xs text-gray-500">No locations available.</p>
     }
 
     return (
       <div className="text-sm">
-        {Object.entries(tree).map(([root, levelIGroup]) => {
-          const rootExpanded = expandedRoots[root] ?? false
-          return (
-            <div key={root} className="mb-2">
-              <button
-                type="button"
-                onClick={() => toggleRoot(root)}
-                className="flex items-center justify-between w-full px-2 py-1 rounded hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              >
-                <div className="flex items-center">
-                  <span className="w-3 h-3 mr-2 text-gray-500">
-                    {rootExpanded ? '▾' : '▸'}
-                  </span>
-                  <span className="font-semibold text-gray-800">{root}</span>
-                </div>
-                <span className="text-[11px] text-gray-500">
-                  {Object.values(levelIGroup).reduce(
-                    (sum, locs) => sum + locs.length,
-                    0
-                  )}{' '}
-                  locations
-                </span>
-              </button>
-
-              {rootExpanded && (
-                <div className="ml-4 border-l border-gray-100 pl-3 mt-1">
-                  {Object.entries(levelIGroup).map(([levelI, locs]) => {
-                    const l1Expanded =
-                      expandedLevelI[root]?.[levelI] ??
-                      false
-                    return (
-                      <div key={levelI} className="mb-1">
-                        <button
-                          type="button"
-                          onClick={() => toggleLevelI(root, levelI)}
-                          className="flex items-center justify-between w-full px-1 py-1 rounded hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        >
-                          <div className="flex items-center">
-                            <span className="w-3 h-3 mr-2 text-gray-400">
-                              {l1Expanded ? '▾' : '▸'}
-                            </span>
-                            <span className="text-gray-800">{levelI}</span>
-                          </div>
-                        </button>
-
-                        {l1Expanded && (
-                          <div className="ml-4 border-l border-gray-100 pl-3 mt-1 space-y-1">
-                            {locs.map((loc) => {
-                              const isSelected =
-                                selectedNode?.type ===
-                                  'location' &&
-                                selectedNode.locationId ===
-                                  loc.id
-                              return (
-                                <button
-                                  key={loc.id}
-                                  type="button"
-                                  onClick={() =>
-                                    handleSelectNode({
-                                      type: 'location',
-                                      root,
-                                      levelI,
-                                      levelII: loc.levelII,
-                                      locationId: loc.id,
-                                    })
-                                  }
-                                  className={`flex items-center justify-between w-full px-2 py-1 rounded text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                                    isSelected
-                                      ? 'bg-blue-50 border border-blue-200'
-                                      : 'hover:bg-gray-50 border border-transparent'
-                                  }`}
-                                >
-                                  <div className="text-left">
-                                    <p className="text-gray-900">
-                                      {getLocationLabel(loc)}
-                                    </p>
-                                    {loc.description && (
-                                      <p className="text-[11px] text-gray-500 truncate">
-                                        {loc.description}
-                                      </p>
-                                    )}
-                                  </div>
-                                  {isSelected && (
-                                    <span className="text-[10px] font-mono text-blue-700">
-                                      selected
-                                    </span>
-                                  )}
-                                </button>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )
-        })}
+        {rootLocations.map((root) => renderLocationNode(root, 0))}
       </div>
     )
   }
@@ -359,105 +530,6 @@ export default function Locations() {
     if (!selectedDetails) {
       return (
         <div className="text-gray-500 text-center py-16">No details available.</div>
-      )
-    }
-
-    if (selectedDetails.mode === 'aggregate') {
-      const count = selectedDetails.locations.length
-      return (
-        <div className="space-y-4">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
-              Selection Summary
-            </h2>
-            <p className="text-sm text-gray-600 mb-2">
-              {selectedNode.type === 'root' && (
-                <>
-                  Storage root{' '}
-                  <span className="font-mono text-gray-800">
-                    {selectedNode.root}
-                  </span>
-                </>
-              )}
-              {selectedNode.type === 'levelI' && (
-                <>
-                  Level I{' '}
-                  <span className="font-mono text-gray-800">
-                    {selectedNode.levelI}
-                  </span>{' '}
-                  in root{' '}
-                  <span className="font-mono text-gray-800">
-                    {selectedNode.root}
-                  </span>
-                </>
-              )}
-              {selectedNode.type === 'levelII' && (
-                <>
-                  Level II{' '}
-                  <span className="font-mono text-gray-800">
-                    {selectedNode.levelII}
-                  </span>{' '}
-                  under{' '}
-                  <span className="font-mono text-gray-800">
-                    {selectedNode.levelI}
-                  </span>{' '}
-                  in root{' '}
-                  <span className="font-mono text-gray-800">
-                    {selectedNode.root}
-                  </span>
-                </>
-              )}
-            </p>
-            <p className="text-3xl font-bold text-blue-600 mb-1">
-              {count.toLocaleString()}
-            </p>
-            <p className="text-sm text-gray-600">locations in this subtree</p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">
-              Locations
-            </h3>
-            <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
-              {selectedDetails.locations.map((loc) => (
-                <button
-                  key={loc.id}
-                  type="button"
-                  onClick={() =>
-                    handleSelectNode({
-                      type: 'location',
-                      root: loc.locationRoot,
-                      levelI: loc.levelI,
-                      levelII: loc.levelII,
-                      locationId: loc.id,
-                    })
-                  }
-                  className="w-full text-left px-2 py-2 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-900">
-                        {loc.levelIII || `Location #${loc.id}`}
-                      </p>
-                      <p className="text-xs text-gray-500 font-mono">
-                        {loc.locationRoot} → {loc.levelI} → {loc.levelII}
-                        {loc.levelIII && ` → ${loc.levelIII}`}
-                      </p>
-                      {loc.description && (
-                        <p className="text-xs text-gray-500 truncate">
-                          {loc.description}
-                        </p>
-                      )}
-                    </div>
-                    <span className="text-[11px] text-blue-600">
-                      View preview
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
       )
     }
 
@@ -478,12 +550,7 @@ export default function Locations() {
       bags: c.bags?.length || 0,
     }
 
-    const pathParts = [
-      location.locationRoot,
-      location.levelI,
-      location.levelII,
-      location.levelIII,
-    ].filter(Boolean)
+    const displayPath = location.path || location.name
 
     return (
       <div className="space-y-4">
@@ -494,11 +561,13 @@ export default function Locations() {
                 Location preview
               </h2>
               <p className="text-sm text-gray-600 font-mono">
-                {pathParts.join(' → ')}
+                {displayPath}
               </p>
               <p className="mt-2 text-sm text-gray-700">
                 Type:{' '}
-                <span className="font-medium">{location.storageTypeId}</span>
+                <span className="font-medium">
+                  {location.effectiveStorageTypeName || location.storageTypeName || location.storageTypeId || 'N/A'}
+                </span>
               </p>
               {location.description && (
                 <p className="mt-1 text-xs text-gray-500">
@@ -825,33 +894,121 @@ export default function Locations() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-white rounded-lg shadow p-4 max-h-[640px] overflow-y-auto">
-            <div className="flex items-center justify-between mb  -2">
+          <div ref={treeRef} className="bg-white rounded-lg shadow p-3 max-h-[640px] overflow-y-auto overflow-x-hidden">
+            <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold text-gray-900">
                 Storage tree
               </h2>
+              <button
+                type="button"
+                onClick={handleAddRoot}
+                disabled={mutationLoading}
+                className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Add root location"
+              >
+                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Root
+              </button>
             </div>
             {renderTree()}
           </div>
 
           <div className="lg:col-span-2 space-y-4">
             {renderSummaryAndPreview()}
-
-            <div className="bg-white rounded-lg shadow p-4 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-600">
-              <span>
-                For a full breakdown of a single location, open details and use the
-                dedicated Location page.
-              </span>
-              <Link
-                to="/locations"
-                className="inline-flex items-center text-blue-600 hover:underline"
-              >
-                Refresh locations
-              </Link>
-            </div>
           </div>
         </div>
       )}
+
+      {/* Success Message */}
+      {successMessage && (
+        <div className="fixed bottom-4 right-4 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg shadow-lg z-50">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            {successMessage}
+          </div>
+        </div>
+      )}
+
+      {/* Form Modal */}
+      {showFormModal && (
+        <LocationForm
+          location={editingLocation}
+          parentId={formParentId}
+          parentLocation={formParentLocation}
+          onSave={handleFormSave}
+          onCancel={handleFormCancel}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingLocationId && (() => {
+        const locationToDelete = locations.find((l) => l.id === deletingLocationId)
+        const children = locationToDelete ? getLocationChildren(locations, locationToDelete.id) : []
+        const hasChildren = children.length > 0
+        const cachedDetails = locationToDelete ? locationDetailsCache[deletingLocationId] : null
+        const hasContents = cachedDetails?.contents
+          ? (cachedDetails.contents.micronixPlates?.length || 0) +
+            (cachedDetails.contents.cryovialBoxes?.length || 0) +
+            (cachedDetails.contents.boxes?.length || 0) +
+            (cachedDetails.contents.bags?.length || 0) > 0
+          : false
+
+        return (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            onClick={handleDeleteCancel}
+          >
+            <div
+              className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Delete Location</h2>
+                <p className="text-sm text-gray-700 mb-4">
+                  Are you sure you want to delete <strong>{locationToDelete?.name}</strong>?
+                </p>
+                {hasChildren && (
+                  <div className="mb-4 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
+                    <p className="text-sm font-medium">Warning: This location has {children.length} child location(s).</p>
+                    <p className="text-xs mt-1">You must delete all child locations first.</p>
+                  </div>
+                )}
+                {hasContents && (
+                  <div className="mb-4 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
+                    <p className="text-sm font-medium">Warning: This location contains storage containers.</p>
+                    <p className="text-xs mt-1">You must move or remove all containers before deleting this location.</p>
+                  </div>
+                )}
+                {!hasChildren && !hasContents && (
+                  <p className="text-sm text-gray-600 mb-4">This action cannot be undone.</p>
+                )}
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={handleDeleteCancel}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    disabled={mutationLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteConfirm}
+                    disabled={mutationLoading || hasChildren || hasContents}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {mutationLoading ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

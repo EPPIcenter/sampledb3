@@ -75,18 +75,17 @@ const testState = await createTestState(testDb, { name: 'Test State' })
 ```
 
 Available factories:
-- `createTestState`
+- `createTestTag`
 - `createTestStorageType`
 - `createTestSpecimenType`
-- `createTestSampleType`
 - `createTestStrain`
-- `createTestComposition`
 - `createTestStorageContainer`
 - `createTestLocation`
-- `createTestCompositionStrain`
 - `createTestControlDefinition`
 - `createTestSpecimen`
 - `createTestUnit`
+- `createTestStudy`
+- `createTestStudySubject`
 
 ## Writing Tests
 
@@ -96,7 +95,6 @@ For routes using `createCrudRoutes`, create the routes dynamically in tests with
 
 ```typescript
 import { createCrudRoutes } from '../../lib/crud-routes'
-import { state } from '../../db/schema'
 import { z } from 'zod'
 
 describe('States API', () => {

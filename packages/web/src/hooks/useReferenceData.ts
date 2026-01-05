@@ -3,15 +3,11 @@ import {
   specimenTypesApi,
   tagsApi,
   storageTypesApi,
-  sampleTypesApi,
   strainsApi,
-  compositionsApi,
   type SpecimenType,
   type Tag,
   type StorageType,
-  type SampleType,
   type Strain,
-  type Composition,
 } from '../lib/api'
 
 // Generic reference data keys factory
@@ -28,9 +24,8 @@ function createReferenceDataKeys<T extends string>(type: T) {
 export const specimenTypeKeys = createReferenceDataKeys('specimen-types')
 export const tagKeys = createReferenceDataKeys('tags')
 export const storageTypeKeys = createReferenceDataKeys('storage-types')
-export const sampleTypeKeys = createReferenceDataKeys('sample-types')
 export const strainKeys = createReferenceDataKeys('strains')
-export const compositionKeys = createReferenceDataKeys('compositions')
+// compositionKeys - REMOVED: Compositions no longer used
 
 // Specimen Types
 export function useSpecimenTypes() {
@@ -203,59 +198,6 @@ export function useDeleteStorageType() {
   })
 }
 
-// Sample Types
-export function useSampleTypes() {
-  return useQuery({
-    queryKey: sampleTypeKeys.list(),
-    queryFn: async () => {
-      const res = await sampleTypesApi.list()
-      return res.data.sampleTypes
-    },
-  })
-}
-
-export function useCreateSampleType() {
-  const queryClient = useQueryClient()
-  
-  return useMutation({
-    mutationFn: async (data: Omit<SampleType, 'id'>) => {
-      const res = await sampleTypesApi.create(data)
-      return res.data.sampleType
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: sampleTypeKeys.lists() })
-    },
-  })
-}
-
-export function useUpdateSampleType() {
-  const queryClient = useQueryClient()
-  
-  return useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<SampleType> }) => {
-      const res = await sampleTypesApi.update(id, data)
-      return res.data.sampleType
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: sampleTypeKeys.detail(data.id) })
-      queryClient.invalidateQueries({ queryKey: sampleTypeKeys.lists() })
-    },
-  })
-}
-
-export function useDeleteSampleType() {
-  const queryClient = useQueryClient()
-  
-  return useMutation({
-    mutationFn: async (id: number) => {
-      await sampleTypesApi.delete(id)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: sampleTypeKeys.lists() })
-    },
-  })
-}
-
 // Strains
 export function useStrains() {
   return useQuery({
@@ -309,58 +251,7 @@ export function useDeleteStrain() {
   })
 }
 
-// Compositions
-export function useCompositions() {
-  return useQuery({
-    queryKey: compositionKeys.list(),
-    queryFn: async () => {
-      const res = await compositionsApi.list()
-      return res.data.compositions
-    },
-  })
-}
-
-export function useCreateComposition() {
-  const queryClient = useQueryClient()
-  
-  return useMutation({
-    mutationFn: async (data: Omit<Composition, 'id'>) => {
-      const res = await compositionsApi.create(data)
-      return res.data.composition
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: compositionKeys.lists() })
-    },
-  })
-}
-
-export function useUpdateComposition() {
-  const queryClient = useQueryClient()
-  
-  return useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<Composition> }) => {
-      const res = await compositionsApi.update(id, data)
-      return res.data.composition
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: compositionKeys.detail(data.id) })
-      queryClient.invalidateQueries({ queryKey: compositionKeys.lists() })
-    },
-  })
-}
-
-export function useDeleteComposition() {
-  const queryClient = useQueryClient()
-  
-  return useMutation({
-    mutationFn: async (id: number) => {
-      await compositionsApi.delete(id)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: compositionKeys.lists() })
-    },
-  })
-}
+// Compositions - REMOVED: No longer used (strains are now embedded in control definitions via properties JSON)
 
 
 

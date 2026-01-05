@@ -3,7 +3,6 @@ import {
   micronixTube,
   cryovialTube,
   staticWell,
-  tube,
   paper,
   micronixPlate,
   cryovialBox,
@@ -14,7 +13,7 @@ import {
 import { eq, and, isNull } from 'drizzle-orm'
 import { resolveCollection, type CollectionType } from './collection-resolution'
 
-export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'static_well' | 'tube' | 'paper'
+export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'static_well' | 'paper'
 
 export interface ContainerInfo {
   containerId: number
@@ -127,28 +126,6 @@ export async function resolveContainerByPosition(
       }
       break
     }
-
-    case 'box': {
-      const tubeRecord = await db
-        .select()
-        .from(tube)
-        .where(and(eq(tube.boxId, collectionId), eq(tube.boxPosition, position)))
-        .get()
-
-      if (tubeRecord) {
-        const boxRecord = await db.select({ name: box.name }).from(box).where(eq(box.id, tubeRecord.boxId)).get()
-        return {
-          containerId: tubeRecord.id,
-          containerType: 'tube',
-          currentCollectionId: tubeRecord.boxId,
-          currentCollectionName: boxRecord?.name || null,
-          currentCollectionType: 'box',
-          currentPosition: tubeRecord.boxPosition,
-          barcode: null,
-        }
-      }
-      break
-    }
   }
 
   return null
@@ -228,11 +205,6 @@ export async function checkPositionAvailability(
       if (cryovial && !excludeContainerIds.includes(cryovial.id)) return { occupied: true, containerId: cryovial.id, containerType: 'cryovial_tube' }
       break
     }
-    case 'box': {
-      const tubeRecord = await db.select({ id: tube.id }).from(tube).where(and(eq(tube.boxId, collectionId), eq(tube.boxPosition, position))).get()
-      if (tubeRecord && !excludeContainerIds.includes(tubeRecord.id)) return { occupied: true, containerId: tubeRecord.id, containerType: 'tube' }
-      break
-    }
     case 'sheet': {
       const paperRec = await db.select({ id: paper.id }).from(paper).where(and(eq(paper.sheetId, collectionId), eq(paper.position, position))).get()
       if (paperRec && !excludeContainerIds.includes(paperRec.id)) return { occupied: true, containerId: paperRec.id, containerType: 'paper' }
@@ -267,17 +239,6 @@ export async function resolveContainerByContainerId(containerId: number): Promis
     currentCollectionType: 'cryovial_box',
     currentPosition: cryovial.position,
     barcode: cryovial.barcode,
-  }
-
-  const tubeRec = await db.select().from(tube).where(eq(tube.id, containerId)).get()
-  if (tubeRec) return {
-    containerId: tubeRec.id,
-    containerType: 'tube',
-    currentCollectionId: tubeRec.boxId,
-    currentCollectionName: (await db.select({ name: box.name }).from(box).where(eq(box.id, tubeRec.boxId)).get())?.name || null,
-    currentCollectionType: 'box',
-    currentPosition: tubeRec.boxPosition,
-    barcode: null,
   }
 
   const paperRec = await db.select().from(paper).where(eq(paper.id, containerId)).get()
@@ -355,7 +316,7 @@ export async function executeMoves(request: BatchMoveRequest): Promise<MoveResul
     const errors: ValidationError[] = []
     for (let i = 0; i < validMoves.length; i++) {
       const { move, info } = validMoves[i]
-      const requiresPosition = info!.containerType === 'micronix_tube' || info!.containerType === 'cryovial_tube' || info!.containerType === 'tube' || info!.containerType === 'static_well'
+      const requiresPosition = info!.containerType === 'micronix_tube' || info!.containerType === 'cryovial_tube' || info!.containerType === 'static_well'
       if (requiresPosition && (!move.targetPosition || typeof move.targetPosition !== 'string' || move.targetPosition.trim() === '')) {
         errors.push({ row: i + 1, error: `target_position is required for ${info!.containerType}` })
       }
@@ -406,7 +367,7 @@ export async function executeMoves(request: BatchMoveRequest): Promise<MoveResul
       }
 
       // Check if target position is already occupied (excluding the container being moved if it's a same-position move)
-      const requiresPosition = info!.containerType === 'micronix_tube' || info!.containerType === 'cryovial_tube' || info!.containerType === 'tube' || info!.containerType === 'static_well'
+      const requiresPosition = info!.containerType === 'micronix_tube' || info!.containerType === 'cryovial_tube' || info!.containerType === 'static_well'
       if (requiresPosition && move.targetPosition) {
         const positionKey = `${targetCollectionId}:${move.targetPosition}`
         if (!positionConflicts.has(positionKey)) {
@@ -469,9 +430,6 @@ export async function executeMoves(request: BatchMoveRequest): Promise<MoveResul
             break
           case 'cryovial_tube':
             tx.update(cryovialTube).set({ collectionId: targetCollectionId, position: move.targetPosition }).where(eq(cryovialTube.id, info!.containerId)).run()
-            break
-          case 'tube':
-            tx.update(tube).set({ boxId: targetCollectionId, boxPosition: move.targetPosition }).where(eq(tube.id, info!.containerId)).run()
             break
           case 'paper':
             tx.update(paper).set({ sheetId: targetCollectionId, position: move.targetPosition }).where(eq(paper.id, info!.containerId)).run()

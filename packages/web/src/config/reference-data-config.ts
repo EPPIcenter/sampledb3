@@ -1,31 +1,28 @@
+import React from 'react'
 import type { Column } from '../components/ReferenceDataTable'
 import type {
   SpecimenType,
   Tag,
   StorageType,
-  SampleType,
   Strain,
-  Composition,
-  Location,
+  Unit,
 } from '../lib/api'
 import {
   specimenTypesApi,
   tagsApi,
   storageTypesApi,
-  sampleTypesApi,
   strainsApi,
-  compositionsApi,
-  locationsApi,
+  unitsApi,
 } from '../lib/api'
+import ContainerTypesCell from '../components/ContainerTypesCell'
+import ContainerTypeToggle from '../components/ContainerTypeToggle'
 
 export type ReferenceDataType =
   | 'specimen-types'
-  | 'locations'
   | 'tags'
   | 'storage-types'
-  | 'sample-types'
   | 'strains'
-  | 'compositions'
+  | 'units'
 
 export interface ReferenceDataConfig {
   id: ReferenceDataType
@@ -33,29 +30,40 @@ export interface ReferenceDataConfig {
   // API methods
   list: () => Promise<{ data: { [key: string]: any[] } }>
   get?: (id: number) => Promise<{ data: { [key: string]: any } }>
-  create: (data: any) => Promise<any>
-  update: (id: number, data: any) => Promise<any>
-  delete: (id: number) => Promise<any>
+  create?: (data: any) => Promise<any>
+  update?: (id: number, data: any) => Promise<any>
+  delete?: (id: number) => Promise<any>
   // Data access
   getDataKey: () => string
   getItemKey: () => string
   // Table configuration
   getColumns: (dependencies?: {
     storageTypes?: StorageType[]
-    sampleTypes?: SampleType[]
+    locations?: Location[]
+    containerTypeRelationships?: Record<number, string[]>
+    containerTypeUsageInfo?: Record<number, Record<string, boolean>>
+    onToggleContainerType?: (specimenTypeId: number, containerType: string, isAdding: boolean) => Promise<void>
   }) => Column<any>[]
   // Form configuration
-  getFormFields: (editingItem?: any) => Array<{
+  getFormFields: (editingItem?: any, formData?: any, dependencies?: {
+    containerTypeRelationships?: Record<number, string[]>
+    containerTypeUsageInfo?: Record<number, Record<string, boolean>>
+    onToggleContainerType?: (specimenTypeId: number, containerType: string, isAdding: boolean) => Promise<void>
+  }) => Array<{
     key: string
     label: string
-    type?: 'text' | 'number' | 'textarea'
-    required?: boolean
+    type?: 'text' | 'number' | 'textarea' | 'select' | 'checkbox' | 'custom'
+    required?: boolean | ((formData: any) => boolean)
+    hidden?: (formData: any) => boolean
+    disabled?: (formData: any) => boolean
     loadOptions?: () => Promise<Array<{ value: any; label: string }>>
+    render?: (value: any, formData: any, onChange: (value: any) => void) => React.ReactNode
   }>
   // Special handling
   requiresPagination?: boolean
   requiresSearch?: boolean
   requiresDependencies?: ReferenceDataType[]
+  readOnly?: boolean // Mark as read-only for legacy data viewing
 }
 
 export const referenceDataConfigs: ReferenceDataConfig[] = [
@@ -69,17 +77,66 @@ export const referenceDataConfigs: ReferenceDataConfig[] = [
     delete: (id) => specimenTypesApi.delete(id),
     getDataKey: () => 'specimenTypes',
     getItemKey: () => 'specimenType',
-    getColumns: () => [
-      { key: 'name', label: 'Name' },
-      {
-        key: 'created',
-        label: 'Created',
-        render: (value: string) => new Date(value).toLocaleDateString(),
-      },
-    ],
-    getFormFields: () => [
-      { key: 'name', label: 'Name', required: true },
-    ],
+    getColumns: (deps) => {
+      const containerTypeRelationships = deps?.containerTypeRelationships || {}
+      const containerTypeUsageInfo = deps?.containerTypeUsageInfo || {}
+      const onToggleContainerType = deps?.onToggleContainerType
+      
+      return [
+        { key: 'name', label: 'Name' },
+        {
+          key: 'containerTypes',
+          label: 'Allowed Container Types',
+          render: (value: any, item: SpecimenType) => {
+            const allowedTypes = containerTypeRelationships[item.id] || []
+            const usageInfo = containerTypeUsageInfo[item.id] || {}
+            return React.createElement(ContainerTypesCell, {
+              item,
+              allowedTypes,
+              onToggle: onToggleContainerType,
+              usageInfo,
+            })
+          },
+        },
+        {
+          key: 'created',
+          label: 'Created',
+          render: (value: string) => new Date(value).toLocaleDateString(),
+        },
+      ]
+    },
+    getFormFields: (editingItem, formData, deps) => {
+      const fields: Array<{
+        key: string
+        label: string
+        type?: 'text' | 'number' | 'textarea' | 'select' | 'checkbox' | 'custom'
+        required?: boolean
+        render?: (value: any, formData: any, onChange: (value: any) => void) => React.ReactNode
+      }> = [
+        { key: 'name', label: 'Name', required: true },
+      ]
+
+      // Add container types field if editing an existing specimen type
+      if (editingItem?.id && deps?.containerTypeRelationships && deps?.onToggleContainerType) {
+        const allowedTypes = deps.containerTypeRelationships[editingItem.id] || []
+        const usageInfo = deps.containerTypeUsageInfo?.[editingItem.id] || {}
+        fields.push({
+          key: 'containerTypes',
+          label: 'Allowed Container Types',
+          type: 'custom',
+          render: (value: any, formData: any, onChange: (value: any) => void) => {
+            return React.createElement(ContainerTypeToggle, {
+              specimenTypeId: editingItem.id,
+              allowedTypes,
+              onToggle: deps.onToggleContainerType,
+              usageInfo,
+            })
+          },
+        })
+      }
+
+      return fields
+    },
   },
   {
     id: 'tags',
@@ -118,51 +175,6 @@ export const referenceDataConfigs: ReferenceDataConfig[] = [
     ],
   },
   {
-    id: 'sample-types',
-    label: 'Sample Types',
-    list: () => sampleTypesApi.list(),
-    get: (id) => sampleTypesApi.get(id),
-    create: (data) => sampleTypesApi.create(data),
-    update: (id, data) => sampleTypesApi.update(id, data),
-    delete: (id) => sampleTypesApi.delete(id),
-    getDataKey: () => 'sampleTypes',
-    getItemKey: () => 'sampleType',
-    requiresDependencies: ['sample-types'],
-    getColumns: (deps) => [
-      { key: 'name', label: 'Name' },
-      { key: 'description', label: 'Description' },
-      {
-        key: 'parentId',
-        label: 'Parent',
-        render: (value: number | null | undefined, item: SampleType) => {
-          if (!value) return 'None (Root)'
-          const parent = deps?.sampleTypes?.find((st) => st.id === value)
-          return parent ? parent.name : `ID: ${value}`
-        },
-      },
-    ],
-    getFormFields: (editingItem) => [
-      { key: 'name', label: 'Name', required: true },
-      { key: 'description', label: 'Description', type: 'textarea' },
-      {
-        key: 'parentId',
-        label: 'Parent Sample Type',
-        type: 'number',
-        loadOptions: async () => {
-          const response = await sampleTypesApi.list()
-          const currentId = editingItem?.id
-          const options = response.data.sampleTypes
-            .filter((st: SampleType) => st.id !== currentId)
-            .map((st: SampleType) => ({
-              value: st.id,
-              label: st.description ? `${st.name} - ${st.description}` : st.name,
-            }))
-          return [{ value: '', label: 'None (Root)' }, ...options]
-        },
-      },
-    ],
-  },
-  {
     id: 'strains',
     label: 'Strains',
     list: () => strainsApi.list(),
@@ -182,83 +194,36 @@ export const referenceDataConfigs: ReferenceDataConfig[] = [
     ],
   },
   {
-    id: 'compositions',
-    label: 'Compositions',
-    list: () => compositionsApi.list(),
-    get: (id) => compositionsApi.get(id),
-    create: (data) => compositionsApi.create(data),
-    update: (id, data) => compositionsApi.update(id, data),
-    delete: (id) => compositionsApi.delete(id),
-    getDataKey: () => 'compositions',
-    getItemKey: () => 'composition',
+    id: 'units',
+    label: 'Units',
+    list: () => unitsApi.list(),
+    get: (id) => unitsApi.get(id),
+    create: (data) => unitsApi.create(data),
+    update: (id, data) => unitsApi.update(id, data),
+    delete: (id) => unitsApi.delete(id),
+    getDataKey: () => 'units',
+    getItemKey: () => 'unit',
     getColumns: () => [
-      { key: 'label', label: 'Label' },
-      { key: 'index', label: 'Index' },
-      {
-        key: 'legacy',
-        label: 'Legacy',
-        render: (value: number) => value ? 'Yes' : 'No',
-      },
+      { key: 'symbol', label: 'Symbol' },
+      { key: 'name', label: 'Name' },
+      { key: 'category', label: 'Category' },
     ],
     getFormFields: () => [
-      { key: 'label', label: 'Label', required: true },
-      { key: 'index', label: 'Index', type: 'number' },
-      { key: 'legacy', label: 'Legacy', type: 'number', required: true },
-    ],
-  },
-  {
-    id: 'locations',
-    label: 'Locations',
-    list: () => locationsApi.list(1, 50, '') as any, // Will be called with page/limit/search separately
-    get: (id) => locationsApi.get(id),
-    create: (data) => locationsApi.create(data),
-    update: (id, data) => locationsApi.update(id, data),
-    delete: (id) => locationsApi.delete(id),
-    getDataKey: () => 'locations',
-    getItemKey: () => 'location',
-    requiresPagination: true,
-    requiresSearch: true,
-    requiresDependencies: ['storage-types'],
-    getColumns: (deps) => [
-      { key: 'locationRoot', label: 'Root' },
-      { key: 'levelI', label: 'Level I' },
-      { key: 'levelII', label: 'Level II' },
-      { key: 'levelIII', label: 'Level III' },
+      { key: 'symbol', label: 'Symbol', required: true },
+      { key: 'name', label: 'Name', required: true },
       {
-        key: 'storageTypeId',
-        label: 'Storage Type',
-        render: (value: string, item: Location) => {
-          const storageType = deps?.storageTypes?.find(
-            (st) => st.name === value || String(st.id) === value
-          )
-          if (storageType) {
-            return storageType.description
-              ? `${storageType.name} - ${storageType.description}`
-              : storageType.name
-          }
-          return value
-        },
-      },
-      { key: 'description', label: 'Description' },
-    ],
-    getFormFields: () => [
-      { key: 'locationRoot', label: 'Location Root', required: true },
-      {
-        key: 'storageTypeId',
-        label: 'Storage Type',
+        key: 'category',
+        label: 'Category',
+        type: 'select',
         required: true,
-        loadOptions: async () => {
-          const response = await storageTypesApi.list()
-          return response.data.storageTypes.map((st: StorageType) => ({
-            value: String(st.id),
-            label: st.description ? `${st.name} - ${st.description}` : st.name,
-          }))
-        },
+        options: [
+          { value: 'volume', label: 'Volume' },
+          { value: 'mass', label: 'Mass' },
+          { value: 'count', label: 'Count' },
+          { value: 'concentration', label: 'Concentration' },
+          { value: 'other', label: 'Other' },
+        ],
       },
-      { key: 'levelI', label: 'Level I', required: true },
-      { key: 'levelII', label: 'Level II', required: true },
-      { key: 'levelIII', label: 'Level III' },
-      { key: 'description', label: 'Description', type: 'textarea' },
     ],
   },
 ]

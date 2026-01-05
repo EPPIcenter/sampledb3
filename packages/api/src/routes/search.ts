@@ -21,9 +21,14 @@ search.get('/', async (c) => {
     // Helper to build location path string
     function buildLocationPath(loc: any | null): string | undefined {
       if (!loc) return undefined
-      const parts = [loc.locationRoot, loc.levelI, loc.levelII]
-      if (loc.levelIII) parts.push(loc.levelIII)
-      return parts.filter(Boolean).join(' → ')
+      // Use the materialized path if available, otherwise use name
+      if (loc.locationPath) {
+        return loc.locationPath
+      }
+      if (loc.locationName) {
+        return loc.locationName
+      }
+      return undefined
     }
 
     // Search specimens by ID or source info
@@ -181,8 +186,14 @@ search.get('/', async (c) => {
     // Search subjects by name
     if (searchTypes.includes('subject') || searchTypes.includes('all')) {
       const subjects = await db
-        .select()
+        .select({
+          id: studySubject.id,
+          name: studySubject.name,
+          studyId: studySubject.studyId,
+          studyShortCode: study.shortCode,
+        })
         .from(studySubject)
+        .leftJoin(study, eq(studySubject.studyId, study.id))
         .where(like(studySubject.name, `%${query}%`))
         .limit(10)
       
@@ -191,7 +202,7 @@ search.get('/', async (c) => {
           type: 'subject',
           id: subject.id,
           title: subject.name,
-          subtitle: `Study ID: ${subject.studyId}`,
+          subtitle: subject.studyShortCode ? `Study: ${subject.studyShortCode}` : '',
           url: `/subjects/${subject.id}`,
           data: subject,
         })
@@ -210,10 +221,8 @@ search.get('/', async (c) => {
           name: micronixPlate.name,
           barcode: micronixPlate.barcode,
           locationId: micronixPlate.locationId,
-          locationRoot: location.locationRoot,
-          levelI: location.levelI,
-          levelII: location.levelII,
-          levelIII: location.levelIII,
+          locationPath: location.path,
+          locationName: location.name,
         })
         .from(micronixPlate)
         .leftJoin(location, eq(micronixPlate.locationId, location.id))
@@ -228,13 +237,7 @@ search.get('/', async (c) => {
         .limit(10)
 
       for (const plate of micronixPlates) {
-        const loc = plate.locationRoot ? {
-          locationRoot: plate.locationRoot,
-          levelI: plate.levelI,
-          levelII: plate.levelII,
-          levelIII: plate.levelIII,
-        } : null
-        const locationPath = buildLocationPath(loc)
+        const locationPath = buildLocationPath(plate)
         const subtitle = [locationPath, plate.barcode].filter(Boolean).join(' • ')
         
         results.push({
@@ -254,10 +257,8 @@ search.get('/', async (c) => {
           name: cryovialBox.name,
           barcode: cryovialBox.barcode,
           locationId: cryovialBox.locationId,
-          locationRoot: location.locationRoot,
-          levelI: location.levelI,
-          levelII: location.levelII,
-          levelIII: location.levelIII,
+          locationPath: location.path,
+          locationName: location.name,
         })
         .from(cryovialBox)
         .leftJoin(location, eq(cryovialBox.locationId, location.id))
@@ -272,13 +273,7 @@ search.get('/', async (c) => {
         .limit(10)
 
       for (const box of cryovialBoxes) {
-        const loc = box.locationRoot ? {
-          locationRoot: box.locationRoot,
-          levelI: box.levelI,
-          levelII: box.levelII,
-          levelIII: box.levelIII,
-        } : null
-        const locationPath = buildLocationPath(loc)
+        const locationPath = buildLocationPath(box)
         const subtitle = [locationPath, box.barcode].filter(Boolean).join(' • ')
         
         results.push({
@@ -297,10 +292,8 @@ search.get('/', async (c) => {
           id: box.id,
           name: box.name,
           locationId: box.locationId,
-          locationRoot: location.locationRoot,
-          levelI: location.levelI,
-          levelII: location.levelII,
-          levelIII: location.levelIII,
+          locationPath: location.path,
+          locationName: location.name,
         })
         .from(box)
         .leftJoin(location, eq(box.locationId, location.id))
@@ -312,13 +305,7 @@ search.get('/', async (c) => {
         .limit(10)
 
       for (const b of boxes) {
-        const loc = b.locationRoot ? {
-          locationRoot: b.locationRoot,
-          levelI: b.levelI,
-          levelII: b.levelII,
-          levelIII: b.levelIII,
-        } : null
-        const locationPath = buildLocationPath(loc)
+        const locationPath = buildLocationPath(b)
         
         results.push({
           type: 'box',
@@ -336,10 +323,8 @@ search.get('/', async (c) => {
           id: bag.id,
           name: bag.name,
           locationId: bag.locationId,
-          locationRoot: location.locationRoot,
-          levelI: location.levelI,
-          levelII: location.levelII,
-          levelIII: location.levelIII,
+          locationPath: location.path,
+          locationName: location.name,
         })
         .from(bag)
         .leftJoin(location, eq(bag.locationId, location.id))
@@ -351,13 +336,7 @@ search.get('/', async (c) => {
         .limit(10)
 
       for (const b of bags) {
-        const loc = b.locationRoot ? {
-          locationRoot: b.locationRoot,
-          levelI: b.levelI,
-          levelII: b.levelII,
-          levelIII: b.levelIII,
-        } : null
-        const locationPath = buildLocationPath(loc)
+        const locationPath = buildLocationPath(b)
         
         results.push({
           type: 'bag',
@@ -403,7 +382,18 @@ search.get('/', async (c) => {
     return c.json({ results, query, count: results.length })
   } catch (error: any) {
     console.error('Error in search:', error)
-    return c.json({ error: 'Search failed', details: error.message }, 500)
+    const isDevelopment = process.env.NODE_ENV !== 'production'
+    return c.json({ 
+      error: 'Search failed',
+      query: c.req.query('q') || '',
+      ...(isDevelopment && { 
+        details: error.message,
+        stack: error.stack 
+      }),
+      ...(!isDevelopment && { 
+        errorCode: 'SEARCH_ERROR'
+      })
+    }, 500)
   }
 })
 

@@ -6,10 +6,13 @@ interface ReferenceDataFormProps<T> {
   fields: Array<{
     key: keyof T
     label: string
-    type?: 'text' | 'number' | 'textarea'
-    required?: boolean
+    type?: 'text' | 'number' | 'textarea' | 'select' | 'checkbox' | 'custom'
+    required?: boolean | ((formData: any) => boolean)
+    hidden?: (formData: any) => boolean
+    disabled?: (formData: any) => boolean
     options?: Array<{ value: any; label: string }>
     loadOptions?: () => Promise<Array<{ value: any; label: string }>>
+    render?: (value: any, formData: any, onChange: (value: any) => void) => React.ReactNode
   }>
   onSave: (data: Partial<T>) => Promise<void>
   onCancel: () => void
@@ -94,16 +97,81 @@ export default function ReferenceDataForm<T extends { id?: number }>({
     setError(null)
 
     try {
-      await onSave(formData)
+      // Prepare data for submission
+      const submitData: any = { ...formData }
+      
+      // Special handling for location form
+      // Convert parentId from string to number if it's set, or null if empty
+      if (submitData.parentId !== undefined && submitData.parentId !== null && submitData.parentId !== '') {
+        // Convert string to number if needed
+        submitData.parentId = typeof submitData.parentId === 'string' ? parseInt(submitData.parentId, 10) : submitData.parentId
+        // Clear storageTypeId when parentId is set (storage type is inferred from parent)
+        // Explicitly set to null (not undefined) so backend knows to clear it
+        submitData.storageTypeId = null
+      } else {
+        // No parent selected - this is a root location
+        submitData.parentId = null
+        // For root locations, storageTypeId should be set (required by backend)
+        // If it's undefined or empty string, remove it so validation error is clear
+        if (submitData.storageTypeId === '' || submitData.storageTypeId === undefined) {
+          delete submitData.storageTypeId
+        }
+      }
+      
+      await onSave(submitData)
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save')
+      // Extract error message from various possible error formats
+      const errorMessage = err.response?.data?.error || 
+                          (err.response?.data?.details && 
+                           (Array.isArray(err.response.data.details) 
+                             ? err.response.data.details.map((d: any) => d.message || d).join(', ')
+                             : err.response.data.details)) ||
+                          err.message ||
+                          'Failed to save'
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
   }
+  
+  // Helper function to check if a field is required
+  const isFieldRequired = (field: typeof fields[0]): boolean => {
+    if (typeof field.required === 'function') {
+      return field.required(formData)
+    }
+    return field.required ?? false
+  }
+  
+  // Helper function to check if a field should be hidden
+  const isFieldHidden = (field: typeof fields[0]): boolean => {
+    if (field.hidden) {
+      return field.hidden(formData)
+    }
+    return false
+  }
+  
+  // Helper function to check if a field should be disabled
+  const isFieldDisabled = (field: typeof fields[0]): boolean => {
+    if (field.disabled) {
+      return field.disabled(formData)
+    }
+    return false
+  }
 
   const handleChange = (key: keyof T, value: any) => {
-    setFormData((prev) => ({ ...prev, [key]: value }))
+    setFormData((prev) => {
+      const updated = { ...prev, [key]: value }
+      
+      // Special handling for location form: clear storageTypeId when parentId is set
+      if (key === 'parentId') {
+        if (value && value !== '' && value !== null && value !== undefined) {
+          // If parent is selected, clear storageTypeId (it will be inferred from parent)
+          updated.storageTypeId = undefined
+        }
+      }
+      
+      return updated
+    })
   }
 
   const formRef = useRef<HTMLFormElement>(null)
@@ -136,19 +204,31 @@ export default function ReferenceDataForm<T extends { id?: number }>({
           <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
             {fields.map((field) => {
               const fieldId = `field-${String(field.key)}`
+              const isRequired = isFieldRequired(field)
+              const isHidden = isFieldHidden(field)
+              const isDisabled = isFieldDisabled(field) || loadingOptions[String(field.key)]
+              
+              // Skip rendering hidden fields
+              if (isHidden) {
+                return null
+              }
+              
               return (
                 <div key={String(field.key)}>
                   <label htmlFor={fieldId} className="block text-sm font-medium text-gray-700 mb-2">
                     {field.label}
-                    {field.required && <span className="text-red-500 ml-1">*</span>}
+                    {isRequired && <span className="text-red-500 ml-1">*</span>}
                   </label>
-                  {field.type === 'textarea' ? (
+                  {field.type === 'custom' && field.render ? (
+                    field.render(formData[field.key], formData, (value) => handleChange(field.key, value))
+                  ) : field.type === 'textarea' ? (
                     <textarea
                       id={fieldId}
                       value={(formData[field.key] as string) || ''}
                       onChange={(e) => handleChange(field.key, e.target.value)}
-                      required={field.required}
-                      className="form-textarea"
+                      required={isRequired}
+                      disabled={isDisabled}
+                      className="form-textarea disabled:bg-gray-100 disabled:cursor-not-allowed"
                       rows={3}
                     />
                   ) : field.options || fieldOptions[String(field.key)] ? (
@@ -164,8 +244,8 @@ export default function ReferenceDataForm<T extends { id?: number }>({
                           handleChange(field.key, value === '' ? undefined : value)
                         }
                       }}
-                      required={field.required}
-                      disabled={loadingOptions[String(field.key)]}
+                      required={isRequired}
+                      disabled={isDisabled}
                       className="form-select disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="">Select...</option>
@@ -175,6 +255,15 @@ export default function ReferenceDataForm<T extends { id?: number }>({
                         </option>
                       ))}
                     </select>
+                  ) : field.type === 'checkbox' ? (
+                    <input
+                      id={fieldId}
+                      type="checkbox"
+                      checked={!!formData[field.key]}
+                      onChange={(e) => handleChange(field.key, e.target.checked)}
+                      disabled={isDisabled}
+                      className="form-checkbox disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    />
                   ) : (
                     <input
                       id={fieldId}
@@ -186,8 +275,9 @@ export default function ReferenceDataForm<T extends { id?: number }>({
                           field.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value
                         )
                       }
-                      required={field.required}
-                      className="form-input"
+                      required={isRequired}
+                      disabled={isDisabled}
+                      className="form-input disabled:bg-gray-100 disabled:cursor-not-allowed"
                     />
                   )}
                 </div>

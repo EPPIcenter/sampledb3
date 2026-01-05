@@ -1,7 +1,18 @@
 import { createCrudRoutes } from '../lib/crud-routes'
-import { specimenType, specimen } from '../db/schema'
-import { eq } from 'drizzle-orm'
+import { 
+  specimenType, 
+  specimen, 
+  specimenTypeContainerType,
+  storageContainer,
+  paper,
+  cryovialTube,
+  micronixTube,
+  staticWell,
+} from '../db/schema'
+import { eq, and, inArray } from 'drizzle-orm'
 import { z } from 'zod'
+import { Hono } from 'hono'
+import { db } from '../db/client'
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -37,6 +48,96 @@ async function checkSpecimenTypeInUse(id: number, database: any): Promise<string
 }
 
 /**
+ * Check if a container type is in use by existing containers for a specimen type
+ */
+async function checkContainerTypeInUse(
+  specimenTypeId: number,
+  containerType: string,
+  database: any
+): Promise<{ inUse: boolean; count?: number; error?: string }> {
+  try {
+    // Get all storage containers for specimens of this type
+    const containers = await database
+      .select({ id: storageContainer.id })
+      .from(storageContainer)
+      .innerJoin(specimen, eq(storageContainer.specimenId, specimen.id))
+      .where(eq(specimen.specimenTypeId, specimenTypeId))
+      .all()
+
+    if (containers.length === 0) {
+      return { inUse: false }
+    }
+
+    const containerIds = containers.map((c: any) => c.id)
+
+    // Check if any of these containers exist in the specific container type table
+    let foundContainer: any = null
+    
+    if (containerType === 'paper') {
+      foundContainer = await database
+        .select({ id: paper.id })
+        .from(paper)
+        .where(inArray(paper.id, containerIds))
+        .limit(1)
+        .get()
+    } else if (containerType === 'cryovial_tube') {
+      foundContainer = await database
+        .select({ id: cryovialTube.id })
+        .from(cryovialTube)
+        .where(inArray(cryovialTube.id, containerIds))
+        .limit(1)
+        .get()
+    } else if (containerType === 'micronix_tube') {
+      foundContainer = await database
+        .select({ id: micronixTube.id })
+        .from(micronixTube)
+        .where(inArray(micronixTube.id, containerIds))
+        .limit(1)
+        .get()
+    } else if (containerType === 'static_well') {
+      foundContainer = await database
+        .select({ id: staticWell.id })
+        .from(staticWell)
+        .where(inArray(staticWell.id, containerIds))
+        .limit(1)
+        .get()
+    }
+
+    if (foundContainer) {
+      // Get specimen type name for error message
+      const specType = await database
+        .select()
+        .from(specimenType)
+        .where(eq(specimenType.id, specimenTypeId))
+        .get()
+      const specTypeName = specType?.name || `ID ${specimenTypeId}`
+      
+      // Get container type display name
+      const containerTypeNames: Record<string, string> = {
+        paper: 'Paper (DBS Sheet)',
+        cryovial_tube: 'Cryovial Tube',
+        micronix_tube: 'Micronix Tube',
+        static_well: 'Static Well',
+      }
+      const containerTypeName = containerTypeNames[containerType] || containerType
+      
+      return {
+        inUse: true,
+        count: 1, // At least one container found
+        error: `Cannot remove container type '${containerTypeName}': it is in use by existing containers for specimen type '${specTypeName}'. Please remove or reassign those containers first.`
+      }
+    }
+  } catch (error) {
+    console.error('Error checking container type usage:', error)
+    return {
+      inUse: false, // Fail open to avoid blocking if query fails
+    }
+  }
+
+  return { inUse: false }
+}
+
+/**
  * Set created and lastUpdated timestamps on create
  */
 function onCreateDefaults() {
@@ -66,6 +167,140 @@ const specimenTypes = createCrudRoutes({
   checkInUse: checkSpecimenTypeInUse,
   onCreateDefaults,
   onUpdateDefaults,
+})
+
+// Additional routes for container type relationships
+const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', 'static_well'])
+
+// GET /specimen-types/:id/container-types - Get allowed container types for a specimen type
+specimenTypes.get('/:id/container-types', async (c) => {
+  try {
+    const id = parseInt(c.req.param('id'))
+    if (isNaN(id)) {
+      return c.json({ error: 'Invalid specimen type ID' }, 400)
+    }
+
+    const relationships = await db
+      .select({ containerType: specimenTypeContainerType.containerType })
+      .from(specimenTypeContainerType)
+      .where(eq(specimenTypeContainerType.specimenTypeId, id))
+
+    const containerTypes = relationships.map(r => r.containerType)
+    
+    // Check usage for each container type
+    const usageInfo: Record<string, boolean> = {}
+    for (const containerType of containerTypes) {
+      const usageCheck = await checkContainerTypeInUse(id, containerType, db)
+      usageInfo[containerType] = usageCheck.inUse
+    }
+
+    return c.json({ 
+      containerTypes,
+      usageInfo 
+    })
+  } catch (error) {
+    console.error('Error fetching container types:', error)
+    return c.json({ error: 'Failed to fetch container types' }, 500)
+  }
+})
+
+// POST /specimen-types/:id/container-types - Add allowed container type
+specimenTypes.post('/:id/container-types', async (c) => {
+  try {
+    const id = parseInt(c.req.param('id'))
+    if (isNaN(id)) {
+      return c.json({ error: 'Invalid specimen type ID' }, 400)
+    }
+
+    const body = await c.req.json()
+    const containerType = containerTypeSchema.parse(body.containerType) as 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well'
+
+    // Verify specimen type exists
+    const specType = await db.select().from(specimenType).where(eq(specimenType.id, id)).get()
+    if (!specType) {
+      return c.json({ error: 'Specimen type not found' }, 404)
+    }
+
+    await db.insert(specimenTypeContainerType).values({
+      specimenTypeId: id,
+      containerType,
+    }).onConflictDoNothing()
+
+    return c.json({ success: true, containerType })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid container type', details: error.issues }, 400)
+    }
+    console.error('Error adding container type:', error)
+    return c.json({ error: 'Failed to add container type' }, 500)
+  }
+})
+
+// DELETE /specimen-types/:id/container-types/:containerType - Remove allowed container type
+specimenTypes.delete('/:id/container-types/:containerType', async (c) => {
+  try {
+    const id = parseInt(c.req.param('id'))
+    const containerType = c.req.param('containerType')
+    
+    if (isNaN(id)) {
+      return c.json({ error: 'Invalid specimen type ID' }, 400)
+    }
+
+    if (!containerTypeSchema.safeParse(containerType).success) {
+      return c.json({ error: 'Invalid container type' }, 400)
+    }
+
+    // Check if container type is in use
+    const usageCheck = await checkContainerTypeInUse(id, containerType, db)
+    if (usageCheck.inUse) {
+      return c.json({ 
+        error: usageCheck.error || 'Container type is in use',
+        inUse: true,
+        count: usageCheck.count
+      }, 400)
+    }
+
+    await db
+      .delete(specimenTypeContainerType)
+      .where(
+        and(
+          eq(specimenTypeContainerType.specimenTypeId, id),
+          eq(specimenTypeContainerType.containerType, containerType as any)
+        )
+      )
+
+    return c.json({ success: true })
+  } catch (error) {
+    console.error('Error removing container type:', error)
+    return c.json({ error: 'Failed to remove container type' }, 500)
+  }
+})
+
+// GET /specimen-types/container-types/:containerType - Get all specimen types allowed for a container type
+specimenTypes.get('/container-types/:containerType', async (c) => {
+  try {
+    const containerType = c.req.param('containerType')
+    
+    if (!containerTypeSchema.safeParse(containerType).success) {
+      return c.json({ error: 'Invalid container type' }, 400)
+    }
+
+    const relationships = await db
+      .select({
+        id: specimenType.id,
+        name: specimenType.name,
+        created: specimenType.created,
+        lastUpdated: specimenType.lastUpdated,
+      })
+      .from(specimenTypeContainerType)
+      .innerJoin(specimenType, eq(specimenTypeContainerType.specimenTypeId, specimenType.id))
+      .where(eq(specimenTypeContainerType.containerType, containerType as any))
+
+    return c.json({ specimenTypes: relationships })
+  } catch (error) {
+    console.error('Error fetching specimen types:', error)
+    return c.json({ error: 'Failed to fetch specimen types' }, 500)
+  }
 })
 
 export default specimenTypes

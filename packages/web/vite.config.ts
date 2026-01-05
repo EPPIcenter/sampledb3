@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@sampledb/api': path.resolve(__dirname, '../api/src'),
     },
   },
   server: {

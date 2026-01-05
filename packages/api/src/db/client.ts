@@ -102,8 +102,10 @@ sqlite.pragma('journal_mode = WAL')
 // Check if database has tables and run migrations if needed
 let needsMigration = false
 try {
-  const tables = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='study'").get()
-  if (!tables) {
+  const studyTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='study'").get()
+  const settingsTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='settings'").get()
+  
+  if (!studyTable) {
     const allTables = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
     const tableCount = allTables.length
     if (tableCount === 0) {
@@ -116,13 +118,29 @@ try {
       needsMigration = true
       console.log(`📝 Running migrations to ensure schema is up to date...`)
     }
+  } else if (!settingsTable) {
+    // Database has some tables but is missing critical ones like 'settings'
+    // This indicates migrations are incomplete
+    needsMigration = true
+    console.log(`📝 Database schema is incomplete (missing 'settings' table) - running migrations...`)
   } else {
     console.log(`✅ Database connected successfully`)
   }
 } catch (error: any) {
-  console.error(`❌ Error checking database: ${error.message}`)
-  // If we can't check, assume we need migrations
-  needsMigration = true
+  // Distinguish between expected cases (empty DB, missing tables) and actual errors
+  // If the error is about the database file not existing, that's expected for new setups
+  // If it's a different error (corruption, permissions, etc.), throw it
+  const errorMessage = error?.message || String(error)
+  
+  if (errorMessage.includes('no such file') || errorMessage.includes('ENOENT')) {
+    // Database file doesn't exist - this is expected for new setups
+    needsMigration = true
+    console.log(`📝 Database file does not exist - will create and run migrations...`)
+  } else {
+    // This is an unexpected error - throw it instead of silently assuming migrations needed
+    console.error(`❌ Error checking database: ${errorMessage}`)
+    throw new Error(`Failed to check database: ${errorMessage}. This may indicate database corruption or permission issues.`)
+  }
 }
 
 // Create drizzle instance for migrations

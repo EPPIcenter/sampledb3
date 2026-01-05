@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, check, primaryKey, unique } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real, check, primaryKey, unique, index } from 'drizzle-orm/sqlite-core'
 import { sql, type InferSelectModel } from 'drizzle-orm'
 
 export type SpecimenType = InferSelectModel<typeof specimenType>
@@ -27,17 +27,13 @@ export const tag = sqliteTable('tag', {
   name: text('name').notNull().unique(),
 })
 
-// Unit table with self-references - using type assertion to avoid circular type inference
-export const unit: ReturnType<typeof sqliteTable> = sqliteTable('unit', {
+// Unit table - simplified (conversion and compound unit features removed for now)
+export const unit = sqliteTable('unit', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   symbol: text('symbol').notNull().unique(),
   name: text('name').notNull(),
-  category: text('category').notNull(), // 'volume', 'count', 'concentration', etc.
-  baseUnitId: integer('base_unit_id').references(() => (unit as any).id),
-  conversionToBase: real('conversion_to_base').default(1.0),
-  numeratorUnitId: integer('numerator_unit_id').references(() => (unit as any).id),
-  denominatorUnitId: integer('denominator_unit_id').references(() => (unit as any).id),
-}) as any
+  category: text('category').notNull(), // 'volume', 'mass', 'count', 'concentration', 'other'
+})
 
 // Studies and subjects (existing tables)
 export const study = sqliteTable('study', {
@@ -64,10 +60,7 @@ export const controlDefinition = sqliteTable('control_definition', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull().unique(),
   controlType: text('control_type').notNull(), // 'blood', 'plasma_positive', 'plasma_negative', 'antibody', 'extraction', 'negative'
-  compositionId: integer('composition_id').references(() => composition.id),
-  targetDensity: real('target_density'),
-  targetDensityUnitId: integer('target_density_unit_id').references(() => unit.id),
-  properties: text('properties', { mode: 'json' }), // JSON field
+  properties: text('properties', { mode: 'json' }), // JSON field - stores type-specific data (strains, density, etc.)
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
 }, (table) => ({
@@ -160,12 +153,6 @@ export const specimen = sqliteTable('specimen', {
   `)
 }))
 
-// States (existing)
-export const state = sqliteTable('state', {
-  id: integer('id').primaryKey(),
-  name: text('name').notNull().unique(),
-})
-
 export const storageContainer = sqliteTable('storage_container', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   specimenId: integer('specimen_id').notNull().references(() => specimen.id),
@@ -184,18 +171,27 @@ export const storageContainerTag = sqliteTable('storage_container_tag', {
   pk: primaryKey(t.storageContainerId, t.tagId),
 }))
 
-// Locations (existing)
-export const location = sqliteTable('location', {
+// Locations (hierarchical parent-child structure)
+// Only root locations (parent_id IS NULL) have storage_type_id
+// Using type assertion to handle circular reference
+const locationTable = sqliteTable('location', {
   id: integer('id').primaryKey(),
-  locationRoot: text('location_root').notNull(),
-  storageTypeId: text('storage_type_id').notNull(),
+  parentId: integer('parent_id').references((): any => locationTable),
+  name: text('name').notNull(),
+  storageTypeId: text('storage_type_id'), // Only required for root locations (parent_id IS NULL)
   description: text('description'),
-  levelI: text('level_I').notNull(),
-  levelII: text('level_II').notNull(),
-  levelIII: text('level_III'),
+  canContainCollections: integer('can_contain_collections', { mode: 'boolean' }).notNull().default(false),
+  path: text('path'), // Materialized path for performance
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
-})
+}, (table) => ({
+  parentNameUnique: unique().on(table.parentId, table.name),
+  parentIdIdx: index('idx_location_parent_id').on(table.parentId),
+  pathIdx: index('idx_location_path').on(table.path),
+  storageTypeConstraint: check('storage_type_constraint', sql`(${table.parentId} IS NULL AND ${table.storageTypeId} IS NOT NULL) OR (${table.parentId} IS NOT NULL AND ${table.storageTypeId} IS NULL)`),
+}))
+
+export const location = locationTable
 
 // Container collections
 export const micronixPlate = sqliteTable('micronix_plate', {
@@ -262,13 +258,6 @@ export const sheet = sqliteTable('sheet', {
   unq: unique().on(t.name, t.boxId, t.bagId)
 }))
 
-export const tube = sqliteTable('tube', {
-  id: integer('id').primaryKey().references(() => storageContainer.id),
-  boxId: integer('box_id').notNull().references(() => box.id),
-  boxPosition: text('box_position').notNull(),
-  label: text('label').notNull(),
-})
-
 export const paper = sqliteTable('paper', {
   id: integer('id').primaryKey().references(() => storageContainer.id),
   sheetId: integer('sheet_id').notNull().references(() => sheet.id),
@@ -289,27 +278,6 @@ export const strain = sqliteTable('strain', {
   description: text('description'),
 })
 
-export const composition = sqliteTable('composition', {
-  id: integer('id').primaryKey(),
-  index: integer('index'),
-  label: text('label').notNull(),
-  legacy: integer('legacy').notNull(),
-})
-
-export const compositionStrain = sqliteTable('composition_strain', {
-  id: integer('id').primaryKey(),
-  compositionId: integer('composition_id').notNull().references(() => composition.id),
-  strainId: integer('strain_id').notNull().references(() => strain.id),
-  percentage: real('percentage').notNull(),
-})
-
-export const sampleType = sqliteTable('sample_type', {
-  id: integer('id').primaryKey(),
-  name: text('name').notNull().unique(),
-  description: text('description'),
-  parentId: integer('parent_id'),
-})
-
 export const storageType = sqliteTable('storage_type', {
   id: integer('id').primaryKey(),
   name: text('name').notNull().unique(),
@@ -325,3 +293,24 @@ export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
   value: text('value', { mode: 'json' }).notNull(),
 })
+
+// Constraint junction tables
+export const specimenTypeContainerType = sqliteTable('specimen_type_container_type', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  specimenTypeId: integer('specimen_type_id').notNull().references(() => specimenType.id, { onDelete: 'cascade' }),
+  containerType: text('container_type').notNull(), // 'paper', 'cryovial_tube', 'micronix_tube', 'static_well'
+  created: text('created').notNull().default(sql`current_timestamp`),
+}, (table) => ({
+  uniqueCombination: unique().on(table.specimenTypeId, table.containerType),
+  containerTypeCheck: check('container_type_check', sql`${table.containerType} IN ('paper', 'cryovial_tube', 'micronix_tube', 'static_well')`)
+}))
+
+export const containerTypeUnit = sqliteTable('container_type_unit', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  containerType: text('container_type').notNull(), // 'paper', 'cryovial_tube', 'micronix_tube', 'static_well'
+  unitId: integer('unit_id').notNull().references(() => unit.id, { onDelete: 'cascade' }),
+  created: text('created').notNull().default(sql`current_timestamp`),
+}, (table) => ({
+  uniqueCombination: unique().on(table.containerType, table.unitId),
+  containerTypeCheck: check('container_type_check', sql`${table.containerType} IN ('paper', 'cryovial_tube', 'micronix_tube', 'static_well')`)
+}))

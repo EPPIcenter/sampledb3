@@ -1,6 +1,6 @@
 import { createCrudRoutes } from '../lib/crud-routes'
 import { storageType, location } from '../db/schema'
-import { eq, or } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 const createSchema = z.object({
@@ -10,7 +10,7 @@ const createSchema = z.object({
 
 /**
  * Check if storage type is in use by locations
- * Note: locations use storageTypeId as text, so we check by both ID and name
+ * Note: storageTypeId is stored as text but must be a valid ID due to foreign key constraint
  */
 async function checkStorageTypeInUse(id: number, database: any): Promise<string | null> {
   const typeRecord = await database
@@ -26,10 +26,7 @@ async function checkStorageTypeInUse(id: number, database: any): Promise<string 
   const inUse = await database
     .select()
     .from(location)
-    .where(or(
-      eq(location.storageTypeId, String(typeRecord.id)),
-      eq(location.storageTypeId, typeRecord.name)
-    ) as any)
+    .where(eq(location.storageTypeId, String(typeRecord.id)))
     .limit(1)
     .get()
 
