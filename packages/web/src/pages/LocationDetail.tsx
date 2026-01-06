@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
-import { locationsApi, type Location } from '../lib/api'
+import { locationsApi, type Location, type LocationHierarchyStats } from '../lib/api'
 import { getLocationAncestors, getLocationDescendants } from '../lib/location-tree'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import LocationHierarchyTree from '../components/LocationHierarchyTree'
+import LocationHierarchyStatsDisplay from '../components/LocationHierarchyStats'
+import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
 import Pagination from '../components/Pagination'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import ContentCard from '../components/ContentCard'
@@ -20,6 +22,7 @@ export default function LocationDetail() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [location, setLocation] = useState<Location | null>(null)
   const [contents, setContents] = useState<LocationContents | null>(null)
+  const [hierarchyStats, setHierarchyStats] = useState<LocationHierarchyStats | null>(null)
   const [allLocations, setAllLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingContext, setLoadingContext] = useState(true)
@@ -68,6 +71,7 @@ export default function LocationDetail() {
 
         setLocation(detailResponse.data.location)
         setContents(detailResponse.data.contents || {})
+        setHierarchyStats(detailResponse.data.hierarchyStats || null)
         setAllLocations(listResponse.data.locations || [])
         if (detailResponse.data.pagination) {
           setPagination(detailResponse.data.pagination)
@@ -161,7 +165,10 @@ export default function LocationDetail() {
       {/* Summary stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-sm font-medium text-gray-500 mb-1">Storage Type</h2>
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-sm font-medium text-gray-500">Storage Type</h2>
+            <LocationCapabilityBadge canContainCollections={location.canContainCollections} size="sm" />
+          </div>
           <p className="text-lg font-semibold text-gray-900">
             {location.effectiveStorageTypeName || location.storageTypeName || location.storageTypeId || 'N/A'}
           </p>
@@ -194,6 +201,17 @@ export default function LocationDetail() {
           </p>
         </div>
       </div>
+
+      {/* Hierarchy Statistics */}
+      {hierarchyStats && (
+        <div className="mb-8">
+          <LocationHierarchyStatsDisplay
+            stats={hierarchyStats}
+            locationName={location.name}
+            canContainCollections={location.canContainCollections}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* Hierarchy context */}

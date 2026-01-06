@@ -48,6 +48,17 @@ async function checkSpecimenTypeInUse(id: number, database: any): Promise<string
 }
 
 /**
+ * Helper function to chunk an array into smaller arrays
+ */
+function chunkArray<T>(array: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize))
+  }
+  return chunks
+}
+
+/**
  * Check if a container type is in use by existing containers for a specimen type
  */
 async function checkContainerTypeInUse(
@@ -70,37 +81,46 @@ async function checkContainerTypeInUse(
 
     const containerIds = containers.map((c: any) => c.id)
 
+    // SQLite has a limit on the number of variables in a query (typically 999)
+    // Batch the queries to avoid exceeding this limit
+    const SQLITE_MAX_VARS = 500 // Conservative limit
+    const chunks = chunkArray(containerIds, SQLITE_MAX_VARS)
+
     // Check if any of these containers exist in the specific container type table
     let foundContainer: any = null
     
-    if (containerType === 'paper') {
-      foundContainer = await database
-        .select({ id: paper.id })
-        .from(paper)
-        .where(inArray(paper.id, containerIds))
-        .limit(1)
-        .get()
-    } else if (containerType === 'cryovial_tube') {
-      foundContainer = await database
-        .select({ id: cryovialTube.id })
-        .from(cryovialTube)
-        .where(inArray(cryovialTube.id, containerIds))
-        .limit(1)
-        .get()
-    } else if (containerType === 'micronix_tube') {
-      foundContainer = await database
-        .select({ id: micronixTube.id })
-        .from(micronixTube)
-        .where(inArray(micronixTube.id, containerIds))
-        .limit(1)
-        .get()
-    } else if (containerType === 'static_well') {
-      foundContainer = await database
-        .select({ id: staticWell.id })
-        .from(staticWell)
-        .where(inArray(staticWell.id, containerIds))
-        .limit(1)
-        .get()
+    for (const chunk of chunks) {
+      if (foundContainer) break // Stop if we found one
+      
+      if (containerType === 'paper') {
+        foundContainer = await database
+          .select({ id: paper.id })
+          .from(paper)
+          .where(inArray(paper.id, chunk))
+          .limit(1)
+          .get()
+      } else if (containerType === 'cryovial_tube') {
+        foundContainer = await database
+          .select({ id: cryovialTube.id })
+          .from(cryovialTube)
+          .where(inArray(cryovialTube.id, chunk))
+          .limit(1)
+          .get()
+      } else if (containerType === 'micronix_tube') {
+        foundContainer = await database
+          .select({ id: micronixTube.id })
+          .from(micronixTube)
+          .where(inArray(micronixTube.id, chunk))
+          .limit(1)
+          .get()
+      } else if (containerType === 'static_well') {
+        foundContainer = await database
+          .select({ id: staticWell.id })
+          .from(staticWell)
+          .where(inArray(staticWell.id, chunk))
+          .limit(1)
+          .get()
+      }
     }
 
     if (foundContainer) {

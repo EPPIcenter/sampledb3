@@ -12,6 +12,7 @@ import {
   validateLocationHierarchy,
   updateLocationPath,
   getLocationStorageTypeId,
+  getLocationHierarchyStats,
 } from '../lib/location-helpers'
 
 const locations = new Hono()
@@ -205,6 +206,9 @@ locations.get('/:id', async (c) => {
     .limit(bagsLimit)
     .offset(bagsOffset)
 
+  // Get hierarchy statistics
+  const hierarchyStats = await getLocationHierarchyStats(id)
+
   return c.json({
     location: {
       ...locationRecord,
@@ -246,6 +250,7 @@ locations.get('/:id', async (c) => {
         totalPages: Math.ceil(bagsTotal / bagsLimit),
       },
     },
+    hierarchyStats,
   })
 })
 

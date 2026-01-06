@@ -315,6 +315,34 @@ export interface Location {
   lastUpdated: string
 }
 
+export interface LocationHierarchyStats {
+  depth: number
+  totalDescendants: number
+  directContainers: {
+    micronix: number
+    cryovial: number
+    boxes: number
+    bags: number
+  }
+  aggregatedContainers: {
+    micronix: number
+    cryovial: number
+    boxes: number
+    bags: number
+  }
+  childLocationStats: Array<{
+    locationId: number
+    locationName: string
+    canContainCollections: boolean
+    containerCounts: {
+      micronix: number
+      cryovial: number
+      boxes: number
+      bags: number
+    }
+  }>
+}
+
 export const specimenTypesApi = {
   list: () => api.get<{ specimenTypes: SpecimenType[] }>('/specimen-types'),
   get: (id: number) => api.get<{ specimenType: SpecimenType }>(`/specimen-types/${id}`),
@@ -598,7 +626,7 @@ export const locationsApi = {
     if (params?.cryovial_boxes_limit) queryParams.cryovial_boxes_limit = params.cryovial_boxes_limit
     if (params?.bags_page) queryParams.bags_page = params.bags_page
     if (params?.bags_limit) queryParams.bags_limit = params.bags_limit
-    return api.get<{ location: Location; contents: any; pagination?: any }>(`/locations/${id}`, { params: queryParams })
+    return api.get<{ location: Location; contents: any; pagination?: any; hierarchyStats?: LocationHierarchyStats }>(`/locations/${id}`, { params: queryParams })
   },
   create: (data: Omit<Location, 'id' | 'created' | 'lastUpdated'>) =>
     api.post<{ location: Location }>('/locations', data),

@@ -1,6 +1,6 @@
 import { db, sqlite } from '../db/client'
-import { location } from '../db/schema'
-import { eq, sql, and, isNull, isNotNull } from 'drizzle-orm'
+import { location, micronixPlate, cryovialBox, box, bag } from '../db/schema'
+import { eq, sql, and, isNull, isNotNull, inArray } from 'drizzle-orm'
 
 /**
  * Build full path string for a location by walking up the parent chain
@@ -230,5 +230,111 @@ export async function getLocationStorageTypeId(locationId: number): Promise<stri
   }
   
   return null
+}
+
+/**
+ * Calculate hierarchy statistics for a location
+ * Returns aggregated statistics including depth, descendant counts, and container counts
+ */
+export async function getLocationHierarchyStats(locationId: number): Promise<{
+  depth: number
+  totalDescendants: number
+  directContainers: {
+    micronix: number
+    cryovial: number
+    boxes: number
+    bags: number
+  }
+  aggregatedContainers: {
+    micronix: number
+    cryovial: number
+    boxes: number
+    bags: number
+  }
+  childLocationStats: Array<{
+    locationId: number
+    locationName: string
+    canContainCollections: boolean
+    containerCounts: {
+      micronix: number
+      cryovial: number
+      boxes: number
+      bags: number
+    }
+  }>
+}> {
+  // Get all descendants
+  const descendants = await getLocationDescendants(locationId)
+  const allLocationIds = [locationId, ...descendants.map(d => d.id)]
+  
+  // Calculate depth by walking up to root
+  const ancestors = await getLocationAncestors(locationId)
+  const depth = ancestors.length
+  
+  // Get direct container counts (this location only)
+  const [directPlatesCount, directCryovialCount, directBoxesCount, directBagsCount] = await Promise.all([
+    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(micronixPlate).where(eq(micronixPlate.locationId, locationId)),
+    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(cryovialBox).where(eq(cryovialBox.locationId, locationId)),
+    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(box).where(eq(box.locationId, locationId)),
+    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(bag).where(eq(bag.locationId, locationId)),
+  ])
+  
+  const directContainers = {
+    micronix: directPlatesCount[0]?.count || 0,
+    cryovial: directCryovialCount[0]?.count || 0,
+    boxes: directBoxesCount[0]?.count || 0,
+    bags: directBagsCount[0]?.count || 0,
+  }
+  
+  // Get aggregated container counts (this location + all descendants)
+  const [aggregatedPlatesCount, aggregatedCryovialCount, aggregatedBoxesCount, aggregatedBagsCount] = await Promise.all([
+    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(micronixPlate).where(inArray(micronixPlate.locationId, allLocationIds)),
+    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(cryovialBox).where(inArray(cryovialBox.locationId, allLocationIds)),
+    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(box).where(inArray(box.locationId, allLocationIds)),
+    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(bag).where(inArray(bag.locationId, allLocationIds)),
+  ])
+  
+  const aggregatedContainers = {
+    micronix: aggregatedPlatesCount[0]?.count || 0,
+    cryovial: aggregatedCryovialCount[0]?.count || 0,
+    boxes: aggregatedBoxesCount[0]?.count || 0,
+    bags: aggregatedBagsCount[0]?.count || 0,
+  }
+  
+  // Get per-child-location statistics
+  const children = await getLocationChildren(locationId)
+  const childLocationStats = await Promise.all(
+    children.map(async (child) => {
+      const childDescendants = await getLocationDescendants(child.id)
+      const childLocationIds = [child.id, ...childDescendants.map(d => d.id)]
+      
+      const [childPlatesCount, childCryovialCount, childBoxesCount, childBagsCount] = await Promise.all([
+        db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(micronixPlate).where(inArray(micronixPlate.locationId, childLocationIds)),
+        db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(cryovialBox).where(inArray(cryovialBox.locationId, childLocationIds)),
+        db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(box).where(inArray(box.locationId, childLocationIds)),
+        db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(bag).where(inArray(bag.locationId, childLocationIds)),
+      ])
+      
+      return {
+        locationId: child.id,
+        locationName: child.name,
+        canContainCollections: child.canContainCollections,
+        containerCounts: {
+          micronix: childPlatesCount[0]?.count || 0,
+          cryovial: childCryovialCount[0]?.count || 0,
+          boxes: childBoxesCount[0]?.count || 0,
+          bags: childBagsCount[0]?.count || 0,
+        },
+      }
+    })
+  )
+  
+  return {
+    depth,
+    totalDescendants: descendants.length,
+    directContainers,
+    aggregatedContainers,
+    childLocationStats,
+  }
 }
 

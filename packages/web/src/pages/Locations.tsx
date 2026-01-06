@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { locationsApi, searchApi } from '../lib/api'
+import { locationsApi, searchApi, type LocationHierarchyStats } from '../lib/api'
 import { getRootLocations, getLocationChildren, getLocationDescendants, getLocationAncestors, getLocationLabel } from '../lib/location-tree'
 import SkeletonCard from '../components/SkeletonCard'
+import LocationDetailsSkeleton from '../components/LocationDetailsSkeleton'
 import LocationForm from '../components/LocationForm'
+import LocationHierarchyStatsDisplay from '../components/LocationHierarchyStats'
+import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
 
 interface Location {
   id: number
@@ -54,7 +57,7 @@ export default function Locations() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
   const [locationDetailsCache, setLocationDetailsCache] = useState<
-    Record<number, { location: Location; contents: LocationContents }>
+    Record<number, { location: Location; contents: LocationContents; hierarchyStats?: LocationHierarchyStats }>
   >({})
   const [loadingSelection, setLoadingSelection] = useState(false)
   
@@ -142,7 +145,10 @@ export default function Locations() {
 
   // Define ensureLocationLoaded before useEffects that use it
   const ensureLocationLoaded = useCallback(async (locationId: number) => {
+    // If already cached, don't show loading state
     if (locationDetailsCache[locationId]) return
+    
+    // Set loading state immediately to trigger skeleton
     setLoadingSelection(true)
     try {
       const response = await locationsApi.get(locationId)
@@ -151,6 +157,7 @@ export default function Locations() {
         [locationId]: {
           location: response.data.location as Location,
           contents: (response.data.contents || {}) as LocationContents,
+          hierarchyStats: response.data.hierarchyStats as LocationHierarchyStats | undefined,
         },
       }))
     } catch (error) {
@@ -163,9 +170,13 @@ export default function Locations() {
   // Load details when a location is selected
   useEffect(() => {
     if (selectedNode) {
+      // Set loading state immediately if not cached to show skeleton right away
+      if (!locationDetailsCache[selectedNode.locationId]) {
+        setLoadingSelection(true)
+      }
       ensureLocationLoaded(selectedNode.locationId)
     }
-  }, [selectedNode, ensureLocationLoaded])
+  }, [selectedNode, ensureLocationLoaded, locationDetailsCache])
 
   // Scroll selected node into view when it changes
   useEffect(() => {
@@ -250,12 +261,26 @@ export default function Locations() {
     if (!selectedNode) return null
 
     const cached = locationDetailsCache[selectedNode.locationId]
-    if (cached) return { mode: 'location' as const, ...cached }
-    const fallbackLocation = locations.find((l) => l.id === selectedNode.locationId) || null
-    return { mode: 'location' as const, location: fallbackLocation, contents: null }
-  }, [selectedNode, locationDetailsCache, locations])
+    if (cached) {
+      // We have cached data, not loading
+      return { mode: 'location' as const, ...cached, isLoading: false }
+    }
+    
+    // No cached data - return null to trigger skeleton immediately
+    // This prevents showing the previous location's data when switching
+    return null
+  }, [selectedNode, locationDetailsCache])
 
   const handleSelectNode = async (node: SelectedNode) => {
+    // If switching to a different location that isn't cached, clear the cache entry
+    // to force skeleton to show immediately
+    if (selectedNode && selectedNode.locationId !== node.locationId) {
+      if (!locationDetailsCache[node.locationId]) {
+        // New location not cached - set loading state immediately
+        setLoadingSelection(true)
+      }
+    }
+    
     setSelectedNode(node)
     
     // Expand all ancestors of the selected location so it's visible
@@ -442,9 +467,19 @@ export default function Locations() {
               )}
               {children.length === 0 && <span className="w-3 h-3 mr-1.5"></span>}
               <div className="text-left flex-1 min-w-0">
-                <p className="text-gray-900 truncate">
-                  {getLocationLabel(loc)}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-gray-900 truncate">
+                    {getLocationLabel(loc)}
+                  </p>
+                  {loc.canContainCollections && (
+                    <LocationCapabilityBadge canContainCollections={true} size="sm" />
+                  )}
+                  {children.length > 0 && (
+                    <span className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                      {children.length} child{children.length !== 1 ? 'ren' : ''}
+                    </span>
+                  )}
+                </div>
                 {loc.description && (
                   <p className="text-[11px] text-gray-500 truncate">
                     {loc.description}
@@ -455,6 +490,19 @@ export default function Locations() {
                     {loc.path}
                   </p>
                 )}
+                {/* Show cached container count if available */}
+                {locationDetailsCache[loc.id]?.hierarchyStats && (() => {
+                  const stats = locationDetailsCache[loc.id].hierarchyStats!
+                  const directTotal = stats.directContainers.micronix + stats.directContainers.cryovial + stats.directContainers.boxes + stats.directContainers.bags
+                  if (directTotal > 0) {
+                    return (
+                      <p className="text-[10px] text-blue-600 font-medium mt-0.5">
+                        {directTotal} container{directTotal !== 1 ? 's' : ''}
+                      </p>
+                    )
+                  }
+                  return null
+                })()}
               </div>
             </div>
           </button>
@@ -528,19 +576,30 @@ export default function Locations() {
     }
 
     if (!selectedDetails) {
-      return (
-        <div className="text-gray-500 text-center py-16">No details available.</div>
-      )
+      return <LocationDetailsSkeleton />
     }
 
-    const { location, contents } = selectedDetails
+    const { location, contents, hierarchyStats } = selectedDetails
+    
+    // If we don't have location data, show skeleton
     if (!location) {
-      return (
-        <div className="text-gray-500 text-center py-16">
-          Location not found for this selection.
-        </div>
-      )
+      return <LocationDetailsSkeleton />
     }
+    
+    // Critical check: Ensure the location ID matches the selected node
+    // This prevents showing stale data from a previous selection
+    if (location.id !== selectedNode.locationId) {
+      return <LocationDetailsSkeleton />
+    }
+    
+    // If we're missing critical data (contents or hierarchyStats), show skeleton
+    // This ensures we don't show partial data with wrong badges or stale information
+    // Only render the actual content when we have complete cached data
+    if (contents === null || hierarchyStats === undefined) {
+      return <LocationDetailsSkeleton />
+    }
+    
+    // At this point we have complete data for the correct location, so we can safely render everything
 
     const c = contents || {}
     const stats = {
@@ -556,10 +615,13 @@ export default function Locations() {
       <div className="space-y-4">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-1">
-                Location preview
-              </h2>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Location preview
+                </h2>
+                <LocationCapabilityBadge canContainCollections={location.canContainCollections} />
+              </div>
               <p className="text-sm text-gray-600 font-mono">
                 {displayPath}
               </p>
@@ -592,6 +654,15 @@ export default function Locations() {
             </div>
           </div>
         </div>
+
+        {/* Hierarchy Statistics */}
+        {hierarchyStats && (
+          <LocationHierarchyStatsDisplay
+            stats={hierarchyStats}
+            locationName={location.name}
+            canContainCollections={location.canContainCollections}
+          />
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white rounded-lg shadow p-4">
@@ -644,9 +715,6 @@ export default function Locations() {
             <h3 className="text-lg font-semibold text-gray-900">
               Contents preview
             </h3>
-            {loadingSelection && (
-              <span className="text-xs text-gray-500">Refreshing…</span>
-            )}
           </div>
 
           {Object.values(stats).every((v) => v === 0) ? (
@@ -915,7 +983,7 @@ export default function Locations() {
             {renderTree()}
           </div>
 
-          <div className="lg:col-span-2 space-y-4">
+          <div className="lg:col-span-2 space-y-4" key={selectedNode?.locationId || 'no-selection'}>
             {renderSummaryAndPreview()}
           </div>
         </div>
