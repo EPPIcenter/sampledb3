@@ -971,6 +971,88 @@ export const exportApi = {
   },
 }
 
+export interface Derivation {
+  id: number
+  parentContainerId: number
+  childContainerId: number
+  derivationType: string
+  derivationDate?: string
+  protocol?: string
+  notes?: string
+  properties?: Record<string, any> | null
+}
+
+export interface CreateDerivationPayload {
+  derivationType: string
+  specimenTypeName: string
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+  quantity?: number
+  unitSymbol?: string
+  quantityUsed?: number
+  reduceParentQuantity?: boolean
+  derivationDate?: string
+  protocol?: string
+  notes?: string
+  properties?: Record<string, any>
+  collectionId?: number
+   collectionName?: string
+   collectionType?: 'micronix_plate' | 'cryovial_box' | 'sheet'
+   collectionLocationId?: number
+  sheetParentType?: 'box' | 'bag'
+  sheetParentName?: string
+  containerBarcode?: string
+  position?: string
+  operatorId?: number
+}
+
+export interface CreateDerivationResponse {
+  derivation: Derivation
+  parentContainer: any
+  childContainer: any
+  specimen: Specimen
+  warnings: string[]
+}
+
+export interface DerivationCsvImportResultRow {
+  index: number
+  success: boolean
+  error?: string
+  warnings?: string[]
+  derivationId?: number
+  parentContainerId?: number
+  childContainerId?: number
+}
+
+export const derivationsApi = {
+  createFromContainer: (parentContainerId: number, payload: CreateDerivationPayload) =>
+    api.post<CreateDerivationResponse>(`/containers/${parentContainerId}/derive`, payload),
+  listFromContainer: (containerId: number, params?: { derivation_type?: string }) =>
+    api.get<{ derivations: Derivation[]; count: number }>(`/containers/${containerId}/derivations`, {
+      params,
+    }),
+  getSource: (containerId: number) =>
+    api.get<{
+      derivation: Derivation
+      parentContainer: any
+      parentSpecimen: Specimen
+    }>(`/containers/${containerId}/source`),
+  getChain: (containerId: number) =>
+    api.get<{
+      ancestors: Array<{ container: any; derivation: Derivation }>
+      descendants: Array<{ container: any; derivation: Derivation }>
+      current: any
+    }>(`/containers/${containerId}/derivation-chain`),
+  update: (id: number, patch: Partial<Pick<Derivation, 'derivationDate' | 'protocol' | 'notes' | 'properties'>>) =>
+    api.patch<{ derivation: Derivation }>(`/derivations/${id}`, patch),
+  delete: (id: number) =>
+    api.delete<{ message: string }>(`/derivations/${id}`),
+  importCsv: (csv: string, dryRun?: boolean) =>
+    api.post<{ rows: DerivationCsvImportResultRow[] }>('/imports/derivations-csv', {
+      csv,
+      dryRun,
+    }),
+}
+
 export const searchApi = {
   search: (query: string, type?: string) =>
     api.get<{ results: any[]; query: string; count: number }>('/search', {

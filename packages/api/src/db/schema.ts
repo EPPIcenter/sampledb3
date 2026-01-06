@@ -314,3 +314,27 @@ export const containerTypeUnit = sqliteTable('container_type_unit', {
   uniqueCombination: unique().on(table.containerType, table.unitId),
   containerTypeCheck: check('container_type_check', sql`${table.containerType} IN ('paper', 'cryovial_tube', 'micronix_tube', 'static_well')`)
 }))
+
+// Container derivations: track parent/child relationships between storage containers
+export const containerDerivation = sqliteTable('container_derivation', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  parentContainerId: integer('parent_container_id').notNull().references(() => storageContainer.id),
+  childContainerId: integer('child_container_id').notNull().references(() => storageContainer.id),
+  derivationType: text('derivation_type').notNull(),
+  derivationDate: text('derivation_date'),
+  operatorId: integer('operator_id').references(() => users.id),
+  protocol: text('protocol'),
+  notes: text('notes'),
+  properties: text('properties', { mode: 'json' }),
+  created: text('created').notNull().default(sql`current_timestamp`),
+}, (table) => ({
+  parentChildCheck: check(
+    'container_derivation_parent_child_check',
+    sql`${table.parentContainerId} != ${table.childContainerId}`,
+  ),
+  childUnique: unique('container_derivation_child_unique').on(table.childContainerId),
+  parentIdx: index('idx_container_derivation_parent').on(table.parentContainerId),
+  childIdx: index('idx_container_derivation_child').on(table.childContainerId),
+  typeIdx: index('idx_container_derivation_type').on(table.derivationType),
+  dateIdx: index('idx_container_derivation_date').on(table.derivationDate),
+}))

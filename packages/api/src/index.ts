@@ -15,6 +15,8 @@ import locationsRoutes from './routes/locations'
 import exportRoutes from './routes/export'
 import searchRoutes from './routes/search'
 import containersRoutes from './routes/containers'
+import derivationsRoutes from './routes/derivations'
+import importsRoutes from './routes/imports'
 import subjectsRoutes from './routes/subjects'
 import activityRoutes from './routes/activity'
 import collectionsRoutes from './routes/collections'
@@ -67,6 +69,8 @@ app.route('/api/locations', locationsRoutes)
 app.route('/api/export', exportRoutes)
 app.route('/api/search', searchRoutes)
 app.route('/api/containers', containersRoutes)
+app.route('/api', derivationsRoutes)
+app.route('/api', importsRoutes)
 app.route('/api/subjects', subjectsRoutes)
 app.route('/api/activity', activityRoutes)
 app.route('/api/collections', collectionsRoutes)

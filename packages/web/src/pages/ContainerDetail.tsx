@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import api from '../lib/api'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import api, { derivationsApi, type Derivation } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import { getContainerTypeIcon, getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import ContainerDerivationModal from '../components/ContainerDerivationModal'
+import DerivationChainView from '../components/DerivationChainView'
 
 interface ContainerDetail {
   id?: number
@@ -34,12 +36,24 @@ function statusColor(name: string): string {
 
 export default function ContainerDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [data, setData] = useState<ContainerDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [derivations, setDerivations] = useState<Derivation[]>([])
+  const [sourceDerivation, setSourceDerivation] = useState<{
+    derivation: Derivation
+    parentContainer: any
+    parentSpecimen: any
+  } | null>(null)
+  const [loadingDerivations, setLoadingDerivations] = useState(false)
+  const [showDerivationModal, setShowDerivationModal] = useState(false)
+  const [showChainView, setShowChainView] = useState(false)
 
   useEffect(() => {
     if (id) {
       loadContainer()
+      loadDerivations()
+      loadSourceDerivation()
     }
   }, [id])
 
@@ -52,6 +66,38 @@ export default function ContainerDetail() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const loadDerivations = async () => {
+    if (!id) return
+    try {
+      setLoadingDerivations(true)
+      const response = await derivationsApi.listFromContainer(parseInt(id))
+      setDerivations(response.data.derivations || [])
+    } catch (error) {
+      console.error('Failed to load derivations:', error)
+    } finally {
+      setLoadingDerivations(false)
+    }
+  }
+
+  const loadSourceDerivation = async () => {
+    if (!id) return
+    try {
+      const response = await derivationsApi.getSource(parseInt(id))
+      setSourceDerivation(response.data)
+    } catch (error: any) {
+      // 404 is expected if container has no source
+      if (error.response?.status !== 404) {
+        console.error('Failed to load source derivation:', error)
+      }
+      setSourceDerivation(null)
+    }
+  }
+
+  const handleDerivationCreated = () => {
+    loadContainer()
+    loadDerivations()
   }
 
   if (loading) {
@@ -298,6 +344,160 @@ export default function ContainerDetail() {
           )}
         </div>
       </div>
+
+      {/* Derivation Sections */}
+      <div className="mt-6 space-y-4">
+        {/* Source Information (if this container is a child) */}
+        {sourceDerivation && (
+          <div className="bg-white rounded-lg border border-gray-100 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-gray-900">Source Information</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowChainView(true)}
+                  className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  View Chain
+                </button>
+                <button
+                  onClick={() => navigate(`/containers/${sourceDerivation.parentContainer.id}`)}
+                  className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  View Parent →
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">Derivation Type:</span>
+                <span className="font-medium text-gray-900">{sourceDerivation.derivation.derivationType}</span>
+              </div>
+              {sourceDerivation.derivation.derivationDate && (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500">Date:</span>
+                  <span className="text-gray-900">
+                    {new Date(sourceDerivation.derivation.derivationDate).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
+              {sourceDerivation.derivation.protocol && (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500">Protocol:</span>
+                  <span className="text-gray-900">{sourceDerivation.derivation.protocol}</span>
+                </div>
+              )}
+              {sourceDerivation.derivation.notes && (
+                <div>
+                  <span className="text-gray-500">Notes: </span>
+                  <span className="text-gray-900">{sourceDerivation.derivation.notes}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Derived Containers (if this container is a parent) */}
+        {derivations.length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-100 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Derived Containers ({derivations.length})
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowChainView(true)}
+                  className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  View Chain
+                </button>
+                <button
+                  onClick={() => setShowDerivationModal(true)}
+                  className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Create Derivation
+                </button>
+              </div>
+            </div>
+            {loadingDerivations ? (
+              <div className="text-sm text-gray-500">Loading...</div>
+            ) : (
+              <div className="space-y-2">
+                {derivations.map((derivation) => (
+                  <div
+                    key={derivation.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-gray-900">{derivation.derivationType}</span>
+                        {derivation.derivationDate && (
+                          <span className="text-xs text-gray-500">
+                            {new Date(derivation.derivationDate).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      {derivation.protocol && (
+                        <div className="text-xs text-gray-600">Protocol: {derivation.protocol}</div>
+                      )}
+                    </div>
+                    {derivation.childContainerId && (
+                      <Link
+                        to={`/containers/${derivation.childContainerId}`}
+                        className="ml-4 text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        View Child →
+                      </Link>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Create Derivation Button (if no derivations yet) */}
+        {!loadingDerivations && derivations.length === 0 && !sourceDerivation && (
+          <div className="bg-white rounded-lg border border-gray-100 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">No Derivations</h3>
+                <p className="text-sm text-gray-600">Create a derivation to track materials derived from this container.</p>
+              </div>
+              <button
+                onClick={() => setShowDerivationModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Create Derivation
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Derivation Modal */}
+      {showDerivationModal && id && (
+        <ContainerDerivationModal
+          isOpen={showDerivationModal}
+          onClose={() => setShowDerivationModal(false)}
+          parentContainerId={parseInt(id)}
+          parentContainer={{
+            remainingQuantity: container.remainingQuantity,
+            unit: container.unit,
+            containerType: effectiveContainerType,
+          }}
+          onSuccess={handleDerivationCreated}
+        />
+      )}
+
+      {/* Derivation Chain View */}
+      {showChainView && id && (
+        <div className="mt-6">
+          <DerivationChainView
+            containerId={parseInt(id)}
+            onClose={() => setShowChainView(false)}
+          />
+        </div>
+      )}
     </div>
   )
 }

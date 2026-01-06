@@ -32,6 +32,8 @@ import BloodControls from './pages/BloodControls'
 import ControlDefinitionForm from './components/forms/ControlDefinitionForm'
 import ReferenceData from './pages/ReferenceData'
 import Settings from './pages/Settings'
+import Derivations from './pages/Derivations'
+import DerivationsImport from './pages/DerivationsImport'
 import SetupGuard from './components/SetupGuard'
 import { DateFilterProvider } from './contexts/DateFilterContext'
 import { HotkeyProvider, useHotkeyContext } from './contexts/HotkeyContext'
@@ -182,6 +184,13 @@ function AppContent() {
         category: 'Navigation',
         keywords: ['controls', 'control', 'blood controls'],
         action: () => navigate('/blood-controls'),
+      },
+      {
+        id: 'nav-derivations',
+        label: 'Go to Derivations',
+        category: 'Navigation',
+        keywords: ['derivations', 'derivation'],
+        action: () => navigate('/derivations'),
       },
       {
         id: 'nav-settings',
@@ -485,6 +494,8 @@ function AppContent() {
           <Route path="/blood-controls/batches/:id/add-specimens" element={<ControlBatchWizard />} />
               <Route path="/reference-data" element={<ReferenceData />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/derivations" element={<Derivations />} />
+              <Route path="/derivations/import" element={<DerivationsImport />} />
             </Routes>
           </main>
         </div>
