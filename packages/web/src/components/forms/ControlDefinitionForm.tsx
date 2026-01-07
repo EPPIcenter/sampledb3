@@ -32,14 +32,40 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
   })
   const [strainInputs, setStrainInputs] = useState<StrainInput[]>([])
   const [showStrains, setShowStrains] = useState(false)
+  const [autoGenerateName, setAutoGenerateName] = useState(!propControlDefinition) // Auto-generate for new definitions
+  const [suggestedName, setSuggestedName] = useState<string>('')
+  const [isGeneratingName, setIsGeneratingName] = useState(false)
 
   useEffect(() => {
     loadStrains()
     loadUnits()
     if (id && !propControlDefinition) {
       loadControlDefinition()
+    } else if (!id && !propControlDefinition) {
+      // For new definitions, ensure strains section is shown
+      setShowStrains(true)
+      // Add one empty strain input to start
+      if (strains.length > 0) {
+        setStrainInputs([{
+          strainId: strains[0].id,
+          percentage: 100,
+          strainName: strains[0].name,
+        }])
+      }
     }
   }, [id, propControlDefinition])
+  
+  // Load strains first, then set initial strain input
+  useEffect(() => {
+    if (!id && !propControlDefinition && strains.length > 0 && strainInputs.length === 0) {
+      setStrainInputs([{
+        strainId: strains[0].id,
+        percentage: 100,
+        strainName: strains[0].name,
+      }])
+      setShowStrains(true)
+    }
+  }, [strains, id, propControlDefinition])
 
   useEffect(() => {
     if (controlDefinition) {
@@ -143,7 +169,67 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
       }
     }
     setStrainInputs(newInputs)
+    // Trigger name generation if auto-generate is enabled
+    if (autoGenerateName) {
+      generateName(newInputs)
+    }
   }
+  
+  const generateName = async (currentStrainInputs: StrainInput[] = strainInputs) => {
+    // Only generate if we have density and strains
+    if (!formData.targetDensity || currentStrainInputs.length === 0) {
+      return
+    }
+    
+    // Validate percentages total 100%
+    const total = currentStrainInputs.reduce((sum, s) => sum + s.percentage, 0)
+    if (Math.abs(total - 100) >= 0.01) {
+      return
+    }
+    
+    setIsGeneratingName(true)
+    try {
+      const response = await controlsApi.suggestName({
+        controlType: 'blood',
+        targetDensity: parseFloat(formData.targetDensity),
+        targetDensityUnitId: formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined,
+        strains: currentStrainInputs.map(s => ({
+          strainId: s.strainId,
+          percentage: s.percentage,
+        })),
+      })
+      
+      setSuggestedName(response.data.suggestedName)
+      if (autoGenerateName) {
+        setFormData({ ...formData, name: response.data.suggestedName })
+      }
+      
+      // Show warning if definition already exists
+      if (response.data.exists && response.data.existingDefinition) {
+        setError(`A control definition with this combination already exists: "${response.data.existingDefinition.name}"`)
+      }
+    } catch (err) {
+      console.error('Failed to generate name:', err)
+      // Don't show error to user, just silently fail
+    } finally {
+      setIsGeneratingName(false)
+    }
+  }
+  
+  // Generate name when density, unit, or strain percentages change
+  useEffect(() => {
+    if (autoGenerateName && formData.targetDensity && strainInputs.length > 0) {
+      const total = strainInputs.reduce((sum, s) => sum + s.percentage, 0)
+      if (Math.abs(total - 100) < 0.01) {
+        // Use a timeout to debounce rapid changes
+        const timeoutId = setTimeout(() => {
+          generateName()
+        }, 300)
+        return () => clearTimeout(timeoutId)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.targetDensity, formData.targetDensityUnitId, autoGenerateName, JSON.stringify(strainInputs.map(s => ({ id: s.strainId, pct: s.percentage })))])
 
   const totalPercentage = strainInputs.reduce((sum, s) => sum + s.percentage, 0)
   const isTotalValid = strainInputs.length === 0 || Math.abs(totalPercentage - 100) < 0.01
@@ -168,22 +254,38 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
     }
 
     try {
+      // Validate required fields for blood controls
+      if (formData.controlType === 'blood') {
+        if (!formData.targetDensity) {
+          setError('Target density is required')
+          setLoading(false)
+          return
+        }
+        if (strainInputs.length === 0) {
+          setError('At least one strain is required')
+          setLoading(false)
+          return
+        }
+      }
+      
       const submitData: any = {
-        name: formData.name,
         controlType: formData.controlType,
+      }
+      
+      // Include name only if provided (will be auto-generated if not)
+      if (formData.name && formData.name.trim()) {
+        submitData.name = formData.name.trim()
       }
 
       // Only include density and strains for blood controls
       if (formData.controlType === 'blood') {
-        submitData.targetDensity = formData.targetDensity ? parseFloat(formData.targetDensity) : undefined
+        submitData.targetDensity = parseFloat(formData.targetDensity)
         submitData.targetDensityUnitId = formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined
         
-        if (showStrains && strainInputs.length > 0) {
-          submitData.strains = strainInputs.map(s => ({
-            strainId: s.strainId,
-            percentage: s.percentage,
-          }))
-        }
+        submitData.strains = strainInputs.map(s => ({
+          strainId: s.strainId,
+          percentage: s.percentage,
+        }))
       }
 
       if (controlDefinition) {
@@ -238,7 +340,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
           {controlDefinition ? 'Edit Blood Control Definition' : 'New Blood Control Definition'}
         </h1>
         <p className="text-gray-500 mt-1">
-          {controlDefinition ? 'Update blood control definition details and strain composition' : 'Create a new blood control definition with optional strain composition'}
+          {controlDefinition ? 'Update blood control definition details and strain composition' : 'Create a new blood control definition with density and strain composition'}
         </p>
       </div>
       <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
@@ -249,17 +351,52 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
       )}
 
       <div>
-        <label htmlFor="control-name" className="block text-sm font-medium text-gray-700 mb-2">
-          Name *
-        </label>
-        <input
-          id="control-name"
-          type="text"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          required
-          className="form-input"
-        />
+        <div className="flex items-center justify-between mb-2">
+          <label htmlFor="control-name" className="block text-sm font-medium text-gray-700">
+            Name {!autoGenerateName && '*'}
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="auto-generate-name"
+              checked={autoGenerateName}
+              onChange={(e) => {
+                setAutoGenerateName(e.target.checked)
+                if (e.target.checked && formData.targetDensity && strainInputs.length > 0) {
+                  generateName()
+                } else if (!e.target.checked) {
+                  setFormData({ ...formData, name: '' })
+                }
+              }}
+              className="rounded"
+            />
+            <label htmlFor="auto-generate-name" className="text-sm text-gray-600 cursor-pointer">
+              Auto-generate name
+            </label>
+          </div>
+        </div>
+        <div className="relative">
+          <input
+            id="control-name"
+            type="text"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            required={!autoGenerateName}
+            disabled={autoGenerateName && isGeneratingName}
+            className="form-input"
+            placeholder={autoGenerateName ? (isGeneratingName ? 'Generating...' : 'Name will be auto-generated') : 'Enter name'}
+          />
+          {autoGenerateName && suggestedName && !isGeneratingName && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+              Suggested: {suggestedName}
+            </div>
+          )}
+        </div>
+        {autoGenerateName && formData.targetDensity && strainInputs.length > 0 && (
+          <p className="mt-1 text-xs text-gray-500">
+            Name will be automatically generated from density and strain composition
+          </p>
+        )}
       </div>
 
       {/* Blood Control Fields */}
@@ -274,9 +411,19 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
                 type="number"
                 step="any"
                 value={formData.targetDensity}
-                onChange={(e) => setFormData({ ...formData, targetDensity: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, targetDensity: e.target.value })
+                  if (autoGenerateName && e.target.value && strainInputs.length > 0) {
+                    // Trigger name generation after a short delay
+                    setTimeout(() => {
+                      if (formData.targetDensity !== e.target.value) return // Value changed again
+                      generateName()
+                    }, 300)
+                  }
+                }}
                 className="form-input flex-1"
                 placeholder="e.g. 10000"
+                required
               />
               <select
                 value={formData.targetDensityUnitId}
@@ -299,18 +446,11 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="block text-sm font-medium text-gray-700">
-                Strain Composition (Parasite Strains)
+                Strain Composition (Parasite Strains) *
               </label>
-              <button
-                type="button"
-                onClick={() => setShowStrains(!showStrains)}
-                className="text-sm text-blue-600 hover:text-blue-800"
-              >
-                {showStrains ? 'Hide' : 'Add Strains'}
-              </button>
             </div>
 
-            {showStrains && (
+            {(
           <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 space-y-4">
             {strainInputs.length === 0 && (
               <p className="text-sm text-gray-500 italic">No strains added yet. Click "Add Strain" to begin.</p>
@@ -371,7 +511,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
               + Add Strain
             </button>
           </div>
-            )}
+          )}
           </div>
       </>
 

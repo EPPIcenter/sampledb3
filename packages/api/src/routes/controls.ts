@@ -23,6 +23,7 @@ import {
 import { eq, and, like, desc, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { validateControlBatchName, generateUniqueBatchName } from '../lib/validation'
+import { generateControlDefinitionName, generateUniqueControlDefinitionName } from '../lib/control-name-generation'
 
 const controls = new Hono()
 
@@ -1087,56 +1088,242 @@ controls.post('/check-unique', async (c) => {
   }
 })
 
+// Suggest name for control definition (preview without creating)
+controls.post('/suggest-name', async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      name: z.string().min(1).optional(), // Optional - will be auto-generated if not provided
+      controlType: z.enum(['blood', 'plasma_positive', 'plasma_negative', 'antibody', 'extraction', 'negative']).optional().default('blood'),
+      targetDensity: z.number(),
+      targetDensityUnitId: z.number().int().optional(),
+      strains: z.array(z.object({
+        strainId: z.number().int(),
+        percentage: z.number().min(0).max(100),
+      })),
+      properties: z.record(z.string(), z.any()).optional(),
+    })
+    
+    const data = schema.parse(body)
+    const controlType = 'blood' // Only blood controls are created through this system
+    
+    // Validate strains are provided
+    if (!data.strains || data.strains.length === 0) {
+      return c.json({ error: 'At least one strain is required' }, 400)
+    }
+    
+    // Validate targetDensity is provided
+    if (data.targetDensity === undefined || data.targetDensity === null) {
+      return c.json({ error: 'Target density is required' }, 400)
+    }
+    
+    // Get strain names
+    const strainIds = data.strains.map(s => s.strainId)
+    const strainRecords = await db
+      .select()
+      .from(strain)
+      .where(inArray(strain.id, strainIds))
+    const strainNameMap = new Map(strainRecords.map(s => [s.id, s.name]))
+    
+    // Validate all strains exist
+    const missingStrains = strainIds.filter(id => !strainNameMap.has(id))
+    if (missingStrains.length > 0) {
+      return c.json({ error: `Invalid strain IDs: ${missingStrains.join(', ')}` }, 400)
+    }
+    
+    // Build strain objects with names
+    const strainsWithNames = data.strains.map(s => ({
+      id: s.strainId,
+      name: strainNameMap.get(s.strainId)!,
+      percentage: s.percentage,
+    }))
+    
+    // Check if definition with same combination already exists
+    const allDefinitions = await db
+      .select()
+      .from(controlDefinition)
+      .where(eq(controlDefinition.controlType, controlType))
+    
+    let existingDefinition = null
+    for (const def of allDefinitions) {
+      const props = def.properties as any
+      if (!props) continue
+      
+      // Check density match
+      if (props.targetDensity !== data.targetDensity) continue
+      
+      // Check unit match
+      if (data.targetDensityUnitId !== undefined) {
+        if (props.targetDensityUnitId !== data.targetDensityUnitId) continue
+      } else {
+        if (props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null) continue
+      }
+      
+      // Check strain composition match
+      const defStrains = props.strains || []
+      if (defStrains.length !== strainsWithNames.length) continue
+      
+      const strainIds = data.strains.map(s => s.strainId).sort()
+      const defStrainIds = defStrains.map((s: any) => (typeof s === 'object' ? s.id : s)).sort()
+      
+      if (strainIds.length !== defStrainIds.length) continue
+      
+      const idsMatch = strainIds.every((id, idx) => id === defStrainIds[idx])
+      if (!idsMatch) continue
+      
+      // Check percentages match
+      const strainMap = new Map(data.strains.map(s => [s.strainId, s.percentage]))
+      const defStrainMap = new Map(defStrains.map((s: any) => [
+        typeof s === 'object' ? s.id : s,
+        typeof s === 'object' ? s.percentage : undefined
+      ]))
+      
+      const percentagesMatch = strainIds.every(id => {
+        const pct = strainMap.get(id)
+        const defPct = defStrainMap.get(id)
+        return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+      })
+      
+      if (percentagesMatch) {
+        existingDefinition = def
+        break
+      }
+    }
+    
+    // Generate suggested name
+    const suggestedName = await generateUniqueControlDefinitionName(db, {
+      controlType,
+      targetDensity: data.targetDensity,
+      targetDensityUnitId: data.targetDensityUnitId,
+      strains: strainsWithNames,
+    })
+    
+    return c.json({
+      suggestedName,
+      exists: existingDefinition !== null,
+      existingDefinition: existingDefinition || undefined,
+    })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    console.error('Error suggesting name:', error)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
 // Create control definition (defaults to blood)
 controls.post('/', async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
-      name: z.string().min(1),
+      name: z.string().min(1).optional(), // Optional - will be auto-generated if not provided
       controlType: z.enum(['blood', 'plasma_positive', 'plasma_negative', 'antibody', 'extraction', 'negative']).optional().default('blood'),
-      targetDensity: z.number().optional(),
+      targetDensity: z.number(),
       targetDensityUnitId: z.number().int().optional(),
       strains: z.array(z.object({
         strainId: z.number().int(),
         percentage: z.number().min(0).max(100),
-      })).optional(),
+      })),
       properties: z.record(z.string(), z.any()).optional(),
     })
     
     const data = schema.parse(body)
     // Ensure controlType is 'blood' for this endpoint
     const controlType = 'blood'
-    const { strains, targetDensity, targetDensityUnitId, properties, ...baseData } = data
+    const { strains, targetDensity, targetDensityUnitId, properties, name, ...baseData } = data
+    
+    // Validate strains are provided (required)
+    if (!strains || strains.length === 0) {
+      return c.json({ error: 'At least one strain is required' }, 400)
+    }
+    
+    // Validate targetDensity is provided (required)
+    if (targetDensity === undefined || targetDensity === null) {
+      return c.json({ error: 'Target density is required' }, 400)
+    }
+    
+    // Check if definition with same combination already exists
+    const allDefinitions = await db
+      .select()
+      .from(controlDefinition)
+      .where(eq(controlDefinition.controlType, controlType))
+    
+    for (const def of allDefinitions) {
+      const props = def.properties as any
+      if (!props) continue
+      
+      // Check density match
+      if (props.targetDensity !== targetDensity) continue
+      
+      // Check unit match
+      if (targetDensityUnitId !== undefined) {
+        if (props.targetDensityUnitId !== targetDensityUnitId) continue
+      } else {
+        if (props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null) continue
+      }
+      
+      // Check strain composition match
+      const defStrains = props.strains || []
+      if (defStrains.length !== strains.length) continue
+      
+      const strainIds = strains.map(s => s.strainId).sort()
+      const defStrainIds = defStrains.map((s: any) => (typeof s === 'object' ? s.id : s)).sort()
+      
+      if (strainIds.length !== defStrainIds.length) continue
+      
+      const idsMatch = strainIds.every((id, idx) => id === defStrainIds[idx])
+      if (!idsMatch) continue
+      
+      // Check percentages match
+      const strainMap = new Map(strains.map(s => [s.strainId, s.percentage]))
+      const defStrainMap = new Map(defStrains.map((s: any) => [
+        typeof s === 'object' ? s.id : s,
+        typeof s === 'object' ? s.percentage : undefined
+      ]))
+      
+      const percentagesMatch = strainIds.every(id => {
+        const pct = strainMap.get(id)
+        const defPct = defStrainMap.get(id)
+        return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+      })
+      
+      if (percentagesMatch) {
+        return c.json({ 
+          error: 'A control definition with this combination of density and strains already exists',
+          existingDefinition: def
+        }, 409)
+      }
+    }
     
     // Build properties JSON
     const props: any = { ...(properties || {}) }
     
+    // Get strain names for storage
+    const strainIds = strains.map(s => s.strainId)
+    const strainRecords = await db
+      .select()
+      .from(strain)
+      .where(inArray(strain.id, strainIds))
+    const strainNameMap = new Map(strainRecords.map(s => [s.id, s.name]))
+    
+    // Validate all strains exist
+    const missingStrains = strainIds.filter(id => !strainNameMap.has(id))
+    if (missingStrains.length > 0) {
+      return c.json({ error: `Invalid strain IDs: ${missingStrains.join(', ')}` }, 400)
+    }
+    
+    // Build strain objects with names
+    const strainsWithNames = strains.map(s => ({
+      id: s.strainId,
+      name: strainNameMap.get(s.strainId)!,
+      percentage: s.percentage,
+    }))
+    
     // For blood controls, add strains and density to properties
     if (controlType === 'blood') {
-      if (strains && strains.length > 0) {
-        // Get strain names for storage
-        const strainIds = strains.map(s => s.strainId)
-        const strainRecords = await db
-          .select()
-          .from(strain)
-          .where(inArray(strain.id, strainIds))
-        const strainNameMap = new Map(strainRecords.map(s => [s.id, s.name]))
-        
-        // Validate all strains exist
-        const missingStrains = strainIds.filter(id => !strainNameMap.has(id))
-        if (missingStrains.length > 0) {
-          return c.json({ error: `Invalid strain IDs: ${missingStrains.join(', ')}` }, 400)
-        }
-        
-        props.strains = strains.map(s => ({
-          id: s.strainId,
-          name: strainNameMap.get(s.strainId)!,
-          percentage: s.percentage,
-        }))
-      }
-      if (targetDensity !== undefined && targetDensity !== null) {
-        props.targetDensity = targetDensity
-      }
+      props.strains = strainsWithNames
+      props.targetDensity = targetDensity
       if (targetDensityUnitId !== undefined) {
         // Validate unit exists
         const unitRecord = await db.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
@@ -1148,10 +1335,33 @@ controls.post('/', async (c) => {
       }
     }
     
+    // Generate name if not provided
+    let finalName = name
+    if (!finalName || finalName.trim() === '') {
+      finalName = await generateUniqueControlDefinitionName(db, {
+        controlType,
+        targetDensity,
+        targetDensityUnitId,
+        strains: strainsWithNames,
+      })
+    } else {
+      // Validate provided name doesn't conflict with existing definition
+      // (name uniqueness is enforced by database constraint, but we check here for better error message)
+      const existingByName = await db
+        .select()
+        .from(controlDefinition)
+        .where(eq(controlDefinition.name, finalName))
+        .get()
+      
+      if (existingByName) {
+        return c.json({ error: 'A control definition with this name already exists' }, 409)
+      }
+    }
+    
     const result = await db
       .insert(controlDefinition)
       .values({
-        ...baseData,
+        name: finalName,
         controlType,
         properties: Object.keys(props).length > 0 ? props : null,
       })

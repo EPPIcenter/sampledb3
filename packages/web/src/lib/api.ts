@@ -527,6 +527,7 @@ export const controlsApi = {
   get: (id: number) => api.get<{ control: ControlDefinition }>(`/blood-controls/${id}`),
   getDefinitionSummary: (id: number) => api.get<ControlDefinitionSummaryResponse>(`/blood-controls/${id}/summary`),
   checkUnique: (data: { controlType: ControlDefinition['controlType']; targetDensity?: number; targetDensityUnitId?: number; strains?: Array<{ strainId: number; percentage: number }> }) => api.post<{ exists: boolean; controlDefinition?: ControlDefinition }>('/blood-controls/check-unique', data),
+  suggestName: (data: { controlType?: ControlDefinition['controlType']; targetDensity: number; targetDensityUnitId?: number; strains: Array<{ strainId: number; percentage: number }> }) => api.post<{ suggestedName: string; exists: boolean; existingDefinition?: ControlDefinition }>('/blood-controls/suggest-name', data),
   create: (data: Omit<ControlDefinition, 'id' | 'created' | 'lastUpdated' | 'strains'> & { strains?: Array<{ strainId: number; percentage: number }> }) => api.post<{ control: ControlDefinition }>('/blood-controls', data),
   update: (id: number, data: Partial<ControlDefinition> & { strains?: Array<{ strainId: number; percentage: number }> }) => api.patch<{ control: ControlDefinition }>(`/blood-controls/${id}`, data),
   listAllBatches: () => api.get<{ batches: Array<ControlBatch & { definitionName?: string }> }>('/blood-controls/batches'),
