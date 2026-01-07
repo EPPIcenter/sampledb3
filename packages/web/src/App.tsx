@@ -33,7 +33,7 @@ import ControlDefinitionForm from './components/forms/ControlDefinitionForm'
 import ReferenceData from './pages/ReferenceData'
 import Settings from './pages/Settings'
 import Derivations from './pages/Derivations'
-import DerivationsImport from './pages/DerivationsImport'
+import DerivationsBulkImport from './pages/DerivationsBulkImport'
 import SetupGuard from './components/SetupGuard'
 import { DateFilterProvider } from './contexts/DateFilterContext'
 import { HotkeyProvider, useHotkeyContext } from './contexts/HotkeyContext'
@@ -495,7 +495,7 @@ function AppContent() {
               <Route path="/reference-data" element={<ReferenceData />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/derivations" element={<Derivations />} />
-              <Route path="/derivations/import" element={<DerivationsImport />} />
+              <Route path="/derivations/import" element={<DerivationsBulkImport />} />
             </Routes>
           </main>
         </div>

@@ -70,7 +70,7 @@ export const controlDefinition = sqliteTable('control_definition', {
 export const controlBatch = sqliteTable('control_batch', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   controlDefinitionId: integer('control_definition_id').notNull().references(() => controlDefinition.id),
-  name: text('name').notNull(),
+  name: text('name').notNull().unique(),
   productionDate: text('production_date'), // DATE as text
   properties: text('properties', { mode: 'json' }),
   created: text('created').notNull().default(sql`current_timestamp`),

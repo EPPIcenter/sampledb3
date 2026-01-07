@@ -22,6 +22,7 @@ import {
 } from '../db/schema'
 import { eq, and, like, desc, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
+import { validateControlBatchName, generateUniqueBatchName } from '../lib/validation'
 
 const controls = new Hono()
 
@@ -1319,6 +1320,62 @@ controls.get('/:id/batches', async (c) => {
   return c.json({ batches })
 })
 
+// Validate batch name
+controls.post('/batches/validate-name', async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      name: z.string().min(1),
+      excludeId: z.number().optional(),
+    })
+    
+    const data = schema.parse(body)
+    const validation = await validateControlBatchName(data.name, data.excludeId)
+    
+    return c.json(validation)
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return c.json({ valid: false, error: 'Invalid input', details: error.issues }, 400)
+    }
+    console.error('Error validating batch name:', error)
+    return c.json({ valid: false, error: 'Failed to validate batch name', details: error?.message }, 500)
+  }
+})
+
+// Generate suggested batch name
+controls.post('/batches/suggest-name', async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      definitionId: z.number(),
+      productionDate: z.string().optional(),
+    })
+    
+    const data = schema.parse(body)
+    
+    // Get definition
+    const definition = await db
+      .select()
+      .from(controlDefinition)
+      .where(eq(controlDefinition.id, data.definitionId))
+      .get()
+    
+    if (!definition) {
+      return c.json({ error: 'Control definition not found' }, 404)
+    }
+    
+    const suggestedName = await generateUniqueBatchName(definition.name, data.productionDate)
+    
+    return c.json({ name: suggestedName })
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    console.error('Error generating suggested batch name:', error)
+    return c.json({ error: 'Failed to generate suggested name', details: error?.message }, 500)
+  }
+})
+
 // Create a new batch (only for blood controls)
 controls.post('/:id/batches', async (c) => {
   try {
@@ -1341,27 +1398,61 @@ controls.post('/:id/batches', async (c) => {
 
     const body = await c.req.json()
     const schema = z.object({
-      name: z.string().min(1),
+      name: z.string().min(1).optional(),
       productionDate: z.string().optional(),
       properties: z.record(z.string(), z.any()).optional(),
     })
     
     const data = schema.parse(body)
     
+    // Generate unique batch name if not provided
+    let batchName: string
+    if (data.name) {
+      // Validate provided name
+      const nameValidation = await validateControlBatchName(data.name)
+      if (!nameValidation.valid) {
+        return c.json({ 
+          error: nameValidation.error,
+          suggestion: nameValidation.suggestion 
+        }, 400)
+      }
+      batchName = data.name
+    } else {
+      // Auto-generate unique name using definition name + production date
+      batchName = await generateUniqueBatchName(definition.name, data.productionDate)
+    }
+    
     const [newBatch] = await db
       .insert(controlBatch)
       .values({
         controlDefinitionId: definitionId,
-        ...data,
+        name: batchName,
+        productionDate: data.productionDate || null,
+        properties: data.properties ? JSON.stringify(data.properties) : null,
       })
       .returning()
     
     return c.json({ batch: newBatch }, 201)
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    // Handle unique constraint violation
+    if (error?.message?.includes('UNIQUE constraint') || error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      // Re-fetch definition for error handling
+      const def = await db
+        .select()
+        .from(controlDefinition)
+        .where(eq(controlDefinition.id, definitionId))
+        .get()
+      const suggestion = def ? await generateUniqueBatchName(def.name, body.productionDate).catch(() => undefined) : undefined
+      return c.json({ 
+        error: 'Batch name already exists',
+        suggestion
+      }, 400)
+    }
+    console.error('Error creating batch:', error)
+    return c.json({ error: 'Internal server error', details: error?.message }, 500)
   }
 })
 

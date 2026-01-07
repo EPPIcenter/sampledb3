@@ -533,6 +533,10 @@ export const controlsApi = {
   getBatches: (id: number) => api.get<{ batches: ControlBatch[] }>(`/blood-controls/${id}/batches`),
   createBatch: (id: number, data: Omit<ControlBatch, 'id' | 'controlDefinitionId' | 'created' | 'lastUpdated'>) =>
     api.post<{ batch: ControlBatch }>(`/blood-controls/${id}/batches`, data),
+  validateBatchName: (name: string, excludeId?: number) =>
+    api.post<{ valid: boolean; error?: string; suggestion?: string }>('/blood-controls/batches/validate-name', { name, excludeId }),
+  suggestBatchName: (definitionId: number, productionDate?: string) =>
+    api.post<{ name: string }>('/blood-controls/batches/suggest-name', { definitionId, productionDate }),
   getBatch: (id: number) => api.get<{ batch: ControlBatch }>(`/blood-controls/batches/${id}`),
   getBatchSummary: (id: number) => api.get<ControlBatchSummaryResponse>(`/blood-controls/batches/${id}/summary`),
   createBatchWithSpecimens: (data: {
@@ -1021,6 +1025,46 @@ export interface DerivationCsvImportResultRow {
   derivationId?: number
   parentContainerId?: number
   childContainerId?: number
+  collectionStatus?: 'existing' | 'will_be_created'
+}
+
+export interface BulkDerivationSettings {
+  derivationType: string
+  specimenTypeName: string
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper'
+  protocol: string
+  derivationDate: string
+  quantity?: number
+  unitSymbol?: string
+  quantityUsed?: number
+  reduceParentQuantity?: boolean
+  validateSourceSpecimenType?: boolean
+  validateParentQuantity?: boolean
+}
+
+export interface CollectionStatus {
+  name?: string
+  barcode?: string
+  status: 'existing' | 'will_be_created'
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper'
+}
+
+export interface ValidationResult {
+  rows: Array<{
+    index: number
+    valid: boolean
+    error?: string
+    warnings?: string[]
+    parentContainerId?: number
+    collectionStatus?: 'existing' | 'will_be_created'
+  }>
+  collections: CollectionStatus[]
+  summary: {
+    total: number
+    valid: number
+    invalid: number
+    warnings: number
+  }
 }
 
 export const derivationsApi = {
@@ -1046,10 +1090,16 @@ export const derivationsApi = {
     api.patch<{ derivation: Derivation }>(`/derivations/${id}`, patch),
   delete: (id: number) =>
     api.delete<{ message: string }>(`/derivations/${id}`),
-  importCsv: (csv: string, dryRun?: boolean) =>
+  importCsv: (csv: string, options?: { dryRun?: boolean; settings?: BulkDerivationSettings }) =>
     api.post<{ rows: DerivationCsvImportResultRow[] }>('/imports/derivations-csv', {
       csv,
-      dryRun,
+      dryRun: options?.dryRun,
+      settings: options?.settings,
+    }),
+  validateCsv: (csv: string, settings?: BulkDerivationSettings) =>
+    api.post<ValidationResult>('/imports/derivations-csv/validate', {
+      csv,
+      settings,
     }),
 }
 

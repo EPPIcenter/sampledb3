@@ -1,6 +1,6 @@
 import { db } from '../db/client'
-import { studySubject, study, specimen, specimenType, controlBatch, specimenTypeContainerType, containerTypeUnit, unit } from '../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { studySubject, study, specimen, specimenType, controlBatch, controlDefinition, specimenTypeContainerType, containerTypeUnit, unit } from '../db/schema'
+import { eq, and, like, sql } from 'drizzle-orm'
 import { resolveStudyByShortCode, resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
 
 /**
@@ -56,6 +56,157 @@ export function validateCollectionDate(date: string | undefined): { valid: boole
   
   if (dateObj > now) {
     return { valid: false, error: 'Collection date cannot be in the future' }
+  }
+  
+  return { valid: true }
+}
+
+/**
+ * Generate a unique batch name using algorithm: definition_name + production_date, or definition_name + production_date + increment
+ */
+export async function generateUniqueBatchName(
+  definitionName: string,
+  productionDate?: string | null,
+  excludeId?: number
+): Promise<string> {
+  // Generate base name: definition_name + production_date (or today's date if not provided)
+  let datePart: string
+  if (productionDate) {
+    // Extract just the date part (YYYY-MM-DD)
+    datePart = productionDate.split(' ')[0].split('T')[0]
+  } else {
+    // Use today's date
+    datePart = new Date().toISOString().split('T')[0]
+  }
+  
+  const baseName = `${definitionName} ${datePart}`
+  
+  // Check if base name is available
+  let where = eq(controlBatch.name, baseName) as any
+  if (excludeId) {
+    where = and(eq(controlBatch.name, baseName), sql`${controlBatch.id} != ${excludeId}`) as any
+  }
+  
+  const existing = await db
+    .select({ id: controlBatch.id })
+    .from(controlBatch)
+    .where(where)
+    .get()
+  
+  if (!existing) {
+    return baseName
+  }
+  
+  // If base name exists, find all existing names with this base and extract increments
+  // Pattern: "Base Name (N)" where N is a number
+  const escapedBaseName = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`^${escapedBaseName} \\((\\d+)\\)$`)
+  const likePattern = `${baseName} (%)`
+  
+  let wherePattern = like(controlBatch.name, likePattern) as any
+  if (excludeId) {
+    wherePattern = and(like(controlBatch.name, likePattern), sql`${controlBatch.id} != ${excludeId}`) as any
+  }
+  
+  const existingNames = await db
+    .select({ name: controlBatch.name })
+    .from(controlBatch)
+    .where(wherePattern)
+    .all()
+  
+  // Extract all increments from existing names
+  const increments = existingNames
+    .map(row => {
+      const match = row.name.match(pattern)
+      return match ? parseInt(match[1], 10) : null
+    })
+    .filter((n): n is number => n !== null)
+    .sort((a, b) => b - a) // Sort descending
+  
+  // Start from the highest increment + 1, or 1 if no increments found
+  let increment = increments.length > 0 ? increments[0] + 1 : 1
+  let candidateName = `${baseName} (${increment})`
+  
+  // Double-check the candidate name is available (in case of gaps)
+  while (true) {
+    let whereIncrement = eq(controlBatch.name, candidateName) as any
+    if (excludeId) {
+      whereIncrement = and(eq(controlBatch.name, candidateName), sql`${controlBatch.id} != ${excludeId}`) as any
+    }
+    
+    const existingIncrement = await db
+      .select({ id: controlBatch.id })
+      .from(controlBatch)
+      .where(whereIncrement)
+      .get()
+    
+    if (!existingIncrement) {
+      return candidateName
+    }
+    
+    increment++
+    candidateName = `${baseName} (${increment})`
+    
+    // Safety check to prevent infinite loop
+    if (increment > 10000) {
+      throw new Error('Unable to generate unique batch name after 10000 attempts')
+    }
+  }
+}
+
+/**
+ * Validate that a control batch name is unique
+ */
+export async function validateControlBatchName(
+  name: string,
+  excludeId?: number
+): Promise<{ valid: boolean; error?: string; suggestion?: string }> {
+  const trimmedName = name.trim()
+  
+  if (trimmedName.length === 0) {
+    return { valid: false, error: 'Batch name cannot be empty' }
+  }
+  
+  if (trimmedName.length > 255) {
+    return { valid: false, error: 'Batch name cannot exceed 255 characters' }
+  }
+  
+  // Check for existing batch with same name
+  let where = eq(controlBatch.name, trimmedName) as any
+  if (excludeId) {
+    where = and(eq(controlBatch.name, trimmedName), sql`${controlBatch.id} != ${excludeId}`) as any
+  }
+  
+  const existing = await db
+    .select({ id: controlBatch.id })
+    .from(controlBatch)
+    .where(where)
+    .get()
+  
+  if (existing) {
+    // Try to generate a suggestion
+    // Extract definition name and date from the name if possible
+    const dateMatch = trimmedName.match(/(\d{4}-\d{2}-\d{2})/)
+    const datePart = dateMatch ? dateMatch[1] : new Date().toISOString().split('T')[0]
+    const definitionPart = trimmedName.replace(/\s+\d{4}-\d{2}-\d{2}.*$/, '').trim()
+    
+    let suggestion: string | undefined
+    try {
+      if (definitionPart) {
+        suggestion = await generateUniqueBatchName(definitionPart, datePart, excludeId)
+      } else {
+        suggestion = `${trimmedName}-${datePart}`
+      }
+    } catch (e) {
+      // If suggestion generation fails, use simple fallback
+      suggestion = `${trimmedName} (${new Date().toISOString().split('T')[0]})`
+    }
+    
+    return {
+      valid: false,
+      error: `Batch name '${trimmedName}' already exists`,
+      suggestion,
+    }
   }
   
   return { valid: true }

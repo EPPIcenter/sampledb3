@@ -1,6 +1,7 @@
 import { db } from '../db/client'
 import {
   containerDerivation,
+  controlBatch,
   cryovialBox,
   cryovialTube,
   micronixPlate,
@@ -12,25 +13,49 @@ import {
   study,
   studySubject,
 } from '../db/schema'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { createDerivation, type CreateDerivationInput } from './derivations'
+
+export interface BulkDerivationSettings {
+  // Required fields (must be same for all rows, cannot be overridden in CSV)
+  derivationType: string
+  specimenTypeName: string
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper'
+  protocol: string
+  derivationDate: string
+  
+  // Default fields (can be overridden per row in CSV)
+  quantity?: number
+  unitSymbol?: string
+  quantityUsed?: number
+  reduceParentQuantity?: boolean
+  
+  // Validation flags
+  validateSourceSpecimenType?: boolean
+  validateParentQuantity?: boolean
+}
 
 export interface DerivationCsvRow {
   // Parent identification
   parent_container_id?: string
   parent_container_barcode?: string
   parent_container_type?: 'micronix_tube' | 'cryovial_tube' | 'paper'
-  parent_box_barcode?: string
-  parent_position?: string
+  // For study subjects (paper)
   parent_study_short_code?: string
   parent_subject_name?: string
   parent_specimen_type_name?: string
   parent_collection_date?: string
+  // For control batches (paper or cryovial) - NEW, optimized for common use case
+  parent_control_batch_name?: string
+  parent_control_batch_id?: string
+  // For cryovial tubes (study or control)
+  parent_box_barcode?: string
+  parent_position?: string
 
-  // Derivation data
-  derivation_type: string
-  specimen_type_name: string
-  container_type: 'micronix_tube' | 'cryovial_tube' | 'paper'
+  // Derivation data (can be overridden by settings)
+  derivation_type?: string
+  specimen_type_name?: string
+  container_type?: 'micronix_tube' | 'cryovial_tube' | 'paper'
   quantity?: string
   unit_symbol?: string
   quantity_used?: string
@@ -52,6 +77,32 @@ export interface DerivationCsvResultRow {
   derivationId?: number
   parentContainerId?: number
   childContainerId?: number
+  collectionStatus?: 'existing' | 'will_be_created'
+}
+
+export interface CollectionStatus {
+  name?: string
+  barcode?: string
+  status: 'existing' | 'will_be_created'
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper'
+}
+
+export interface ValidationResult {
+  rows: Array<{
+    index: number
+    valid: boolean
+    error?: string
+    warnings?: string[]
+    parentContainerId?: number
+    collectionStatus?: 'existing' | 'will_be_created'
+  }>
+  collections: CollectionStatus[]
+  summary: {
+    total: number
+    valid: number
+    invalid: number
+    warnings: number
+  }
 }
 
 function parseBoolean(value?: string): boolean | undefined {
@@ -154,6 +205,131 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
     throw new Error(`Parent container barcode '${barcode}' not found`)
   }
 
+  // 3. Control batch identification (NEW - optimized for common use case)
+  if (row.parent_control_batch_name || row.parent_control_batch_id) {
+    if (!row.parent_specimen_type_name) {
+      throw new Error('Control batch parents require parent_specimen_type_name')
+    }
+
+    // Resolve control batch
+    let batchId: number | undefined
+    if (row.parent_control_batch_id) {
+      const batchIdNum = parseNumber(row.parent_control_batch_id)
+      if (batchIdNum) {
+        const batch = await db
+          .select({ id: controlBatch.id })
+          .from(controlBatch)
+          .where(eq(controlBatch.id, batchIdNum))
+          .get()
+        if (!batch) {
+          throw new Error(`Control batch id '${batchIdNum}' not found`)
+        }
+        batchId = batch.id
+      }
+    } else if (row.parent_control_batch_name) {
+      const batch = await db
+        .select({ id: controlBatch.id })
+        .from(controlBatch)
+        .where(eq(controlBatch.name, row.parent_control_batch_name.trim()))
+        .get()
+      if (!batch) {
+        throw new Error(`Control batch '${row.parent_control_batch_name}' not found`)
+      }
+      batchId = batch.id
+    }
+
+    if (!batchId) {
+      throw new Error('Unable to resolve control batch')
+    }
+
+    // Find specimen type
+    const typeRec = await db
+      .select({ id: specimenType.id })
+      .from(specimenType)
+      .where(eq(specimenType.name, row.parent_specimen_type_name.trim()))
+      .get()
+    if (!typeRec) {
+      throw new Error(`Specimen type '${row.parent_specimen_type_name}' not found`)
+    }
+
+    // Find specimen in batch
+    const where = and(
+      eq(specimen.controlBatchId, batchId),
+      eq(specimen.specimenTypeId, typeRec.id),
+      sql`${specimen.studySubjectId} IS NULL`,
+    ) as any
+
+    const candidates = await db
+      .select({ id: specimen.id })
+      .from(specimen)
+      .where(row.parent_collection_date
+        ? and(where, eq(specimen.collectionDate, row.parent_collection_date.trim())) as any
+        : where,
+      )
+
+    if (candidates.length === 0) {
+      throw new Error(`No ${row.parent_specimen_type_name} specimen found in control batch '${row.parent_control_batch_name || row.parent_control_batch_id}'`)
+    }
+    if (candidates.length > 1 && !row.parent_collection_date) {
+      throw new Error(`Multiple ${row.parent_specimen_type_name} specimens found in batch; add parent_collection_date to disambiguate`)
+    }
+
+    const specId = candidates[0].id
+
+    // Determine container type from row or infer
+    const containerType = row.parent_container_type || 'paper'
+
+    if (containerType === 'paper') {
+      const parentContainer = await db
+        .select({ id: storageContainer.id })
+        .from(storageContainer)
+        .innerJoin(paper, eq(paper.id, storageContainer.id))
+        .where(eq(storageContainer.specimenId, specId))
+        .get()
+
+      if (!parentContainer) {
+        throw new Error(`No paper container found for ${row.parent_specimen_type_name} specimen in control batch`)
+      }
+
+      return parentContainer.id
+    }
+
+    if (containerType === 'cryovial_tube') {
+      if (!row.parent_box_barcode || !row.parent_position) {
+        throw new Error('Cryovial control parents require parent_box_barcode and parent_position')
+      }
+      const box = await db
+        .select({ id: cryovialBox.id })
+        .from(cryovialBox)
+        .where(eq(cryovialBox.barcode, row.parent_box_barcode.trim()))
+        .get()
+      if (!box) {
+        throw new Error(`Cryovial box barcode '${row.parent_box_barcode}' not found`)
+      }
+      const tube = await db
+        .select({ id: cryovialTube.id })
+        .from(cryovialTube)
+        .where(and(
+          eq(cryovialTube.collectionId, box.id),
+          eq(cryovialTube.position, row.parent_position.trim()),
+        ) as any)
+        .get()
+      if (!tube) {
+        throw new Error(`Cryovial tube not found at position '${row.parent_position}' in box '${row.parent_box_barcode}'`)
+      }
+      // Verify tube belongs to the specimen
+      const container = await db
+        .select({ specimenId: storageContainer.specimenId })
+        .from(storageContainer)
+        .where(eq(storageContainer.id, tube.id))
+        .get()
+      if (!container || container.specimenId !== specId) {
+        throw new Error(`Cryovial tube at position '${row.parent_position}' does not belong to the specified control batch specimen`)
+      }
+      return tube.id
+    }
+  }
+
   const type = row.parent_container_type
 
   if (type === 'micronix_tube') {
@@ -187,8 +363,14 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
   }
 
   if (type === 'paper') {
+    // Check if it's a control batch or study subject
+    if (row.parent_control_batch_name || row.parent_control_batch_id) {
+      // Already handled above
+      throw new Error('Control batch paper parents should be resolved via control batch logic')
+    }
+
     if (!row.parent_study_short_code || !row.parent_subject_name || !row.parent_specimen_type_name) {
-      throw new Error('Paper parents require parent_study_short_code, parent_subject_name, and parent_specimen_type_name')
+      throw new Error('Paper parents require either control batch identification (parent_control_batch_name + parent_specimen_type_name) or study subject identification (parent_study_short_code + parent_subject_name + parent_specimen_type_name)')
     }
 
     const studyRec = await db
@@ -264,37 +446,49 @@ async function resolveCollectionId(
   containerType: DerivationCsvRow['container_type'],
   collectionName?: string,
   collectionBarcode?: string,
-): Promise<number | undefined> {
-  if (!collectionName && !collectionBarcode) return undefined
+): Promise<{ id?: number; status: 'existing' | 'will_be_created' }> {
+  if (!collectionName && !collectionBarcode) {
+    return { status: 'will_be_created' }
+  }
 
   if (containerType === 'micronix_tube') {
-    const q = db
-      .select({ id: micronixPlate.id })
-      .from(micronixPlate)
-
     if (collectionBarcode) {
-      const plate = await q.where(eq(micronixPlate.barcode, collectionBarcode.trim())).get()
-      if (plate) return plate.id
+      const plate = await db
+        .select({ id: micronixPlate.id })
+        .from(micronixPlate)
+        .where(eq(micronixPlate.barcode, collectionBarcode.trim()))
+        .get()
+      if (plate) return { id: plate.id, status: 'existing' }
     }
     if (collectionName) {
-      const plate = await q.where(eq(micronixPlate.name, collectionName.trim())).get()
-      if (plate) return plate.id
+      const plate = await db
+        .select({ id: micronixPlate.id })
+        .from(micronixPlate)
+        .where(eq(micronixPlate.name, collectionName.trim()))
+        .get()
+      if (plate) return { id: plate.id, status: 'existing' }
     }
+    return { status: 'will_be_created' }
   }
 
   if (containerType === 'cryovial_tube') {
-    const q = db
-      .select({ id: cryovialBox.id })
-      .from(cryovialBox)
-
     if (collectionBarcode) {
-      const box = await q.where(eq(cryovialBox.barcode, collectionBarcode.trim())).get()
-      if (box) return box.id
+      const box = await db
+        .select({ id: cryovialBox.id })
+        .from(cryovialBox)
+        .where(eq(cryovialBox.barcode, collectionBarcode.trim()))
+        .get()
+      if (box) return { id: box.id, status: 'existing' }
     }
     if (collectionName) {
-      const box = await q.where(eq(cryovialBox.name, collectionName.trim())).get()
-      if (box) return box.id
+      const box = await db
+        .select({ id: cryovialBox.id })
+        .from(cryovialBox)
+        .where(eq(cryovialBox.name, collectionName.trim()))
+        .get()
+      if (box) return { id: box.id, status: 'existing' }
     }
+    return { status: 'will_be_created' }
   }
 
   if (containerType === 'paper') {
@@ -303,93 +497,305 @@ async function resolveCollectionId(
       .from(paper)
       .limit(1)
       .get()
-    return sheetRec?.id
+    return { id: sheetRec?.id, status: sheetRec?.id ? 'existing' : 'will_be_created' }
   }
 
-  return undefined
+  return { status: 'will_be_created' }
+}
+
+export async function validateDerivationsCsv(
+  text: string,
+  settings?: BulkDerivationSettings,
+): Promise<ValidationResult> {
+  const rows = parseCsv(text)
+  const validationRows: ValidationResult['rows'] = []
+  const collectionsMap = new Map<string, CollectionStatus>()
+  let validCount = 0
+  let invalidCount = 0
+  let warningCount = 0
+  let firstParentSpecimenTypeId: number | null = null
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    const validationRow: ValidationResult['rows'][0] = {
+      index: i,
+      valid: false,
+    }
+
+    try {
+      // Validate required fields from settings
+      if (settings) {
+        if (row.derivation_type && row.derivation_type !== settings.derivationType) {
+          validationRow.error = 'derivation_type in CSV conflicts with shared settings. Remove derivation_type from CSV.'
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        if (row.specimen_type_name && row.specimen_type_name !== settings.specimenTypeName) {
+          validationRow.error = 'specimen_type_name in CSV conflicts with shared settings. Remove specimen_type_name from CSV.'
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        if (row.container_type && row.container_type !== settings.containerType) {
+          validationRow.error = 'container_type in CSV conflicts with shared settings. Remove container_type from CSV.'
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        if (row.protocol && row.protocol !== settings.protocol) {
+          validationRow.error = 'protocol in CSV conflicts with shared settings. Remove protocol from CSV.'
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        if (row.derivation_date && row.derivation_date !== settings.derivationDate) {
+          validationRow.error = 'derivation_date in CSV conflicts with shared settings. Remove derivation_date from CSV.'
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+      }
+
+      // Resolve parent container
+      const parentContainerId = await resolveParentContainerId(row)
+      validationRow.parentContainerId = parentContainerId
+
+      // Get parent specimen type for validation
+      let currentParentSpecimenTypeId: number | null = null
+      if (settings?.validateSourceSpecimenType && parentContainerId) {
+        const parentContainer = await db
+          .select({ specimenId: storageContainer.specimenId })
+          .from(storageContainer)
+          .where(eq(storageContainer.id, parentContainerId))
+          .get()
+        
+        if (parentContainer) {
+          const parentSpecimen = await db
+            .select({ specimenTypeId: specimen.specimenTypeId })
+            .from(specimen)
+            .where(eq(specimen.id, parentContainer.specimenId))
+            .get()
+          
+          if (parentSpecimen) {
+            currentParentSpecimenTypeId = parentSpecimen.specimenTypeId
+            
+            // Store first row's specimen type for comparison
+            if (i === 0) {
+              firstParentSpecimenTypeId = currentParentSpecimenTypeId
+            } else if (firstParentSpecimenTypeId !== null && currentParentSpecimenTypeId !== firstParentSpecimenTypeId) {
+              validationRow.warnings = validationRow.warnings || []
+              validationRow.warnings.push('Source specimen type does not match other rows')
+              warningCount++
+            }
+          }
+        }
+      }
+
+      // Validate parent quantity if enabled
+      if (settings?.validateParentQuantity && parentContainerId) {
+        const parentContainer = await db
+          .select({ 
+            remainingQuantity: storageContainer.remainingQuantity,
+            unitId: storageContainer.unitId,
+          })
+          .from(storageContainer)
+          .where(eq(storageContainer.id, parentContainerId))
+          .get()
+        
+        if (parentContainer) {
+          const quantityUsed = row.quantity_used 
+            ? parseNumber(row.quantity_used) 
+            : settings.quantityUsed
+          
+          if (quantityUsed && parentContainer.remainingQuantity < quantityUsed) {
+            validationRow.warnings = validationRow.warnings || []
+            validationRow.warnings.push(`Insufficient parent quantity: ${parentContainer.remainingQuantity} available, ${quantityUsed} requested`)
+            warningCount++
+          }
+        }
+      }
+
+      // Resolve collection and track status
+      const containerType = row.container_type || settings?.containerType || 'micronix_tube'
+      const collectionInfo = await resolveCollectionId(
+        containerType,
+        row.collection_name,
+        row.collection_barcode,
+      )
+      validationRow.collectionStatus = collectionInfo.status
+
+      // Track unique collections
+      const collectionKey = `${row.collection_name || ''}_${row.collection_barcode || ''}_${containerType}`
+      if (!collectionsMap.has(collectionKey) && (row.collection_name || row.collection_barcode)) {
+        collectionsMap.set(collectionKey, {
+          name: row.collection_name,
+          barcode: row.collection_barcode,
+          status: collectionInfo.status,
+          containerType: containerType as 'micronix_tube' | 'cryovial_tube' | 'paper',
+        })
+      }
+
+      validationRow.valid = true
+      validCount++
+    } catch (error: any) {
+      validationRow.error = error?.message || String(error)
+      invalidCount++
+    }
+
+    validationRows.push(validationRow)
+  }
+
+  return {
+    rows: validationRows,
+    collections: Array.from(collectionsMap.values()),
+    summary: {
+      total: rows.length,
+      valid: validCount,
+      invalid: invalidCount,
+      warnings: warningCount,
+    },
+  }
 }
 
 export async function importDerivationsFromCsv(
   text: string,
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; settings?: BulkDerivationSettings } = {},
 ): Promise<{ rows: DerivationCsvResultRow[] }> {
   const rows = parseCsv(text)
   const results: DerivationCsvResultRow[] = []
+  const settings = options.settings
+
+  // Validate that required fields from settings are not in CSV
+  if (settings) {
+    for (const row of rows) {
+      if (row.derivation_type && row.derivation_type !== settings.derivationType) {
+        throw new Error(`Row ${rows.indexOf(row) + 1}: derivation_type in CSV conflicts with shared settings. Remove derivation_type from CSV.`)
+      }
+      if (row.specimen_type_name && row.specimen_type_name !== settings.specimenTypeName) {
+        throw new Error(`Row ${rows.indexOf(row) + 1}: specimen_type_name in CSV conflicts with shared settings. Remove specimen_type_name from CSV.`)
+      }
+      if (row.container_type && row.container_type !== settings.containerType) {
+        throw new Error(`Row ${rows.indexOf(row) + 1}: container_type in CSV conflicts with shared settings. Remove container_type from CSV.`)
+      }
+      if (row.protocol && row.protocol !== settings.protocol) {
+        throw new Error(`Row ${rows.indexOf(row) + 1}: protocol in CSV conflicts with shared settings. Remove protocol from CSV.`)
+      }
+      if (row.derivation_date && row.derivation_date !== settings.derivationDate) {
+        throw new Error(`Row ${rows.indexOf(row) + 1}: derivation_date in CSV conflicts with shared settings. Remove derivation_date from CSV.`)
+      }
+    }
+  }
 
   const useTx = !options.dryRun
 
   if (useTx) {
-    await db.transaction(async (tx) => {
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i]
-        try {
-          const parentContainerId = await resolveParentContainerId(row)
-          const collectionId = await resolveCollectionId(
-            row.container_type,
-            row.collection_name,
-            row.collection_barcode,
-          )
+    // All-or-nothing: throw on first error to trigger rollback
+    // Wrap in try-catch to capture which row failed, but still let transaction rollback
+    let failedRowIndex: number | null = null
+    let transactionError: Error | null = null
+    
+    try {
+      await db.transaction(async (tx) => {
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i]
+          try {
+            const parentContainerId = await resolveParentContainerId(row)
+            const collectionInfo = await resolveCollectionId(
+              row.container_type || settings?.containerType || 'micronix_tube',
+              row.collection_name,
+              row.collection_barcode,
+            )
 
-          const input: CreateDerivationInput = {
-            parentContainerId,
-            derivationType: row.derivation_type,
-            specimenTypeName: row.specimen_type_name,
-            containerType: row.container_type,
-            quantity: parseNumber(row.quantity),
-            unitSymbol: row.unit_symbol,
-            quantityUsed: parseNumber(row.quantity_used),
-            reduceParentQuantity: parseBoolean(row.reduce_parent_quantity),
-            derivationDate: row.derivation_date,
-            protocol: row.protocol,
-            notes: row.notes,
-            collectionId,
-            containerBarcode: row.container_barcode,
-            position: row.position,
+            // Use settings for required fields, allow CSV override for defaults
+            const input: CreateDerivationInput = {
+              parentContainerId,
+              derivationType: settings?.derivationType || row.derivation_type!,
+              specimenTypeName: settings?.specimenTypeName || row.specimen_type_name!,
+              containerType: (settings?.containerType || row.container_type!) as 'micronix_tube' | 'cryovial_tube' | 'paper',
+              quantity: row.quantity ? parseNumber(row.quantity) : settings?.quantity,
+              unitSymbol: row.unit_symbol || settings?.unitSymbol,
+              quantityUsed: row.quantity_used ? parseNumber(row.quantity_used) : settings?.quantityUsed,
+              reduceParentQuantity: row.reduce_parent_quantity !== undefined 
+                ? parseBoolean(row.reduce_parent_quantity) 
+                : settings?.reduceParentQuantity,
+              derivationDate: settings?.derivationDate || row.derivation_date!,
+              protocol: settings?.protocol || row.protocol!,
+              notes: row.notes,
+              collectionId: collectionInfo.id,
+              containerBarcode: row.container_barcode,
+              position: row.position,
+            }
+
+            const result = await createDerivation(input)
+
+            results.push({
+              index: i,
+              success: true,
+              derivationId: result.derivation.id,
+              parentContainerId,
+              childContainerId: result.childContainer.id,
+              warnings: result.warnings.map(w => w.message),
+              collectionStatus: collectionInfo.status,
+            })
+          } catch (error: any) {
+            // Track which row failed and throw to trigger rollback
+            failedRowIndex = i
+            transactionError = error
+            throw error
           }
-
-          const result = await createDerivation(input)
-
-          results.push({
-            index: i,
-            success: true,
-            derivationId: result.derivation.id,
-            parentContainerId,
-            childContainerId: result.childContainer.id,
-            warnings: result.warnings.map(w => w.message),
-          })
-        } catch (error: any) {
-          results.push({
+        }
+      })
+    } catch (error: any) {
+      // Transaction failed and rolled back - return error for failed row
+      // All other rows are marked as not processed (transaction rolled back)
+      if (failedRowIndex !== null) {
+        results.push({
+          index: failedRowIndex,
+          success: false,
+          error: `Row ${failedRowIndex + 1}: ${transactionError?.message || error?.message || String(error)}. All changes rolled back (all-or-nothing transaction).`,
+        })
+        // Mark all previous rows as failed due to transaction rollback
+        for (let i = 0; i < failedRowIndex; i++) {
+          results[i] = {
             index: i,
             success: false,
-            error: error?.message || String(error),
-          })
+            error: `Transaction rolled back due to error in row ${failedRowIndex + 1}`,
+          }
         }
+      } else {
+        // Unknown error
+        throw error
       }
-    })
+    }
   } else {
+    // Dry run: can return partial results
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
       try {
         const parentContainerId = await resolveParentContainerId(row)
-        const collectionId = await resolveCollectionId(
-          row.container_type,
+        const collectionInfo = await resolveCollectionId(
+          row.container_type || settings?.containerType || 'micronix_tube',
           row.collection_name,
           row.collection_barcode,
         )
 
+        // Use settings for required fields, allow CSV override for defaults
         const input: CreateDerivationInput = {
           parentContainerId,
-          derivationType: row.derivation_type,
-          specimenTypeName: row.specimen_type_name,
-          containerType: row.container_type,
-          quantity: parseNumber(row.quantity),
-          unitSymbol: row.unit_symbol,
-          quantityUsed: parseNumber(row.quantity_used),
-          reduceParentQuantity: parseBoolean(row.reduce_parent_quantity),
-          derivationDate: row.derivation_date,
-          protocol: row.protocol,
+          derivationType: settings?.derivationType || row.derivation_type!,
+          specimenTypeName: settings?.specimenTypeName || row.specimen_type_name!,
+          containerType: (settings?.containerType || row.container_type!) as 'micronix_tube' | 'cryovial_tube' | 'paper',
+          quantity: row.quantity ? parseNumber(row.quantity) : settings?.quantity,
+          unitSymbol: row.unit_symbol || settings?.unitSymbol,
+          quantityUsed: row.quantity_used ? parseNumber(row.quantity_used) : settings?.quantityUsed,
+          reduceParentQuantity: row.reduce_parent_quantity !== undefined 
+            ? parseBoolean(row.reduce_parent_quantity) 
+            : settings?.reduceParentQuantity,
+          derivationDate: settings?.derivationDate || row.derivation_date!,
+          protocol: settings?.protocol || row.protocol!,
           notes: row.notes,
-          collectionId,
+          collectionId: collectionInfo.id,
           containerBarcode: row.container_barcode,
           position: row.position,
         }
@@ -403,6 +809,7 @@ export async function importDerivationsFromCsv(
           parentContainerId,
           childContainerId: result.childContainer.id,
           warnings: result.warnings.map(w => w.message),
+          collectionStatus: collectionInfo.status,
         })
       } catch (error: any) {
         results.push({

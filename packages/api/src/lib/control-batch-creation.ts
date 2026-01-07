@@ -1,6 +1,7 @@
 import { db } from '../db/client'
 import {
   controlBatch,
+  controlDefinition,
   specimen,
   specimenType,
   storageContainer,
@@ -17,7 +18,7 @@ import {
 } from '../db/schema'
 import { eq, and, sql } from 'drizzle-orm'
 import { getDefaultUnit } from './defaults'
-import { validateContainerTypeForSpecimenType, validateUnitForContainerType } from './validation'
+import { validateContainerTypeForSpecimenType, validateUnitForContainerType, validateControlBatchName, generateUniqueBatchName } from './validation'
 import type { ContainerType } from './container-creation'
 
 export interface CreateBatchWithSpecimensRequest {
@@ -819,6 +820,30 @@ export async function createBatchWithSpecimens(
   const collectionMap = new Map<string, number>()
   const createdCollections: CreatedCollection[] = []
 
+  // Validate and generate unique batch name before transaction
+  const definition = await db
+    .select()
+    .from(controlDefinition)
+    .where(eq(controlDefinition.id, data.batch.controlDefinitionId))
+    .get()
+
+  if (!definition) {
+    throw new Error(`Control definition with ID ${data.batch.controlDefinitionId} not found`)
+  }
+
+  let batchName: string
+  if (data.batch.name) {
+    // Validate provided name
+    const nameValidation = await validateControlBatchName(data.batch.name)
+    if (!nameValidation.valid) {
+      throw new Error(nameValidation.error || 'Batch name must be unique')
+    }
+    batchName = data.batch.name
+  } else {
+    // Auto-generate unique name using definition name + production date
+    batchName = await generateUniqueBatchName(definition.name, data.batch.productionDate)
+  }
+
   // Prepare collections
   if (data.createCollections) {
     for (const coll of data.createCollections) {
@@ -950,10 +975,10 @@ export async function createBatchWithSpecimens(
       }
     }
 
-    // Create batch
+    // Create batch with validated unique name
     const batchResult = tx.insert(controlBatch).values({
       controlDefinitionId: data.batch.controlDefinitionId,
-      name: data.batch.name,
+      name: batchName,
       productionDate: data.batch.productionDate || null,
       properties: data.batch.properties ? JSON.stringify(data.batch.properties) : null,
     }).returning().get()

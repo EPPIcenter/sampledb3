@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { controlsApi } from '../../lib/api'
 import type { ControlDefinition } from '../../lib/api'
 import type { BatchInfo } from '../../pages/ControlBatchWizard'
@@ -20,7 +20,11 @@ export default function BatchInfoStep({
 }: BatchInfoStepProps) {
   const [definitions, setDefinitions] = useState<ControlDefinition[]>([])
   const [loading, setLoading] = useState(false)
+  const [validating, setValidating] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [nameSuggestion, setNameSuggestion] = useState<string | null>(null)
+  const [localName, setLocalName] = useState(batchInfo.name)
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadDefinitions()
@@ -31,6 +35,11 @@ export default function BatchInfoStep({
       loadDefinition(batchInfo.controlDefinitionId)
     }
   }, [batchInfo.controlDefinitionId])
+
+  // Sync local name with batchInfo when it changes externally
+  useEffect(() => {
+    setLocalName(batchInfo.name)
+  }, [batchInfo.name])
 
   const loadDefinitions = async () => {
     try {
@@ -61,11 +70,22 @@ export default function BatchInfoStep({
       ? definitions.find(d => d.id === definitionId) || null
       : null
 
-    // Auto-suggest batch name
+    // Generate suggested batch name using API
     let suggestedName = ''
     if (definition) {
-      const date = new Date().toISOString().split('T')[0]
-      suggestedName = `${definition.name}-${date}`
+      try {
+        const response = await controlsApi.suggestBatchName(definition.id, batchInfo.productionDate || undefined)
+        suggestedName = response.data.name
+        setNameSuggestion(suggestedName)
+      } catch (err) {
+        console.error('Failed to generate suggested batch name:', err)
+        // Fallback to simple suggestion
+        const date = batchInfo.productionDate || new Date().toISOString().split('T')[0]
+        suggestedName = `${definition.name} ${date}`
+        setNameSuggestion(null)
+      }
+    } else {
+      setNameSuggestion(null)
     }
 
     onChange({
@@ -76,7 +96,72 @@ export default function BatchInfoStep({
     })
   }
 
-  const validate = (): boolean => {
+  // Update suggested name when production date changes
+  useEffect(() => {
+    if (batchInfo.controlDefinitionId && batchInfo.productionDate && !isAddMode && definitions.length > 0) {
+      const definition = definitions.find(d => d.id === batchInfo.controlDefinitionId)
+      if (definition) {
+        controlsApi.suggestBatchName(definition.id, batchInfo.productionDate)
+          .then(response => {
+            // Only update name if it's empty or matches the previous suggestion
+            if (!batchInfo.name || batchInfo.name === nameSuggestion) {
+              onChange({ ...batchInfo, name: response.data.name })
+            }
+            setNameSuggestion(response.data.name)
+          })
+          .catch(err => {
+            console.error('Failed to generate suggested batch name:', err)
+          })
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchInfo.productionDate, batchInfo.controlDefinitionId])
+
+  const handleNameChange = (name: string) => {
+    // Update local state immediately (no re-render from parent)
+    setLocalName(name)
+    // Update parent state (but this won't cause focus loss since we're using local state)
+    onChange({ ...batchInfo, name })
+    
+    // Clear previous errors
+    if (errors.name) {
+      setErrors({ ...errors, name: '' })
+    }
+    setNameSuggestion(null)
+  }
+
+  // Debounced validation
+  useEffect(() => {
+    if (!localName.trim() || !batchInfo.controlDefinitionId) {
+      setValidating(false)
+      return
+    }
+
+    const timeoutId = setTimeout(async () => {
+      setValidating(true)
+      try {
+        const response = await controlsApi.validateBatchName(localName.trim())
+        if (!response.data.valid) {
+          setErrors(prev => ({ ...prev, name: response.data.error || 'Batch name is invalid' }))
+          if (response.data.suggestion) {
+            setNameSuggestion(response.data.suggestion)
+          }
+        } else {
+          setErrors(prev => ({ ...prev, name: '' }))
+          setNameSuggestion(null)
+        }
+      } catch (err) {
+        console.error('Failed to validate batch name:', err)
+        // Don't block user input on validation error
+      } finally {
+        setValidating(false)
+      }
+    }, 500) // Debounce 500ms
+
+    return () => clearTimeout(timeoutId)
+  }, [localName, batchInfo.controlDefinitionId])
+
+  const validate = async (): Promise<boolean> => {
     const newErrors: Record<string, string> = {}
 
     if (!batchInfo.controlDefinitionId) {
@@ -85,14 +170,32 @@ export default function BatchInfoStep({
 
     if (!batchInfo.name.trim()) {
       newErrors.name = 'Batch name is required'
+    } else {
+      // Validate batch name with API
+      setValidating(true)
+      try {
+        const response = await controlsApi.validateBatchName(batchInfo.name.trim())
+        if (!response.data.valid) {
+          newErrors.name = response.data.error || 'Batch name is invalid'
+          if (response.data.suggestion) {
+            setNameSuggestion(response.data.suggestion)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to validate batch name:', err)
+        newErrors.name = 'Failed to validate batch name. Please try again.'
+      } finally {
+        setValidating(false)
+      }
     }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
-  const handleNext = () => {
-    if (validate()) {
+  const handleNext = async () => {
+    const isValid = await validate()
+    if (isValid) {
       onNext()
     }
   }
@@ -163,18 +266,37 @@ export default function BatchInfoStep({
           <label htmlFor="batch-name" className="block text-sm font-medium text-gray-700 mb-2">
             Batch Name {!isAddMode && '*'}
           </label>
-          <input
-            id="batch-name"
-            type="text"
-            value={batchInfo.name}
-            onChange={(e) => onChange({ ...batchInfo, name: e.target.value })}
-            disabled={isAddMode}
-            className={`block w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              errors.name ? 'border-red-300' : 'border-gray-300'
-            } ${isAddMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-            placeholder="e.g., Batch-2024-01-15"
-          />
+          <div className="relative">
+            <input
+              ref={nameInputRef}
+              id="batch-name"
+              type="text"
+              value={localName}
+              onChange={(e) => handleNameChange(e.target.value)}
+              disabled={isAddMode}
+              className={`block w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.name ? 'border-red-300' : 'border-gray-300'
+              } ${isAddMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+              placeholder="e.g., Batch-2024-01-15"
+            />
+            {validating && (
+              <div className="absolute right-3 top-2.5">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              </div>
+            )}
+          </div>
           {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
+          {nameSuggestion && !errors.name && (
+            <p className="mt-1 text-sm text-blue-600">
+              Suggestion: <button
+                type="button"
+                onClick={() => handleNameChange(nameSuggestion)}
+                className="underline hover:text-blue-800"
+              >
+                {nameSuggestion}
+              </button>
+            </p>
+          )}
         </div>
 
         <div>
