@@ -166,8 +166,8 @@ export default function ContainerDerivationModal({
         specimenTypesApi.list(),
         unitsApi.list(),
       ])
-      setSpecimenTypes(specimenTypesRes.data.specimenTypes || [])
-      setUnits(unitsRes.data.units || [])
+      setSpecimenTypes(specimenTypesRes.data)
+      setUnits(unitsRes.data)
     } catch (err: any) {
       console.error('Failed to load reference data:', err)
       setError(err.response?.data?.error || 'Failed to load reference data')

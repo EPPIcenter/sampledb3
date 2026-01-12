@@ -86,7 +86,17 @@ export default function ReferenceData() {
           if (depConfig) {
             try {
               const res = await depConfig.list()
-              deps[depConfig.getDataKey()] = res.data[depConfig.getDataKey()] || []
+              // Handle both structures: { data: T[] } and { data: { [key]: T[] } }
+              const data = res.data
+              if (Array.isArray(data)) {
+                // Direct array: { data: T[] }
+                deps[depConfig.getDataKey()] = data
+              } else if (typeof data === 'object' && data !== null) {
+                // Nested structure: { data: { [key]: T[] } }
+                deps[depConfig.getDataKey()] = (data as any)[depConfig.getDataKey()] || []
+              } else {
+                deps[depConfig.getDataKey()] = []
+              }
             } catch (error) {
               console.error(`Failed to load dependency ${depType}:`, error)
             }
@@ -100,7 +110,7 @@ export default function ReferenceData() {
 
   // Load all locations (without pagination) for parent name lookups
   useEffect(() => {
-    if (activeTab === 'locations') {
+    if ((activeTab as string) === 'locations') {
       const loadAllLocations = async () => {
         try {
           // Load all locations without pagination
@@ -207,10 +217,18 @@ export default function ReferenceData() {
         }
       } else {
         // Simple list
-        // The API returns { data: [...] }, and extractData extracts the array
-        // So res.data is already the array directly
+        // The API returns { data: [...] } or { data: { [key]: [...] } }
         const res = await config.list()
-        setData(Array.isArray(res.data) ? res.data : [])
+        const data = res.data
+        if (Array.isArray(data)) {
+          // Direct array: { data: T[] }
+          setData(data)
+        } else if (typeof data === 'object' && data !== null) {
+          // Nested structure: { data: { [key]: T[] } }
+          setData((data as any)[config.getDataKey()] || [])
+        } else {
+          setData([])
+        }
       }
     } catch (error) {
       console.error('Failed to load data:', error)
@@ -263,7 +281,7 @@ export default function ReferenceData() {
       deps.storageTypes = storageTypes
     }
     // Add all locations (without pagination) for parent name lookups
-    if (activeTab === 'locations' && allLocations.length > 0) {
+    if ((activeTab as string) === 'locations' && allLocations.length > 0) {
       deps.locations = allLocations
     }
     // Add container type relationships for specimen types

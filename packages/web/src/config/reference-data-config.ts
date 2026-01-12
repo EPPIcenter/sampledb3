@@ -27,9 +27,9 @@ export type ReferenceDataType =
 export interface ReferenceDataConfig {
   id: ReferenceDataType
   label: string
-  // API methods
-  list: () => Promise<{ data: { [key: string]: any[] } }>
-  get?: (id: number) => Promise<{ data: { [key: string]: any } }>
+  // API methods - can return either { data: T[] } or { data: { [key: string]: any[] } }
+  list: () => Promise<{ data: any[] | { [key: string]: any[] } }>
+  get?: (id: number) => Promise<any>
   create?: (data: any) => Promise<any>
   update?: (id: number, data: any) => Promise<any>
   delete?: (id: number) => Promise<any>
@@ -45,11 +45,11 @@ export interface ReferenceDataConfig {
     onToggleContainerType?: (specimenTypeId: number, containerType: string, isAdding: boolean) => Promise<void>
   }) => Column<any>[]
   // Form configuration
-  getFormFields: (editingItem?: any, formData?: any, dependencies?: {
-    containerTypeRelationships?: Record<number, string[]>
-    containerTypeUsageInfo?: Record<number, Record<string, boolean>>
-    onToggleContainerType?: (specimenTypeId: number, containerType: string, isAdding: boolean) => Promise<void>
-  }) => Array<{
+    getFormFields: (editingItem?: any, formData?: any, dependencies?: {
+      containerTypeRelationships?: Record<number, string[]>
+      containerTypeUsageInfo?: Record<number, Record<string, boolean>>
+      onToggleContainerType?: ((specimenTypeId: number, containerType: string, isAdding: boolean) => Promise<void>) | undefined
+    }) => Array<{
     key: string
     label: string
     type?: 'text' | 'number' | 'textarea' | 'select' | 'checkbox' | 'custom'
@@ -125,6 +125,9 @@ export const referenceDataConfigs: ReferenceDataConfig[] = [
           label: 'Allowed Container Types',
           type: 'custom',
           render: (value: any, formData: any, onChange: (value: any) => void) => {
+            if (!deps.onToggleContainerType) {
+              return React.createElement('div', null, 'Container type toggle unavailable')
+            }
             return React.createElement(ContainerTypeToggle, {
               specimenTypeId: editingItem.id,
               allowedTypes,

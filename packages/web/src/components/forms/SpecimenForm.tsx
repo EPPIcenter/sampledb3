@@ -103,7 +103,7 @@ export default function SpecimenForm({
   const loadStudies = async () => {
     try {
       const response = await studiesApi.list()
-      setStudies(response.data.studies)
+      setStudies(response.studies)
     } catch (error) {
       console.error('Failed to load studies:', error)
     }
@@ -112,16 +112,18 @@ export default function SpecimenForm({
   const loadSpecimenTypes = async () => {
     try {
       const response = await specimenTypesApi.list()
-      setSpecimenTypes(response.data.specimenTypes || [])
+      setSpecimenTypes(response.data)
     } catch (error) {
       console.error('Failed to load specimen types:', error)
+      setError('Failed to load specimen types. Please refresh the page.')
+      setSpecimenTypes([]) // Clear on error
     }
   }
 
   const loadSubjects = async (studyId: number) => {
     try {
       const response = await studiesApi.getSubjects(studyId)
-      setSubjects(response.data.subjects)
+      setSubjects(response.subjects)
     } catch (error) {
       console.error('Failed to load subjects:', error)
     }
@@ -182,7 +184,7 @@ export default function SpecimenForm({
             studyId: formData.studyId,
             name: formData.subjectName.trim(),
           })
-          sourceId = subjectResponse.data.subject.id
+          sourceId = subjectResponse.subject.id
         } catch (err: any) {
           setError(err.response?.data?.error || 'Failed to create subject')
           setLoading(false)
@@ -245,8 +247,8 @@ export default function SpecimenForm({
         onSuccess()
       } else {
         // Navigate to the newly created specimen's detail page
-        if (response.data.specimen?.id) {
-          navigate(`/specimens/${response.data.specimen.id}`)
+        if (response.specimen?.id) {
+          navigate(`/specimens/${response.specimen.id}`)
         } else {
           navigate('/statistics')
         }

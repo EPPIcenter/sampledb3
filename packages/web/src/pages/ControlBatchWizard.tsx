@@ -91,9 +91,10 @@ export default function ControlBatchWizard() {
   const loadSpecimenTypes = async () => {
     try {
       const response = await specimenTypesApi.list()
-      setAvailableSpecimenTypes(response.data.specimenTypes || [])
+      setAvailableSpecimenTypes(response.data)
     } catch (err) {
       console.error('Failed to load specimen types:', err)
+      setAvailableSpecimenTypes([]) // Clear on error
     }
   }
 

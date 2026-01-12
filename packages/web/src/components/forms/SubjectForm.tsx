@@ -34,7 +34,7 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
   const loadStudyById = async (id: number) => {
     try {
       const response = await studiesApi.list()
-      const study = response.data.studies.find((s) => s.id === id)
+      const study = response.studies.find((s) => s.id === id)
       if (study) {
         setStudyName(study?.title || null)
       }
@@ -80,9 +80,9 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
         // Update existing subject
         const response = await subjectsApi.update(subject.id, { name: trimmedName })
         if (onSuccess) {
-          onSuccess(response.data.subject.id)
+          onSuccess(response.subject.id)
         } else {
-          navigate(`/subjects/${response.data.subject.id}`)
+          navigate(`/subjects/${response.subject.id}`)
         }
       } else {
         // Create new subject
@@ -92,11 +92,11 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
         })
 
         if (onSuccess) {
-          onSuccess(response.data.subject.id)
+          onSuccess(response.subject.id)
         } else {
           // Navigate to the newly created subject's detail page
-          if (response.data.subject?.id) {
-            navigate(`/subjects/${response.data.subject.id}`)
+          if (response.subject?.id) {
+            navigate(`/subjects/${response.subject.id}`)
           } else {
             navigate(-1)
           }

@@ -49,7 +49,7 @@ export default function Studies() {
       try {
         // Fetch all studies to get all unique lead persons
         const response = await studiesApi.list(undefined, { page: 1, limit: 10000 })
-        const allStudies = response.data.studies || []
+        const allStudies = response.studies || []
         const leads = new Set(allStudies.map(s => s.leadPerson).filter(Boolean))
         setAllLeadPersons(Array.from(leads).sort())
       } catch (error) {
@@ -99,7 +99,7 @@ export default function Studies() {
       }
       
       const response = await studiesApi.list(search || undefined, { page, limit })
-      const studiesList = response.data.studies || []
+      const studiesList = response.studies || []
       
       if (studiesList.length === 0) {
         setHasMore(false)
@@ -124,10 +124,10 @@ export default function Studies() {
         setStudies(prev => [...prev, ...studiesWithSummaries])
       }
       
-      if (response.data.pagination) {
-        setTotalPages(response.data.pagination.totalPages)
-        setTotal(response.data.pagination.total)
-        setHasMore(page < response.data.pagination.totalPages)
+      if (response.pagination) {
+        setTotalPages(response.pagination.totalPages)
+        setTotal(response.pagination.total)
+        setHasMore(page < response.pagination.totalPages)
       } else {
         setHasMore(false)
       }
@@ -148,7 +148,7 @@ export default function Studies() {
       setLoading(true)
       // Load all studies when filters are active (we'll paginate client-side)
       const response = await studiesApi.list(search || undefined, { page: 1, limit: 10000 })
-      const studiesList = response.data.studies || []
+      const studiesList = response.studies || []
       
       // Merge with cached summaries
       const studiesWithSummaries = studiesList.map(study => ({
@@ -159,8 +159,8 @@ export default function Studies() {
       
       setStudies(studiesWithSummaries)
       // Set total to the actual count for display
-      if (response.data.pagination) {
-        setTotal(response.data.pagination.total)
+      if (response.pagination) {
+        setTotal(response.pagination.total)
       }
     } catch (error) {
       console.error('Failed to load studies:', error)
@@ -186,7 +186,7 @@ export default function Studies() {
 
     try {
       const response = await studiesApi.getSummaries(idsToLoad)
-      const summaries = response.data.summaries || []
+      const summaries = response.summaries || []
       
       // Update cache
       setSummaryCache(prev => {

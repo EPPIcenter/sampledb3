@@ -130,22 +130,64 @@ export interface StudySummaryBasic {
   collectionDateRange: { earliest: string; latest: string } | null
 }
 
+type StudiesListResponse = {
+  studies: Study[]
+  pagination?: { page: number; limit: number; total: number; totalPages: number }
+}
+
+type StudyResponse = { study: Study }
+type SubjectsListResponse = {
+  subjects: StudySubject[]
+  pagination?: { page: number; limit: number; total: number; totalPages: number }
+}
+type SummariesResponse = { summaries: StudySummaryBasic[] }
+
 export const studiesApi = {
-  list: (search?: string, params?: { page?: number; limit?: number }) =>
-    api.get<{ studies: Study[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>('/studies', {
+  list: async (
+    search?: string,
+    params?: { page?: number; limit?: number }
+  ): Promise<StudiesListResponse> => {
+    const response = await api.get<StudiesListResponse>('/studies', {
       params: { search, ...params }
-    }),
-  get: (id: number) => api.get<{ study: Study }>(`/studies/${id}`),
-  getSubjects: (id: number, params?: { page?: number; limit?: number }) =>
-    api.get<{ subjects: StudySubject[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>(`/studies/${id}/subjects`, { params }),
-  getSummary: (id: number) => api.get<StudySummary>(`/studies/${id}/summary`),
-  getSummaries: (ids: number[]) => api.get<{ summaries: StudySummaryBasic[] }>('/studies/summaries', {
-    params: { ids: ids.join(',') }
-  }),
-  getTimeline: (id: number) => api.get<StudyTimelineData>(`/studies/${id}/timeline`),
-  create: (data: Omit<Study, 'id' | 'created' | 'lastUpdated'>) => api.post<{ study: Study }>('/studies', data),
-  update: (id: number, data: Partial<Pick<Study, 'title' | 'leadPerson' | 'shortCode' | 'description' | 'isLongitudinal'>>) =>
-    api.put<{ study: Study }>(`/studies/${id}`, data),
+    })
+    return response.data
+  },
+  get: async (id: number): Promise<StudyResponse> => {
+    const response = await api.get<StudyResponse>(`/studies/${id}`)
+    return response.data
+  },
+  getSubjects: async (
+    id: number,
+    params?: { page?: number; limit?: number }
+  ): Promise<SubjectsListResponse> => {
+    const response = await api.get<SubjectsListResponse>(`/studies/${id}/subjects`, { params })
+    return response.data
+  },
+  getSummary: async (id: number): Promise<StudySummary> => {
+    const response = await api.get<StudySummary>(`/studies/${id}/summary`)
+    return response.data
+  },
+  getSummaries: async (ids: number[]): Promise<SummariesResponse> => {
+    const response = await api.get<SummariesResponse>('/studies/summaries', {
+      params: { ids: ids.join(',') }
+    })
+    return response.data
+  },
+  getTimeline: async (id: number): Promise<StudyTimelineData> => {
+    const response = await api.get<StudyTimelineData>(`/studies/${id}/timeline`)
+    return response.data
+  },
+  create: async (data: Omit<Study, 'id' | 'created' | 'lastUpdated'>): Promise<StudyResponse> => {
+    const response = await api.post<StudyResponse>('/studies', data)
+    return response.data
+  },
+  update: async (
+    id: number,
+    data: Partial<Pick<Study, 'title' | 'leadPerson' | 'shortCode' | 'description' | 'isLongitudinal'>>
+  ): Promise<StudyResponse> => {
+    const response = await api.put<StudyResponse>(`/studies/${id}`, data)
+    return response.data
+  },
 }
 
 export interface SubjectSummarySpecimen {
@@ -203,13 +245,25 @@ export interface SubjectSummaryResponse {
   summary: SubjectSummary
 }
 
+type SubjectResponse = { subject: StudySubject }
+
 export const subjectsApi = {
-  get: (id: number) => api.get<{ subject: StudySubject }>(`/subjects/${id}`),
-  getSummary: (id: number) => api.get<SubjectSummaryResponse>(`/subjects/${id}/summary`),
-  create: (data: { studyId?: number; studyShortCode?: string; name: string }) =>
-    api.post<{ subject: StudySubject }>('/subjects', data),
-  update: (id: number, data: { name: string }) =>
-    api.put<{ subject: StudySubject }>(`/subjects/${id}`, data),
+  get: async (id: number): Promise<SubjectResponse> => {
+    const response = await api.get<SubjectResponse>(`/subjects/${id}`)
+    return response.data
+  },
+  getSummary: async (id: number): Promise<SubjectSummaryResponse> => {
+    const response = await api.get<SubjectSummaryResponse>(`/subjects/${id}/summary`)
+    return response.data
+  },
+  create: async (data: { studyId?: number; studyShortCode?: string; name: string }): Promise<SubjectResponse> => {
+    const response = await api.post<SubjectResponse>('/subjects', data)
+    return response.data
+  },
+  update: async (id: number, data: { name: string }): Promise<SubjectResponse> => {
+    const response = await api.put<SubjectResponse>(`/subjects/${id}`, data)
+    return response.data
+  },
   createBulk: (data: { subjects: Array<{ studyShortCode: string; name: string }> }) =>
     api.post<{ subjects: StudySubject[]; created: number; errors?: Array<{ index: number; error: string }> }>('/subjects/bulk', data),
   createWithSpecimens: (data: {
@@ -262,32 +316,54 @@ export const subjectsApi = {
     }>(`/subjects/${targetId}/merge`, { sourceId }),
 }
 
-export const specimensApi = {
-  search: (params?: { source_type?: string; study?: string; barcode?: string; subject_id?: string }) =>
-    api.get<{ specimens: Specimen[] }>('/specimens', { params }),
-  get: (id: number) => api.get<{ specimen: Specimen }>(`/specimens/${id}`),
-  create: (data: {
+type SpecimensListResponse = { specimens: Specimen[] }
+type SpecimenResponse = { specimen: Specimen }
+type SpecimensBulkResponse = {
+  specimens: Specimen[]
+  created: number
+  errors?: Array<{ index: number; error: string }>
+}
+
+type CreateSpecimenData = {
+  sourceType: 'subject' | 'control' | 'reagent' | 'cell_line' | 'plasmid' | 'standard'
+  sourceId?: number
+  studyShortCode?: string
+  subjectName?: string
+  specimenTypeId?: number
+  specimenTypeName?: string
+  collectionDate?: string
+  containerBarcode?: string
+}
+
+type CreateSpecimensBulkData = {
+  specimens: Array<{
     sourceType: 'subject' | 'control' | 'reagent' | 'cell_line' | 'plasmid' | 'standard'
     sourceId?: number
     studyShortCode?: string
     subjectName?: string
-    specimenTypeId?: number
-    specimenTypeName?: string
+    specimenTypeName: string
     collectionDate?: string
     containerBarcode?: string
-  }) => api.post<{ specimen: Specimen }>('/specimens', data),
-  createBulk: (data: {
-    specimens: Array<{
-      sourceType: 'subject' | 'control' | 'reagent' | 'cell_line' | 'plasmid' | 'standard'
-      sourceId?: number
-      studyShortCode?: string
-      subjectName?: string
-      specimenTypeName: string
-      collectionDate?: string
-      containerBarcode?: string
-    }>
-  }) =>
-    api.post<{ specimens: Specimen[]; created: number; errors?: Array<{ index: number; error: string }> }>('/specimens/bulk', data),
+  }>
+}
+
+export const specimensApi = {
+  search: async (params?: { source_type?: string; study?: string; barcode?: string; subject_id?: string }): Promise<SpecimensListResponse> => {
+    const response = await api.get<SpecimensListResponse>('/specimens', { params })
+    return response.data
+  },
+  get: async (id: number): Promise<SpecimenResponse> => {
+    const response = await api.get<SpecimenResponse>(`/specimens/${id}`)
+    return response.data
+  },
+  create: async (data: CreateSpecimenData): Promise<SpecimenResponse> => {
+    const response = await api.post<SpecimenResponse>('/specimens', data)
+    return response.data
+  },
+  createBulk: async (data: CreateSpecimensBulkData): Promise<SpecimensBulkResponse> => {
+    const response = await api.post<SpecimensBulkResponse>('/specimens/bulk', data)
+    return response.data
+  },
 }
 
 // State interface removed - states deprecated in favor of tags
@@ -352,7 +428,7 @@ export interface LocationHierarchyStats {
 }
 
 export const specimenTypesApi = {
-  list: async () => {
+  list: async (): Promise<{ data: SpecimenType[]; meta?: ApiResponse<SpecimenType[]>['meta'] }> => {
     const response = await api.get<ApiResponse<SpecimenType[]>>('/specimen-types')
     return { data: extractData(response), meta: response.data.meta }
   },
@@ -380,7 +456,7 @@ export const specimenTypesApi = {
 
 // States API removed - replaced with tags
 export const tagsApi = {
-  list: async () => {
+  list: async (): Promise<{ data: Tag[]; meta?: ApiResponse<Tag[]>['meta'] }> => {
     const response = await api.get<ApiResponse<Tag[]>>('/tags')
     return { data: extractData(response), meta: response.data.meta }
   },
@@ -400,7 +476,7 @@ export const tagsApi = {
 }
 
 export const storageTypesApi = {
-  list: async () => {
+  list: async (): Promise<{ data: StorageType[]; meta?: ApiResponse<StorageType[]>['meta'] }> => {
     const response = await api.get<ApiResponse<StorageType[]>>('/storage-types')
     return { data: extractData(response), meta: response.data.meta }
   },
@@ -420,7 +496,7 @@ export const storageTypesApi = {
 }
 
 export const strainsApi = {
-  list: async () => {
+  list: async (): Promise<{ data: Strain[]; meta?: ApiResponse<Strain[]>['meta'] }> => {
     const response = await api.get<ApiResponse<Strain[]>>('/strains')
     return { data: extractData(response), meta: response.data.meta }
   },
@@ -440,7 +516,7 @@ export const strainsApi = {
 }
 
 export const unitsApi = {
-  list: async () => {
+  list: async (): Promise<{ data: Unit[]; meta?: ApiResponse<Unit[]>['meta'] }> => {
     const response = await api.get<ApiResponse<Unit[]>>('/units')
     return { data: extractData(response), meta: response.data.meta }
   },

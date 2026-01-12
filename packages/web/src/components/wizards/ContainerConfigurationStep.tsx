@@ -30,7 +30,7 @@ export default function ContainerConfigurationStep({
     bags: Map<string, { id: number; locationId: number }>
   }>({ boxes: new Map(), bags: new Map() })
   const [loadingCollections, setLoadingCollections] = useState(false)
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const existingCollectionsRef = useRef(existingCollections)
   
   // Keep ref in sync with state

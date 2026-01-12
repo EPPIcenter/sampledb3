@@ -101,7 +101,7 @@ export default function StudyDetail() {
     try {
       setStudyLoading(true)
       const response = await studiesApi.get(parseInt(id!))
-      setStudy(response.data.study)
+      setStudy(response.study)
     } catch (error) {
       console.error('Failed to load study:', error)
     } finally {
@@ -113,14 +113,14 @@ export default function StudyDetail() {
     try {
       setLoading(true)
       const response = await studiesApi.getSubjects(parseInt(id!), { page: subjectsPage, limit })
-      setSubjects(response.data.subjects || [])
-      if (response.data.pagination) {
-        setSubjectsTotal(response.data.pagination.total)
-        setSubjectsTotalPages(response.data.pagination.totalPages)
+      setSubjects(response.subjects || [])
+      if (response.pagination) {
+        setSubjectsTotal(response.pagination.total)
+        setSubjectsTotalPages(response.pagination.totalPages)
       } else {
         // Pagination should always be present - handle missing pagination as error case
         console.warn('Missing pagination in subjects response')
-        setSubjectsTotal(response.data.subjects?.length || 0)
+        setSubjectsTotal(response.subjects?.length || 0)
         setSubjectsTotalPages(1)
       }
     } catch (error) {
@@ -146,7 +146,7 @@ export default function StudyDetail() {
     try {
       setSummaryLoading(true)
       const response = await studiesApi.getSummary(parseInt(id!))
-      setSummary(response.data)
+      setSummary(response)
     } catch (error) {
       console.error('Failed to load study summary:', error)
     } finally {
@@ -158,7 +158,7 @@ export default function StudyDetail() {
     try {
       setTimelineLoading(true)
       const response = await studiesApi.getTimeline(parseInt(id!))
-      setTimeline(response.data)
+      setTimeline(response)
     } catch (error) {
       console.error('Failed to load study timeline:', error)
     } finally {

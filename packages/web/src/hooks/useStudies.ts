@@ -22,7 +22,7 @@ export function useStudies(search?: string, params?: { page?: number; limit?: nu
     queryFn: async () => {
       try {
         const res = await studiesApi.list(search, params)
-        return res.data
+        return res
       } catch (err: any) {
         showError(err.response?.data?.error || 'Failed to load studies')
         throw err
@@ -36,7 +36,7 @@ export function useStudy(id: number) {
     queryKey: studyKeys.detail(id),
     queryFn: async () => {
       const res = await studiesApi.get(id)
-      return res.data.study
+      return res.study
     },
     enabled: !!id,
   })
@@ -47,7 +47,7 @@ export function useStudySubjects(studyId: number, params?: { page?: number; limi
     queryKey: [...studyKeys.detail(studyId), 'subjects', params],
     queryFn: async () => {
       const res = await studiesApi.getSubjects(studyId, params)
-      return res.data
+      return res
     },
     enabled: !!studyId,
   })
@@ -58,7 +58,7 @@ export function useStudySummary(studyId: number) {
     queryKey: studyKeys.summary(studyId),
     queryFn: async () => {
       const res = await studiesApi.getSummary(studyId)
-      return res.data
+      return res
     },
     enabled: !!studyId,
   })
@@ -69,7 +69,7 @@ export function useStudyTimeline(studyId: number) {
     queryKey: studyKeys.timeline(studyId),
     queryFn: async () => {
       const res = await studiesApi.getTimeline(studyId)
-      return res.data
+      return res
     },
     enabled: !!studyId,
   })
@@ -80,7 +80,7 @@ export function useStudySummaries(ids: number[]) {
     queryKey: studyKeys.summaries(ids),
     queryFn: async () => {
       const res = await studiesApi.getSummaries(ids)
-      return res.data.summaries
+      return res.summaries
     },
     enabled: ids.length > 0,
   })
@@ -94,7 +94,7 @@ export function useCreateStudy() {
     mutationFn: async (data: Omit<Study, 'id' | 'created' | 'lastUpdated'>) => {
       try {
         const res = await studiesApi.create(data)
-        return res.data.study
+        return res.study
       } catch (err: any) {
         showError(err.response?.data?.error || 'Failed to create study')
         throw err
@@ -121,7 +121,7 @@ export function useUpdateStudy() {
     }) => {
       try {
         const res = await studiesApi.update(id, data)
-        return res.data.study
+        return res.study
       } catch (err: any) {
         showError(err.response?.data?.error || 'Failed to update study')
         throw err

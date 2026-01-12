@@ -25,7 +25,7 @@ export function useSpecimens(filters?: {
     queryKey: specimenKeys.list(filters),
     queryFn: async () => {
       const res = await specimensApi.search(filters)
-      return res.data.specimens
+      return res.specimens
     },
   })
 }
@@ -35,7 +35,7 @@ export function useSpecimen(id: number) {
     queryKey: specimenKeys.detail(id),
     queryFn: async () => {
       const res = await specimensApi.get(id)
-      return res.data.specimen
+      return res.specimen
     },
     enabled: !!id,
   })
@@ -58,7 +58,7 @@ export function useCreateSpecimen() {
     }) => {
       try {
         const res = await specimensApi.create(data)
-        return res.data.specimen
+        return res.specimen
       } catch (err: any) {
         showError(err.response?.data?.error || 'Failed to create specimen')
         throw err

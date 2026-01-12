@@ -61,7 +61,7 @@ export default function SubjectDetail() {
       setLoading(true)
       setError(null)
       const response = await subjectsApi.getSummary(parseInt(id!))
-      setSummaryData(response.data)
+      setSummaryData(response)
     } catch (err: any) {
       console.error('Failed to load subject summary:', err)
       setError(err.response?.data?.error || 'Failed to load subject summary')

@@ -59,7 +59,7 @@ export default function BloodControls() {
         tubeCount: Number(b.tubeCount || 0),
         inventoryTotal: Number(b.inventoryTotal || 0)
       })))
-      setStrains(strainsRes.data.strains || [])
+      setStrains(strainsRes.data)
     } catch (error) {
       console.error('Failed to load controls data:', error)
     } finally {

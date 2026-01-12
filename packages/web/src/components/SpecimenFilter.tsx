@@ -48,9 +48,9 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
     try {
       setLoading(true)
       const [specimenTypesRes] = await Promise.all([
-        specimenTypesApi.list().catch(() => ({ data: { specimenTypes: [] } })),
+        specimenTypesApi.list().catch(() => ({ data: [] })),
       ])
-      setSpecimenTypes(specimenTypesRes.data.specimenTypes || [])
+      setSpecimenTypes(specimenTypesRes.data)
     } catch (error) {
       console.error('Failed to load reference data:', error)
     } finally {
@@ -76,7 +76,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
     try {
       setStudyLoading(true)
       const response = await studiesApi.list(studySearch || undefined)
-      setStudies(response.data.studies || [])
+      setStudies(response.studies || [])
     } catch (error) {
       console.error('Failed to load studies:', error)
     } finally {

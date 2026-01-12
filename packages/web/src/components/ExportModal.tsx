@@ -83,7 +83,7 @@ export default function ExportModal({
       
       // Safely extract data with null checks
       const availableTypesData = availableTypesRes?.data
-      const tagsData = tagsRes?.data
+      const tagsData = tagsRes.data // tagsApi.list() returns { data: Tag[] }
       
       if (!availableTypesData) {
         throw new Error('Invalid response from server: missing data')
@@ -107,7 +107,7 @@ export default function ExportModal({
       const availableContainerTypes = Array.isArray(availableTypesData.container_types)
         ? availableTypesData.container_types
         : []
-      setTags(Array.isArray(tagsData?.tags) ? tagsData.tags : [])
+      setTags(tagsData)
       
       // Store available container types for filtering the UI
       setAvailableContainerTypes(availableContainerTypes)

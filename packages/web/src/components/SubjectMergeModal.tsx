@@ -109,8 +109,8 @@ export default function SubjectMergeModal({
       setLoading(true)
       setError(null)
       const response = await studiesApi.getSubjects(studyId, { page: 1, limit: 1000 })
-      setSubjects(response.data.subjects || [])
-      if (!response.data.subjects || response.data.subjects.length === 0) {
+      setSubjects(response.subjects || [])
+      if (!response.subjects || response.subjects.length === 0) {
         setError('No subjects found in this study')
       }
     } catch (err: any) {
@@ -146,7 +146,7 @@ export default function SubjectMergeModal({
       const promises = subjects.slice(0, 50).map(async (subject) => {
         try {
           const summary = await subjectsApi.getSummary(subject.id)
-          counts.set(subject.id, summary.data.summary.totalSpecimens)
+          counts.set(subject.id, summary.summary.totalSpecimens)
         } catch (err) {
           console.error(`Failed to load count for subject ${subject.id}:`, err)
           counts.set(subject.id, 0)

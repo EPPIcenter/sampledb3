@@ -54,7 +54,7 @@ export default function SpecimenDetail() {
   const loadSpecimen = async () => {
     try {
       const response = await specimensApi.get(parseInt(id!))
-      const specData = response.data.specimen
+      const specData = response.specimen
       setSpecimen(specData)
       
       // Load source information

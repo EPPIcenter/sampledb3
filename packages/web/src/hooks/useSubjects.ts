@@ -13,7 +13,7 @@ export function useSubject(id: number) {
     queryKey: subjectKeys.detail(id),
     queryFn: async () => {
       const res = await subjectsApi.get(id)
-      return res.data.subject
+      return res.subject
     },
     enabled: !!id,
   })
@@ -24,7 +24,7 @@ export function useSubjectSummary(id: number) {
     queryKey: subjectKeys.summary(id),
     queryFn: async () => {
       const res = await subjectsApi.getSummary(id)
-      return res.data
+      return res
     },
     enabled: !!id,
   })
@@ -36,7 +36,7 @@ export function useCreateSubject() {
   return useMutation({
     mutationFn: async (data: { studyId?: number; studyShortCode?: string; name: string }) => {
       const res = await subjectsApi.create(data)
-      return res.data.subject
+      return res.subject
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: subjectKeys.detail(data.id) })
@@ -50,7 +50,7 @@ export function useUpdateSubject() {
   return useMutation({
     mutationFn: async ({ id, data }: { id: number; data: { name: string } }) => {
       const res = await subjectsApi.update(id, data)
-      return res.data.subject
+      return res.subject
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: subjectKeys.detail(data.id) })

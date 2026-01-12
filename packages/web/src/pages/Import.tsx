@@ -543,8 +543,8 @@ export default function Import() {
         const response = await specimensApi.createBulk({ specimens: data })
         setImportResult({
           success: true,
-          created: response.data.created,
-          errors: response.data.errors,
+          created: response.created,
+          errors: response.errors,
         })
       } else {
         // Combined: group by subject

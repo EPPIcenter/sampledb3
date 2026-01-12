@@ -32,7 +32,7 @@ export default function StudyPicker({ value, onChange }: StudyPickerProps) {
     try {
       setLoading(true)
       const response = await studiesApi.list(search || undefined)
-      setStudies(response.data.studies || [])
+      setStudies(response.studies || [])
     } catch (error) {
       console.error('Failed to load studies:', error)
     } finally {

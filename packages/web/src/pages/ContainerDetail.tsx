@@ -89,7 +89,12 @@ export default function ContainerDetail() {
     if (!id) return
     try {
       const response = await derivationsApi.getSource(parseInt(id))
-      setSourceDerivation(response.data)
+      setSourceDerivation({
+        type: 'derivation',
+        derivation: response.data.derivation,
+        parentContainer: response.data.parentContainer,
+        parentSpecimen: response.data.parentSpecimen,
+      })
     } catch (error: any) {
       // 404 is expected if container has no source
       if (error.response?.status !== 404) {

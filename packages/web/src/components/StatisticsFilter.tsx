@@ -69,11 +69,11 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
     try {
       setLoading(true)
       const [specimenTypesRes, tagsRes] = await Promise.all([
-        specimenTypesApi.list().catch(() => ({ data: { specimenTypes: [] } })),
-        tagsApi.list().catch(() => ({ data: { tags: [] } })),
+        specimenTypesApi.list().catch(() => ({ data: [] })),
+        tagsApi.list().catch(() => ({ data: [] })),
       ])
-      setSpecimenTypes(specimenTypesRes.data.specimenTypes || [])
-      setTags(tagsRes.data.tags || [])
+      setSpecimenTypes(specimenTypesRes.data)
+      setTags(tagsRes.data)
     } catch (error) {
       console.error('Failed to load reference data:', error)
     } finally {
@@ -99,7 +99,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
     try {
       setStudyLoading(true)
       const response = await studiesApi.list(studySearch || undefined)
-      setStudies(response.data.studies || [])
+      setStudies(response.studies || [])
     } catch (error) {
       console.error('Failed to load studies:', error)
     } finally {

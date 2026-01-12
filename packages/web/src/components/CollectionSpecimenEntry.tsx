@@ -40,7 +40,7 @@ export default function CollectionSpecimenEntry({
   const loadStudies = async () => {
     try {
       const response = await studiesApi.list()
-      setStudies(response.data.studies)
+      setStudies(response.studies)
     } catch (error) {
       console.error('Failed to load studies:', error)
     }
@@ -49,9 +49,10 @@ export default function CollectionSpecimenEntry({
   const loadSpecimenTypes = async () => {
     try {
       const response = await specimenTypesApi.list()
-      setSpecimenTypes(response.data.specimenTypes || [])
+      setSpecimenTypes(response.data)
     } catch (error) {
       console.error('Failed to load specimen types:', error)
+      setSpecimenTypes([]) // Clear on error
     }
   }
 
@@ -108,8 +109,8 @@ export default function CollectionSpecimenEntry({
 
       const response = await specimensApi.createBulk({ specimens })
       
-      if (response.data.errors && response.data.errors.length > 0) {
-        setError(`Some specimens failed to create: ${response.data.errors.map(e => e.error).join(', ')}`)
+      if (response.errors && response.errors.length > 0) {
+        setError(`Some specimens failed to create: ${response.errors.map((e: { error: string }) => e.error).join(', ')}`)
       } else {
         if (onSuccess) {
           onSuccess()

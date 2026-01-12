@@ -38,7 +38,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
       storageTypesApi
         .list()
         .then((response) => {
-          setStorageTypes(response.data.storageTypes)
+          setStorageTypes(response.data)
         })
         .catch((error) => {
           console.error('Failed to load storage types:', error)

@@ -121,9 +121,10 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
   const loadStrains = async () => {
     try {
       const res = await strainsApi.list()
-      setStrains(res.data.strains || [])
+      setStrains(res.data)
     } catch (err) {
       console.error('Failed to load strains:', err)
+      setStrains([]) // Clear on error
     }
   }
 

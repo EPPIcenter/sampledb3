@@ -166,7 +166,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
       if (key === 'parentId') {
         if (value && value !== '' && value !== null && value !== undefined) {
           // If parent is selected, clear storageTypeId (it will be inferred from parent)
-          updated.storageTypeId = undefined
+          ;(updated as any).storageTypeId = undefined
         }
       }
       

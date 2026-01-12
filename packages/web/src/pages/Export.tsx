@@ -94,17 +94,15 @@ export default function Export() {
       ])
       
       setSpecimenTypes(
-        Array.isArray(specimenTypesRes?.data?.specimenTypes)
-          ? specimenTypesRes.data.specimenTypes.map((st: any) => ({
-              id: st.id,
-              name: st.name,
-              created: st.created || '',
-              lastUpdated: st.lastUpdated || '',
-            }))
-          : []
+        specimenTypesRes.data.map((st) => ({
+          id: st.id,
+          name: st.name,
+          created: st.created || '',
+          lastUpdated: st.lastUpdated || '',
+        }))
       )
       
-      setTags(Array.isArray(tagsRes?.data?.tags) ? tagsRes.data.tags : [])
+      setTags(tagsRes.data)
       
       // For container types, we'll show all types (they'll be filtered server-side)
       setAvailableContainerTypes(CONTAINER_TYPES.map(t => t.value))

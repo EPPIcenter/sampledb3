@@ -151,7 +151,7 @@ export default function Dashboard() {
         controlsRes,
       ] = await Promise.all([
         statisticsApi.get().catch(() => ({ data: null })),
-        studiesApi.list(undefined, { limit: 15 }).catch(() => ({ data: { studies: [] } })),
+        studiesApi.list(undefined, { limit: 15 }).catch(() => ({ studies: [] })),
         activityApi.recent(20).catch(() => ({ data: { activity: [] } })),
         locationsApi.list().catch(() => ({ data: { locations: [] } })),
         controlsApi.list().catch(() => ({ data: { controls: [] } })),
@@ -175,16 +175,16 @@ export default function Dashboard() {
       }
 
       // Load study summaries
-      const studies = studiesListRes.data.studies || []
+      const studies = studiesListRes.studies || []
       if (studies.length > 0) {
-        const studyIds = studies.map((s) => s.id)
+        const studyIds = studies.map((s: Study) => s.id)
         try {
           const summariesRes = await studiesApi.getSummaries(studyIds)
           const summariesMap = new Map(
-            (summariesRes.data.summaries || []).map((s) => [s.studyId, s])
+            (summariesRes.summaries || []).map((s: StudySummaryBasic) => [s.studyId, s])
           )
           setRecentStudies(
-            studies.map((study) => ({
+            studies.map((study: Study) => ({
               ...study,
               summary: summariesMap.get(study.id) || null,
             }))
