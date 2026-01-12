@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { specimensApi, type Specimen } from '../lib/api'
+import { useToast } from '../contexts/ToastContext'
 
 export const specimenKeys = {
   all: ['specimens'] as const,
@@ -42,6 +43,7 @@ export function useSpecimen(id: number) {
 
 export function useCreateSpecimen() {
   const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
   
   return useMutation({
     mutationFn: async (data: {
@@ -54,11 +56,20 @@ export function useCreateSpecimen() {
       collectionDate?: string
       containerBarcode?: string
     }) => {
-      const res = await specimensApi.create(data)
-      return res.data.specimen
+      try {
+        const res = await specimensApi.create(data)
+        return res.data.specimen
+      } catch (err: any) {
+        showError(err.response?.data?.error || 'Failed to create specimen')
+        throw err
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: specimenKeys.lists() })
+      success('Specimen created successfully')
+    },
+    onError: () => {
+      // Error already shown in mutationFn
     },
   })
 }

@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
-import { db } from '../db/client'
 import { users, sessions } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
@@ -9,7 +8,7 @@ import { nanoid } from 'nanoid'
 import type { Database } from '../db/client'
 import { getPasswordRequirements, getSessionSettings } from '../lib/settings'
 
-export function createAuthRoutes(database: Database = db) {
+export function createAuthRoutes(database: Database) {
   const auth = new Hono()
 
 const loginSchema = z.object({
@@ -170,5 +169,5 @@ auth.post('/register', async (c) => {
   return auth
 }
 
-const auth = createAuthRoutes()
-export default auth
+// Default export removed - routes must be created with database injection via createAuthRoutes()
+// This will be handled in index.ts

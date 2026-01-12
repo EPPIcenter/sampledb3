@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData } from '../../__tests__/helpers/test-client'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import { createTestStorageType, createTestLocation } from '../../__tests__/helpers/factories'
 import type { Database } from '../../db/client'
@@ -74,8 +74,8 @@ describe('Storage Types API', () => {
 
       const res = await client.api['storage-types'].$get()
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.storageTypes).toEqual([])
+      const data = await getResponseData(res)
+      expect(data).toEqual([])
     })
 
     it('should return all storage types', async () => {
@@ -88,8 +88,8 @@ describe('Storage Types API', () => {
 
       const res = await client.api['storage-types'].$get()
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.storageTypes).toHaveLength(2)
+      const data = await getResponseData(res)
+      expect(data).toHaveLength(2)
     })
   })
 
@@ -107,9 +107,9 @@ describe('Storage Types API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
-      expect(data.storageType.name).toBe('New Storage Type')
-      expect(data.storageType.description).toBe('Test description')
+      const data = await getResponseData(res)
+      expect(data.name).toBe('New Storage Type')
+      expect(data.description).toBe('Test description')
     })
 
     it('should create storage type without description', async () => {
@@ -124,8 +124,8 @@ describe('Storage Types API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
-      expect(data.storageType.name).toBe('Simple Type')
+      const data = await getResponseData(res)
+      expect(data.name).toBe('Simple Type')
     })
 
     it('should reject duplicate names', async () => {
@@ -141,7 +141,7 @@ describe('Storage Types API', () => {
         },
       })
 
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(409)
       const data = await res.json()
       expect(data.error).toContain('already exists')
     })
@@ -160,9 +160,9 @@ describe('Storage Types API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.storageType.id).toBe(testType.id)
-      expect(data.storageType.name).toBe('Test Type')
+      const data = await getResponseData(res)
+      expect(data.id).toBe(testType.id)
+      expect(data.name).toBe('Test Type')
     })
 
     it('should return 404 for non-existent ID', async () => {
@@ -195,9 +195,9 @@ describe('Storage Types API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.storageType.name).toBe('Updated')
-      expect(data.storageType.description).toBe('New description')
+      const data = await getResponseData(res)
+      expect(data.name).toBe('Updated')
+      expect(data.description).toBe('New description')
     })
   })
 

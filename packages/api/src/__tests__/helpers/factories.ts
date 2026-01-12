@@ -221,3 +221,44 @@ export async function createTestSpecimen(
   return result
 }
 
+/**
+ * Create a test control batch
+ */
+export async function createTestControlBatch(
+  db: Database,
+  controlDefinitionId: number,
+  data?: { name?: string; productionDate?: string; properties?: any }
+) {
+  const now = new Date().toISOString()
+  const [result] = await db.insert(controlBatch).values({
+    controlDefinitionId,
+    name: data?.name || `Batch ${Date.now()}`,
+    productionDate: data?.productionDate,
+    properties: data?.properties ? JSON.stringify(data.properties) : null,
+    created: now,
+    lastUpdated: now,
+  }).returning()
+  return result
+}/**
+ * Create a test study with default values
+ */
+export function createTestStudyData(overrides?: Partial<{ title: string; shortCode: string; leadPerson: string; isLongitudinal: boolean }>) {
+  const timestamp = Date.now()
+  return {
+    title: `Test Study ${timestamp}`,
+    shortCode: `TEST${timestamp}`,
+    isLongitudinal: false,
+    leadPerson: 'Test Person',
+    ...overrides
+  }
+}/**
+ * Create a test subject with default values
+ */
+export function createTestSubjectData(studyId: number, overrides?: Partial<{ name: string }>) {
+  const timestamp = Date.now()
+  return {
+    studyId,
+    name: `SUBJ-${timestamp}`,
+    ...overrides
+  }
+}

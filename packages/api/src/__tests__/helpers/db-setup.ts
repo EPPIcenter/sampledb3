@@ -1,7 +1,7 @@
-import Database from 'better-sqlite3'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { Database } from 'bun:sqlite'
+import { drizzle } from 'drizzle-orm/bun-sqlite'
 import * as schema from '../../db/schema'
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
+import { migrate } from 'drizzle-orm/bun-sqlite/migrator'
 import type { Database as DrizzleDatabase } from '../../db/client'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
@@ -13,9 +13,9 @@ const __dirname = dirname(__filename)
 /**
  * Creates an in-memory SQLite database for testing
  */
-export function createTestDatabase(): { db: DrizzleDatabase; sqlite: Database.Database } {
+export function createTestDatabase(): { db: DrizzleDatabase; sqlite: Database } {
   const sqlite = new Database(':memory:')
-  sqlite.pragma('journal_mode = WAL')
+  sqlite.exec('PRAGMA journal_mode = WAL')
 
   const db = drizzle(sqlite, { schema })
 
@@ -26,7 +26,7 @@ export function createTestDatabase(): { db: DrizzleDatabase; sqlite: Database.Da
  * Sets up a test database with full schema using Drizzle migrations
  * This ensures the test database matches the production schema
  */
-export async function setupTestDatabase(): Promise<{ db: DrizzleDatabase; sqlite: Database.Database }> {
+export async function setupTestDatabase(): Promise<{ db: DrizzleDatabase; sqlite: Database }> {
   const { db, sqlite } = createTestDatabase()
 
   try {
@@ -47,14 +47,14 @@ export async function setupTestDatabase(): Promise<{ db: DrizzleDatabase; sqlite
 /**
  * Cleans up test database
  */
-export function cleanupTestDatabase(sqlite: Database.Database) {
+export function cleanupTestDatabase(sqlite: Database) {
   sqlite.close()
 }
 
 /**
  * Reset the test database by dropping all tables and recreating schema
  */
-export async function resetTestDatabase(sqlite: Database.Database, db: DrizzleDatabase) {
+export async function resetTestDatabase(sqlite: Database, db: DrizzleDatabase) {
   // Get all table names
   const tables = sqlite.prepare(`
     SELECT name FROM sqlite_master 

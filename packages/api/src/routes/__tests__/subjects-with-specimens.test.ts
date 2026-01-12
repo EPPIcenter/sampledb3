@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { Hono } from 'hono'
 import { createTestClient } from '../../__tests__/helpers/test-client'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
@@ -27,20 +27,7 @@ import {
   specimenTypeContainerType,
   settings,
 } from '../../db/schema'
-
-// Mock the db import before importing subjects route
-let mockDb: Database
-vi.mock('../../db/client', async () => {
-  const actual = await vi.importActual('../../db/client')
-  return {
-    ...actual,
-    get db() {
-      return mockDb
-    },
-  }
-})
-
-import subjects from '../subjects'
+import { createSubjectsRoutes } from '../subjects'
 
 describe('Subjects with Specimens API', () => {
   let app: Hono
@@ -56,9 +43,6 @@ describe('Subjects with Specimens API', () => {
     const setup = await setupTestDatabase()
     testDb = setup.db
     sqlite = setup.sqlite
-    
-    // Set the mock db to use test database
-    mockDb = testDb
 
     // Create required test data
     testStudy = await createTestStudy(testDb, {
@@ -155,8 +139,10 @@ describe('Subjects with Specimens API', () => {
       } as any,
     })
 
+    // Create subjects routes with test database
+    const subjectsRoutes = createSubjectsRoutes(testDb)
     app = new Hono()
-    app.route('/api/subjects', subjects)
+    app.route('/api/subjects', subjectsRoutes)
   })
 
   afterEach(() => {

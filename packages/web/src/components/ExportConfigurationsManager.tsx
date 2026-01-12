@@ -36,10 +36,6 @@ const AVAILABLE_COLUMNS = [
   { key: 'study_title', label: 'Study Title' },
   { key: 'study_lead_person', label: 'Study Lead Person' },
   { key: 'location_path', label: 'Location Path' },
-  { key: 'location_root', label: 'Location Root' },
-  { key: 'location_level_i', label: 'Location Level I' },
-  { key: 'location_level_ii', label: 'Location Level II' },
-  { key: 'location_level_iii', label: 'Location Level III' },
   { key: 'created', label: 'Created' },
   { key: 'last_updated', label: 'Last Updated' },
 ]

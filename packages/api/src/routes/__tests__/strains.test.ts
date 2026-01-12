@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData } from '../../__tests__/helpers/test-client'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import { createTestStrain } from '../../__tests__/helpers/factories'
 import type { Database } from '../../db/client'
@@ -25,13 +25,6 @@ describe('Strains API', () => {
       description: z.string().optional(),
     })
 
-    async function checkStrainInUse(id: number, database: any): Promise<string | null> {
-      // Note: Compositions are no longer used - strains are now embedded in control definitions via properties JSON
-      // This check is kept for backward compatibility but always returns null since compositions don't exist
-      // In the future, if we need to check for "in use" scenarios, we would check control definitions' properties JSON
-      return null
-    }
-
     strainsRoutes = createCrudRoutes({
       table: strain,
       database: testDb,
@@ -39,7 +32,8 @@ describe('Strains API', () => {
       pluralName: 'strains',
       singularName: 'strain',
       createSchema,
-      checkInUse: checkStrainInUse,
+      // Note: If we need to check if a strain is in use, we would check control definitions' properties JSON
+      // For now, strains can be deleted without checking usage
     })
   })
 
@@ -57,8 +51,8 @@ describe('Strains API', () => {
 
       const res = await client.api.strains.$get()
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.strains).toEqual([])
+      const data = await getResponseData(res)
+      expect(data).toEqual([])
     })
 
     it('should return all strains ordered by name', async () => {
@@ -71,9 +65,9 @@ describe('Strains API', () => {
 
       const res = await client.api.strains.$get()
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.strains).toHaveLength(2)
-      expect(data.strains[0].name).toBe('Strain A')
+      const data = await getResponseData(res)
+      expect(data).toHaveLength(2)
+      expect(data[0].name).toBe('Strain A')
     })
   })
 
@@ -91,9 +85,9 @@ describe('Strains API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
-      expect(data.strain.name).toBe('New Strain')
-      expect(data.strain.description).toBe('Test description')
+      const data = await getResponseData(res)
+      expect(data.name).toBe('New Strain')
+      expect(data.description).toBe('Test description')
     })
 
     it('should reject duplicate names', async () => {
@@ -109,7 +103,7 @@ describe('Strains API', () => {
         },
       })
 
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(409)
       const data = await res.json()
       expect(data.error).toContain('already exists')
     })
@@ -128,9 +122,9 @@ describe('Strains API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.strain.id).toBe(testStrain.id)
-      expect(data.strain.name).toBe('Test Strain')
+      const data = await getResponseData(res)
+      expect(data.id).toBe(testStrain.id)
+      expect(data.name).toBe('Test Strain')
     })
   })
 
@@ -151,8 +145,8 @@ describe('Strains API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.strain.name).toBe('Updated')
+      const data = await getResponseData(res)
+      expect(data.name).toBe('Updated')
     })
   })
 

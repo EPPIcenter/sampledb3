@@ -2,24 +2,26 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import type { Database } from '../../db/client'
-import BetterSqlite3 from 'better-sqlite3'
+import { Database } from 'bun:sqlite'
 import { createSetupRoutes } from '../setup'
 import { users, unit, specimenType, storageType, location, containerTypeUnit, specimenTypeContainerType } from '../../db/schema'
 
 describe('Setup Route', () => {
   let testDb: Database
-  let sqlite: BetterSqlite3.Database
-  let app: Hono
+  let sqlite: Database
+
+  function createTestApp(): Hono {
+    // Create a fresh app instance for each test to avoid state leakage
+    const setupRoutes = createSetupRoutes(testDb)
+    const app = new Hono()
+    app.route('/setup', setupRoutes)
+    return app
+  }
 
   beforeEach(async () => {
     const setup = await setupTestDatabase()
     testDb = setup.db
     sqlite = setup.sqlite
-
-    // Create routes with test database
-    const setupRoutes = createSetupRoutes(testDb)
-    app = new Hono()
-    app.route('/setup', setupRoutes)
   })
 
   afterEach(() => {
@@ -43,6 +45,7 @@ describe('Setup Route', () => {
         locations: [{ name: 'Location 1' }],
       }
 
+      const app = createTestApp()
       const res = await app.request('/setup/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -55,6 +58,7 @@ describe('Setup Route', () => {
     })
 
     it('should validate all critical data was created', async () => {
+      // Create a fresh object to avoid mutation issues
       const setupData = {
         adminName: 'Test Admin',
         adminEmail: 'admin@test.com',
@@ -70,13 +74,21 @@ describe('Setup Route', () => {
         ],
         locations: [{ name: 'Location 1', storageTypeId: 'Freezer' }],
       }
+      
+      // Deep clone to prevent mutation
+      const requestBody = JSON.parse(JSON.stringify(setupData))
 
+      const app = createTestApp()
       const res = await app.request('/setup/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(setupData),
+        body: JSON.stringify(requestBody),
       })
 
+      if (res.status !== 200) {
+        const errorBody = await res.json() as any
+        console.error('Setup failed:', JSON.stringify(errorBody, null, 2))
+      }
       expect(res.status).toBe(200)
       const body = await res.json() as { success?: boolean }
       expect(body.success).toBe(true)
@@ -108,6 +120,7 @@ describe('Setup Route', () => {
         ],
       }
 
+      const app = createTestApp()
       const res = await app.request('/setup/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,6 +161,7 @@ describe('Setup Route', () => {
         ],
       }
 
+      const app = createTestApp()
       const res = await app.request('/setup/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -187,6 +201,7 @@ describe('Setup Route', () => {
         units: [{ name: 'items', symbol: 'items', category: 'count' }],
       }
 
+      const app = createTestApp()
       const res = await app.request('/setup/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

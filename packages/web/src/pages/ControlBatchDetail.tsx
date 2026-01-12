@@ -255,12 +255,11 @@ export default function ControlBatchDetail() {
                 </div>
               )}
 
-              {batch.properties && Object.keys(batch.properties).filter(k => k !== 'legacy_study_id').length > 0 && (
+              {batch.properties && Object.keys(batch.properties).length > 0 && (
                 <div className="pt-6 border-t border-gray-100">
                   <h3 className="text-sm font-semibold text-gray-900 mb-2">Batch Properties</h3>
                   <div className="bg-gray-50 rounded-lg p-3 space-y-2 border border-gray-100">
                     {Object.entries(batch.properties)
-                      .filter(([key]) => key !== 'legacy_study_id')
                       .map(([key, value]) => (
                         <div key={key} className="flex justify-between text-xs">
                           <span className="text-gray-500 capitalize">{key.replace('_', ' ')}</span>

@@ -1,4 +1,5 @@
 import { db } from '../db/client'
+import type { Database } from '../db/client'
 import { micronixPlate, cryovialBox, box, bag, sheet } from '../db/schema'
 import { eq } from 'drizzle-orm'
 
@@ -9,11 +10,12 @@ export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' |
  */
 export async function resolveCollectionByName(
   name: string,
-  type: CollectionType
+  type: CollectionType,
+  database: Database = db
 ): Promise<number | null> {
   switch (type) {
     case 'micronix_plate': {
-      const plate = await db
+      const plate = await database
         .select({ id: micronixPlate.id })
         .from(micronixPlate)
         .where(eq(micronixPlate.name, name))
@@ -21,7 +23,7 @@ export async function resolveCollectionByName(
       return plate?.id ?? null
     }
     case 'cryovial_box': {
-      const box = await db
+      const box = await database
         .select({ id: cryovialBox.id })
         .from(cryovialBox)
         .where(eq(cryovialBox.name, name))
@@ -29,7 +31,7 @@ export async function resolveCollectionByName(
       return box?.id ?? null
     }
     case 'box': {
-      const boxRecord = await db
+      const boxRecord = await database
         .select({ id: box.id })
         .from(box)
         .where(eq(box.name, name))
@@ -37,7 +39,7 @@ export async function resolveCollectionByName(
       return boxRecord?.id ?? null
     }
     case 'bag': {
-      const bagRecord = await db
+      const bagRecord = await database
         .select({ id: bag.id })
         .from(bag)
         .where(eq(bag.name, name))
@@ -45,7 +47,7 @@ export async function resolveCollectionByName(
       return bagRecord?.id ?? null
     }
     case 'sheet': {
-      const sheetRecord = await db
+      const sheetRecord = await database
         .select({ id: sheet.id })
         .from(sheet)
         .where(eq(sheet.name, name))
@@ -74,7 +76,7 @@ export async function resolveCollectionByBarcode(
       return plate?.id ?? null
     }
     case 'cryovial_box': {
-      const box = await db
+      const box = await database
         .select({ id: cryovialBox.id })
         .from(cryovialBox)
         .where(eq(cryovialBox.barcode, barcode))
@@ -92,15 +94,16 @@ export async function resolveCollectionByBarcode(
  */
 export async function resolveCollection(
   identifier: string,
-  type: CollectionType
+  type: CollectionType,
+  database: Database = db
 ): Promise<number | null> {
   // Try by name first
-  const byName = await resolveCollectionByName(identifier, type)
+  const byName = await resolveCollectionByName(identifier, type, database)
   if (byName) return byName
 
   // Try by barcode if applicable
   if (type === 'micronix_plate' || type === 'cryovial_box') {
-    const byBarcode = await resolveCollectionByBarcode(identifier, type)
+    const byBarcode = await resolveCollectionByBarcode(identifier, type, database)
     if (byBarcode) return byBarcode
   }
 

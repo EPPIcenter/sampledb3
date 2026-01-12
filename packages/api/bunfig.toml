@@ -1,0 +1,3 @@
+[test]
+# Only run tests from src directory, exclude dist (compiled files)
+exclude = ["dist/**", "node_modules/**"]

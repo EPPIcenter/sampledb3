@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
-import { db, sqlite } from '../db/client'
+import type { Database } from '../db/client'
+import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { 
   study, 
   studySubject, 
@@ -14,8 +15,15 @@ import {
 import { eq, and, like, sql, or, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
+import { handleRouteError, NotFoundError, ConflictError, ValidationError } from '../lib/error-handler'
 
-const studies = new Hono()
+/**
+ * Create studies routes with database injection
+ * @param database - Database instance (required)
+ * @param sqliteDatabase - Raw SQLite database instance (required for raw queries)
+ */
+export function createStudiesRoutes(database: Database, sqliteDatabase: SQLiteDatabase): Hono {
+  const studies = new Hono()
 
 // List all studies
 studies.get('/', async (c) => {
@@ -25,8 +33,8 @@ studies.get('/', async (c) => {
     const limit = await validateLimit(c.req.query('limit'))
     const offset = (page - 1) * limit
     
-    let query = db.select().from(study)
-    let countQuery = db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(study)
+    let query = database.select().from(study)
+    let countQuery = database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(study)
     
     if (search) {
       const searchPattern = `%${search}%`
@@ -51,9 +59,8 @@ studies.get('/', async (c) => {
         totalPages: Math.ceil(total / limit),
       },
     })
-  } catch (error: any) {
-    console.error('Error fetching studies:', error)
-    return c.json({ error: 'Failed to fetch studies', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -72,7 +79,7 @@ studies.get('/summaries', async (c) => {
     }
 
     // Get all subjects for these studies
-    const subjects = await db
+    const subjects = await database
       .select()
       .from(studySubject)
       .where(inArray(studySubject.studyId, ids))
@@ -127,7 +134,7 @@ studies.get('/summaries', async (c) => {
         FROM specimen s
         WHERE s.study_subject_id IN (${placeholders})
       `
-      const stmt = sqlite.prepare(specimensQuery)
+      const stmt = sqliteDatabase.prepare(specimensQuery)
       const batchResults = stmt.all(...batch) as Array<{
         id: number
         studySubjectId: number
@@ -176,7 +183,7 @@ studies.get('/summaries', async (c) => {
           WHERE specimen_id IN (${containerPlaceholders})
           GROUP BY specimen_id
         `
-        const containerStmt = sqlite.prepare(containersQuery)
+        const containerStmt = sqliteDatabase.prepare(containersQuery)
         const containerRows = containerStmt.all(...batch) as Array<{ specimen_id: number; count: number }>
 
         containerRows.forEach(row => {
@@ -218,9 +225,8 @@ studies.get('/summaries', async (c) => {
     }
 
     return c.json({ summaries })
-  } catch (error: any) {
-    console.error('Error fetching study summaries:', error)
-    return c.json({ error: 'Failed to fetch study summaries', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -233,20 +239,19 @@ studies.get('/:id', async (c) => {
       return c.json({ error: 'Invalid study ID' }, 400)
     }
 
-    const studyRecord = await db
+    const studyRecord = await database
       .select()
       .from(study)
       .where(eq(study.id, id))
       .get()
 
     if (!studyRecord) {
-      return c.json({ error: 'Study not found' }, 404)
+      throw new NotFoundError('Study', id)
     }
 
     return c.json({ study: studyRecord })
-  } catch (error: any) {
-    console.error('Error fetching study:', error)
-    return c.json({ error: 'Failed to fetch study', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -266,7 +271,7 @@ studies.get('/:id/subjects', async (c) => {
     const whereClause = eq(studySubject.studyId, id)
     
     // First get the subjects
-    const subjectsList = await db
+    const subjectsList = await database
       .select({
         id: studySubject.id,
         studyId: studySubject.studyId,
@@ -280,7 +285,7 @@ studies.get('/:id/subjects', async (c) => {
       .offset(offset)
 
     // Get total count for pagination
-    const countResult = await db
+    const countResult = await database
       .select({ count: sql<number>`COUNT(*)`.as('count') })
       .from(studySubject)
       .where(whereClause)
@@ -303,8 +308,8 @@ studies.get('/:id/subjects', async (c) => {
         GROUP BY s.study_subject_id
       `
       
-      // Use the underlying better-sqlite3 database for this query
-      const stmt = sqlite.prepare(query)
+      // Use the underlying Bun SQLite database for this query
+      const stmt = sqliteDatabase.prepare(query)
       const rows = stmt.all(...subjectIds) as Array<{ subject_id: number; count: number }>
 
       rows.forEach(row => {
@@ -327,9 +332,8 @@ studies.get('/:id/subjects', async (c) => {
         totalPages: Math.ceil(total / limit),
       },
     })
-  } catch (error: any) {
-    console.error('Error fetching subjects:', error)
-    return c.json({ error: 'Failed to fetch subjects', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -343,7 +347,7 @@ studies.get('/:id/summary', async (c) => {
     }
 
     // Get study
-    const studyRecord = await db
+    const studyRecord = await database
       .select()
       .from(study)
       .where(eq(study.id, id))
@@ -354,7 +358,7 @@ studies.get('/:id/summary', async (c) => {
     }
 
     // Get all subjects for this study
-    const subjects = await db
+    const subjects = await database
       .select()
       .from(studySubject)
       .where(eq(studySubject.studyId, id))
@@ -393,7 +397,7 @@ studies.get('/:id/summary', async (c) => {
       FROM specimen s
       WHERE s.study_subject_id IN (${placeholders})
     `
-    const stmt = sqlite.prepare(specimensQuery)
+    const stmt = sqliteDatabase.prepare(specimensQuery)
     const specimens = stmt.all(...subjectIds) as Array<{
       id: number
       studySubjectId: number
@@ -444,7 +448,7 @@ studies.get('/:id/summary', async (c) => {
     const specimenTypeIds = [...new Set(specimens.map(s => s.specimenTypeId))]
 
     // Get specimen types
-    const specimenTypes = await db
+    const specimenTypes = await database
       .select()
       .from(specimenType)
       .where(inArray(specimenType.id, specimenTypeIds))
@@ -452,7 +456,7 @@ studies.get('/:id/summary', async (c) => {
     const specimenTypeMap = new Map(specimenTypes.map(st => [st.id, st.name]))
 
     // Get all containers for these specimens
-    const containers = await db
+    const containers = await database
       .select()
       .from(storageContainer)
       .where(inArray(storageContainer.specimenId, specimenIds))
@@ -463,16 +467,16 @@ studies.get('/:id/summary', async (c) => {
     // Get container type information
     const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
       containerIds.length > 0
-        ? db.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, containerIds))
+        ? database.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, containerIds))
         : [],
       containerIds.length > 0
-        ? db.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, containerIds))
+        ? database.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, containerIds))
         : [],
       containerIds.length > 0
-        ? db.select({ id: paper.id }).from(paper).where(inArray(paper.id, containerIds))
+        ? database.select({ id: paper.id }).from(paper).where(inArray(paper.id, containerIds))
         : [],
       containerIds.length > 0
-        ? db.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, containerIds))
+        ? database.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, containerIds))
         : [],
     ])
 
@@ -570,9 +574,8 @@ studies.get('/:id/summary', async (c) => {
         enrollmentTimeline,
       },
     })
-  } catch (error: any) {
-    console.error('Error fetching study summary:', error)
-    return c.json({ error: 'Failed to fetch study summary', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -586,18 +589,18 @@ studies.get('/:id/timeline', async (c) => {
     }
 
     // Get study
-    const studyRecord = await db
+    const studyRecord = await database
       .select()
       .from(study)
       .where(eq(study.id, id))
       .get()
 
     if (!studyRecord) {
-      return c.json({ error: 'Study not found' }, 404)
+      throw new NotFoundError('Study', id)
     }
 
     // Get all subjects for this study, sorted by name
-    const subjects = await db
+    const subjects = await database
       .select()
       .from(studySubject)
       .where(eq(studySubject.studyId, id))
@@ -625,7 +628,7 @@ studies.get('/:id/timeline', async (c) => {
       WHERE s.study_subject_id IN (${placeholders})
       ORDER BY s.collection_date
     `
-    const stmt = sqlite.prepare(specimensQuery)
+    const stmt = sqliteDatabase.prepare(specimensQuery)
     const specimens = stmt.all(...subjectIds) as Array<{
       id: number
       studySubjectId: number
@@ -644,7 +647,7 @@ studies.get('/:id/timeline', async (c) => {
     const specimenTypeIds = [...new Set(specimens.map(s => s.specimenTypeId))]
 
     // Get specimen types
-    const specimenTypes = await db
+    const specimenTypes = await database
       .select()
       .from(specimenType)
       .where(inArray(specimenType.id, specimenTypeIds))
@@ -692,9 +695,8 @@ studies.get('/:id/timeline', async (c) => {
       specimenTypes: specimenTypes.map(st => ({ id: st.id, name: st.name })),
       dateRange,
     })
-  } catch (error: any) {
-    console.error('Error fetching study timeline:', error)
-    return c.json({ error: 'Failed to fetch study timeline', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -712,7 +714,7 @@ studies.post('/', async (c) => {
     
     const data = schema.parse(body)
     
-    const [newStudy] = await db
+    const [newStudy] = await database
       .insert(study)
       .values({
         ...data,
@@ -723,10 +725,7 @@ studies.post('/', async (c) => {
     
     return c.json({ study: newStudy }, 201)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -740,14 +739,14 @@ studies.put('/:id', async (c) => {
     }
 
     // Check if study exists
-    const existingStudy = await db
+    const existingStudy = await database
       .select()
       .from(study)
       .where(eq(study.id, id))
       .get()
 
     if (!existingStudy) {
-      return c.json({ error: 'Study not found' }, 404)
+      throw new NotFoundError('Study', id)
     }
 
     const body = await c.req.json()
@@ -762,32 +761,32 @@ studies.put('/:id', async (c) => {
     
     // Check for duplicate title if title is being updated
     if (data.title && data.title !== existingStudy.title) {
-      const duplicateTitle = await db
+      const duplicateTitle = await database
         .select({ id: study.id })
         .from(study)
         .where(eq(study.title, data.title))
         .get()
       
       if (duplicateTitle) {
-        return c.json({ error: `Study title '${data.title}' already exists` }, 400)
+        throw new ConflictError(`Study title '${data.title}' already exists`)
       }
     }
     
     // Check for duplicate shortCode if shortCode is being updated
     if (data.shortCode && data.shortCode !== existingStudy.shortCode) {
-      const duplicateShortCode = await db
+      const duplicateShortCode = await database
         .select({ id: study.id })
         .from(study)
         .where(eq(study.shortCode, data.shortCode))
         .get()
       
       if (duplicateShortCode) {
-        return c.json({ error: `Study short code '${data.shortCode}' already exists` }, 400)
+        throw new ConflictError(`Study short code '${data.shortCode}' already exists`)
       }
     }
     
     // Update study (isLongitudinal cannot be changed after creation)
-    const [updatedStudy] = await db
+    const [updatedStudy] = await database
       .update(study)
       .set({
         ...data,
@@ -798,12 +797,12 @@ studies.put('/:id', async (c) => {
     
     return c.json({ study: updatedStudy })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error updating study:', error)
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
-export default studies
+  return studies
+}
+
+// Default export removed - routes must be created with database injection via createStudiesRoutes()
+// This will be handled in index.ts

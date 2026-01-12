@@ -1,5 +1,4 @@
 import { Hono } from 'hono'
-import { db } from '../db/client'
 import { users, specimenType, unit, storageType, location, strain, specimenTypeContainerType, containerTypeUnit } from '../db/schema'
 import { sql, eq } from 'drizzle-orm'
 import { z } from 'zod'
@@ -16,7 +15,7 @@ import type { Database } from '../db/client'
 // Note: Defaults are only used in the frontend Setup.tsx
 // Backend requires all data to be provided via the API
 
-export function createSetupRoutes(database: Database = db) {
+export function createSetupRoutes(database: Database) {
   const setupRoutes = new Hono()
 
   // Check if system is initialized
@@ -98,12 +97,13 @@ const initSchema = z.object({
               name: s.name,
               description: s.description
             }).returning()
-            if (result[0]) {
+            if (result && result.length > 0 && result[0]) {
               storageTypeMap.set(s.name, result[0].id)
             }
           }
         }
       }
+      
 
       // 3. Specimen Types
       if (!specimenTypes || specimenTypes.length === 0) {
@@ -147,31 +147,33 @@ const initSchema = z.object({
       // 6. Locations (Root) - must resolve storage type IDs
       if (locations && locations.length > 0) {
         const locationValues = locations.map((l, i) => {
+          // Create a copy of the location to avoid mutation issues
+          const location = { ...l }
           let resolvedStorageTypeId: string | null = null
-          if (l.storageTypeId) {
+          if (location.storageTypeId) {
             // Frontend sends storage type name, look it up
-            const storageTypeId = storageTypeMap.get(l.storageTypeId)
+            const storageTypeId = storageTypeMap.get(location.storageTypeId)
             if (storageTypeId) {
               resolvedStorageTypeId = String(storageTypeId)
             } else {
               // Fail if storage type not found by name - don't fall back
-              throw new Error(`Storage type '${l.storageTypeId}' not found for location '${l.name}'. Please provide a valid storage type name.`)
+              throw new Error(`Storage type '${location.storageTypeId}' not found for location '${location.name}'. Please provide a valid storage type name.`)
             }
           } else if (storageTypeMap.size > 0) {
             // Use first storage type as default if none specified
             resolvedStorageTypeId = String(Array.from(storageTypeMap.values())[0])
           } else {
-            throw new Error(`No storage types available for location '${l.name}'. At least one storage type must be created.`)
+            throw new Error(`No storage types available for location '${location.name}'. At least one storage type must be created.`)
           }
           
           return {
             id: i + 1,
             parentId: null,
-            name: l.name,
+            name: location.name,
             storageTypeId: resolvedStorageTypeId,
-            description: l.description,
+            description: location.description,
             canContainCollections: false, // Root locations typically don't hold collections directly
-            path: l.name, // Root location path is just its name
+            path: location.name, // Root location path is just its name
             created: now,
             lastUpdated: now
           }
@@ -300,10 +302,6 @@ const initSchema = z.object({
               'study_title',
               'study_lead_person',
               'location_path',
-              'location_root',
-              'location_level_i',
-              'location_level_ii',
-              'location_level_iii',
               'created',
               'last_updated',
             ],
@@ -393,7 +391,3 @@ const initSchema = z.object({
 
   return setupRoutes
 }
-
-// Export default for backward compatibility
-const setupRoutes = createSetupRoutes()
-export default setupRoutes

@@ -126,7 +126,7 @@ describe('ReferenceDataTable', () => {
     const onEdit = vi.fn()
     const onDelete = vi.fn()
 
-    render(
+    const { container } = render(
       <ReferenceDataTable
         data={[]}
         columns={columns}
@@ -136,9 +136,9 @@ describe('ReferenceDataTable', () => {
       />
     )
 
-    // Check for loading indicator
-    const spinner = document.querySelector('.animate-spin')
-    expect(spinner).toBeInTheDocument()
+    // ReferenceDataTable uses SkeletonTable when loading, check for skeleton elements
+    const skeleton = container.querySelector('[class*="animate-pulse"]')
+    expect(skeleton).toBeInTheDocument()
   })
 
   it('should use custom render function for columns', () => {

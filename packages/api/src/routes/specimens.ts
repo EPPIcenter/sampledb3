@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import { specimen, storageContainer, studySubject, study, specimenType, controlBatch } from '../db/schema'
 import { eq, and, like, or, sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -7,8 +7,15 @@ import { validatePage, validateLimit } from '../lib/constants'
 import { resolveContainerByBarcode } from '../lib/identifier-resolution'
 import { validateSpecimenData, checkDuplicateSpecimens } from '../lib/validation'
 import { createContainerForSpecimen, type ContainerData } from '../lib/container-creation'
+import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 
-const specimens = new Hono()
+/**
+ * Create specimens routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createSpecimensRoutes(database: Database): Hono {
+  const dbInstance = database
+  const specimens = new Hono()
 
 // Search specimens
 specimens.get('/', async (c) => {
@@ -25,7 +32,7 @@ specimens.get('/', async (c) => {
     const barcode = c.req.query('barcode')
     const search = c.req.query('search')
     
-    let query = db
+    let query = dbInstance
       .select({
         id: specimen.id,
         studySubjectId: specimen.studySubjectId,
@@ -105,9 +112,9 @@ specimens.get('/', async (c) => {
     if (barcode) {
       // Find specimens that have a container with this barcode
       // This requires joins to all the container tables
-      const containerId = await resolveContainerByBarcode(barcode)
+      const containerId = await resolveContainerByBarcode(barcode, dbInstance)
       if (containerId) {
-        const container = await db
+        const container = await dbInstance
           .select({ specimenId: storageContainer.specimenId })
           .from(storageContainer)
           .where(eq(storageContainer.id, containerId))
@@ -138,7 +145,7 @@ specimens.get('/', async (c) => {
     const limit = await validateLimit(c.req.query('limit'))
     const offset = (page - 1) * limit
     
-    const countQuery = db
+    const countQuery = dbInstance
       .select({ count: sql<number>`COUNT(*)` })
       .from(specimen)
       .leftJoin(specimenType, eq(specimen.specimenTypeId, specimenType.id))
@@ -166,44 +173,47 @@ specimens.get('/', async (c) => {
         totalPages: Math.ceil(total / limit),
       },
     })
-  } catch (error: any) {
-    console.error('Error fetching specimens:', error)
-    return c.json({ error: 'Failed to fetch specimens', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
 // Get specimen by ID
 specimens.get('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'))
-  
-  if (isNaN(id)) {
-    return c.json({ error: 'Invalid specimen ID' }, 400)
+  try {
+    const id = parseInt(c.req.param('id'))
+    
+    if (isNaN(id)) {
+      return c.json({ error: 'Invalid specimen ID' }, 400)
+    }
+
+    const specimenRecord = await dbInstance
+      .select({
+        id: specimen.id,
+        studySubjectId: specimen.studySubjectId,
+        controlBatchId: specimen.controlBatchId,
+        specimenTypeId: specimen.specimenTypeId,
+        collectionDate: specimen.collectionDate,
+        created: specimen.created,
+        lastUpdated: specimen.lastUpdated,
+        specimenType: {
+          id: specimenType.id,
+          name: specimenType.name,
+        },
+      })
+      .from(specimen)
+      .leftJoin(specimenType, eq(specimen.specimenTypeId, specimenType.id))
+      .where(eq(specimen.id, id))
+      .get()
+
+    if (!specimenRecord) {
+      throw new NotFoundError('Specimen', id)
+    }
+
+    return c.json({ specimen: specimenRecord })
+  } catch (error) {
+    return handleRouteError(error, c)
   }
-
-  const specimenRecord = await db
-    .select({
-      id: specimen.id,
-      studySubjectId: specimen.studySubjectId,
-      controlBatchId: specimen.controlBatchId,
-      specimenTypeId: specimen.specimenTypeId,
-      collectionDate: specimen.collectionDate,
-      created: specimen.created,
-      lastUpdated: specimen.lastUpdated,
-      specimenType: {
-        id: specimenType.id,
-        name: specimenType.name,
-      },
-    })
-    .from(specimen)
-    .leftJoin(specimenType, eq(specimen.specimenTypeId, specimenType.id))
-    .where(eq(specimen.id, id))
-    .get()
-
-  if (!specimenRecord) {
-    return c.json({ error: 'Specimen not found' }, 404)
-  }
-
-  return c.json({ specimen: specimenRecord })
 })
 
 // Create specimen
@@ -248,10 +258,10 @@ specimens.post('/', async (c) => {
       specimenTypeId: data.specimenTypeId,
       specimenTypeName: data.specimenTypeName,
       collectionDate: data.collectionDate,
-    })
+    }, dbInstance)
     
     if (!validation.valid || !validation.resolved) {
-      return c.json({ error: validation.error || 'Invalid specimen data' }, 400)
+      throw new ValidationError(validation.error || 'Invalid specimen data')
     }
     
     const now = new Date().toISOString()
@@ -267,7 +277,7 @@ specimens.post('/', async (c) => {
       insertData.collectionDate = data.collectionDate
     }
     
-    const [newSpecimen] = await db
+    const [newSpecimen] = await dbInstance
       .insert(specimen)
       .values(insertData)
       .returning()
@@ -275,10 +285,10 @@ specimens.post('/', async (c) => {
     let containerResult: { success: boolean; containerId?: number; error?: string } | null = null
     
     if (data.container && data.container.mode !== 'skip') {
-      containerResult = await createContainerForSpecimen(newSpecimen.id, data.container as ContainerData)
+      containerResult = await createContainerForSpecimen(newSpecimen.id, data.container as ContainerData, dbInstance)
       if (!containerResult.success) {
-        await db.delete(specimen).where(eq(specimen.id, newSpecimen.id))
-        return c.json({ error: containerResult.error || 'Failed to create container' }, 400)
+        await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))
+        throw new ValidationError(containerResult.error || 'Failed to create container')
       }
     }
     
@@ -287,12 +297,9 @@ specimens.post('/', async (c) => {
       container: containerResult ? { containerId: containerResult.containerId } : null,
     }, 201)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error creating specimen:', error)
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
-})
+  })
 
-export default specimens
+  return specimens
+}

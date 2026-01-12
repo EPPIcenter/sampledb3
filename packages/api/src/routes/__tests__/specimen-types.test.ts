@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { createTestClient } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData } from '../../__tests__/helpers/test-client'
 import { Hono } from 'hono'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import type { Database } from '../../db/client'
@@ -90,9 +90,8 @@ describe('Specimen Types API', () => {
       const res = await client.api['specimen-types'].$get()
 
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data).toHaveProperty('specimenTypes')
-      expect(Array.isArray(data.specimenTypes)).toBe(true)
+      const data = await getResponseData(res)
+      expect(Array.isArray(data)).toBe(true)
     })
   })
 
@@ -106,10 +105,10 @@ describe('Specimen Types API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
-      expect(data.specimenType).toBeDefined()
-      expect(data.specimenType.name).toBe('Test Type')
-      expect(data.specimenType.id).toBeDefined()
+      const data = await getResponseData(res)
+      expect(data).toBeDefined()
+      expect(data.name).toBe('Test Type')
+      expect(data.id).toBeDefined()
     })
 
     it('should reject empty name', async () => {
@@ -138,7 +137,7 @@ describe('Specimen Types API', () => {
         },
       })
 
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(409)
       const data = await res.json()
       expect(data.error).toContain('already exists')
     })
@@ -152,17 +151,17 @@ describe('Specimen Types API', () => {
       const createRes = await client.api['specimen-types'].$post({
         json: { name: 'Get Test Type' },
       })
-      const created = await createRes.json()
-      const id = created.specimenType.id
+      const created = await getResponseData(createRes)
+      const id = created.id
 
       const res = await client.api['specimen-types'][':id'].$get({
         param: { id: String(id) },
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.specimenType.id).toBe(id)
-      expect(data.specimenType.name).toBe('Get Test Type')
+      const data = await getResponseData(res)
+      expect(data.id).toBe(id)
+      expect(data.name).toBe('Get Test Type')
     })
 
     it('should return 404 for non-existent ID', async () => {
@@ -192,8 +191,8 @@ describe('Specimen Types API', () => {
       const createRes = await client.api['specimen-types'].$post({
         json: { name: 'Original Name' },
       })
-      const created = await createRes.json()
-      const id = created.specimenType.id
+      const created = await getResponseData(createRes)
+      const id = created.id
 
       const res = await client.api['specimen-types'][':id'].$put({
         param: { id: String(id) },
@@ -203,8 +202,8 @@ describe('Specimen Types API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.specimenType.name).toBe('Updated Name')
+      const data = await getResponseData(res)
+      expect(data.name).toBe('Updated Name')
     })
 
     it('should reject duplicate names on update', async () => {
@@ -214,7 +213,7 @@ describe('Specimen Types API', () => {
       const create1 = await client.api['specimen-types'].$post({
         json: { name: 'Type A' },
       })
-      const type1 = await create1.json()
+      const type1 = await getResponseData(create1)
 
       await client.api['specimen-types'].$post({
         json: { name: 'Type B' },
@@ -222,13 +221,13 @@ describe('Specimen Types API', () => {
 
       // Try to update type1 to have the same name as type2
       const res = await client.api['specimen-types'][':id'].$put({
-        param: { id: String(type1.specimenType.id) },
+        param: { id: String(type1.id) },
         json: {
           name: 'Type B', // Duplicate
         },
       })
 
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(409)
     })
   })
 
@@ -240,8 +239,8 @@ describe('Specimen Types API', () => {
       const createRes = await client.api['specimen-types'].$post({
         json: { name: 'Delete Test Type' },
       })
-      const created = await createRes.json()
-      const id = created.specimenType.id
+      const created = await getResponseData(createRes)
+      const id = created.id
 
       const res = await client.api['specimen-types'][':id'].$delete({
         param: { id: String(id) },
@@ -279,11 +278,10 @@ describe('Specimen Types API', () => {
 
       const res = await client.api['specimen-types'].$get()
       expect(res.status).toBe(200)
-      const data = await res.json()
-
       // Check that list items have the transformed structure
-      if (data.specimenTypes.length > 0) {
-        const item = data.specimenTypes[0]
+      const data = await getResponseData(res)
+      if (data.length > 0) {
+        const item = data[0]
         expect(item).toHaveProperty('id')
         expect(item).toHaveProperty('name')
         expect(item).toHaveProperty('created')
@@ -301,10 +299,10 @@ describe('Specimen Types API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
-      expect(data.specimenType.created).toBeDefined()
-      expect(data.specimenType.lastUpdated).toBeDefined()
-      expect(new Date(data.specimenType.created).getTime()).toBeGreaterThan(0)
+      const data = await getResponseData(res)
+      expect(data.created).toBeDefined()
+      expect(data.lastUpdated).toBeDefined()
+      expect(new Date(data.created).getTime()).toBeGreaterThan(0)
     })
 
     it('should update lastUpdated on update', async () => {
@@ -313,20 +311,20 @@ describe('Specimen Types API', () => {
       const createRes = await client.api['specimen-types'].$post({
         json: { name: 'Update Timestamp Test' },
       })
-      const created = await createRes.json()
-      const originalUpdated = created.specimenType.lastUpdated
+      const created = await getResponseData(createRes)
+      const originalUpdated = created.lastUpdated
 
       // Wait a bit to ensure timestamp difference
       await new Promise(resolve => setTimeout(resolve, 10))
 
       const updateRes = await client.api['specimen-types'][':id'].$put({
-        param: { id: String(created.specimenType.id) },
+        param: { id: String(created.id) },
         json: { name: 'Updated Name' },
       })
 
       expect(updateRes.status).toBe(200)
-      const updated = await updateRes.json()
-      expect(updated.specimenType.lastUpdated).not.toBe(originalUpdated)
+      const updated = await getResponseData(updateRes)
+      expect(updated.lastUpdated).not.toBe(originalUpdated)
     })
   })
 })

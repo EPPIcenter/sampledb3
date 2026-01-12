@@ -23,16 +23,16 @@ This directory contains end-to-end tests for SampleDB using Playwright.
 
 ```bash
 # Run all tests
-pnpm test
+bun test
 
 # Run tests in UI mode (interactive)
-pnpm test:ui
+bun test:ui
 
 # Run specific test file
-pnpm test src/tests/tags.spec.ts
+bun test src/tests/tags.spec.ts
 
 # Run tests with codegen (record new tests)
-pnpm codegen
+bun codegen
 ```
 
 ## Test Database

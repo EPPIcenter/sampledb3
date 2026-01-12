@@ -54,11 +54,11 @@ describe('DataTable', () => {
   })
 
   it('should show loading state', () => {
-    render(<DataTable data={[]} columns={columns} loading />)
+    const { container } = render(<DataTable data={[]} columns={columns} loading />)
     
-    // Check for loading spinner
-    const spinner = document.querySelector('.animate-spin')
-    expect(spinner).toBeInTheDocument()
+    // DataTable uses SkeletonTable when loading, check for skeleton elements
+    const skeleton = container.querySelector('[class*="animate-pulse"]')
+    expect(skeleton).toBeInTheDocument()
   })
 
   it('should sort data when sortable column header is clicked', async () => {

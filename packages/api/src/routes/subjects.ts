@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import { 
   studySubject, 
   study, 
@@ -25,14 +25,180 @@ import { resolveStudyByShortCode, resolveSubjectByNameAndStudy, resolveSpecimenT
 import { validateSubjectName, validateStudyShortCode, validateSpecimenData, validateCollectionDate, validateContainerTypeForSpecimenType, validateUnitForContainerType } from '../lib/validation'
 import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } from '../lib/defaults'
 import { resolveCollection } from '../lib/collection-resolution'
+import { resolveCollectionByName } from '../lib/collection-resolution'
 import type { ContainerData } from '../lib/container-creation'
+import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 
 // Extended container data type for this endpoint (includes collectionLocationId)
 interface ExtendedContainerData extends ContainerData {
   collectionLocationId?: number
 }
 
-const subjects = new Hono()
+/**
+ * Create subjects routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createSubjectsRoutes(database: Database): Hono {
+  const dbInstance = database
+  const subjects = new Hono()
+
+  // Wrapper functions that use dbInstance instead of global db
+  async function resolveStudyByShortCodeLocal(shortCode: string): Promise<number | null> {
+    const studyRecord = await dbInstance
+      .select({ id: study.id })
+      .from(study)
+      .where(eq(study.shortCode, shortCode))
+      .get()
+    return studyRecord?.id ?? null
+  }
+
+  async function resolveSubjectByNameAndStudyLocal(
+    subjectName: string,
+    studyId: number
+  ): Promise<number | null> {
+    const subjectRecord = await dbInstance
+      .select({ id: studySubject.id })
+      .from(studySubject)
+      .where(and(
+        eq(studySubject.studyId, studyId),
+        eq(studySubject.name, subjectName)
+      ) as any)
+      .get()
+    return subjectRecord?.id ?? null
+  }
+
+  async function resolveSpecimenTypeByNameLocal(name: string): Promise<number | null> {
+    const specimenTypeRecord = await dbInstance
+      .select({ id: specimenType.id })
+      .from(specimenType)
+      .where(eq(specimenType.name, name))
+      .get()
+    return specimenTypeRecord?.id ?? null
+  }
+
+  async function validateStudyShortCodeLocal(shortCode: string): Promise<{ valid: boolean; error?: string; studyId?: number }> {
+    const studyId = await resolveStudyByShortCodeLocal(shortCode)
+    if (!studyId) {
+      return { valid: false, error: `Study short code '${shortCode}' not found` }
+    }
+    return { valid: true, studyId }
+  }
+
+  async function validateSubjectNameLocal(studyId: number, name: string): Promise<{ valid: boolean; error?: string }> {
+    const trimmedName = name.trim()
+    if (trimmedName.length === 0) {
+      return { valid: false, error: 'Subject name cannot be empty' }
+    }
+    if (trimmedName.length > 255) {
+      return { valid: false, error: 'Subject name cannot exceed 255 characters' }
+    }
+    const existing = await dbInstance
+      .select({ id: studySubject.id })
+      .from(studySubject)
+      .where(and(
+        eq(studySubject.studyId, studyId),
+        eq(studySubject.name, trimmedName)
+      ) as any)
+      .get()
+    if (existing) {
+      return { valid: false, error: `Subject name '${trimmedName}' already exists in this study` }
+    }
+    return { valid: true }
+  }
+
+  async function validateUnitForContainerTypeLocal(
+    containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well',
+    unitId: number
+  ): Promise<{ valid: boolean; error?: string }> {
+    const containerTypeUnit = await import('../db/schema').then(m => m.containerTypeUnit)
+    const relationship = await dbInstance
+      .select()
+      .from(containerTypeUnit)
+      .where(and(
+        eq(containerTypeUnit.containerType, containerType),
+        eq(containerTypeUnit.unitId, unitId)
+      ) as any)
+      .get()
+
+    if (!relationship) {
+      const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, unitId)).get()
+      const unitSymbol = unitRecord?.symbol || `ID ${unitId}`
+      return { valid: false, error: `Unit '${unitSymbol}' is not valid for container type '${containerType}'` }
+    }
+
+    return { valid: true }
+  }
+
+  async function getDefaultUnitLocal(containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well'): Promise<number> {
+    // Get container defaults from settings table
+    const settings = await import('../db/schema').then(m => m.settings)
+    const defaultsRecord = await dbInstance
+      .select()
+      .from(settings)
+      .where(eq(settings.key, 'container_defaults'))
+      .get()
+    
+    if (!defaultsRecord || !defaultsRecord.value) {
+      throw new Error('Container defaults are not configured. Please run database initialization.')
+    }
+
+    const defaults = defaultsRecord.value as any
+    const containerDefaults = defaults[containerType]
+    if (!containerDefaults || !containerDefaults.defaultUnitSymbol) {
+      throw new Error(`Default unit symbol not configured for container type '${containerType}'. Please update settings.`)
+    }
+
+    const unitSymbol = containerDefaults.defaultUnitSymbol
+    const unitRecord = await dbInstance
+      .select()
+      .from(unit)
+      .where(eq(unit.symbol, unitSymbol))
+      .get()
+    
+    if (!unitRecord) {
+      throw new Error(`Unit symbol '${unitSymbol}' not found for container type '${containerType}'. Please update settings or create the unit.`)
+    }
+
+    return unitRecord.id as number
+  }
+
+  async function getDefaultTotalQuantityLocal(containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well'): Promise<number> {
+    const settings = await import('../db/schema').then(m => m.settings)
+    const defaultsRecord = await dbInstance
+      .select()
+      .from(settings)
+      .where(eq(settings.key, 'container_defaults'))
+      .get()
+    
+    if (!defaultsRecord || !defaultsRecord.value) {
+      throw new Error('Container defaults are not configured. Please run database initialization.')
+    }
+
+    const defaults = defaultsRecord.value as any
+    if (!defaults[containerType]) {
+      throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
+    }
+    return defaults[containerType].totalQuantity
+  }
+
+  async function getDefaultRemainingQuantityLocal(containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well'): Promise<number> {
+    const settings = await import('../db/schema').then(m => m.settings)
+    const defaultsRecord = await dbInstance
+      .select()
+      .from(settings)
+      .where(eq(settings.key, 'container_defaults'))
+      .get()
+    
+    if (!defaultsRecord || !defaultsRecord.value) {
+      throw new Error('Container defaults are not configured. Please run database initialization.')
+    }
+
+    const defaults = defaultsRecord.value as any
+    if (!defaults[containerType]) {
+      throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
+    }
+    return defaults[containerType].remainingQuantity
+  }
 
 // List all subjects (for counting)
 subjects.get('/', async (c) => {
@@ -42,8 +208,8 @@ subjects.get('/', async (c) => {
     const offset = (page - 1) * limit
     
     const [subjectsList, countResult] = await Promise.all([
-      db.select().from(studySubject).limit(limit).offset(offset),
-      db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(studySubject),
+      dbInstance.select().from(studySubject).limit(limit).offset(offset),
+      dbInstance.select({ count: sql<number>`COUNT(*)`.as('count') }).from(studySubject),
     ])
     
     const total = countResult[0]?.count || 0
@@ -57,9 +223,8 @@ subjects.get('/', async (c) => {
         totalPages: Math.ceil(total / limit),
       },
     })
-  } catch (error: any) {
-    console.error('Error fetching subjects:', error)
-    return c.json({ error: 'Failed to fetch subjects', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -72,7 +237,7 @@ subjects.get('/:id', async (c) => {
       return c.json({ error: 'Invalid subject ID' }, 400)
     }
 
-    const subject = await db
+    const subject = await dbInstance
       .select({
         id: studySubject.id,
         studyId: studySubject.studyId,
@@ -91,13 +256,12 @@ subjects.get('/:id', async (c) => {
       .get()
 
     if (!subject) {
-      return c.json({ error: 'Subject not found' }, 404)
+      throw new NotFoundError('Subject', id)
     }
 
     return c.json({ subject })
-  } catch (error: any) {
-    console.error('Error fetching subject:', error)
-    return c.json({ error: 'Failed to fetch subject', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -111,7 +275,7 @@ subjects.get('/:id/summary', async (c) => {
     }
 
     // Get subject
-    const subject = await db
+    const subject = await dbInstance
       .select({
         id: studySubject.id,
         studyId: studySubject.studyId,
@@ -130,11 +294,11 @@ subjects.get('/:id/summary', async (c) => {
       .get()
 
     if (!subject) {
-      return c.json({ error: 'Subject not found' }, 404)
+      throw new NotFoundError('Subject', id)
     }
 
     // Get all specimens for this subject
-    const specimens = await db
+    const specimens = await dbInstance
       .select({
         id: specimen.id,
         studySubjectId: specimen.studySubjectId,
@@ -166,7 +330,7 @@ subjects.get('/:id/summary', async (c) => {
     const specimenTypeIds = [...new Set(specimens.map(s => s.specimenTypeId))]
 
     // Get specimen types
-    const specimenTypes = await db
+    const specimenTypes = await dbInstance
       .select()
       .from(specimenType)
       .where(inArray(specimenType.id, specimenTypeIds))
@@ -174,7 +338,7 @@ subjects.get('/:id/summary', async (c) => {
     const specimenTypeMap = new Map(specimenTypes.map(st => [st.id, st.name]))
 
     // Get all containers for these specimens with units
-    const containers = await db
+    const containers = await dbInstance
       .select({
         id: storageContainer.id,
         specimenId: storageContainer.specimenId,
@@ -205,7 +369,7 @@ subjects.get('/:id/summary', async (c) => {
     // Get container type information with collection names and locations
     const [micronixTubesList, cryovialBoxesList, sheetsList, staticWellsList] = await Promise.all([
       (containerIds.length > 0
-        ? db
+        ? dbInstance
             .select({ 
               id: micronixTube.id, 
               collectionId: micronixTube.collectionId,
@@ -221,7 +385,7 @@ subjects.get('/:id/summary', async (c) => {
             .where(inArray(micronixTube.id, containerIds))
         : []) as Promise<any[]>,
       (containerIds.length > 0
-        ? db
+        ? dbInstance
             .select({ 
               id: cryovialTube.id, 
               collectionId: cryovialTube.collectionId,
@@ -237,7 +401,7 @@ subjects.get('/:id/summary', async (c) => {
             .where(inArray(cryovialTube.id, containerIds))
         : []) as Promise<any[]>,
       (containerIds.length > 0
-        ? db
+        ? dbInstance
             .select({ 
               id: paper.id, 
               sheetId: paper.sheetId,
@@ -252,7 +416,7 @@ subjects.get('/:id/summary', async (c) => {
             .where(inArray(paper.id, containerIds))
         : []) as Promise<any[]>,
       (containerIds.length > 0
-        ? db
+        ? dbInstance
             .select({ 
               id: staticWell.id, 
               collectionId: staticWell.collectionId,
@@ -289,7 +453,7 @@ subjects.get('/:id/summary', async (c) => {
     for (const t of sheetsList) {
       let locPath: string | undefined
       if (t.boxId) {
-        const res = await db
+        const res = await dbInstance
           .select({ 
             box: box, 
             locationPath: location.path,
@@ -301,7 +465,7 @@ subjects.get('/:id/summary', async (c) => {
           .get()
         locPath = formatLocPath(res, res?.box.name)
       } else if (t.bagId) {
-        const res = await db
+        const res = await dbInstance
           .select({ 
             bag: bag, 
             locationPath: location.path,
@@ -411,9 +575,8 @@ subjects.get('/:id/summary', async (c) => {
         timeline,
       },
     })
-  } catch (error: any) {
-    console.error('Error fetching subject summary:', error)
-    return c.json({ error: 'Failed to fetch subject summary', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -434,9 +597,9 @@ subjects.post('/', async (c) => {
     if (data.studyId) {
       studyId = data.studyId
     } else if (data.studyShortCode) {
-      const resolved = await resolveStudyByShortCode(data.studyShortCode)
+      const resolved = await resolveStudyByShortCodeLocal(data.studyShortCode)
       if (!resolved) {
-        return c.json({ error: `Study short code '${data.studyShortCode}' not found` }, 400)
+        throw new NotFoundError(`Study with short code '${data.studyShortCode}'`)
       }
       studyId = resolved
     } else {
@@ -444,7 +607,7 @@ subjects.post('/', async (c) => {
     }
     
     // Validate subject name
-    const nameValidation = await validateSubjectName(studyId, data.name)
+    const nameValidation = await validateSubjectNameLocal(studyId, data.name)
     if (!nameValidation.valid) {
       return c.json({ error: nameValidation.error }, 400)
     }
@@ -452,7 +615,7 @@ subjects.post('/', async (c) => {
     const trimmedName = data.name.trim()
     const now = new Date().toISOString()
     
-    const [newSubject] = await db
+    const [newSubject] = await dbInstance
       .insert(studySubject)
       .values({
         studyId,
@@ -464,11 +627,7 @@ subjects.post('/', async (c) => {
     
     return c.json({ subject: newSubject }, 201)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error creating subject:', error)
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -498,7 +657,7 @@ subjects.post('/bulk', async (c) => {
       const trimmedName = subject.name.trim()
       
       // Validate study short code
-      const studyValidation = await validateStudyShortCode(subject.studyShortCode)
+      const studyValidation = await validateStudyShortCodeLocal(subject.studyShortCode)
       if (!studyValidation.valid || !studyValidation.studyId) {
         errors.push({
           index: i,
@@ -508,7 +667,7 @@ subjects.post('/bulk', async (c) => {
       }
       
       // Validate subject name
-      const nameValidation = await validateSubjectName(studyValidation.studyId, trimmedName)
+      const nameValidation = await validateSubjectNameLocal(studyValidation.studyId, trimmedName)
       if (!nameValidation.valid) {
         errors.push({
           index: i,
@@ -560,7 +719,7 @@ subjects.post('/bulk', async (c) => {
     const insertedSubjects = []
     
     for (const subject of validSubjects) {
-      const [newSubject] = await db
+      const [newSubject] = await dbInstance
         .insert(studySubject)
         .values({
           studyId: subject.studyId,
@@ -578,11 +737,7 @@ subjects.post('/bulk', async (c) => {
       created: insertedSubjects.length,
     }, 201)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error creating subjects:', error)
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -639,7 +794,7 @@ subjects.post('/with-specimens', async (c) => {
     const data = schema.parse(body)
     
     // Resolve study (validation before transaction)
-    const studyValidation = await validateStudyShortCode(data.studyShortCode)
+    const studyValidation = await validateStudyShortCodeLocal(data.studyShortCode)
     if (!studyValidation.valid || !studyValidation.studyId) {
       return c.json({ error: studyValidation.error || 'Invalid study' }, 400)
     }
@@ -647,12 +802,12 @@ subjects.post('/with-specimens', async (c) => {
     
     // Check if subject exists
     const trimmedName = data.subjectName.trim()
-    const existingSubjectId = await resolveSubjectByNameAndStudy(trimmedName, studyId)
+    const existingSubjectId = await resolveSubjectByNameAndStudyLocal(trimmedName, studyId)
     const subjectCreated = !existingSubjectId
     
     // If subject doesn't exist, validate name
     if (!existingSubjectId) {
-      const nameValidation = await validateSubjectName(studyId, trimmedName)
+      const nameValidation = await validateSubjectNameLocal(studyId, trimmedName)
       if (!nameValidation.valid) {
         return c.json({ error: nameValidation.error }, 400)
       }
@@ -669,7 +824,7 @@ subjects.post('/with-specimens', async (c) => {
       const spec = data.specimens[i]
       
       // Validate specimen type
-      const specimenTypeId = await resolveSpecimenTypeByName(spec.specimenTypeName)
+      const specimenTypeId = await resolveSpecimenTypeByNameLocal(spec.specimenTypeName)
       if (!specimenTypeId) {
         return c.json({
           error: `Specimen type '${spec.specimenTypeName}' not found`,
@@ -691,7 +846,8 @@ subjects.post('/with-specimens', async (c) => {
         // Validate container type is allowed for specimen type
         const containerTypeValidation = await validateContainerTypeForSpecimenType(
           specimenTypeId,
-          spec.container.containerType
+          spec.container.containerType,
+          dbInstance
         )
         if (!containerTypeValidation.valid) {
           return c.json({
@@ -767,7 +923,14 @@ subjects.post('/with-specimens', async (c) => {
           
           if (identifier) {
             // Try to resolve existing collection
-            const existingCollectionId = await resolveCollection(identifier, collectionType)
+            let existingCollectionId: number | null = null
+            try {
+              existingCollectionId = await resolveCollection(identifier, collectionType, dbInstance)
+            } catch (e) {
+              // Handle any unexpected errors from resolveCollection gracefully
+              existingCollectionId = null
+            }
+            
             if (existingCollectionId) {
               const key = `${collectionType}-${identifier}`
               collectionMap.set(key, existingCollectionId)
@@ -780,7 +943,7 @@ subjects.post('/with-specimens', async (c) => {
           }
         } else if (containerType === 'paper') {
           if (collectionName) {
-            const existingBoxId = await resolveCollection(collectionName, 'box')
+            const existingBoxId = await resolveCollection(collectionName, 'box', dbInstance)
             if (existingBoxId) {
               collectionMap.set(`box-${collectionName}`, existingBoxId)
             } else if (!collectionLocationId) {
@@ -806,10 +969,10 @@ subjects.post('/with-specimens', async (c) => {
         const containerType = container.containerType
         
         // Get unit (async, before transaction)
-        const unitId = container.unitId || await getDefaultUnit(containerType)
+        const unitId = container.unitId || await getDefaultUnitLocal(containerType)
         
         // Validate unit (async, before transaction)
-        const unitValidation = await validateUnitForContainerType(containerType, unitId)
+        const unitValidation = await validateUnitForContainerTypeLocal(containerType, unitId)
         if (!unitValidation.valid) {
           return c.json({
             error: unitValidation.error || 'Invalid unit for container type',
@@ -817,8 +980,8 @@ subjects.post('/with-specimens', async (c) => {
         }
         
         // Get quantities (async, before transaction)
-        const defaultTotalQty = await getDefaultTotalQuantity(containerType)
-        const defaultRemainingQty = await getDefaultRemainingQuantity(containerType)
+        const defaultTotalQty = await getDefaultTotalQuantityLocal(containerType)
+        const defaultRemainingQty = await getDefaultRemainingQuantityLocal(containerType)
         const totalQty = container.totalQuantity ?? defaultTotalQty
         const remainingQty = container.remainingQuantity ?? container.totalQuantity ?? defaultRemainingQty
         
@@ -837,7 +1000,9 @@ subjects.post('/with-specimens', async (c) => {
     }
     
     // Now execute everything in a synchronous transaction
-    const result = db.transaction((tx) => {
+    let result
+    try {
+      result = dbInstance.transaction((tx) => {
       const now = new Date().toISOString()
       
       // Get or create subject
@@ -951,7 +1116,7 @@ subjects.post('/with-specimens', async (c) => {
               collectionId = newPlate.id
               collectionMap.set(key, collectionId)
             } else {
-              throw new Error('Collection not found and no location provided')
+              throw new ValidationError('Collection not found and no location provided')
             }
             
             // Check barcode uniqueness
@@ -997,7 +1162,7 @@ subjects.post('/with-specimens', async (c) => {
               collectionId = newBox.id
               collectionMap.set(key, collectionId)
             } else {
-              throw new Error('Collection not found and no location provided')
+              throw new ValidationError('Collection not found and no location provided')
             }
             
             // Check barcode uniqueness if provided
@@ -1042,7 +1207,7 @@ subjects.post('/with-specimens', async (c) => {
               boxId = newBox.id
               collectionMap.set(key, boxId)
             } else {
-              throw new Error('Box not found and no location provided')
+              throw new ValidationError('Box not found and no location provided')
             }
             
             // Get or create sheet
@@ -1106,7 +1271,7 @@ subjects.post('/with-specimens', async (c) => {
               collectionId = newPlate.id
               collectionMap.set(key, collectionId)
             } else {
-              throw new Error('Collection not found and no location provided')
+              throw new ValidationError('Collection not found and no location provided')
             }
             
             tx.insert(staticWell).values({
@@ -1129,7 +1294,15 @@ subjects.post('/with-specimens', async (c) => {
         subjectCreated,
         specimens: insertedSpecimens,
       }
-    })
+      })
+    } catch (transactionError) {
+      // If it's a ValidationError, rethrow it so it gets handled as 400
+      if (transactionError instanceof ValidationError) {
+        throw transactionError
+      }
+      // For other errors, wrap them or rethrow
+      throw transactionError
+    }
     
     // Calculate summary
     const summary = {
@@ -1158,74 +1331,76 @@ subjects.post('/with-specimens', async (c) => {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    console.error('Error creating subject with specimens:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
-    return c.json({ error: errorMessage }, 500)
+    // ValidationError should return 400
+    if (error instanceof ValidationError) {
+      return c.json({ error: error.message }, 400)
+    }
+    return handleRouteError(error, c)
   }
 })
 
-// Helper function to validate subjects for merge
-async function validateSubjectsForMerge(targetId: number, sourceId: number): Promise<{ valid: boolean; error?: string; targetSubject?: typeof studySubject.$inferSelect; sourceSubject?: typeof studySubject.$inferSelect }> {
-  if (targetId === sourceId) {
-    return { valid: false, error: 'Cannot merge a subject with itself' }
+  // Helper function to validate subjects for merge
+  async function validateSubjectsForMerge(targetId: number, sourceId: number): Promise<{ valid: boolean; error?: string; targetSubject?: typeof studySubject.$inferSelect; sourceSubject?: typeof studySubject.$inferSelect }> {
+    if (targetId === sourceId) {
+      return { valid: false, error: 'Cannot merge a subject with itself' }
+    }
+
+    const [targetSubject, sourceSubject] = await Promise.all([
+      dbInstance.select().from(studySubject).where(eq(studySubject.id, targetId)).get(),
+      dbInstance.select().from(studySubject).where(eq(studySubject.id, sourceId)).get(),
+    ])
+
+    if (!targetSubject) {
+      return { valid: false, error: 'Target subject not found' }
+    }
+
+    if (!sourceSubject) {
+      return { valid: false, error: 'Source subject not found' }
+    }
+
+    if (targetSubject.studyId !== sourceSubject.studyId) {
+      return { valid: false, error: 'Subjects must be in the same study' }
+    }
+
+    return { valid: true, targetSubject, sourceSubject }
   }
 
-  const [targetSubject, sourceSubject] = await Promise.all([
-    db.select().from(studySubject).where(eq(studySubject.id, targetId)).get(),
-    db.select().from(studySubject).where(eq(studySubject.id, sourceId)).get(),
-  ])
-
-  if (!targetSubject) {
-    return { valid: false, error: 'Target subject not found' }
+  // Helper function to get subject specimen count
+  async function getSubjectSpecimenCount(subjectId: number): Promise<number> {
+    const result = await dbInstance
+      .select({ count: sql<number>`COUNT(*)`.as('count') })
+      .from(specimen)
+      .where(eq(specimen.studySubjectId, subjectId))
+    
+    return result[0]?.count || 0
   }
 
-  if (!sourceSubject) {
-    return { valid: false, error: 'Source subject not found' }
+  // Helper function to find matching specimen in target subject
+  async function findMatchingSpecimen(
+    targetSubjectId: number,
+    specimenTypeId: number,
+    collectionDate: string | null
+  ): Promise<typeof specimen.$inferSelect | null> {
+    // Build condition for collection date matching
+    // Both NULL counts as a match, or exact string match
+    const dateCondition = collectionDate === null
+      ? isNull(specimen.collectionDate)
+      : eq(specimen.collectionDate, collectionDate)
+
+    const matchingSpecimen = await dbInstance
+      .select()
+      .from(specimen)
+      .where(
+        and(
+          eq(specimen.studySubjectId, targetSubjectId),
+          eq(specimen.specimenTypeId, specimenTypeId),
+          dateCondition
+        ) as any
+      )
+      .get()
+
+    return matchingSpecimen || null
   }
-
-  if (targetSubject.studyId !== sourceSubject.studyId) {
-    return { valid: false, error: 'Subjects must be in the same study' }
-  }
-
-  return { valid: true, targetSubject, sourceSubject }
-}
-
-// Helper function to get subject specimen count
-async function getSubjectSpecimenCount(subjectId: number): Promise<number> {
-  const result = await db
-    .select({ count: sql<number>`COUNT(*)`.as('count') })
-    .from(specimen)
-    .where(eq(specimen.studySubjectId, subjectId))
-  
-  return result[0]?.count || 0
-}
-
-// Helper function to find matching specimen in target subject
-async function findMatchingSpecimen(
-  targetSubjectId: number,
-  specimenTypeId: number,
-  collectionDate: string | null
-): Promise<typeof specimen.$inferSelect | null> {
-  // Build condition for collection date matching
-  // Both NULL counts as a match, or exact string match
-  const dateCondition = collectionDate === null
-    ? isNull(specimen.collectionDate)
-    : eq(specimen.collectionDate, collectionDate)
-
-  const matchingSpecimen = await db
-    .select()
-    .from(specimen)
-    .where(
-      and(
-        eq(specimen.studySubjectId, targetSubjectId),
-        eq(specimen.specimenTypeId, specimenTypeId),
-        dateCondition
-      ) as any
-    )
-    .get()
-
-  return matchingSpecimen || null
-}
 
 // Merge subjects endpoint
 subjects.post('/:targetId/merge', async (c) => {
@@ -1253,13 +1428,13 @@ subjects.post('/:targetId/merge', async (c) => {
     const { targetSubject, sourceSubject } = validation
 
     // Get all source specimens
-    const sourceSpecimens = await db
+    const sourceSpecimens = await dbInstance
       .select()
       .from(specimen)
       .where(eq(specimen.studySubjectId, sourceId))
 
     // Process merge in a transaction
-    const result = db.transaction((tx) => {
+    const result = dbInstance.transaction((tx) => {
       const now = new Date().toISOString()
 
       // Statistics (declared inside transaction)
@@ -1365,7 +1540,7 @@ subjects.post('/:targetId/merge', async (c) => {
     })
 
     // Get updated target subject
-    const updatedTargetSubject = await db
+    const updatedTargetSubject = await dbInstance
       .select()
       .from(studySubject)
       .where(eq(studySubject.id, targetId))
@@ -1380,8 +1555,7 @@ subjects.post('/:targetId/merge', async (c) => {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    console.error('Error merging subjects:', error)
-    return c.json({ error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -1395,14 +1569,14 @@ subjects.put('/:id', async (c) => {
     }
 
     // Check if subject exists
-    const existingSubject = await db
+    const existingSubject = await dbInstance
       .select()
       .from(studySubject)
       .where(eq(studySubject.id, id))
       .get()
 
     if (!existingSubject) {
-      return c.json({ error: 'Subject not found' }, 404)
+      throw new NotFoundError('Subject', id)
     }
 
     const body = await c.req.json()
@@ -1422,9 +1596,9 @@ subjects.put('/:id', async (c) => {
       return c.json({ error: 'Subject name cannot exceed 255 characters' }, 400)
     }
     
-    // Check for duplicate name within the same study (excluding current subject)
-    if (trimmedName !== existingSubject.name) {
-      const duplicate = await db
+      // Check for duplicate name within the same study (excluding current subject)
+      if (trimmedName !== existingSubject.name) {
+        const duplicate = await dbInstance
         .select({ id: studySubject.id })
         .from(studySubject)
         .where(and(
@@ -1439,7 +1613,7 @@ subjects.put('/:id', async (c) => {
     }
     
     // Update subject
-    const [updatedSubject] = await db
+    const [updatedSubject] = await dbInstance
       .update(studySubject)
       .set({
         name: trimmedName,
@@ -1450,12 +1624,9 @@ subjects.put('/:id', async (c) => {
     
     return c.json({ subject: updatedSubject })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error updating subject:', error)
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
-export default subjects
+  return subjects
+}

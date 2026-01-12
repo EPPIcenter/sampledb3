@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactNode } from 'react'
+import { ToastProvider } from '../../contexts/ToastContext'
 import {
   useSubject,
   useSubjectSummary,
@@ -35,7 +36,9 @@ function createWrapper() {
 
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <ToastProvider>
+        {children}
+      </ToastProvider>
     </QueryClientProvider>
   )
 }

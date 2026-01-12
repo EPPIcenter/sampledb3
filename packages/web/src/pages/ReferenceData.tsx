@@ -207,8 +207,10 @@ export default function ReferenceData() {
         }
       } else {
         // Simple list
+        // The API returns { data: [...] }, and extractData extracts the array
+        // So res.data is already the array directly
         const res = await config.list()
-        setData(res.data[config.getDataKey()] || [])
+        setData(Array.isArray(res.data) ? res.data : [])
       }
     } catch (error) {
       console.error('Failed to load data:', error)

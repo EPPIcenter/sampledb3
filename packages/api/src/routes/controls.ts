@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import {
   controlDefinition,
   controlBatch,
@@ -24,8 +24,15 @@ import { eq, and, like, desc, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { validateControlBatchName, generateUniqueBatchName } from '../lib/validation'
 import { generateControlDefinitionName, generateUniqueControlDefinitionName } from '../lib/control-name-generation'
+import { handleRouteError, NotFoundError } from '../lib/error-handler'
 
-const controls = new Hono()
+/**
+ * Create controls routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createControlsRoutes(database: Database): Hono {
+  const dbInstance = database
+  const controls = new Hono()
 
 // Helper function to extract strain/density data from properties JSON
 function parseControlProperties(properties: any, strainMap?: Map<number, { name: string }>) {
@@ -75,7 +82,7 @@ function parseControlProperties(properties: any, strainMap?: Map<number, { name:
 
 // List all control batches
 controls.get('/batches', async (c) => {
-  const spotCountSubquery = db
+  const spotCountSubquery = dbInstance
     .select({
       batchId: specimen.controlBatchId,
       count: sql<number>`SUM(${storageContainer.remainingQuantity})`.as('spot_count'),
@@ -86,7 +93,7 @@ controls.get('/batches', async (c) => {
     .groupBy(specimen.controlBatchId)
     .as('spot_counts')
 
-  const tubeCountSubquery = db
+  const tubeCountSubquery = dbInstance
     .select({
       batchId: specimen.controlBatchId,
       count: sql<number>`count(*)`.as('tube_count'),
@@ -101,7 +108,7 @@ controls.get('/batches', async (c) => {
     .groupBy(specimen.controlBatchId)
     .as('tube_counts')
 
-  const specimenCountSubquery = db
+  const specimenCountSubquery = dbInstance
     .select({
       batchId: specimen.controlBatchId,
       count: sql<number>`count(*)`.as('specimen_count'),
@@ -112,7 +119,7 @@ controls.get('/batches', async (c) => {
 
   // Strains are now stored in properties JSON, so we'll parse them in the response
 
-  const batchesResults = await db
+  const batchesResults = await dbInstance
     .select({
       id: controlBatch.id,
       controlDefinitionId: controlBatch.controlDefinitionId,
@@ -156,7 +163,7 @@ controls.get('/batches/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
-  const result = await db
+  const result = await dbInstance
     .select({
       batch: controlBatch,
       definition: controlDefinition,
@@ -169,7 +176,7 @@ controls.get('/batches/:id', async (c) => {
     ))
     .get()
 
-  if (!result) return c.json({ error: 'Blood control batch not found' }, 404)
+  if (!result) throw new NotFoundError('Blood control batch', id)
 
   return c.json({ batch: result.batch })
 })
@@ -181,7 +188,7 @@ controls.delete('/batches/:id', async (c) => {
 
   try {
     // Check if batch exists and is associated with a blood control definition
-    const batchWithDefinition = await db
+    const batchWithDefinition = await dbInstance
       .select({
         batch: controlBatch,
         definition: controlDefinition,
@@ -201,7 +208,7 @@ controls.delete('/batches/:id', async (c) => {
     const batch = batchWithDefinition.batch
 
     // Find all specimens for this batch
-    const specimens = await db
+    const specimens = await dbInstance
       .select({ id: specimen.id })
       .from(specimen)
       .where(eq(specimen.controlBatchId, id))
@@ -211,7 +218,7 @@ controls.delete('/batches/:id', async (c) => {
     // If there are specimens, find all containers
     let containerIds: number[] = []
     if (specimenIds.length > 0) {
-      const containers = await db
+      const containers = await dbInstance
         .select({ id: storageContainer.id })
         .from(storageContainer)
         .where(inArray(storageContainer.specimenId, specimenIds))
@@ -220,7 +227,7 @@ controls.delete('/batches/:id', async (c) => {
     }
 
     // Delete in transaction to ensure atomicity
-    db.transaction((tx) => {
+    dbInstance.transaction((tx) => {
       // 1. Delete storageContainerTag records for all containers
       if (containerIds.length > 0) {
         tx.delete(storageContainerTag)
@@ -272,12 +279,8 @@ controls.delete('/batches/:id', async (c) => {
     })
 
     return c.json({ message: 'Batch deleted successfully' })
-  } catch (error: any) {
-    console.error('Error deleting batch:', error)
-    return c.json({ 
-      error: 'Failed to delete batch', 
-      details: error.message 
-    }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -288,7 +291,7 @@ controls.get('/batches/:id/summary', async (c) => {
     if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
     // Get batch with definition (filtered to blood controls)
-    const batchWithDefinition = await db
+    const batchWithDefinition = await dbInstance
       .select({
         batch: controlBatch,
         definition: controlDefinition,
@@ -309,7 +312,7 @@ controls.get('/batches/:id/summary', async (c) => {
     const definitionData = batchWithDefinition.definition
 
     // Parse properties to get strain/density info
-    const allStrains = await db.select().from(strain)
+    const allStrains = await dbInstance.select().from(strain)
     const strainMap = new Map(allStrains.map(s => [s.id, { name: s.name }]))
     
     const parsedProps = definitionData ? parseControlProperties(definitionData.properties, strainMap) : null
@@ -317,7 +320,7 @@ controls.get('/batches/:id/summary', async (c) => {
     // If we have targetDensityUnitId but no unitSymbol, look it up from the database
     let unitSymbol = parsedProps?.unitSymbol
     if (parsedProps?.targetDensityUnitId && !unitSymbol) {
-      const unitRecord = await db
+      const unitRecord = await dbInstance
         .select({ symbol: unit.symbol })
         .from(unit)
         .where(eq(unit.id, parsedProps.targetDensityUnitId))
@@ -345,7 +348,7 @@ controls.get('/batches/:id/summary', async (c) => {
     }
 
     // Get all specimens for this batch
-    const specimensList = await db
+    const specimensList = await dbInstance
       .select({
         id: specimen.id,
         studySubjectId: specimen.studySubjectId,
@@ -377,7 +380,7 @@ controls.get('/batches/:id/summary', async (c) => {
     const specimenTypeIds = [...new Set(specimensList.map(s => s.specimenTypeId))]
 
     // Get specimen types
-    const specimenTypes = await db
+    const specimenTypes = await dbInstance
       .select()
       .from(specimenType)
       .where(inArray(specimenType.id, specimenTypeIds))
@@ -385,7 +388,7 @@ controls.get('/batches/:id/summary', async (c) => {
     const specimenTypeMap = new Map(specimenTypes.map(st => [st.id, st.name]))
 
     // Get all containers for these specimens with units
-    const containers = await db
+    const containers = await dbInstance
       .select({
         id: storageContainer.id,
         specimenId: storageContainer.specimenId,
@@ -403,7 +406,7 @@ controls.get('/batches/:id/summary', async (c) => {
     // Get container type information with collection names and locations
     const [micronixTubesList, cryovialBoxesList, sheetsList, bagsList, staticWellsList] = await Promise.all([
       (containerIds.length > 0
-        ? db
+        ? dbInstance
             .select({ 
               id: micronixTube.id, 
               collectionId: micronixTube.collectionId,
@@ -419,7 +422,7 @@ controls.get('/batches/:id/summary', async (c) => {
             .where(inArray(micronixTube.id, containerIds))
         : []) as Promise<any[]>,
       (containerIds.length > 0
-        ? db
+        ? dbInstance
             .select({ 
               id: cryovialTube.id, 
               collectionId: cryovialTube.collectionId,
@@ -435,7 +438,7 @@ controls.get('/batches/:id/summary', async (c) => {
             .where(inArray(cryovialTube.id, containerIds))
         : []) as Promise<any[]>,
       (containerIds.length > 0
-        ? db
+        ? dbInstance
             .select({ 
               id: paper.id, 
               sheetId: paper.sheetId,
@@ -451,7 +454,7 @@ controls.get('/batches/:id/summary', async (c) => {
         : []) as Promise<any[]>,
       Promise.resolve([]) as Promise<any[]>,
       (containerIds.length > 0
-        ? db
+        ? dbInstance
             .select({ 
               id: staticWell.id, 
               collectionId: staticWell.collectionId,
@@ -489,7 +492,7 @@ controls.get('/batches/:id/summary', async (c) => {
     for (const t of sheetsList) {
       let locPath: string | undefined
       if (t.boxId) {
-        const res = await db
+        const res = await dbInstance
           .select({ 
             box: box, 
             locationPath: location.path,
@@ -501,7 +504,7 @@ controls.get('/batches/:id/summary', async (c) => {
           .get()
         locPath = formatLocPath(res, res?.box.name)
       } else if (t.bagId) {
-        const res = await db
+        const res = await dbInstance
           .select({ 
             bag: bag, 
             locationPath: location.path,
@@ -667,9 +670,8 @@ controls.get('/batches/:id/summary', async (c) => {
         timeline,
       },
     })
-  } catch (error: any) {
-    console.error('Error fetching batch summary:', error)
-    return c.json({ error: 'Failed to fetch batch summary', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -677,7 +679,7 @@ controls.get('/batches/:id/summary', async (c) => {
 
 // List all control definitions (filtered to blood controls)
 controls.get('/', async (c) => {
-  const batchCountSubquery = db
+  const batchCountSubquery = dbInstance
     .select({
       definitionId: controlBatch.controlDefinitionId,
       count: sql<number>`count(*)`.as('batch_count'),
@@ -686,7 +688,7 @@ controls.get('/', async (c) => {
     .groupBy(controlBatch.controlDefinitionId)
     .as('batch_counts')
 
-  const specimenCountSubquery = db
+  const specimenCountSubquery = dbInstance
     .select({
       definitionId: controlBatch.controlDefinitionId,
       count: sql<number>`count(*)`.as('specimen_count'),
@@ -696,7 +698,7 @@ controls.get('/', async (c) => {
     .groupBy(controlBatch.controlDefinitionId)
     .as('specimen_counts')
 
-  const spotCountSubquery = db
+  const spotCountSubquery = dbInstance
     .select({
       definitionId: controlBatch.controlDefinitionId,
       count: sql<number>`SUM(${storageContainer.remainingQuantity})`.as('spot_count'),
@@ -708,7 +710,7 @@ controls.get('/', async (c) => {
     .groupBy(controlBatch.controlDefinitionId)
     .as('spot_counts')
 
-  const tubeCountSubquery = db
+  const tubeCountSubquery = dbInstance
     .select({
       definitionId: controlBatch.controlDefinitionId,
       count: sql<number>`count(*)`.as('tube_count'),
@@ -725,10 +727,10 @@ controls.get('/', async (c) => {
     .as('tube_counts')
 
   // Get all strains for name lookup
-  const allStrains = await db.select().from(strain)
+  const allStrains = await dbInstance.select().from(strain)
   const strainMap = new Map(allStrains.map(s => [s.id, { name: s.name }]))
 
-  const query = db
+  const query = dbInstance
     .select({
       id: controlDefinition.id,
       name: controlDefinition.name,
@@ -774,7 +776,7 @@ controls.get('/:id', async (c) => {
     return c.json({ error: 'Invalid blood control ID' }, 400)
   }
 
-  const control = await db
+  const control = await dbInstance
     .select()
     .from(controlDefinition)
     .where(and(
@@ -797,7 +799,7 @@ controls.get('/:id/summary', async (c) => {
 
   try {
     // 1. Get control definition (filtered to blood controls)
-    const control = await db
+    const control = await dbInstance
       .select({
         id: controlDefinition.id,
         name: controlDefinition.name,
@@ -815,14 +817,14 @@ controls.get('/:id/summary', async (c) => {
     if (!control) return c.json({ error: 'Blood control not found' }, 404)
 
     // 2. Parse properties to get strain/density info
-    const allStrains = await db.select().from(strain)
+    const allStrains = await dbInstance.select().from(strain)
     const strainMap = new Map(allStrains.map(s => [s.id, { name: s.name }]))
     const parsed = parseControlProperties(control.properties, strainMap)
     
     // If we have targetDensityUnitId but no unitSymbol, look it up from the database
     let unitSymbol = parsed.unitSymbol
     if (parsed.targetDensityUnitId && !unitSymbol) {
-      const unitRecord = await db
+      const unitRecord = await dbInstance
         .select({ symbol: unit.symbol })
         .from(unit)
         .where(eq(unit.id, parsed.targetDensityUnitId))
@@ -841,7 +843,7 @@ controls.get('/:id/summary', async (c) => {
     const compositionDetails = parsed.strains.length > 0 ? { strains: parsed.strains } : null
 
     // 3. Get all batches and calculate stock levels
-    const spotCountSubquery = db
+    const spotCountSubquery = dbInstance
       .select({
         batchId: specimen.controlBatchId,
         count: sql<number>`SUM(${storageContainer.remainingQuantity})`.as('spot_count'),
@@ -852,7 +854,7 @@ controls.get('/:id/summary', async (c) => {
       .groupBy(specimen.controlBatchId)
       .as('batch_spot_counts')
 
-    const tubeCountSubquery = db
+    const tubeCountSubquery = dbInstance
       .select({
         batchId: specimen.controlBatchId,
         count: sql<number>`count(*)`.as('tube_count'),
@@ -870,7 +872,7 @@ controls.get('/:id/summary', async (c) => {
       .groupBy(specimen.controlBatchId)
       .as('batch_tube_counts')
 
-    const batchesList = await db
+    const batchesList = await dbInstance
       .select({
         id: controlBatch.id,
         name: controlBatch.name,
@@ -889,14 +891,14 @@ controls.get('/:id/summary', async (c) => {
     const enrichedBatches = await Promise.all(
       batchesList.map(async (batch) => {
         // Get specimen count (total records)
-        const specimensCount = await db
+        const specimensCount = await dbInstance
           .select({ count: sql<number>`count(*)` })
           .from(specimen)
           .where(eq(specimen.controlBatchId, batch.id))
           .get()
 
         // Get total remaining quantity and unit for summary badges
-        const inventory = await db
+        const inventory = await dbInstance
           .select({
             totalRemaining: sql<number>`sum(${storageContainer.remainingQuantity})`,
             unitSymbol: unit.symbol,
@@ -933,7 +935,7 @@ controls.get('/:id/summary', async (c) => {
     const batchIds = enrichedBatches.map(b => b.id)
     let activeLocationsCount = 0
     if (batchIds.length > 0) {
-      const locationResults = await db
+      const locationResults = await dbInstance
         .select({ locationId: location.id })
         .from(location)
         .innerJoin(micronixPlate, eq(location.id, micronixPlate.locationId))
@@ -942,7 +944,7 @@ controls.get('/:id/summary', async (c) => {
         .innerJoin(specimen, eq(storageContainer.specimenId, specimen.id))
         .where(inArray(specimen.controlBatchId, batchIds))
         .union(
-          db
+          dbInstance
             .select({ locationId: location.id })
             .from(location)
             .innerJoin(cryovialBox, eq(location.id, cryovialBox.locationId))
@@ -952,7 +954,7 @@ controls.get('/:id/summary', async (c) => {
             .where(inArray(specimen.controlBatchId, batchIds))
         )
         .union(
-          db
+          dbInstance
             .select({ locationId: location.id })
             .from(location)
             .innerJoin(box, eq(location.id, box.locationId))
@@ -963,7 +965,7 @@ controls.get('/:id/summary', async (c) => {
             .where(inArray(specimen.controlBatchId, batchIds))
         )
         .union(
-          db
+          dbInstance
             .select({ locationId: location.id })
             .from(location)
             .innerJoin(bag, eq(location.id, bag.locationId))
@@ -992,9 +994,8 @@ controls.get('/:id/summary', async (c) => {
         activeLocationsCount,
       }
     })
-  } catch (error: any) {
-    console.error('Error fetching control summary:', error)
-    return c.json({ error: 'Internal server error', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -1017,7 +1018,7 @@ controls.post('/check-unique', async (c) => {
     const controlType = 'blood'
     
     // Get all definitions of blood type
-    const allDefinitions = await db
+    const allDefinitions = await dbInstance
       .select()
       .from(controlDefinition)
       .where(eq(controlDefinition.controlType, controlType))
@@ -1119,7 +1120,7 @@ controls.post('/suggest-name', async (c) => {
     
     // Get strain names
     const strainIds = data.strains.map(s => s.strainId)
-    const strainRecords = await db
+    const strainRecords = await dbInstance
       .select()
       .from(strain)
       .where(inArray(strain.id, strainIds))
@@ -1139,7 +1140,7 @@ controls.post('/suggest-name', async (c) => {
     }))
     
     // Check if definition with same combination already exists
-    const allDefinitions = await db
+    const allDefinitions = await dbInstance
       .select()
       .from(controlDefinition)
       .where(eq(controlDefinition.controlType, controlType))
@@ -1191,7 +1192,7 @@ controls.post('/suggest-name', async (c) => {
     }
     
     // Generate suggested name
-    const suggestedName = await generateUniqueControlDefinitionName(db, {
+    const suggestedName = await generateUniqueControlDefinitionName(dbInstance, {
       controlType,
       targetDensity: data.targetDensity,
       targetDensityUnitId: data.targetDensityUnitId,
@@ -1244,7 +1245,7 @@ controls.post('/', async (c) => {
     }
     
     // Check if definition with same combination already exists
-    const allDefinitions = await db
+    const allDefinitions = await dbInstance
       .select()
       .from(controlDefinition)
       .where(eq(controlDefinition.controlType, controlType))
@@ -1301,7 +1302,7 @@ controls.post('/', async (c) => {
     
     // Get strain names for storage
     const strainIds = strains.map(s => s.strainId)
-    const strainRecords = await db
+    const strainRecords = await dbInstance
       .select()
       .from(strain)
       .where(inArray(strain.id, strainIds))
@@ -1326,7 +1327,7 @@ controls.post('/', async (c) => {
       props.targetDensity = targetDensity
       if (targetDensityUnitId !== undefined) {
         // Validate unit exists
-        const unitRecord = await db.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
+        const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
         if (!unitRecord) {
           return c.json({ error: `Invalid unit ID: ${targetDensityUnitId}` }, 400)
         }
@@ -1338,7 +1339,7 @@ controls.post('/', async (c) => {
     // Generate name if not provided
     let finalName = name
     if (!finalName || finalName.trim() === '') {
-      finalName = await generateUniqueControlDefinitionName(db, {
+      finalName = await generateUniqueControlDefinitionName(dbInstance, {
         controlType,
         targetDensity,
         targetDensityUnitId,
@@ -1347,7 +1348,7 @@ controls.post('/', async (c) => {
     } else {
       // Validate provided name doesn't conflict with existing definition
       // (name uniqueness is enforced by database constraint, but we check here for better error message)
-      const existingByName = await db
+      const existingByName = await dbInstance
         .select()
         .from(controlDefinition)
         .where(eq(controlDefinition.name, finalName))
@@ -1358,7 +1359,7 @@ controls.post('/', async (c) => {
       }
     }
     
-    const result = await db
+    const result = await dbInstance
       .insert(controlDefinition)
       .values({
         name: finalName,
@@ -1393,7 +1394,7 @@ controls.patch('/:id', async (c) => {
     if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
 
     // Get existing control to merge properties (filtered to blood controls)
-    const existing = await db
+    const existing = await dbInstance
       .select()
       .from(controlDefinition)
       .where(and(
@@ -1434,7 +1435,7 @@ controls.patch('/:id', async (c) => {
         if (strains.length > 0) {
           // Get strain names
           const strainIds = strains.map(s => s.strainId)
-          const strainRecords = await db
+          const strainRecords = await dbInstance
             .select()
             .from(strain)
             .where(inArray(strain.id, strainIds))
@@ -1463,7 +1464,7 @@ controls.patch('/:id', async (c) => {
           delete newProps.targetDensityUnitSymbol
         } else {
           newProps.targetDensityUnitId = targetDensityUnitId
-          const unitRecord = await db.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
+          const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
           if (unitRecord) {
             newProps.targetDensityUnitSymbol = unitRecord.symbol
           }
@@ -1472,7 +1473,7 @@ controls.patch('/:id', async (c) => {
     }
     
     // Update control definition
-    const [updatedControl] = await db
+    const [updatedControl] = await dbInstance
       .update(controlDefinition)
       .set({
         ...baseData,
@@ -1483,22 +1484,8 @@ controls.patch('/:id', async (c) => {
       .returning()
     
     return c.json({ control: updatedControl })
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error updating control definition:', error)
-    const isDevelopment = process.env.NODE_ENV !== 'production'
-    return c.json({ 
-      error: error?.message || 'Failed to update control definition',
-      ...(isDevelopment && { 
-        details: error?.message,
-        stack: error?.stack 
-      }),
-      ...(!isDevelopment && { 
-        errorCode: 'UPDATE_CONTROL_ERROR'
-      })
-    }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -1508,7 +1495,7 @@ controls.get('/:id/batches', async (c) => {
   if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
 
   // Verify definition is a blood control
-  const definition = await db
+  const definition = await dbInstance
     .select()
     .from(controlDefinition)
     .where(and(
@@ -1521,7 +1508,7 @@ controls.get('/:id/batches', async (c) => {
     return c.json({ error: 'Blood control definition not found' }, 404)
   }
 
-  const batches = await db
+  const batches = await dbInstance
     .select()
     .from(controlBatch)
     .where(eq(controlBatch.controlDefinitionId, id))
@@ -1564,7 +1551,7 @@ controls.post('/batches/suggest-name', async (c) => {
     const data = schema.parse(body)
     
     // Get definition
-    const definition = await db
+    const definition = await dbInstance
       .select()
       .from(controlDefinition)
       .where(eq(controlDefinition.id, data.definitionId))
@@ -1588,12 +1575,13 @@ controls.post('/batches/suggest-name', async (c) => {
 
 // Create a new batch (only for blood controls)
 controls.post('/:id/batches', async (c) => {
-  try {
-    const definitionId = parseInt(c.req.param('id'))
-    if (isNaN(definitionId)) return c.json({ error: 'Invalid blood control ID' }, 400)
+  const definitionId = parseInt(c.req.param('id'))
+  if (isNaN(definitionId)) return c.json({ error: 'Invalid blood control ID' }, 400)
 
+  let body: any
+  try {
     // Verify definition is a blood control
-    const definition = await db
+    const definition = await dbInstance
       .select()
       .from(controlDefinition)
       .where(and(
@@ -1606,7 +1594,7 @@ controls.post('/:id/batches', async (c) => {
       return c.json({ error: 'Blood control definition not found' }, 404)
     }
 
-    const body = await c.req.json()
+    body = await c.req.json()
     const schema = z.object({
       name: z.string().min(1).optional(),
       productionDate: z.string().optional(),
@@ -1632,7 +1620,7 @@ controls.post('/:id/batches', async (c) => {
       batchName = await generateUniqueBatchName(definition.name, data.productionDate)
     }
     
-    const [newBatch] = await db
+    const [newBatch] = await dbInstance
       .insert(controlBatch)
       .values({
         controlDefinitionId: definitionId,
@@ -1650,7 +1638,7 @@ controls.post('/:id/batches', async (c) => {
     // Handle unique constraint violation
     if (error?.message?.includes('UNIQUE constraint') || error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       // Re-fetch definition for error handling
-      const def = await db
+      const def = await dbInstance
         .select()
         .from(controlDefinition)
         .where(eq(controlDefinition.id, definitionId))
@@ -1661,8 +1649,7 @@ controls.post('/:id/batches', async (c) => {
         suggestion
       }, 400)
     }
-    console.error('Error creating batch:', error)
-    return c.json({ error: 'Internal server error', details: error?.message }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -1673,9 +1660,8 @@ controls.post('/batches/create-with-specimens', async (c) => {
     const { createBatchWithSpecimens } = await import('../lib/control-batch-creation')
     const result = await createBatchWithSpecimens(body)
     return c.json(result, 201)
-  } catch (error: any) {
-    console.error('Error creating batch with specimens:', error)
-    return c.json({ error: error.message || 'Failed to create batch with specimens' }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -1743,7 +1729,7 @@ controls.post('/batches/validate-csv', async (c) => {
     }
 
     // Check if specimen types exist
-    const allSpecimenTypes = await db.select().from(specimenType)
+    const allSpecimenTypes = await dbInstance.select().from(specimenType)
     const existingTypeNames = new Set(allSpecimenTypes.map(t => t.name))
 
     for (const typeName of specimenTypeNames) {
@@ -1771,6 +1757,7 @@ controls.post('/batches/validate-csv', async (c) => {
     console.error('Error validating CSV:', error)
     return c.json({ error: 'Failed to validate CSV', details: error.message }, 500)
   }
-})
+  })
 
-export default controls
+  return controls
+}

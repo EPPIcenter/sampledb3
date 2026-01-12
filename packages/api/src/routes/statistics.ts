@@ -18,6 +18,7 @@ import {
 } from '../db/schema'
 import { eq, and, or, sql, gte, lte, inArray, isNull } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
+import { cache, cacheKeys } from '../lib/cache'
 
 const statistics = new Hono()
 
@@ -205,10 +206,25 @@ statistics.get('/', async (c) => {
     })
 
     // By specimen type
+    // Use cache for specimen types (reference data that changes infrequently)
     const specimenTypeIds = [...new Set(filteredSpecimens.map(s => s.specimenTypeId))]
-    const specimenTypes = specimenTypeIds.length > 0
-      ? await db.select().from(specimenType).where(inArray(specimenType.id, specimenTypeIds))
-      : []
+    let specimenTypes = specimenTypeIds.length > 0
+      ? cache.get<typeof specimenType.$inferSelect[]>(cacheKeys.specimenTypes)
+      : null
+    
+    if (!specimenTypes && specimenTypeIds.length > 0) {
+      specimenTypes = await db.select().from(specimenType).where(inArray(specimenType.id, specimenTypeIds))
+      // Cache all specimen types (not just filtered ones) for future use
+      const allSpecimenTypes = await db.select().from(specimenType)
+      cache.set(cacheKeys.specimenTypes, allSpecimenTypes, 10 * 60 * 1000) // 10 minutes
+      // Use filtered types for this query
+      specimenTypes = allSpecimenTypes.filter(st => specimenTypeIds.includes(st.id))
+    } else if (specimenTypeIds.length > 0 && specimenTypes) {
+      // Filter cached types to only those we need
+      specimenTypes = specimenTypes.filter(st => specimenTypeIds.includes(st.id))
+    } else {
+      specimenTypes = []
+    }
     const specimenTypeMap = new Map(specimenTypes.map(st => [st.id, st.name]))
     
     const bySpecimenType: Record<string, number> = {}
@@ -562,20 +578,23 @@ statistics.get('/', async (c) => {
           filteredContainers = []
         } else {
           // Fetch containers matching location and other filters
+          // Use Promise.all to parallelize queries
           const containerIdChunks = chunkArray(locationFilteredContainerIds, 500)
-          for (const containerIdChunk of containerIdChunks) {
-            let containerQuery = db.select().from(storageContainer)
-            const containerConditions = [inArray(storageContainer.id, containerIdChunk)]
+          const chunkResults = await Promise.all(
+            containerIdChunks.map(async (containerIdChunk) => {
+              let containerQuery = db.select().from(storageContainer)
+              const containerConditions = [inArray(storageContainer.id, containerIdChunk)]
 
-            // Apply tag filter if provided
-            if (tagFilteredContainerIds) {
-              containerConditions.push(inArray(storageContainer.id, tagFilteredContainerIds))
-            }
+              // Apply tag filter if provided
+              if (tagFilteredContainerIds) {
+                containerConditions.push(inArray(storageContainer.id, tagFilteredContainerIds))
+              }
 
-            containerQuery = containerQuery.where(and(...containerConditions) as any) as any
-            const chunkContainers = await containerQuery
-            filteredContainers.push(...chunkContainers)
-          }
+              containerQuery = containerQuery.where(and(...containerConditions) as any) as any
+              return await containerQuery
+            })
+          )
+          filteredContainers = chunkResults.flat()
         }
       } else {
         // No location filter
@@ -742,28 +761,31 @@ statistics.get('/', async (c) => {
     // Containers by tags
     const finalContainerIds = finalContainers.map(c => c.id)
     console.log('[STATS] Querying container tags for', finalContainerIds.length, 'containers')
-    const containerTags: Array<{ containerId: number; tagId: number; tagName: string }> = []
+    let containerTags: Array<{ containerId: number; tagId: number; tagName: string }> = []
     
     if (finalContainerIds.length > 0) {
       // Batch query to avoid SQLite variable limit and stack overflow
       const containerIdChunks = chunkArray(finalContainerIds, 500)
-      console.log('[STATS] Processing', containerIdChunks.length, 'chunks for container tags')
+      console.log('[STATS] Processing', containerIdChunks.length, 'chunks for container tags in parallel')
       
-      for (let i = 0; i < containerIdChunks.length; i++) {
-        const chunk = containerIdChunks[i]
-        console.log('[STATS] Querying container tags chunk', i + 1, 'of', containerIdChunks.length, 'with', chunk.length, 'container IDs')
-        const chunkTags = await db
-          .select({
-            containerId: storageContainerTag.storageContainerId,
-            tagId: tag.id,
-            tagName: tag.name,
-          })
-          .from(storageContainerTag)
-          .innerJoin(tag, eq(storageContainerTag.tagId, tag.id))
-          .where(inArray(storageContainerTag.storageContainerId, chunk))
-        console.log('[STATS] Found', chunkTags.length, 'tags in chunk')
-        containerTags.push(...chunkTags)
-      }
+      // Use Promise.all to parallelize container tag queries
+      const tagChunkResults = await Promise.all(
+        containerIdChunks.map(async (chunk, i) => {
+          console.log('[STATS] Querying container tags chunk', i + 1, 'of', containerIdChunks.length, 'with', chunk.length, 'container IDs')
+          const chunkTags = await db
+            .select({
+              containerId: storageContainerTag.storageContainerId,
+              tagId: tag.id,
+              tagName: tag.name,
+            })
+            .from(storageContainerTag)
+            .innerJoin(tag, eq(storageContainerTag.tagId, tag.id))
+            .where(inArray(storageContainerTag.storageContainerId, chunk))
+          console.log('[STATS] Found', chunkTags.length, 'tags in chunk')
+          return chunkTags
+        })
+      )
+      containerTags = tagChunkResults.flat()
     }
     console.log('[STATS] Found', containerTags.length, 'total container tags')
     
@@ -796,26 +818,33 @@ statistics.get('/', async (c) => {
     
     if (finalContainerIds.length > 0) {
       // Batch queries to avoid SQLite variable limit
+      // Use Promise.all to parallelize all chunks
       const containerChunks = chunkArray(finalContainerIds, 500)
-      console.log('[STATS] Processing', containerChunks.length, 'chunks for storage statistics')
+      console.log('[STATS] Processing', containerChunks.length, 'chunks for storage statistics in parallel')
       
-      for (let i = 0; i < containerChunks.length; i++) {
-        const chunk = containerChunks[i]
-        console.log('[STATS] Querying storage chunk', i + 1, 'of', containerChunks.length, 'with', chunk.length, 'container IDs')
-        const [micronixBatch, cryovialBatch] = await Promise.all([
-          db.select({ containerId: micronixTube.id, locationId: micronixPlate.locationId })
-            .from(micronixTube)
-            .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
-            .where(inArray(micronixTube.id, chunk)),
-          db.select({ containerId: cryovialTube.id, locationId: cryovialBox.locationId })
-            .from(cryovialTube)
-            .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
-            .where(inArray(cryovialTube.id, chunk)),
-        ])
-        console.log('[STATS] Found', micronixBatch.length, 'micronix and', cryovialBatch.length, 'cryovial in chunk')
-        micronixTubes.push(...micronixBatch)
-        cryovialTubes.push(...cryovialBatch)
-      }
+      const storageChunkResults = await Promise.all(
+        containerChunks.map(async (chunk, i) => {
+          console.log('[STATS] Querying storage chunk', i + 1, 'of', containerChunks.length, 'with', chunk.length, 'container IDs')
+          const [micronixBatch, cryovialBatch] = await Promise.all([
+            db.select({ containerId: micronixTube.id, locationId: micronixPlate.locationId })
+              .from(micronixTube)
+              .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
+              .where(inArray(micronixTube.id, chunk)),
+            db.select({ containerId: cryovialTube.id, locationId: cryovialBox.locationId })
+              .from(cryovialTube)
+              .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
+              .where(inArray(cryovialTube.id, chunk)),
+          ])
+          console.log('[STATS] Found', micronixBatch.length, 'micronix and', cryovialBatch.length, 'cryovial in chunk')
+          return { micronix: micronixBatch, cryovial: cryovialBatch }
+        })
+      )
+      
+      // Flatten results
+      storageChunkResults.forEach(result => {
+        micronixTubes.push(...result.micronix)
+        cryovialTubes.push(...result.cryovial)
+      })
     }
 
     const locationIds = [
@@ -829,21 +858,23 @@ statistics.get('/', async (c) => {
     if (locationIds.length > 0) {
       console.log('[STATS] Querying', locationIds.length, 'locations for storage statistics')
       // Batch query to avoid SQLite variable limit
+      // Use Promise.all to parallelize location queries
       const locationChunks = chunkArray(locationIds, 500)
-      const allLocations: Array<typeof location.$inferSelect> = []
+      console.log('[STATS] Processing', locationChunks.length, 'location chunks in parallel')
       
-      for (let i = 0; i < locationChunks.length; i++) {
-        const chunk = locationChunks[i]
-        console.log('[STATS] Querying location chunk', i + 1, 'of', locationChunks.length, 'with', chunk.length, 'location IDs')
-        const locations = await db
-          .select()
-          .from(location)
-          .where(inArray(location.id, chunk))
-        console.log('[STATS] Found', locations.length, 'locations in chunk')
-        allLocations.push(...locations)
-      }
+      const locationChunkResults = await Promise.all(
+        locationChunks.map(async (chunk, i) => {
+          console.log('[STATS] Querying location chunk', i + 1, 'of', locationChunks.length, 'with', chunk.length, 'location IDs')
+          const locations = await db
+            .select()
+            .from(location)
+            .where(inArray(location.id, chunk))
+          console.log('[STATS] Found', locations.length, 'locations in chunk')
+          return locations
+        })
+      )
       
-      const locations = allLocations
+      const locations = locationChunkResults.flat()
 
       const locationMap = new Map(locations.map(l => [l.id, l]))
 

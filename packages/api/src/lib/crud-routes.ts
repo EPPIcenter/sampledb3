@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
-import { db } from '../db/client'
 import { eq, and, ne, sql, SQL } from 'drizzle-orm'
 import { z } from 'zod'
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 import type { Database } from '../db/client'
+import { handleRouteError, NotFoundError, ConflictError, ValidationError } from './error-handler'
+import { listResponse, successResponse, createdResponse } from './response-helpers'
 
 export interface CrudRouteConfig<TTable extends SQLiteTable, TCreate, TUpdate = Partial<TCreate>> {
   /**
@@ -12,9 +13,9 @@ export interface CrudRouteConfig<TTable extends SQLiteTable, TCreate, TUpdate = 
   table: TTable
   
   /**
-   * The database instance (defaults to global db)
+   * The database instance (required)
    */
-  database?: Database
+  database: Database
   
   /**
    * Entity name for error messages (e.g., "State", "Specimen Type")
@@ -92,7 +93,7 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
 ): Hono {
   const {
     table,
-    database = db,
+    database,
     entityName,
     pluralName,
     singularName,
@@ -132,20 +133,9 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
         ? items.map(transformList)
         : items
 
-      return c.json({ [pluralName]: transformed })
-    } catch (error: any) {
-      console.error(`Error fetching ${pluralName}:`, error)
-      const isDevelopment = process.env.NODE_ENV !== 'production'
-      return c.json({ 
-        error: `Failed to fetch ${pluralName}`,
-        ...(isDevelopment && { 
-          details: error.message,
-          stack: error.stack 
-        }),
-        ...(!isDevelopment && { 
-          errorCode: 'FETCH_ERROR'
-        })
-      }, 500)
+      return listResponse(c, transformed)
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 
@@ -165,24 +155,13 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
         .get()
 
       if (!item) {
-        return c.json({ error: `${entityName} not found` }, 404)
+        throw new NotFoundError(entityName, id)
       }
 
       const transformed = transformDetail ? transformDetail(item) : item
-      return c.json({ [singularName]: transformed })
-    } catch (error: any) {
-      console.error(`Error fetching ${entityName}:`, error)
-      const isDevelopment = process.env.NODE_ENV !== 'production'
-      return c.json({ 
-        error: `Failed to fetch ${entityName}`,
-        ...(isDevelopment && { 
-          details: error.message,
-          stack: error.stack 
-        }),
-        ...(!isDevelopment && { 
-          errorCode: 'FETCH_ERROR'
-        })
-      }, 500)
+      return successResponse(c, transformed)
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 
@@ -196,7 +175,7 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
       if (validateCreate) {
         const validationError = await validateCreate(data, database)
         if (validationError) {
-          return c.json({ error: validationError }, 400)
+          throw new ValidationError(validationError)
         }
       }
 
@@ -210,9 +189,7 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
           .get()
 
         if (existing) {
-          return c.json({ 
-            error: `${entityName} with this name already exists` 
-          }, 400)
+          throw new ConflictError(`${entityName} with this name already exists`)
         }
       }
 
@@ -228,23 +205,9 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
         .returning()
 
       const transformed = transformDetail ? transformDetail(result[0]) : result[0]
-      return c.json({ [singularName]: transformed }, 201)
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return c.json({ error: 'Validation error', details: error.issues }, 400)
-      }
-      console.error(`Error creating ${entityName}:`, error)
-      const isDevelopment = process.env.NODE_ENV !== 'production'
-      return c.json({ 
-        error: `Failed to create ${entityName}`,
-        ...(isDevelopment && { 
-          details: error.message,
-          stack: error.stack 
-        }),
-        ...(!isDevelopment && { 
-          errorCode: 'CREATE_ERROR'
-        })
-      }, 500)
+      return createdResponse(c, transformed)
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 
@@ -268,14 +231,14 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
         .get()
 
       if (!existing) {
-        return c.json({ error: `${entityName} not found` }, 404)
+        throw new NotFoundError(entityName, id)
       }
 
       // Custom validation
       if (validateUpdate) {
         const validationError = await validateUpdate(id, data, database)
         if (validationError) {
-          return c.json({ error: validationError }, 400)
+          throw new ValidationError(validationError)
         }
       }
 
@@ -292,9 +255,7 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
           .get()
 
         if (duplicate) {
-          return c.json({ 
-            error: `${entityName} with this name already exists` 
-          }, 400)
+          throw new ConflictError(`${entityName} with this name already exists`)
         }
       }
 
@@ -311,23 +272,9 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
         .returning()
 
       const transformed = transformDetail ? transformDetail(result[0]) : result[0]
-      return c.json({ [singularName]: transformed })
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return c.json({ error: 'Validation error', details: error.issues }, 400)
-      }
-      console.error(`Error updating ${entityName}:`, error)
-      const isDevelopment = process.env.NODE_ENV !== 'production'
-      return c.json({ 
-        error: `Failed to update ${entityName}`,
-        ...(isDevelopment && { 
-          details: error.message,
-          stack: error.stack 
-        }),
-        ...(!isDevelopment && { 
-          errorCode: 'UPDATE_ERROR'
-        })
-      }, 500)
+      return successResponse(c, transformed)
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 
@@ -344,7 +291,7 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
       if (checkInUse) {
         const inUseError = await checkInUse(id, database)
         if (inUseError) {
-          return c.json({ error: inUseError }, 400)
+          throw new ValidationError(inUseError)
         }
       }
 
@@ -354,23 +301,12 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
         .returning()
 
       if (result.length === 0) {
-        return c.json({ error: `${entityName} not found` }, 404)
+        throw new NotFoundError(entityName, id)
       }
 
       return c.json({ message: `${entityName} deleted successfully` })
-    } catch (error: any) {
-      console.error(`Error deleting ${entityName}:`, error)
-      const isDevelopment = process.env.NODE_ENV !== 'production'
-      return c.json({ 
-        error: `Failed to delete ${entityName}`,
-        ...(isDevelopment && { 
-          details: error.message,
-          stack: error.stack 
-        }),
-        ...(!isDevelopment && { 
-          errorCode: 'DELETE_ERROR'
-        })
-      }, 500)
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 

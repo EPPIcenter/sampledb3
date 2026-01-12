@@ -28,14 +28,14 @@ export default defineConfig({
     ],
     webServer: [
         {
-            command: `cd ../api && PORT=${API_PORT} DATABASE_PATH=${DATABASE_PATH} pnpm exec tsx src/index.ts`,
+            command: `cd ../api && PORT=${API_PORT} DATABASE_PATH=${DATABASE_PATH} bun --watch src/index.ts`,
             url: `http://localhost:${API_PORT}/health`,
             reuseExistingServer: !process.env.CI,
             stdout: 'pipe',
             stderr: 'pipe',
         },
         {
-            command: `cd ../web && PORT=${WEB_PORT} API_TARGET=http://localhost:${API_PORT} pnpm dev --port ${WEB_PORT}`,
+            command: `cd ../web && PORT=${WEB_PORT} API_TARGET=http://localhost:${API_PORT} bun dev --port ${WEB_PORT}`,
             url: `http://localhost:${WEB_PORT}`,
             reuseExistingServer: !process.env.CI,
             stdout: 'pipe',

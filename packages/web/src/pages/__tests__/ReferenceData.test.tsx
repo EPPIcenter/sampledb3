@@ -88,10 +88,12 @@ describe('ReferenceData Page', () => {
   })
 
   describe('Tab Switching', () => {
-    it('should render with default tab (specimen-types)', () => {
+    it('should render with default tab (specimen-types)', async () => {
       render(<ReferenceData />)
 
-      expect(screen.getByText('Reference Data Management')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByText('Reference Data Management')).toBeInTheDocument()
+      })
       expect(screen.getByText('Specimen Types')).toBeInTheDocument()
     })
 
@@ -116,7 +118,9 @@ describe('ReferenceData Page', () => {
       render(<ReferenceData />)
 
       // Just verify the page renders - data loading is tested in integration
-      expect(screen.getByText('Reference Data Management')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByText('Reference Data Management')).toBeInTheDocument()
+      })
     })
   })
 

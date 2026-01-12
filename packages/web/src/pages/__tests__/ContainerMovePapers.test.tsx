@@ -53,7 +53,9 @@ describe('ContainerMovePapers', () => {
 
     it('renders initial step successfully', async () => {
         render(<ContainerMovePapers />, { wrapper: Wrapper })
-        expect(screen.getByText('Move Papers')).toBeInTheDocument()
+        await waitFor(() => {
+            expect(screen.getByText('Move Papers')).toBeInTheDocument()
+        })
         expect(screen.getByText('Choose Source Collection')).toBeInTheDocument()
     })
 

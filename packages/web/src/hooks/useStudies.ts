@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { studiesApi, type Study, type StudySummary, type StudyTimelineData, type StudySummaryBasic } from '../lib/api'
+import { useToast } from '../contexts/ToastContext'
 
 export const studyKeys = {
   all: ['studies'] as const,
@@ -14,11 +15,18 @@ export const studyKeys = {
 }
 
 export function useStudies(search?: string, params?: { page?: number; limit?: number }) {
+  const { error: showError } = useToast()
+  
   return useQuery({
     queryKey: studyKeys.list({ search, ...params }),
     queryFn: async () => {
-      const res = await studiesApi.list(search, params)
-      return res.data
+      try {
+        const res = await studiesApi.list(search, params)
+        return res.data
+      } catch (err: any) {
+        showError(err.response?.data?.error || 'Failed to load studies')
+        throw err
+      }
     },
   })
 }
@@ -80,32 +88,52 @@ export function useStudySummaries(ids: number[]) {
 
 export function useCreateStudy() {
   const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
   
   return useMutation({
     mutationFn: async (data: Omit<Study, 'id' | 'created' | 'lastUpdated'>) => {
-      const res = await studiesApi.create(data)
-      return res.data.study
+      try {
+        const res = await studiesApi.create(data)
+        return res.data.study
+      } catch (err: any) {
+        showError(err.response?.data?.error || 'Failed to create study')
+        throw err
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: studyKeys.lists() })
+      success('Study created successfully')
+    },
+    onError: () => {
+      // Error already shown in mutationFn
     },
   })
 }
 
 export function useUpdateStudy() {
   const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
   
   return useMutation({
     mutationFn: async ({ id, data }: { 
       id: number
       data: Partial<Pick<Study, 'title' | 'leadPerson' | 'shortCode' | 'description' | 'isLongitudinal'>>
     }) => {
-      const res = await studiesApi.update(id, data)
-      return res.data.study
+      try {
+        const res = await studiesApi.update(id, data)
+        return res.data.study
+      } catch (err: any) {
+        showError(err.response?.data?.error || 'Failed to update study')
+        throw err
+      }
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: studyKeys.detail(data.id) })
       queryClient.invalidateQueries({ queryKey: studyKeys.lists() })
+      success('Study updated successfully')
+    },
+    onError: () => {
+      // Error already shown in mutationFn
     },
   })
 }

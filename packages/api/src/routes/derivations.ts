@@ -10,6 +10,10 @@ import {
   box,
   bag,
   sheet,
+  studySubject,
+  study,
+  controlBatch,
+  controlDefinition,
 } from '../db/schema'
 import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
@@ -223,7 +227,7 @@ derivations.get('/containers/:id/derivations', async (c) => {
   }
 })
 
-// Get derivation source for a child container
+// Get derivation source for a child container, or original source if not derived
 derivations.get('/containers/:id/source', async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
@@ -231,40 +235,128 @@ derivations.get('/containers/:id/source', async (c) => {
       return c.json({ error: 'Invalid container ID' }, 400)
     }
 
+    // First check if this container is derived
     const record = await db
       .select()
       .from(containerDerivation)
       .where(eq(containerDerivation.childContainerId, id))
       .get()
 
-    if (!record) {
-      return c.json({ error: 'Derivation not found for container' }, 404)
+    if (record) {
+      // Container is derived - return derivation source
+      const parent = await db
+        .select()
+        .from(storageContainer)
+        .where(eq(storageContainer.id, record.parentContainerId))
+        .get()
+
+      if (!parent) {
+        return c.json({ error: 'Parent container not found' }, 404)
+      }
+
+      const parentSpecimen = await db
+        .select()
+        .from(specimen)
+        .where(eq(specimen.id, parent.specimenId))
+        .get()
+
+      return c.json({
+        type: 'derivation',
+        derivation: record,
+        parentContainer: parent,
+        parentSpecimen,
+      })
     }
 
-    const parent = await db
+    // Container is not derived - return original source (subject or control)
+    const container = await db
       .select()
       .from(storageContainer)
-      .where(eq(storageContainer.id, record.parentContainerId))
+      .where(eq(storageContainer.id, id))
       .get()
 
-    if (!parent) {
-      return c.json({ error: 'Parent container not found' }, 404)
+    if (!container) {
+      return c.json({ error: 'Container not found' }, 404)
     }
 
-    const parentSpecimen = await db
+    const spec = await db
       .select()
       .from(specimen)
-      .where(eq(specimen.id, parent.specimenId))
+      .where(eq(specimen.id, container.specimenId))
       .get()
 
+    if (!spec) {
+      return c.json({ error: 'Specimen not found for container' }, 404)
+    }
+
+    let sourceInfo: any = null
+    if (spec.studySubjectId) {
+      const subject = await db
+        .select({
+          id: studySubject.id,
+          name: studySubject.name,
+          studyId: studySubject.studyId,
+          studyTitle: study.title,
+          studyCode: study.shortCode,
+        })
+        .from(studySubject)
+        .leftJoin(study, eq(studySubject.studyId, study.id))
+        .where(eq(studySubject.id, spec.studySubjectId))
+        .get()
+      
+      if (subject) {
+        sourceInfo = {
+          type: 'subject',
+          id: subject.id,
+          name: subject.name,
+          study: {
+            id: subject.studyId,
+            title: subject.studyTitle,
+            code: subject.studyCode,
+          },
+        }
+      }
+    } else if (spec.controlBatchId) {
+      const batch = await db
+        .select({
+          id: controlBatch.id,
+          name: controlBatch.name,
+          productionDate: controlBatch.productionDate,
+          definitionId: controlDefinition.id,
+          definitionName: controlDefinition.name,
+        })
+        .from(controlBatch)
+        .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
+        .where(eq(controlBatch.id, spec.controlBatchId))
+        .get()
+
+      if (batch) {
+        sourceInfo = {
+          type: 'control',
+          id: batch.id,
+          name: batch.name,
+          productionDate: batch.productionDate,
+          definition: {
+            id: batch.definitionId,
+            name: batch.definitionName,
+          }
+        }
+      }
+    }
+
+    if (!sourceInfo) {
+      return c.json({ error: 'Source not found for container' }, 404)
+    }
+
     return c.json({
-      derivation: record,
-      parentContainer: parent,
-      parentSpecimen,
+      type: 'original',
+      source: sourceInfo,
+      container,
+      specimen: spec,
     })
   } catch (error: any) {
-    console.error('Error fetching derivation source:', error)
-    return c.json({ error: 'Failed to fetch derivation source', details: error.message }, 500)
+    console.error('Error fetching container source:', error)
+    return c.json({ error: 'Failed to fetch container source', details: error.message }, 500)
   }
 })
 

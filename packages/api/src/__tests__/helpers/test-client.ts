@@ -66,6 +66,22 @@ export async function expectJsonStructure(
 }
 
 /**
+ * Unpack the data field from a standardized API response
+ * This avoids the verbose data.data pattern in tests
+ */
+export async function getResponseData<T>(response: Response): Promise<T> {
+  const json = await response.json() as any
+  return json.data as T
+}
+
+/**
+ * Get the full response including metadata (for cases where you need error, meta, etc.)
+ */
+export async function getResponse<T>(response: Response): Promise<{ data: T; meta?: any; error?: string }> {
+  return await response.json() as any
+}
+
+/**
  * Create an authenticated test client (for routes requiring auth)
  * Note: This is a placeholder - implement based on your auth setup
  */

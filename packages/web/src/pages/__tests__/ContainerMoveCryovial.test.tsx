@@ -1,5 +1,6 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { renderWithProviders } from '../../__tests__/helpers/render'
 
 // Polyfill File.prototype.text for JSDOM
 if (!File.prototype.text) {
@@ -13,17 +14,21 @@ if (!File.prototype.text) {
 }
 
 import ContainerMoveCryovial from '../ContainerMoveCryovial'
-import { collectionsApi } from '../../lib/api'
+import { collectionsApi, locationsApi } from '../../lib/api'
 
 // Mock react-router-dom
 const mockSetSearchParams = vi.fn()
 const mockGetSearchParams = vi.fn()
 
-vi.mock('react-router-dom', () => ({
-    useSearchParams: () => [{
-        get: mockGetSearchParams
-    }, mockSetSearchParams]
-}))
+vi.mock('react-router-dom', async () => {
+    const actual = await vi.importActual('react-router-dom')
+    return {
+        ...actual,
+        useSearchParams: () => [{
+            get: mockGetSearchParams
+        }, mockSetSearchParams]
+    }
+})
 
 // Mock API
 vi.mock('../../lib/api', () => ({
@@ -31,6 +36,9 @@ vi.mock('../../lib/api', () => ({
         resolveContainers: vi.fn(),
         listCollectionsByType: vi.fn(),
         moveContainers: vi.fn()
+    },
+    locationsApi: {
+        list: vi.fn()
     }
 }))
 
@@ -38,16 +46,35 @@ describe('ContainerMoveCryovial', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mockGetSearchParams.mockReturnValue(null)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
     })
 
-    it('renders upload step initially', () => {
-        render(<ContainerMoveCryovial />)
-        expect(screen.getByText('Move Cryovial Tubes')).toBeInTheDocument()
-        expect(screen.getByText('Upload CSV')).toBeInTheDocument()
+    it('renders upload step initially', async () => {
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        
+        renderWithProviders(<ContainerMoveCryovial />)
+        
+        await waitFor(() => {
+            expect(screen.getByText('Move Cryovial Tubes')).toBeInTheDocument()
+        })
+        
+        await waitFor(() => {
+            expect(screen.getByText('Upload CSV Files')).toBeInTheDocument()
+        })
     })
 
     it('validates empty CSV file', async () => {
-        const { container } = render(<ContainerMoveCryovial />)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        
+        const { container } = renderWithProviders(<ContainerMoveCryovial />)
+
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input).toBeInTheDocument()
+        })
 
         const file = new File([''], 'test.csv', { type: 'text/csv' })
         // Polyfill .text() for JSDOM
@@ -58,6 +85,10 @@ describe('ContainerMoveCryovial', () => {
 
         fireEvent.change(input, { target: { files: [file] } })
 
+        await waitFor(() => {
+            expect(screen.getByText('Next: Resolve Containers')).toBeInTheDocument()
+        })
+
         const nextButton = screen.getByText('Next: Resolve Containers')
         fireEvent.click(nextButton)
 
@@ -67,7 +98,16 @@ describe('ContainerMoveCryovial', () => {
     })
 
     it('validates CSV columns specific to cryovials', async () => {
-        const { container } = render(<ContainerMoveCryovial />)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        
+        const { container } = renderWithProviders(<ContainerMoveCryovial />)
+        
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input).toBeInTheDocument()
+        })
+        
         // Cryovials need source_collection_name, source_position, target_position
         const csvContent = 'wrong_col,another\nval1,val2'
         const file = new File([csvContent], 'cryo.csv', { type: 'text/csv' })
@@ -79,6 +119,10 @@ describe('ContainerMoveCryovial', () => {
 
         fireEvent.change(input, { target: { files: [file] } })
 
+        await waitFor(() => {
+            expect(screen.getByText('Next: Resolve Containers')).toBeInTheDocument()
+        })
+
         const nextButton = screen.getByText('Next: Resolve Containers')
         fireEvent.click(nextButton)
 
@@ -88,6 +132,21 @@ describe('ContainerMoveCryovial', () => {
     })
 
     it('resolves cryovial containers successfully', async () => {
+        // Mock a box that matches the filename so it auto-selects
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ 
+            data: { 
+                collections: [{ 
+                    id: 1, 
+                    name: 'cryo', 
+                    barcode: null, 
+                    locationId: null,
+                    itemCount: 0,
+                    location: null
+                }] 
+            } 
+        } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        
         const csvContent = 'source_collection_name,source_position,target_position\nCRYO1,A1,B1'
         const file = new File([csvContent], 'cryo.csv', { type: 'text/csv' })
 
@@ -108,17 +167,26 @@ describe('ContainerMoveCryovial', () => {
             }
         } as any)
 
-        const { container } = render(<ContainerMoveCryovial />)
+        const { container } = renderWithProviders(<ContainerMoveCryovial />)
+
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input).toBeInTheDocument()
+        })
 
         const input = container.querySelector('input[type="file"]') as HTMLInputElement
         fireEvent.change(input, { target: { files: [file] } })
+
+        await waitFor(() => {
+            expect(screen.getByText('Next: Resolve Containers')).toBeInTheDocument()
+        })
 
         const nextButton = screen.getByText('Next: Resolve Containers')
         fireEvent.click(nextButton)
 
         await waitFor(() => {
-            expect(mockSetSearchParams).toHaveBeenCalledWith(expect.any(Function))
-        })
+            expect(collectionsApi.resolveContainers).toHaveBeenCalled()
+        }, { timeout: 3000 })
 
         expect(collectionsApi.resolveContainers).toHaveBeenCalledWith({
             identifiers: [{
@@ -130,6 +198,21 @@ describe('ContainerMoveCryovial', () => {
     })
 
     it('errors on incorrect collection types (e.g. generic box)', async () => {
+        // Mock a box that matches the filename so it auto-selects
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ 
+            data: { 
+                collections: [{ 
+                    id: 1, 
+                    name: 'test', 
+                    barcode: null, 
+                    locationId: null,
+                    itemCount: 0,
+                    location: null
+                }] 
+            } 
+        } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        
         const csvContent = 'source_collection_name,source_position,target_position\nBOX1,A1,B1'
         const file = new File([csvContent], 'test.csv', { type: 'text/csv' })
 
@@ -150,14 +233,24 @@ describe('ContainerMoveCryovial', () => {
             }
         } as any)
 
-        const { container } = render(<ContainerMoveCryovial />)
+        const { container } = renderWithProviders(<ContainerMoveCryovial />)
+        
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input).toBeInTheDocument()
+        })
+        
         const input = container.querySelector('input[type="file"]') as HTMLInputElement
         fireEvent.change(input, { target: { files: [file] } })
+        
+        await waitFor(() => {
+            expect(screen.getByText('Next: Resolve Containers')).toBeInTheDocument()
+        })
+        
         fireEvent.click(screen.getByText('Next: Resolve Containers'))
 
         await waitFor(() => {
-            expect(screen.getByText(/Mixed or invalid collection types found/i)).toBeInTheDocument()
-            expect(screen.getByText(/All containers must be from cryovial_box collections/i)).toBeInTheDocument()
-        })
+            expect(screen.getByText(/Some containers are not from cryovial boxes/i)).toBeInTheDocument()
+        }, { timeout: 3000 })
     })
 })

@@ -1,52 +1,94 @@
-import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
-import { serveStatic } from '@hono/node-server/serve-static'
+import { serveStatic } from 'hono/bun'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
-import authRoutes from './routes/auth'
-import studiesRoutes from './routes/studies'
-import specimensRoutes from './routes/specimens'
-import controlsRoutes from './routes/controls'
-import reagentsRoutes from './routes/reagents'
-import locationsRoutes from './routes/locations'
+import { rateLimit } from './middleware/rate-limit'
+import { createDatabase } from './db/client'
+import { study } from './db/schema'
+import { createAuthRoutes } from './routes/auth'
+import { createStudiesRoutes } from './routes/studies'
+import { createSpecimensRoutes } from './routes/specimens'
+import { createControlsRoutes } from './routes/controls'
+import { createSetupRoutes } from './routes/setup'
+import { createSubjectsRoutes } from './routes/subjects'
+import { createLocationsRoutes } from './routes/locations'
+import { createReagentsRoutes } from './routes/reagents'
+import { createActivityRoutes } from './routes/activity'
+import { createSpecimenTypesRoutes } from './routes/specimen-types'
+import { createStorageTypesRoutes } from './routes/storage-types'
+import { createStrainsRoutes } from './routes/strains'
+import { createCellLinesRoutes } from './routes/cell-lines'
+import { createPlasmidsRoutes } from './routes/plasmids'
+import { createStandardsRoutes } from './routes/standards'
+import { createTagsRoutes } from './routes/tags'
+import { createUnitsRoutes } from './routes/units'
+// TODO: Convert remaining routes to factory functions
 import exportRoutes from './routes/export'
 import searchRoutes from './routes/search'
 import containersRoutes from './routes/containers'
 import derivationsRoutes from './routes/derivations'
 import importsRoutes from './routes/imports'
-import subjectsRoutes from './routes/subjects'
-import activityRoutes from './routes/activity'
 import collectionsRoutes from './routes/collections'
-import specimenTypesRoutes from './routes/specimen-types'
-import storageTypesRoutes from './routes/storage-types'
-import strainsRoutes from './routes/strains'
-import cellLinesRoutes from './routes/cell-lines'
-import plasmidsRoutes from './routes/plasmids'
-import standardsRoutes from './routes/standards'
 import statisticsRoutes from './routes/statistics'
-import setupRoutes from './routes/setup'
-import tagsRoutes from './routes/tags'
 import settingsRoutes from './routes/settings'
-import unitsRoutes from './routes/units'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
+
+// Create database instance
+const { db, sqlite } = createDatabase()
 
 const app = new Hono()
 
 // Middleware
 app.use('*', logger())
 app.use('*', cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'],
+  origin: process.env.NODE_ENV === 'production' 
+    ? process.env.ALLOWED_ORIGINS?.split(',') || []
+    : ['http://localhost:5173', 'http://localhost:3000'],
   credentials: true,
 }))
 
 // Health check
-app.get('/health', (c) => {
-  return c.json({ status: 'ok', timestamp: new Date().toISOString() })
+app.get('/health', async (c) => {
+  const startTime = Date.now()
+  const health: {
+    status: 'ok' | 'degraded' | 'error'
+    timestamp: string
+    uptime: number
+    database: { status: 'ok' | 'error'; latency?: number }
+    version: string
+  } = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    database: { status: 'ok' },
+    version: '1.0.0',
+  }
+
+  // Check database connectivity
+  try {
+    const dbStart = Date.now()
+    await db.select().from(study).limit(1)
+    const dbLatency = Date.now() - dbStart
+    health.database = { status: 'ok', latency: dbLatency }
+    
+    // Consider degraded if database is slow
+    if (dbLatency > 1000) {
+      health.status = 'degraded'
+    }
+  } catch (error) {
+    health.status = 'error'
+    health.database = { status: 'error' }
+  }
+
+  const responseTime = Date.now() - startTime
+  const statusCode = health.status === 'error' ? 503 : health.status === 'degraded' ? 200 : 200
+
+  return c.json(health, statusCode)
 })
 
 // API routes
@@ -54,37 +96,58 @@ app.get('/api', (c) => {
   return c.json({ message: 'SampleDB API', version: '1.0.0' })
 })
 
+// OpenAPI documentation
+// Note: Install @hono/swagger-ui for full Swagger UI support
+// For now, returns OpenAPI JSON schema
+app.get('/api/docs', async (c) => {
+  const { openApiInfo } = await import('./lib/openapi')
+  return c.json(openApiInfo)
+})
+
 // Setup routes
-app.route('/api/setup', setupRoutes)
+app.route('/api/setup', createSetupRoutes(db))
 
 // Auth routes
-app.route('/api/auth', authRoutes)
+app.route('/api/auth', createAuthRoutes(db))
 
 // Data routes
-app.route('/api/studies', studiesRoutes)
-app.route('/api/specimens', specimensRoutes)
-app.route('/api/blood-controls', controlsRoutes)
-app.route('/api/reagents', reagentsRoutes)
-app.route('/api/locations', locationsRoutes)
-app.route('/api/export', exportRoutes)
-app.route('/api/search', searchRoutes)
+app.route('/api/studies', createStudiesRoutes(db, sqlite))
+app.route('/api/specimens', createSpecimensRoutes(db))
+app.route('/api/blood-controls', createControlsRoutes(db))
+app.route('/api/reagents', createReagentsRoutes(db))
+app.route('/api/locations', createLocationsRoutes(db, sqlite))
+// Rate limit expensive operations
+const exportApp = new Hono()
+exportApp.use('*', rateLimit(60, 60 * 1000)) // 60 requests per minute (increased from 10)
+exportApp.route('/', exportRoutes)
+app.route('/api/export', exportApp)
+
+const searchApp = new Hono()
+searchApp.use('*', rateLimit(120, 60 * 1000)) // 120 requests per minute (increased from 30)
+searchApp.route('/', searchRoutes)
+app.route('/api/search', searchApp)
+
 app.route('/api/containers', containersRoutes)
 app.route('/api', derivationsRoutes)
-app.route('/api', importsRoutes)
-app.route('/api/subjects', subjectsRoutes)
-app.route('/api/activity', activityRoutes)
+
+const importsApp = new Hono()
+importsApp.use('*', rateLimit(30, 60 * 1000)) // 30 requests per minute (increased from 5)
+importsApp.route('/', importsRoutes)
+app.route('/api/imports', importsApp) // Fixed: mount at /api/imports instead of /api
+app.route('/api/subjects', createSubjectsRoutes(db))
+app.route('/api/activity', createActivityRoutes(db))
 app.route('/api/collections', collectionsRoutes)
-app.route('/api/specimen-types', specimenTypesRoutes)
+app.route('/api/specimen-types', createSpecimenTypesRoutes(db))
 // States route removed - states deprecated
-app.route('/api/storage-types', storageTypesRoutes)
-app.route('/api/strains', strainsRoutes)
-app.route('/api/cell-lines', cellLinesRoutes)
-app.route('/api/plasmids', plasmidsRoutes)
-app.route('/api/standards', standardsRoutes)
+app.route('/api/storage-types', createStorageTypesRoutes(db))
+app.route('/api/strains', createStrainsRoutes(db))
+app.route('/api/cell-lines', createCellLinesRoutes(db))
+app.route('/api/plasmids', createPlasmidsRoutes(db))
+app.route('/api/standards', createStandardsRoutes(db))
 app.route('/api/statistics', statisticsRoutes)
-app.route('/api/tags', tagsRoutes)
+app.route('/api/tags', createTagsRoutes(db))
 app.route('/api/settings', settingsRoutes)
-app.route('/api/units', unitsRoutes)
+app.route('/api/units', createUnitsRoutes(db))
 
 // Serve static files from web build in production
 if (process.env.NODE_ENV === 'production') {
@@ -98,9 +161,9 @@ const port = Number(process.env.PORT) || 3000
 console.log(`🚀 SampleDB API server starting on port ${port}`)
 console.log(`📁 Database: ${process.env.DATABASE_PATH || './sampledb_dev.sqlite (default)'}`)
 
-serve({
+Bun.serve({
   fetch: app.fetch,
   port,
-}, (info) => {
-  console.log(`✅ Server running at http://localhost:${info.port}`)
 })
+
+console.log(`✅ Server running at http://localhost:${port}`)

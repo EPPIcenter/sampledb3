@@ -13,16 +13,6 @@ import SkeletonCard from '../components/SkeletonCard'
 type SettingsCategory = 'application' | 'security' | 'data-management'
 type SettingsSection = 'container-defaults' | 'pagination' | 'password' | 'session' | 'export-configurations' | 'scanner-configurations'
 
-// Map old tab IDs to new category/section structure for backward compatibility
-const tabToCategorySection: Record<string, { category: SettingsCategory; section: SettingsSection }> = {
-  'container-defaults': { category: 'application', section: 'container-defaults' },
-  'pagination': { category: 'application', section: 'pagination' },
-  'password': { category: 'security', section: 'password' },
-  'session': { category: 'security', section: 'session' },
-  'export-configurations': { category: 'data-management', section: 'export-configurations' },
-  'scanner-configurations': { category: 'data-management', section: 'scanner-configurations' },
-}
-
 interface SettingsStructure {
   id: SettingsCategory
   label: string
@@ -104,18 +94,11 @@ const settingsStructure: SettingsStructure[] = [
 export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams()
   
-  // Handle backward compatibility with old ?tab= param
-  const tabParam = searchParams.get('tab')
   const categoryParam = searchParams.get('category') as SettingsCategory | null
   const sectionParam = searchParams.get('section') as SettingsSection | null
   
   // Determine initial category and section
   const getInitialCategoryAndSection = (): { category: SettingsCategory; section: SettingsSection } => {
-    // If old tab param exists, map it to new structure
-    if (tabParam && tabToCategorySection[tabParam]) {
-      return tabToCategorySection[tabParam]
-    }
-    
     // Use new params if available
     if (categoryParam && sectionParam) {
       // Validate that the section belongs to the category
@@ -138,20 +121,6 @@ export default function Settings() {
   const [expandedCategories, setExpandedCategories] = useState<Set<SettingsCategory>>(
     new Set([initial.category])
   )
-  
-  // Handle backward compatibility: migrate old ?tab= param to new format
-  useEffect(() => {
-    if (tabParam && tabToCategorySection[tabParam]) {
-      const mapped = tabToCategorySection[tabParam]
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev)
-        next.delete('tab')
-        next.set('category', mapped.category)
-        next.set('section', mapped.section)
-        return next
-      })
-    }
-  }, [tabParam, setSearchParams])
   
   // Update active category/section when URL params change
   useEffect(() => {

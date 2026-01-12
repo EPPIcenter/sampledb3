@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactNode } from 'react'
+import { ToastProvider } from '../../contexts/ToastContext'
 import {
   useSpecimenTypes,
   useSpecimenType,
@@ -44,7 +45,9 @@ function createWrapper() {
 
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <ToastProvider>
+        {children}
+      </ToastProvider>
     </QueryClientProvider>
   )
 }
@@ -81,7 +84,7 @@ describe('useReferenceData Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(result.current.data).toEqual(mockData.specimenTypes)
+      expect(result.current.data).toEqual(mockData)
       expect(api.specimenTypesApi.list).toHaveBeenCalledOnce()
     })
 
@@ -127,7 +130,7 @@ describe('useReferenceData Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(result.current.data).toEqual(mockData.specimenType)
+      expect(result.current.data?.data?.specimenType).toEqual(mockData.specimenType)
       expect(api.specimenTypesApi.get).toHaveBeenCalledWith(1)
     })
 
@@ -169,7 +172,9 @@ describe('useReferenceData Hooks', () => {
 
       const wrapper = ({ children }: { children: ReactNode }) => (
         <QueryClientProvider client={queryClient}>
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </QueryClientProvider>
       )
 
@@ -186,7 +191,7 @@ describe('useReferenceData Hooks', () => {
       })
 
       expect(api.specimenTypesApi.create).toHaveBeenCalledWith({ name: 'New Type' })
-      expect(result.current.data).toEqual(mockCreated.specimenType)
+      expect(result.current.data?.data?.specimenType).toEqual(mockCreated.specimenType)
       expect(invalidateSpy).toHaveBeenCalled()
     })
   })
@@ -219,7 +224,9 @@ describe('useReferenceData Hooks', () => {
 
       const wrapper = ({ children }: { children: ReactNode }) => (
         <QueryClientProvider client={queryClient}>
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </QueryClientProvider>
       )
 
@@ -236,7 +243,7 @@ describe('useReferenceData Hooks', () => {
       })
 
       expect(api.specimenTypesApi.update).toHaveBeenCalledWith(1, { name: 'Updated Name' })
-      expect(result.current.data).toEqual(mockUpdated.specimenType)
+      expect(result.current.data?.data?.specimenType).toEqual(mockUpdated.specimenType)
       expect(invalidateSpy).toHaveBeenCalled()
     })
   })
@@ -260,7 +267,9 @@ describe('useReferenceData Hooks', () => {
 
       const wrapper = ({ children }: { children: ReactNode }) => (
         <QueryClientProvider client={queryClient}>
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </QueryClientProvider>
       )
 
@@ -281,37 +290,8 @@ describe('useReferenceData Hooks', () => {
     })
   })
 
-  describe('useStates', () => {
-    it('should fetch and return states', async () => {
-      const mockData = {
-        states: [
-          { id: 1, name: 'Frozen' },
-          { id: 2, name: 'Thawed' },
-        ],
-      }
-
-      // Note: statesApi no longer exists - states are deprecated
-      // This test should be removed or updated to test a different feature
-      const mockStatesApi = { list: vi.fn() }
-      vi.mocked(mockStatesApi.list).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
-
-      const { result } = renderHook(() => useStates(), {
-        wrapper: createWrapper(),
-      })
-
-      await waitFor(() => {
-        expect(result.current.isSuccess).toBe(true)
-      })
-
-      expect(result.current.data).toEqual(mockData.states)
-    })
-  })
+  // Note: useStates hook has been removed - states are deprecated
+  // The test for useStates has been removed as the hook no longer exists
 
   describe('useStorageTypes', () => {
     it('should fetch and return storage types', async () => {
@@ -338,7 +318,7 @@ describe('useReferenceData Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(result.current.data).toEqual(mockData.storageTypes)
+      expect(result.current.data).toEqual(mockData)
     })
   })
 })

@@ -4,7 +4,7 @@
 
 **Stack Overflow During Worker Cleanup (Non-Blocking)**
 
-When running tests, you may see a `RangeError: Maximum call stack size exceeded` error after all tests complete. This is a **known non-blocking issue** with Vitest/tinypool when using native Node.js modules like `better-sqlite3`.
+When running tests, you may see a `RangeError: Maximum call stack size exceeded` error after all tests complete. This is a **known non-blocking issue** with Vitest/tinypool when using native modules.
 
 - **Impact**: None - all tests pass successfully before the error occurs
 - **When it happens**: Only during worker cleanup/teardown, after all tests complete
@@ -18,10 +18,10 @@ When running tests, you may see a `RangeError: Maximum call stack size exceeded`
 Tests use Vitest for the backend API. Run tests with:
 
 ```bash
-pnpm test          # Run once
-pnpm test:watch    # Watch mode
-pnpm test:ui       # UI mode
-pnpm test:coverage # With coverage
+bun test          # Run once
+bun test:watch    # Watch mode
+bun test:ui       # UI mode
+bun test:coverage # With coverage
 ```
 
 ## Test Structure
@@ -156,7 +156,7 @@ Coverage thresholds are set to 60% for:
 Run coverage reports:
 
 ```bash
-pnpm test:coverage
+bun test:coverage
 ```
 
 Coverage reports are generated in:

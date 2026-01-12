@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData } from '../../__tests__/helpers/test-client'
 import { createCrudRoutes } from '../crud-routes'
 import { setupTestDatabase, cleanupTestDatabase, resetTestDatabase } from '../../__tests__/helpers/db-setup'
 import { tag, storageContainer, storageContainerTag } from '../../db/schema'
@@ -46,9 +46,8 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await client.api.tags.$get()
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data).toHaveProperty('tags')
-      expect(Array.isArray(data.tags)).toBe(true)
+      const data = await getResponseData(res)
+      expect(Array.isArray(data)).toBe(true)
     })
 
     it('should create routes with GET /:id endpoint for getting one', async () => {
@@ -77,10 +76,10 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.tag).toBeDefined()
-      expect(data.tag.id).toBe(testTag.id)
-      expect(data.tag.name).toBe('Test Tag')
+      const data = await getResponseData(res)
+      expect(data).toBeDefined()
+      expect(data.id).toBe(testTag.id)
+      expect(data.name).toBe('Test Tag')
     })
 
     it('should return 404 for non-existent ID', async () => {
@@ -107,7 +106,7 @@ describe('createCrudRoutes Factory', () => {
 
       expect(res.status).toBe(404)
       const data = await res.json()
-      expect(data.error).toBe('Tag not found')
+      expect(data.error).toBe('Tag with id 99999 not found')
     })
 
     it('should return 400 for invalid ID', async () => {
@@ -160,10 +159,10 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
-      expect(data.tag).toBeDefined()
-      expect(data.tag.name).toBe('New Tag')
-      expect(data.tag.id).toBeDefined()
+      const data = await getResponseData(res)
+      expect(data).toBeDefined()
+      expect(data.name).toBe('New Tag')
+      expect(data.id).toBeDefined()
     })
 
     it('should create routes with PUT /:id endpoint for updating', async () => {
@@ -193,8 +192,8 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.tag.name).toBe('Updated Name')
+      const data = await getResponseData(res)
+      expect(data.name).toBe('Updated Name')
     })
 
     it('should create routes with DELETE /:id endpoint for deleting', async () => {
@@ -315,7 +314,7 @@ describe('createCrudRoutes Factory', () => {
         json: { name: 'Duplicate' },
       })
 
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(409)
       const data = await res.json()
       expect(data.error).toContain('already exists')
     })
@@ -347,7 +346,7 @@ describe('createCrudRoutes Factory', () => {
         json: { name: 'Tag 2' },
       })
 
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(409)
       const data = await res.json()
       expect(data.error).toContain('already exists')
     })
@@ -601,9 +600,9 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await client.api.tags.$get()
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.tags[0].name).toBe('TAG 1')
-      expect(data.tags[1].name).toBe('TAG 2')
+      const data = await getResponseData(res)
+      expect(data[0].name).toBe('TAG 1')
+      expect(data[1].name).toBe('TAG 2')
     })
 
     it('should apply transformDetail to detail responses', async () => {
@@ -638,9 +637,9 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.tag.name).toBe('TEST TAG')
-      expect(data.tag.transformed).toBe(true)
+      const data = await getResponseData(res)
+      expect(data.name).toBe('TEST TAG')
+      expect(data.transformed).toBe(true)
     })
   })
 
@@ -736,10 +735,10 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await client.api.tags.$get()
       expect(res.status).toBe(200)
-      const data = await res.json()
-      expect(data.tags.length).toBeGreaterThanOrEqual(3)
+      const data = await getResponseData(res)
+      expect(data.length).toBeGreaterThanOrEqual(3)
       // Should be ordered by name
-      const names = data.tags.map((s: any) => s.name)
+      const names = data.map((s: any) => s.name)
       expect(names).toEqual([...names].sort())
     })
   })

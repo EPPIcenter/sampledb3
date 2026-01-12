@@ -40,6 +40,7 @@ import { HotkeyProvider, useHotkeyContext } from './contexts/HotkeyContext'
 import HotkeyHelpModal from './components/HotkeyHelpModal'
 import CommandPalette from './components/CommandPalette'
 import SearchModal from './components/SearchModal'
+import { ToastContainer } from './components/Toast'
 import { useHotkey, useModifierHotkey, useModifierShiftHotkey } from './hooks/useHotkey'
 import { useBrowserShortcutBlocker } from './hooks/useBrowserShortcutBlocker'
 import { useFloatingButtonsPosition } from './hooks/useFloatingButtonsPosition'
@@ -547,6 +548,7 @@ function AppContent() {
         onClose={closeCommandPalette}
         commands={commands}
       />
+      <ToastContainer />
     </SetupGuard>
   )
 }

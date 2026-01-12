@@ -1,4 +1,5 @@
 import { db } from '../db/client'
+import type { Database } from '../db/client'
 import { study, studySubject, specimenType, micronixTube, storageContainer, cryovialTube, paper } from '../db/schema'
 import { eq, and, inArray } from 'drizzle-orm'
 
@@ -50,9 +51,9 @@ export async function resolveSpecimenTypeByName(name: string): Promise<number | 
 /**
  * Resolve container barcode to container ID
  */
-export async function resolveContainerByBarcode(barcode: string): Promise<number | null> {
+export async function resolveContainerByBarcode(barcode: string, database: Database = db): Promise<number | null> {
   // Try micronix tube
-  const micronix = await db
+  const micronix = await database
     .select({ id: micronixTube.id })
     .from(micronixTube)
     .where(eq(micronixTube.barcode, barcode))
@@ -60,7 +61,7 @@ export async function resolveContainerByBarcode(barcode: string): Promise<number
   if (micronix) return micronix.id
 
   // Try cryovial tube
-  const cryovial = await db
+  const cryovial = await database
     .select({ id: cryovialTube.id })
     .from(cryovialTube)
     .where(eq(cryovialTube.barcode, barcode))
@@ -68,7 +69,7 @@ export async function resolveContainerByBarcode(barcode: string): Promise<number
   if (cryovial) return cryovial.id
 
   // Try paper
-  const paperRec = await db
+  const paperRec = await database
     .select({ id: paper.id })
     .from(paper)
     .where(eq(paper.barcode, barcode))

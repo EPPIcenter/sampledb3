@@ -4,17 +4,17 @@
   "private": true,
   "description": "Laboratory Information Management System for sample tracking, experiment management, and SRA submissions",
   "scripts": {
-    "dev": "pnpm -r --parallel dev",
-    "dev:api": "pnpm --filter @sampledb/api dev",
-    "dev:api:production": "pnpm --filter @sampledb/api dev:production",
-    "dev:web": "pnpm --filter @sampledb/web dev",
-    "dev:production": "pnpm --filter @sampledb/api dev:production & pnpm --filter @sampledb/web dev",
-    "build": "pnpm -r build",
-    "build:api": "pnpm --filter @sampledb/api build",
-    "build:web": "pnpm --filter @sampledb/web build",
-    "start": "pnpm --filter @sampledb/api start",
-    "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "dev": "bun --filter '*' --parallel dev",
+    "dev:api": "bun --filter @sampledb/api dev",
+    "dev:api:production": "bun --filter @sampledb/api dev:production",
+    "dev:web": "bun --filter @sampledb/web dev",
+    "dev:production": "bun --filter @sampledb/api dev:production & bun --filter @sampledb/web dev",
+    "build": "bun --filter '*' build",
+    "build:api": "bun --filter @sampledb/api build",
+    "build:web": "bun --filter @sampledb/web build",
+    "start": "bun --filter @sampledb/api start",
+    "lint": "bun --filter '*' lint",
+    "typecheck": "bun --filter '*' typecheck"
   },
   "keywords": [
     "lims",
@@ -26,7 +26,10 @@
   "author": "",
   "license": "MIT",
   "engines": {
-    "node": ">=20.0.0"
+    "bun": ">=1.0.0"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "dependencies": {}
 }

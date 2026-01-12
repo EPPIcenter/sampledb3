@@ -20,7 +20,7 @@ const bulkDerivationSettingsSchema = z.object({
 
 // Bulk import container derivations from CSV
 // Expects JSON body: { csv: string, dryRun?: boolean, settings?: BulkDerivationSettings }
-imports.post('/imports/derivations-csv', async (c) => {
+imports.post('/derivations-csv', async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -46,7 +46,7 @@ imports.post('/imports/derivations-csv', async (c) => {
 
 // Validate derivations CSV without importing
 // Expects JSON body: { csv: string, settings?: BulkDerivationSettings }
-imports.post('/imports/derivations-csv/validate', async (c) => {
+imports.post('/derivations-csv/validate', async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({

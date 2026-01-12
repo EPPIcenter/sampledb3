@@ -45,7 +45,10 @@ export const study = sqliteTable('study', {
   leadPerson: text('lead_person').notNull(),
   created: text('created').notNull(),
   lastUpdated: text('last_updated').notNull(),
-})
+}, (table) => ({
+  titleIdx: index('study_title_idx').on(table.title),
+  shortCodeIdx: index('study_short_code_idx').on(table.shortCode),
+}))
 
 export const studySubject = sqliteTable('study_subject', {
   id: integer('id').primaryKey(),
@@ -53,7 +56,10 @@ export const studySubject = sqliteTable('study_subject', {
   name: text('name').notNull(),
   created: text('created').notNull(),
   lastUpdated: text('last_updated').notNull(),
-})
+}, (table) => ({
+  studyIdIdx: index('study_subject_study_id_idx').on(table.studyId),
+  nameIdx: index('study_subject_name_idx').on(table.name),
+}))
 
 // Control Production Hierarchy
 export const controlDefinition = sqliteTable('control_definition', {
@@ -75,7 +81,9 @@ export const controlBatch = sqliteTable('control_batch', {
   properties: text('properties', { mode: 'json' }),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
-})
+}, (table) => ({
+  controlDefinitionIdIdx: index('control_batch_control_definition_id_idx').on(table.controlDefinitionId),
+}))
 
 // Other polymorphic source tables
 export const reagent = sqliteTable('reagent', {
@@ -150,7 +158,11 @@ export const specimen = sqliteTable('specimen', {
   specimenSubjectXorControl: check('specimen_subject_xor_control', sql`
     (${table.studySubjectId} IS NOT NULL AND ${table.controlBatchId} IS NULL) OR
     (${table.studySubjectId} IS NULL AND ${table.controlBatchId} IS NOT NULL)
-  `)
+  `),
+  studySubjectIdIdx: index('specimen_study_subject_id_idx').on(table.studySubjectId),
+  controlBatchIdIdx: index('specimen_control_batch_id_idx').on(table.controlBatchId),
+  collectionDateIdx: index('specimen_collection_date_idx').on(table.collectionDate),
+  specimenTypeIdIdx: index('specimen_specimen_type_id_idx').on(table.specimenTypeId),
 }))
 
 export const storageContainer = sqliteTable('storage_container', {
@@ -162,7 +174,9 @@ export const storageContainer = sqliteTable('storage_container', {
   unitId: integer('unit_id').notNull().references(() => unit.id),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
-})
+}, (table) => ({
+  specimenIdIdx: index('storage_container_specimen_id_idx').on(table.specimenId),
+}))
 
 export const storageContainerTag = sqliteTable('storage_container_tag', {
   storageContainerId: integer('storage_container_id').notNull().references(() => storageContainer.id),
@@ -201,7 +215,9 @@ export const micronixPlate = sqliteTable('micronix_plate', {
   barcode: text('barcode').unique(),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
-})
+}, (table) => ({
+  locationIdIdx: index('micronix_plate_location_id_idx').on(table.locationId),
+}))
 
 export const micronixTube = sqliteTable('micronix_tube', {
   id: integer('id').primaryKey().references(() => storageContainer.id),
@@ -217,7 +233,9 @@ export const cryovialBox = sqliteTable('cryovial_box', {
   barcode: text('barcode').unique(),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
-})
+}, (table) => ({
+  locationIdIdx: index('cryovial_box_location_id_idx').on(table.locationId),
+}))
 
 export const cryovialTube = sqliteTable('cryovial_tube', {
   id: integer('id').primaryKey().references(() => storageContainer.id),
@@ -240,7 +258,9 @@ export const bag = sqliteTable('bag', {
   name: text('name').notNull().unique(),
   created: text('created').notNull(),
   lastUpdated: text('last_updated').notNull(),
-})
+}, (table) => ({
+  locationIdIdx: index('bag_location_id_idx').on(table.locationId),
+}))
 
 export const sheet = sqliteTable('sheet', {
   id: integer('id').primaryKey({ autoIncrement: true }),

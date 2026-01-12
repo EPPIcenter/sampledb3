@@ -1,8 +1,9 @@
+import { Hono } from 'hono'
 import { createCrudRoutes } from '../lib/crud-routes'
+import type { Database } from '../db/client'
 import { unit, storageContainer, containerTypeUnit } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '../db/client'
 
 const createSchema = z.object({
   symbol: z.string().min(1, 'Symbol is required'),
@@ -97,19 +98,24 @@ async function validateUpdateUnit(id: number, data: any, database: any): Promise
   return null
 }
 
-const units = createCrudRoutes({
-  table: unit,
-  entityName: 'Unit',
-  pluralName: 'units',
-  singularName: 'unit',
-  createSchema,
-  updateSchema,
-  transformList,
-  orderBy: unit.symbol,
-  checkInUse: checkUnitInUse,
-  validateCreate: validateCreateUnit,
-  validateUpdate: validateUpdateUnit,
-})
-
-export default units
+/**
+ * Create units routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createUnitsRoutes(database: Database): Hono {
+  return createCrudRoutes({
+    table: unit,
+    database,
+    entityName: 'Unit',
+    pluralName: 'units',
+    singularName: 'unit',
+    createSchema,
+    updateSchema,
+    transformList,
+    orderBy: unit.symbol,
+    checkInUse: checkUnitInUse,
+    validateCreate: validateCreateUnit,
+    validateUpdate: validateUpdateUnit,
+  })
+}
 

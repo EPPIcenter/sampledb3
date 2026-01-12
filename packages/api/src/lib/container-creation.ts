@@ -1,4 +1,5 @@
 import { db } from '../db/client'
+import type { Database } from '../db/client'
 import {
   storageContainer,
   micronixTube,
@@ -128,11 +129,12 @@ export async function validateContainerData(
  */
 export async function linkExistingContainer(
   specimenId: number,
-  containerId: number
+  containerId: number,
+  database: Database = db
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Check if container exists and is not already linked
-    const container = await db
+    const container = await database
       .select()
       .from(storageContainer)
       .where(eq(storageContainer.id, containerId))
@@ -147,7 +149,7 @@ export async function linkExistingContainer(
     }
 
     // Update container to link to specimen
-    await db
+    await database
       .update(storageContainer)
       .set({
         specimenId,
@@ -166,10 +168,11 @@ export async function linkExistingContainer(
  */
 async function createMicronixTube(
   specimenId: number,
-  data: ContainerData
+  data: ContainerData,
+  database: Database = db
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
-    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate')
+    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate', database)
     if (!collectionId) return { success: false, error: 'Micronix plate not found' }
 
     const defaultUnitId = await getDefaultUnit('micronix_tube')
@@ -185,7 +188,7 @@ async function createMicronixTube(
     const defaultRemainingQty = await getDefaultRemainingQuantity('micronix_tube')
 
     const now = new Date().toISOString()
-    const [container] = await db.insert(storageContainer).values({
+    const [container] = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
@@ -195,7 +198,7 @@ async function createMicronixTube(
       lastUpdated: now,
     }).returning()
 
-    await db.insert(micronixTube).values({
+    await database.insert(micronixTube).values({
       id: container.id,
       collectionId: collectionId,
       barcode: data.barcode!,
@@ -213,10 +216,11 @@ async function createMicronixTube(
  */
 async function createCryovialTube(
   specimenId: number,
-  data: ContainerData
+  data: ContainerData,
+  database: Database = db
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
-    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'cryovial_box')
+    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'cryovial_box', database)
     if (!collectionId) return { success: false, error: 'Cryovial box not found' }
 
     const defaultUnitId = await getDefaultUnit('cryovial_tube')
@@ -232,7 +236,7 @@ async function createCryovialTube(
     const defaultRemainingQty = await getDefaultRemainingQuantity('cryovial_tube')
 
     const now = new Date().toISOString()
-    const [container] = await db.insert(storageContainer).values({
+    const [container] = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
@@ -242,7 +246,7 @@ async function createCryovialTube(
       lastUpdated: now,
     }).returning()
 
-    await db.insert(cryovialTube).values({
+    await database.insert(cryovialTube).values({
       id: container.id,
       collectionId: collectionId,
       barcode: data.barcode || null,
@@ -260,11 +264,12 @@ async function createCryovialTube(
  */
 async function createPaper(
   specimenId: number,
-  data: ContainerData
+  data: ContainerData,
+  database: Database = db
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
     // Resolve sheet
-    const sheetRecord = await db.select({ id: sheet.id }).from(sheet).where(eq(sheet.name, data.collectionName!)).get()
+    const sheetRecord = await database.select({ id: sheet.id }).from(sheet).where(eq(sheet.name, data.collectionName!)).get()
     if (!sheetRecord) return { success: false, error: 'Sheet not found' }
 
     const defaultUnitId = await getDefaultUnit('paper')
@@ -280,7 +285,7 @@ async function createPaper(
     const defaultRemainingQty = await getDefaultRemainingQuantity('paper')
 
     const now = new Date().toISOString()
-    const [container] = await db.insert(storageContainer).values({
+    const [container] = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
@@ -290,7 +295,7 @@ async function createPaper(
       lastUpdated: now,
     }).returning()
 
-    await db.insert(paper).values({
+    await database.insert(paper).values({
       id: container.id,
       sheetId: sheetRecord.id,
       barcode: data.barcode || null,
@@ -308,10 +313,11 @@ async function createPaper(
  */
 async function createStaticWell(
   specimenId: number,
-  data: ContainerData
+  data: ContainerData,
+  database: Database = db
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
-    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate')
+    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate', database)
     if (!collectionId) return { success: false, error: 'Micronix plate not found' }
 
     const defaultUnitId = await getDefaultUnit('static_well')
@@ -327,7 +333,7 @@ async function createStaticWell(
     const defaultRemainingQty = await getDefaultRemainingQuantity('static_well')
 
     const now = new Date().toISOString()
-    const [container] = await db.insert(storageContainer).values({
+    const [container] = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
@@ -337,7 +343,7 @@ async function createStaticWell(
       lastUpdated: now,
     }).returning()
 
-    await db.insert(staticWell).values({
+    await database.insert(staticWell).values({
       id: container.id,
       collectionId: collectionId,
       position: normalizePosition(data.position),
@@ -354,7 +360,8 @@ async function createStaticWell(
  */
 export async function createContainerForSpecimen(
   specimenId: number,
-  data: ContainerData
+  data: ContainerData,
+  database: Database = db
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   const validation = await validateContainerData(data.containerType, data)
   if (!validation.valid) return { success: false, error: validation.error }
@@ -362,14 +369,14 @@ export async function createContainerForSpecimen(
   if (data.mode === 'skip') return { success: true }
 
   // Get specimen to find specimen type ID for validation
-  const specimenRecord = await db.select({ specimenTypeId: specimen.specimenTypeId }).from(specimen).where(eq(specimen.id, specimenId)).get()
+  const specimenRecord = await database.select({ specimenTypeId: specimen.specimenTypeId }).from(specimen).where(eq(specimen.id, specimenId)).get()
   if (!specimenRecord) {
     return { success: false, error: 'Specimen not found' }
   }
 
   // Validate container type is allowed for specimen type
   if (data.containerType) {
-    const containerTypeValidation = await validateContainerTypeForSpecimenType(specimenRecord.specimenTypeId, data.containerType)
+    const containerTypeValidation = await validateContainerTypeForSpecimenType(specimenRecord.specimenTypeId, data.containerType, database)
     if (!containerTypeValidation.valid) {
       return { success: false, error: containerTypeValidation.error }
     }
@@ -377,21 +384,21 @@ export async function createContainerForSpecimen(
 
   if (data.mode === 'link') {
     if (data.containerType === 'micronix_tube' && data.containerBarcode) {
-      const container = await db.select({ id: micronixTube.id }).from(micronixTube).where(eq(micronixTube.barcode, data.containerBarcode)).get()
+      const container = await database.select({ id: micronixTube.id }).from(micronixTube).where(eq(micronixTube.barcode, data.containerBarcode)).get()
       if (!container) return { success: false, error: `Container with barcode '${data.containerBarcode}' not found` }
-      return linkExistingContainer(specimenId, container.id)
+      return linkExistingContainer(specimenId, container.id, database)
     } else if (data.containerId) {
-      return linkExistingContainer(specimenId, data.containerId)
+      return linkExistingContainer(specimenId, data.containerId, database)
     } else {
       return { success: false, error: 'Container identifier required for linking' }
     }
   }
 
   switch (data.containerType) {
-    case 'micronix_tube': return createMicronixTube(specimenId, data)
-    case 'cryovial_tube': return createCryovialTube(specimenId, data)
-    case 'paper': return createPaper(specimenId, data)
-    case 'static_well': return createStaticWell(specimenId, data)
+    case 'micronix_tube': return createMicronixTube(specimenId, data, database)
+    case 'cryovial_tube': return createCryovialTube(specimenId, data, database)
+    case 'paper': return createPaper(specimenId, data, database)
+    case 'static_well': return createStaticWell(specimenId, data, database)
     default: return { success: false, error: `Unsupported container type: ${data.containerType}` }
   }
 }

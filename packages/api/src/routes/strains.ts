@@ -1,4 +1,6 @@
+import { Hono } from 'hono'
 import { createCrudRoutes } from '../lib/crud-routes'
+import type { Database } from '../db/client'
 import { strain, controlDefinition } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
@@ -36,14 +38,19 @@ async function checkStrainInUse(id: number, database: any): Promise<string | nul
   return null
 }
 
-const strains = createCrudRoutes({
-  table: strain,
-  entityName: 'Strain',
-  pluralName: 'strains',
-  singularName: 'strain',
-  createSchema,
-  checkInUse: checkStrainInUse,
-})
-
-export default strains
+/**
+ * Create strains routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createStrainsRoutes(database: Database): Hono {
+  return createCrudRoutes({
+    table: strain,
+    database,
+    entityName: 'Strain',
+    pluralName: 'strains',
+    singularName: 'strain',
+    createSchema,
+    checkInUse: checkStrainInUse,
+  })
+}
 

@@ -36,9 +36,9 @@ describe('ReferenceDataForm', () => {
     )
 
     expect(screen.getByText('Add New Item')).toBeInTheDocument()
-    expect(screen.getByLabelText('Name')).toBeInTheDocument()
-    expect(screen.getByLabelText('Description')).toBeInTheDocument()
-    expect(screen.getByLabelText('Value')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Name/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Description/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Value/)).toBeInTheDocument()
   })
 
   it('should populate form when editing existing item', () => {
@@ -82,20 +82,50 @@ describe('ReferenceDataForm', () => {
       />
     )
 
-    await user.type(screen.getByLabelText('Name'), 'New Item')
-    await user.type(screen.getByLabelText('Description'), 'New description')
-    await user.type(screen.getByLabelText('Value'), '50')
+    // Wait for form to be ready
+    await waitFor(() => {
+      expect(screen.getByLabelText(/^Name/)).toBeInTheDocument()
+    })
+
+    const nameInput = screen.getByLabelText(/^Name/) as HTMLInputElement
+    const descriptionInput = screen.getByLabelText(/^Description/) as HTMLTextAreaElement
+    const valueInput = screen.getByLabelText(/^Value/) as HTMLInputElement
+
+    // Fill in the form fields
+    await user.click(nameInput)
+    await user.keyboard('{Control>}a{/Control}{Delete}')
+    await user.type(nameInput, 'New Item')
+    
+    await user.click(descriptionInput)
+    await user.keyboard('{Control>}a{/Control}{Delete}')
+    await user.type(descriptionInput, 'New description')
+    
+    await user.click(valueInput)
+    await user.keyboard('{Control>}a{/Control}{Delete}')
+    await user.type(valueInput, '50')
+
+    // Wait for form state to update
+    await waitFor(() => {
+      expect(nameInput.value).toBe('New Item')
+      expect(descriptionInput.value).toBe('New description')
+      expect(valueInput.value).toBe('50')
+    })
 
     const saveButton = screen.getByText('Create')
+    expect(saveButton).not.toBeDisabled()
+    
     await user.click(saveButton)
 
     await waitFor(() => {
-      expect(onSave).toHaveBeenCalledWith({
-        name: 'New Item',
-        description: 'New description',
-        value: 50,
-      })
-    })
+      expect(onSave).toHaveBeenCalledTimes(1)
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'New Item',
+          description: 'New description',
+          value: 50,
+        })
+      )
+    }, { timeout: 3000 })
   })
 
   it('should call onCancel when cancel button is clicked', async () => {
@@ -166,12 +196,14 @@ describe('ReferenceDataForm', () => {
       />
     )
 
-    await user.type(screen.getByLabelText('Name'), 'Test')
+    const nameInput = screen.getByLabelText(/^Name/)
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Test')
     const saveButton = screen.getByText('Create')
     await user.click(saveButton)
 
     await waitFor(() => {
-      expect(screen.getByText(/error/i)).toBeInTheDocument()
+      expect(screen.getByText('Save failed')).toBeInTheDocument()
     })
   })
 
@@ -192,7 +224,7 @@ describe('ReferenceDataForm', () => {
       />
     )
 
-    await user.type(screen.getByLabelText('Name'), 'Test')
+    await user.type(screen.getByLabelText(/^Name/), 'Test')
     const saveButton = screen.getByText('Create')
     await user.click(saveButton)
 

@@ -1,4 +1,6 @@
+import { Hono } from 'hono'
 import { createCrudRoutes } from '../lib/crud-routes'
+import type { Database } from '../db/client'
 import { storageType, location } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
@@ -36,14 +38,19 @@ async function checkStorageTypeInUse(id: number, database: any): Promise<string 
   return null
 }
 
-const storageTypes = createCrudRoutes({
-  table: storageType,
-  entityName: 'Storage type',
-  pluralName: 'storageTypes',
-  singularName: 'storageType',
-  createSchema,
-  checkInUse: checkStorageTypeInUse,
-})
-
-export default storageTypes
+/**
+ * Create storage types routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createStorageTypesRoutes(database: Database): Hono {
+  return createCrudRoutes({
+    table: storageType,
+    database,
+    entityName: 'Storage type',
+    pluralName: 'storageTypes',
+    singularName: 'storageType',
+    createSchema,
+    checkInUse: checkStorageTypeInUse,
+  })
+}
 

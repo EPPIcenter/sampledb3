@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import { 
   specimen, 
   study, 
@@ -13,15 +13,20 @@ import {
 } from '../db/schema'
 import { sql, eq } from 'drizzle-orm'
 
-const activity = new Hono()
+/**
+ * Create activity routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createActivityRoutes(database: Database): Hono {
+  const activity = new Hono()
 
-// Get recent activity across all entity types
-activity.get('/recent', async (c) => {
+  // Get recent activity across all entity types
+  activity.get('/recent', async (c) => {
   try {
     const limit = parseInt(c.req.query('limit') || '10')
     
     // Get recent specimens with enriched data
-    const recentSpecimens = await db
+    const recentSpecimens = await database
       .select({
         id: specimen.id,
         type: sql<string>`'specimen'`.as('type'),
@@ -48,7 +53,7 @@ activity.get('/recent', async (c) => {
         
         if (spec.studySubjectId) {
           try {
-            const subject = await db
+            const subject = await database
               .select({
                 name: studySubject.name,
                 studyId: studySubject.studyId,
@@ -58,7 +63,7 @@ activity.get('/recent', async (c) => {
               .get()
             
             if (subject) {
-              const studyRecord = await db
+              const studyRecord = await database
                 .select({
                   title: study.title,
                   shortCode: study.shortCode,
@@ -91,7 +96,7 @@ activity.get('/recent', async (c) => {
     )
     
     // Get recent studies with enriched data
-    const recentStudies = await db
+    const recentStudies = await database
       .select({
         id: study.id,
         type: sql<string>`'study'`.as('type'),
@@ -114,7 +119,7 @@ activity.get('/recent', async (c) => {
       )
     
     // Get recent containers with enriched data
-    const recentContainers = await db
+    const recentContainers = await database
       .select({
         id: storageContainer.id,
         created: storageContainer.created,
@@ -130,19 +135,19 @@ activity.get('/recent', async (c) => {
       recentContainers.map(async (container) => {
         // Determine container type by checking subtype tables
         const [micronixInfo, cryovialInfo, paperInfo, staticWellInfo] = await Promise.all([
-          db.select({ barcode: micronixTube.barcode, position: micronixTube.position })
+          database.select({ barcode: micronixTube.barcode, position: micronixTube.position })
             .from(micronixTube)
             .where(eq(micronixTube.id, container.id))
             .get(),
-          db.select({ barcode: cryovialTube.barcode, position: cryovialTube.position })
+          database.select({ barcode: cryovialTube.barcode, position: cryovialTube.position })
             .from(cryovialTube)
             .where(eq(cryovialTube.id, container.id))
             .get(),
-          db.select({ barcode: paper.barcode, position: paper.position })
+          database.select({ barcode: paper.barcode, position: paper.position })
             .from(paper)
             .where(eq(paper.id, container.id))
             .get(),
-          db.select({ position: staticWell.position })
+          database.select({ position: staticWell.position })
             .from(staticWell)
             .where(eq(staticWell.id, container.id))
             .get(),
@@ -187,7 +192,7 @@ activity.get('/recent', async (c) => {
         // Get specimen info for context
         if (container.specimenId) {
           try {
-            const spec = await db
+            const spec = await database
               .select({
                 id: specimen.id,
                 specimenTypeId: specimen.specimenTypeId,
@@ -198,7 +203,7 @@ activity.get('/recent', async (c) => {
               .get()
             
             if (spec) {
-              const specType = await db
+              const specType = await database
                 .select({ name: specimenType.name })
                 .from(specimenType)
                 .where(eq(specimenType.id, spec.specimenTypeId))
@@ -210,7 +215,7 @@ activity.get('/recent', async (c) => {
               
               if (spec.studySubjectId) {
                 try {
-                  const subject = await db
+                  const subject = await database
                     .select({
                       name: studySubject.name,
                       studyId: studySubject.studyId,
@@ -220,7 +225,7 @@ activity.get('/recent', async (c) => {
                     .get()
                   
                   if (subject) {
-                    const studyRecord = await db
+                    const studyRecord = await database
                       .select({
                         shortCode: study.shortCode,
                       })
@@ -275,4 +280,5 @@ activity.get('/recent', async (c) => {
   }
 })
 
-export default activity
+  return activity
+}

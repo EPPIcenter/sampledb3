@@ -41,9 +41,13 @@ export default function ContainerDetail() {
   const [loading, setLoading] = useState(true)
   const [derivations, setDerivations] = useState<Derivation[]>([])
   const [sourceDerivation, setSourceDerivation] = useState<{
-    derivation: Derivation
-    parentContainer: any
-    parentSpecimen: any
+    type: 'derivation' | 'original'
+    derivation?: Derivation
+    parentContainer?: any
+    parentSpecimen?: any
+    source?: any
+    container?: any
+    specimen?: any
   } | null>(null)
   const [loadingDerivations, setLoadingDerivations] = useState(false)
   const [showDerivationModal, setShowDerivationModal] = useState(false)
@@ -347,8 +351,8 @@ export default function ContainerDetail() {
 
       {/* Derivation Sections */}
       <div className="mt-6 space-y-4">
-        {/* Source Information (if this container is a child) */}
-        {sourceDerivation && (
+        {/* Source Information (if this container is a child via derivation) */}
+        {sourceDerivation && sourceDerivation.type === 'derivation' && sourceDerivation.derivation && (
           <div className="bg-white rounded-lg border border-gray-100 p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold text-gray-900">Source Information</h3>
@@ -359,12 +363,14 @@ export default function ContainerDetail() {
                 >
                   View Chain
                 </button>
-                <button
-                  onClick={() => navigate(`/containers/${sourceDerivation.parentContainer.id}`)}
-                  className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
-                >
-                  View Parent →
-                </button>
+                {sourceDerivation.parentContainer && (
+                  <button
+                    onClick={() => navigate(`/containers/${sourceDerivation.parentContainer.id}`)}
+                    className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    View Parent →
+                  </button>
+                )}
               </div>
             </div>
             <div className="space-y-2 text-sm">
@@ -456,7 +462,7 @@ export default function ContainerDetail() {
         )}
 
         {/* Create Derivation Button (if no derivations yet) */}
-        {!loadingDerivations && derivations.length === 0 && !sourceDerivation && (
+        {!loadingDerivations && derivations.length === 0 && (!sourceDerivation || sourceDerivation.type === 'original') && (
           <div className="bg-white rounded-lg border border-gray-100 p-4">
             <div className="flex items-center justify-between">
               <div>

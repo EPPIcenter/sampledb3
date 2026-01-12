@@ -1,4 +1,6 @@
+import { Hono } from 'hono'
 import { createCrudRoutes } from '../lib/crud-routes'
+import type { Database } from '../db/client'
 import { tag, storageContainerTag } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
@@ -24,15 +26,20 @@ async function checkTagInUse(id: number, database: any): Promise<string | null> 
   return null
 }
 
-const tags = createCrudRoutes({
-  table: tag,
-  entityName: 'Tag',
-  pluralName: 'tags',
-  singularName: 'tag',
-  createSchema,
-  checkInUse: checkTagInUse,
-})
-
-export default tags
+/**
+ * Create tags routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createTagsRoutes(database: Database): Hono {
+  return createCrudRoutes({
+    table: tag,
+    database,
+    entityName: 'Tag',
+    pluralName: 'tags',
+    singularName: 'tag',
+    createSchema,
+    checkInUse: checkTagInUse,
+  })
+}
 
 

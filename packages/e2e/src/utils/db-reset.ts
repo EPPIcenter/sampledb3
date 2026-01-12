@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import Database from 'better-sqlite3';
+import { Database } from 'bun:sqlite';
 
 const DB_PATH = path.resolve(__dirname, '../../sampledb_e2e.sqlite');
 const API_PKG_PATH = path.resolve(__dirname, '../../../api');
@@ -14,7 +14,7 @@ export async function resetDatabase() {
         try {
             const db = new Database(DB_PATH);
             // Disable foreign keys to allow deleting in any order
-            db.pragma('foreign_keys = OFF');
+            db.exec('PRAGMA foreign_keys = OFF');
 
             // Get all tables
             const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all() as { name: string }[];
@@ -25,7 +25,7 @@ export async function resetDatabase() {
 
             // No need to reset sqlite_sequence as we dropped tables.
 
-            db.pragma('foreign_keys = ON');
+            db.exec('PRAGMA foreign_keys = ON');
             db.close();
             console.log('Data cleared.');
 
@@ -45,7 +45,7 @@ export async function resetDatabase() {
 
     console.log('Pushing schema to ensure up-to-date...');
     try {
-        execSync(`DATABASE_PATH=${DB_PATH} pnpm exec drizzle-kit push`, {
+        execSync(`DATABASE_PATH=${DB_PATH} bun exec drizzle-kit push`, {
             cwd: API_PKG_PATH,
             stdio: 'inherit',
             env: { ...process.env, DATABASE_PATH: DB_PATH }

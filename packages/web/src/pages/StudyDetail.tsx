@@ -118,7 +118,8 @@ export default function StudyDetail() {
         setSubjectsTotal(response.data.pagination.total)
         setSubjectsTotalPages(response.data.pagination.totalPages)
       } else {
-        // Fallback for backward compatibility
+        // Pagination should always be present - handle missing pagination as error case
+        console.warn('Missing pagination in subjects response')
         setSubjectsTotal(response.data.subjects?.length || 0)
         setSubjectsTotalPages(1)
       }

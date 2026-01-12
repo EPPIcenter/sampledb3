@@ -18,10 +18,10 @@ When running tests, you may see a `RangeError: Maximum call stack size exceeded`
 Tests use Vitest + React Testing Library. Run tests with:
 
 ```bash
-pnpm test          # Run once
-pnpm test:watch    # Watch mode
-pnpm test:ui       # UI mode
-pnpm test:coverage # With coverage
+bun test          # Run once
+bun test:watch    # Watch mode
+bun test:ui       # UI mode
+bun test:coverage # With coverage
 ```
 
 ## Test Structure
@@ -169,7 +169,7 @@ Coverage thresholds are set to 60% for:
 Run coverage reports:
 
 ```bash
-pnpm test:coverage
+bun test:coverage
 ```
 
 Coverage reports are generated in:

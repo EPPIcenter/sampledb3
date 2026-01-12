@@ -1,18 +1,23 @@
 import { Hono } from 'hono'
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import { reagent } from '../db/schema'
 import { eq, and, lte } from 'drizzle-orm'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 
-const reagents = new Hono()
+/**
+ * Create reagents routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createReagentsRoutes(database: Database): Hono {
+  const reagents = new Hono()
 
-// List all reagents
-reagents.get('/', async (c) => {
-  const type = c.req.query('type')
-  const expiringWithinDays = c.req.query('expiring_within_days')
-  
-  let query = db.select().from(reagent)
+  // List all reagents
+  reagents.get('/', async (c) => {
+    const type = c.req.query('type')
+    const expiringWithinDays = c.req.query('expiring_within_days')
+    
+    let query = database.select().from(reagent)
   
   const conditions = []
   
@@ -49,11 +54,11 @@ reagents.get('/:id', async (c) => {
     return c.json({ error: 'Invalid reagent ID' }, 400)
   }
 
-  const reagentRecord = await db
-    .select()
-    .from(reagent)
-    .where(eq(reagent.id, id))
-    .get()
+    const reagentRecord = await database
+      .select()
+      .from(reagent)
+      .where(eq(reagent.id, id))
+      .get()
 
   if (!reagentRecord) {
     return c.json({ error: 'Reagent not found' }, 404)
@@ -80,7 +85,7 @@ reagents.post('/', async (c) => {
     
     const data = schema.parse(body)
     
-    const [newReagent] = await db
+    const [newReagent] = await database
       .insert(reagent)
       .values(data)
       .returning()
@@ -117,7 +122,7 @@ reagents.patch('/:id', async (c) => {
     
     const data = schema.parse(body)
     
-    const [updated] = await db
+    const [updated] = await database
       .update(reagent)
       .set({
         ...data,
@@ -137,6 +142,7 @@ reagents.patch('/:id', async (c) => {
     }
     return c.json({ error: 'Internal server error' }, 500)
   }
-})
+  })
 
-export default reagents
+  return reagents
+}

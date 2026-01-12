@@ -1,4 +1,5 @@
 import { db } from '../db/client'
+import type { Database } from '../db/client'
 import { studySubject, study, specimen, specimenType, controlBatch, controlDefinition, specimenTypeContainerType, containerTypeUnit, unit } from '../db/schema'
 import { eq, and, like, sql } from 'drizzle-orm'
 import { resolveStudyByShortCode, resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
@@ -236,7 +237,7 @@ export async function validateSpecimenData(data: {
   specimenTypeName?: string
   specimenTypeId?: number
   collectionDate?: string
-}): Promise<{ 
+}, database: Database = db): Promise<{ 
   valid: boolean; 
   error?: string; 
   resolved?: { 
@@ -252,7 +253,7 @@ export async function validateSpecimenData(data: {
   if (data.sourceType === 'subject') {
     if (data.sourceId) {
       // Verify the subject exists
-      const subject = await db.select({ id: studySubject.id }).from(studySubject).where(eq(studySubject.id, data.sourceId)).get()
+      const subject = await database.select({ id: studySubject.id }).from(studySubject).where(eq(studySubject.id, data.sourceId)).get()
       if (!subject) {
         return { valid: false, error: `Subject with ID ${data.sourceId} not found` }
       }
@@ -277,7 +278,7 @@ export async function validateSpecimenData(data: {
       return { valid: false, error: 'Control Batch ID required for control specimens' }
     }
     // Verify control batch exists
-    const batch = await db.select({ id: controlBatch.id }).from(controlBatch).where(eq(controlBatch.id, data.sourceId)).get()
+    const batch = await database.select({ id: controlBatch.id }).from(controlBatch).where(eq(controlBatch.id, data.sourceId)).get()
     if (!batch) {
       return { valid: false, error: `Control Batch with ID ${data.sourceId} not found` }
     }
@@ -352,10 +353,11 @@ export function checkDuplicateSpecimens(
  */
 export async function validateContainerTypeForSpecimenType(
   specimenTypeId: number,
-  containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well'
+  containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well',
+  database: Database = db
 ): Promise<{ valid: boolean; error?: string }> {
   // Check if relationship exists
-  const relationship = await db
+  const relationship = await database
     .select()
     .from(specimenTypeContainerType)
     .where(
@@ -368,7 +370,7 @@ export async function validateContainerTypeForSpecimenType(
 
   if (!relationship) {
     // Get specimen type name for error message
-    const specType = await db.select().from(specimenType).where(eq(specimenType.id, specimenTypeId)).get()
+    const specType = await database.select().from(specimenType).where(eq(specimenType.id, specimenTypeId)).get()
     const specTypeName = specType?.name || `ID ${specimenTypeId}`
     
     return {
