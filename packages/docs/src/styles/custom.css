@@ -1,0 +1,24 @@
+/* SampleDB Documentation Custom Styles */
+/* Matching the application's design language with Starlight's theming system */
+
+/* Override Starlight's accent color to match app's blue-600 */
+:root[data-theme="light"] {
+	--sl-color-accent-low: #dbeafe;
+	--sl-color-accent: #3b82f6; /* blue-600 - matches app */
+	--sl-color-accent-high: #1e40af; /* blue-800 */
+}
+
+/* Logo styling - ensure it displays properly */
+header .logo img {
+	height: 2rem;
+	width: auto;
+}
+
+/* Match app's font stack */
+body {
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+		'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+		sans-serif;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}

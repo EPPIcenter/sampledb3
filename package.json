@@ -8,10 +8,12 @@
     "dev:api": "bun --filter @sampledb/api dev",
     "dev:api:production": "bun --filter @sampledb/api dev:production",
     "dev:web": "bun --filter @sampledb/web dev",
-    "dev:production": "bun --filter @sampledb/api dev:production & bun --filter @sampledb/web dev",
+    "dev:production": "bun --filter @sampledb/api dev:production & bun --filter @sampledb/web dev & bun --filter @sampledb/docs dev",
+    "dev:docs": "bun --filter @sampledb/docs dev",
     "build": "bun --filter '*' build",
     "build:api": "bun --filter @sampledb/api build",
     "build:web": "bun --filter @sampledb/web build",
+    "build:docs": "bun --filter @sampledb/docs build",
     "start": "bun --filter @sampledb/api start",
     "lint": "bun --filter '*' lint",
     "typecheck": "bun --filter '*' typecheck"

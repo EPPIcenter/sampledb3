@@ -1,0 +1,94 @@
+---
+title: Welcome to SampleDB
+description: Complete user guide for SampleDB laboratory sample management system
+template: splash
+hero:
+  tagline: Your complete guide to managing laboratory samples with SampleDB
+  actions:
+    - text: Get Started
+      link: /guides/getting-started/setup/
+      icon: right-arrow
+    - text: Dashboard Overview
+      link: /guides/getting-started/dashboard/
+      icon: document
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What is SampleDB?
+
+SampleDB is a comprehensive laboratory sample management system designed to help wet lab teams track and manage biological samples, containers, and storage locations efficiently. Whether you're working with research studies, control batches, or specimen derivations, SampleDB provides the tools you need to maintain accurate records and streamline your workflows.
+
+The system helps you organize everything from initial sample collection through long-term storage, tracking each specimen's journey from subject to container to location. With features for bulk import, export, and container management, SampleDB scales from small pilot studies to large multi-site research projects.
+
+## Understanding the Core Concepts
+
+Before diving into the guides, it's helpful to understand how SampleDB organizes your laboratory data. The system is built around a few key concepts that work together to create a complete picture of your sample inventory.
+
+**Studies** form the foundation of your organization. Think of a study as a research project or clinical trial that brings together related work. Each study has a unique short code (like "NAM15" or "TCC08") that you'll use throughout the system to identify which study a sample belongs to. Studies can contain many subjects, and you can track statistics and progress at the study level.
+
+**Subjects** are the individual participants or sample sources within a study. If you're running a clinical trial, each subject might be a patient. In a research study, subjects might be animals, cell lines, or other sample sources. Each subject can have multiple specimens collected over time, especially in longitudinal studies where you track samples across multiple timepoints.
+
+**Specimens** are the actual biological samples you're managing—the blood, plasma, DNA, or other materials collected from subjects or control batches. Each specimen has a type (like Whole Blood or Plasma), a collection date, and can be associated with a physical container for storage tracking.
+
+**Containers** are the physical storage units that hold your specimens. SampleDB supports several container types to match your laboratory's storage methods. Micronix tubes are small tubes typically stored in 96-well plates, perfect for DNA samples or small volumes. Cryovial tubes are standard vials stored in boxes, ideal for larger liquid samples. Papers represent dried blood spot (DBS) sheets stored in boxes or bags. Static wells are fixed-position containers in plates, useful for specific assay formats.
+
+**Collections** group containers together for organization. A Micronix plate holds multiple micronix tubes in a grid layout. A cryovial box organizes cryovial tubes. Boxes and bags can hold paper sheets or other items. This hierarchical organization—collections containing containers containing specimens—helps you quickly locate any sample in your inventory.
+
+**Locations** represent your physical storage infrastructure in a hierarchical structure. You might organize locations as Building → Room → Freezer → Shelf, or any structure that matches your lab's physical layout. This allows you to track exactly where each collection is stored, making it easy to find samples and plan storage capacity.
+
+## Getting Started
+
+<CardGrid stagger>
+	<Card title="Initial Setup" icon="setting">
+		Complete the setup wizard to configure your SampleDB instance with specimen types, units, storage locations, and more.
+		[Get Started →](/guides/getting-started/setup/)
+	</Card>
+	<Card title="Dashboard Overview" icon="document">
+		Learn how to navigate the dashboard, understand key metrics, and use quick actions to speed up your workflow.
+		[View Guide →](/guides/getting-started/dashboard/)
+	</Card>
+	<Card title="Create Your First Study" icon="add-document">
+		Start by creating a study, then add subjects and register specimens. Follow our step-by-step workflows.
+		[Studies Guide →](/guides/workflows/studies/)
+	</Card>
+	<Card title="Bulk Import" icon="pencil">
+		Import subjects and specimens in bulk using CSV files. Perfect for getting started with existing data.
+		[Import Guide →](/guides/bulk-operations/import/)
+	</Card>
+</CardGrid>
+
+## How This Guide is Organized
+
+This documentation is organized to help you whether you're just getting started or looking for information on specific features. Each section builds on previous concepts, but you can also jump to any topic that interests you.
+
+**Getting Started** guides walk you through your first steps with SampleDB. The initial setup process configures your system with the specimen types, units, and storage infrastructure your lab uses. Once setup is complete, the dashboard becomes your home base, showing key metrics and providing quick access to common tasks.
+
+**Core Workflows** cover the day-to-day operations you'll perform most frequently. You'll learn how to create and manage studies, add subjects and register specimens, organize samples in containers, and set up your storage location hierarchy. These guides include step-by-step instructions and practical examples.
+
+**Bulk Operations** help you work efficiently with large datasets. Whether you're importing hundreds of subjects from a spreadsheet, exporting containers for analysis, or reorganizing containers between collections, these guides show you how to handle bulk operations safely and effectively.
+
+**Specialized Features** dive into advanced functionality for specific use cases. Blood controls help you manage quality control samples with definitions and batches. Derivations track how samples are processed and transformed. Collection movement helps you reorganize your storage as your lab grows.
+
+**Reference Data** management guides show you how to configure the system-wide settings that define what types of information SampleDB can store. You'll learn how to manage specimen types, units, storage types, locations, and other foundational data.
+
+**Advanced Topics** cover power user features that can make your work more efficient. Barcode export lets you quickly export data for scanned containers. Statistics and reporting give you insights into your inventory. Search and navigation shortcuts help you move through the system quickly. Settings let you customize export configurations and other preferences.
+
+**Troubleshooting** provides solutions to common problems you might encounter. Whether you're dealing with import errors, container issues, or CSV formatting questions, these guides help you resolve issues quickly. Best practices recommendations help you avoid problems before they occur, and CSV guidelines ensure your import files are formatted correctly.
+
+## About EPPIcenter
+
+SampleDB is developed by **EPPIcenter** (Experimental & Population-based Pathogen Investigation Center) at the University of California, San Francisco. EPPIcenter brings a systems epidemiology approach to understanding complex infectious disease dynamics by integrating state-of-the-art data collection, molecular technologies, and computational analysis.
+
+The center believes that the greatest success in the fight against infectious diseases comes through a highly interdisciplinary approach, connecting traditionally siloed theoretical work, technology development, generation and collection of empirical data, and analysis using statistical and mathematical modeling. This philosophy drives the development of tools like SampleDB, which bridge the gap between laboratory operations and data analysis.
+
+EPPIcenter focuses on infectious disease research, including malaria, COVID-19, and other pathogens, working to advance public health through innovative research, data management solutions, and collaborative partnerships. SampleDB represents our commitment to providing laboratories with modern, efficient solutions for sample management that scale from small pilot studies to large multi-site research projects.
+
+Our team works closely with researchers and laboratory staff to understand their needs and develop software that truly supports their work. SampleDB is designed with input from wet lab teams to ensure it meets real-world requirements and integrates smoothly into existing workflows.
+
+To learn more about EPPIcenter and our research, visit [eppicenter.ucsf.edu](https://eppicenter.ucsf.edu).
+
+## Need Help?
+
+If you encounter issues not covered in this guide, please contact your system administrator or refer to the troubleshooting section for common problems and solutions. The guides are designed to be comprehensive, but every laboratory has unique workflows and requirements.
