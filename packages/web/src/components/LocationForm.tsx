@@ -109,13 +109,21 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
 
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => {
-      if (e.target === e.currentTarget && !loading) {
-        onCancel()
-      }
-    }}>
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="p-6">
+    <div className="fixed inset-0 z-[100] overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        {/* Background overlay */}
+        <div
+          className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
+          onClick={(e) => {
+            if (!loading) {
+              onCancel()
+            }
+          }}
+        />
+        
+        {/* Modal panel */}
+        <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full sm:max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto max-h-[90vh]">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
             {isEdit ? 'Edit Location' : isRoot ? 'Add Root Location' : 'Add Child Location'}
           </h2>
@@ -271,6 +279,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
               </button>
             </div>
           </form>
+          </div>
         </div>
       </div>
     </div>

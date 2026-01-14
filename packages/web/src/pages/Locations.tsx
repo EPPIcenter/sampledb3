@@ -1026,15 +1026,17 @@ export default function Locations() {
           : false
 
         return (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-            onClick={handleDeleteCancel}
-          >
-            <div
-              className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-6">
+          <div className="fixed inset-0 z-[100] overflow-y-auto">
+            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+              {/* Background overlay */}
+              <div
+                className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
+                onClick={handleDeleteCancel}
+              />
+              
+              {/* Modal panel */}
+              <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full" onClick={(e) => e.stopPropagation()}>
+                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">Delete Location</h2>
                 <p className="text-sm text-gray-700 mb-4">
                   Are you sure you want to delete <strong>{locationToDelete?.name}</strong>?
@@ -1071,6 +1073,7 @@ export default function Locations() {
                   >
                     {mutationLoading ? 'Deleting...' : 'Delete'}
                   </button>
+                </div>
                 </div>
               </div>
             </div>

@@ -323,12 +323,12 @@ export default function ContainerRegistration({
 
               {/* Create Collection Modal */}
               {showCreateCollection && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center">
                   <div
-                    className="absolute inset-0 bg-black bg-opacity-30"
+                    className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
                     onClick={() => setShowCreateCollection(false)}
                   />
-                  <div className="relative z-50 w-full max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6 max-h-[90vh] overflow-y-auto">
+                  <div className="relative z-10 w-full max-w-2xl mx-4 bg-white rounded-lg shadow-xl p-6 max-h-[90vh] overflow-y-auto">
                     <h3 className="text-lg font-semibold mb-4 text-gray-900">
                       Create {getCollectionType() === 'micronix_plate' ? 'Micronix Plate' : 'Cryovial Box'}
                     </h3>

@@ -258,12 +258,12 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
           <div
-            className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm"
+            className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
             onClick={() => setOpen(false)}
           />
-          <div className="relative bg-white rounded-lg shadow-lg p-6 max-h-[90vh] flex flex-col w-full max-w-3xl mx-4" style={{ zIndex: 60 }}>
+          <div className="relative z-10 bg-white rounded-lg shadow-xl p-6 max-h-[90vh] flex flex-col w-full max-w-3xl mx-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Select Location</h2>
               <button

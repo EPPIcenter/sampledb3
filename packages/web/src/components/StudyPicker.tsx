@@ -59,12 +59,12 @@ export default function StudyPicker({ value, onChange }: StudyPickerProps) {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
           <div
-            className="absolute inset-0 bg-black bg-opacity-30"
+            className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
             onClick={() => setOpen(false)}
           />
-          <div className="relative z-50 w-full max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-6">
+          <div className="relative z-10 w-full max-w-3xl mx-4 bg-white rounded-lg shadow-xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Select Study</h2>
               <button
