@@ -17,6 +17,7 @@ import {
 import { and, eq, sql } from 'drizzle-orm'
 import { resolveCollection, type CollectionType } from '../lib/collection-resolution'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
+import { getDefaultUnit } from './defaults'
 
 export type DerivationType = string
 
@@ -142,19 +143,8 @@ async function resolveUnitIdForChild(
     return u.id
   }
 
-  // Fallback: use same unit as parent container type by convention
-  // (caller should ensure compatibility using existing validation utilities if needed)
-  const defaultUnit = await db
-    .select()
-    .from(unit)
-    .limit(1)
-    .get()
-
-  if (!defaultUnit) {
-    throw new Error('No units configured in database')
-  }
-
-  return defaultUnit.id
+  // Use the default unit for the child container type
+  return await getDefaultUnit(containerType)
 }
 
 async function adjustParentQuantity(

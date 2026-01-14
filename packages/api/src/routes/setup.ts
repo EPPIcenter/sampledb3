@@ -161,7 +161,11 @@ const initSchema = z.object({
             }
           } else if (storageTypeMap.size > 0) {
             // Use first storage type as default if none specified
-            resolvedStorageTypeId = String(Array.from(storageTypeMap.values())[0])
+            // This is a fallback - log a warning so user is aware
+            const firstStorageTypeId = Array.from(storageTypeMap.values())[0]
+            const firstStorageTypeName = Array.from(storageTypeMap.entries()).find(([_, id]) => id === firstStorageTypeId)?.[0] || 'unknown'
+            console.warn(`⚠️  Location '${location.name}' has no storage type specified. Using first available storage type '${firstStorageTypeName}' as default. Consider explicitly setting a storage type.`)
+            resolvedStorageTypeId = String(firstStorageTypeId)
           } else {
             throw new Error(`No storage types available for location '${location.name}'. At least one storage type must be created.`)
           }

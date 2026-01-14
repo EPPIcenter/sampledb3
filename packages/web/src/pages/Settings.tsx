@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { settingsApi, type AllSettings } from '../lib/api'
 import InfoTooltip from '../components/InfoTooltip'
 import ContainerDefaultsForm from '../components/ContainerDefaultsForm'
+import ContainerTypeUnitsManager from '../components/ContainerTypeUnitsManager'
 import PaginationSettingsForm from '../components/PaginationSettingsForm'
 import PasswordRequirementsForm from '../components/PasswordRequirementsForm'
 import SessionSettingsForm from '../components/SessionSettingsForm'
@@ -11,7 +12,7 @@ import ScannerConfigurationsManager from '../components/ScannerConfigurationsMan
 import SkeletonCard from '../components/SkeletonCard'
 
 type SettingsCategory = 'application' | 'security' | 'data-management'
-type SettingsSection = 'container-defaults' | 'pagination' | 'password' | 'session' | 'export-configurations' | 'scanner-configurations'
+type SettingsSection = 'container-defaults' | 'container-type-units' | 'pagination' | 'password' | 'session' | 'export-configurations' | 'scanner-configurations'
 
 interface SettingsStructure {
   id: SettingsCategory
@@ -38,7 +39,12 @@ const settingsStructure: SettingsStructure[] = [
       {
         id: 'container-defaults',
         label: 'Container Defaults',
-        tooltip: 'Configure default quantity values and unit symbols used when creating new containers for each container type',
+        tooltip: 'Configure default quantity values used when creating new containers for each container type. Default units are managed in Container Type Units settings.',
+      },
+      {
+        id: 'container-type-units',
+        label: 'Container Type Units',
+        tooltip: 'Manage which units are allowed for each container type and set the default unit for each type. Only allowed units can be used when creating or editing containers.',
       },
       {
         id: 'pagination',
@@ -212,6 +218,17 @@ export default function Settings() {
               setSuccess('Container defaults saved successfully')
               setTimeout(() => setSuccess(null), 3000)
               loadSettings()
+            }}
+          />
+        )
+      case 'container-type-units':
+        return (
+          <ContainerTypeUnitsManager
+            onSave={handleSave}
+            onError={(err) => setError(err)}
+            onSuccess={() => {
+              setSuccess('Container type units updated successfully')
+              setTimeout(() => setSuccess(null), 3000)
             }}
           />
         )
