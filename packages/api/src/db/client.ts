@@ -1,4 +1,4 @@
-import { Database } from 'bun:sqlite'
+import { Database as SQLiteDatabase } from 'bun:sqlite'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator'
 import * as schema from './schema'
@@ -34,7 +34,13 @@ function findProjectRoot(): string {
             if (pkg.name === 'sampledb') {
               return currentDir
             }
-          } catch { }
+          } catch (error) {
+            // Expected: package.json may be unreadable or malformed during project root search
+            // Log in development mode for debugging, but don't throw - this is expected behavior
+            if (process.env.NODE_ENV === 'development') {
+              console.debug(`Could not parse ${packageJson} during project root detection:`, error)
+            }
+          }
         }
         const parent = dirname(currentDir)
         if (parent === currentDir) break
@@ -53,7 +59,13 @@ function findProjectRoot(): string {
             if (pkg.name === 'sampledb') {
               return currentDir
             }
-          } catch { }
+          } catch (error) {
+            // Expected: package.json may be unreadable or malformed during project root search
+            // Log in development mode for debugging, but don't throw - this is expected behavior
+            if (process.env.NODE_ENV === 'development') {
+              console.debug(`Could not parse ${packageJson} during project root detection:`, error)
+            }
+          }
         }
         const parent = dirname(currentDir)
         if (parent === currentDir) break
@@ -81,7 +93,7 @@ function findProjectRoot(): string {
  * @param dbPath - Optional database path. If not provided, uses DATABASE_PATH env var or default dev database
  * @returns Object with db (drizzle instance) and sqlite (raw Database instance)
  */
-export function createDatabase(dbPath?: string): { db: ReturnType<typeof drizzle<typeof schema>>; sqlite: Database } {
+export function createDatabase(dbPath?: string): { db: ReturnType<typeof drizzle<typeof schema>>; sqlite: SQLiteDatabase } {
   // Determine database path
   let resolvedPath: string
 
@@ -107,7 +119,7 @@ export function createDatabase(dbPath?: string): { db: ReturnType<typeof drizzle
   console.log(`📁 Database exists: ${existsSync(resolvedPath)}`)
   console.log(`📁 DATABASE_PATH env: ${process.env.DATABASE_PATH || 'not set (using default: sampledb_dev.sqlite)'}`)
 
-  const sqlite = new Database(resolvedPath)
+  const sqlite = new SQLiteDatabase(resolvedPath)
   sqlite.exec('PRAGMA journal_mode = WAL')
 
   // Check if database has tables and run migrations if needed
@@ -177,7 +189,13 @@ export function createDatabase(dbPath?: string): { db: ReturnType<typeof drizzle
               migrationsFolder = join(currentDir, 'drizzle')
               break
             }
-          } catch { }
+          } catch (error) {
+            // Expected: package.json may be unreadable or malformed during migrations folder search
+            // Log in development mode for debugging, but don't throw - this is expected behavior
+            if (process.env.NODE_ENV === 'development') {
+              console.debug(`Could not parse ${packageJson} during migrations folder detection:`, error)
+            }
+          }
         }
         const parent = dirname(currentDir)
         if (parent === currentDir) break

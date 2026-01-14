@@ -325,11 +325,51 @@ containers.patch('/:id', async (c) => {
     const schema = z.object({
       comment: z.string().optional(),
       remainingQuantity: z.number().optional(),
+      unitId: z.number().int().optional(),
       tagIds: z.array(z.number().int()).optional(), // Replace tags
     })
     
     const data = schema.parse(body)
-    const { tagIds, ...updateData } = data
+    const { tagIds, unitId, ...updateData } = data
+    
+    // Validate unit if provided
+    if (unitId !== undefined) {
+      // Get container to determine container type
+      const container = await db
+        .select()
+        .from(storageContainer)
+        .where(eq(storageContainer.id, id))
+        .get()
+      
+      if (!container) {
+        return c.json({ error: 'Container not found' }, 404)
+      }
+      
+      // Determine container type
+      const [micronixInfo, cryovialInfo, paperInfo, staticWellInfo] = await Promise.all([
+        db.select().from(micronixTube).where(eq(micronixTube.id, id)).get(),
+        db.select().from(cryovialTube).where(eq(cryovialTube.id, id)).get(),
+        db.select().from(paper).where(eq(paper.id, id)).get(),
+        db.select().from(staticWell).where(eq(staticWell.id, id)).get(),
+      ])
+      
+      let containerType: string | null = null
+      if (micronixInfo) containerType = 'micronix_tube'
+      else if (cryovialInfo) containerType = 'cryovial_tube'
+      else if (paperInfo) containerType = 'paper'
+      else if (staticWellInfo) containerType = 'static_well'
+      
+      if (containerType) {
+        // Validate unit is allowed for container type
+        const { validateUnitForContainerType } = await import('../lib/validation')
+        const validation = await validateUnitForContainerType(containerType as any, unitId)
+        if (!validation.valid) {
+          return c.json({ error: validation.error }, 400)
+        }
+      }
+      
+      updateData.unitId = unitId
+    }
     
     // Update container fields (excluding tagIds)
     const [updated] = await db
