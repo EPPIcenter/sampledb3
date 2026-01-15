@@ -56,12 +56,21 @@ export interface SpecimenType {
   lastUpdated: string
 }
 
+// Import property types (defined locally for web package)
+interface BloodControlProperties {
+  strains?: Array<{ id: number; name?: string; percentage?: number } | number>
+  targetDensity?: number
+  targetDensityUnitId?: number
+  targetDensityUnitSymbol?: string
+  targetDensityUnit?: { id: number; symbol: string } | string
+}
+
 export interface ControlDefinition {
   id: number
   name: string
   controlType: 'blood' | 'plasma_positive' | 'plasma_negative' | 'antibody' | 'extraction' | 'negative'
   description?: string
-  properties?: Record<string, any> // For blood controls: { strains: [...], targetDensity, targetDensityUnitId, targetDensityUnitSymbol }
+  properties?: BloodControlProperties | ControlBatchProperties | Record<string, unknown>
   created: string
   lastUpdated: string
   // Parsed from properties for convenience
@@ -76,6 +85,14 @@ export interface ControlDefinition {
   strains?: Array<{ id: number; name: string; percentage?: number }>
 }
 
+interface ControlBatchProperties {
+  [key: string]: unknown
+}
+
+interface ReagentProperties {
+  [key: string]: unknown
+}
+
 export interface Reagent {
   id: number
   name: string
@@ -86,7 +103,7 @@ export interface Reagent {
   receivedDate?: string
   expirationDate?: string
   storageTemp?: string
-  properties?: Record<string, any>
+  properties?: ReagentProperties
   created: string
   lastUpdated: string
 }
@@ -536,13 +553,25 @@ export const unitsApi = {
 }
 
 
+interface CellLineProperties {
+  [key: string]: unknown
+}
+
+interface PlasmidProperties {
+  [key: string]: unknown
+}
+
+interface StandardProperties {
+  [key: string]: unknown
+}
+
 export interface CellLine {
   id: number
   name: string
   species: string
   strain?: string
   source?: string
-  properties?: Record<string, any>
+  properties?: CellLineProperties
   created: string
   lastUpdated: string
 }
@@ -555,7 +584,7 @@ export interface Plasmid {
   insertSizeBp?: number
   resistance?: string
   source?: string
-  properties?: Record<string, any>
+  properties?: PlasmidProperties
   created: string
   lastUpdated: string
 }
@@ -567,7 +596,7 @@ export interface Standard {
   manufacturer?: string
   catalogNumber?: string
   lotNumber?: string
-  properties?: Record<string, any>
+  properties?: StandardProperties
   created: string
   lastUpdated: string
 }
@@ -592,7 +621,7 @@ export interface ControlBatch {
   controlDefinitionId: number
   name: string
   productionDate?: string
-  properties?: Record<string, any>
+  properties?: ControlBatchProperties
   created: string
   lastUpdated: string
   specimenCount?: number
@@ -687,7 +716,7 @@ export const controlsApi = {
       controlDefinitionId: number
       name: string
       productionDate?: string
-      properties?: Record<string, any>
+      properties?: ControlBatchProperties
     }
     specimens: Array<{
       specimenTypeName: string
@@ -748,7 +777,7 @@ export const reagentsApi = {
 
 export const locationsApi = {
   list: (page?: number, limit?: number, search?: string) => {
-    const params: any = {}
+    const params: Record<string, string | number> = {}
     if (page) params.page = page
     if (limit) params.limit = limit
     if (search && search.trim()) params.search = search.trim()
@@ -764,7 +793,7 @@ export const locationsApi = {
     bags_page?: number;
     bags_limit?: number;
   }) => {
-    const queryParams: any = {}
+    const queryParams: Record<string, string | number | undefined> = {}
     if (params?.boxes_page) queryParams.boxes_page = params.boxes_page
     if (params?.boxes_limit) queryParams.boxes_limit = params.boxes_limit
     if (params?.plates_page) queryParams.plates_page = params.plates_page
@@ -773,7 +802,7 @@ export const locationsApi = {
     if (params?.cryovial_boxes_limit) queryParams.cryovial_boxes_limit = params.cryovial_boxes_limit
     if (params?.bags_page) queryParams.bags_page = params.bags_page
     if (params?.bags_limit) queryParams.bags_limit = params.bags_limit
-    return api.get<{ location: Location; contents: any; pagination?: any; hierarchyStats?: LocationHierarchyStats }>(`/locations/${id}`, { params: queryParams })
+    return api.get<{ location: Location; contents: { micronixPlates?: Array<{ id: number; name: string; barcode?: string | null; locationId: number; itemCount?: number }>; cryovialBoxes?: Array<{ id: number; name: string; barcode?: string | null; locationId: number; itemCount?: number }>; boxes?: Array<{ id: number; name: string; locationId: number; itemCount?: number }>; bags?: Array<{ id: number; name: string; locationId: number; itemCount?: number }> }; pagination?: { page: number; limit: number; total: number; totalPages: number }; hierarchyStats?: LocationHierarchyStats }>(`/locations/${id}`, { params: queryParams })
   },
   create: (data: Omit<Location, 'id' | 'created' | 'lastUpdated'>) =>
     api.post<{ location: Location }>('/locations', data),
@@ -782,34 +811,124 @@ export const locationsApi = {
   delete: (id: number) => api.delete<{ message: string }>(`/locations/${id}`),
 }
 
+// Collection response types
+interface MicronixPlateResponse {
+  id: number
+  name: string
+  barcode?: string | null
+  locationId: number
+  location?: Location | null
+  locationPath?: string | null
+  created: string
+  lastUpdated: string
+  createdBy?: number | null
+  updatedBy?: number | null
+}
+
+interface CryovialBoxResponse {
+  id: number
+  name: string
+  barcode?: string | null
+  locationId: number
+  location?: Location | null
+  locationPath?: string | null
+  created: string
+  lastUpdated: string
+  createdBy?: number | null
+  updatedBy?: number | null
+}
+
+interface BoxResponse {
+  id: number
+  name: string
+  locationId: number
+  location?: Location | null
+  locationPath?: string | null
+  created: string
+  lastUpdated: string
+  createdBy?: number | null
+  updatedBy?: number | null
+}
+
+interface BagResponse {
+  id: number
+  name: string
+  locationId: number
+  location?: Location | null
+  locationPath?: string | null
+  created: string
+  lastUpdated: string
+  createdBy?: number | null
+  updatedBy?: number | null
+}
+
+interface SheetResponse {
+  id: number
+  name: string
+  boxId?: number | null
+  bagId?: number | null
+  location?: Location | null
+  locationPath?: string | null
+  box?: { id: number; name: string } | null
+  bag?: { id: number; name: string } | null
+  created: string
+  lastUpdated: string
+  createdBy?: number | null
+  updatedBy?: number | null
+}
+
+interface WellEntry {
+  type: 'micronix_tube' | 'static_well'
+  id: number
+  barcode?: string | null
+  position?: string | null
+  container?: unknown
+}
+
+interface CryovialTubeEntry {
+  kind: 'cryovial_tube'
+  id: number
+  barcode?: string | null
+  position?: string | null
+  container?: unknown
+}
+
+interface PaperEntry {
+  type: 'paper'
+  id: number
+  barcode?: string | null
+  position?: string | null
+  container?: unknown
+}
+
 export const collectionsApi = {
   getMicronixPlate: (id: number) =>
-    api.get<{ plate: any; wells: Record<string, any> }>(`/collections/plates/micronix/${id}`),
+    api.get<{ plate: MicronixPlateResponse; wells: Record<string, WellEntry> }>(`/collections/plates/micronix/${id}`),
   getCryovialBox: (id: number) =>
-    api.get<{ box: any; positions: Record<string, any[]> }>(`/collections/boxes/cryovial/${id}`),
+    api.get<{ box: CryovialBoxResponse; positions: Record<string, CryovialTubeEntry[]> }>(`/collections/boxes/cryovial/${id}`),
   getBox: (id: number) =>
-    api.get<{ box: any; contents: { tubes: any[]; papers: any[] } }>(`/collections/boxes/${id}`),
+    api.get<{ box: BoxResponse; contents: { sheets: Array<SheetResponse & { papers: PaperEntry[] }> } }>(`/collections/boxes/${id}`),
   getBag: (id: number) =>
-    api.get<{ bag: any; contents: { papers: any[] } }>(`/collections/bags/${id}`),
+    api.get<{ bag: BagResponse; contents: { sheets: Array<SheetResponse & { papers: PaperEntry[] }> } }>(`/collections/bags/${id}`),
   getSheet: (id: number) =>
-    api.get<{ sheet: any; papers: any[] }>(`/collections/sheets/${id}`),
+    api.get<{ sheet: SheetResponse; papers: PaperEntry[] }>(`/collections/sheets/${id}`),
   check: (data: { collections: Array<{ identifier: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet' }> }) =>
     api.post<{ results: Array<{ identifier: string; type: string; exists: boolean; id: number | null }> }>('/collections/check', data),
   createMicronixPlate: (data: { name: string; locationId: number; barcode?: string }) =>
-    api.post<{ plate: any }>('/collections/plates/micronix', data),
+    api.post<{ plate: MicronixPlateResponse }>('/collections/plates/micronix', data),
   createCryovialBox: (data: { name: string; locationId: number; barcode?: string }) =>
-    api.post<{ box: any }>('/collections/boxes/cryovial', data),
+    api.post<{ box: CryovialBoxResponse }>('/collections/boxes/cryovial', data),
   createBox: (data: { name: string; locationId: number }) =>
-    api.post<{ box: any }>('/collections/boxes', data),
+    api.post<{ box: BoxResponse }>('/collections/boxes', data),
   createBag: (data: { name: string; locationId: number }) =>
-    api.post<{ bag: any }>('/collections/bags', data),
+    api.post<{ bag: BagResponse }>('/collections/bags', data),
   resolveContainers: (data: {
     identifiers: Array<
       | { type: 'barcode'; barcode: string }
       | { type: 'position'; sourceCollectionName: string; sourcePosition: string }
     >
   }) =>
-    api.post<{ containers: Array<{ identifier: any; container: any }> }>('/collections/containers/resolve', data),
+    api.post<{ containers: Array<{ identifier: { type: string; value: string } | string; container: unknown }> }>('/collections/containers/resolve', data),
   listCollectionsByType: (type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet') =>
     api.get<{ collections: Array<{ id: number; name: string }> }>(`/collections/list/${type}`),
   moveContainers: (data: {
@@ -899,7 +1018,7 @@ export const exportApi = {
     api.get('/export/specimens.csv', { params, responseType: 'blob' }),
   inventory: () => api.get('/export/inventory.csv', { responseType: 'blob' }),
   containers: (params: ExportFilters, format: 'csv' | 'xlsx' | 'json' = 'csv', configName?: string) => {
-    const queryParams: any = { format }
+    const queryParams: Record<string, string | number | number[] | string[] | undefined> = { format }
     // Add study
     queryParams.study = params.study
     // Add date filters
@@ -931,7 +1050,7 @@ export const exportApi = {
     })
   },
   containersCount: (params: ExportFilters) => {
-    const queryParams: any = { count_only: 'true' }
+    const queryParams: Record<string, string | number | number[] | string[] | undefined> = { count_only: 'true' }
     // Add study
     queryParams.study = params.study
     // Add date filters
@@ -1114,6 +1233,10 @@ export const exportApi = {
   },
 }
 
+interface DerivationProperties {
+  [key: string]: unknown
+}
+
 export interface Derivation {
   id: number
   parentContainerId: number
@@ -1122,7 +1245,7 @@ export interface Derivation {
   derivationDate?: string
   protocol?: string
   notes?: string
-  properties?: Record<string, any> | null
+  properties?: DerivationProperties | null
 }
 
 export interface CreateDerivationPayload {
@@ -1136,7 +1259,7 @@ export interface CreateDerivationPayload {
   derivationDate?: string
   protocol?: string
   notes?: string
-  properties?: Record<string, any>
+  properties?: DerivationProperties
   collectionId?: number
    collectionName?: string
    collectionType?: 'micronix_plate' | 'cryovial_box' | 'sheet'
@@ -1415,10 +1538,31 @@ export interface Unit {
   category: string
 }
 
+// Settings value discriminated union
+export type SettingValue =
+  | { type: 'container_defaults'; value: ContainerDefaults }
+  | { type: 'pagination_settings'; value: PaginationSettings }
+  | { type: 'password_requirements'; value: PasswordRequirements }
+  | { type: 'session_settings'; value: SessionSettings }
+  | { type: 'export_configurations'; value: ExportConfigurations }
+  | { type: 'scanner_configurations'; value: ScannerConfigurations }
+
+// Helper type to extract setting value by key
+export type SettingValueByKey<T extends string> =
+  T extends 'container_defaults' ? ContainerDefaults :
+  T extends 'pagination_settings' ? PaginationSettings :
+  T extends 'password_requirements' ? PasswordRequirements :
+  T extends 'session_settings' ? SessionSettings :
+  T extends 'export_configurations' ? ExportConfigurations :
+  T extends 'scanner_configurations' ? ScannerConfigurations :
+  never
+
 export const settingsApi = {
   getAll: () => api.get<AllSettings>('/settings'),
-  get: (key: string) => api.get<{ key: string; value: any }>(`/settings/${key}`),
-  update: (key: string, value: any) => api.put<{ key: string; value: any }>(`/settings/${key}`, value),
+  get: <T extends keyof AllSettings>(key: T): Promise<{ data: { key: T; value: AllSettings[T] } }> => 
+    api.get<{ key: T; value: AllSettings[T] }>(`/settings/${key}`),
+  update: <T extends keyof AllSettings>(key: T, value: AllSettings[T]): Promise<{ data: { key: T; value: AllSettings[T] } }> =>
+    api.put<{ key: T; value: AllSettings[T] }>(`/settings/${key}`, value),
   getUnits: () => api.get<Unit[]>('/settings/units'),
   getContainerTypeUnits: (containerType: string) =>
     api.get<{ units: Unit[] }>(`/settings/container-types/${containerType}/units`),
