@@ -16,6 +16,7 @@ import {
   getLocationHierarchyStats,
 } from '../lib/location-helpers'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import { adminMiddleware } from '../middleware/auth'
 
 /**
  * Create locations routes with database injection
@@ -261,8 +262,8 @@ locations.get('/:id', async (c) => {
   })
 })
 
-// Create new location
-locations.post('/', async (c) => {
+// Create new location (admin only)
+locations.post('/', adminMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     // Only root locations (parentId is null) require storageTypeId
@@ -353,7 +354,7 @@ locations.post('/', async (c) => {
 })
 
 // Update location
-locations.put('/:id', async (c) => {
+locations.put('/:id', adminMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   
   if (isNaN(id)) {
@@ -491,7 +492,7 @@ locations.put('/:id', async (c) => {
 })
 
 // Delete location
-locations.delete('/:id', async (c) => {
+locations.delete('/:id', adminMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   
   if (isNaN(id)) {

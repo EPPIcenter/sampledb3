@@ -54,7 +54,9 @@ export default function ContainerTypeToggle({
 
         // Build tooltip text
         let tooltip = isSelected ? 'Click to remove' : 'Click to add'
-        if (isSelected && isInUse) {
+        if (disabled && !isLoading && !(isSelected && isInUse)) {
+          tooltip = 'Admin access required to modify container types'
+        } else if (isSelected && isInUse) {
           tooltip = 'Cannot remove: container type is in use by existing containers. Please remove or reassign those containers first.'
         }
 

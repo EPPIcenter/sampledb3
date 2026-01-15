@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { settingsApi, type AllSettings } from '../lib/api'
+import { useUser } from '../contexts/UserContext'
 import InfoTooltip from '../components/InfoTooltip'
 import ContainerDefaultsForm from '../components/ContainerDefaultsForm'
 import ContainerTypeUnitsManager from '../components/ContainerTypeUnitsManager'
@@ -22,6 +23,7 @@ interface SettingsStructure {
     id: SettingsSection
     label: string
     tooltip: string
+    adminOnly?: boolean
   }>
 }
 
@@ -40,11 +42,13 @@ const settingsStructure: SettingsStructure[] = [
         id: 'container-defaults',
         label: 'Container Defaults',
         tooltip: 'Configure default quantity values used when creating new containers for each container type. Default units are managed in Container Type Units settings.',
+        adminOnly: true,
       },
       {
         id: 'container-type-units',
         label: 'Container Type Units',
         tooltip: 'Manage which units are allowed for each container type and set the default unit for each type. Only allowed units can be used when creating or editing containers.',
+        adminOnly: true,
       },
       {
         id: 'pagination',
@@ -66,11 +70,13 @@ const settingsStructure: SettingsStructure[] = [
         id: 'password',
         label: 'Password Requirements',
         tooltip: 'Set password security requirements for user accounts',
+        adminOnly: true,
       },
       {
         id: 'session',
         label: 'Session Settings',
         tooltip: 'Configure how long users remain logged in before requiring re-authentication',
+        adminOnly: true,
       },
     ],
   },
@@ -98,30 +104,52 @@ const settingsStructure: SettingsStructure[] = [
 ]
 
 export default function Settings() {
+  const { user } = useUser()
+  const isAdmin = user?.role === 'admin'
   const [searchParams, setSearchParams] = useSearchParams()
+  
+  // Filter settings structure based on user role
+  const filteredSettingsStructure = useMemo(() => {
+    if (isAdmin) {
+      return settingsStructure
+    }
+    // For non-admins, filter out admin-only sections
+    return settingsStructure.map(category => ({
+      ...category,
+      sections: category.sections.filter(section => !section.adminOnly),
+    })).filter(category => category.sections.length > 0) // Remove categories with no visible sections
+  }, [isAdmin])
   
   const categoryParam = searchParams.get('category') as SettingsCategory | null
   const sectionParam = searchParams.get('section') as SettingsSection | null
   
-  // Determine initial category and section
-  const getInitialCategoryAndSection = (): { category: SettingsCategory; section: SettingsSection } => {
+  // Get initial category and section based on filtered structure
+  const getInitialCategoryAndSection = useCallback((): { category: SettingsCategory; section: SettingsSection } => {
     // Use new params if available
     if (categoryParam && sectionParam) {
-      // Validate that the section belongs to the category
-      const category = settingsStructure.find(c => c.id === categoryParam)
+      // Validate that the section belongs to the category and is accessible
+      const category = filteredSettingsStructure.find(c => c.id === categoryParam)
       if (category && category.sections.some(s => s.id === sectionParam)) {
         return { category: categoryParam, section: sectionParam }
       }
     }
     
     // Default to first section of first category
-    return {
-      category: settingsStructure[0].id,
-      section: settingsStructure[0].sections[0].id,
+    if (filteredSettingsStructure.length > 0 && filteredSettingsStructure[0].sections.length > 0) {
+      return {
+        category: filteredSettingsStructure[0].id,
+        section: filteredSettingsStructure[0].sections[0].id,
+      }
     }
-  }
-  
-  const initial = getInitialCategoryAndSection()
+    
+    // Fallback (shouldn't happen, but TypeScript needs it)
+    return {
+      category: 'data-management',
+      section: 'export-configurations',
+    }
+  }, [filteredSettingsStructure, categoryParam, sectionParam])
+
+  const initial = useMemo(() => getInitialCategoryAndSection(), [getInitialCategoryAndSection])
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>(initial.category)
   const [activeSection, setActiveSection] = useState<SettingsSection>(initial.section)
   const [expandedCategories, setExpandedCategories] = useState<Set<SettingsCategory>>(
@@ -134,14 +162,18 @@ export default function Settings() {
     const section = searchParams.get('section') as SettingsSection | null
     
     if (category && section) {
-      const categoryData = settingsStructure.find(c => c.id === category)
+      const categoryData = filteredSettingsStructure.find(c => c.id === category)
       if (categoryData && categoryData.sections.some(s => s.id === section)) {
         setActiveCategory(category)
         setActiveSection(section)
         setExpandedCategories(prev => new Set([...prev, category]))
+      } else {
+        // If trying to access admin-only section, redirect to first available
+        const initial = getInitialCategoryAndSection()
+        setSearchParams({ category: initial.category, section: initial.section }, { replace: true })
       }
     }
-  }, [searchParams])
+  }, [searchParams, filteredSettingsStructure, getInitialCategoryAndSection, setSearchParams])
   
   const handleSectionChange = (category: SettingsCategory, section: SettingsSection) => {
     setActiveCategory(category)
@@ -338,7 +370,7 @@ export default function Settings() {
     )
   }
 
-  const activeCategoryData = settingsStructure.find(c => c.id === activeCategory)
+  const activeCategoryData = filteredSettingsStructure.find(c => c.id === activeCategory)
   const activeSectionData = activeCategoryData?.sections.find(s => s.id === activeSection)
 
   return (
@@ -364,7 +396,7 @@ export default function Settings() {
         <aside className="w-60 flex-shrink-0">
           <div className="bg-white rounded-lg shadow border border-gray-200">
             <nav className="p-2">
-              {settingsStructure.map((category) => {
+              {filteredSettingsStructure.map((category) => {
                 const isExpanded = expandedCategories.has(category.id)
                 const isActiveCategory = activeCategory === category.id
                 

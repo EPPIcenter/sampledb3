@@ -15,6 +15,7 @@ import { eq, and, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { parseId } from '../lib/common-validators'
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
+import { adminMiddleware } from '../middleware/auth'
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -233,8 +234,8 @@ export function createSpecimenTypesRoutes(database: Database): Hono {
   }
 })
 
-// POST /specimen-types/:id/container-types - Add allowed container type
-specimenTypes.post('/:id/container-types', async (c) => {
+// POST /specimen-types/:id/container-types - Add allowed container type (admin only)
+specimenTypes.post('/:id/container-types', adminMiddleware, async (c) => {
   try {
     const id = parseId(c.req.param('id'))
     if (!id) {
@@ -261,8 +262,8 @@ specimenTypes.post('/:id/container-types', async (c) => {
   }
 })
 
-// DELETE /specimen-types/:id/container-types/:containerType - Remove allowed container type
-specimenTypes.delete('/:id/container-types/:containerType', async (c) => {
+// DELETE /specimen-types/:id/container-types/:containerType - Remove allowed container type (admin only)
+specimenTypes.delete('/:id/container-types/:containerType', adminMiddleware, async (c) => {
   try {
     const id = parseId(c.req.param('id'))
     const containerType = c.req.param('containerType')

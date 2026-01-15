@@ -6,6 +6,7 @@ interface ContainerTypesCellProps {
   allowedTypes: string[]
   onToggle?: (specimenTypeId: number, containerType: string, isAdding: boolean) => Promise<void>
   usageInfo?: Record<string, boolean>
+  disabled?: boolean
 }
 
 export default function ContainerTypesCell({
@@ -13,9 +14,10 @@ export default function ContainerTypesCell({
   allowedTypes,
   onToggle,
   usageInfo = {},
+  disabled = false,
 }: ContainerTypesCellProps) {
-  if (!onToggle) {
-    // Fallback display if no toggle handler provided
+  if (!onToggle || disabled) {
+    // Fallback display if no toggle handler provided or disabled
     return (
       <div className="flex flex-wrap gap-1">
         {allowedTypes.length > 0 ? (
@@ -41,6 +43,7 @@ export default function ContainerTypesCell({
         allowedTypes={allowedTypes}
         onToggle={onToggle}
         usageInfo={usageInfo}
+        disabled={disabled}
       />
     </div>
   )

@@ -43,12 +43,14 @@ export interface ReferenceDataConfig {
     containerTypeRelationships?: Record<number, string[]>
     containerTypeUsageInfo?: Record<number, Record<string, boolean>>
     onToggleContainerType?: (specimenTypeId: number, containerType: string, isAdding: boolean) => Promise<void>
+    containerTypesDisabled?: boolean
   }) => Column<any>[]
   // Form configuration
     getFormFields: (editingItem?: any, formData?: any, dependencies?: {
       containerTypeRelationships?: Record<number, string[]>
       containerTypeUsageInfo?: Record<number, Record<string, boolean>>
       onToggleContainerType?: ((specimenTypeId: number, containerType: string, isAdding: boolean) => Promise<void>) | undefined
+      containerTypesDisabled?: boolean
     }) => Array<{
     key: string
     label: string
@@ -81,6 +83,7 @@ export const referenceDataConfigs: ReferenceDataConfig[] = [
       const containerTypeRelationships = deps?.containerTypeRelationships || {}
       const containerTypeUsageInfo = deps?.containerTypeUsageInfo || {}
       const onToggleContainerType = deps?.onToggleContainerType
+      const containerTypesDisabled = deps?.containerTypesDisabled || false
       
       return [
         { key: 'name', label: 'Name' },
@@ -95,6 +98,7 @@ export const referenceDataConfigs: ReferenceDataConfig[] = [
               allowedTypes,
               onToggle: onToggleContainerType,
               usageInfo,
+              disabled: containerTypesDisabled,
             })
           },
         },
@@ -117,9 +121,10 @@ export const referenceDataConfigs: ReferenceDataConfig[] = [
       ]
 
       // Add container types field if editing an existing specimen type
-      if (editingItem?.id && deps?.containerTypeRelationships && deps?.onToggleContainerType) {
+      if (editingItem?.id && deps?.containerTypeRelationships) {
         const allowedTypes = deps.containerTypeRelationships[editingItem.id] || []
         const usageInfo = deps.containerTypeUsageInfo?.[editingItem.id] || {}
+        const containerTypesDisabled = deps?.containerTypesDisabled || false
         fields.push({
           key: 'containerTypes',
           label: 'Allowed Container Types',
@@ -133,6 +138,7 @@ export const referenceDataConfigs: ReferenceDataConfig[] = [
               allowedTypes,
               onToggle: deps.onToggleContainerType,
               usageInfo,
+              disabled: containerTypesDisabled,
             })
           },
         })

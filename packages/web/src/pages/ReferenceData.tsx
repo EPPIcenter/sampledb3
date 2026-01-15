@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useUser } from '../contexts/UserContext'
 import ReferenceDataTable from '../components/ReferenceDataTable'
 import ReferenceDataForm from '../components/ReferenceDataForm'
 import Pagination from '../components/Pagination'
@@ -12,6 +13,8 @@ import { useStorageTypes } from '../hooks/useReferenceData'
 import { locationsApi, specimenTypesApi, type Location, type SpecimenType } from '../lib/api'
 
 export default function ReferenceData() {
+  const { user } = useUser()
+  const isAdmin = user?.role === 'admin'
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = (searchParams.get('tab') as ReferenceDataType) || 'specimen-types'
 
@@ -171,6 +174,11 @@ export default function ReferenceData() {
   }
 
   const handleToggleContainerType = async (specimenTypeId: number, containerType: string, isAdding: boolean) => {
+    // Block non-admin users from toggling
+    if (!isAdmin) {
+      return
+    }
+
     try {
       // Optimistically update state
       setContainerTypeRelationships((prev) => {
@@ -194,7 +202,7 @@ export default function ReferenceData() {
       // Rollback on error
       await loadContainerTypeRelationships()
       const errorMessage = error.response?.data?.error || error.message || 'Failed to update container type'
-      alert(errorMessage)
+      console.error('Failed to toggle container type:', errorMessage)
       throw error
     }
   }
@@ -288,7 +296,8 @@ export default function ReferenceData() {
     if (activeTab === 'specimen-types') {
       deps.containerTypeRelationships = containerTypeRelationships
       deps.containerTypeUsageInfo = containerTypeUsageInfo
-      deps.onToggleContainerType = handleToggleContainerType
+      deps.onToggleContainerType = isAdmin ? handleToggleContainerType : undefined
+      deps.containerTypesDisabled = !isAdmin
     }
     return config.getColumns(deps)
   }
@@ -301,7 +310,8 @@ export default function ReferenceData() {
     if (activeTab === 'specimen-types') {
       deps.containerTypeRelationships = containerTypeRelationships
       deps.containerTypeUsageInfo = containerTypeUsageInfo
-      deps.onToggleContainerType = handleToggleContainerType
+      deps.onToggleContainerType = isAdmin ? handleToggleContainerType : undefined
+      deps.containerTypesDisabled = !isAdmin
     }
     return config.getFormFields(editingItem, editingItem, deps)
   }
@@ -341,13 +351,28 @@ export default function ReferenceData() {
         </div>
 
         <div className="p-6">
+          {!isAdmin && (
+            <div className="mb-4 rounded-md bg-blue-50 border border-blue-200 p-3">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm font-medium text-blue-800">
+                  Reference data is view-only. Contact an administrator to add or modify reference data.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="mb-4 flex justify-end">
-            <button
-              onClick={() => setEditingItem({})}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Add New
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setEditingItem({})}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Add New
+              </button>
+            )}
           </div>
 
           <ReferenceDataTable
@@ -361,6 +386,7 @@ export default function ReferenceData() {
             onSearchChange={config.requiresSearch ? setSearch : undefined}
             disableClientFilter={config.requiresSearch}
             loading={loading && config.requiresSearch}
+            readOnly={!isAdmin}
           />
 
           {config.requiresPagination && totalPages > 1 && (
@@ -375,7 +401,7 @@ export default function ReferenceData() {
         </div>
       </div>
 
-      {editingItem !== null && (
+      {editingItem !== null && isAdmin && (
         <ReferenceDataForm
           item={editingItem}
           fields={getFormFields()}

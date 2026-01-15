@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useUser } from '../contexts/UserContext'
 import SkeletonTable from './SkeletonTable'
 
 export interface Column<T> {
@@ -18,6 +19,7 @@ interface ReferenceDataTableProps<T extends { id: number }> {
   onSearchChange?: (search: string) => void
   disableClientFilter?: boolean
   loading?: boolean
+  readOnly?: boolean
 }
 
 export default function ReferenceDataTable<T extends { id: number }>({
@@ -31,7 +33,11 @@ export default function ReferenceDataTable<T extends { id: number }>({
   onSearchChange,
   disableClientFilter = false,
   loading = false,
+  readOnly = false,
 }: ReferenceDataTableProps<T>) {
+  const { user } = useUser()
+  const isAdmin = user?.role === 'admin'
+  const canEdit = !readOnly && isAdmin
   const [internalSearch, setInternalSearch] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
@@ -108,9 +114,11 @@ export default function ReferenceDataTable<T extends { id: number }>({
                     {col.label}
                   </th>
                 ))}
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
+                {canEdit && (
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -121,21 +129,23 @@ export default function ReferenceDataTable<T extends { id: number }>({
                       {col.render ? col.render(item[col.key], item) : String(item[col.key] || '')}
                     </td>
                   ))}
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => onEdit(item)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(item.id)}
-                      disabled={deletingId === item.id}
-                      className="text-red-600 hover:text-red-900 disabled:opacity-50"
-                    >
-                      {deletingId === item.id ? 'Deleting...' : 'Delete'}
-                    </button>
-                  </td>
+                  {canEdit && (
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => onEdit(item)}
+                        className="text-blue-600 hover:text-blue-900 mr-4"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        disabled={deletingId === item.id}
+                        className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                      >
+                        {deletingId === item.id ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

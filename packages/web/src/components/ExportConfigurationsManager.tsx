@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { exportConfigurationsApi, type ExportConfigurations, type ExportConfiguration } from '../lib/api'
+import { useUser } from '../contexts/UserContext'
 import InfoTooltip from './InfoTooltip'
 
 interface ExportConfigurationsManagerProps {
@@ -49,10 +50,16 @@ export default function ExportConfigurationsManager({
   onError,
   onSuccess,
 }: ExportConfigurationsManagerProps) {
-  const [configurations, setConfigurations] = useState<ExportConfiguration[]>([])
+  const { user } = useUser()
+  const isAdmin = user?.role === 'admin'
+  const [sharedConfigurations, setSharedConfigurations] = useState<ExportConfiguration[]>([])
+  const [personalConfigurations, setPersonalConfigurations] = useState<ExportConfiguration[]>([])
+  const [activeTab, setActiveTab] = useState<'shared' | 'personal'>('shared')
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editingType, setEditingType] = useState<'shared' | 'personal' | null>(null)
   const [newConfigName, setNewConfigName] = useState('')
   const [newConfigColumns, setNewConfigColumns] = useState<string[]>(DEFAULT_COLUMNS)
   const [showNewForm, setShowNewForm] = useState(false)
@@ -62,19 +69,37 @@ export default function ExportConfigurationsManager({
   const autoScrollIntervalRef = useRef<number | null>(null)
   const mouseYRef = useRef<number>(0)
 
+  // Load shared and personal configs separately
   useEffect(() => {
-    if (data && data.configurations) {
-      setConfigurations(data.configurations)
-    } else {
-      setConfigurations([])
+    const loadConfigs = async () => {
+      setLoading(true)
+      try {
+        const [sharedRes, personalRes] = await Promise.all([
+          exportConfigurationsApi.getShared(),
+          exportConfigurationsApi.getPersonal().catch(() => ({ data: { configurations: [] } })),
+        ])
+        setSharedConfigurations(sharedRes.data?.configurations || [])
+        setPersonalConfigurations(personalRes.data?.configurations || [])
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to load configurations')
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [data])
+    loadConfigs()
+  }, [])
 
   const handleSave = async () => {
     setSaving(true)
     setError(null)
     try {
-      await exportConfigurationsApi.update({ configurations })
+      if (activeTab === 'shared' && isAdmin) {
+        // Save shared configs (system-wide)
+        await exportConfigurationsApi.update({ configurations: sharedConfigurations }, null)
+      } else {
+        // Save personal configs
+        await exportConfigurationsApi.updatePersonal({ configurations: personalConfigurations })
+      }
       onSuccess?.()
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Failed to save export configurations'
@@ -85,12 +110,14 @@ export default function ExportConfigurationsManager({
     }
   }
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!newConfigName.trim()) {
       setError('Configuration name is required')
       return
     }
-    if (configurations.some(c => c.name === newConfigName.trim())) {
+    
+    const currentConfigs = activeTab === 'shared' ? sharedConfigurations : personalConfigurations
+    if (currentConfigs.some(c => c.name === newConfigName.trim())) {
       setError('A configuration with this name already exists')
       return
     }
@@ -102,15 +129,30 @@ export default function ExportConfigurationsManager({
     const newConfig: ExportConfiguration = {
       name: newConfigName.trim(),
       columns: [...newConfigColumns],
-      isDefault: configurations.length === 0, // First config is default
+      isDefault: currentConfigs.length === 0, // First config is default
     }
 
-    // If this is the first config or user wants it as default, unset others
-    if (newConfig.isDefault) {
-      const updated = configurations.map(c => ({ ...c, isDefault: false }))
-      setConfigurations([...updated, newConfig])
+    if (activeTab === 'personal') {
+      // Save personal config immediately
+      try {
+        const updated = newConfig.isDefault 
+          ? [...currentConfigs.map(c => ({ ...c, isDefault: false })), newConfig]
+          : [...currentConfigs, newConfig]
+        await exportConfigurationsApi.updatePersonal({ configurations: updated })
+        setPersonalConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to create configuration')
+        return
+      }
     } else {
-      setConfigurations([...configurations, newConfig])
+      // For shared, just update local state (admin will save)
+      if (newConfig.isDefault) {
+        const updated = currentConfigs.map(c => ({ ...c, isDefault: false }))
+        setSharedConfigurations([...updated, newConfig])
+      } else {
+        setSharedConfigurations([...currentConfigs, newConfig])
+      }
     }
 
     setNewConfigName('')
@@ -119,24 +161,27 @@ export default function ExportConfigurationsManager({
     setError(null)
   }
 
-  const handleEdit = (index: number) => {
+  const handleEdit = (index: number, type: 'shared' | 'personal') => {
     setEditingIndex(index)
-    const config = configurations[index]
+    setEditingType(type)
+    const configs = type === 'shared' ? sharedConfigurations : personalConfigurations
+    const config = configs[index]
     setNewConfigName(config.name)
     setNewConfigColumns([...config.columns])
     setShowNewForm(true)
   }
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!newConfigName.trim()) {
       setError('Configuration name is required')
       return
     }
-    if (editingIndex === null) return
+    if (editingIndex === null || editingType === null) return
 
-    const existingConfig = configurations[editingIndex]
+    const currentConfigs = editingType === 'shared' ? sharedConfigurations : personalConfigurations
+    const existingConfig = currentConfigs[editingIndex]
     const nameChanged = newConfigName.trim() !== existingConfig.name
-    if (nameChanged && configurations.some((c, i) => i !== editingIndex && c.name === newConfigName.trim())) {
+    if (nameChanged && currentConfigs.some((c, i) => i !== editingIndex && c.name === newConfigName.trim())) {
       setError('A configuration with this name already exists')
       return
     }
@@ -145,38 +190,80 @@ export default function ExportConfigurationsManager({
       return
     }
 
-    const updated = [...configurations]
+    const updated = [...currentConfigs]
     updated[editingIndex] = {
       name: newConfigName.trim(),
       columns: [...newConfigColumns],
       isDefault: existingConfig.isDefault,
     }
-    setConfigurations(updated)
+
+    if (editingType === 'personal') {
+      // Save personal config immediately
+      try {
+        await exportConfigurationsApi.updatePersonal({ configurations: updated })
+        setPersonalConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to update configuration')
+        return
+      }
+    } else {
+      // For shared, just update local state (admin will save)
+      setSharedConfigurations(updated)
+    }
 
     setEditingIndex(null)
+    setEditingType(null)
     setNewConfigName('')
     setNewConfigColumns(DEFAULT_COLUMNS)
     setShowNewForm(false)
     setError(null)
   }
 
-  const handleDelete = (index: number) => {
-    if (window.confirm(`Are you sure you want to delete "${configurations[index].name}"?`)) {
-      const updated = configurations.filter((_, i) => i !== index)
-      // If we deleted the default, make the first one default
-      if (configurations[index].isDefault && updated.length > 0) {
+  const handleDelete = async (index: number, type: 'shared' | 'personal') => {
+    const configs = type === 'shared' ? sharedConfigurations : personalConfigurations
+    const configName = configs[index].name
+    
+    if (!window.confirm(`Are you sure you want to delete "${configName}"?`)) {
+      return
+    }
+
+    if (type === 'personal') {
+      // Delete personal config immediately
+      try {
+        const updated = configs.filter((_, i) => i !== index)
+        // If we deleted the default, make the first one default
+        if (configs[index].isDefault && updated.length > 0) {
+          updated[0].isDefault = true
+        }
+        await exportConfigurationsApi.updatePersonal({ configurations: updated })
+        setPersonalConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to delete configuration')
+      }
+    } else {
+      // For shared, just update local state (admin will save)
+      const updated = configs.filter((_, i) => i !== index)
+      if (configs[index].isDefault && updated.length > 0) {
         updated[0].isDefault = true
       }
-      setConfigurations(updated)
+      setSharedConfigurations(updated)
     }
   }
 
-  const handleSetDefault = (index: number) => {
-    const updated = configurations.map((c, i) => ({
+  const handleSetDefault = (index: number, type: 'shared' | 'personal') => {
+    const configs = type === 'shared' ? sharedConfigurations : personalConfigurations
+    const updated = configs.map((c, i) => ({
       ...c,
       isDefault: i === index,
     }))
-    setConfigurations(updated)
+    
+    if (type === 'shared') {
+      setSharedConfigurations(updated)
+    } else {
+      setPersonalConfigurations(updated)
+    }
   }
 
   const handleToggleColumn = (columnKey: string) => {
@@ -303,9 +390,15 @@ export default function ExportConfigurationsManager({
   }
 
   const hasUnsavedChanges = () => {
-    if (!data || !data.configurations) return configurations.length > 0
-    return JSON.stringify(configurations) !== JSON.stringify(data.configurations)
+    if (activeTab === 'shared' && isAdmin) {
+      // For shared configs, check if there are unsaved changes
+      // This is a simplified check - in production you'd want to compare with original loaded state
+      return false // Will be handled by save button visibility
+    }
+    return false // Personal configs are saved immediately
   }
+
+  const currentConfigurations = activeTab === 'shared' ? sharedConfigurations : personalConfigurations
 
   return (
     <div className="space-y-4">
@@ -333,76 +426,178 @@ export default function ExportConfigurationsManager({
           <label className="text-sm font-medium text-gray-700">
             Export Configurations
           </label>
-          <InfoTooltip text="Create and manage multiple named export configurations. Each configuration defines which columns appear in exports and their order. Select a default configuration to use when no specific configuration is chosen." />
+          <InfoTooltip text="Create and manage multiple named export configurations. Shared configurations are available to all users. Personal configurations are only visible to you. Each configuration defines which columns appear in exports and their order." />
         </div>
+        {activeTab === 'personal' && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowNewForm(true)
+              setEditingIndex(null)
+              setEditingType(null)
+              setNewConfigName('')
+              setNewConfigColumns(DEFAULT_COLUMNS)
+              setError(null)
+            }}
+            className="text-sm text-blue-600 hover:text-blue-800"
+          >
+            + Add Personal Configuration
+          </button>
+        )}
+        {activeTab === 'shared' && isAdmin && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowNewForm(true)
+              setEditingIndex(null)
+              setEditingType(null)
+              setNewConfigName('')
+              setNewConfigColumns(DEFAULT_COLUMNS)
+              setError(null)
+            }}
+            className="text-sm text-blue-600 hover:text-blue-800"
+          >
+            + Add Shared Configuration
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-gray-200 mb-4">
         <button
           type="button"
-          onClick={() => {
-            setShowNewForm(true)
-            setEditingIndex(null)
-            setNewConfigName('')
-            setNewConfigColumns(DEFAULT_COLUMNS)
-            setError(null)
-          }}
-          className="text-sm text-blue-600 hover:text-blue-800"
+          onClick={() => setActiveTab('shared')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'shared'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
         >
-          + Add Configuration
+          Shared Configurations
+          {sharedConfigurations.length > 0 && (
+            <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+              {sharedConfigurations.length}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('personal')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'personal'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          My Configurations
+          {personalConfigurations.length > 0 && (
+            <span className="ml-2 text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
+              {personalConfigurations.length}
+            </span>
+          )}
         </button>
       </div>
 
-      {/* Existing Configurations */}
-      <div className="space-y-2">
-        {configurations.map((config, index) => (
-          <div
-            key={index}
-            className="border border-gray-200 rounded-lg p-3 bg-white"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {config.isDefault && (
-                  <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                    Default
-                  </span>
-                )}
-                <span className="text-sm font-medium text-gray-900">{config.name}</span>
-                <span className="text-xs text-gray-500">
-                  ({config.columns.length} column{config.columns.length !== 1 ? 's' : ''})
-                </span>
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">Loading configurations...</div>
+      ) : (
+        <>
+          {/* Existing Configurations */}
+          <div className="space-y-2">
+            {currentConfigurations.map((config, index) => (
+              <div
+                key={index}
+                className={`border rounded-lg p-3 ${
+                  activeTab === 'shared' 
+                    ? 'border-gray-200 bg-gray-50' 
+                    : 'border-blue-200 bg-blue-50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {activeTab === 'shared' && (
+                      <span className="text-xs font-medium text-gray-600 bg-gray-200 px-2 py-1 rounded">
+                        Shared
+                      </span>
+                    )}
+                    {activeTab === 'personal' && (
+                      <span className="text-xs font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                        Personal
+                      </span>
+                    )}
+                    {config.isDefault && (
+                      <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                        Default
+                      </span>
+                    )}
+                    <span className="text-sm font-medium text-gray-900">{config.name}</span>
+                    <span className="text-xs text-gray-500">
+                      ({config.columns.length} column{config.columns.length !== 1 ? 's' : ''})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!config.isDefault && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetDefault(index, activeTab)}
+                        className="text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        Set as Default
+                      </button>
+                    )}
+                    {activeTab === 'shared' && isAdmin && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(index, 'shared')}
+                          className="text-xs text-gray-600 hover:text-gray-800"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(index, 'shared')}
+                          className="text-xs text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                    {activeTab === 'personal' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(index, 'personal')}
+                          className="text-xs text-gray-600 hover:text-gray-800"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(index, 'personal')}
+                          className="text-xs text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                    {activeTab === 'shared' && !isAdmin && (
+                      <span className="text-xs text-gray-400 italic">Read-only</span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {!config.isDefault && (
-                  <button
-                    type="button"
-                    onClick={() => handleSetDefault(index)}
-                    className="text-xs text-blue-600 hover:text-blue-800"
-                  >
-                    Set as Default
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => handleEdit(index)}
-                  className="text-xs text-gray-600 hover:text-gray-800"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(index)}
-                  className="text-xs text-red-600 hover:text-red-800"
-                >
-                  Delete
-                </button>
+            ))}
+            {currentConfigurations.length === 0 && !showNewForm && (
+              <div className="text-sm text-gray-500 italic text-center py-4">
+                {activeTab === 'shared' 
+                  ? 'No shared configurations available.'
+                  : 'No personal configurations yet. Click "Add Personal Configuration" to create one.'}
               </div>
-            </div>
+            )}
           </div>
-        ))}
-        {configurations.length === 0 && !showNewForm && (
-          <div className="text-sm text-gray-500 italic text-center py-4">
-            No configurations yet. Click "Add Configuration" to create one.
-          </div>
-        )}
-      </div>
+        </>
+      )}
 
       {/* New/Edit Form */}
       {showNewForm && (
@@ -547,14 +742,14 @@ export default function ExportConfigurationsManager({
               onClick={editingIndex !== null ? handleUpdate : handleAdd}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
             >
-              {editingIndex !== null ? 'Update' : 'Add'}
+              {editingIndex !== null ? 'Update' : activeTab === 'personal' ? 'Create' : 'Add'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Save Button */}
-      {hasUnsavedChanges() && (
+      {/* Save Button - Only for shared configs (admin) */}
+      {activeTab === 'shared' && isAdmin && sharedConfigurations.length > 0 && (
         <div className="flex justify-end pt-2">
           <button
             type="button"
@@ -562,7 +757,7 @@ export default function ExportConfigurationsManager({
             disabled={saving}
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? 'Saving...' : 'Save Shared Configurations'}
           </button>
         </div>
       )}
