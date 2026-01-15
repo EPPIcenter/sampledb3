@@ -8,7 +8,7 @@ export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, refreshUser, setUser } = useUser()
-  const [email, setEmail] = useState('')
+  const [emailOrUsername, setEmailOrUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,7 +31,7 @@ export default function Login() {
     setError(null)
 
     try {
-      const response = await authApi.login(email, password)
+      const response = await authApi.login(emailOrUsername, password)
       // The response structure from axios is: { data: { user: {...} } }
       // So we access response.data.user
       const userData = response.data?.user
@@ -75,19 +75,19 @@ export default function Login() {
           )}
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
+              <label htmlFor="emailOrUsername" className="sr-only">
+                Email or Username
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
+                id="emailOrUsername"
+                name="emailOrUsername"
+                type="text"
+                autoComplete="username"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={emailOrUsername}
+                onChange={(e) => setEmailOrUsername(e.target.value)}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Email address"
+                placeholder="Email or Username"
                 autoFocus
               />
             </div>

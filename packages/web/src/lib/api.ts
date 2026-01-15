@@ -1618,6 +1618,7 @@ export const setupApi = {
 export interface User {
   id: number
   email: string
+  username?: string
   name: string
   role: 'admin' | 'member' | 'viewer'
   createdAt?: string
@@ -1672,12 +1673,16 @@ export interface AdminSystemStats {
 }
 
 export const authApi = {
-  login: (email: string, password: string) =>
-    api.post<{ user: User }>('/auth/login', { email, password }),
+  login: (emailOrUsername: string, password: string) =>
+    api.post<{ user: User }>('/auth/login', { emailOrUsername, password }),
   logout: () => api.post<{ message: string }>('/auth/logout'),
   getCurrentUser: () => api.get<{ user: User }>('/auth/current'),
   switchUser: (userId: number, password: string) =>
     api.post<{ user: User }>('/auth/switch', { userId, password }),
+  updateProfile: (data: { name?: string; email?: string; username?: string | null }) =>
+    api.patch<{ user: User }>('/auth/me', data),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    api.patch<{ message: string }>('/auth/me/password', data),
 }
 
 export const adminApi = {

@@ -63,6 +63,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const newUser: User = {
         id: userData.id,
         email: userData.email,
+        username: userData.username,
         name: userData.name,
         role: userData.role,
       }
