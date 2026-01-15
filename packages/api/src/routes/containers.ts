@@ -372,11 +372,13 @@ containers.patch('/:id', async (c) => {
     }
     
     // Update container fields (excluding tagIds)
+    const user = c.get('user')
     const [updated] = await db
       .update(storageContainer)
       .set({
         ...updateData,
         lastUpdated: new Date().toISOString(),
+        updatedBy: user?.id,
       })
       .where(eq(storageContainer.id, id))
       .returning()

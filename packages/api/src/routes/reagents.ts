@@ -84,10 +84,15 @@ reagents.post('/', async (c) => {
     })
     
     const data = schema.parse(body)
+    const user = c.get('user')
     
     const [newReagent] = await database
       .insert(reagent)
-      .values(data)
+      .values({
+        ...data,
+        createdBy: user?.id,
+        updatedBy: user?.id,
+      })
       .returning()
     
     return c.json({ reagent: newReagent }, 201)
@@ -121,12 +126,14 @@ reagents.patch('/:id', async (c) => {
     })
     
     const data = schema.parse(body)
+    const user = c.get('user')
     
     const [updated] = await database
       .update(reagent)
       .set({
         ...data,
         lastUpdated: new Date().toISOString(),
+        updatedBy: user?.id,
       })
       .where(eq(reagent.id, id))
       .returning()

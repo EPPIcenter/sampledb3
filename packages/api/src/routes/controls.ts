@@ -1359,12 +1359,15 @@ controls.post('/', async (c) => {
       }
     }
     
+    const user = c.get('user')
     const result = await dbInstance
       .insert(controlDefinition)
       .values({
         name: finalName,
         controlType,
         properties: Object.keys(props).length > 0 ? props : null,
+        createdBy: user?.id,
+        updatedBy: user?.id,
       })
       .returning()
     
@@ -1473,12 +1476,14 @@ controls.patch('/:id', async (c) => {
     }
     
     // Update control definition
+    const user = c.get('user')
     const [updatedControl] = await dbInstance
       .update(controlDefinition)
       .set({
         ...baseData,
         properties: Object.keys(newProps).length > 0 ? newProps : null,
         lastUpdated: sql`current_timestamp`,
+        updatedBy: user?.id,
       })
       .where(eq(controlDefinition.id, id))
       .returning()
@@ -1620,6 +1625,7 @@ controls.post('/:id/batches', async (c) => {
       batchName = await generateUniqueBatchName(definition.name, data.productionDate)
     }
     
+    const user = c.get('user')
     const [newBatch] = await dbInstance
       .insert(controlBatch)
       .values({
@@ -1627,6 +1633,8 @@ controls.post('/:id/batches', async (c) => {
         name: batchName,
         productionDate: data.productionDate || null,
         properties: data.properties ? JSON.stringify(data.properties) : null,
+        createdBy: user?.id,
+        updatedBy: user?.id,
       })
       .returning()
     

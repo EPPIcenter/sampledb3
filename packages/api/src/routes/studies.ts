@@ -713,6 +713,7 @@ studies.post('/', async (c) => {
     })
     
     const data = schema.parse(body)
+    const user = c.get('user')
     
     const [newStudy] = await database
       .insert(study)
@@ -720,6 +721,8 @@ studies.post('/', async (c) => {
         ...data,
         created: new Date().toISOString(),
         lastUpdated: new Date().toISOString(),
+        createdBy: user?.id,
+        updatedBy: user?.id,
       })
       .returning()
     
@@ -786,11 +789,13 @@ studies.put('/:id', async (c) => {
     }
     
     // Update study (isLongitudinal cannot be changed after creation)
+    const user = c.get('user')
     const [updatedStudy] = await database
       .update(study)
       .set({
         ...data,
         lastUpdated: new Date().toISOString(),
+        updatedBy: user?.id,
       })
       .where(eq(study.id, id))
       .returning()

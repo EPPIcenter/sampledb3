@@ -314,6 +314,7 @@ locations.post('/', async (c) => {
     }
 
     const now = new Date().toISOString()
+    const user = c.get('user')
     const result = await database
       .insert(location)
       .values({
@@ -324,6 +325,8 @@ locations.post('/', async (c) => {
         canContainCollections: data.canContainCollections ?? false,
         created: now,
         lastUpdated: now,
+        createdBy: user?.id,
+        updatedBy: user?.id,
       })
       .returning()
 
@@ -457,6 +460,11 @@ locations.put('/:id', async (c) => {
     }
     if (data.description !== undefined) updateData.description = data.description ?? null
     if (data.canContainCollections !== undefined) updateData.canContainCollections = data.canContainCollections
+
+    const user = c.get('user')
+    if (user) {
+      updateData.updatedBy = user.id
+    }
 
     const result = await database
       .update(location)

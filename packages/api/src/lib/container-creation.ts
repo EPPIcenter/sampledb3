@@ -37,12 +37,7 @@ function normalizePosition(position: string | null | undefined): string | null {
 export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
 export interface ContainerData {
-  mode: 'create' | 'link' | 'skip'
   containerType: ContainerType
-  // For linking existing
-  containerBarcode?: string
-  containerId?: number
-  // For creating new
   collectionName?: string
   collectionBarcode?: string
   barcode?: string
@@ -61,22 +56,6 @@ export async function validateContainerData(
   containerType: ContainerType,
   data: ContainerData
 ): Promise<{ valid: boolean; error?: string }> {
-  if (data.mode === 'skip') {
-    return { valid: true }
-  }
-
-  if (data.mode === 'link') {
-    if (containerType === 'micronix_tube') {
-      if (!data.containerBarcode) {
-        return { valid: false, error: 'Container barcode is required for linking micronix tubes' }
-      }
-    } else if (!data.containerId) {
-      return { valid: false, error: 'Container ID is required for linking' }
-    }
-    return { valid: true }
-  }
-
-  // Mode is 'create'
   if (containerType === 'micronix_tube') {
     if (!data.barcode) {
       return { valid: false, error: 'Barcode is required for micronix tubes' }
@@ -125,45 +104,6 @@ export async function validateContainerData(
 }
 
 /**
- * Link existing container to specimen
- */
-export async function linkExistingContainer(
-  specimenId: number,
-  containerId: number,
-  database: Database = db
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    // Check if container exists and is not already linked
-    const container = await database
-      .select()
-      .from(storageContainer)
-      .where(eq(storageContainer.id, containerId))
-      .get()
-
-    if (!container) {
-      return { success: false, error: 'Container not found' }
-    }
-
-    if (container.specimenId && container.specimenId !== specimenId) {
-      return { success: false, error: 'Container is already linked to another specimen' }
-    }
-
-    // Update container to link to specimen
-    await database
-      .update(storageContainer)
-      .set({
-        specimenId,
-        lastUpdated: new Date().toISOString(),
-      })
-      .where(eq(storageContainer.id, containerId))
-
-    return { success: true }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'Failed to link container' }
-  }
-}
-
-/**
  * Create micronix tube container
  */
 async function createMicronixTube(
@@ -196,6 +136,8 @@ async function createMicronixTube(
       comment: data.comment,
       created: now,
       lastUpdated: now,
+      createdBy: userId,
+      updatedBy: userId,
     }).returning()
 
     await database.insert(micronixTube).values({
@@ -244,6 +186,8 @@ async function createCryovialTube(
       comment: data.comment,
       created: now,
       lastUpdated: now,
+      createdBy: userId,
+      updatedBy: userId,
     }).returning()
 
     await database.insert(cryovialTube).values({
@@ -293,6 +237,8 @@ async function createPaper(
       comment: data.comment,
       created: now,
       lastUpdated: now,
+      createdBy: userId,
+      updatedBy: userId,
     }).returning()
 
     await database.insert(paper).values({
@@ -341,6 +287,8 @@ async function createStaticWell(
       comment: data.comment,
       created: now,
       lastUpdated: now,
+      createdBy: userId,
+      updatedBy: userId,
     }).returning()
 
     await database.insert(staticWell).values({
@@ -361,12 +309,11 @@ async function createStaticWell(
 export async function createContainerForSpecimen(
   specimenId: number,
   data: ContainerData,
-  database: Database = db
+  database: Database = db,
+  userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   const validation = await validateContainerData(data.containerType, data)
   if (!validation.valid) return { success: false, error: validation.error }
-
-  if (data.mode === 'skip') return { success: true }
 
   // Get specimen to find specimen type ID for validation
   const specimenRecord = await database.select({ specimenTypeId: specimen.specimenTypeId }).from(specimen).where(eq(specimen.id, specimenId)).get()
@@ -379,18 +326,6 @@ export async function createContainerForSpecimen(
     const containerTypeValidation = await validateContainerTypeForSpecimenType(specimenRecord.specimenTypeId, data.containerType, database)
     if (!containerTypeValidation.valid) {
       return { success: false, error: containerTypeValidation.error }
-    }
-  }
-
-  if (data.mode === 'link') {
-    if (data.containerType === 'micronix_tube' && data.containerBarcode) {
-      const container = await database.select({ id: micronixTube.id }).from(micronixTube).where(eq(micronixTube.barcode, data.containerBarcode)).get()
-      if (!container) return { success: false, error: `Container with barcode '${data.containerBarcode}' not found` }
-      return linkExistingContainer(specimenId, container.id, database)
-    } else if (data.containerId) {
-      return linkExistingContainer(specimenId, data.containerId, database)
-    } else {
-      return { success: false, error: 'Container identifier required for linking' }
     }
   }
 

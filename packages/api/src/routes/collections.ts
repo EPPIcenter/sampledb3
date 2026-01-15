@@ -444,11 +444,14 @@ collections.post('/plates/micronix', async (c) => {
     if (existing) return c.json({ error: 'Plate with this name already exists' }, 400)
     
     const now = new Date().toISOString()
+    const user = c.get('user')
     const [newPlate] = await db.insert(micronixPlate).values({
       ...data,
       barcode: data.barcode || null,
       created: now,
       lastUpdated: now,
+      createdBy: user?.id,
+      updatedBy: user?.id,
     }).returning()
     
     return c.json({ plate: newPlate }, 201)
@@ -483,11 +486,14 @@ collections.post('/boxes/cryovial', async (c) => {
     if (existing) return c.json({ error: 'Cryovial box with this name already exists' }, 400)
     
     const now = new Date().toISOString()
+    const user = c.get('user')
     const [newBox] = await db.insert(cryovialBox).values({
       ...data,
       barcode: data.barcode || null,
       created: now,
       lastUpdated: now,
+      createdBy: user?.id,
+      updatedBy: user?.id,
     }).returning()
     
     return c.json({ box: newBox }, 201)
@@ -521,10 +527,13 @@ collections.post('/boxes', async (c) => {
     if (existing) return c.json({ error: 'Box with this name already exists' }, 400)
     
     const now = new Date().toISOString()
+    const user = c.get('user')
     const [newBox] = await db.insert(box).values({
       ...data,
       created: now,
       lastUpdated: now,
+      createdBy: user?.id,
+      updatedBy: user?.id,
     }).returning()
     
     return c.json({ box: newBox }, 201)
@@ -558,10 +567,13 @@ collections.post('/bags', async (c) => {
     if (existing) return c.json({ error: 'Bag with this name already exists' }, 400)
     
     const now = new Date().toISOString()
+    const user = c.get('user')
     const [newBag] = await db.insert(bag).values({
       ...data,
       created: now,
       lastUpdated: now,
+      createdBy: user?.id,
+      updatedBy: user?.id,
     }).returning()
     
     return c.json({ bag: newBag }, 201)

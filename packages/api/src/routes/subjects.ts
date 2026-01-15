@@ -614,6 +614,7 @@ subjects.post('/', async (c) => {
     
     const trimmedName = data.name.trim()
     const now = new Date().toISOString()
+    const user = c.get('user')
     
     const [newSubject] = await dbInstance
       .insert(studySubject)
@@ -622,6 +623,8 @@ subjects.post('/', async (c) => {
         name: trimmedName,
         created: now,
         lastUpdated: now,
+        createdBy: user?.id,
+        updatedBy: user?.id,
       })
       .returning()
     
@@ -716,6 +719,7 @@ subjects.post('/bulk', async (c) => {
     
     // Insert all subjects in a transaction
     const now = new Date().toISOString()
+    const user = c.get('user')
     const insertedSubjects = []
     
     for (const subject of validSubjects) {
@@ -726,6 +730,8 @@ subjects.post('/bulk', async (c) => {
           name: subject.name,
           created: now,
           lastUpdated: now,
+          createdBy: user?.id,
+          updatedBy: user?.id,
         })
         .returning()
       
@@ -765,10 +771,7 @@ subjects.post('/with-specimens', async (c) => {
     
     // Container schema matching specimens.ts
     const containerSchema = z.object({
-      mode: z.enum(['create', 'link', 'skip']).default('skip'),
       containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', 'static_well']).optional(),
-      containerBarcode: z.string().optional(),
-      containerId: z.number().int().optional(),
       collectionName: z.string().optional(),
       collectionBarcode: z.string().optional(),
       barcode: z.string().optional(),
@@ -842,7 +845,7 @@ subjects.post('/with-specimens', async (c) => {
       }
       
       // Validate container data if provided
-      if (spec.container && spec.container.mode !== 'skip' && spec.container.containerType) {
+      if (spec.container && spec.container.containerType) {
         // Validate container type is allowed for specimen type
         const containerTypeValidation = await validateContainerTypeForSpecimenType(
           specimenTypeId,
@@ -910,7 +913,7 @@ subjects.post('/with-specimens', async (c) => {
     // Resolve collections before transaction (for validation)
     const collectionMap = new Map<string, number>()
     for (const spec of resolvedSpecimens) {
-      if (spec.container && spec.container.mode === 'create' && spec.container.containerType) {
+      if (spec.container && spec.container.containerType) {
         const container = spec.container as ExtendedContainerData
         const containerType = container.containerType
         const collectionName = container.collectionName
@@ -964,7 +967,7 @@ subjects.post('/with-specimens', async (c) => {
     }> = []
     
     for (const spec of resolvedSpecimens) {
-      if (spec.container && spec.container.mode === 'create' && spec.container.containerType) {
+      if (spec.container && spec.container.containerType) {
         const container = spec.container as ExtendedContainerData
         const containerType = container.containerType
         
@@ -1000,6 +1003,7 @@ subjects.post('/with-specimens', async (c) => {
     }
     
     // Now execute everything in a synchronous transaction
+    const user = c.get('user')
     let result
     try {
       result = dbInstance.transaction((tx) => {
@@ -1030,6 +1034,8 @@ subjects.post('/with-specimens', async (c) => {
             name: trimmedName,
             created: now,
             lastUpdated: now,
+            createdBy: user?.id,
+            updatedBy: user?.id,
           })
           .returning()
           .get()
@@ -1058,6 +1064,8 @@ subjects.post('/with-specimens', async (c) => {
             collectionDate: spec.collectionDate,
             created: now,
             lastUpdated: now,
+            createdBy: user?.id,
+            updatedBy: user?.id,
           })
           .returning()
           .get()
@@ -1067,7 +1075,7 @@ subjects.post('/with-specimens', async (c) => {
         let containerId: number | undefined
         
         // Create container if provided
-        if (spec.container && spec.container.mode === 'create' && spec.container.containerType) {
+        if (spec.container && spec.container.containerType) {
           const container = spec.container as ExtendedContainerData
           const containerType = container.containerType
           
@@ -1243,7 +1251,7 @@ subjects.post('/with-specimens', async (c) => {
             tx.insert(paper).values({
               id: containerId,
               sheetId,
-              barcode: container.containerBarcode || null,
+              barcode: container.barcode || null,
               position: normalizePosition(container.position),
             }).run()
           } else if (containerType === 'static_well') {
@@ -1434,6 +1442,7 @@ subjects.post('/:targetId/merge', async (c) => {
       .where(eq(specimen.studySubjectId, sourceId))
 
     // Process merge in a transaction
+    const user = c.get('user')
     const result = dbInstance.transaction((tx) => {
       const now = new Date().toISOString()
 
@@ -1508,6 +1517,7 @@ subjects.post('/:targetId/merge', async (c) => {
             .set({
               studySubjectId: targetId,
               lastUpdated: now,
+              updatedBy: user?.id,
             })
             .where(eq(specimen.id, sourceSpecimen.id))
             .run()
@@ -1521,6 +1531,7 @@ subjects.post('/:targetId/merge', async (c) => {
         .update(studySubject)
         .set({
           lastUpdated: now,
+          updatedBy: user?.id,
         })
         .where(eq(studySubject.id, targetId))
         .run()
@@ -1613,11 +1624,13 @@ subjects.put('/:id', async (c) => {
     }
     
     // Update subject
+    const user = c.get('user')
     const [updatedSubject] = await dbInstance
       .update(studySubject)
       .set({
         name: trimmedName,
         lastUpdated: new Date().toISOString(),
+        updatedBy: user?.id,
       })
       .where(eq(studySubject.id, id))
       .returning()

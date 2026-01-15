@@ -16,7 +16,11 @@ search.get('/', async (c) => {
     }
 
     const results: any[] = []
-    const searchTypes = type ? [type] : ['specimen', 'container', 'study', 'subject']
+    // Map collection-specific types to 'collection' for search
+    const normalizedType = type === 'micronix_plate' || type === 'cryovial_box' || type === 'box' || type === 'bag' 
+      ? 'collection' 
+      : type
+    const searchTypes = normalizedType ? [normalizedType] : ['specimen', 'container', 'study', 'subject']
     
     // Helper to build location path string
     function buildLocationPath(loc: any | null): string | undefined {
@@ -244,6 +248,10 @@ search.get('/', async (c) => {
           type: 'micronix_plate',
           id: plate.id,
           title: plate.name,
+          name: plate.name,
+          barcode: plate.barcode,
+          locationId: plate.locationId,
+          locationPath: locationPath,
           subtitle: subtitle || 'No location',
           url: `/collections/micronix-plates/${plate.id}`,
           data: plate,
@@ -280,6 +288,10 @@ search.get('/', async (c) => {
           type: 'cryovial_box',
           id: box.id,
           title: box.name,
+          name: box.name,
+          barcode: box.barcode,
+          locationId: box.locationId,
+          locationPath: locationPath,
           subtitle: subtitle || 'No location',
           url: `/collections/cryovial-boxes/${box.id}`,
           data: box,

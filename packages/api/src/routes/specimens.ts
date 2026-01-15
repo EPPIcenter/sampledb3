@@ -222,10 +222,7 @@ specimens.post('/', async (c) => {
     const body = await c.req.json()
     
     const containerSchema = z.object({
-      mode: z.enum(['create', 'link', 'skip']).default('skip'),
       containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', 'static_well']).optional(),
-      containerBarcode: z.string().optional(),
-      containerId: z.number().int().optional(),
       collectionName: z.string().optional(),
       collectionBarcode: z.string().optional(),
       barcode: z.string().optional(),
@@ -265,12 +262,15 @@ specimens.post('/', async (c) => {
     }
     
     const now = new Date().toISOString()
+    const user = c.get('user')
     const insertData: any = {
       studySubjectId: validation.resolved.studySubjectId,
       controlBatchId: validation.resolved.controlBatchId,
       specimenTypeId: validation.resolved.specimenTypeId,
       created: now,
       lastUpdated: now,
+      createdBy: user?.id,
+      updatedBy: user?.id,
     }
     
     if (data.collectionDate) {
@@ -284,8 +284,9 @@ specimens.post('/', async (c) => {
     
     let containerResult: { success: boolean; containerId?: number; error?: string } | null = null
     
-    if (data.container && data.container.mode !== 'skip') {
-      containerResult = await createContainerForSpecimen(newSpecimen.id, data.container as ContainerData, dbInstance)
+    if (data.container) {
+      const user = c.get('user')
+      containerResult = await createContainerForSpecimen(newSpecimen.id, data.container as ContainerData, dbInstance, user?.id)
       if (!containerResult.success) {
         await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))
         throw new ValidationError(containerResult.error || 'Failed to create container')
