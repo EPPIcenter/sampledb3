@@ -608,7 +608,7 @@ export async function validateDerivationsCsv(
             ? parseNumber(row.quantity_used) 
             : settings.quantityUsed
           
-          if (quantityUsed && parentContainer.remainingQuantity < quantityUsed) {
+          if (quantityUsed && parentContainer.remainingQuantity !== null && parentContainer.remainingQuantity < quantityUsed) {
             validationRow.warnings = validationRow.warnings || []
             validationRow.warnings.push(`Insufficient parent quantity: ${parentContainer.remainingQuantity} available, ${quantityUsed} requested`)
             warningCount++
@@ -638,8 +638,9 @@ export async function validateDerivationsCsv(
 
       validationRow.valid = true
       validCount++
-    } catch (error: any) {
-      validationRow.error = error?.message || String(error)
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      validationRow.error = errorMessage
       invalidCount++
     }
 
@@ -693,7 +694,7 @@ export async function importDerivationsFromCsv(
     // All-or-nothing: throw on first error to trigger rollback
     // Wrap in try-catch to capture which row failed, but still let transaction rollback
     let failedRowIndex: number | null = null
-    let transactionError: Error | null = null
+    let transactionError: unknown = null
     
     try {
       await db.transaction(async (tx) => {
@@ -738,7 +739,7 @@ export async function importDerivationsFromCsv(
               warnings: result.warnings.map(w => w.message),
               collectionStatus: collectionInfo.status,
             })
-          } catch (error: any) {
+          } catch (error: unknown) {
             // Track which row failed and throw to trigger rollback
             failedRowIndex = i
             transactionError = error
@@ -746,14 +747,17 @@ export async function importDerivationsFromCsv(
           }
         }
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Transaction failed and rolled back - return error for failed row
       // All other rows are marked as not processed (transaction rolled back)
       if (failedRowIndex !== null) {
+        const transactionErrorMessage = transactionError instanceof Error ? transactionError.message : String(transactionError || 'Unknown error')
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        const finalMessage = transactionErrorMessage !== 'null' && transactionErrorMessage !== 'Unknown error' ? transactionErrorMessage : errorMessage
         results.push({
           index: failedRowIndex,
           success: false,
-          error: `Row ${failedRowIndex + 1}: ${transactionError?.message || error?.message || String(error)}. All changes rolled back (all-or-nothing transaction).`,
+          error: `Row ${failedRowIndex + 1}: ${finalMessage}. All changes rolled back (all-or-nothing transaction).`,
         })
         // Mark all previous rows as failed due to transaction rollback
         for (let i = 0; i < failedRowIndex; i++) {
@@ -811,11 +815,12 @@ export async function importDerivationsFromCsv(
           warnings: result.warnings.map(w => w.message),
           collectionStatus: collectionInfo.status,
         })
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
         results.push({
           index: i,
           success: false,
-          error: error?.message || String(error),
+          error: errorMessage,
         })
       }
     }

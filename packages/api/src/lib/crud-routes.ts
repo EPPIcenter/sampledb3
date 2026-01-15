@@ -2,11 +2,19 @@ import { Hono } from 'hono'
 import { eq, and, ne, sql, SQL } from 'drizzle-orm'
 import { z } from 'zod'
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
+import type { InferSelectModel } from 'drizzle-orm'
 import type { Database } from '../db/client'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from './error-handler'
 import { listResponse, successResponse, createdResponse } from './response-helpers'
 
-export interface CrudRouteConfig<TTable extends SQLiteTable, TCreate, TUpdate = Partial<TCreate>> {
+export interface CrudRouteConfig<
+  TTable extends SQLiteTable,
+  TCreate,
+  TUpdate = Partial<TCreate>,
+  TSelect = InferSelectModel<TTable>,
+  TListOutput = TSelect,
+  TDetailOutput = TSelect
+> {
   /**
    * The database table
    */
@@ -46,12 +54,12 @@ export interface CrudRouteConfig<TTable extends SQLiteTable, TCreate, TUpdate = 
   /**
    * Optional: Transform list response
    */
-  transformList?: (item: any) => any
+  transformList?: (item: TSelect) => TListOutput
   
   /**
    * Optional: Transform detail response
    */
-  transformDetail?: (item: any) => any
+  transformDetail?: (item: TSelect) => TDetailOutput
   
   /**
    * Optional: Custom order by clause (defaults to name field)
@@ -67,12 +75,12 @@ export interface CrudRouteConfig<TTable extends SQLiteTable, TCreate, TUpdate = 
   /**
    * Optional: Additional fields to set on create
    */
-  onCreateDefaults?: (data: TCreate) => Record<string, any>
+  onCreateDefaults?: (data: TCreate) => Record<string, unknown>
   
   /**
    * Optional: Additional fields to set on update
    */
-  onUpdateDefaults?: (data: TUpdate) => Record<string, any>
+  onUpdateDefaults?: (data: TUpdate) => Record<string, unknown>
   
   /**
    * Optional: Custom validation before create
@@ -88,8 +96,15 @@ export interface CrudRouteConfig<TTable extends SQLiteTable, TCreate, TUpdate = 
 /**
  * Creates a generic CRUD route handler for reference data tables
  */
-export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = Partial<TCreate>>(
-  config: CrudRouteConfig<TTable, TCreate, TUpdate>
+export function createCrudRoutes<
+  TTable extends SQLiteTable,
+  TCreate,
+  TUpdate = Partial<TCreate>,
+  TSelect = InferSelectModel<TTable>,
+  TListOutput = TSelect,
+  TDetailOutput = TSelect
+>(
+  config: CrudRouteConfig<TTable, TCreate, TUpdate, TSelect, TListOutput, TDetailOutput>
 ): Hono {
   const {
     table,
@@ -130,10 +145,10 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
       
       const items = await query
       const transformed = transformList 
-        ? items.map(transformList)
+        ? items.map(item => transformList(item as TSelect))
         : items
 
-      return listResponse(c, transformed)
+      return listResponse(c, transformed as TListOutput[])
     } catch (error) {
       return handleRouteError(error, c)
     }
@@ -158,8 +173,8 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
         throw new NotFoundError(entityName, id)
       }
 
-      const transformed = transformDetail ? transformDetail(item) : item
-      return successResponse(c, transformed)
+      const transformed = transformDetail ? transformDetail(item as TSelect) : item
+      return successResponse(c, transformed as TDetailOutput)
     } catch (error) {
       return handleRouteError(error, c)
     }
@@ -194,7 +209,7 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
       }
 
       // Prepare insert data
-      const insertData: any = { ...data }
+      const insertData = { ...data } as Record<string, unknown>
       if (onCreateDefaults) {
         Object.assign(insertData, onCreateDefaults(data))
       }
@@ -208,10 +223,10 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
 
       const result = await database
         .insert(table)
-        .values(insertData)
+        .values(insertData as any)
         .returning()
 
-      const transformed = transformDetail ? transformDetail(result[0]) : result[0]
+      const transformed = transformDetail ? transformDetail(result[0] as TSelect) : result[0]
       return createdResponse(c, transformed)
     } catch (error) {
       return handleRouteError(error, c)
@@ -267,7 +282,7 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
       }
 
       // Prepare update data
-      const updateData: any = { ...data }
+      const updateData = { ...data } as Record<string, unknown>
       if (onUpdateDefaults) {
         Object.assign(updateData, onUpdateDefaults(data))
       }
@@ -281,11 +296,11 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
 
       const result = await database
         .update(table)
-        .set(updateData)
+        .set(updateData as any)
         .where(eq((table as any).id, id))
         .returning()
 
-      const transformed = transformDetail ? transformDetail(result[0]) : result[0]
+      const transformed = transformDetail ? transformDetail(result[0] as TSelect) : result[0]
       return successResponse(c, transformed)
     } catch (error) {
       return handleRouteError(error, c)

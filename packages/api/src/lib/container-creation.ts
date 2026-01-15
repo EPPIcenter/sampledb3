@@ -109,7 +109,8 @@ export async function validateContainerData(
 async function createMicronixTube(
   specimenId: number,
   data: ContainerData,
-  database: Database = db
+  database: Database = db,
+  userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
     const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate', database)
@@ -148,8 +149,9 @@ async function createMicronixTube(
     })
 
     return { success: true, containerId: container.id }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'Failed to create micronix tube' }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create micronix tube'
+    return { success: false, error: errorMessage }
   }
 }
 
@@ -159,7 +161,8 @@ async function createMicronixTube(
 async function createCryovialTube(
   specimenId: number,
   data: ContainerData,
-  database: Database = db
+  database: Database = db,
+  userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
     const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'cryovial_box', database)
@@ -198,8 +201,9 @@ async function createCryovialTube(
     })
 
     return { success: true, containerId: container.id }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'Failed to create cryovial tube' }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create cryovial tube'
+    return { success: false, error: errorMessage }
   }
 }
 
@@ -209,7 +213,8 @@ async function createCryovialTube(
 async function createPaper(
   specimenId: number,
   data: ContainerData,
-  database: Database = db
+  database: Database = db,
+  userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
     // Resolve sheet
@@ -249,8 +254,9 @@ async function createPaper(
     })
 
     return { success: true, containerId: container.id }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'Failed to create paper' }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create paper'
+    return { success: false, error: errorMessage }
   }
 }
 
@@ -260,7 +266,8 @@ async function createPaper(
 async function createStaticWell(
   specimenId: number,
   data: ContainerData,
-  database: Database = db
+  database: Database = db,
+  userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
     const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate', database)
@@ -298,8 +305,9 @@ async function createStaticWell(
     })
 
     return { success: true, containerId: container.id }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'Failed to create static well' }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create static well'
+    return { success: false, error: errorMessage }
   }
 }
 
@@ -330,10 +338,10 @@ export async function createContainerForSpecimen(
   }
 
   switch (data.containerType) {
-    case 'micronix_tube': return createMicronixTube(specimenId, data, database)
-    case 'cryovial_tube': return createCryovialTube(specimenId, data, database)
-    case 'paper': return createPaper(specimenId, data, database)
-    case 'static_well': return createStaticWell(specimenId, data, database)
+    case 'micronix_tube': return createMicronixTube(specimenId, data, database, userId)
+    case 'cryovial_tube': return createCryovialTube(specimenId, data, database, userId)
+    case 'paper': return createPaper(specimenId, data, database, userId)
+    case 'static_well': return createStaticWell(specimenId, data, database, userId)
     default: return { success: false, error: `Unsupported container type: ${data.containerType}` }
   }
 }

@@ -64,11 +64,12 @@ export async function resolveCollectionByName(
  */
 export async function resolveCollectionByBarcode(
   barcode: string,
-  type: CollectionType
+  type: CollectionType,
+  database: Database = db
 ): Promise<number | null> {
   switch (type) {
     case 'micronix_plate': {
-      const plate = await db
+      const plate = await database
         .select({ id: micronixPlate.id })
         .from(micronixPlate)
         .where(eq(micronixPlate.barcode, barcode))

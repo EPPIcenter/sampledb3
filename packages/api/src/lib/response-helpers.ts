@@ -4,8 +4,8 @@ import { ApiResponse, PaginationMeta } from './api-types'
 /**
  * Create a standardized success response
  */
-export function successResponse<T>(c: Context, data: T, status = 200) {
-  return c.json({ data } as ApiResponse<T>, status)
+export function successResponse<T>(c: Context, data: T, status: 200 | 201 | 204 = 200) {
+  return c.json({ data } as ApiResponse<T>, status as 200)
 }
 
 /**
