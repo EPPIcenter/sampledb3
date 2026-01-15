@@ -45,6 +45,7 @@ export const users = sqliteTable('users', {
   role: text('role').notNull(), // 'admin', 'member', 'viewer'
   createdAt: text('created').notNull().default(sql`current_timestamp`),
   lastLogin: text('last_login'),
+  deletedAt: text('deleted_at'), // Soft delete timestamp
 })
 
 export const sessions = sqliteTable('sessions', {
@@ -373,10 +374,16 @@ export const version = sqliteTable('version', {
 })
 
 // Application settings (user-configurable defaults)
+// userId is NULL for system-wide settings, set for user-specific settings
 export const settings = sqliteTable('settings', {
-  key: text('key').primaryKey(),
+  key: text('key').notNull(),
+  userId: integer('user_id').references(() => users.id), // nullable for system settings
   value: text('value', { mode: 'json' }).notNull(),
-})
+}, (table) => ({
+  pk: primaryKey(table.key, table.userId), // Composite primary key
+  // Index for efficient user settings lookup
+  userIdIdx: index('settings_user_id_idx').on(table.userId),
+}))
 
 // Constraint junction tables
 export const specimenTypeContainerType = sqliteTable('specimen_type_container_type', {
