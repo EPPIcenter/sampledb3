@@ -6,6 +6,7 @@ import type { InferSelectModel } from 'drizzle-orm'
 import type { Database } from '../db/client'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from './error-handler'
 import { listResponse, successResponse, createdResponse } from './response-helpers'
+import { adminMiddleware } from '../middleware/auth'
 
 export interface CrudRouteConfig<
   TTable extends SQLiteTable,
@@ -180,8 +181,8 @@ export function createCrudRoutes<
     }
   })
 
-  // POST / - Create
-  routes.post('/', async (c) => {
+  // POST / - Create (admin only)
+  routes.post('/', adminMiddleware, async (c) => {
     try {
       const body = await c.req.json()
       const data = createSchema.parse(body)
@@ -233,8 +234,8 @@ export function createCrudRoutes<
     }
   })
 
-  // PUT /:id - Update
-  routes.put('/:id', async (c) => {
+  // PUT /:id - Update (admin only)
+  routes.put('/:id', adminMiddleware, async (c) => {
     const id = parseInt(c.req.param('id'))
     
     if (isNaN(id)) {
@@ -307,8 +308,8 @@ export function createCrudRoutes<
     }
   })
 
-  // DELETE /:id - Delete
-  routes.delete('/:id', async (c) => {
+  // DELETE /:id - Delete (admin only)
+  routes.delete('/:id', adminMiddleware, async (c) => {
     const id = parseInt(c.req.param('id'))
     
     if (isNaN(id)) {

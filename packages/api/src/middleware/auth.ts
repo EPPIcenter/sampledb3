@@ -2,7 +2,7 @@ import { Context, Next } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import { db } from '../db/client'
 import { sessions, users } from '../db/schema'
-import { eq, and, gt } from 'drizzle-orm'
+import { eq, and, gt, isNull } from 'drizzle-orm'
 
 export interface AuthUser {
   id: number
@@ -50,7 +50,10 @@ export async function authMiddleware(c: Context, next: Next) {
       role: users.role,
     })
     .from(users)
-    .where(eq(users.id, session.userId))
+    .where(and(
+      eq(users.id, session.userId),
+      isNull(users.deletedAt) // Exclude soft-deleted users
+    ))
     .get()
 
   if (!user) {
@@ -58,6 +61,23 @@ export async function authMiddleware(c: Context, next: Next) {
   }
 
   c.set('user', user as AuthUser)
+  await next()
+}
+
+export async function adminMiddleware(c: Context, next: Next) {
+  // First check authentication
+  await authMiddleware(c, async () => {})
+  
+  const user = c.get('user')
+  
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+  
+  if (user.role !== 'admin') {
+    return c.json({ error: 'Forbidden: Admin access required' }, 403)
+  }
+  
   await next()
 }
 
