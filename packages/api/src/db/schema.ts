@@ -1,8 +1,40 @@
 import { sqliteTable, text, integer, real, check, primaryKey, unique, index } from 'drizzle-orm/sqlite-core'
 import { sql, type InferSelectModel } from 'drizzle-orm'
 
-export type SpecimenType = InferSelectModel<typeof specimenType>
+// Type exports for all database tables
+export type User = InferSelectModel<typeof users>
+export type Session = InferSelectModel<typeof sessions>
+export type Tag = InferSelectModel<typeof tag>
+export type Unit = InferSelectModel<typeof unit>
 export type Study = InferSelectModel<typeof study>
+export type StudySubject = InferSelectModel<typeof studySubject>
+export type ControlDefinition = InferSelectModel<typeof controlDefinition>
+export type ControlBatch = InferSelectModel<typeof controlBatch>
+export type Reagent = InferSelectModel<typeof reagent>
+export type CellLine = InferSelectModel<typeof cellLine>
+export type Plasmid = InferSelectModel<typeof plasmid>
+export type Standard = InferSelectModel<typeof standard>
+export type SpecimenType = InferSelectModel<typeof specimenType>
+export type Specimen = InferSelectModel<typeof specimen>
+export type StorageContainer = InferSelectModel<typeof storageContainer>
+export type StorageContainerTag = InferSelectModel<typeof storageContainerTag>
+export type Location = InferSelectModel<typeof location>
+export type MicronixPlate = InferSelectModel<typeof micronixPlate>
+export type MicronixTube = InferSelectModel<typeof micronixTube>
+export type CryovialBox = InferSelectModel<typeof cryovialBox>
+export type CryovialTube = InferSelectModel<typeof cryovialTube>
+export type Box = InferSelectModel<typeof box>
+export type Bag = InferSelectModel<typeof bag>
+export type Sheet = InferSelectModel<typeof sheet>
+export type Paper = InferSelectModel<typeof paper>
+export type StaticWell = InferSelectModel<typeof staticWell>
+export type Strain = InferSelectModel<typeof strain>
+export type StorageType = InferSelectModel<typeof storageType>
+export type Version = InferSelectModel<typeof version>
+export type Settings = InferSelectModel<typeof settings>
+export type SpecimenTypeContainerType = InferSelectModel<typeof specimenTypeContainerType>
+export type ContainerTypeUnit = InferSelectModel<typeof containerTypeUnit>
+export type ContainerDerivation = InferSelectModel<typeof containerDerivation>
 
 // Users and authentication
 export const users = sqliteTable('users', {
