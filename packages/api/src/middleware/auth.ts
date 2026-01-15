@@ -7,6 +7,7 @@ import { eq, and, gt, isNull } from 'drizzle-orm'
 export interface AuthUser {
   id: number
   email: string
+  username?: string
   name: string
   role: 'admin' | 'member' | 'viewer'
 }
@@ -46,6 +47,7 @@ export async function authMiddleware(c: Context, next: Next) {
     .select({
       id: users.id,
       email: users.email,
+      username: users.username,
       name: users.name,
       role: users.role,
     })
@@ -60,7 +62,13 @@ export async function authMiddleware(c: Context, next: Next) {
     return c.json({ error: 'User not found' }, 404)
   }
 
-  c.set('user', user as AuthUser)
+  c.set('user', {
+    id: user.id,
+    email: user.email,
+    username: user.username || undefined,
+    name: user.name,
+    role: user.role,
+  } as AuthUser)
   await next()
 }
 

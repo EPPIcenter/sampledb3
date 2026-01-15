@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import { users, sessions } from '../db/schema'
-import { eq, and, isNull, gt, ne } from 'drizzle-orm'
+import { eq, and, isNull, gt, ne, or } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { nanoid } from 'nanoid'
@@ -13,7 +13,7 @@ export function createAuthRoutes(database: Database) {
   const auth = new Hono()
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  emailOrUsername: z.string().min(1),
   password: z.string().min(1),
 })
 
@@ -27,6 +27,7 @@ const createRegisterSchema = async () => {
   return z.object({
     email: z.string().email(),
     name: z.string().min(1),
+    username: z.string().min(1).optional().nullable(),
     password: z.string().min(minLength),
     role: z.enum(['admin', 'member', 'viewer']).default('member'),
   })
@@ -36,13 +37,17 @@ const createRegisterSchema = async () => {
 auth.post('/login', async (c) => {
   try {
     const body = await c.req.json()
-    const { email, password } = loginSchema.parse(body)
+    const { emailOrUsername, password } = loginSchema.parse(body)
 
+    // Try to find user by email or username
     const user = await database
       .select()
       .from(users)
       .where(and(
-        eq(users.email, email),
+        or(
+          eq(users.email, emailOrUsername),
+          eq(users.username, emailOrUsername)
+        ),
         isNull(users.deletedAt) // Exclude soft-deleted users
       ))
       .get()
@@ -91,6 +96,7 @@ auth.post('/login', async (c) => {
       user: {
         id: user.id,
         email: user.email,
+        username: user.username || undefined,
         name: user.name,
         role: user.role,
       },
@@ -116,7 +122,32 @@ auth.post('/logout', async (c) => {
 // Get current user (requires authentication)
 auth.get('/me', authMiddleware, async (c) => {
   const user = c.get('user')!
-  return c.json({ user })
+  // Fetch full user data including username
+  const fullUser = await database
+    .select({
+      id: users.id,
+      email: users.email,
+      username: users.username,
+      name: users.name,
+      role: users.role,
+    })
+    .from(users)
+    .where(eq(users.id, user.id))
+    .get()
+  
+  if (!fullUser) {
+    return c.json({ error: 'User not found' }, 404)
+  }
+  
+  return c.json({ 
+    user: {
+      id: fullUser.id,
+      email: fullUser.email,
+      username: fullUser.username || undefined,
+      name: fullUser.name,
+      role: fullUser.role,
+    }
+  })
 })
 
 // Register (admin only in production)
@@ -126,15 +157,28 @@ auth.post('/register', async (c) => {
     const registerSchema = await createRegisterSchema()
     const data = registerSchema.parse(body)
 
-    // Check if user exists
-    const existing = await database
+    // Check if email already exists
+    const existingEmail = await database
       .select()
       .from(users)
       .where(eq(users.email, data.email))
       .get()
 
-    if (existing) {
-      return c.json({ error: 'User already exists' }, 400)
+    if (existingEmail) {
+      return c.json({ error: 'Email already in use' }, 400)
+    }
+
+    // Check if username already exists (if provided)
+    if (data.username) {
+      const existingUsername = await database
+        .select()
+        .from(users)
+        .where(eq(users.username, data.username))
+        .get()
+
+      if (existingUsername) {
+        return c.json({ error: 'Username already in use' }, 400)
+      }
     }
 
     // Hash password
@@ -145,6 +189,7 @@ auth.post('/register', async (c) => {
       .insert(users)
       .values({
         email: data.email,
+        username: data.username || null,
         name: data.name,
         passwordHash,
         role: data.role,
@@ -155,6 +200,7 @@ auth.post('/register', async (c) => {
       user: {
         id: user.id,
         email: user.email,
+        username: user.username || undefined,
         name: user.name,
         role: user.role,
       },
@@ -170,7 +216,186 @@ auth.post('/register', async (c) => {
 // Get current user (alias for /me for consistency, requires authentication)
 auth.get('/current', authMiddleware, async (c) => {
   const user = c.get('user')!
-  return c.json({ user })
+  // Fetch full user data including username
+  const fullUser = await database
+    .select({
+      id: users.id,
+      email: users.email,
+      username: users.username,
+      name: users.name,
+      role: users.role,
+    })
+    .from(users)
+    .where(eq(users.id, user.id))
+    .get()
+  
+  if (!fullUser) {
+    return c.json({ error: 'User not found' }, 404)
+  }
+  
+  return c.json({ 
+    user: {
+      id: fullUser.id,
+      email: fullUser.email,
+      username: fullUser.username || undefined,
+      name: fullUser.name,
+      role: fullUser.role,
+    }
+  })
+})
+
+// Update current user profile (self-service)
+auth.patch('/me', authMiddleware, async (c) => {
+  try {
+    const currentUser = c.get('user')!
+    const body = await c.req.json()
+    const updateSchema = z.object({
+      name: z.string().min(1).optional(),
+      email: z.string().email().optional(),
+      username: z.string().min(1).optional().nullable(),
+    })
+    const data = updateSchema.parse(body)
+
+    // Get current user from database
+    const existing = await database
+      .select()
+      .from(users)
+      .where(eq(users.id, currentUser.id))
+      .get()
+
+    if (!existing) {
+      return c.json({ error: 'User not found' }, 404)
+    }
+
+    // If email is being updated, check for duplicates (excluding current user)
+    if (data.email && data.email !== existing.email) {
+      const duplicate = await database
+        .select()
+        .from(users)
+        .where(and(
+          eq(users.email, data.email),
+          isNull(users.deletedAt),
+          ne(users.id, currentUser.id)
+        ))
+        .get()
+
+      if (duplicate) {
+        return c.json({ error: 'Email already in use' }, 400)
+      }
+    }
+
+    // If username is being updated, check for duplicates (excluding current user)
+    if (data.username !== undefined) {
+      // Allow setting username to null (clearing it)
+      if (data.username !== null && data.username !== existing.username) {
+        const duplicate = await database
+          .select()
+          .from(users)
+          .where(and(
+            eq(users.username, data.username),
+            isNull(users.deletedAt),
+            ne(users.id, currentUser.id)
+          ))
+          .get()
+
+        if (duplicate) {
+          return c.json({ error: 'Username already in use' }, 400)
+        }
+      }
+    }
+
+    const [updated] = await database
+      .update(users)
+      .set(data)
+      .where(eq(users.id, currentUser.id))
+      .returning()
+
+    return c.json({
+      user: {
+        id: updated.id,
+        email: updated.email,
+        username: updated.username || undefined,
+        name: updated.name,
+        role: updated.role,
+      },
+    })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// Change current user password (self-service)
+auth.patch('/me/password', authMiddleware, async (c) => {
+  try {
+    const currentUser = c.get('user')!
+    const body = await c.req.json()
+    const schema = z.object({
+      currentPassword: z.string().min(1),
+      newPassword: z.string().min(1),
+    })
+    const { currentPassword, newPassword } = schema.parse(body)
+
+    // Get password requirements
+    const passwordRequirements = await getPasswordRequirements()
+    if (!passwordRequirements) {
+      return c.json({ error: 'Password requirements are not configured' }, 500)
+    }
+
+    if (newPassword.length < passwordRequirements.minLength) {
+      return c.json({ 
+        error: `Password must be at least ${passwordRequirements.minLength} characters` 
+      }, 400)
+    }
+
+    // Get current user from database
+    const existing = await database
+      .select()
+      .from(users)
+      .where(eq(users.id, currentUser.id))
+      .get()
+
+    if (!existing) {
+      return c.json({ error: 'User not found' }, 404)
+    }
+
+    // Verify current password
+    const valid = await bcrypt.compare(currentPassword, existing.passwordHash)
+    if (!valid) {
+      return c.json({ error: 'Current password is incorrect' }, 401)
+    }
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(newPassword, 10)
+
+    await database
+      .update(users)
+      .set({ passwordHash })
+      .where(eq(users.id, currentUser.id))
+
+    // Revoke all existing sessions except the current one for security
+    const sessionId = getCookie(c, 'session_id')
+    if (sessionId) {
+      await database
+        .delete(sessions)
+        .where(and(
+          eq(sessions.userId, currentUser.id),
+          ne(sessions.id, sessionId)
+        ))
+    } else {
+      // If no session cookie, revoke all sessions
+      await database.delete(sessions).where(eq(sessions.userId, currentUser.id))
+    }
+
+    return c.json({ message: 'Password changed successfully' })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    return c.json({ error: 'Internal server error' }, 500)
+  }
 })
 
 // List all users (admin only, requires authentication)
@@ -182,6 +407,7 @@ auth.get('/users', adminMiddleware, async (c) => {
       .select({
         id: users.id,
         email: users.email,
+        username: users.username,
         name: users.name,
         role: users.role,
         createdAt: users.createdAt,
@@ -276,6 +502,7 @@ auth.post('/switch', authMiddleware, async (c) => {
       user: {
         id: targetUser.id,
         email: targetUser.email,
+        username: targetUser.username || undefined,
         name: targetUser.name,
         role: targetUser.role,
       },
@@ -300,6 +527,7 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
     const updateSchema = z.object({
       name: z.string().min(1).optional(),
       email: z.string().email().optional(),
+      username: z.string().min(1).optional().nullable(),
       role: z.enum(['admin', 'member', 'viewer']).optional(),
     })
     const data = updateSchema.parse(body)
@@ -322,12 +550,33 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
         .from(users)
         .where(and(
           eq(users.email, data.email),
-          isNull(users.deletedAt)
+          isNull(users.deletedAt),
+          ne(users.id, id)
         ))
         .get()
 
       if (duplicate) {
         return c.json({ error: 'Email already in use' }, 400)
+      }
+    }
+
+    // If username is being updated, check for duplicates (excluding soft-deleted users)
+    if (data.username !== undefined) {
+      // Allow setting username to null (clearing it)
+      if (data.username !== null && data.username !== existing.username) {
+        const duplicate = await database
+          .select()
+          .from(users)
+          .where(and(
+            eq(users.username, data.username),
+            isNull(users.deletedAt),
+            ne(users.id, id)
+          ))
+          .get()
+
+        if (duplicate) {
+          return c.json({ error: 'Username already in use' }, 400)
+        }
       }
     }
 
@@ -357,6 +606,7 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
       user: {
         id: updated.id,
         email: updated.email,
+        username: updated.username || undefined,
         name: updated.name,
         role: updated.role,
         createdAt: updated.createdAt,
@@ -539,6 +789,7 @@ auth.post('/users/:id/restore', adminMiddleware, async (c) => {
       user: {
         id: restored.id,
         email: restored.email,
+        username: restored.username || undefined,
         name: restored.name,
         role: restored.role,
         createdAt: restored.createdAt,
