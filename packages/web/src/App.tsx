@@ -33,6 +33,7 @@ import BloodControls from './pages/BloodControls'
 import ControlDefinitionForm from './components/forms/ControlDefinitionForm'
 import ReferenceData from './pages/ReferenceData'
 import Settings from './pages/Settings'
+import Profile from './pages/Profile'
 import Derivations from './pages/Derivations'
 import DerivationsBulkImport from './pages/DerivationsBulkImport'
 import AdminDashboard from './pages/AdminDashboard'
@@ -200,6 +201,13 @@ function AppContent() {
         category: 'Navigation',
         keywords: ['derivations', 'derivation'],
         action: () => navigate('/derivations'),
+      },
+      {
+        id: 'nav-profile',
+        label: 'Go to My Profile',
+        category: 'Navigation',
+        keywords: ['profile', 'my profile', 'account'],
+        action: () => navigate('/profile'),
       },
       {
         id: 'nav-settings',
@@ -507,6 +515,7 @@ function AppContent() {
           <Route path="/blood-controls/batches/:id/add-specimens" element={<ControlBatchWizard />} />
               <Route path="/reference-data" element={<ReferenceData />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/profile" element={<Profile />} />
               <Route path="/derivations" element={<Derivations />} />
               <Route path="/derivations/import" element={<DerivationsBulkImport />} />
               {/* Admin routes */}
