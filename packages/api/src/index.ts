@@ -161,6 +161,7 @@ const port = Number(process.env.PORT) || 3000
 console.log(`🚀 SampleDB API server starting on port ${port}`)
 console.log(`📁 Database: ${process.env.DATABASE_PATH || './sampledb_dev.sqlite (default)'}`)
 
+// @ts-expect-error - Bun global is available at runtime
 Bun.serve({
   fetch: app.fetch,
   port,
