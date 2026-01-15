@@ -1561,8 +1561,10 @@ export const settingsApi = {
   getAll: () => api.get<AllSettings>('/settings'),
   get: <T extends keyof AllSettings>(key: T): Promise<{ data: { key: T; value: AllSettings[T] } }> => 
     api.get<{ key: T; value: AllSettings[T] }>(`/settings/${key}`),
-  update: <T extends keyof AllSettings>(key: T, value: AllSettings[T]): Promise<{ data: { key: T; value: AllSettings[T] } }> =>
-    api.put<{ key: T; value: AllSettings[T] }>(`/settings/${key}`, value),
+  update: <T extends keyof AllSettings>(key: T, value: AllSettings[T], userId?: number | null): Promise<{ data: { key: T; value: AllSettings[T]; userId?: number | null } }> =>
+    api.put<{ key: T; value: AllSettings[T]; userId?: number | null }>(`/settings/${key}`, { ...value, userId }),
+  resetUserSetting: (key: string): Promise<{ data: { success: boolean; message: string } }> =>
+    api.delete<{ success: boolean; message: string }>(`/settings/${key}/user`),
   getUnits: () => api.get<Unit[]>('/settings/units'),
   getContainerTypeUnits: (containerType: string) =>
     api.get<{ units: Unit[] }>(`/settings/container-types/${containerType}/units`),
@@ -1576,12 +1578,26 @@ export const settingsApi = {
 
 export const exportConfigurationsApi = {
   getAll: () => api.get<ExportConfigurations>('/settings/export_configurations'),
-  update: (configs: ExportConfigurations) => api.put<ExportConfigurations>('/settings/export_configurations', configs),
+  getShared: () => api.get<ExportConfigurations>('/settings/export-configurations/shared'),
+  getPersonal: () => api.get<ExportConfigurations>('/settings/export-configurations/personal'),
+  update: (configs: ExportConfigurations, userId?: number | null) => 
+    api.put<ExportConfigurations>('/settings/export_configurations', { ...configs, userId }),
+  createPersonal: (config: ExportConfiguration) => 
+    api.post<{ success: boolean; config: ExportConfiguration }>('/settings/export-configurations/personal', config),
+  updatePersonal: (configs: ExportConfigurations) => 
+    api.put<{ success: boolean; configurations: ExportConfiguration[] }>('/settings/export-configurations/personal', configs),
 }
 
 export const scannerConfigurationsApi = {
   getAll: () => api.get<ScannerConfigurations>('/settings/scanner_configurations'),
-  update: (configs: ScannerConfigurations) => api.put<ScannerConfigurations>('/settings/scanner_configurations', configs),
+  getShared: () => api.get<ScannerConfigurations>('/settings/scanner-configurations/shared'),
+  getPersonal: () => api.get<ScannerConfigurations>('/settings/scanner-configurations/personal'),
+  update: (configs: ScannerConfigurations, userId?: number | null) => 
+    api.put<ScannerConfigurations>('/settings/scanner_configurations', { ...configs, userId }),
+  createPersonal: (config: ScannerConfiguration) => 
+    api.post<{ success: boolean; config: ScannerConfiguration }>('/settings/scanner-configurations/personal', config),
+  updatePersonal: (configs: ScannerConfigurations) => 
+    api.put<{ success: boolean; configurations: ScannerConfiguration[] }>('/settings/scanner-configurations/personal', configs),
 }
 
 export const setupApi = {
@@ -1604,6 +1620,55 @@ export interface User {
   email: string
   name: string
   role: 'admin' | 'member' | 'viewer'
+  createdAt?: string
+  lastLogin?: string
+  deletedAt?: string
+}
+
+export interface UserSession {
+  id: string
+  expiresAt: number
+}
+
+export interface AdminSystemStats {
+  users: {
+    total: number
+    active: number
+    deleted: number
+    byRole: Record<string, number>
+    recentLogins: number
+  }
+  sessions: {
+    active: number
+  }
+  entities: {
+    studies: number
+    subjects: number
+    specimens: number
+    containers: number
+  }
+  containers: {
+    micronixTubes: number
+    cryovialTubes: number
+    papers: number
+    staticWells: number
+  }
+  collections: {
+    micronixPlates: number
+    cryovialBoxes: number
+    boxes: number
+    bags: number
+  }
+  referenceData: {
+    specimenTypes: number
+    storageTypes: number
+    tags: number
+    units: number
+    strains: number
+  }
+  locations: {
+    total: number
+  }
 }
 
 export const authApi = {
@@ -1613,6 +1678,27 @@ export const authApi = {
   getCurrentUser: () => api.get<{ user: User }>('/auth/current'),
   switchUser: (userId: number, password: string) =>
     api.post<{ user: User }>('/auth/switch', { userId, password }),
+}
+
+export const adminApi = {
+  getUsers: (includeDeleted = false) =>
+    api.get<{ users: User[] }>('/auth/users', { params: { includeDeleted } }),
+  createUser: (data: { email: string; name: string; password: string; role?: 'admin' | 'member' | 'viewer' }) =>
+    api.post<{ user: User }>('/auth/register', data),
+  updateUser: (id: number, data: { name?: string; email?: string; role?: 'admin' | 'member' | 'viewer' }) =>
+    api.put<{ user: User }>(`/auth/users/${id}`, data),
+  deleteUser: (id: number) =>
+    api.delete<{ message: string }>(`/auth/users/${id}`),
+  restoreUser: (id: number) =>
+    api.post<{ user: User }>(`/auth/users/${id}/restore`),
+  resetPassword: (id: number, password: string) =>
+    api.patch<{ message: string }>(`/auth/users/${id}/password`, { password }),
+  getUserSessions: (userId: number) =>
+    api.get<{ sessions: UserSession[] }>(`/auth/users/${userId}/sessions`),
+  revokeSession: (sessionId: string) =>
+    api.delete<{ message: string }>(`/auth/sessions/${sessionId}`),
+  getSystemStats: () =>
+    api.get<AdminSystemStats>('/statistics/admin'),
 }
 
 export default api

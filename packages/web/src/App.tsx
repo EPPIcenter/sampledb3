@@ -35,8 +35,13 @@ import ReferenceData from './pages/ReferenceData'
 import Settings from './pages/Settings'
 import Derivations from './pages/Derivations'
 import DerivationsBulkImport from './pages/DerivationsBulkImport'
+import AdminDashboard from './pages/AdminDashboard'
+import AdminUsers from './pages/AdminUsers'
+import AdminSettings from './pages/AdminSettings'
+import AdminStatistics from './pages/AdminStatistics'
 import SetupGuard from './components/SetupGuard'
 import AuthGuard from './components/AuthGuard'
+import AdminGuard from './components/AdminGuard'
 import { DateFilterProvider } from './contexts/DateFilterContext'
 import { HotkeyProvider, useHotkeyContext } from './contexts/HotkeyContext'
 import { UserProvider } from './contexts/UserContext'
@@ -504,6 +509,39 @@ function AppContent() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/derivations" element={<Derivations />} />
               <Route path="/derivations/import" element={<DerivationsBulkImport />} />
+              {/* Admin routes */}
+              <Route
+                path="/admin"
+                element={
+                  <AdminGuard>
+                    <AdminDashboard />
+                  </AdminGuard>
+                }
+              />
+              <Route
+                path="/admin/users"
+                element={
+                  <AdminGuard>
+                    <AdminUsers />
+                  </AdminGuard>
+                }
+              />
+              <Route
+                path="/admin/settings"
+                element={
+                  <AdminGuard>
+                    <AdminSettings />
+                  </AdminGuard>
+                }
+              />
+              <Route
+                path="/admin/statistics"
+                element={
+                  <AdminGuard>
+                    <AdminStatistics />
+                  </AdminGuard>
+                }
+              />
                 </Routes>
               </main>
             </div>
