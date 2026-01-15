@@ -199,6 +199,13 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
         Object.assign(insertData, onCreateDefaults(data))
       }
 
+      // Set created_by from user context if available and table has the field
+      const user = c.get('user')
+      const createdByField = (table as any).createdBy
+      if (user && createdByField) {
+        insertData.createdBy = user.id
+      }
+
       const result = await database
         .insert(table)
         .values(insertData)
@@ -263,6 +270,13 @@ export function createCrudRoutes<TTable extends SQLiteTable, TCreate, TUpdate = 
       const updateData: any = { ...data }
       if (onUpdateDefaults) {
         Object.assign(updateData, onUpdateDefaults(data))
+      }
+
+      // Set updated_by from user context if available and table has the field
+      const user = c.get('user')
+      const updatedByField = (table as any).updatedBy
+      if (user && updatedByField) {
+        updateData.updatedBy = user.id
       }
 
       const result = await database
