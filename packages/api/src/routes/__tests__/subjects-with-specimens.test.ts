@@ -175,7 +175,6 @@ describe('Subjects with Specimens API', () => {
               specimenTypeName: 'Whole Blood',
               collectionDate: '2024-01-15',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'BOX-001',
                 position: 'A01',
@@ -228,7 +227,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'micronix_tube',
                 collectionName: 'PLATE-001',
                 barcode: 'MTX-12345',
@@ -287,7 +285,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'paper',
                 collectionName: 'BOX-002',
                 label: 'Sheet-1',
@@ -333,7 +330,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'static_well',
                 collectionName: 'PLATE-002',
                 position: 'C03',
@@ -390,7 +386,6 @@ describe('Subjects with Specimens API', () => {
               specimenTypeName: 'Whole Blood',
               collectionDate: '2024-01-15',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'BOX-003',
                 position: 'A01',
@@ -400,7 +395,6 @@ describe('Subjects with Specimens API', () => {
               specimenTypeName: 'Whole Blood',
               collectionDate: '2024-01-16',
               container: {
-                mode: 'create',
                 containerType: 'micronix_tube',
                 collectionName: 'PLATE-003',
                 barcode: 'MTX-11111',
@@ -455,7 +449,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'BOX-004',
                 position: 'A01',
@@ -514,7 +507,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'BOX-005',
                 position: 'A01',
@@ -523,7 +515,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'BOX-005',
                 position: 'A02',
@@ -532,7 +523,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'BOX-005',
                 position: 'A03',
@@ -591,7 +581,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'NON-EXISTENT-BOX',
                 // No collectionLocationId - should fail
@@ -668,7 +657,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'micronix_tube',
                 collectionName: 'PLATE-DUP',
                 barcode: 'MTX-DUPLICATE', // Duplicate!
@@ -713,7 +701,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'EXISTING-BOX',
                 position: 'A01',
@@ -745,7 +732,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'NEW-BOX',
                 collectionLocationId: testLocation.id,
@@ -777,7 +763,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'MISSING-BOX',
                 // No collectionLocationId
@@ -857,7 +842,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'BOX-RESPONSE',
                 position: 'A01',
@@ -900,7 +884,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'BOX-SUMMARY',
                 position: 'A01',
@@ -909,7 +892,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 collectionName: 'BOX-SUMMARY',
                 position: 'A02',
@@ -978,7 +960,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'cryovial_tube',
                 // Missing collectionName
               },
@@ -997,7 +978,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'micronix_tube',
                 collectionName: 'PLATE',
                 // Missing barcode
@@ -1017,7 +997,6 @@ describe('Subjects with Specimens API', () => {
             {
               specimenTypeName: 'Whole Blood',
               container: {
-                mode: 'create',
                 containerType: 'paper',
                 collectionName: 'BOX',
                 // Missing label

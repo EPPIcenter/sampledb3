@@ -100,7 +100,6 @@ describe('Specimen Creation Integration Tests', () => {
         specimenTypeId: specimenType.id,
         collectionDate: '2024-01-01',
         container: {
-          mode: 'create',
           containerType: 'micronix_tube',
           collectionName: plate.name,
           barcode: 'TEST001',
