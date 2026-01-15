@@ -40,6 +40,7 @@ export type ContainerDerivation = InferSelectModel<typeof containerDerivation>
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey(),
   email: text('email').notNull().unique(),
+  username: text('username').unique(),
   name: text('name').notNull(),
   passwordHash: text('password_hash').notNull(),
   role: text('role').notNull(), // 'admin', 'member', 'viewer'
