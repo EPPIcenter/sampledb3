@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { db } from '../db/client'
-import { specimen, study, studySubject, micronixTube, cryovialTube, micronixPlate, cryovialBox, box, bag, location, controlBatch, controlDefinition } from '../db/schema'
+import { specimen, study, studySubject, micronixTube, cryovialTube, micronixPlate, cryovialBox, box, bag, location, controlBatch, controlDefinition, type Location } from '../db/schema'
 import { eq, or, like, sql } from 'drizzle-orm'
 
 const search = new Hono()
@@ -23,16 +23,13 @@ search.get('/', async (c) => {
     const searchTypes = normalizedType ? [normalizedType] : ['specimen', 'container', 'study', 'subject']
     
     // Helper to build location path string
-    function buildLocationPath(loc: any | null): string | undefined {
+    function buildLocationPath(loc: { path?: string | null; locationPath?: string | null; name?: string; locationName?: string | null } | null | undefined): string | undefined {
       if (!loc) return undefined
       // Use the materialized path if available, otherwise use name
-      if (loc.locationPath) {
-        return loc.locationPath
+      if (loc.path || loc.locationPath) {
+        return loc.path || loc.locationPath || undefined
       }
-      if (loc.locationName) {
-        return loc.locationName
-      }
-      return undefined
+      return loc.name || loc.locationName || undefined
     }
 
     // Search specimens by ID or source info
@@ -392,15 +389,17 @@ search.get('/', async (c) => {
     }
 
     return c.json({ results, query, count: results.length })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in search:', error)
     const isDevelopment = process.env.NODE_ENV !== 'production'
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorStack = error instanceof Error ? error.stack : undefined
     return c.json({ 
       error: 'Search failed',
       query: c.req.query('q') || '',
       ...(isDevelopment && { 
-        details: error.message,
-        stack: error.stack 
+        details: errorMessage,
+        stack: errorStack 
       }),
       ...(!isDevelopment && { 
         errorCode: 'SEARCH_ERROR'

@@ -657,7 +657,7 @@ export_.post('/containers/multi-study', async (c) => {
       // Since it's multi-study, we'll use the first study or create a generic one
       const firstStudy = result.studies && result.studies.size > 0 
         ? Array.from(result.studies.values())[0]
-        : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', description: null, leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '' }
+        : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', description: null, leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '', createdBy: null, updatedBy: null }
       const dummyFilters: ExportFilters = { study: 'MULTI' }
       const jsonData = await formatAsJSON(result.containers, dummyFilters, firstStudy, configName)
       return c.json({
@@ -760,7 +760,7 @@ export_.post('/containers/by-barcodes', async (c) => {
     // For multi-study, we use subjectToStudyMap to get the correct study for each container
     const firstStudy = studies && studies.length > 0 
       ? studies[0] 
-      : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', description: null, leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '' }
+      : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', description: null, leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '', createdBy: null, updatedBy: null }
     
     const enrichedData = await enrichContainerData(containers, specimens, firstStudy, undefined, subjectToStudyMap)
 
@@ -779,7 +779,7 @@ export_.post('/containers/by-barcodes', async (c) => {
 
     if (format === 'json') {
       const dummyFilters: ExportFilters = { study: 'MULTI' }
-      const studyWithDescription = firstStudy.description !== undefined ? firstStudy : { ...firstStudy, description: null }
+      const studyWithDescription = firstStudy.description !== undefined ? firstStudy : { ...firstStudy, description: null as string | null }
       const jsonData = await formatAsJSON(enrichedData, dummyFilters, studyWithDescription, configName)
       return c.json({
         summary,

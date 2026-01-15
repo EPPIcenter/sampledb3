@@ -20,10 +20,12 @@ const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
 })
 
+import type { SpecimenType } from '../db/schema'
+
 /**
  * Transform list response to include only specific fields
  */
-function transformList(item: any) {
+function transformList(item: SpecimenType) {
   return {
     id: item.id,
     name: item.name,
@@ -98,28 +100,28 @@ async function checkContainerTypeInUse(
         foundContainer = await database
           .select({ id: paper.id })
           .from(paper)
-          .where(inArray(paper.id, chunk))
+          .where(inArray(paper.id, chunk as number[]))
           .limit(1)
           .get()
       } else if (containerType === 'cryovial_tube') {
         foundContainer = await database
           .select({ id: cryovialTube.id })
           .from(cryovialTube)
-          .where(inArray(cryovialTube.id, chunk))
+          .where(inArray(cryovialTube.id, chunk as number[]))
           .limit(1)
           .get()
       } else if (containerType === 'micronix_tube') {
         foundContainer = await database
           .select({ id: micronixTube.id })
           .from(micronixTube)
-          .where(inArray(micronixTube.id, chunk))
+          .where(inArray(micronixTube.id, chunk as number[]))
           .limit(1)
           .get()
       } else if (containerType === 'static_well') {
         foundContainer = await database
           .select({ id: staticWell.id })
           .from(staticWell)
-          .where(inArray(staticWell.id, chunk))
+          .where(inArray(staticWell.id, chunk as number[]))
           .limit(1)
           .get()
       }

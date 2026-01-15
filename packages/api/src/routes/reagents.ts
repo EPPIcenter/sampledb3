@@ -80,7 +80,7 @@ reagents.post('/', async (c) => {
       receivedDate: z.string().optional(),
       expirationDate: z.string().optional(),
       storageTemp: z.string().optional(),
-      properties: z.record(z.string(), z.any()).optional(),
+      properties: z.record(z.string(), z.unknown()).optional(),
     })
     
     const data = schema.parse(body)
@@ -122,7 +122,7 @@ reagents.patch('/:id', async (c) => {
       receivedDate: z.string().optional(),
       expirationDate: z.string().optional(),
       storageTemp: z.string().optional(),
-      properties: z.record(z.string(), z.any()).optional(),
+      properties: z.record(z.string(), z.unknown()).optional(),
     })
     
     const data = schema.parse(body)

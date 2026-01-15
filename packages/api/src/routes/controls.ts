@@ -25,6 +25,7 @@ import { z } from 'zod'
 import { validateControlBatchName, generateUniqueBatchName } from '../lib/validation'
 import { generateControlDefinitionName, generateUniqueControlDefinitionName } from '../lib/control-name-generation'
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
+import type { BloodControlProperties, ParsedControlProperties } from '../types/properties'
 
 /**
  * Create controls routes with database injection
@@ -35,24 +36,25 @@ export function createControlsRoutes(database: Database): Hono {
   const controls = new Hono()
 
 // Helper function to extract strain/density data from properties JSON
-function parseControlProperties(properties: any, strainMap?: Map<number, { name: string }>) {
+function parseControlProperties(properties: unknown, strainMap?: Map<number, { name: string }>): ParsedControlProperties {
   if (!properties) return { strains: [], targetDensity: undefined, unitSymbol: undefined, targetDensityUnitId: undefined }
   
-  let props: any
+  let props: BloodControlProperties
   try {
-    props = typeof properties === 'string' ? JSON.parse(properties) : properties
+    const parsed = typeof properties === 'string' ? JSON.parse(properties) : properties
+    props = parsed as BloodControlProperties
   } catch (e) {
     // If parsing fails, return empty data
     return { strains: [], targetDensity: undefined, unitSymbol: undefined, targetDensityUnitId: undefined }
   }
   
-  const strains = (props.strains || []).map((s: any) => {
+  const strains = (props.strains || []).map((s: number | { id: number; name?: string; percentage?: number }) => {
     if (typeof s === 'number') {
       // Just strain ID - look up name if available
       return { id: s, name: strainMap?.get(s)?.name || `Strain ${s}` }
     }
     // Full strain object with id, name, percentage
-    return s
+    return { id: s.id, name: s.name || `Strain ${s.id}`, percentage: s.percentage }
   })
   
   // Extract target density - handle both number and string formats
@@ -61,9 +63,10 @@ function parseControlProperties(properties: any, strainMap?: Map<number, { name:
     : undefined
   
   // Extract unit symbol - check multiple possible locations
-  const unitSymbol = props.targetDensityUnit?.symbol 
-    || props.targetDensityUnitSymbol 
-    || (props.targetDensityUnit && typeof props.targetDensityUnit === 'string' ? props.targetDensityUnit : undefined)
+  const unitSymbol = (typeof props.targetDensityUnit === 'object' && props.targetDensityUnit !== null && 'symbol' in props.targetDensityUnit)
+    ? (props.targetDensityUnit as { symbol: string }).symbol
+    : props.targetDensityUnitSymbol 
+    || (typeof props.targetDensityUnit === 'string' ? props.targetDensityUnit : undefined)
   
   // Extract unit ID
   const targetDensityUnitId = props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null

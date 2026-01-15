@@ -1,26 +1,24 @@
 import { Hono } from 'hono'
 import { db } from '../db/client'
-import { storageContainer, specimen, location, unit, micronixTube, cryovialTube, micronixPlate, cryovialBox, studySubject, study, specimenType, controlBatch, controlDefinition, box, paper, sheet, bag, staticWell, tag, storageContainerTag } from '../db/schema'
+import { storageContainer, specimen, location, unit, micronixTube, cryovialTube, micronixPlate, cryovialBox, studySubject, study, specimenType, controlBatch, controlDefinition, box, paper, sheet, bag, staticWell, tag, storageContainerTag, type Location, type StorageContainer, type Unit, type Tag } from '../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
+import type { CollectionInfo } from '../types/collections'
 
 const containers = new Hono()
 
 // Helper function to build full location path
-function buildLocationPath(loc: any, parentName?: string): string {
+function buildLocationPath(loc: Location | null | undefined, parentName?: string): string {
   if (!loc) return parentName || ''
   // Use the materialized path if available, otherwise use name
-  if (loc.locationPath) {
-    return parentName ? `${loc.locationPath} → ${parentName}` : loc.locationPath
+  if (loc.path) {
+    return parentName ? `${loc.path} → ${parentName}` : loc.path
   }
-  if (loc.locationName) {
-    return parentName ? `${loc.locationName} → ${parentName}` : loc.locationName
-  }
-  return parentName || ''
+  return parentName ? `${loc.name} → ${parentName}` : loc.name
 }
 
-async function enrichContainerDetailed(container: any) {
+async function enrichContainerDetailed(container: StorageContainer) {
   const id = container.id
 
   // Get unit and tags
@@ -67,22 +65,22 @@ async function enrichContainerDetailed(container: any) {
     }).from(staticWell).leftJoin(micronixPlate, eq(staticWell.collectionId, micronixPlate.id)).where(eq(staticWell.id, id)).get(),
   ])
 
-  let containerType = 'unknown'
+  let containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well' | 'unknown' = 'unknown'
   let locationId: number | null = null
-  let collectionInfo: any = null
+  let collectionInfo: CollectionInfo | null = null
   let parentContainerName: string | undefined
 
   if (micronixInfo) {
     containerType = 'micronix_tube'
-    locationId = micronixInfo.locationId
-    collectionInfo = { type: 'micronix_plate', id: micronixInfo.plateId, name: micronixInfo.plateName, position: micronixInfo.position, barcode: micronixInfo.barcode }
+    locationId = micronixInfo.locationId || null
+    collectionInfo = { type: 'micronix_plate', id: micronixInfo.plateId!, name: micronixInfo.plateName!, position: micronixInfo.position, barcode: micronixInfo.barcode }
   } else if (cryovialInfo) {
     containerType = 'cryovial_tube'
-    locationId = cryovialInfo.locationId
-    collectionInfo = { type: 'cryovial_box', id: cryovialInfo.boxId, name: cryovialInfo.boxName, position: cryovialInfo.position, barcode: cryovialInfo.barcode }
+    locationId = cryovialInfo.locationId || null
+    collectionInfo = { type: 'cryovial_box', id: cryovialInfo.boxId!, name: cryovialInfo.boxName!, position: cryovialInfo.position, barcode: cryovialInfo.barcode }
   } else if (paperInfo) {
     containerType = 'paper'
-    collectionInfo = { type: 'sheet', id: paperInfo.sheetId, name: paperInfo.sheetName, position: paperInfo.position, barcode: paperInfo.barcode }
+    collectionInfo = { type: 'sheet', id: paperInfo.sheetId!, name: paperInfo.sheetName!, position: paperInfo.position, barcode: paperInfo.barcode }
     
     // For paper, location is on the parent box or bag
     if (paperInfo.boxId) {
@@ -96,14 +94,14 @@ async function enrichContainerDetailed(container: any) {
     }
   } else if (staticWellInfo) {
     containerType = 'static_well'
-    locationId = staticWellInfo.locationId
-    collectionInfo = { type: 'micronix_plate', id: staticWellInfo.plateId, name: staticWellInfo.plateName, position: staticWellInfo.position }
+    locationId = staticWellInfo.locationId || null
+    collectionInfo = { type: 'micronix_plate', id: staticWellInfo.plateId!, name: staticWellInfo.plateName!, position: staticWellInfo.position }
   }
 
   // Get location details
-  let locationInfo: any = null
+  let locationInfo: Location | null = null
   if (locationId) {
-    locationInfo = await db.select().from(location).where(eq(location.id, locationId)).get()
+    locationInfo = await db.select().from(location).where(eq(location.id, locationId)).get() || null
   }
 
   return {
@@ -194,9 +192,10 @@ containers.get('/', async (c) => {
         totalPages: Math.ceil(total / limit),
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching containers:', error)
-    return c.json({ error: 'Failed to fetch containers', details: error.message }, 500)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    return c.json({ error: 'Failed to fetch containers', details: errorMessage }, 500)
   }
 })
 
@@ -306,9 +305,10 @@ containers.get('/:id', async (c) => {
       source: sourceInfo,
       ...enriched,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching container:', error)
-    return c.json({ error: 'Failed to fetch container', details: error.message }, 500)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    return c.json({ error: 'Failed to fetch container', details: errorMessage }, 500)
   }
 })
 
@@ -330,7 +330,8 @@ containers.patch('/:id', async (c) => {
     })
     
     const data = schema.parse(body)
-    const { tagIds, unitId, ...updateData } = data
+    const { tagIds, unitId, ...restData } = data
+    const updateData: { comment?: string; remainingQuantity?: number; unitId?: number } = { ...restData }
     
     // Validate unit if provided
     if (unitId !== undefined) {
@@ -353,7 +354,7 @@ containers.patch('/:id', async (c) => {
         db.select().from(staticWell).where(eq(staticWell.id, id)).get(),
       ])
       
-      let containerType: string | null = null
+      let containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well' | null = null
       if (micronixInfo) containerType = 'micronix_tube'
       else if (cryovialInfo) containerType = 'cryovial_tube'
       else if (paperInfo) containerType = 'paper'
@@ -362,7 +363,7 @@ containers.patch('/:id', async (c) => {
       if (containerType) {
         // Validate unit is allowed for container type
         const { validateUnitForContainerType } = await import('../lib/validation')
-        const validation = await validateUnitForContainerType(containerType as any, unitId)
+        const validation = await validateUnitForContainerType(containerType, unitId)
         if (!validation.valid) {
           return c.json({ error: validation.error }, 400)
         }
@@ -431,9 +432,10 @@ containers.get('/:id/tags', async (c) => {
       .where(eq(storageContainerTag.storageContainerId, id))
 
     return c.json({ tags })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching container tags:', error)
-    return c.json({ error: 'Failed to fetch container tags', details: error.message }, 500)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    return c.json({ error: 'Failed to fetch container tags', details: errorMessage }, 500)
   }
 })
 
@@ -471,9 +473,9 @@ containers.post('/:id/tags', async (c) => {
         storageContainerId: id,
         tagId,
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Ignore duplicate key errors
-      if (!error.message?.includes('UNIQUE constraint')) {
+      if (error instanceof Error && !error.message.includes('UNIQUE constraint')) {
         throw error
       }
     }
@@ -506,9 +508,10 @@ containers.delete('/:id/tags/:tagId', async (c) => {
       )
 
     return c.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error removing container tag:', error)
-    return c.json({ error: 'Failed to remove tag', details: error.message }, 500)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    return c.json({ error: 'Failed to remove tag', details: errorMessage }, 500)
   }
 })
 

@@ -49,7 +49,7 @@ settings.get('/', async (c) => {
       export_configurations: exportConfigurations,
       scanner_configurations: scannerConfigurations,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return c.json({ error: 'Internal server error' }, 500)
   }
 })
@@ -68,7 +68,7 @@ settings.get('/units', async (c) => {
       .orderBy(unit.symbol)
     
     return c.json(units)
-  } catch (error: any) {
+  } catch (error: unknown) {
     return c.json({ error: 'Internal server error' }, 500)
   }
 })
@@ -78,7 +78,7 @@ settings.get('/:key', async (c) => {
   try {
     const key = c.req.param('key')
 
-    let value: any = null
+    let value: unknown = null
     switch (key) {
       case 'container_defaults':
         value = await getContainerDefaults()
@@ -107,7 +107,7 @@ settings.get('/:key', async (c) => {
     }
 
     return c.json({ key, value })
-  } catch (error: any) {
+  } catch (error: unknown) {
     return c.json({ error: 'Internal server error' }, 500)
   }
 })
@@ -250,7 +250,7 @@ settings.put('/:key', async (c) => {
       default:
         return c.json({ error: 'Invalid setting key' }, 400)
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return c.json({ 
         error: 'Validation error', 
@@ -260,7 +260,8 @@ settings.put('/:key', async (c) => {
         }))
       }, 400)
     }
-    return c.json({ error: 'Internal server error', details: error.message }, 500)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    return c.json({ error: 'Internal server error', details: errorMessage }, 500)
   }
 })
 

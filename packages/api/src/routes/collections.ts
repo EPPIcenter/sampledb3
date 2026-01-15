@@ -613,17 +613,19 @@ collections.post('/containers/resolve', async (c) => {
     }
     
     return c.json({ containers: result })
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
     console.error('Error resolving containers:', error)
     const isDevelopment = process.env.NODE_ENV !== 'production'
+    const errorMessage = error instanceof Error ? error.message : 'Failed to resolve containers'
+    const errorStack = error instanceof Error ? error.stack : undefined
     return c.json({ 
-      error: error?.message || 'Failed to resolve containers',
+      error: errorMessage,
       ...(isDevelopment && { 
-        details: error?.message,
-        stack: error?.stack 
+        details: errorMessage,
+        stack: errorStack 
       }),
       ...(!isDevelopment && { 
         errorCode: 'RESOLVE_CONTAINERS_ERROR'
@@ -784,19 +786,21 @@ collections.post('/containers/move', async (c) => {
     }
     
     return c.json({ success: true, moved: result.moved })
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
     console.error('Error moving containers:', error)
     const isDevelopment = process.env.NODE_ENV !== 'production'
+    const errorMessage = error instanceof Error ? error.message : 'Failed to move containers'
+    const errorStack = error instanceof Error ? error.stack : undefined
     return c.json({ 
-      error: error?.message || 'Failed to move containers',
+      error: errorMessage,
       moved: 0,
-      errors: [{ row: 0, error: error?.message || 'Internal server error' }],
+      errors: [{ row: 0, error: errorMessage }],
       ...(isDevelopment && { 
-        details: error?.message,
-        stack: error?.stack 
+        details: errorMessage,
+        stack: errorStack 
       }),
       ...(!isDevelopment && { 
         errorCode: 'MOVE_CONTAINERS_ERROR'

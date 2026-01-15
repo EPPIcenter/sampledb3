@@ -17,6 +17,7 @@ import {
   staticWell,
   location,
   bag,
+  type Location,
 } from '../db/schema'
 import { eq, sql, and, inArray, or, isNull } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../lib/constants'
@@ -142,7 +143,11 @@ export function createSubjectsRoutes(database: Database): Hono {
       throw new Error('Container defaults are not configured. Please run database initialization.')
     }
 
-    const defaults = defaultsRecord.value as any
+    // Type guard for ContainerDefaults
+    const defaults = defaultsRecord.value as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
+    if (!defaults) {
+      throw new Error('Container defaults are not configured. Please run database initialization.')
+    }
     const containerDefaults = defaults[containerType]
     if (!containerDefaults || !containerDefaults.defaultUnitSymbol) {
       throw new Error(`Default unit symbol not configured for container type '${containerType}'. Please update settings.`)
@@ -174,8 +179,8 @@ export function createSubjectsRoutes(database: Database): Hono {
       throw new Error('Container defaults are not configured. Please run database initialization.')
     }
 
-    const defaults = defaultsRecord.value as any
-    if (!defaults[containerType]) {
+    const defaults = defaultsRecord.value as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
+    if (!defaults || !defaults[containerType]) {
       throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
     }
     return defaults[containerType].totalQuantity
@@ -193,8 +198,8 @@ export function createSubjectsRoutes(database: Database): Hono {
       throw new Error('Container defaults are not configured. Please run database initialization.')
     }
 
-    const defaults = defaultsRecord.value as any
-    if (!defaults[containerType]) {
+    const defaults = defaultsRecord.value as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
+    if (!defaults || !defaults[containerType]) {
       throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
     }
     return defaults[containerType].remainingQuantity
@@ -434,14 +439,16 @@ subjects.get('/:id/summary', async (c) => {
 
     const containerInfoMap = new Map<number, { type: string; collectionName: string; position?: string; id: number; locationPath?: string }>()
     
-    function formatLocPath(loc: any, parentName?: string) {
+    function formatLocPath(loc: { path?: string | null; locationPath?: string | null; name?: string; locationName?: string | null } | null | undefined, parentName?: string): string | undefined {
       if (!loc) return parentName || undefined
       // Use the materialized path if available, otherwise use name
-      if (loc.locationPath) {
-        return parentName ? `${loc.locationPath} → ${parentName}` : loc.locationPath
+      const path = loc.path || loc.locationPath
+      const name = loc.name || loc.locationName
+      if (path) {
+        return parentName ? `${path} → ${parentName}` : path
       }
-      if (loc.locationName) {
-        return parentName ? `${loc.locationName} → ${parentName}` : loc.locationName
+      if (name) {
+        return parentName ? `${name} → ${parentName}` : name
       }
       return parentName || undefined
     }
