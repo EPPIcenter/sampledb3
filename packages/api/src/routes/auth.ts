@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { nanoid } from 'nanoid'
 import type { Database } from '../db/client'
 import { getPasswordRequirements, getSessionSettings } from '../lib/settings'
+import { authMiddleware } from '../middleware/auth'
 
 export function createAuthRoutes(database: Database) {
   const auth = new Hono()
@@ -109,12 +110,9 @@ auth.post('/logout', async (c) => {
   return c.json({ message: 'Logged out' })
 })
 
-// Get current user
-auth.get('/me', async (c) => {
-  const user = c.get('user')
-  if (!user) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
+// Get current user (requires authentication)
+auth.get('/me', authMiddleware, async (c) => {
+  const user = c.get('user')!
   return c.json({ user })
 })
 
@@ -165,6 +163,121 @@ auth.post('/register', async (c) => {
     return c.json({ error: 'Internal server error' }, 500)
   }
   })
+
+// Get current user (alias for /me for consistency, requires authentication)
+auth.get('/current', authMiddleware, async (c) => {
+  const user = c.get('user')!
+  return c.json({ user })
+})
+
+// List all users (admin only, requires authentication)
+auth.get('/users', authMiddleware, async (c) => {
+  const currentUser = c.get('user')!
+  
+  if (currentUser.role !== 'admin') {
+    return c.json({ error: 'Forbidden: Admin access required' }, 403)
+  }
+  
+  try {
+    const allUsers = await database
+      .select({
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        createdAt: users.createdAt,
+        lastLogin: users.lastLogin,
+      })
+      .from(users)
+      .orderBy(users.name)
+    
+    return c.json({ users: allUsers })
+  } catch (error) {
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// Switch user (for shared workstations - requires password confirmation and authentication)
+auth.post('/switch', authMiddleware, async (c) => {
+  try {
+    const currentUser = c.get('user')!
+    const body = await c.req.json()
+    const schema = z.object({
+      userId: z.number().int(),
+      password: z.string().min(1),
+    })
+    
+    const { userId, password } = schema.parse(body)
+    
+    // Get the target user
+    const targetUser = await database
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .get()
+    
+    if (!targetUser) {
+      return c.json({ error: 'User not found' }, 404)
+    }
+    
+    // Verify password for the target user
+    const valid = await bcrypt.compare(password, targetUser.passwordHash)
+    if (!valid) {
+      return c.json({ error: 'Invalid password' }, 401)
+    }
+    
+    // Get session settings
+    const sessionSettings = await getSessionSettings()
+    if (!sessionSettings) {
+      return c.json({ error: 'Session settings are not configured. Please run database initialization.' }, 500)
+    }
+    const maxAgeSeconds = sessionSettings.maxAgeSeconds
+    
+    // Delete old session
+    const sessionId = getCookie(c, 'session_id')
+    if (sessionId) {
+      await database.delete(sessions).where(eq(sessions.id, sessionId))
+    }
+    
+    // Create new session for target user
+    const newSessionId = nanoid()
+    const expiresAt = Math.floor(Date.now() / 1000) + maxAgeSeconds
+    
+    await database.insert(sessions).values({
+      id: newSessionId,
+      userId: targetUser.id,
+      expiresAt,
+    })
+    
+    // Update last login
+    await database
+      .update(users)
+      .set({ lastLogin: new Date().toISOString() })
+      .where(eq(users.id, targetUser.id))
+    
+    setCookie(c, 'session_id', newSessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: maxAgeSeconds,
+      path: '/',
+    })
+    
+    return c.json({
+      user: {
+        id: targetUser.id,
+        email: targetUser.email,
+        name: targetUser.name,
+        role: targetUser.role,
+      },
+    })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
 
   return auth
 }
