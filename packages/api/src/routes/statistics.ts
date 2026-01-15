@@ -15,10 +15,18 @@ import {
   cryovialBox,
   paper,
   staticWell,
+  users,
+  sessions,
+  storageType,
+  strain,
+  unit,
+  box,
+  bag,
 } from '../db/schema'
-import { eq, and, or, sql, gte, lte, inArray, isNull } from 'drizzle-orm'
+import { eq, and, or, sql, gte, lte, inArray, isNull, gt } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { cache, cacheKeys } from '../lib/cache'
+import { adminMiddleware } from '../middleware/auth'
 
 const statistics = new Hono()
 
@@ -1018,6 +1026,133 @@ statistics.get('/', async (c) => {
       ...(!isDevelopment && { 
         errorCode: 'STATISTICS_ERROR'
       })
+    }, 500)
+  }
+})
+
+// Admin statistics endpoint - comprehensive system overview
+statistics.get('/admin', adminMiddleware, async (c) => {
+  try {
+    // User statistics
+    const [totalUsers, activeUsers, deletedUsers, usersByRole] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(users),
+      db.select({ count: sql<number>`count(*)` }).from(users).where(isNull(users.deletedAt)),
+      db.select({ count: sql<number>`count(*)` }).from(users).where(sql`${users.deletedAt} IS NOT NULL`),
+      db.select({
+        role: users.role,
+        count: sql<number>`count(*)`,
+      })
+        .from(users)
+        .where(isNull(users.deletedAt))
+        .groupBy(users.role),
+    ])
+
+    // Active sessions
+    const now = Math.floor(Date.now() / 1000)
+    const activeSessions = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(sessions)
+      .where(gt(sessions.expiresAt, now))
+
+    // Entity counts
+    const [studiesCount, subjectsCount, specimensCount, containersCount] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(study),
+      db.select({ count: sql<number>`count(*)` }).from(studySubject),
+      db.select({ count: sql<number>`count(*)` }).from(specimen),
+      db.select({ count: sql<number>`count(*)` }).from(storageContainer),
+    ])
+
+    // Reference data counts
+    const [specimenTypesCount, storageTypesCount, tagsCount, unitsCount, strainsCount] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(specimenType),
+      db.select({ count: sql<number>`count(*)` }).from(storageType),
+      db.select({ count: sql<number>`count(*)` }).from(tag),
+      db.select({ count: sql<number>`count(*)` }).from(unit),
+      db.select({ count: sql<number>`count(*)` }).from(strain),
+    ])
+
+    // Container type breakdown
+    const [micronixCount, cryovialCount, paperCount, staticWellCount] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(micronixTube),
+      db.select({ count: sql<number>`count(*)` }).from(cryovialTube),
+      db.select({ count: sql<number>`count(*)` }).from(paper),
+      db.select({ count: sql<number>`count(*)` }).from(staticWell),
+    ])
+
+    // Collection counts
+    const [micronixPlatesCount, cryovialBoxesCount, boxesCount, bagsCount] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(micronixPlate),
+      db.select({ count: sql<number>`count(*)` }).from(cryovialBox),
+      db.select({ count: sql<number>`count(*)` }).from(box),
+      db.select({ count: sql<number>`count(*)` }).from(bag),
+    ])
+
+    // Location count
+    const locationsCount = await db.select({ count: sql<number>`count(*)` }).from(location)
+
+    // Recent user activity (last 7 days)
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const recentLogins = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(and(
+        isNull(users.deletedAt),
+        sql`${users.lastLogin} >= ${sevenDaysAgo.toISOString()}`
+      ))
+
+    // Format users by role
+    const usersByRoleMap: Record<string, number> = {}
+    usersByRole.forEach((row: any) => {
+      usersByRoleMap[row.role] = row.count
+    })
+
+    return c.json({
+      users: {
+        total: totalUsers[0]?.count || 0,
+        active: activeUsers[0]?.count || 0,
+        deleted: deletedUsers[0]?.count || 0,
+        byRole: usersByRoleMap,
+        recentLogins: recentLogins[0]?.count || 0,
+      },
+      sessions: {
+        active: activeSessions[0]?.count || 0,
+      },
+      entities: {
+        studies: studiesCount[0]?.count || 0,
+        subjects: subjectsCount[0]?.count || 0,
+        specimens: specimensCount[0]?.count || 0,
+        containers: containersCount[0]?.count || 0,
+      },
+      containers: {
+        micronixTubes: micronixCount[0]?.count || 0,
+        cryovialTubes: cryovialCount[0]?.count || 0,
+        papers: paperCount[0]?.count || 0,
+        staticWells: staticWellCount[0]?.count || 0,
+      },
+      collections: {
+        micronixPlates: micronixPlatesCount[0]?.count || 0,
+        cryovialBoxes: cryovialBoxesCount[0]?.count || 0,
+        boxes: boxesCount[0]?.count || 0,
+        bags: bagsCount[0]?.count || 0,
+      },
+      referenceData: {
+        specimenTypes: specimenTypesCount[0]?.count || 0,
+        storageTypes: storageTypesCount[0]?.count || 0,
+        tags: tagsCount[0]?.count || 0,
+        units: unitsCount[0]?.count || 0,
+        strains: strainsCount[0]?.count || 0,
+      },
+      locations: {
+        total: locationsCount[0]?.count || 0,
+      },
+    })
+  } catch (error: unknown) {
+    console.error('[ADMIN STATS] Error fetching admin statistics:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    return c.json({
+      error: 'Failed to fetch admin statistics',
+      details: errorMessage,
     }, 500)
   }
 })
