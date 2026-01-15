@@ -45,6 +45,8 @@ export const study = sqliteTable('study', {
   leadPerson: text('lead_person').notNull(),
   created: text('created').notNull(),
   lastUpdated: text('last_updated').notNull(),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 }, (table) => ({
   titleIdx: index('study_title_idx').on(table.title),
   shortCodeIdx: index('study_short_code_idx').on(table.shortCode),
@@ -56,6 +58,8 @@ export const studySubject = sqliteTable('study_subject', {
   name: text('name').notNull(),
   created: text('created').notNull(),
   lastUpdated: text('last_updated').notNull(),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 }, (table) => ({
   studyIdIdx: index('study_subject_study_id_idx').on(table.studyId),
   nameIdx: index('study_subject_name_idx').on(table.name),
@@ -69,6 +73,8 @@ export const controlDefinition = sqliteTable('control_definition', {
   properties: text('properties', { mode: 'json' }), // JSON field - stores type-specific data (strains, density, etc.)
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 }, (table) => ({
   controlTypeCheck: check('control_type_check', sql`${table.controlType} IN ('blood', 'plasma_positive', 'plasma_negative', 'antibody', 'extraction', 'negative')`)
 }))
@@ -81,6 +87,8 @@ export const controlBatch = sqliteTable('control_batch', {
   properties: text('properties', { mode: 'json' }),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 }, (table) => ({
   controlDefinitionIdIdx: index('control_batch_control_definition_id_idx').on(table.controlDefinitionId),
 }))
@@ -99,6 +107,8 @@ export const reagent = sqliteTable('reagent', {
   properties: text('properties', { mode: 'json' }),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 })
 
 export const cellLine = sqliteTable('cell_line', {
@@ -110,6 +120,8 @@ export const cellLine = sqliteTable('cell_line', {
   properties: text('properties', { mode: 'json' }),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 })
 
 export const plasmid = sqliteTable('plasmid', {
@@ -123,6 +135,8 @@ export const plasmid = sqliteTable('plasmid', {
   properties: text('properties', { mode: 'json' }),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 })
 
 export const standard = sqliteTable('standard', {
@@ -135,6 +149,8 @@ export const standard = sqliteTable('standard', {
   properties: text('properties', { mode: 'json' }),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 })
 
 // Specimen types (existing)
@@ -154,6 +170,8 @@ export const specimen = sqliteTable('specimen', {
   collectionDate: text('collection_date'),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 }, (table) => ({
   specimenSubjectXorControl: check('specimen_subject_xor_control', sql`
     (${table.studySubjectId} IS NOT NULL AND ${table.controlBatchId} IS NULL) OR
@@ -174,6 +192,8 @@ export const storageContainer = sqliteTable('storage_container', {
   unitId: integer('unit_id').notNull().references(() => unit.id),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 }, (table) => ({
   specimenIdIdx: index('storage_container_specimen_id_idx').on(table.specimenId),
 }))
@@ -198,6 +218,8 @@ const locationTable = sqliteTable('location', {
   path: text('path'), // Materialized path for performance
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 }, (table) => ({
   parentNameUnique: unique().on(table.parentId, table.name),
   parentIdIdx: index('idx_location_parent_id').on(table.parentId),
@@ -215,6 +237,8 @@ export const micronixPlate = sqliteTable('micronix_plate', {
   barcode: text('barcode').unique(),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 }, (table) => ({
   locationIdIdx: index('micronix_plate_location_id_idx').on(table.locationId),
 }))
@@ -233,6 +257,8 @@ export const cryovialBox = sqliteTable('cryovial_box', {
   barcode: text('barcode').unique(),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 }, (table) => ({
   locationIdIdx: index('cryovial_box_location_id_idx').on(table.locationId),
 }))
@@ -250,6 +276,8 @@ export const box = sqliteTable('box', {
   name: text('name').notNull().unique(),
   created: text('created').notNull(),
   lastUpdated: text('last_updated').notNull(),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 })
 
 export const bag = sqliteTable('bag', {
@@ -258,6 +286,8 @@ export const bag = sqliteTable('bag', {
   name: text('name').notNull().unique(),
   created: text('created').notNull(),
   lastUpdated: text('last_updated').notNull(),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 }, (table) => ({
   locationIdIdx: index('bag_location_id_idx').on(table.locationId),
 }))
@@ -269,6 +299,8 @@ export const sheet = sqliteTable('sheet', {
   bagId: integer('bag_id').references(() => bag.id),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
 }, (t) => ({
   sheetParentCheck: check('sheet_parent_check', sql`
     (${t.boxId} IS NOT NULL AND ${t.bagId} IS NULL) OR
