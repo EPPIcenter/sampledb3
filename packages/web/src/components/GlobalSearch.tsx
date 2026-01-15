@@ -1,15 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import api from '../lib/api'
-
-interface SearchResult {
-  type: 'specimen' | 'container' | 'study' | 'subject'
-  id: number
-  title: string
-  subtitle: string
-  url: string
-  data: any
-}
+import api, { type SearchResult } from '../lib/api'
 
 export default function GlobalSearch() {
   const [query, setQuery] = useState('')

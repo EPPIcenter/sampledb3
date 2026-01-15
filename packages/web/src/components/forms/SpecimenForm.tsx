@@ -238,7 +238,7 @@ export default function SpecimenForm({
       }
 
       // Add container data if provided
-      if (containerData && containerData.mode !== 'skip') {
+      if (containerData) {
         data.container = containerData
       }
 
@@ -269,7 +269,7 @@ export default function SpecimenForm({
   }, { preventDefault: true, enableOnFormTags: true })
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-8">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
           {error}
@@ -277,28 +277,26 @@ export default function SpecimenForm({
       )}
 
       {!subjectId && !controlBatchId && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           <h2 className="text-lg font-semibold text-gray-900">Source & Study</h2>
-          <div className="grid gap-6 md:grid-cols-2">
-            <div>
-              <label htmlFor="specimen-source-type" className="block text-sm font-medium text-gray-700 mb-2">
-                Source Type *
-              </label>
-              <select
-                id="specimen-source-type"
-                value={formData.sourceType}
-                onChange={(e) => setFormData({ ...formData, sourceType: e.target.value as any, sourceId: 0 })}
-                required
-                className="form-select"
-              >
-                <option value="subject">Subject</option>
-                <option value="control">Control</option>
-                <option value="reagent">Reagent</option>
-                <option value="cell_line">Cell Line</option>
-                <option value="plasmid">Plasmid</option>
-                <option value="standard">Standard</option>
-              </select>
-            </div>
+          <div>
+            <label htmlFor="specimen-source-type" className="block text-sm font-medium text-gray-700 mb-2">
+              Source Type *
+            </label>
+            <select
+              id="specimen-source-type"
+              value={formData.sourceType}
+              onChange={(e) => setFormData({ ...formData, sourceType: e.target.value as any, sourceId: 0 })}
+              required
+              className="form-select"
+            >
+              <option value="subject">Subject</option>
+              <option value="control">Control</option>
+              <option value="reagent">Reagent</option>
+              <option value="cell_line">Cell Line</option>
+              <option value="plasmid">Plasmid</option>
+              <option value="standard">Standard</option>
+            </select>
           </div>
 
           {formData.sourceType === 'control' && (
@@ -420,110 +418,108 @@ export default function SpecimenForm({
 
           {formData.sourceType === 'subject' && (
             <div className="space-y-4">
-              <div className="grid gap-6 md:grid-cols-2">
-                <div>
-                  <label htmlFor="specimen-study" className="block text-sm font-medium text-gray-700 mb-2">
-                    Study *
-                  </label>
-                  <StudyPicker
-                    value={formData.studyId || undefined}
-                    onChange={(id) => {
-                      const selectedStudy = studies.find(s => s.id === id)
-                      setFormData({
-                        ...formData,
-                        studyId: id,
-                        studyShortCode: selectedStudy?.shortCode || '',
-                        sourceId: 0,
-                        createNewSubject: false,
-                      })
-                    }}
-                  />
-                </div>
+              <div>
+                <label htmlFor="specimen-study" className="block text-sm font-medium text-gray-700 mb-2">
+                  Study *
+                </label>
+                <StudyPicker
+                  value={formData.studyId || undefined}
+                  onChange={(id) => {
+                    const selectedStudy = studies.find(s => s.id === id)
+                    setFormData({
+                      ...formData,
+                      studyId: id,
+                      studyShortCode: selectedStudy?.shortCode || '',
+                      sourceId: 0,
+                      createNewSubject: false,
+                    })
+                  }}
+                />
+              </div>
 
-                {formData.studyId > 0 && (
-                  <div>
-                    <div className="flex items-center space-x-2 mb-2">
-                      <label htmlFor="create-new-subject" className="block text-sm font-medium text-gray-700">
-                        Create New Subject
+              {formData.studyId > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="create-new-subject"
+                      checked={formData.createNewSubject}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          createNewSubject: e.target.checked,
+                          sourceId: 0,
+                          subjectName: '',
+                        })
+                      }
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="create-new-subject" className="text-sm font-medium text-gray-700 cursor-pointer">
+                      Create New Subject
+                    </label>
+                  </div>
+
+                  {formData.createNewSubject ? (
+                    <div>
+                      <label htmlFor="new-subject-name" className="block text-sm font-medium text-gray-700 mb-2">
+                        Subject Name *
                       </label>
                       <input
-                        type="checkbox"
-                        id="create-new-subject"
-                        checked={formData.createNewSubject}
+                        id="new-subject-name"
+                        type="text"
+                        value={formData.subjectName}
                         onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            createNewSubject: e.target.checked,
-                            sourceId: 0,
-                            subjectName: '',
-                          })
+                          setFormData({ ...formData, subjectName: e.target.value })
                         }
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-100 rounded"
+                        required
+                        className="form-input"
+                        placeholder="Enter subject name"
                       />
                     </div>
-
-                    {formData.createNewSubject ? (
-                      <div>
-                        <label htmlFor="new-subject-name" className="block text-sm font-medium text-gray-700 mb-2">
-                          Subject Name *
-                        </label>
-                        <input
-                          id="new-subject-name"
-                          type="text"
-                          value={formData.subjectName}
-                          onChange={(e) =>
-                            setFormData({ ...formData, subjectName: e.target.value })
-                          }
-                          required
-                          className="form-input"
-                          placeholder="Enter subject name"
-                        />
-                      </div>
-                    ) : (
-                      <div>
-                        <label htmlFor="specimen-subject" className="block text-sm font-medium text-gray-700 mb-2">
-                          Subject *
-                        </label>
-                        <select
-                          id="specimen-subject"
-                          value={formData.sourceId}
-                          onChange={(e) => {
-                            const selectedSubject = subjects.find(s => s.id === parseInt(e.target.value))
-                            setFormData({
-                              ...formData,
-                              sourceId: parseInt(e.target.value),
-                              subjectName: selectedSubject?.name || '',
-                            })
-                          }}
-                          required
-                          className="form-select"
-                        >
-                          <option value={0}>Select a subject</option>
-                          {subjects
-                            .slice()
-                            .sort((a, b) => a.name.localeCompare(b.name))
-                            .map((subject) => (
-                              <option key={subject.id} value={subject.id}>
-                                {subject.name}
-                                {typeof subject.specimenCount === 'number'
-                                  ? ` (${subject.specimenCount} specimens)`
-                                  : ''}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                  ) : (
+                    <div>
+                      <label htmlFor="specimen-subject" className="block text-sm font-medium text-gray-700 mb-2">
+                        Subject *
+                      </label>
+                      <select
+                        id="specimen-subject"
+                        value={formData.sourceId}
+                        onChange={(e) => {
+                          const selectedSubject = subjects.find(s => s.id === parseInt(e.target.value))
+                          setFormData({
+                            ...formData,
+                            sourceId: parseInt(e.target.value),
+                            subjectName: selectedSubject?.name || '',
+                          })
+                        }}
+                        required
+                        className="form-select"
+                      >
+                        <option value={0}>Select a subject</option>
+                        {subjects
+                          .slice()
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map((subject) => (
+                            <option key={subject.id} value={subject.id}>
+                              {subject.name}
+                              {typeof subject.specimenCount === 'number'
+                                ? ` (${subject.specimenCount} specimens)`
+                                : ''}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         <h2 className="text-lg font-semibold text-gray-900">Specimen Details</h2>
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label htmlFor="specimen-type" className="block text-sm font-medium text-gray-700 mb-2">
               Specimen Type *
@@ -573,7 +569,7 @@ export default function SpecimenForm({
         onValidationChange={(isValid) => setContainerValid(isValid)}
       />
 
-      <div className="flex justify-end space-x-4">
+      <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
         <button
           type="button"
           onClick={onCancel}

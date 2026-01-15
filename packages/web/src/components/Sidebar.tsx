@@ -1,5 +1,8 @@
 import { useState, useEffect, ReactNode } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import UserSwitcher from './UserSwitcher'
+import { authApi } from '../lib/api'
+import { useUser } from '../contexts/UserContext'
 
 interface NavItem {
   label: string
@@ -20,6 +23,8 @@ interface SidebarProps {
 
 export default function Sidebar({ isMobileOpen = false, onMobileClose }: SidebarProps) {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { refreshUser } = useUser()
   
   // Initialize expanded items - check if any child routes are active
   const getInitialExpandedItems = () => {
@@ -415,8 +420,27 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
             {sections.map((section, index) => renderSection(section, index))}
           </nav>
 
+          {/* User Switcher */}
+          <div className="px-2 py-3 border-t border-gray-200 space-y-2">
+            <UserSwitcher />
+            <button
+              onClick={async () => {
+                try {
+                  await authApi.logout()
+                  await refreshUser()
+                  navigate('/login')
+                } catch (err) {
+                  console.error('Logout failed:', err)
+                }
+              }}
+              className="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-left"
+            >
+              Sign Out
+            </button>
+          </div>
+
           {/* EPPIcenter Footer */}
-          <div className="px-3 py-3 border-t border-gray-200 mt-auto">
+          <div className="px-3 py-3 border-t border-gray-200">
             <a
               href="https://eppicenter.ucsf.edu"
               target="_blank"

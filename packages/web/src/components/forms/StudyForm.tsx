@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { studiesApi, type Study } from '../../lib/api'
 import { useNavigate } from 'react-router-dom'
 import { useModifierHotkey } from '../../hooks/useHotkey'
+import UserBadge from '../UserBadge'
 
 interface StudyFormProps {
   study?: Study
@@ -67,6 +68,8 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
           {error}
         </div>
       )}
+
+      <UserBadge action={study ? 'updating' : 'creating'} />
 
       <div>
         <label htmlFor="study-title" className="block text-sm font-medium text-gray-700 mb-2">

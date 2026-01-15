@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import api from '../lib/api'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import api, { type SearchResult, type CollectionSearchResult } from '../lib/api'
 
 export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
 
@@ -31,79 +31,186 @@ export default function CollectionPicker({
   const [loading, setLoading] = useState(false)
   const [collections, setCollections] = useState<Collection[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [validatedCollection, setValidatedCollection] = useState<Collection | null>(null)
+  const debounceTimeoutRef = useRef<number | null>(null)
+  const isSearchingRef = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
+  // Sync search state when value prop changes (e.g., after creating a new collection)
   useEffect(() => {
-    if (open && search.length >= 1) {
-      const timeout = setTimeout(() => {
-        searchCollections()
-      }, 300)
-      return () => clearTimeout(timeout)
-    } else if (open && search.length === 0) {
-      setCollections([])
+    const currentValue = value || ''
+    if (currentValue !== search) {
+      setSearch(currentValue)
+      // If we have a validated collection that matches, keep it
+      // Otherwise, clear validation so it can be re-validated
+      if (validatedCollection && validatedCollection.name !== currentValue && validatedCollection.barcode !== currentValue) {
+        setValidatedCollection(null)
+      }
     }
-  }, [open, search])
+  }, [value, search, validatedCollection])
 
-  const searchCollections = async () => {
-    try {
-      setLoading(true)
+  // Consolidated search effect with proper debouncing
+  useEffect(() => {
+    // Clear any pending debounce
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current)
+    }
+
+    // If search is empty, clear results and validation
+    if (search.length === 0) {
+      setCollections([])
+      setValidatedCollection(null)
       setError(null)
-      
-      // Use global search API to find collections
-      const response = await api.get('/search', {
-        params: { q: search, type: collectionType === 'micronix_plate' ? 'micronix_plate' : collectionType === 'cryovial_box' ? 'cryovial_box' : undefined },
-      })
-      
-      // Filter results by type and extract collection info
-      const results = (response.data.results || []).filter((r: any) => {
-        if (collectionType === 'micronix_plate') {
-          return r.type === 'micronix_plate' || r.type === 'plate'
-        } else if (collectionType === 'cryovial_box') {
-          return r.type === 'cryovial_box' || r.type === 'box'
-        }
-        return false
-      })
-      
-      // Transform results to Collection format
-      const transformed: Collection[] = results.map((r: any) => ({
-        id: r.id,
-        name: r.title || r.name || '',
-        barcode: r.barcode,
-        locationId: r.locationId,
-        locationPath: r.locationPath,
-      }))
-      
-      setCollections(transformed)
-    } catch (error: any) {
-      console.error('Failed to search collections:', error)
-      setError('Failed to search collections')
-      setCollections([])
-    } finally {
-      setLoading(false)
+      if (open) {
+        setOpen(false)
+      }
+      return
     }
-  }
 
-  const handleSelect = (collection: Collection) => {
+    // Debounce search requests
+    debounceTimeoutRef.current = setTimeout(async () => {
+      // Prevent concurrent searches
+      if (isSearchingRef.current) {
+        return
+      }
+
+      try {
+        isSearchingRef.current = true
+        setLoading(true)
+        setError(null)
+        
+        // Use global search API to find collections
+        const response = await api.get('/search', {
+          params: { 
+            q: search, 
+            type: collectionType === 'micronix_plate' ? 'micronix_plate' : collectionType === 'cryovial_box' ? 'cryovial_box' : undefined 
+          },
+        })
+        
+        // Filter results by type and extract collection info
+        const results = (response.data.results || []).filter((r: SearchResult): r is CollectionSearchResult => {
+          if (collectionType === 'micronix_plate') {
+            return r.type === 'micronix_plate'
+          } else if (collectionType === 'cryovial_box') {
+            return r.type === 'cryovial_box' || r.type === 'box'
+          }
+          return false
+        })
+        
+        // Transform results to Collection format
+        const transformed: Collection[] = results.map((r: CollectionSearchResult) => ({
+          id: r.id,
+          name: r.title || r.name || '',
+          barcode: r.barcode || undefined,
+          locationId: r.locationId || undefined,
+          locationPath: r.locationPath || undefined,
+        }))
+        
+        setCollections(transformed)
+        
+        // Check if current search value exactly matches a collection
+        const exactMatch = transformed.find(
+          (c) => c.name.toLowerCase() === search.toLowerCase() || c.barcode?.toLowerCase() === search.toLowerCase()
+        )
+        
+        if (exactMatch) {
+          setValidatedCollection(exactMatch)
+          // Automatically select the matched collection (use the exact name from database)
+          if (exactMatch.name !== search) {
+            onChange(exactMatch.name)
+          }
+          // Keep dropdown closed when exact match is found
+          setOpen(false)
+        } else {
+          setValidatedCollection(null)
+          // Keep dropdown open if there are results or if it was already open
+          if (transformed.length > 0 || open) {
+            setOpen(true)
+          }
+        }
+      } catch (error: any) {
+        console.error('Failed to search collections:', error)
+        setError('Failed to search collections')
+        setCollections([])
+        setValidatedCollection(null)
+      } finally {
+        setLoading(false)
+        isSearchingRef.current = false
+      }
+    }, 300) // 300ms debounce
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current)
+      }
+    }
+  }, [search, collectionType, onChange, open])
+
+  const handleSelect = useCallback((collection: Collection) => {
+    // Update search state to match the selected collection
+    setSearch(collection.name)
     // Use name as identifier (could also use barcode if available)
     onChange(collection.name)
+    setValidatedCollection(collection)
     setOpen(false)
-  }
+  }, [onChange])
 
   const displayValue = value || ''
+  const isValid = validatedCollection !== null && (validatedCollection.name.toLowerCase() === value?.toLowerCase() || validatedCollection.barcode?.toLowerCase() === value?.toLowerCase())
+
+  // Handle clicks outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      // Close dropdown if clicking outside the component
+      if (open && containerRef.current && !containerRef.current.contains(target)) {
+        setOpen(false)
+      }
+    }
+
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [open])
 
   return (
-    <>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={displayValue}
-          onChange={(e) => {
-            setSearch(e.target.value)
-            onChange(e.target.value)
-          }}
-          onFocus={() => setOpen(true)}
-          placeholder={`Enter ${collectionType === 'micronix_plate' ? 'plate' : collectionType === 'cryovial_box' ? 'box' : 'collection'} name or barcode`}
-          className="flex-1 form-input"
-        />
+    <div ref={containerRef} className="relative">
+      <div className="flex gap-2 items-center">
+        <div className="flex-1 relative">
+          <input
+            type="text"
+            value={displayValue}
+            onChange={(e) => {
+              const newValue = e.target.value
+              setSearch(newValue)
+              onChange(newValue)
+              // Clear validation when user types
+              if (validatedCollection) {
+                setValidatedCollection(null)
+              }
+              // Open dropdown when user starts typing
+              if (newValue.length > 0 && !isValid) {
+                setOpen(true)
+              }
+            }}
+            onFocus={() => {
+              // Open dropdown if there are results or if user has typed something
+              if (search.length > 0 && !isValid) {
+                setOpen(true)
+              }
+            }}
+            placeholder={`Enter ${collectionType === 'micronix_plate' ? 'plate' : collectionType === 'cryovial_box' ? 'box' : 'collection'} name or barcode`}
+            className={`flex-1 form-input ${isValid ? 'border-green-500 pr-8' : ''}`}
+          />
+          {isValid && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-green-500 pointer-events-none">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          )}
+        </div>
         {allowCreate && onCreateClick && (
           <button
             type="button"
@@ -115,9 +222,9 @@ export default function CollectionPicker({
         )}
       </div>
 
-      {open && (
-        <div className="relative z-50 mt-1">
-          <div className="absolute w-full bg-white border border-gray-100 rounded-md shadow-lg max-h-60 overflow-y-auto">
+      {open && !isValid && (
+        <div className="absolute z-[100] mt-1 w-full">
+          <div className="bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
             {loading ? (
               <div className="p-4 text-sm text-gray-500">Searching...</div>
             ) : error ? (
@@ -132,8 +239,13 @@ export default function CollectionPicker({
                   <li key={collection.id}>
                     <button
                       type="button"
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 focus:outline-none focus:bg-gray-50"
-                      onClick={() => handleSelect(collection)}
+                      className="w-full px-4 py-3 text-left hover:bg-blue-50 focus:outline-none focus:bg-blue-50 active:bg-blue-100 transition-colors cursor-pointer"
+                      onMouseDown={(e) => {
+                        // Prevent input from losing focus and handle selection
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleSelect(collection)
+                      }}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -154,7 +266,20 @@ export default function CollectionPicker({
           </div>
         </div>
       )}
-    </>
+      
+      {isValid && validatedCollection && (
+        <div className="mt-1 text-xs text-green-600 flex items-center gap-1">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span>
+            {validatedCollection.locationPath 
+              ? `Found: ${validatedCollection.name} at ${validatedCollection.locationPath}`
+              : `Found: ${validatedCollection.name}`}
+          </span>
+        </div>
+      )}
+    </div>
   )
 }
 

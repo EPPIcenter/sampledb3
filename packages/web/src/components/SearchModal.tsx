@@ -1,16 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import api from '../lib/api'
+import api, { type SearchResult } from '../lib/api'
 import { useHotkey } from '../hooks/useHotkey'
-
-interface SearchResult {
-  type: 'specimen' | 'container' | 'study' | 'subject' | 'location' | 'control_batch'
-  id: number
-  title: string
-  subtitle: string
-  url: string
-  data: any
-}
 
 interface SearchModalProps {
   isOpen: boolean

@@ -1242,9 +1242,60 @@ export const derivationsApi = {
     }),
 }
 
+/**
+ * Search result types from the unified search API
+ */
+export type SearchResultType = 
+  | 'specimen'
+  | 'container'
+  | 'study'
+  | 'subject'
+  | 'micronix_plate'
+  | 'cryovial_box'
+  | 'box'
+  | 'bag'
+  | 'control_batch'
+
+/**
+ * Base search result structure
+ */
+export interface BaseSearchResult {
+  type: SearchResultType
+  id: number
+  title: string
+  subtitle: string
+  url: string
+  data: unknown
+}
+
+/**
+ * Collection search results (plates, boxes, bags) include additional fields
+ */
+export interface CollectionSearchResult extends BaseSearchResult {
+  type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+  name: string // Always present for collection types
+  barcode?: string | null
+  locationId?: number | null
+  locationPath?: string | null
+}
+
+/**
+ * Union type for all possible search results
+ */
+export type SearchResult = BaseSearchResult | CollectionSearchResult
+
+/**
+ * Search API response
+ */
+export interface SearchResponse {
+  results: SearchResult[]
+  query: string
+  count: number
+}
+
 export const searchApi = {
   search: (query: string, type?: string) =>
-    api.get<{ results: any[]; query: string; count: number }>('/search', {
+    api.get<SearchResponse>('/search', {
       params: { q: query, type },
     }),
 }
@@ -1402,6 +1453,22 @@ export const setupApi = {
     storageTypes?: Array<{ name: string; description?: string }>
     strains?: Array<{ name: string; description?: string }>
   }) => api.post<{ success: boolean; message: string }>('/setup/initialize', data),
+}
+
+export interface User {
+  id: number
+  email: string
+  name: string
+  role: 'admin' | 'member' | 'viewer'
+}
+
+export const authApi = {
+  login: (email: string, password: string) =>
+    api.post<{ user: User }>('/auth/login', { email, password }),
+  logout: () => api.post<{ message: string }>('/auth/logout'),
+  getCurrentUser: () => api.get<{ user: User }>('/auth/current'),
+  switchUser: (userId: number, password: string) =>
+    api.post<{ user: User }>('/auth/switch', { userId, password }),
 }
 
 export default api

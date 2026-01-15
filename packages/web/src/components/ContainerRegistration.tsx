@@ -6,10 +6,7 @@ import api, { settingsApi, type Unit, type ContainerDefaults } from '../lib/api'
 export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
 export interface ContainerData {
-  mode: 'create' | 'link' | 'skip'
   containerType: ContainerType
-  containerBarcode?: string
-  containerId?: number
   collectionName?: string
   collectionBarcode?: string
   barcode?: string
@@ -38,7 +35,6 @@ export default function ContainerRegistration({
   const [enabled, setEnabled] = useState(mode === 'required' || (mode === 'optional' && !!defaultValue))
   const [containerType, setContainerType] = useState<ContainerType>(initialContainerType || 'micronix_tube')
   const [formData, setFormData] = useState<ContainerData>({
-    mode: defaultValue?.mode || 'create',
     containerType: initialContainerType || 'micronix_tube',
     collectionName: defaultValue?.collectionName || '',
     collectionBarcode: defaultValue?.collectionBarcode || '',
@@ -136,34 +132,20 @@ export default function ContainerRegistration({
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
 
-    if (formData.mode === 'skip') {
-      setValidationErrors({})
-      return true
+    if (!formData.collectionName && !formData.collectionBarcode) {
+      errors.collection = 'Collection name or barcode is required'
     }
 
-    if (formData.mode === 'link') {
-      if (containerType === 'micronix_tube' && !formData.containerBarcode) {
-        errors.containerBarcode = 'Barcode is required for linking micronix tubes'
-      } else if (!formData.containerId && !formData.containerBarcode) {
-        errors.container = 'Container identifier is required for linking'
-      }
-    } else {
-      // Mode is 'create'
-      if (!formData.collectionName && !formData.collectionBarcode) {
-        errors.collection = 'Collection name or barcode is required'
-      }
+    if (containerType === 'micronix_tube' && !formData.barcode) {
+      errors.barcode = 'Barcode is required for micronix tubes'
+    }
 
-      if (containerType === 'micronix_tube' && !formData.barcode) {
-        errors.barcode = 'Barcode is required for micronix tubes'
-      }
+    if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && !formData.position) {
+      errors.position = 'Position is required for ' + (containerType === 'micronix_tube' ? 'micronix tubes' : 'cryovial tubes')
+    }
 
-      if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && !formData.position) {
-        errors.position = 'Position is required for ' + (containerType === 'micronix_tube' ? 'micronix tubes' : 'cryovial tubes')
-      }
-
-      if (containerType === 'paper' && !formData.label) {
-        errors.label = 'Label is required for papers'
-      }
+    if (containerType === 'paper' && !formData.label) {
+      errors.label = 'Label is required for papers'
     }
 
     setValidationErrors(errors)
@@ -201,16 +183,16 @@ export default function ContainerRegistration({
   }
 
   return (
-    <div className="space-y-4 border-t pt-4 mt-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">Container Registration</h3>
         {mode === 'optional' && (
-          <label className="flex items-center space-x-2">
+          <label className="flex items-center space-x-2 cursor-pointer">
             <input
               type="checkbox"
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-100 rounded"
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
             <span className="text-sm text-gray-700">Add Container</span>
           </label>
@@ -218,7 +200,7 @@ export default function ContainerRegistration({
       </div>
 
       {enabled && (
-        <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
+        <div className="space-y-4 bg-gray-50/50 p-5 rounded-lg border border-gray-200/60">
           {/* Container Type Selector */}
           {!initialContainerType && (
             <div>
@@ -241,64 +223,7 @@ export default function ContainerRegistration({
             </div>
           )}
 
-          {/* Mode Selector */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Action *
-            </label>
-            <select
-              value={formData.mode}
-              onChange={(e) => {
-                handleFieldChange('mode', e.target.value)
-              }}
-              className="form-select"
-            >
-              <option value="create">Create New Container</option>
-              <option value="link">Link Existing Container</option>
-              <option value="skip">Skip (No Container)</option>
-            </select>
-          </div>
-
-          {formData.mode === 'link' && (
-            <div className="space-y-4">
-              {containerType === 'micronix_tube' ? (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Container Barcode *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.containerBarcode || ''}
-                    onChange={(e) => handleFieldChange('containerBarcode', e.target.value)}
-                    placeholder="Enter barcode"
-                    className={`form-input ${validationErrors.containerBarcode ? 'border-red-300' : ''}`}
-                  />
-                  {validationErrors.containerBarcode && (
-                    <p className="mt-1 text-sm text-red-600">{validationErrors.containerBarcode}</p>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Container ID *
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.containerId || ''}
-                    onChange={(e) => handleFieldChange('containerId', parseInt(e.target.value) || undefined)}
-                    placeholder="Enter container ID"
-                    className={`form-input ${validationErrors.container ? 'border-red-300' : ''}`}
-                  />
-                  {validationErrors.container && (
-                    <p className="mt-1 text-sm text-red-600">{validationErrors.container}</p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {formData.mode === 'create' && (
-            <div className="space-y-4">
+          <div className="space-y-4">
               {/* Collection Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -515,8 +440,7 @@ export default function ContainerRegistration({
                   placeholder="Add any notes about this container"
                 />
               </div>
-            </div>
-          )}
+          </div>
         </div>
       )}
     </div>

@@ -328,7 +328,6 @@ export default function Import() {
 
           if (containerType !== 'none') {
             spec.container = {
-              mode: 'create' as const,
               containerType,
               collectionName: row.collection_name,
               collectionBarcode: row.collection_barcode || undefined,

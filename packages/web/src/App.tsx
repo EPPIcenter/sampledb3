@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Setup from './pages/Setup'
+import Login from './pages/Login'
 import Studies from './pages/Studies'
 import StudyDetail from './pages/StudyDetail'
 import SubjectDetail from './pages/SubjectDetail'
@@ -35,8 +36,10 @@ import Settings from './pages/Settings'
 import Derivations from './pages/Derivations'
 import DerivationsBulkImport from './pages/DerivationsBulkImport'
 import SetupGuard from './components/SetupGuard'
+import AuthGuard from './components/AuthGuard'
 import { DateFilterProvider } from './contexts/DateFilterContext'
 import { HotkeyProvider, useHotkeyContext } from './contexts/HotkeyContext'
+import { UserProvider } from './contexts/UserContext'
 import HotkeyHelpModal from './components/HotkeyHelpModal'
 import CommandPalette from './components/CommandPalette'
 import SearchModal from './components/SearchModal'
@@ -435,33 +438,37 @@ function AppContent() {
 
   // Help modal toggle
   useHotkey('?', () => toggleHelpModal(), { preventDefault: true })
+  
+  const isLoginPage = location.pathname === '/login'
+  const isSetupPage = location.pathname === '/setup'
 
   return (
     <SetupGuard>
-      <div className="min-h-screen bg-gray-50 flex">
-        {/* Sidebar */}
-        <Sidebar
-          isMobileOpen={isMobileSidebarOpen}
-          onMobileClose={() => setIsMobileSidebarOpen(false)}
-        />
+      {!isLoginPage && !isSetupPage ? (
+        <AuthGuard>
+          <div className="min-h-screen bg-gray-50 flex">
+            {/* Sidebar */}
+            <Sidebar
+              isMobileOpen={isMobileSidebarOpen}
+              onMobileClose={() => setIsMobileSidebarOpen(false)}
+            />
 
-        {/* Main content area */}
-        <div className="flex-1 flex flex-col lg:ml-52 min-w-0">
-          {/* Mobile menu button - floating */}
-          <button
-            onClick={() => setIsMobileSidebarOpen(true)}
-            className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-white rounded-lg shadow-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 border border-gray-200"
-            aria-label="Open menu"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+            {/* Main content area */}
+            <div className="flex-1 flex flex-col lg:ml-52 min-w-0">
+              {/* Mobile menu button - floating */}
+              <button
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-white rounded-lg shadow-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 border border-gray-200"
+                aria-label="Open menu"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
 
-          {/* Page content */}
-          <main className="flex-1 overflow-auto">
-            <Routes>
-          <Route path="/setup" element={<Setup />} />
+              {/* Page content */}
+              <main className="flex-1 overflow-auto">
+                <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/studies" element={<Studies />} />
           <Route path="/studies/new" element={<StudyNew />} />
@@ -497,11 +504,20 @@ function AppContent() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/derivations" element={<Derivations />} />
               <Route path="/derivations/import" element={<DerivationsBulkImport />} />
-            </Routes>
-          </main>
-        </div>
+                </Routes>
+              </main>
+            </div>
+          </div>
+        </AuthGuard>
+      ) : (
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/setup" element={<Setup />} />
+        </Routes>
+      )}
 
-        {/* Floating action buttons */}
+      {/* Floating action buttons - only show when authenticated */}
+      {!isLoginPage && !isSetupPage && (
         <div 
           ref={buttonsRef}
           data-floating-buttons="true"
@@ -540,14 +556,20 @@ function AppContent() {
             </span>
           </button>
         </div>
-      </div>
-      <HotkeyHelpModal isOpen={isHelpModalOpen} onClose={toggleHelpModal} />
-      <SearchModal isOpen={isSearchModalOpen} onClose={closeSearchModal} />
-      <CommandPalette
-        isOpen={isCommandPaletteOpen}
-        onClose={closeCommandPalette}
-        commands={commands}
-      />
+      )}
+
+      {/* Modals - only show when authenticated */}
+      {!isLoginPage && !isSetupPage && (
+        <>
+          <HotkeyHelpModal isOpen={isHelpModalOpen} onClose={toggleHelpModal} />
+          <SearchModal isOpen={isSearchModalOpen} onClose={closeSearchModal} />
+          <CommandPalette
+            isOpen={isCommandPaletteOpen}
+            onClose={closeCommandPalette}
+            commands={commands}
+          />
+        </>
+      )}
       <ToastContainer />
     </SetupGuard>
   )
@@ -557,9 +579,11 @@ function App() {
   return (
     <DateFilterProvider>
       <HotkeyProvider>
-        <BrowserRouter>
-          <AppContent />
-        </BrowserRouter>
+        <UserProvider>
+          <BrowserRouter>
+            <AppContent />
+          </BrowserRouter>
+        </UserProvider>
       </HotkeyProvider>
     </DateFilterProvider>
   )

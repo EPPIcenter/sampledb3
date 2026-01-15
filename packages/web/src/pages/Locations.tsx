@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { locationsApi, searchApi, type LocationHierarchyStats } from '../lib/api'
+import { locationsApi, searchApi, type LocationHierarchyStats, type CollectionSearchResult } from '../lib/api'
 import { getRootLocations, getLocationChildren, getLocationDescendants, getLocationAncestors, getLocationLabel } from '../lib/location-tree'
 import SkeletonCard from '../components/SkeletonCard'
 import LocationDetailsSkeleton from '../components/LocationDetailsSkeleton'
@@ -34,14 +34,6 @@ interface SelectedNode {
   locationId: number
 }
 
-interface CollectionSearchResult {
-  type: string
-  id: number
-  title: string
-  subtitle: string
-  url: string
-  data: any
-}
 
 export default function Locations() {
   const navigate = useNavigate()
@@ -222,7 +214,12 @@ export default function Locations() {
     try {
       setSearchLoading(true)
       const response = await searchApi.search(searchQuery, 'collection')
-      setCollectionResults(response.data.results || [])
+      // Filter to only collection types (micronix_plate, cryovial_box, box, bag)
+      const collectionResults = (response.data.results || []).filter(
+        (r): r is CollectionSearchResult =>
+          r.type === 'micronix_plate' || r.type === 'cryovial_box' || r.type === 'box' || r.type === 'bag'
+      )
+      setCollectionResults(collectionResults)
       setIsSearchOpen(true)
     } catch (error) {
       console.error('Collection search failed:', error)

@@ -8,6 +8,7 @@ import api, {
   controlsApi,
   searchApi,
   type Study,
+  type SearchResult,
   type StudySummaryBasic,
   type StatisticsData,
   type Location,
@@ -67,7 +68,7 @@ export default function Dashboard() {
     secondary: true,
   })
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
 
   // Load critical data first
