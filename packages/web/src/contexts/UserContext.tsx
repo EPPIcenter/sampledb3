@@ -29,13 +29,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (userData) {
         addRecentUser(userData)
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // If 401, user is not authenticated - this is expected, not an error
-      if (err.response?.status === 401) {
-        setUser(null)
-        setError(null)
+      if (typeof err === 'object' && err !== null && 'response' in err) {
+        const axiosErr = err as { response?: { status?: number; data?: { error?: string } } }
+        if (axiosErr.response?.status === 401) {
+          setUser(null)
+          setError(null)
+        } else {
+          setError(axiosErr.response?.data?.error || 'Failed to load user')
+          setUser(null)
+        }
       } else {
-        setError(err.response?.data?.error || 'Failed to load user')
+        setError('Failed to load user')
         setUser(null)
       }
     } finally {
@@ -67,8 +73,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setUser(newUser)
       // Clear loading state - React will batch these updates but both will apply
       setLoading(false)
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.error || err.message || 'Failed to switch user'
+    } catch (err: unknown) {
+      let errorMessage = 'Failed to switch user'
+      if (typeof err === 'object' && err !== null) {
+        if ('response' in err) {
+          const axiosErr = err as { response?: { data?: { error?: string } } }
+          errorMessage = axiosErr.response?.data?.error || errorMessage
+        } else if ('message' in err && typeof (err as { message: unknown }).message === 'string') {
+          errorMessage = (err as { message: string }).message
+        }
+      }
       setError(errorMessage)
       setLoading(false)
       // Don't call refreshUser() here - if switch failed, we want to keep the current user

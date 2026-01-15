@@ -71,7 +71,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
     if (controlDefinition) {
       // Parse strains and density from properties or from parsed fields
       const props = controlDefinition.properties || {}
-      const strains = controlDefinition.strains || props.strains || []
+      const strains = controlDefinition.strains || (Array.isArray(props.strains) ? props.strains : [])
       const targetDensity = controlDefinition.targetDensity ?? props.targetDensity
       const targetDensityUnitId = controlDefinition.targetDensityUnitId ?? props.targetDensityUnitId
       

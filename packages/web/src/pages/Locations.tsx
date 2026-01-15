@@ -24,10 +24,10 @@ interface Location {
 }
 
 interface LocationContents {
-  micronixPlates?: any[]
-  cryovialBoxes?: any[]
-  boxes?: any[]
-  bags?: any[]
+  micronixPlates?: Array<{ id: number; name: string; barcode?: string | null; locationId: number; itemCount?: number }>
+  cryovialBoxes?: Array<{ id: number; name: string; barcode?: string | null; locationId: number; itemCount?: number }>
+  boxes?: Array<{ id: number; name: string; locationId: number; itemCount?: number }>
+  bags?: Array<{ id: number; name: string; locationId: number; itemCount?: number }>
 }
 
 interface SelectedNode {

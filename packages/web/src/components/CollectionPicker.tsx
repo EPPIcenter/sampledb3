@@ -128,7 +128,7 @@ export default function CollectionPicker({
             setOpen(true)
           }
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Failed to search collections:', error)
         setError('Failed to search collections')
         setCollections([])

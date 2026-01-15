@@ -212,19 +212,22 @@ export default function ContainerConfigurationStep({
 
       const collectionId = ('plate' in response.data && response.data.plate?.id) || 
                           ('box' in response.data && response.data.box?.id) || 
-                          ('bag' in response.data && response.data.bag?.id)
+                          ('bag' in response.data && response.data.bag?.id) || undefined
       
       const updatedFiles = [...csvFiles]
       updatedFiles[fileIndex] = {
         ...updatedFiles[fileIndex],
-        collectionId,
+        collectionId: typeof collectionId === 'number' ? collectionId : undefined,
         collectionName: name,
         collectionLocationId: locationId,
       }
       onChangeCsvFiles(updatedFiles)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to create collection:', error)
-      alert(error.response?.data?.error || 'Failed to create collection')
+      const errorMessage = typeof error === 'object' && error !== null && 'response' in error
+        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to create collection'
+        : 'Failed to create collection'
+      alert(errorMessage)
     }
   }
 
@@ -248,7 +251,7 @@ export default function ContainerConfigurationStep({
 
       const collectionId = ('plate' in response.data && response.data.plate?.id) || 
                           ('box' in response.data && response.data.box?.id) || 
-                          ('bag' in response.data && response.data.bag?.id)
+                          ('bag' in response.data && response.data.bag?.id) || undefined
       
       // Update all containers for this specimen type with the collection ID
       const updated = specimenTypes.map(st => {
@@ -257,7 +260,7 @@ export default function ContainerConfigurationStep({
             ...st,
             containers: st.containers.map(c => ({
               ...c,
-              collectionId,
+              collectionId: typeof collectionId === 'number' ? collectionId : undefined,
               collectionName: name,
               collectionLocationId: locationId,
             })),
@@ -266,9 +269,12 @@ export default function ContainerConfigurationStep({
         return st
       })
       onChangeSpecimenTypes(updated)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to create collection:', error)
-      alert(error.response?.data?.error || 'Failed to create collection')
+      const errorMessage = typeof error === 'object' && error !== null && 'response' in error
+        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to create collection'
+        : 'Failed to create collection'
+      alert(errorMessage)
     }
   }
 
