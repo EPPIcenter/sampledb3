@@ -65,7 +65,7 @@ export function createSettingsRoutes(database: Database) {
 })
 
   // GET /api/settings/units - Get all available units
-  settings.get('/units', async (c) => {
+  settings.get('/units', authMiddleware, async (c) => {
     try {
       const units = await database
         .select({
@@ -590,7 +590,7 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
   })
 
   // GET /api/settings/units/container-types/:containerType - Get all units allowed for a container type (alias for above)
-  settings.get('/units/container-types/:containerType', async (c) => {
+  settings.get('/units/container-types/:containerType', authMiddleware, async (c) => {
     try {
       const containerType = c.req.param('containerType')
       
