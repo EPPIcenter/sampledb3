@@ -40,6 +40,7 @@ import AdminDashboard from './pages/AdminDashboard'
 import AdminUsers from './pages/AdminUsers'
 import AdminSettings from './pages/AdminSettings'
 import AdminStatistics from './pages/AdminStatistics'
+import AdminErrorLogs from './pages/AdminErrorLogs'
 import SetupGuard from './components/SetupGuard'
 import AuthGuard from './components/AuthGuard'
 import AdminGuard from './components/AdminGuard'
@@ -548,6 +549,14 @@ function AppContent() {
                 element={
                   <AdminGuard>
                     <AdminStatistics />
+                  </AdminGuard>
+                }
+              />
+              <Route
+                path="/admin/error-logs"
+                element={
+                  <AdminGuard>
+                    <AdminErrorLogs />
                   </AdminGuard>
                 }
               />

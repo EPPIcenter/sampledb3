@@ -4,8 +4,12 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './lib/query-client'
 import { ToastProvider } from './contexts/ToastContext'
 import { ErrorBoundaryWrapper } from './components/ErrorBoundary'
+import { initializeGlobalErrorHandlers } from './lib/global-error-handlers'
 import App from './App'
 import './index.css'
+
+// Initialize global error handlers
+initializeGlobalErrorHandlers()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

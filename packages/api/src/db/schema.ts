@@ -430,3 +430,26 @@ export const containerDerivation = sqliteTable('container_derivation', {
   typeIdx: index('idx_container_derivation_type').on(table.derivationType),
   dateIdx: index('idx_container_derivation_date').on(table.derivationDate),
 }))
+
+// Error logging table
+export const errorLogs = sqliteTable('error_logs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  timestamp: text('timestamp').notNull().default(sql`current_timestamp`),
+  source: text('source').notNull(), // 'frontend' | 'backend'
+  level: text('level').notNull(), // 'error' | 'warning' | 'info'
+  message: text('message').notNull(),
+  errorCode: text('error_code'),
+  stack: text('stack'),
+  context: text('context', { mode: 'json' }), // JSON field for additional context
+  userId: integer('user_id'), // Optional user ID if available
+  url: text('url'), // Request URL for backend, page URL for frontend
+  userAgent: text('user_agent'),
+  resolved: integer('resolved', { mode: 'boolean' }).notNull().default(false),
+  resolvedAt: text('resolved_at'),
+  resolvedBy: integer('resolved_by'), // User ID who resolved it
+}, (table) => ({
+  timestampIdx: index('error_logs_timestamp_idx').on(table.timestamp),
+  sourceIdx: index('error_logs_source_idx').on(table.source),
+  levelIdx: index('error_logs_level_idx').on(table.level),
+  resolvedIdx: index('error_logs_resolved_idx').on(table.resolved),
+}))

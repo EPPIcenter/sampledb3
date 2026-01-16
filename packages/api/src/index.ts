@@ -33,6 +33,7 @@ import { createImportsRoutes } from './routes/imports'
 import { createCollectionsRoutes } from './routes/collections'
 import { createStatisticsRoutes } from './routes/statistics'
 import { createSettingsRoutes } from './routes/settings'
+import { createErrorLogsRoutes } from './routes/error-logs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -147,6 +148,7 @@ app.route('/api/statistics', createStatisticsRoutes(db, sqlite))
 app.route('/api/tags', createTagsRoutes(db))
 app.route('/api/settings', createSettingsRoutes(db))
 app.route('/api/units', createUnitsRoutes(db))
+app.route('/api/error-logs', createErrorLogsRoutes(db))
 
 // Serve static files from web build in production
 if (process.env.NODE_ENV === 'production') {

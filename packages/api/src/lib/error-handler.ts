@@ -1,5 +1,7 @@
 import { Context } from 'hono'
 import { z } from 'zod'
+import { logBackendError, type ErrorLogContext } from './error-logger'
+import { db } from '../db/client'
 
 export interface ErrorResponse {
   error: string
@@ -9,6 +11,29 @@ export interface ErrorResponse {
 }
 
 export function handleRouteError(error: unknown, c: Context): Response {
+  // Get database from context if available, otherwise use default
+  const database = (c.get('db') as typeof db | undefined) || db
+  
+  // Extract context for error logging
+  const user = c.get('user') as { id: number } | undefined
+  const url = c.req.url
+  const userAgent = c.req.header('user-agent')
+  
+  const errorContext: ErrorLogContext = {
+    userId: user?.id,
+    url,
+    userAgent,
+    additionalContext: {
+      method: c.req.method,
+      path: new URL(url).pathname,
+    },
+  }
+  
+  // Log error asynchronously (non-blocking)
+  logBackendError(database, error, errorContext).catch((logErr) => {
+    // If logging fails, just log to console
+    console.error('[ERROR_HANDLER] Failed to log error:', logErr)
+  })
   // Handle Zod validation errors
   if (error instanceof z.ZodError) {
     return c.json({
