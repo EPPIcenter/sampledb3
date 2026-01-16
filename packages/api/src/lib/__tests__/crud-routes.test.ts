@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient, getResponseData } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
 import { createCrudRoutes } from '../crud-routes'
 import { setupTestDatabase, cleanupTestDatabase, resetTestDatabase } from '../../__tests__/helpers/db-setup'
 import { tag, storageContainer, storageContainerTag } from '../../db/schema'
@@ -8,15 +8,35 @@ import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import type { Database } from '../../db/client'
 import { createTestTag, createTestStorageContainer, createTestSpecimenType, createTestSpecimen, createTestUnit } from '../../__tests__/helpers/factories'
+import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
 
 describe('createCrudRoutes Factory', () => {
   let testDb: Database
   let sqlite: any
+  let cookieHeader: string
 
   beforeEach(async () => {
     const setup = await setupTestDatabase()
     testDb = setup.db
     sqlite = setup.sqlite
+
+    // Setup required settings for auth to work
+    await setupPasswordRequirements(testDb, 8)
+    await setupSessionSettings(testDb, 604800)
+
+    // Create an admin user for authenticated requests
+    await createTestUser(testDb, {
+      email: 'admin@test.com',
+      name: 'Admin User',
+      password: 'password123',
+      role: 'admin',
+    })
+
+    // Login to get session cookie
+    const app = new Hono()
+    const { createAuthRoutes } = await import('../../routes/auth')
+    app.route('/api/auth', createAuthRoutes(testDb, testDb))
+    cookieHeader = await loginAndGetCookie(app, 'admin@test.com', 'password123')
   })
 
   afterEach(() => {
@@ -154,7 +174,9 @@ describe('createCrudRoutes Factory', () => {
       app.route('/api/tags', routes)
       const client = createTestClient(app)
 
-      const res = await client.api.tags.$post({
+      const res = await authenticatedRequest(app, '/api/tags', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'New Tag' },
       })
 
@@ -186,8 +208,9 @@ describe('createCrudRoutes Factory', () => {
       app.route('/api/tags', routes)
       const client = createTestClient(app)
 
-      const res = await client.api.tags[':id'].$put({
-        param: { id: String(testTag.id) },
+      const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
+        method: 'PUT',
+        cookie: cookieHeader,
         json: { name: 'Updated Name' },
       })
 
@@ -215,10 +238,10 @@ describe('createCrudRoutes Factory', () => {
 
       const app = new Hono()
       app.route('/api/tags', routes)
-      const client = createTestClient(app)
 
-      const res = await client.api.tags[':id'].$delete({
-        param: { id: String(testTag.id) },
+      const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
+        method: 'DELETE',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(200)
@@ -226,7 +249,10 @@ describe('createCrudRoutes Factory', () => {
       expect(data.message).toContain('deleted successfully')
 
       // Verify it's deleted
-      const getRes = await client.api.tags[':id'].$get({
+      const app2 = new Hono()
+      app2.route('/api/tags', routes)
+      const client2 = createTestClient(app2)
+      const getRes = await client2.api.tags[':id'].$get({
         param: { id: String(testTag.id) },
       })
       expect(getRes.status).toBe(404)
@@ -250,9 +276,10 @@ describe('createCrudRoutes Factory', () => {
 
       const app = new Hono()
       app.route('/api/tags', routes)
-      const client = createTestClient(app)
 
-      const res = await client.api.tags.$post({
+      const res = await authenticatedRequest(app, '/api/tags', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: '' }, // Empty name should fail
       })
 
@@ -282,8 +309,9 @@ describe('createCrudRoutes Factory', () => {
       app.route('/api/tags', routes)
       const client = createTestClient(app)
 
-      const res = await client.api.tags[':id'].$put({
-        param: { id: String(testTag.id) },
+      const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
+        method: 'PUT',
+        cookie: cookieHeader,
         json: { name: '' }, // Empty name should fail
       })
 
@@ -310,7 +338,9 @@ describe('createCrudRoutes Factory', () => {
       app.route('/api/tags', routes)
       const client = createTestClient(app)
 
-      const res = await client.api.tags.$post({
+      const res = await authenticatedRequest(app, '/api/tags', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Duplicate' },
       })
 
@@ -341,8 +371,9 @@ describe('createCrudRoutes Factory', () => {
       const client = createTestClient(app)
 
       // Try to update state1 to have the same name as state2
-      const res = await client.api.tags[':id'].$put({
-        param: { id: String(tag1.id) },
+      const res = await authenticatedRequest(app, `/api/tags/${tag1.id}`, {
+        method: 'PUT',
+        cookie: cookieHeader,
         json: { name: 'Tag 2' },
       })
 
@@ -372,8 +403,9 @@ describe('createCrudRoutes Factory', () => {
       const client = createTestClient(app)
 
       // Update with the same name should work
-      const res = await client.api.tags[':id'].$put({
-        param: { id: String(testTag.id) },
+      const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
+        method: 'PUT',
+        cookie: cookieHeader,
         json: { name: 'Original' },
       })
 
@@ -410,7 +442,9 @@ describe('createCrudRoutes Factory', () => {
       app.route('/api/tags', routes)
       const client = createTestClient(app)
 
-      const res = await client.api.tags.$post({
+      const res = await authenticatedRequest(app, '/api/tags', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Invalid' },
       })
 
@@ -450,8 +484,9 @@ describe('createCrudRoutes Factory', () => {
       app.route('/api/tags', routes)
       const client = createTestClient(app)
 
-      const res = await client.api.tags[':id'].$put({
-        param: { id: String(testTag.id) },
+      const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
+        method: 'PUT',
+        cookie: cookieHeader,
         json: { name: 'Invalid' },
       })
 
@@ -518,8 +553,9 @@ describe('createCrudRoutes Factory', () => {
       app.route('/api/tags', routes)
       const client = createTestClient(app)
 
-      const res = await client.api.tags[':id'].$delete({
-        param: { id: String(testTag.id) },
+      const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
+        method: 'DELETE',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(400)
@@ -560,10 +596,10 @@ describe('createCrudRoutes Factory', () => {
 
       const app = new Hono()
       app.route('/api/tags', routes)
-      const client = createTestClient(app)
 
-      const res = await client.api.tags[':id'].$delete({
-        param: { id: String(testTag.id) },
+      const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
+        method: 'DELETE',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(200)
@@ -667,7 +703,9 @@ describe('createCrudRoutes Factory', () => {
       app.route('/api/tags', routes)
       const client = createTestClient(app)
 
-      const res = await client.api.tags.$post({
+      const res = await authenticatedRequest(app, '/api/tags', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Test' },
       })
 
@@ -701,8 +739,9 @@ describe('createCrudRoutes Factory', () => {
       app.route('/api/tags', routes)
       const client = createTestClient(app)
 
-      const res = await client.api.tags[':id'].$put({
-        param: { id: String(testTag.id) },
+      const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
+        method: 'PUT',
+        cookie: cookieHeader,
         json: { name: 'Updated' },
       })
 

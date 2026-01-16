@@ -10,7 +10,7 @@ import {
   createTestStorageType,
 } from '../helpers/factories'
 import type { Database } from '../../db/client'
-import collectionsRoutes from '../../routes/collections'
+import { createCollectionsRoutes } from '../../routes/collections'
 
 describe('Collection Move Integration Tests', () => {
   let testDb: Database
@@ -23,7 +23,7 @@ describe('Collection Move Integration Tests', () => {
     sqlite = setup.sqlite
 
     const app = new (await import('hono')).Hono()
-    app.route('/api/collections', collectionsRoutes)
+    app.route('/api/collections', createCollectionsRoutes(testDb))
     client = createTestClient(app)
   })
 

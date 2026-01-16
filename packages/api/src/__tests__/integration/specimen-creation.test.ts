@@ -8,9 +8,12 @@ import {
   createTestLocation,
   createTestStorageType,
 } from '../helpers/factories'
-import { micronixPlate, specimenTypeContainerType } from '../../db/schema'
+import { micronixPlate, specimenTypeContainerType, unit, containerTypeUnit } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { createSpecimensRoutes } from '../../routes/specimens'
+import { setupPasswordRequirements, setupSessionSettings } from '../helpers/auth-helpers'
+import { setContainerDefaults } from '../../lib/settings'
+import { eq } from 'drizzle-orm'
 
 describe('Specimen Creation Integration Tests', () => {
   let testDb: Database
@@ -21,6 +24,54 @@ describe('Specimen Creation Integration Tests', () => {
     const setup = await setupTestDatabase()
     testDb = setup.db
     sqlite = setup.sqlite
+
+    // Setup required units for container defaults
+    let itemsUnit = await testDb.select().from(unit).where(eq(unit.symbol, 'items')).get()
+    if (!itemsUnit) {
+      const [inserted] = await testDb.insert(unit).values({
+        symbol: 'items',
+        name: 'Items',
+        category: 'count',
+      }).returning()
+      itemsUnit = inserted
+    }
+    let spotsUnit = await testDb.select().from(unit).where(eq(unit.symbol, 'spots')).get()
+    if (!spotsUnit) {
+      const [inserted] = await testDb.insert(unit).values({
+        symbol: 'spots',
+        name: 'Spots',
+        category: 'count',
+      }).returning()
+      spotsUnit = inserted
+    }
+
+    // Setup container type / unit relationships
+    await testDb.insert(containerTypeUnit).values({
+      containerType: 'micronix_tube',
+      unitId: itemsUnit.id as number,
+    }).onConflictDoNothing()
+    await testDb.insert(containerTypeUnit).values({
+      containerType: 'cryovial_tube',
+      unitId: itemsUnit.id as number,
+    }).onConflictDoNothing()
+    await testDb.insert(containerTypeUnit).values({
+      containerType: 'paper',
+      unitId: spotsUnit.id as number,
+    }).onConflictDoNothing()
+    await testDb.insert(containerTypeUnit).values({
+      containerType: 'static_well',
+      unitId: spotsUnit.id as number,
+    }).onConflictDoNothing()
+
+    // Setup required settings for container creation
+    await setupPasswordRequirements(testDb, 8)
+    await setupSessionSettings(testDb, 604800)
+    await setContainerDefaults(testDb, {
+      micronix_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'items' },
+      cryovial_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'items' },
+      paper: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'spots' },
+      static_well: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'spots' },
+    })
 
     const app = new (await import('hono')).Hono()
     // Use factory pattern with test database

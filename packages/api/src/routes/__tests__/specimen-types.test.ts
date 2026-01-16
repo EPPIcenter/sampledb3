@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { createTestClient, getResponseData } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
 import { Hono } from 'hono'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import type { Database } from '../../db/client'
@@ -7,17 +7,37 @@ import { createCrudRoutes } from '../../lib/crud-routes'
 import { specimenType, specimen } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
+import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
 
 describe('Specimen Types API', () => {
   let app: Hono
   let testDb: Database
   let sqlite: any
   let specimenTypesRoutes: any
+  let cookieHeader: string
 
   beforeEach(async () => {
     const setup = await setupTestDatabase()
     testDb = setup.db
     sqlite = setup.sqlite
+
+    // Setup required settings for auth to work
+    await setupPasswordRequirements(testDb, 8)
+    await setupSessionSettings(testDb, 604800)
+
+    // Create an admin user for authenticated requests
+    await createTestUser(testDb, {
+      email: 'admin@test.com',
+      name: 'Admin User',
+      password: 'password123',
+      role: 'admin',
+    })
+
+    // Login to get session cookie
+    const authApp = new Hono()
+    const { createAuthRoutes } = await import('../../routes/auth')
+    authApp.route('/api/auth', createAuthRoutes(testDb, testDb))
+    cookieHeader = await loginAndGetCookie(authApp, 'admin@test.com', 'password123')
 
     // Create routes with test database
     const createSchema = z.object({
@@ -97,8 +117,9 @@ describe('Specimen Types API', () => {
 
   describe('POST /specimen-types', () => {
     it('should create a new specimen type', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api['specimen-types'].$post({
+      const res = await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           name: 'Test Type',
         },
@@ -112,8 +133,9 @@ describe('Specimen Types API', () => {
     })
 
     it('should reject empty name', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api['specimen-types'].$post({
+      const res = await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           name: '',
         },
@@ -123,15 +145,17 @@ describe('Specimen Types API', () => {
     })
 
     it('should reject duplicate names', async () => {
-      const client = createTestClient(app) as any
-
       // Create first type
-      await client.api['specimen-types'].$post({
+      await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Duplicate Test' },
       })
 
       // Try to create duplicate
-      const res = await client.api['specimen-types'].$post({
+      const res = await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           name: 'Duplicate Test',
         },
@@ -145,15 +169,16 @@ describe('Specimen Types API', () => {
 
   describe('GET /specimen-types/:id', () => {
     it('should return specimen type by ID', async () => {
-      const client = createTestClient(app) as any
-
       // Create a type first
-      const createRes = await client.api['specimen-types'].$post({
+      const createRes = await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Get Test Type' },
       })
       const created = await getResponseData(createRes)
       const id = created.id
 
+      const client = createTestClient(app) as any
       const res = await client.api['specimen-types'][':id'].$get({
         param: { id: String(id) },
       })
@@ -185,17 +210,18 @@ describe('Specimen Types API', () => {
 
   describe('PUT /specimen-types/:id', () => {
     it('should update specimen type', async () => {
-      const client = createTestClient(app) as any
-
       // Create a type first
-      const createRes = await client.api['specimen-types'].$post({
+      const createRes = await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Original Name' },
       })
       const created = await getResponseData(createRes)
       const id = created.id
 
-      const res = await client.api['specimen-types'][':id'].$put({
-        param: { id: String(id) },
+      const res = await authenticatedRequest(app, `/api/specimen-types/${id}`, {
+        method: 'PUT',
+        cookie: cookieHeader,
         json: {
           name: 'Updated Name',
         },
@@ -207,21 +233,24 @@ describe('Specimen Types API', () => {
     })
 
     it('should reject duplicate names on update', async () => {
-      const client = createTestClient(app) as any
-
       // Create two types
-      const create1 = await client.api['specimen-types'].$post({
+      const create1 = await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Type A' },
       })
       const type1 = await getResponseData(create1)
 
-      await client.api['specimen-types'].$post({
+      await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Type B' },
       })
 
       // Try to update type1 to have the same name as type2
-      const res = await client.api['specimen-types'][':id'].$put({
-        param: { id: String(type1.id) },
+      const res = await authenticatedRequest(app, `/api/specimen-types/${type1.id}`, {
+        method: 'PUT',
+        cookie: cookieHeader,
         json: {
           name: 'Type B', // Duplicate
         },
@@ -233,22 +262,24 @@ describe('Specimen Types API', () => {
 
   describe('DELETE /specimen-types/:id', () => {
     it('should delete specimen type when not in use', async () => {
-      const client = createTestClient(app) as any
-
       // Create a type
-      const createRes = await client.api['specimen-types'].$post({
+      const createRes = await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Delete Test Type' },
       })
       const created = await getResponseData(createRes)
       const id = created.id
 
-      const res = await client.api['specimen-types'][':id'].$delete({
-        param: { id: String(id) },
+      const res = await authenticatedRequest(app, `/api/specimen-types/${id}`, {
+        method: 'DELETE',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(200)
 
       // Verify it's deleted
+      const client = createTestClient(app) as any
       const getRes = await client.api['specimen-types'][':id'].$get({
         param: { id: String(id) },
       })
@@ -256,9 +287,9 @@ describe('Specimen Types API', () => {
     })
 
     it('should return 400 for invalid ID', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api['specimen-types'][':id'].$delete({
-        param: { id: 'invalid' },
+      const res = await authenticatedRequest(app, '/api/specimen-types/invalid', {
+        method: 'DELETE',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(400)
@@ -267,15 +298,18 @@ describe('Specimen Types API', () => {
 
   describe('List transformation', () => {
     it('should transform list response to include only specific fields', async () => {
-      const client = createTestClient(app) as any
-
-      await client.api['specimen-types'].$post({
+      await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Type 1' },
       })
-      await client.api['specimen-types'].$post({
+      await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Type 2' },
       })
 
+      const client = createTestClient(app) as any
       const res = await client.api['specimen-types'].$get()
       expect(res.status).toBe(200)
       // Check that list items have the transformed structure
@@ -292,9 +326,9 @@ describe('Specimen Types API', () => {
 
   describe('Timestamp handling', () => {
     it('should set created and lastUpdated on create', async () => {
-      const client = createTestClient(app) as any
-
-      const res = await client.api['specimen-types'].$post({
+      const res = await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Timestamp Test' },
       })
 
@@ -306,9 +340,9 @@ describe('Specimen Types API', () => {
     })
 
     it('should update lastUpdated on update', async () => {
-      const client = createTestClient(app) as any
-
-      const createRes = await client.api['specimen-types'].$post({
+      const createRes = await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: { name: 'Update Timestamp Test' },
       })
       const created = await getResponseData(createRes)
@@ -317,8 +351,9 @@ describe('Specimen Types API', () => {
       // Wait a bit to ensure timestamp difference
       await new Promise(resolve => setTimeout(resolve, 10))
 
-      const updateRes = await client.api['specimen-types'][':id'].$put({
-        param: { id: String(created.id) },
+      const updateRes = await authenticatedRequest(app, `/api/specimen-types/${created.id}`, {
+        method: 'PUT',
+        cookie: cookieHeader,
         json: { name: 'Updated Name' },
       })
 

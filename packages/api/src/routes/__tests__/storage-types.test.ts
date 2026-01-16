@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient, getResponseData } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import { createTestStorageType, createTestLocation } from '../../__tests__/helpers/factories'
 import type { Database } from '../../db/client'
@@ -8,16 +8,36 @@ import { createCrudRoutes } from '../../lib/crud-routes'
 import { storageType, location } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
+import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
 
 describe('Storage Types API', () => {
   let testDb: Database
   let sqlite: any
   let storageTypesRoutes: any
+  let cookieHeader: string
 
   beforeEach(async () => {
     const setup = await setupTestDatabase()
     testDb = setup.db
     sqlite = setup.sqlite
+
+    // Setup required settings for auth to work
+    await setupPasswordRequirements(testDb, 8)
+    await setupSessionSettings(testDb, 604800)
+
+    // Create an admin user for authenticated requests
+    await createTestUser(testDb, {
+      email: 'admin@test.com',
+      name: 'Admin User',
+      password: 'password123',
+      role: 'admin',
+    })
+
+    // Login to get session cookie
+    const app = new Hono()
+    const { createAuthRoutes } = await import('../../routes/auth')
+    app.route('/api/auth', createAuthRoutes(testDb, testDb))
+    cookieHeader = await loginAndGetCookie(app, 'admin@test.com', 'password123')
 
     // Create routes with test database
     const createSchema = z.object({
@@ -99,7 +119,9 @@ describe('Storage Types API', () => {
       app.route('/api/storage-types', storageTypesRoutes)
       const client = createTestClient(app) as any
 
-      const res = await client.api['storage-types'].$post({
+      const res = await authenticatedRequest(app, '/api/storage-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           name: 'New Storage Type',
           description: 'Test description',
@@ -117,7 +139,9 @@ describe('Storage Types API', () => {
       app.route('/api/storage-types', storageTypesRoutes)
       const client = createTestClient(app) as any
 
-      const res = await client.api['storage-types'].$post({
+      const res = await authenticatedRequest(app, '/api/storage-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           name: 'Simple Type',
         },
@@ -135,7 +159,9 @@ describe('Storage Types API', () => {
       app.route('/api/storage-types', storageTypesRoutes)
       const client = createTestClient(app) as any
 
-      const res = await client.api['storage-types'].$post({
+      const res = await authenticatedRequest(app, '/api/storage-types', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           name: 'Existing Type',
         },
@@ -186,8 +212,9 @@ describe('Storage Types API', () => {
       app.route('/api/storage-types', storageTypesRoutes)
       const client = createTestClient(app) as any
 
-      const res = await client.api['storage-types'][':id'].$put({
-        param: { id: String(testType.id) },
+      const res = await authenticatedRequest(app, `/api/storage-types/${testType.id}`, {
+        method: 'PUT',
+        cookie: cookieHeader,
         json: {
           name: 'Updated',
           description: 'New description',
@@ -209,8 +236,9 @@ describe('Storage Types API', () => {
       app.route('/api/storage-types', storageTypesRoutes)
       const client = createTestClient(app) as any
 
-      const res = await client.api['storage-types'][':id'].$delete({
-        param: { id: String(testType.id) },
+      const res = await authenticatedRequest(app, `/api/storage-types/${testType.id}`, {
+        method: 'DELETE',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(200)
@@ -230,8 +258,9 @@ describe('Storage Types API', () => {
       app.route('/api/storage-types', storageTypesRoutes)
       const client = createTestClient(app) as any
 
-      const res = await client.api['storage-types'][':id'].$delete({
-        param: { id: String(testType.id) },
+      const res = await authenticatedRequest(app, `/api/storage-types/${testType.id}`, {
+        method: 'DELETE',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(400)

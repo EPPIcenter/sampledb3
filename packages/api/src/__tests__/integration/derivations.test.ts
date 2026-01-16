@@ -8,7 +8,7 @@ import {
   createTestSpecimen,
 } from '../helpers/factories'
 import type { Database } from '../../db/client'
-import derivationsRoutes from '../../routes/derivations'
+import { createDerivationsRoutes } from '../../routes/derivations'
 
 describe('Derivation Workflow Integration Tests', () => {
   let testDb: Database
@@ -21,7 +21,7 @@ describe('Derivation Workflow Integration Tests', () => {
     sqlite = setup.sqlite
 
     const app = new (await import('hono')).Hono()
-    app.route('/api', derivationsRoutes)
+    app.route('/api', createDerivationsRoutes(testDb))
     client = createTestClient(app)
   })
 
