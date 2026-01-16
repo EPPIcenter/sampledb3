@@ -82,6 +82,25 @@ vi.mock('../../hooks/useReferenceData', () => ({
   }),
 }))
 
+// Mock the UserContext
+const mockUser = {
+  id: 1,
+  email: 'admin@example.com',
+  name: 'Admin User',
+  username: 'admin',
+  role: 'admin' as const,
+}
+
+vi.mock('../../contexts/UserContext', () => ({
+  useUser: () => ({
+    user: mockUser,
+    setUser: vi.fn(),
+    refreshUser: vi.fn(),
+    loading: false,
+    error: null,
+  }),
+}))
+
 describe('ReferenceData Page', () => {
   beforeEach(() => {
     vi.clearAllMocks()

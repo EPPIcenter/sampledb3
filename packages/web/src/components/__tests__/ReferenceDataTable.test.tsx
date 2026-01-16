@@ -1,7 +1,26 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import ReferenceDataTable from '../ReferenceDataTable'
+
+// Mock the UserContext
+const mockUser = {
+  id: 1,
+  email: 'admin@example.com',
+  name: 'Admin User',
+  username: 'admin',
+  role: 'admin' as const,
+}
+
+vi.mock('../../contexts/UserContext', () => ({
+  useUser: () => ({
+    user: mockUser,
+    setUser: vi.fn(),
+    refreshUser: vi.fn(),
+    loading: false,
+    error: null,
+  }),
+}))
 
 interface TestItem {
   id: number
@@ -10,6 +29,10 @@ interface TestItem {
 }
 
 describe('ReferenceDataTable', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   const columns = [
     { key: 'name' as const, label: 'Name' },
     { key: 'value' as const, label: 'Value' },

@@ -60,13 +60,7 @@ describe('useSubjects Hooks', () => {
         },
       }
 
-      vi.mocked(api.subjectsApi.get).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.subjectsApi.get).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useSubject(1), {
         wrapper: createWrapper(),
@@ -89,13 +83,7 @@ describe('useSubjects Hooks', () => {
         summary: { specimenCount: 5, totalSpecimens: 5, totalContainers: 10, specimenTypes: [], timeline: [], collectionDateRange: null },
       }
 
-      vi.mocked(api.subjectsApi.getSummary).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.subjectsApi.getSummary).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useSubjectSummary(1), {
         wrapper: createWrapper(),
@@ -121,13 +109,7 @@ describe('useSubjects Hooks', () => {
         },
       }
 
-      vi.mocked(api.subjectsApi.create).mockResolvedValue({
-        data: mockCreated,
-        status: 201,
-        statusText: 'Created',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.subjectsApi.create).mockResolvedValue(mockCreated)
 
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -175,13 +157,7 @@ describe('useSubjects Hooks', () => {
         },
       }
 
-      vi.mocked(api.subjectsApi.update).mockResolvedValue({
-        data: mockUpdated,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.subjectsApi.update).mockResolvedValue(mockUpdated)
 
       const queryClient = new QueryClient({
         defaultOptions: {

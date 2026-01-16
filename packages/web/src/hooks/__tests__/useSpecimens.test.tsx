@@ -55,13 +55,7 @@ describe('useSpecimens Hooks', () => {
         ],
       }
 
-      vi.mocked(api.specimensApi.search).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.specimensApi.search).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useSpecimens(), {
         wrapper: createWrapper(),
@@ -78,13 +72,7 @@ describe('useSpecimens Hooks', () => {
     it('should pass filters to search', async () => {
       const mockData = { specimens: [] }
 
-      vi.mocked(api.specimensApi.search).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.specimensApi.search).mockResolvedValue(mockData)
 
       const filters = { source_type: 'subject', study: 'ST1' }
       const { result } = renderHook(() => useSpecimens(filters), {
@@ -110,13 +98,7 @@ describe('useSpecimens Hooks', () => {
         },
       }
 
-      vi.mocked(api.specimensApi.get).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.specimensApi.get).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useSpecimen(1), {
         wrapper: createWrapper(),
@@ -142,13 +124,7 @@ describe('useSpecimens Hooks', () => {
         },
       }
 
-      vi.mocked(api.specimensApi.create).mockResolvedValue({
-        data: mockCreated,
-        status: 201,
-        statusText: 'Created',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.specimensApi.create).mockResolvedValue(mockCreated)
 
       const queryClient = new QueryClient({
         defaultOptions: {

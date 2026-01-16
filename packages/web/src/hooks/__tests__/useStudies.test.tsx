@@ -62,13 +62,7 @@ describe('useStudies Hooks', () => {
         pagination: { total: 2, page: 1, limit: 10, totalPages: 1 },
       }
 
-      vi.mocked(api.studiesApi.list).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.studiesApi.list).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useStudies(), {
         wrapper: createWrapper(),
@@ -85,13 +79,7 @@ describe('useStudies Hooks', () => {
     it('should pass search and pagination parameters', async () => {
       const mockData = { studies: [], pagination: { total: 0, page: 1, limit: 10, totalPages: 0 } }
 
-      vi.mocked(api.studiesApi.list).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.studiesApi.list).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useStudies('test', { page: 2, limit: 20 }), {
         wrapper: createWrapper(),
@@ -119,13 +107,7 @@ describe('useStudies Hooks', () => {
         },
       }
 
-      vi.mocked(api.studiesApi.get).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.studiesApi.get).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useStudy(1), {
         wrapper: createWrapper(),
@@ -158,13 +140,7 @@ describe('useStudies Hooks', () => {
         pagination: { total: 1, page: 1, limit: 10, totalPages: 1 },
       }
 
-      vi.mocked(api.studiesApi.getSubjects).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.studiesApi.getSubjects).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useStudySubjects(1), {
         wrapper: createWrapper(),
@@ -193,13 +169,7 @@ describe('useStudies Hooks', () => {
         },
       }
 
-      vi.mocked(api.studiesApi.create).mockResolvedValue({
-        data: mockCreated,
-        status: 201,
-        statusText: 'Created',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.studiesApi.create).mockResolvedValue(mockCreated)
 
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -253,13 +223,7 @@ describe('useStudies Hooks', () => {
         },
       }
 
-      vi.mocked(api.studiesApi.update).mockResolvedValue({
-        data: mockUpdated,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.studiesApi.update).mockResolvedValue(mockUpdated)
 
       const queryClient = new QueryClient({
         defaultOptions: {
