@@ -19,11 +19,12 @@ import {
   controlDefinition,
   unit,
 } from '../db/schema'
-import { eq, sql } from 'drizzle-orm'
+import { eq, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { executeMoves, resolveContainersByBarcodes, type BatchMoveRequest, type ContainerInfo } from '../lib/container-move'
 import { resolveCollection } from '../lib/collection-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
+import { createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create collections routes with database injection
@@ -31,6 +32,7 @@ import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/colle
  */
 export function createCollectionsRoutes(database: Database): Hono {
   const collections = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
 // Helper to build location path string
 function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | undefined {
@@ -394,7 +396,7 @@ collections.get('/sheets/:id', async (c) => {
 })
 
 // Check collection existence
-collections.post('/check', async (c) => {
+collections.post('/check', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -425,7 +427,7 @@ collections.post('/check', async (c) => {
 })
 
 // Create micronix plate
-collections.post('/plates/micronix', async (c) => {
+collections.post('/plates/micronix', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -467,7 +469,7 @@ collections.post('/plates/micronix', async (c) => {
 })
 
 // Create cryovial box
-collections.post('/boxes/cryovial', async (c) => {
+collections.post('/boxes/cryovial', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -509,7 +511,7 @@ collections.post('/boxes/cryovial', async (c) => {
 })
 
 // Create regular box
-collections.post('/boxes', async (c) => {
+collections.post('/boxes', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -549,7 +551,7 @@ collections.post('/boxes', async (c) => {
 })
 
 // Create bag
-collections.post('/bags', async (c) => {
+collections.post('/bags', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -589,7 +591,7 @@ collections.post('/bags', async (c) => {
 })
 
 // Resolve multiple identifiers to container info
-collections.post('/containers/resolve', async (c) => {
+collections.post('/containers/resolve', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -636,6 +638,185 @@ collections.post('/containers/resolve', async (c) => {
         errorCode: 'RESOLVE_CONTAINERS_ERROR'
       })
     }, 500)
+  }
+})
+
+// List all collections (optimized for move page)
+collections.get('/list-all', async (c) => {
+  try {
+    // Load all collection types in parallel with optimized queries
+    const [plates, cryovialBoxes, boxes, bags] = await Promise.all([
+      // Micronix plates with batch item counts
+      (async () => {
+        const platesData = await database
+          .select({
+            plate: micronixPlate,
+            location: location,
+          })
+          .from(micronixPlate)
+          .leftJoin(location, eq(micronixPlate.locationId, location.id))
+        
+        // Batch count queries for efficiency
+        const plateIds = platesData.map(p => p.plate.id)
+        const [tubeCounts, wellCounts] = plateIds.length > 0 ? await Promise.all([
+          database
+            .select({
+              collectionId: micronixTube.collectionId,
+              count: sql<number>`COUNT(*)`.as('count'),
+            })
+            .from(micronixTube)
+            .where(inArray(micronixTube.collectionId, plateIds))
+            .groupBy(micronixTube.collectionId),
+          database
+            .select({
+              collectionId: staticWell.collectionId,
+              count: sql<number>`COUNT(*)`.as('count'),
+            })
+            .from(staticWell)
+            .where(inArray(staticWell.collectionId, plateIds))
+            .groupBy(staticWell.collectionId),
+        ]) : [[], []]
+        
+        const tubeCountMap = new Map(tubeCounts.map(t => [t.collectionId, t.count]))
+        const wellCountMap = new Map(wellCounts.map(w => [w.collectionId, w.count]))
+        
+        return platesData.map((r) => ({
+          id: r.plate.id,
+          name: r.plate.name,
+          type: 'micronix_plate' as const,
+          barcode: r.plate.barcode,
+          locationId: r.plate.locationId,
+          itemCount: (tubeCountMap.get(r.plate.id) || 0) + (wellCountMap.get(r.plate.id) || 0),
+          location: r.location
+            ? {
+                id: r.location.id,
+                path: buildLocationPath(r.location),
+              }
+            : null,
+        }))
+      })(),
+      
+      // Cryovial boxes with batch item counts
+      (async () => {
+        const boxesData = await database
+          .select({
+            box: cryovialBox,
+            location: location,
+          })
+          .from(cryovialBox)
+          .leftJoin(location, eq(cryovialBox.locationId, location.id))
+        
+        const boxIds = boxesData.map(b => b.box.id)
+        const tubeCounts = boxIds.length > 0 ? await database
+          .select({
+            collectionId: cryovialTube.collectionId,
+            count: sql<number>`COUNT(*)`.as('count'),
+          })
+          .from(cryovialTube)
+          .where(inArray(cryovialTube.collectionId, boxIds))
+          .groupBy(cryovialTube.collectionId) : []
+        
+        const tubeCountMap = new Map(tubeCounts.map(t => [t.collectionId, t.count]))
+        
+        return boxesData.map((r) => ({
+          id: r.box.id,
+          name: r.box.name,
+          type: 'cryovial_box' as const,
+          barcode: r.box.barcode,
+          locationId: r.box.locationId,
+          itemCount: tubeCountMap.get(r.box.id) || 0,
+          location: r.location
+            ? {
+                id: r.location.id,
+                path: buildLocationPath(r.location),
+              }
+            : null,
+        }))
+      })(),
+      
+      // Boxes with batch item counts
+      (async () => {
+        const boxesData = await database
+          .select({
+            box: box,
+            location: location,
+          })
+          .from(box)
+          .leftJoin(location, eq(box.locationId, location.id))
+        
+        const boxIds = boxesData.map(b => b.box.id)
+        const sheetCounts = boxIds.length > 0 ? await database
+          .select({
+            boxId: sheet.boxId,
+            count: sql<number>`COUNT(*)`.as('count'),
+          })
+          .from(sheet)
+          .where(inArray(sheet.boxId, boxIds))
+          .groupBy(sheet.boxId) : []
+        
+        const sheetCountMap = new Map(sheetCounts.map(s => [s.boxId, s.count]))
+        
+        return boxesData.map((r) => ({
+          id: r.box.id,
+          name: r.box.name,
+          type: 'box' as const,
+          barcode: null,
+          locationId: r.box.locationId,
+          itemCount: sheetCountMap.get(r.box.id) || 0,
+          location: r.location
+            ? {
+                id: r.location.id,
+                path: buildLocationPath(r.location),
+              }
+            : null,
+        }))
+      })(),
+      
+      // Bags with batch item counts
+      (async () => {
+        const bagsData = await database
+          .select({
+            bag: bag,
+            location: location,
+          })
+          .from(bag)
+          .leftJoin(location, eq(bag.locationId, location.id))
+        
+        const bagIds = bagsData.map(b => b.bag.id)
+        const sheetCounts = bagIds.length > 0 ? await database
+          .select({
+            bagId: sheet.bagId,
+            count: sql<number>`COUNT(*)`.as('count'),
+          })
+          .from(sheet)
+          .where(inArray(sheet.bagId, bagIds))
+          .groupBy(sheet.bagId) : []
+        
+        const sheetCountMap = new Map(sheetCounts.map(s => [s.bagId, s.count]))
+        
+        return bagsData.map((r) => ({
+          id: r.bag.id,
+          name: r.bag.name,
+          type: 'bag' as const,
+          barcode: null,
+          locationId: r.bag.locationId,
+          itemCount: sheetCountMap.get(r.bag.id) || 0,
+          location: r.location
+            ? {
+                id: r.location.id,
+                path: buildLocationPath(r.location),
+              }
+            : null,
+        }))
+      })(),
+    ])
+    
+    return c.json({
+      collections: [...plates, ...cryovialBoxes, ...boxes, ...bags],
+    })
+  } catch (error) {
+    console.error('Error loading all collections:', error)
+    return c.json({ error: 'Internal server error' }, 500)
   }
 })
 
@@ -764,7 +945,7 @@ collections.get('/list/:type', async (c) => {
 })
 
 // Move containers
-collections.post('/containers/move', async (c) => {
+collections.post('/containers/move', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -815,7 +996,7 @@ collections.post('/containers/move', async (c) => {
 })
 
 // Move sheets
-collections.post('/sheets/move', async (c) => {
+collections.post('/sheets/move', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -879,7 +1060,7 @@ collections.post('/sheets/move', async (c) => {
 })
 
 // Move collections
-collections.post('/move', async (c) => {
+collections.post('/move', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({

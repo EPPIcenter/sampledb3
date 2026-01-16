@@ -930,7 +930,9 @@ export const collectionsApi = {
   }) =>
     api.post<{ containers: Array<{ identifier: { type: string; value: string } | string; container: unknown }> }>('/collections/containers/resolve', data),
   listCollectionsByType: (type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet') =>
-    api.get<{ collections: Array<{ id: number; name: string }> }>(`/collections/list/${type}`),
+    api.get<{ collections: Array<{ id: number; name: string; locationId?: number | null; itemCount?: number; location?: { id: number; path: string | null } | null }> }>(`/collections/list/${type}`),
+  listAllCollections: () =>
+    api.get<{ collections: Array<{ id: number; name: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'; barcode: string | null; locationId: number | null; itemCount: number; location: { id: number; path: string | null } | null }> }>('/collections/list-all'),
   moveContainers: (data: {
     collectionType?: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet'
     mappings: Array<{
