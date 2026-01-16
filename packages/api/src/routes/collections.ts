@@ -141,7 +141,7 @@ async function enrichContainer(containerId: number) {
 }
 
 // Micronix plate detail
-collections.get('/plates/micronix/:id', async (c) => {
+collections.get('/plates/micronix/:id', authMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid plate ID' }, 400)
 
@@ -198,7 +198,7 @@ collections.get('/plates/micronix/:id', async (c) => {
 })
 
 // Cryovial box detail
-collections.get('/boxes/cryovial/:id', async (c) => {
+collections.get('/boxes/cryovial/:id', authMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid box ID' }, 400)
 
@@ -248,7 +248,7 @@ collections.get('/boxes/cryovial/:id', async (c) => {
 })
 
 // Generic box detail
-collections.get('/boxes/:id', async (c) => {
+collections.get('/boxes/:id', authMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid box ID' }, 400)
 
@@ -296,7 +296,7 @@ collections.get('/boxes/:id', async (c) => {
 })
 
 // Bag detail
-collections.get('/bags/:id', async (c) => {
+collections.get('/bags/:id', authMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid bag ID' }, 400)
 
@@ -344,7 +344,7 @@ collections.get('/bags/:id', async (c) => {
 })
 
 // Sheet detail (Replaces DBS bag detail)
-collections.get('/sheets/:id', async (c) => {
+collections.get('/sheets/:id', authMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid sheet ID' }, 400)
 
@@ -642,7 +642,7 @@ collections.post('/containers/resolve', authMiddleware, async (c) => {
 })
 
 // List all collections (optimized for move page)
-collections.get('/list-all', async (c) => {
+collections.get('/list-all', authMiddleware, async (c) => {
   try {
     // Load all collection types in parallel with optimized queries
     const [plates, cryovialBoxes, boxes, bags] = await Promise.all([
@@ -821,7 +821,7 @@ collections.get('/list-all', async (c) => {
 })
 
 // List collections by type
-collections.get('/list/:type', async (c) => {
+collections.get('/list/:type', authMiddleware, async (c) => {
   try {
     const type = c.req.param('type') as any
     let result: any[] = []

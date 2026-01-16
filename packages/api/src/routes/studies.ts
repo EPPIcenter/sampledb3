@@ -28,7 +28,7 @@ export function createStudiesRoutes(database: Database, sqliteDatabase: SQLiteDa
   const authMiddleware = createAuthMiddleware(database)
 
 // List all studies
-studies.get('/', async (c) => {
+studies.get('/', authMiddleware, async (c) => {
   try {
     const search = c.req.query('search')
     const page = validatePage(c.req.query('page'))
@@ -68,7 +68,7 @@ studies.get('/', async (c) => {
 
 // Get batch summaries for multiple studies (lightweight version)
 // NOTE: This must come before /:id route to avoid matching "summaries" as an ID
-studies.get('/summaries', async (c) => {
+studies.get('/summaries', authMiddleware, async (c) => {
   try {
     const idsParam = c.req.query('ids')
     if (!idsParam) {
@@ -233,7 +233,7 @@ studies.get('/summaries', async (c) => {
 })
 
 // Get study by ID
-studies.get('/:id', async (c) => {
+studies.get('/:id', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
@@ -258,7 +258,7 @@ studies.get('/:id', async (c) => {
 })
 
 // Get subjects for a study
-studies.get('/:id/subjects', async (c) => {
+studies.get('/:id/subjects', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
@@ -340,7 +340,7 @@ studies.get('/:id/subjects', async (c) => {
 })
 
 // Get study summary
-studies.get('/:id/summary', async (c) => {
+studies.get('/:id/summary', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
@@ -582,7 +582,7 @@ studies.get('/:id/summary', async (c) => {
 })
 
 // Get study timeline data
-studies.get('/:id/timeline', async (c) => {
+studies.get('/:id/timeline', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
@@ -735,7 +735,7 @@ studies.post('/', authMiddleware, async (c) => {
 })
 
 // Update study
-studies.put('/:id', async (c) => {
+studies.put('/:id', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     

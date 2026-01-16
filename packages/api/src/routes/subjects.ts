@@ -208,7 +208,7 @@ export function createSubjectsRoutes(database: Database): Hono {
   }
 
 // List all subjects (for counting)
-subjects.get('/', async (c) => {
+subjects.get('/', authMiddleware, async (c) => {
   try {
     const page = validatePage(c.req.query('page'))
     const limit = await validateLimit(dbInstance, c.req.query('limit'))
@@ -236,7 +236,7 @@ subjects.get('/', async (c) => {
 })
 
 // Get subject by ID
-subjects.get('/:id', async (c) => {
+subjects.get('/:id', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
@@ -273,7 +273,7 @@ subjects.get('/:id', async (c) => {
 })
 
 // Get subject summary with enriched specimen data
-subjects.get('/:id/summary', async (c) => {
+subjects.get('/:id/summary', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
@@ -1588,7 +1588,7 @@ subjects.post('/:targetId/merge', authMiddleware, async (c) => {
 })
 
 // Update subject
-subjects.put('/:id', async (c) => {
+subjects.put('/:id', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     

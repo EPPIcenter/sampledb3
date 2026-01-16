@@ -127,7 +127,7 @@ async function enrichContainerDetailed(container: StorageContainer) {
 }
 
 // List containers with filters
-containers.get('/', async (c) => {
+containers.get('/', authMiddleware, async (c) => {
   try {
     const specimenId = c.req.query('specimen_id')
     const locationId = c.req.query('location_id')
@@ -207,7 +207,7 @@ containers.get('/', async (c) => {
 })
 
 // Get container by ID with full details
-containers.get('/:id', async (c) => {
+containers.get('/:id', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
@@ -320,7 +320,7 @@ containers.get('/:id', async (c) => {
 })
 
 // Update container
-containers.patch('/:id', async (c) => {
+containers.patch('/:id', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
@@ -424,7 +424,7 @@ containers.patch('/:id', async (c) => {
 })
 
 // Get container tags
-containers.get('/:id/tags', async (c) => {
+containers.get('/:id/tags', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
@@ -497,7 +497,7 @@ containers.post('/:id/tags', authMiddleware, async (c) => {
 })
 
 // Remove tag from container
-containers.delete('/:id/tags/:tagId', async (c) => {
+containers.delete('/:id/tags/:tagId', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     const tagId = parseInt(c.req.param('tagId'))

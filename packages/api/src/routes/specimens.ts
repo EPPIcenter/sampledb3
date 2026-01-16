@@ -20,7 +20,7 @@ export function createSpecimensRoutes(database: Database): Hono {
   const authMiddleware = createAuthMiddleware(database)
 
 // Search specimens
-specimens.get('/', async (c) => {
+specimens.get('/', authMiddleware, async (c) => {
   try {
     const sourceType = c.req.query('source_type')
     const studyCode = c.req.query('study')
@@ -181,7 +181,7 @@ specimens.get('/', async (c) => {
 })
 
 // Get specimen by ID
-specimens.get('/:id', async (c) => {
+specimens.get('/:id', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
