@@ -82,12 +82,120 @@ export async function getResponse<T>(response: Response): Promise<{ data: T; met
 }
 
 /**
- * Create an authenticated test client (for routes requiring auth)
- * Note: This is a placeholder - implement based on your auth setup
+ * Extract session ID from Set-Cookie header or cookie header string
+ * Handles both formats:
+ * - Set-Cookie header: "session_id=abc123; Path=/; HttpOnly"
+ * - Cookie header: "session_id=abc123"
+ * Returns the session ID value or null if not found
  */
-export function createAuthenticatedTestClient(app: Hono, userId: number = 1) {
-  // TODO: Add authentication headers/cookies to test client
-  // This would require setting up session cookies or auth tokens
-  return testClient(app)
+export function extractSessionId(cookieHeader: string | null): string | null {
+  if (!cookieHeader) {
+    return null
+  }
+  
+  // Handle multiple cookies (Set-Cookie can be an array or comma-separated)
+  const cookies = Array.isArray(cookieHeader) 
+    ? cookieHeader 
+    : cookieHeader.split(',').map(c => c.trim())
+  
+  for (const cookie of cookies) {
+    // Match session_id=value (value can be followed by ; or end of string)
+    const match = cookie.match(/session_id=([^;\s]+)/)
+    if (match) {
+      return match[1]
+    }
+  }
+  
+  return null
+}
+
+/**
+ * Create a cookie header string from a session ID
+ */
+export function createCookieHeader(sessionId: string): string {
+  return `session_id=${sessionId}`
+}
+
+/**
+ * Make an authenticated request to the app
+ * This is a convenience wrapper around app.request() that handles cookies
+ */
+export function authenticatedRequest(
+  app: Hono,
+  path: string,
+  options: {
+    method?: string
+    cookie?: string
+    json?: any
+    headers?: Record<string, string>
+  } = {}
+): Promise<Response> {
+  const { method = 'GET', cookie, json, headers = {} } = options
+  
+  const requestHeaders: Record<string, string> = {
+    ...headers,
+  }
+  
+  if (cookie) {
+    requestHeaders['Cookie'] = cookie
+  }
+  
+  if (json) {
+    requestHeaders['Content-Type'] = 'application/json'
+  }
+  
+  return app.request(path, {
+    method,
+    headers: requestHeaders,
+    body: json ? JSON.stringify(json) : undefined,
+  })
+}
+
+/**
+ * Login a user and return the session cookie
+ * This is a convenience function that logs in and extracts the cookie
+ */
+export async function loginAndGetCookie(
+  app: Hono,
+  emailOrUsername: string,
+  password: string = 'password123'
+): Promise<string> {
+  const client = createTestClient(app) as any
+  const loginRes = await client.api.auth.login.$post({
+    json: {
+      emailOrUsername,
+      password,
+    },
+  })
+  
+  if (loginRes.status !== 200) {
+    const errorBody = await loginRes.json().catch(() => ({}))
+    throw new Error(`Login failed: ${loginRes.status} - ${JSON.stringify(errorBody)}`)
+  }
+  
+  const setCookieHeader = loginRes.headers.get('set-cookie')
+  const sessionId = extractSessionId(setCookieHeader)
+  
+  if (!sessionId) {
+    throw new Error('No session cookie in login response')
+  }
+  
+  return createCookieHeader(sessionId)
+}
+
+/**
+ * Create an authenticated test client (for routes requiring auth)
+ * This logs in a user and returns a client with the session cookie
+ * @deprecated Use loginAndGetCookie() and authenticatedRequest() instead
+ */
+export async function createAuthenticatedTestClient(
+  app: Hono,
+  db: Database,
+  emailOrUsername: string,
+  password: string = 'password123'
+) {
+  // Import here to avoid circular dependency
+  const { createAuthenticatedClient } = await import('./auth-helpers')
+  return createAuthenticatedClient(app, db, emailOrUsername, password)
 }
 
