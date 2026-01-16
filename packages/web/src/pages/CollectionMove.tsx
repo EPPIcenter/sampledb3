@@ -4,12 +4,11 @@ import CollectionMoveTreePicker, { type Collection } from '../components/Collect
 import LocationTreePicker, { type LocationSelection } from '../components/LocationTreePicker'
 
 type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
-type Step = 'select-type' | 'select-collections' | 'select-destination' | 'confirm' | 'execute'
+type Step = 'select-collections' | 'select-destination' | 'confirm' | 'execute'
 
 export default function CollectionMove() {
-  const [currentStep, setCurrentStep] = useState<Step>('select-type')
+  const [currentStep, setCurrentStep] = useState<Step>('select-collections')
   const [loading, setLoading] = useState(false)
-  const [collectionType, setCollectionType] = useState<CollectionType | null>(null)
   const [locations, setLocations] = useState<Location[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
   const [selectedCollectionIds, setSelectedCollectionIds] = useState<Set<number>>(new Set())
@@ -34,25 +33,24 @@ export default function CollectionMove() {
     loadLocations()
   }, [])
 
-  // Load collections when type is selected
+  // Load collections on mount
   useEffect(() => {
-    if (collectionType && currentStep === 'select-collections') {
+    if (currentStep === 'select-collections') {
       loadCollections()
     }
-  }, [collectionType, currentStep])
+  }, [currentStep])
 
   const loadCollections = async () => {
-    if (!collectionType) return
-
     setLoading(true)
     try {
-      const response = await collectionsApi.listCollectionsByType(collectionType)
+      // Use optimized endpoint that loads all collections in a single request
+      const response = await collectionsApi.listAllCollections()
       const collectionsData = response.data?.collections || []
 
-      const formattedCollections: Collection[] = collectionsData.map((c: any) => ({
+      const allCollections: Collection[] = collectionsData.map((c: any) => ({
         id: c.id,
         name: c.name,
-        type: collectionType,
+        type: c.type,
         itemCount: c.itemCount || 0,
         locationId: c.locationId,
         location: c.location
@@ -64,18 +62,12 @@ export default function CollectionMove() {
         barcode: c.barcode || null,
       }))
 
-      setCollections(formattedCollections)
+      setCollections(allCollections)
     } catch (error) {
       console.error('Failed to load collections:', error)
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleCollectionTypeSelect = (type: CollectionType) => {
-    setCollectionType(type)
-    setSelectedCollectionIds(new Set())
-    setCurrentStep('select-collections')
   }
 
   const handleCollectionToggle = (id: number) => {
@@ -94,6 +86,21 @@ export default function CollectionMove() {
 
   const handleDeselectAll = () => {
     setSelectedCollectionIds(new Set())
+  }
+
+  const handleSelectAllAtLocation = (locationId: number) => {
+    const collectionsAtLocation = collections.filter((c) => c.locationId === locationId)
+    const allSelected = collectionsAtLocation.every((c) => selectedCollectionIds.has(c.id))
+    
+    const newSelected = new Set(selectedCollectionIds)
+    if (allSelected) {
+      // Deselect all at this location
+      collectionsAtLocation.forEach((c) => newSelected.delete(c.id))
+    } else {
+      // Select all at this location
+      collectionsAtLocation.forEach((c) => newSelected.add(c.id))
+    }
+    setSelectedCollectionIds(newSelected)
   }
 
   const handleDestinationSelect = (selections: LocationSelection[]) => {
@@ -117,7 +124,7 @@ export default function CollectionMove() {
   }
 
   const handleExecuteMove = async () => {
-    if (!collectionType || selectedCollectionIds.size === 0 || !targetLocationId) {
+    if (selectedCollectionIds.size === 0 || !targetLocationId) {
       return
     }
 
@@ -125,35 +132,70 @@ export default function CollectionMove() {
     setMoveResult(null)
 
     try {
-      const moves = Array.from(selectedCollectionIds).map((id) => {
+      // Group selected collections by type
+      const collectionsByType = new Map<CollectionType, Array<{ id: number; collection: Collection }>>()
+      
+      Array.from(selectedCollectionIds).forEach((id) => {
         const collection = collections.find((c) => c.id === id)
-        return {
+        if (collection) {
+          if (!collectionsByType.has(collection.type)) {
+            collectionsByType.set(collection.type, [])
+          }
+          collectionsByType.get(collection.type)!.push({ id, collection })
+        }
+      })
+
+      // Execute moves for each type
+      const allErrors: Array<{ row: number; error: string }> = []
+      let totalMoved = 0
+      let allSuccess = true
+
+      for (const [collectionType, typeCollections] of collectionsByType.entries()) {
+        const moves = typeCollections.map(({ id }) => ({
           identifier: {
             type: 'id' as const,
             id,
           },
           targetLocationId,
+        }))
+
+        try {
+          const response = await collectionsApi.moveCollections({
+            collectionType,
+            moves,
+          })
+
+          if (response.data.success) {
+            totalMoved += response.data.moved
+          } else {
+            allSuccess = false
+            totalMoved += response.data.moved || 0
+            if (response.data.errors) {
+              // Adjust row numbers to account for previous moves
+              const baseRow = allErrors.length
+              allErrors.push(
+                ...response.data.errors.map((err) => ({
+                  row: err.row + baseRow,
+                  error: err.error,
+                }))
+              )
+            }
+          }
+        } catch (error: any) {
+          allSuccess = false
+          allErrors.push({
+            row: allErrors.length,
+            error: error.response?.data?.error || error.message || `Failed to move ${collectionType} collections`,
+          })
         }
-      })
-
-      const response = await collectionsApi.moveCollections({
-        collectionType,
-        moves,
-      })
-
-      if (response.data.success) {
-        setMoveResult({
-          success: true,
-          moved: response.data.moved,
-        })
-        setCurrentStep('execute')
-      } else {
-        setMoveResult({
-          success: false,
-          moved: response.data.moved || 0,
-          errors: response.data.errors,
-        })
       }
+
+      setMoveResult({
+        success: allSuccess,
+        moved: totalMoved,
+        errors: allErrors.length > 0 ? allErrors : undefined,
+      })
+      setCurrentStep('execute')
     } catch (error: any) {
       setMoveResult({
         success: false,
@@ -171,12 +213,13 @@ export default function CollectionMove() {
   }
 
   const handleStartOver = () => {
-    setCurrentStep('select-type')
-    setCollectionType(null)
+    setCurrentStep('select-collections')
     setSelectedCollectionIds(new Set())
     setTargetLocationId(null)
     setTargetLocationPath('')
     setMoveResult(null)
+    // Reload collections
+    loadCollections()
   }
 
   const getCollectionTypeLabel = (type: CollectionType) => {
@@ -202,26 +245,7 @@ export default function CollectionMove() {
           <div className="flex items-center justify-between">
             <div
               className={`flex items-center ${
-                currentStep === 'select-type' ? 'text-blue-600 font-semibold' : 'text-gray-500'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  currentStep === 'select-type' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                }`}
-              >
-                1
-              </div>
-              <span className="ml-2">Select Type</span>
-            </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div
-              className={`flex items-center ${
-                currentStep === 'select-collections'
-                  ? 'text-blue-600 font-semibold'
-                  : ['select-type'].includes(currentStep)
-                  ? 'text-gray-500'
-                  : 'text-gray-400'
+                currentStep === 'select-collections' ? 'text-blue-600 font-semibold' : 'text-gray-500'
               }`}
             >
               <div
@@ -229,7 +253,7 @@ export default function CollectionMove() {
                   currentStep === 'select-collections' ? 'bg-blue-600 text-white' : 'bg-gray-200'
                 }`}
               >
-                2
+                1
               </div>
               <span className="ml-2">Select Collections</span>
             </div>
@@ -238,7 +262,7 @@ export default function CollectionMove() {
               className={`flex items-center ${
                 currentStep === 'select-destination'
                   ? 'text-blue-600 font-semibold'
-                  : ['select-type', 'select-collections'].includes(currentStep)
+                  : currentStep === 'select-collections'
                   ? 'text-gray-500'
                   : 'text-gray-400'
               }`}
@@ -248,7 +272,7 @@ export default function CollectionMove() {
                   currentStep === 'select-destination' ? 'bg-blue-600 text-white' : 'bg-gray-200'
                 }`}
               >
-                3
+                2
               </div>
               <span className="ml-2">Choose Destination</span>
             </div>
@@ -257,7 +281,7 @@ export default function CollectionMove() {
               className={`flex items-center ${
                 currentStep === 'confirm'
                   ? 'text-blue-600 font-semibold'
-                  : ['select-type', 'select-collections', 'select-destination'].includes(currentStep)
+                  : ['select-collections', 'select-destination'].includes(currentStep)
                   ? 'text-gray-500'
                   : 'text-gray-400'
               }`}
@@ -267,7 +291,7 @@ export default function CollectionMove() {
                   currentStep === 'confirm' ? 'bg-blue-600 text-white' : 'bg-gray-200'
                 }`}
               >
-                4
+                3
               </div>
               <span className="ml-2">Review & Confirm</span>
             </div>
@@ -282,44 +306,20 @@ export default function CollectionMove() {
                   currentStep === 'execute' ? 'bg-blue-600 text-white' : 'bg-gray-200'
                 }`}
               >
-                5
+                4
               </div>
               <span className="ml-2">Complete</span>
             </div>
           </div>
         </div>
 
-        {/* Step 1: Select Collection Type */}
-        {currentStep === 'select-type' && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Select Collection Type</h2>
-            <p className="text-gray-700 mb-6">
-              Choose the type of collection you want to move.
-            </p>
-
-            <div className="grid grid-cols-2 gap-4">
-              {(['micronix_plate', 'cryovial_box', 'box', 'bag'] as CollectionType[]).map(
-                (type) => (
-                  <button
-                    key={type}
-                    onClick={() => handleCollectionTypeSelect(type)}
-                    className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors text-left"
-                  >
-                    <div className="font-semibold text-gray-900">{getCollectionTypeLabel(type)}</div>
-                  </button>
-                )
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Select Collections */}
-        {currentStep === 'select-collections' && collectionType && (
+        {/* Step 1: Select Collections */}
+        {currentStep === 'select-collections' && (
           <div className="bg-white rounded-lg shadow p-6 mb-6">
             <div className="mb-4">
               <h2 className="text-xl font-semibold">Select Collections to Move</h2>
               <p className="text-sm text-gray-600 mt-1">
-                Type: {getCollectionTypeLabel(collectionType)}
+                Select any collections you want to move together, regardless of type.
               </p>
             </div>
 
@@ -335,6 +335,7 @@ export default function CollectionMove() {
                 onToggle={handleCollectionToggle}
                 onSelectAll={handleSelectAll}
                 onDeselectAll={handleDeselectAll}
+                onSelectAllAtLocation={handleSelectAllAtLocation}
                 loading={loading}
                 filterEmptyLocations={true}
               />
@@ -354,7 +355,7 @@ export default function CollectionMove() {
           </div>
         )}
 
-        {/* Step 3: Select Destination Location */}
+        {/* Step 2: Select Destination Location */}
         {currentStep === 'select-destination' && (
           <div className="bg-white rounded-lg shadow p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Choose Destination Location</h2>
@@ -375,11 +376,12 @@ export default function CollectionMove() {
                   : []
               }
               onChange={handleDestinationSelect}
+              filterCollectionsOnly={true}
             />
           </div>
         )}
 
-        {/* Step 4: Confirm */}
+        {/* Step 3: Confirm */}
         {currentStep === 'confirm' && (
           <div className="bg-white rounded-lg shadow p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Review & Confirm</h2>
@@ -393,9 +395,9 @@ export default function CollectionMove() {
                     if (!collection) return null
                     return (
                       <li key={id}>
-                        {collection.name}
+                        {collection.name} <span className="text-gray-500">({getCollectionTypeLabel(collection.type)})</span>
                         {collection.location?.path && (
-                          <span className="text-gray-400"> ({collection.location.path})</span>
+                          <span className="text-gray-400"> - {collection.location.path}</span>
                         )}
                       </li>
                     )
@@ -431,7 +433,7 @@ export default function CollectionMove() {
           </div>
         )}
 
-        {/* Step 5: Results */}
+        {/* Step 4: Results */}
         {currentStep === 'execute' && moveResult && (
           <div className="bg-white rounded-lg shadow p-6 mb-6">
             {moveResult.success ? (

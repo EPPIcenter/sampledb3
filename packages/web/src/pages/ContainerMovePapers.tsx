@@ -58,18 +58,27 @@ export default function ContainerMovePapers() {
 
   // Load available collections and locations
   useEffect(() => {
-    Promise.all([
-      collectionsApi.listCollectionsByType('box'),
-      collectionsApi.listCollectionsByType('bag'),
-      locationsApi.list(),
-    ]).then(([boxesRes, bagsRes, locationsRes]) => {
-      // Ensure we're accessing the correct response structure
-      const boxes = boxesRes.data?.collections || []
-      const bags = bagsRes.data?.collections || []
-      setLocations(locationsRes.data?.locations || [])
+    const loadCollections = async () => {
+      setLoading(true)
+      try {
+        const [boxesRes, bagsRes, locationsRes] = await Promise.all([
+          collectionsApi.listCollectionsByType('box'),
+          collectionsApi.listCollectionsByType('bag'),
+          locationsApi.list(),
+        ])
+        
+        // Ensure we're accessing the correct response structure
+        const boxes = boxesRes.data?.collections || []
+        const bags = bagsRes.data?.collections || []
+        const locations = locationsRes.data?.locations || []
+        
+        console.log('Loaded boxes:', boxes.length, boxes)
+        console.log('Loaded bags:', bags.length, bags)
+        console.log('Loaded locations:', locations.length)
+        
+        setLocations(locations)
 
-      setAvailableBoxes(
-        boxes.map((c: any) => {
+        const mappedBoxes = boxes.map((c: any) => {
           // Handle case where name might be null, undefined, or actually be the ID
           const name = (c.name && typeof c.name === 'string' && c.name.trim() !== '')
             ? c.name
@@ -83,9 +92,8 @@ export default function ContainerMovePapers() {
             location: c.location,
           }
         })
-      )
-      setAvailableBags(
-        bags.map((c: any) => {
+        
+        const mappedBags = bags.map((c: any) => {
           // Handle case where name might be null, undefined, or actually be the ID
           const name = (c.name && typeof c.name === 'string' && c.name.trim() !== '')
             ? c.name
@@ -99,10 +107,20 @@ export default function ContainerMovePapers() {
             location: c.location,
           }
         })
-      )
-    }).catch((error) => {
-      console.error('Failed to load collections:', error)
-    })
+        
+        console.log('Mapped boxes:', mappedBoxes.length, mappedBoxes)
+        console.log('Mapped bags:', mappedBags.length, mappedBags)
+        
+        setAvailableBoxes(mappedBoxes)
+        setAvailableBags(mappedBags)
+      } catch (error) {
+        console.error('Failed to load collections:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadCollections()
   }, [])
 
   // Load sheets when source collection is selected
@@ -312,21 +330,47 @@ export default function ContainerMovePapers() {
         {/* Step 1: Choose Source Collection */}
         {currentStep === 'select-source' && (
           <>
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="bg-white rounded-lg shadow p-6 mb-6 relative" style={{ isolation: 'isolate' }}>
               <h2 className="text-xl font-semibold mb-4">Choose Source Collection</h2>
               <p className="text-gray-700 mb-6">
                 Select the box or bag containing the sheets you want to move.
               </p>
 
-              <CollectionTreePicker
-                locations={locations}
-                collections={availableBoxes
-                  .concat(availableBags)
-                  .filter((c) => c.itemCount > 0)}
-                onSelect={handleSourceCollectionSelect}
-                loading={loading}
-                filterEmptyLocations={true}
-              />
+              {(() => {
+                const allCollections = availableBoxes.concat(availableBags)
+                const collectionsWithItems = allCollections.filter((c) => c.itemCount > 0)
+                
+                console.log('Total collections:', allCollections.length)
+                console.log('Collections with items:', collectionsWithItems.length)
+                console.log('Collections:', allCollections)
+                
+                if (allCollections.length === 0 && !loading) {
+                  return (
+                    <div className="p-4 text-center text-gray-500">
+                      <p>No collections found. Please create a box or bag first.</p>
+                    </div>
+                  )
+                }
+                
+                if (collectionsWithItems.length === 0 && allCollections.length > 0) {
+                  return (
+                    <div className="p-4 text-center text-gray-500">
+                      <p>No collections with sheets found. Collections need to contain at least one sheet to be used as a source.</p>
+                      <p className="text-sm mt-2">Found {allCollections.length} collection{allCollections.length !== 1 ? 's' : ''} total, but none have sheets.</p>
+                    </div>
+                  )
+                }
+
+                return (
+                  <CollectionTreePicker
+                    locations={locations}
+                    collections={collectionsWithItems}
+                    onSelect={handleSourceCollectionSelect}
+                    loading={loading}
+                    filterEmptyLocations={true}
+                  />
+                )
+              })()}
             </div>
           </>
         )}
@@ -439,17 +483,9 @@ export default function ContainerMovePapers() {
               {/* Compact Selection Summary */}
               {selectedSheetIds.size > 0 && (
                 <div className="mt-4 pt-4 border-t">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-gray-700">
-                      <span className="font-medium text-blue-600">{selectedSheetIds.size}</span> sheet{selectedSheetIds.size !== 1 ? 's' : ''} selected
-                    </p>
-                    <button
-                      onClick={() => setCurrentStep('select-destination')}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium"
-                    >
-                      Continue →
-                    </button>
-                  </div>
+                  <p className="text-sm text-gray-700">
+                    <span className="font-medium text-blue-600">{selectedSheetIds.size}</span> sheet{selectedSheetIds.size !== 1 ? 's' : ''} selected
+                  </p>
                 </div>
               )}
             </div>
@@ -478,7 +514,7 @@ export default function ContainerMovePapers() {
         {/* Step 3: Choose Destination Collection */}
         {currentStep === 'select-destination' && (
           <>
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="bg-white rounded-lg shadow p-6 mb-6 relative" style={{ isolation: 'isolate' }}>
               <h2 className="text-xl font-semibold mb-4">Choose Destination Collection</h2>
               <p className="text-gray-700 mb-6">
                 Select where to move the {selectedSheetIds.size} selected sheet{selectedSheetIds.size !== 1 ? 's' : ''}.
