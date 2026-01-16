@@ -30,7 +30,7 @@ studies.get('/', async (c) => {
   try {
     const search = c.req.query('search')
     const page = validatePage(c.req.query('page'))
-    const limit = await validateLimit(c.req.query('limit'))
+    const limit = await validateLimit(database, c.req.query('limit'))
     const offset = (page - 1) * limit
     
     let query = database.select().from(study)
@@ -265,7 +265,7 @@ studies.get('/:id/subjects', async (c) => {
     }
 
     const page = validatePage(c.req.query('page'))
-    const limit = await validateLimit(c.req.query('limit'))
+    const limit = await validateLimit(database, c.req.query('limit'))
     const offset = (page - 1) * limit
 
     const whereClause = eq(studySubject.studyId, id)

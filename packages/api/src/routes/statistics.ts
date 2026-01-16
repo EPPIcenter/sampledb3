@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
-import { db } from '../db/client'
+import type { Database } from '../db/client'
+import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import {
   specimen,
   storageContainer,
@@ -26,9 +27,16 @@ import {
 import { eq, and, or, sql, gte, lte, inArray, isNull, gt } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { cache, cacheKeys } from '../lib/cache'
-import { adminMiddleware } from '../middleware/auth'
+import { createAdminMiddleware } from '../middleware/auth'
 
-const statistics = new Hono()
+/**
+ * Create statistics routes with database injection
+ * @param database - Database instance (required)
+ * @param sqliteDatabase - Raw SQLite database instance (required for location queries)
+ */
+export function createStatisticsRoutes(database: Database, sqliteDatabase: SQLiteDatabase) {
+  const statistics = new Hono()
+  const adminMiddleware = createAdminMiddleware(database)
 
 // Helper to build date filter conditions
 function buildDateFilter(column: SQLiteColumn, dateFrom?: string, dateTo?: string) {
@@ -65,10 +73,10 @@ async function getContainerTypes(containerIds: number[]): Promise<Map<number, st
   const chunkResults = await Promise.all(
     chunks.map(async (chunk) => {
       const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
-        db.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, chunk)),
-        db.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, chunk)),
-        db.select({ id: paper.id }).from(paper).where(inArray(paper.id, chunk)),
-        db.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, chunk)),
+        database.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, chunk)),
+        database.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, chunk)),
+        database.select({ id: paper.id }).from(paper).where(inArray(paper.id, chunk)),
+        database.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, chunk)),
       ])
 
       const chunkMap = new Map<number, string>()
@@ -125,14 +133,14 @@ statistics.get('/', async (c) => {
     // Filter by study
     let subjectIds: number[] = []
     if (studyCode) {
-      const studyRecord = await db
+      const studyRecord = await database
         .select()
         .from(study)
         .where(eq(study.shortCode, studyCode))
         .get()
       
       if (studyRecord) {
-        const subjects = await db
+        const subjects = await database
           .select({ id: studySubject.id })
           .from(studySubject)
           .where(eq(studySubject.studyId, studyRecord.id))
@@ -194,7 +202,7 @@ statistics.get('/', async (c) => {
 
     // Get filtered specimens
     console.log('[STATS] Querying filtered specimens, conditions:', specimenConditions.length)
-    let specimenQuery = db.select().from(specimen)
+    let specimenQuery = database.select().from(specimen)
     if (specimenConditions.length > 0) {
       specimenQuery = specimenQuery.where(and(...specimenConditions) as any) as any
     }
@@ -221,9 +229,9 @@ statistics.get('/', async (c) => {
       : null
     
     if (!specimenTypes && specimenTypeIds.length > 0) {
-      specimenTypes = await db.select().from(specimenType).where(inArray(specimenType.id, specimenTypeIds))
+      specimenTypes = await database.select().from(specimenType).where(inArray(specimenType.id, specimenTypeIds))
       // Cache all specimen types (not just filtered ones) for future use
-      const allSpecimenTypes = await db.select().from(specimenType)
+      const allSpecimenTypes = await database.select().from(specimenType)
       cache.set(cacheKeys.specimenTypes, allSpecimenTypes, 10 * 60 * 1000) // 10 minutes
       // Use filtered types for this query
       specimenTypes = allSpecimenTypes.filter(st => specimenTypeIds.includes(st.id))
@@ -255,7 +263,7 @@ statistics.get('/', async (c) => {
         const allSubjects: Array<{ id: number; studyId: number }> = []
         
         for (const chunk of subjectChunks) {
-          const subjects = await db
+          const subjects = await database
             .select({
               id: studySubject.id,
               studyId: studySubject.studyId,
@@ -267,7 +275,7 @@ statistics.get('/', async (c) => {
         
         const studyIds = [...new Set(allSubjects.map(s => s.studyId))]
         if (studyIds.length > 0) {
-          const studies = await db
+          const studies = await database
             .select()
             .from(study)
             .where(inArray(study.id, studyIds))
@@ -324,7 +332,7 @@ statistics.get('/', async (c) => {
       const id = parseInt(locationId!)
       if (!isNaN(id)) {
         // Get the location and all its descendants
-        const targetLocation = await db
+        const targetLocation = await database
           .select()
           .from(location)
           .where(eq(location.id, id))
@@ -333,7 +341,7 @@ statistics.get('/', async (c) => {
         if (targetLocation) {
           // Get all descendants of this location
           const { getLocationDescendants } = await import('../lib/location-helpers')
-          const descendants = await getLocationDescendants(id)
+          const descendants = await getLocationDescendants(sqliteDatabase, id)
           filteredLocationIds = [id, ...descendants.map(d => d.id)]
           console.log('[STATS] Found', filteredLocationIds.length, 'locations (including descendants)')
         } else {
@@ -375,7 +383,7 @@ statistics.get('/', async (c) => {
       const containerSets: Set<number>[] = []
       
       for (const tagId of tagIds) {
-        const containersWithTag = await db
+        const containersWithTag = await database
           .select({ containerId: storageContainerTag.storageContainerId })
           .from(storageContainerTag)
           .where(eq(storageContainerTag.tagId, tagId))
@@ -433,10 +441,10 @@ statistics.get('/', async (c) => {
         // First, get plates/boxes that match the location IDs
         console.log('[STATS] Step 1: Querying plates/boxes for', filteredLocationIds.length, 'locations')
         const [matchingPlates, matchingBoxes] = await Promise.all([
-          db.select({ id: micronixPlate.id })
+          database.select({ id: micronixPlate.id })
             .from(micronixPlate)
             .where(inArray(micronixPlate.locationId, filteredLocationIds)),
-          db.select({ id: cryovialBox.id })
+          database.select({ id: cryovialBox.id })
             .from(cryovialBox)
             .where(inArray(cryovialBox.locationId, filteredLocationIds)),
         ])
@@ -449,12 +457,12 @@ statistics.get('/', async (c) => {
         console.log('[STATS] Step 2: Querying containers from plates/boxes')
         const [micronixContainerIds, cryovialContainerIds] = await Promise.all([
           plateIds.length > 0
-            ? db.select({ id: micronixTube.id })
+            ? database.select({ id: micronixTube.id })
                 .from(micronixTube)
                 .where(inArray(micronixTube.collectionId, plateIds))
             : Promise.resolve([]),
           boxIds.length > 0
-            ? db.select({ id: cryovialTube.id })
+            ? database.select({ id: cryovialTube.id })
                 .from(cryovialTube)
                 .where(inArray(cryovialTube.collectionId, boxIds))
             : Promise.resolve([]),
@@ -483,7 +491,7 @@ statistics.get('/', async (c) => {
       
       const chunkResults = await Promise.all(
         specimenChunks.map(async (specimenChunk, chunkIndex) => {
-          let containerQuery = db.select().from(storageContainer)
+          let containerQuery = database.select().from(storageContainer)
           const containerConditions = [inArray(storageContainer.specimenId, specimenChunk)]
           
           // Apply location filter if provided
@@ -546,10 +554,10 @@ statistics.get('/', async (c) => {
         // First, get plates/boxes that match the location IDs
         console.log('[STATS] Step 1: Querying plates/boxes for', filteredLocationIds.length, 'locations')
         const [matchingPlates, matchingBoxes] = await Promise.all([
-          db.select({ id: micronixPlate.id })
+          database.select({ id: micronixPlate.id })
             .from(micronixPlate)
             .where(inArray(micronixPlate.locationId, filteredLocationIds)),
-          db.select({ id: cryovialBox.id })
+          database.select({ id: cryovialBox.id })
             .from(cryovialBox)
             .where(inArray(cryovialBox.locationId, filteredLocationIds)),
         ])
@@ -562,12 +570,12 @@ statistics.get('/', async (c) => {
         console.log('[STATS] Step 2: Querying containers from plates/boxes')
         const [micronixContainerIds, cryovialContainerIds] = await Promise.all([
           plateIds.length > 0
-            ? db.select({ id: micronixTube.id })
+            ? database.select({ id: micronixTube.id })
                 .from(micronixTube)
                 .where(inArray(micronixTube.collectionId, plateIds))
             : Promise.resolve([]),
           boxIds.length > 0
-            ? db.select({ id: cryovialTube.id })
+            ? database.select({ id: cryovialTube.id })
                 .from(cryovialTube)
                 .where(inArray(cryovialTube.collectionId, boxIds))
             : Promise.resolve([]),
@@ -590,7 +598,7 @@ statistics.get('/', async (c) => {
           const containerIdChunks = chunkArray(locationFilteredContainerIds, 500)
           const chunkResults = await Promise.all(
             containerIdChunks.map(async (containerIdChunk) => {
-              let containerQuery = db.select().from(storageContainer)
+              let containerQuery = database.select().from(storageContainer)
               const containerConditions = [inArray(storageContainer.id, containerIdChunk)]
 
               // Apply tag filter if provided
@@ -606,7 +614,7 @@ statistics.get('/', async (c) => {
         }
       } else {
         // No location filter
-        let containerQuery = db.select().from(storageContainer)
+        let containerQuery = database.select().from(storageContainer)
         const containerConditions = []
 
         // Apply tag filter if provided
@@ -667,7 +675,7 @@ statistics.get('/', async (c) => {
       // By specimen type
       const adjustedSpecimenTypeIds = [...new Set(adjustedSpecimens.map(s => s.specimenTypeId))]
       const adjustedSpecimenTypes = adjustedSpecimenTypeIds.length > 0
-        ? await db.select().from(specimenType).where(inArray(specimenType.id, adjustedSpecimenTypeIds))
+        ? await database.select().from(specimenType).where(inArray(specimenType.id, adjustedSpecimenTypeIds))
         : []
       const adjustedSpecimenTypeMap = new Map(adjustedSpecimenTypes.map(st => [st.id, st.name]))
       
@@ -689,7 +697,7 @@ statistics.get('/', async (c) => {
         const adjustedAllSubjects: Array<{ id: number; studyId: number }> = []
         
         for (const chunk of adjustedSubjectChunks) {
-          const subjects = await db
+          const subjects = await database
             .select({
               id: studySubject.id,
               studyId: studySubject.studyId,
@@ -701,7 +709,7 @@ statistics.get('/', async (c) => {
         
         const adjustedStudyIds = [...new Set(adjustedAllSubjects.map(s => s.studyId))]
         if (adjustedStudyIds.length > 0) {
-          const studies = await db
+          const studies = await database
             .select()
             .from(study)
             .where(inArray(study.id, adjustedStudyIds))
@@ -780,7 +788,7 @@ statistics.get('/', async (c) => {
       const tagChunkResults = await Promise.all(
         containerIdChunks.map(async (chunk, i) => {
           console.log('[STATS] Querying container tags chunk', i + 1, 'of', containerIdChunks.length, 'with', chunk.length, 'container IDs')
-          const chunkTags = await db
+          const chunkTags = await database
             .select({
               containerId: storageContainerTag.storageContainerId,
               tagId: tag.id,
@@ -834,11 +842,11 @@ statistics.get('/', async (c) => {
         containerChunks.map(async (chunk, i) => {
           console.log('[STATS] Querying storage chunk', i + 1, 'of', containerChunks.length, 'with', chunk.length, 'container IDs')
           const [micronixBatch, cryovialBatch] = await Promise.all([
-            db.select({ containerId: micronixTube.id, locationId: micronixPlate.locationId })
+            database.select({ containerId: micronixTube.id, locationId: micronixPlate.locationId })
               .from(micronixTube)
               .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
               .where(inArray(micronixTube.id, chunk)),
-            db.select({ containerId: cryovialTube.id, locationId: cryovialBox.locationId })
+            database.select({ containerId: cryovialTube.id, locationId: cryovialBox.locationId })
               .from(cryovialTube)
               .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
               .where(inArray(cryovialTube.id, chunk)),
@@ -873,7 +881,7 @@ statistics.get('/', async (c) => {
       const locationChunkResults = await Promise.all(
         locationChunks.map(async (chunk, i) => {
           console.log('[STATS] Querying location chunk', i + 1, 'of', locationChunks.length, 'with', chunk.length, 'location IDs')
-          const locations = await db
+          const locations = await database
             .select()
             .from(location)
             .where(inArray(location.id, chunk))
@@ -905,7 +913,7 @@ statistics.get('/', async (c) => {
         console.log('[STATS] Loading', parentIdsToLoad.size, 'missing parent locations')
         const parentChunks = chunkArray(Array.from(parentIdsToLoad), 500)
         for (const chunk of parentChunks) {
-          const parentLocations = await db
+          const parentLocations = await database
             .select()
             .from(location)
             .where(inArray(location.id, chunk))
@@ -928,7 +936,7 @@ statistics.get('/', async (c) => {
           const parentChunks = chunkArray(Array.from(additionalParents), 500)
           additionalParents = new Set<number>()
           for (const chunk of parentChunks) {
-            const parentLocations = await db
+            const parentLocations = await database
               .select()
               .from(location)
               .where(inArray(location.id, chunk))
@@ -1035,10 +1043,10 @@ statistics.get('/admin', adminMiddleware, async (c) => {
   try {
     // User statistics
     const [totalUsers, activeUsers, deletedUsers, usersByRole] = await Promise.all([
-      db.select({ count: sql<number>`count(*)` }).from(users),
-      db.select({ count: sql<number>`count(*)` }).from(users).where(isNull(users.deletedAt)),
-      db.select({ count: sql<number>`count(*)` }).from(users).where(sql`${users.deletedAt} IS NOT NULL`),
-      db.select({
+      database.select({ count: sql<number>`count(*)` }).from(users),
+      database.select({ count: sql<number>`count(*)` }).from(users).where(isNull(users.deletedAt)),
+      database.select({ count: sql<number>`count(*)` }).from(users).where(sql`${users.deletedAt} IS NOT NULL`),
+      database.select({
         role: users.role,
         count: sql<number>`count(*)`,
       })
@@ -1049,51 +1057,51 @@ statistics.get('/admin', adminMiddleware, async (c) => {
 
     // Active sessions
     const now = Math.floor(Date.now() / 1000)
-    const activeSessions = await db
+    const activeSessions = await database
       .select({ count: sql<number>`count(*)` })
       .from(sessions)
       .where(gt(sessions.expiresAt, now))
 
     // Entity counts
     const [studiesCount, subjectsCount, specimensCount, containersCount] = await Promise.all([
-      db.select({ count: sql<number>`count(*)` }).from(study),
-      db.select({ count: sql<number>`count(*)` }).from(studySubject),
-      db.select({ count: sql<number>`count(*)` }).from(specimen),
-      db.select({ count: sql<number>`count(*)` }).from(storageContainer),
+      database.select({ count: sql<number>`count(*)` }).from(study),
+      database.select({ count: sql<number>`count(*)` }).from(studySubject),
+      database.select({ count: sql<number>`count(*)` }).from(specimen),
+      database.select({ count: sql<number>`count(*)` }).from(storageContainer),
     ])
 
     // Reference data counts
     const [specimenTypesCount, storageTypesCount, tagsCount, unitsCount, strainsCount] = await Promise.all([
-      db.select({ count: sql<number>`count(*)` }).from(specimenType),
-      db.select({ count: sql<number>`count(*)` }).from(storageType),
-      db.select({ count: sql<number>`count(*)` }).from(tag),
-      db.select({ count: sql<number>`count(*)` }).from(unit),
-      db.select({ count: sql<number>`count(*)` }).from(strain),
+      database.select({ count: sql<number>`count(*)` }).from(specimenType),
+      database.select({ count: sql<number>`count(*)` }).from(storageType),
+      database.select({ count: sql<number>`count(*)` }).from(tag),
+      database.select({ count: sql<number>`count(*)` }).from(unit),
+      database.select({ count: sql<number>`count(*)` }).from(strain),
     ])
 
     // Container type breakdown
     const [micronixCount, cryovialCount, paperCount, staticWellCount] = await Promise.all([
-      db.select({ count: sql<number>`count(*)` }).from(micronixTube),
-      db.select({ count: sql<number>`count(*)` }).from(cryovialTube),
-      db.select({ count: sql<number>`count(*)` }).from(paper),
-      db.select({ count: sql<number>`count(*)` }).from(staticWell),
+      database.select({ count: sql<number>`count(*)` }).from(micronixTube),
+      database.select({ count: sql<number>`count(*)` }).from(cryovialTube),
+      database.select({ count: sql<number>`count(*)` }).from(paper),
+      database.select({ count: sql<number>`count(*)` }).from(staticWell),
     ])
 
     // Collection counts
     const [micronixPlatesCount, cryovialBoxesCount, boxesCount, bagsCount] = await Promise.all([
-      db.select({ count: sql<number>`count(*)` }).from(micronixPlate),
-      db.select({ count: sql<number>`count(*)` }).from(cryovialBox),
-      db.select({ count: sql<number>`count(*)` }).from(box),
-      db.select({ count: sql<number>`count(*)` }).from(bag),
+      database.select({ count: sql<number>`count(*)` }).from(micronixPlate),
+      database.select({ count: sql<number>`count(*)` }).from(cryovialBox),
+      database.select({ count: sql<number>`count(*)` }).from(box),
+      database.select({ count: sql<number>`count(*)` }).from(bag),
     ])
 
     // Location count
-    const locationsCount = await db.select({ count: sql<number>`count(*)` }).from(location)
+    const locationsCount = await database.select({ count: sql<number>`count(*)` }).from(location)
 
     // Recent user activity (last 7 days)
     const sevenDaysAgo = new Date()
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-    const recentLogins = await db
+    const recentLogins = await database
       .select({ count: sql<number>`count(*)` })
       .from(users)
       .where(and(
@@ -1157,5 +1165,6 @@ statistics.get('/admin', adminMiddleware, async (c) => {
   }
 })
 
-export default statistics
+  return statistics
+}
 

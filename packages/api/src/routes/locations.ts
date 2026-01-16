@@ -16,7 +16,7 @@ import {
   getLocationHierarchyStats,
 } from '../lib/location-helpers'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
-import { adminMiddleware } from '../middleware/auth'
+import { createAdminMiddleware } from '../middleware/auth'
 
 /**
  * Create locations routes with database injection
@@ -25,6 +25,7 @@ import { adminMiddleware } from '../middleware/auth'
  */
 export function createLocationsRoutes(database: Database, sqliteDatabase: SQLiteDatabase): Hono {
   const locations = new Hono()
+  const adminMiddleware = createAdminMiddleware(database)
 
 // List all locations
 locations.get('/', async (c) => {
@@ -33,7 +34,7 @@ locations.get('/', async (c) => {
     // Make pagination optional: if neither page nor limit is provided, return all locations
     const hasPagination = c.req.query('page') !== undefined || c.req.query('limit') !== undefined
     const page = hasPagination ? validatePage(c.req.query('page')) : 1
-    const limit = hasPagination ? await validateLimit(c.req.query('limit')) : undefined
+    const limit = hasPagination ? await validateLimit(database, c.req.query('limit')) : undefined
     const offset = hasPagination ? (page - 1) * limit! : undefined
     
     let query = database.select().from(location)
@@ -86,7 +87,7 @@ locations.get('/', async (c) => {
     const enrichedLocations = await Promise.all(
       locationsList.map(async (loc) => {
         // Get effective storage type (from root)
-        const effectiveStorageTypeId = await getLocationStorageTypeId(loc.id)
+        const effectiveStorageTypeId = await getLocationStorageTypeId(database, loc.id)
         const effectiveStorageTypeName = effectiveStorageTypeId
           ? storageTypeMap.get(effectiveStorageTypeId) || null
           : null
@@ -134,10 +135,10 @@ locations.get('/:id', async (c) => {
 
   // Get children, ancestors, path, and effective storage type
   const [children, ancestors, computedPath, effectiveStorageTypeId] = await Promise.all([
-    getLocationChildren(id),
-    getLocationAncestors(id),
-    buildLocationPath(id),
-    getLocationStorageTypeId(id),
+    getLocationChildren(database, id),
+    getLocationAncestors(sqliteDatabase, id),
+    buildLocationPath(sqliteDatabase, id),
+    getLocationStorageTypeId(database, id),
   ])
 
   // Get storage type name if we have a storage type ID
@@ -156,19 +157,19 @@ locations.get('/:id', async (c) => {
   
   // Pagination parameters for each collection type
   const platesPage = validatePage(c.req.query('plates_page') || '1')
-  const platesLimit = await validateLimit(c.req.query('plates_limit') || String(defaultLimit))
+  const platesLimit = await validateLimit(database, c.req.query('plates_limit') || String(defaultLimit))
   const platesOffset = (platesPage - 1) * platesLimit
 
   const cryovialBoxesPage = validatePage(c.req.query('cryovial_boxes_page') || '1')
-  const cryovialBoxesLimit = await validateLimit(c.req.query('cryovial_boxes_limit') || String(defaultLimit))
+  const cryovialBoxesLimit = await validateLimit(database, c.req.query('cryovial_boxes_limit') || String(defaultLimit))
   const cryovialBoxesOffset = (cryovialBoxesPage - 1) * cryovialBoxesLimit
 
   const boxesPage = validatePage(c.req.query('boxes_page') || '1')
-  const boxesLimit = await validateLimit(c.req.query('boxes_limit') || String(defaultLimit))
+  const boxesLimit = await validateLimit(database, c.req.query('boxes_limit') || String(defaultLimit))
   const boxesOffset = (boxesPage - 1) * boxesLimit
 
   const bagsPage = validatePage(c.req.query('bags_page') || '1')
-  const bagsLimit = await validateLimit(c.req.query('bags_limit') || String(defaultLimit))
+  const bagsLimit = await validateLimit(database, c.req.query('bags_limit') || String(defaultLimit))
   const bagsOffset = (bagsPage - 1) * bagsLimit
 
   // Get total counts for pagination
@@ -215,7 +216,7 @@ locations.get('/:id', async (c) => {
     .offset(bagsOffset)
 
   // Get hierarchy statistics
-  const hierarchyStats = await getLocationHierarchyStats(id)
+  const hierarchyStats = await getLocationHierarchyStats(database, sqliteDatabase, id)
 
   return c.json({
     location: {
@@ -291,7 +292,7 @@ locations.post('/', adminMiddleware, async (c) => {
     const data = schema.parse(body)
 
     // Validate parent exists and no circular reference
-    const validationError = await validateLocationHierarchy(data.parentId ?? null)
+    const validationError = await validateLocationHierarchy(database, sqliteDatabase, data.parentId ?? null)
     if (validationError) {
       throw new ValidationError(validationError)
     }
@@ -338,7 +339,7 @@ locations.post('/', adminMiddleware, async (c) => {
     }
 
     // Update path for this location and descendants
-    await updateLocationPath(insertResult[0].id)
+    await updateLocationPath(database, sqliteDatabase, insertResult[0].id)
 
     // Fetch the created location with updated path
     const created = await database
@@ -475,7 +476,7 @@ locations.put('/:id', adminMiddleware, async (c) => {
 
     // Update paths if parent or name changed
     if (data.parentId !== undefined || data.name !== undefined) {
-      await updateLocationPath(id)
+      await updateLocationPath(database, sqliteDatabase, id)
     }
 
     // Fetch updated location
@@ -501,7 +502,7 @@ locations.delete('/:id', adminMiddleware, async (c) => {
 
   try {
     // Check if location has children
-    const children = await getLocationChildren(id)
+    const children = await getLocationChildren(database, id)
     if (children.length > 0) {
       return c.json({ error: 'Cannot delete location: it has child locations' }, 400)
     }

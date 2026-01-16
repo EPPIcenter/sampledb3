@@ -1,17 +1,20 @@
+import type { Database } from '../db/client'
+
 // Cache for pagination settings
 let paginationCache: { defaultPageSize: number; maxPageSize: number } | null = null
 
 /**
  * Get pagination settings from cache or database
+ * @param db - Database instance
  * @throws Error if pagination settings are not configured
  */
-async function getPaginationSettings(): Promise<{ defaultPageSize: number; maxPageSize: number }> {
+async function getPaginationSettings(db: Database): Promise<{ defaultPageSize: number; maxPageSize: number }> {
   if (paginationCache) {
     return paginationCache
   }
 
   const { getPaginationSettings } = await import('./settings')
-  const settings = await getPaginationSettings()
+  const settings = await getPaginationSettings(db)
   
   if (!settings) {
     throw new Error('Pagination settings are not configured. Please run database initialization.')
@@ -23,11 +26,12 @@ async function getPaginationSettings(): Promise<{ defaultPageSize: number; maxPa
 
 /**
  * Validates and normalizes a pagination limit value
+ * @param db - Database instance
  * @param limit - The limit value to validate (can be string or number)
  * @returns A valid limit value between 1 and MAX_PAGE_SIZE
  */
-export async function validateLimit(limit: string | number | undefined): Promise<number> {
-  const settings = await getPaginationSettings()
+export async function validateLimit(db: Database, limit: string | number | undefined): Promise<number> {
+  const settings = await getPaginationSettings(db)
   const parsed = typeof limit === 'string' ? parseInt(limit, 10) : limit
   if (isNaN(parsed as number) || parsed === undefined || parsed === null) {
     return settings.defaultPageSize

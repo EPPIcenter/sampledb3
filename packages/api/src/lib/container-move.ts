@@ -1,4 +1,4 @@
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import {
   micronixTube,
   cryovialTube,
@@ -56,23 +56,24 @@ export interface MoveResult {
  * Resolve container by position and collection
  */
 export async function resolveContainerByPosition(
+  database: Database,
   collectionName: string,
   collectionType: CollectionType,
   position: string
 ): Promise<ContainerInfo | null> {
-  const collectionId = await resolveCollection(collectionName, collectionType)
+  const collectionId = await resolveCollection(collectionName, collectionType, database)
   if (!collectionId) return null
 
   switch (collectionType) {
     case 'cryovial_box': {
-      const cryovial = await db
+      const cryovial = await database
         .select()
         .from(cryovialTube)
         .where(and(eq(cryovialTube.collectionId, collectionId), eq(cryovialTube.position, position)))
         .get()
 
       if (cryovial) {
-        const boxRec = await db.select({ name: cryovialBox.name }).from(cryovialBox).where(eq(cryovialBox.id, cryovial.collectionId)).get()
+        const boxRec = await database.select({ name: cryovialBox.name }).from(cryovialBox).where(eq(cryovialBox.id, cryovial.collectionId)).get()
         return {
           containerId: cryovial.id,
           containerType: 'cryovial_tube',
@@ -87,14 +88,14 @@ export async function resolveContainerByPosition(
     }
 
     case 'micronix_plate': {
-      const tubeRec = await db
+      const tubeRec = await database
         .select()
         .from(micronixTube)
         .where(and(eq(micronixTube.collectionId, collectionId), eq(micronixTube.position, position)))
         .get()
 
       if (tubeRec) {
-        const plate = await db.select({ name: micronixPlate.name }).from(micronixPlate).where(eq(micronixPlate.id, tubeRec.collectionId)).get()
+        const plate = await database.select({ name: micronixPlate.name }).from(micronixPlate).where(eq(micronixPlate.id, tubeRec.collectionId)).get()
         return {
           containerId: tubeRec.id,
           containerType: 'micronix_tube',
@@ -106,14 +107,14 @@ export async function resolveContainerByPosition(
         }
       }
 
-      const well = await db
+      const well = await database
         .select()
         .from(staticWell)
         .where(and(eq(staticWell.collectionId, collectionId), eq(staticWell.position, position)))
         .get()
 
       if (well) {
-        const plate = await db.select({ name: micronixPlate.name }).from(micronixPlate).where(eq(micronixPlate.id, well.collectionId)).get()
+        const plate = await database.select({ name: micronixPlate.name }).from(micronixPlate).where(eq(micronixPlate.id, well.collectionId)).get()
         return {
           containerId: well.id,
           containerType: 'static_well',
@@ -134,10 +135,10 @@ export async function resolveContainerByPosition(
 /**
  * Resolve container by barcode
  */
-export async function resolveContainerByBarcode(barcode: string): Promise<ContainerInfo | null> {
-  const micronix = await db.select().from(micronixTube).where(eq(micronixTube.barcode, barcode)).get()
+export async function resolveContainerByBarcode(database: Database, barcode: string): Promise<ContainerInfo | null> {
+  const micronix = await database.select().from(micronixTube).where(eq(micronixTube.barcode, barcode)).get()
   if (micronix) {
-    const plate = await db.select({ name: micronixPlate.name }).from(micronixPlate).where(eq(micronixPlate.id, micronix.collectionId)).get()
+    const plate = await database.select({ name: micronixPlate.name }).from(micronixPlate).where(eq(micronixPlate.id, micronix.collectionId)).get()
     return {
       containerId: micronix.id,
       containerType: 'micronix_tube',
@@ -149,9 +150,9 @@ export async function resolveContainerByBarcode(barcode: string): Promise<Contai
     }
   }
 
-  const cryovial = await db.select().from(cryovialTube).where(eq(cryovialTube.barcode, barcode)).get()
+  const cryovial = await database.select().from(cryovialTube).where(eq(cryovialTube.barcode, barcode)).get()
   if (cryovial) {
-    const boxRec = await db.select({ name: cryovialBox.name }).from(cryovialBox).where(eq(cryovialBox.id, cryovial.collectionId)).get()
+    const boxRec = await database.select({ name: cryovialBox.name }).from(cryovialBox).where(eq(cryovialBox.id, cryovial.collectionId)).get()
     return {
       containerId: cryovial.id,
       containerType: 'cryovial_tube',
@@ -163,9 +164,9 @@ export async function resolveContainerByBarcode(barcode: string): Promise<Contai
     }
   }
 
-  const paperRec = await db.select().from(paper).where(eq(paper.barcode, barcode)).get()
+  const paperRec = await database.select().from(paper).where(eq(paper.barcode, barcode)).get()
   if (paperRec) {
-    const sheetRec = await db.select({ name: sheet.name }).from(sheet).where(eq(sheet.id, paperRec.sheetId)).get()
+    const sheetRec = await database.select({ name: sheet.name }).from(sheet).where(eq(sheet.id, paperRec.sheetId)).get()
     return {
       containerId: paperRec.id,
       containerType: 'paper',
@@ -184,6 +185,7 @@ export async function resolveContainerByBarcode(barcode: string): Promise<Contai
  * Check position availability
  */
 export async function checkPositionAvailability(
+  database: Database,
   collectionId: number,
   collectionType: CollectionType,
   position: string | null,
@@ -193,20 +195,20 @@ export async function checkPositionAvailability(
 
   switch (collectionType) {
     case 'micronix_plate': {
-      const tubeRec = await db.select({ id: micronixTube.id }).from(micronixTube).where(and(eq(micronixTube.collectionId, collectionId), eq(micronixTube.position, position))).get()
+      const tubeRec = await database.select({ id: micronixTube.id }).from(micronixTube).where(and(eq(micronixTube.collectionId, collectionId), eq(micronixTube.position, position))).get()
       if (tubeRec && !excludeContainerIds.includes(tubeRec.id)) return { occupied: true, containerId: tubeRec.id, containerType: 'micronix_tube' }
 
-      const well = await db.select({ id: staticWell.id }).from(staticWell).where(and(eq(staticWell.collectionId, collectionId), eq(staticWell.position, position))).get()
+      const well = await database.select({ id: staticWell.id }).from(staticWell).where(and(eq(staticWell.collectionId, collectionId), eq(staticWell.position, position))).get()
       if (well && !excludeContainerIds.includes(well.id)) return { occupied: true, containerId: well.id, containerType: 'static_well' }
       break
     }
     case 'cryovial_box': {
-      const cryovial = await db.select({ id: cryovialTube.id }).from(cryovialTube).where(and(eq(cryovialTube.collectionId, collectionId), eq(cryovialTube.position, position))).get()
+      const cryovial = await database.select({ id: cryovialTube.id }).from(cryovialTube).where(and(eq(cryovialTube.collectionId, collectionId), eq(cryovialTube.position, position))).get()
       if (cryovial && !excludeContainerIds.includes(cryovial.id)) return { occupied: true, containerId: cryovial.id, containerType: 'cryovial_tube' }
       break
     }
     case 'sheet': {
-      const paperRec = await db.select({ id: paper.id }).from(paper).where(and(eq(paper.sheetId, collectionId), eq(paper.position, position))).get()
+      const paperRec = await database.select({ id: paper.id }).from(paper).where(and(eq(paper.sheetId, collectionId), eq(paper.position, position))).get()
       if (paperRec && !excludeContainerIds.includes(paperRec.id)) return { occupied: true, containerId: paperRec.id, containerType: 'paper' }
       break
     }
@@ -226,27 +228,27 @@ export interface ContainerIdentifier {
 /**
  * Resolve container by container ID
  */
-export async function resolveContainerByContainerId(containerId: number): Promise<ContainerInfo | null> {
-  const micronix = await db.select().from(micronixTube).where(eq(micronixTube.id, containerId)).get()
-  if (micronix) return resolveContainerByBarcode(micronix.barcode)
+export async function resolveContainerByContainerId(database: Database, containerId: number): Promise<ContainerInfo | null> {
+  const micronix = await database.select().from(micronixTube).where(eq(micronixTube.id, containerId)).get()
+  if (micronix) return resolveContainerByBarcode(database, micronix.barcode)
 
-  const cryovial = await db.select().from(cryovialTube).where(eq(cryovialTube.id, containerId)).get()
+  const cryovial = await database.select().from(cryovialTube).where(eq(cryovialTube.id, containerId)).get()
   if (cryovial) return {
     containerId: cryovial.id,
     containerType: 'cryovial_tube',
     currentCollectionId: cryovial.collectionId,
-    currentCollectionName: (await db.select({ name: cryovialBox.name }).from(cryovialBox).where(eq(cryovialBox.id, cryovial.collectionId)).get())?.name || null,
+    currentCollectionName: (await database.select({ name: cryovialBox.name }).from(cryovialBox).where(eq(cryovialBox.id, cryovial.collectionId)).get())?.name || null,
     currentCollectionType: 'cryovial_box',
     currentPosition: cryovial.position,
     barcode: cryovial.barcode,
   }
 
-  const paperRec = await db.select().from(paper).where(eq(paper.id, containerId)).get()
+  const paperRec = await database.select().from(paper).where(eq(paper.id, containerId)).get()
   if (paperRec) return {
     containerId: paperRec.id,
     containerType: 'paper',
     currentCollectionId: paperRec.sheetId,
-    currentCollectionName: (await db.select({ name: sheet.name }).from(sheet).where(eq(sheet.id, paperRec.sheetId)).get())?.name || null,
+    currentCollectionName: (await database.select({ name: sheet.name }).from(sheet).where(eq(sheet.id, paperRec.sheetId)).get())?.name || null,
     currentCollectionType: 'sheet',
     currentPosition: paperRec.position,
     barcode: paperRec.barcode,
@@ -258,25 +260,25 @@ export async function resolveContainerByContainerId(containerId: number): Promis
 /**
  * Resolve container by identifier
  */
-export async function resolveContainerByIdentifier(identifier: ContainerIdentifier): Promise<ContainerInfo | null> {
+export async function resolveContainerByIdentifier(database: Database, identifier: ContainerIdentifier): Promise<ContainerInfo | null> {
   if (identifier.type === 'barcode' && identifier.barcode) {
-    return resolveContainerByBarcode(identifier.barcode)
+    return resolveContainerByBarcode(database, identifier.barcode)
   } else if (identifier.type === 'position' && identifier.sourceCollectionName && identifier.sourcePosition) {
     const types: CollectionType[] = ['cryovial_box', 'micronix_plate', 'box', 'sheet']
     for (const type of types) {
-      const result = await resolveContainerByPosition(identifier.sourceCollectionName, type, identifier.sourcePosition)
+      const result = await resolveContainerByPosition(database, identifier.sourceCollectionName, type, identifier.sourcePosition)
       if (result) return result
     }
   } else if (identifier.type === 'container_id' && identifier.containerId) {
-    return resolveContainerByContainerId(identifier.containerId)
+    return resolveContainerByContainerId(database, identifier.containerId)
   }
   return null
 }
 
-export async function resolveContainersByIdentifiers(identifiers: ContainerIdentifier[]): Promise<Map<string, ContainerInfo>> {
+export async function resolveContainersByIdentifiers(database: Database, identifiers: ContainerIdentifier[]): Promise<Map<string, ContainerInfo>> {
   const results = new Map<string, ContainerInfo>()
   for (const identifier of identifiers) {
-    const container = await resolveContainerByIdentifier(identifier)
+    const container = await resolveContainerByIdentifier(database, identifier)
     if (container) {
       const key = identifier.type === 'barcode' ? identifier.barcode! : identifier.type === 'position' ? `${identifier.sourceCollectionName}:${identifier.sourcePosition}` : `container_${identifier.containerId}`
       results.set(key, container)
@@ -285,9 +287,9 @@ export async function resolveContainersByIdentifiers(identifiers: ContainerIdent
   return results
 }
 
-export async function resolveContainersByBarcodes(barcodes: string[]): Promise<Map<string, ContainerInfo>> {
+export async function resolveContainersByBarcodes(database: Database, barcodes: string[]): Promise<Map<string, ContainerInfo>> {
     const identifiers: ContainerIdentifier[] = barcodes.map(b => ({ type: 'barcode', barcode: b }))
-    return resolveContainersByIdentifiers(identifiers)
+    return resolveContainersByIdentifiers(database, identifiers)
 }
 
 export function inferCollectionTypeFromContainers(containers: ContainerInfo[]): { valid: boolean; collectionType: CollectionType | null; error?: string } {
@@ -301,11 +303,11 @@ export function inferCollectionTypeFromContainers(containers: ContainerInfo[]): 
   return { valid: true, collectionType: Array.from(collectionTypes)[0] }
 }
 
-export async function executeMoves(request: BatchMoveRequest): Promise<MoveResult> {
+export async function executeMoves(database: Database, request: BatchMoveRequest): Promise<MoveResult> {
   // Simple implementation for brevity, following the transaction pattern
   try {
     const { moves, mappings } = request
-    const containersWithInfo = await Promise.all(moves.map(async m => ({ move: m, info: await resolveContainerByIdentifier(m.identifier) })))
+    const containersWithInfo = await Promise.all(moves.map(async m => ({ move: m, info: await resolveContainerByIdentifier(database, m.identifier) })))
     const validMoves = containersWithInfo.filter(m => m.info !== null)
     
     const collectionTypeRes = inferCollectionTypeFromContainers(validMoves.map(m => m.info!))
@@ -329,8 +331,8 @@ export async function executeMoves(request: BatchMoveRequest): Promise<MoveResul
     const mappingMap = new Map<number, number>()
     const missingMappings: string[] = []
     for (const m of mappings) {
-      const fromId = await resolveCollection(m.fromCollectionName, collectionType)
-      const toId = await resolveCollection(m.toCollectionName, collectionType)
+      const fromId = await resolveCollection(m.fromCollectionName, collectionType, database)
+      const toId = await resolveCollection(m.toCollectionName, collectionType, database)
       if (fromId && toId) {
         mappingMap.set(fromId, toId)
       } else {
@@ -401,7 +403,7 @@ export async function executeMoves(request: BatchMoveRequest): Promise<MoveResul
           const targetCollectionId = mappingMap.get(info!.currentCollectionId!)
           if (targetCollectionId) {
             const excludeIds = validMoves.map(m => m.info!.containerId)
-            const availability = await checkPositionAvailability(targetCollectionId, collectionType, move.targetPosition, excludeIds)
+            const availability = await checkPositionAvailability(database, targetCollectionId, collectionType, move.targetPosition, excludeIds)
             
             if (availability.occupied && availability.containerId && !excludeIds.includes(availability.containerId)) {
               errors.push({ 
@@ -419,7 +421,7 @@ export async function executeMoves(request: BatchMoveRequest): Promise<MoveResul
     }
 
     // All validation passed, execute the moves
-    db.transaction((tx) => {
+    await database.transaction(async (tx) => {
       for (const { move, info } of validMoves) {
         const targetCollectionId = mappingMap.get(info!.currentCollectionId!)
         if (!targetCollectionId) continue

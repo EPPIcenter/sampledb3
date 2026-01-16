@@ -1,12 +1,17 @@
 import { Hono } from 'hono'
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import { storageContainer, specimen, location, unit, micronixTube, cryovialTube, micronixPlate, cryovialBox, studySubject, study, specimenType, controlBatch, controlDefinition, box, paper, sheet, bag, staticWell, tag, storageContainerTag, type Location, type StorageContainer, type Unit, type Tag } from '../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import type { CollectionInfo } from '../types/collections'
 
-const containers = new Hono()
+/**
+ * Create containers routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createContainersRoutes(database: Database): Hono {
+  const containers = new Hono()
 
 // Helper function to build full location path
 function buildLocationPath(loc: Location | null | undefined, parentName?: string): string {
@@ -23,8 +28,8 @@ async function enrichContainerDetailed(container: StorageContainer) {
 
   // Get unit and tags
   const [containerUnit, containerTags] = await Promise.all([
-    db.select().from(unit).where(eq(unit.id, container.unitId)).get(),
-    db.select({ id: tag.id, name: tag.name })
+    database.select().from(unit).where(eq(unit.id, container.unitId)).get(),
+    database.select({ id: tag.id, name: tag.name })
       .from(tag)
       .innerJoin(storageContainerTag, eq(tag.id, storageContainerTag.tagId))
       .where(eq(storageContainerTag.storageContainerId, id)),
@@ -32,7 +37,7 @@ async function enrichContainerDetailed(container: StorageContainer) {
 
   // Check all possible subtypes
   const [micronixInfo, cryovialInfo, paperInfo, staticWellInfo] = await Promise.all([
-    db.select({
+    database.select({
       barcode: micronixTube.barcode,
       position: micronixTube.position,
       plateId: micronixPlate.id,
@@ -40,7 +45,7 @@ async function enrichContainerDetailed(container: StorageContainer) {
       locationId: micronixPlate.locationId,
     }).from(micronixTube).leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id)).where(eq(micronixTube.id, id)).get(),
 
-    db.select({
+    database.select({
       barcode: cryovialTube.barcode,
       position: cryovialTube.position,
       boxId: cryovialBox.id,
@@ -48,7 +53,7 @@ async function enrichContainerDetailed(container: StorageContainer) {
       locationId: cryovialBox.locationId,
     }).from(cryovialTube).leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id)).where(eq(cryovialTube.id, id)).get(),
 
-    db.select({
+    database.select({
       barcode: paper.barcode,
       position: paper.position,
       sheetId: sheet.id,
@@ -57,7 +62,7 @@ async function enrichContainerDetailed(container: StorageContainer) {
       bagId: sheet.bagId,
     }).from(paper).leftJoin(sheet, eq(paper.sheetId, sheet.id)).where(eq(paper.id, id)).get(),
 
-    db.select({
+    database.select({
       position: staticWell.position,
       plateId: micronixPlate.id,
       plateName: micronixPlate.name,
@@ -84,11 +89,11 @@ async function enrichContainerDetailed(container: StorageContainer) {
     
     // For paper, location is on the parent box or bag
     if (paperInfo.boxId) {
-      const parentBox = await db.select({ locationId: box.locationId, name: box.name }).from(box).where(eq(box.id, paperInfo.boxId)).get()
+      const parentBox = await database.select({ locationId: box.locationId, name: box.name }).from(box).where(eq(box.id, paperInfo.boxId)).get()
       locationId = parentBox?.locationId || null
       parentContainerName = parentBox?.name
     } else if (paperInfo.bagId) {
-      const parentBag = await db.select({ locationId: bag.locationId, name: bag.name }).from(bag).where(eq(bag.id, paperInfo.bagId)).get()
+      const parentBag = await database.select({ locationId: bag.locationId, name: bag.name }).from(bag).where(eq(bag.id, paperInfo.bagId)).get()
       locationId = parentBag?.locationId || null
       parentContainerName = parentBag?.name
     }
@@ -101,7 +106,7 @@ async function enrichContainerDetailed(container: StorageContainer) {
   // Get location details
   let locationInfo: Location | null = null
   if (locationId) {
-    locationInfo = await db.select().from(location).where(eq(location.id, locationId)).get() || null
+    locationInfo = await database.select().from(location).where(eq(location.id, locationId)).get() || null
   }
 
   return {
@@ -126,11 +131,11 @@ containers.get('/', async (c) => {
     const locationId = c.req.query('location_id')
     const tagIds = c.req.queries('tag_ids')?.map(id => parseInt(id)).filter(id => !isNaN(id))
     const page = validatePage(c.req.query('page'))
-    const limit = await validateLimit(c.req.query('limit'))
+    const limit = await validateLimit(database, c.req.query('limit'))
     const offset = (page - 1) * limit
     
-    let query = db.select().from(storageContainer)
-    let countQuery = db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(storageContainer)
+    let query = database.select().from(storageContainer)
+    let countQuery = database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(storageContainer)
     
     const conditions = []
     
@@ -143,7 +148,7 @@ containers.get('/', async (c) => {
     
     // Filter by tags if provided
     if (tagIds && tagIds.length > 0) {
-      const containerIdsWithTags = await db
+      const containerIdsWithTags = await database
         .select({ containerId: storageContainerTag.storageContainerId })
         .from(storageContainerTag)
         .where(inArray(storageContainerTag.tagId, tagIds))
@@ -209,7 +214,7 @@ containers.get('/:id', async (c) => {
     }
 
     // Get base container
-    const container = await db
+    const container = await database
       .select()
       .from(storageContainer)
       .where(eq(storageContainer.id, id))
@@ -222,7 +227,7 @@ containers.get('/:id', async (c) => {
     const enriched = await enrichContainerDetailed(container)
 
     // Get specimen details with type
-    const spec = await db
+    const spec = await database
       .select({
         id: specimen.id,
         studySubjectId: specimen.studySubjectId,
@@ -245,7 +250,7 @@ containers.get('/:id', async (c) => {
     let sourceInfo: any = null
     if (spec) {
       if (spec.studySubjectId) {
-        const subject = await db
+        const subject = await database
           .select({
             id: studySubject.id,
             name: studySubject.name,
@@ -271,7 +276,7 @@ containers.get('/:id', async (c) => {
           }
         }
       } else if (spec.controlBatchId) {
-        const batch = await db
+        const batch = await database
           .select({
             id: controlBatch.id,
             name: controlBatch.name,
@@ -336,7 +341,7 @@ containers.patch('/:id', async (c) => {
     // Validate unit if provided
     if (unitId !== undefined) {
       // Get container to determine container type
-      const container = await db
+      const container = await database
         .select()
         .from(storageContainer)
         .where(eq(storageContainer.id, id))
@@ -348,10 +353,10 @@ containers.patch('/:id', async (c) => {
       
       // Determine container type
       const [micronixInfo, cryovialInfo, paperInfo, staticWellInfo] = await Promise.all([
-        db.select().from(micronixTube).where(eq(micronixTube.id, id)).get(),
-        db.select().from(cryovialTube).where(eq(cryovialTube.id, id)).get(),
-        db.select().from(paper).where(eq(paper.id, id)).get(),
-        db.select().from(staticWell).where(eq(staticWell.id, id)).get(),
+        database.select().from(micronixTube).where(eq(micronixTube.id, id)).get(),
+        database.select().from(cryovialTube).where(eq(cryovialTube.id, id)).get(),
+        database.select().from(paper).where(eq(paper.id, id)).get(),
+        database.select().from(staticWell).where(eq(staticWell.id, id)).get(),
       ])
       
       let containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well' | null = null
@@ -374,7 +379,7 @@ containers.patch('/:id', async (c) => {
     
     // Update container fields (excluding tagIds)
     const user = c.get('user')
-    const [updated] = await db
+    const [updated] = await database
       .update(storageContainer)
       .set({
         ...updateData,
@@ -391,12 +396,12 @@ containers.patch('/:id', async (c) => {
     // Update tags if provided
     if (tagIds !== undefined) {
       // Remove all existing tags
-      await db.delete(storageContainerTag)
+      await database.delete(storageContainerTag)
         .where(eq(storageContainerTag.storageContainerId, id))
       
       // Add new tags
       if (tagIds.length > 0) {
-        await db.insert(storageContainerTag).values(
+        await database.insert(storageContainerTag).values(
           tagIds.map(tagId => ({
             storageContainerId: id,
             tagId,
@@ -425,7 +430,7 @@ containers.get('/:id/tags', async (c) => {
       return c.json({ error: 'Invalid container ID' }, 400)
     }
 
-    const tags = await db
+    const tags = await database
       .select({ id: tag.id, name: tag.name })
       .from(tag)
       .innerJoin(storageContainerTag, eq(tag.id, storageContainerTag.tagId))
@@ -456,20 +461,20 @@ containers.post('/:id/tags', async (c) => {
     const { tagId } = schema.parse(body)
 
     // Check if container exists
-    const container = await db.select().from(storageContainer).where(eq(storageContainer.id, id)).get()
+    const container = await database.select().from(storageContainer).where(eq(storageContainer.id, id)).get()
     if (!container) {
       return c.json({ error: 'Container not found' }, 404)
     }
 
     // Check if tag exists
-    const tagRecord = await db.select().from(tag).where(eq(tag.id, tagId)).get()
+    const tagRecord = await database.select().from(tag).where(eq(tag.id, tagId)).get()
     if (!tagRecord) {
       return c.json({ error: 'Tag not found' }, 404)
     }
 
     // Add tag (ignore if already exists due to primary key constraint)
     try {
-      await db.insert(storageContainerTag).values({
+      await database.insert(storageContainerTag).values({
         storageContainerId: id,
         tagId,
       })
@@ -499,7 +504,7 @@ containers.delete('/:id/tags/:tagId', async (c) => {
       return c.json({ error: 'Invalid container ID or tag ID' }, 400)
     }
 
-    await db.delete(storageContainerTag)
+    await database.delete(storageContainerTag)
       .where(
         and(
           eq(storageContainerTag.storageContainerId, id),
@@ -515,4 +520,5 @@ containers.delete('/:id/tags/:tagId', async (c) => {
   }
 })
 
-export default containers
+  return containers
+}

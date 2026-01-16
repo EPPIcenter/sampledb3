@@ -1,4 +1,3 @@
-import { db } from '../db/client'
 import type { Database } from '../db/client'
 import { studySubject, study, specimen, specimenType, controlBatch, controlDefinition, specimenTypeContainerType, containerTypeUnit, unit } from '../db/schema'
 import { eq, and, like, sql } from 'drizzle-orm'
@@ -8,6 +7,7 @@ import { resolveStudyByShortCode, resolveSubjectByNameAndStudy, resolveSpecimenT
  * Validate that a subject name is unique within a study
  */
 export async function validateSubjectName(
+  database: Database,
   studyId: number,
   name: string
 ): Promise<{ valid: boolean; error?: string }> {
@@ -22,7 +22,7 @@ export async function validateSubjectName(
   }
   
   // Check for existing subject with same name in same study
-  const existing = await db
+  const existing = await database
     .select({ id: studySubject.id })
     .from(studySubject)
     .where(and(
@@ -66,6 +66,7 @@ export function validateCollectionDate(date: string | undefined): { valid: boole
  * Generate a unique batch name using algorithm: definition_name + production_date, or definition_name + production_date + increment
  */
 export async function generateUniqueBatchName(
+  database: Database,
   definitionName: string,
   productionDate?: string | null,
   excludeId?: number
@@ -88,7 +89,7 @@ export async function generateUniqueBatchName(
     where = and(eq(controlBatch.name, baseName), sql`${controlBatch.id} != ${excludeId}`) as any
   }
   
-  const existing = await db
+  const existing = await database
     .select({ id: controlBatch.id })
     .from(controlBatch)
     .where(where)
@@ -109,7 +110,7 @@ export async function generateUniqueBatchName(
     wherePattern = and(like(controlBatch.name, likePattern), sql`${controlBatch.id} != ${excludeId}`) as any
   }
   
-  const existingNames = await db
+  const existingNames = await database
     .select({ name: controlBatch.name })
     .from(controlBatch)
     .where(wherePattern)
@@ -135,7 +136,7 @@ export async function generateUniqueBatchName(
       whereIncrement = and(eq(controlBatch.name, candidateName), sql`${controlBatch.id} != ${excludeId}`) as any
     }
     
-    const existingIncrement = await db
+    const existingIncrement = await database
       .select({ id: controlBatch.id })
       .from(controlBatch)
       .where(whereIncrement)
@@ -159,6 +160,7 @@ export async function generateUniqueBatchName(
  * Validate that a control batch name is unique
  */
 export async function validateControlBatchName(
+  database: Database,
   name: string,
   excludeId?: number
 ): Promise<{ valid: boolean; error?: string; suggestion?: string }> {
@@ -178,7 +180,7 @@ export async function validateControlBatchName(
     where = and(eq(controlBatch.name, trimmedName), sql`${controlBatch.id} != ${excludeId}`) as any
   }
   
-  const existing = await db
+  const existing = await database
     .select({ id: controlBatch.id })
     .from(controlBatch)
     .where(where)
@@ -194,7 +196,7 @@ export async function validateControlBatchName(
     let suggestion: string | undefined
     try {
       if (definitionPart) {
-        suggestion = await generateUniqueBatchName(definitionPart, datePart, excludeId)
+        suggestion = await generateUniqueBatchName(database, definitionPart, datePart, excludeId)
       } else {
         suggestion = `${trimmedName}-${datePart}`
       }
@@ -216,8 +218,8 @@ export async function validateControlBatchName(
 /**
  * Validate study short code exists
  */
-export async function validateStudyShortCode(shortCode: string): Promise<{ valid: boolean; error?: string; studyId?: number }> {
-  const studyId = await resolveStudyByShortCode(shortCode)
+export async function validateStudyShortCode(database: Database, shortCode: string): Promise<{ valid: boolean; error?: string; studyId?: number }> {
+  const studyId = await resolveStudyByShortCode(database, shortCode)
   
   if (!studyId) {
     return { valid: false, error: `Study short code '${shortCode}' not found` }
@@ -237,7 +239,7 @@ export async function validateSpecimenData(data: {
   specimenTypeName?: string
   specimenTypeId?: number
   collectionDate?: string
-}, database: Database = db): Promise<{ 
+}, database: Database): Promise<{ 
   valid: boolean; 
   error?: string; 
   resolved?: { 
@@ -260,12 +262,12 @@ export async function validateSpecimenData(data: {
       studySubjectId = data.sourceId
     } else if (data.studyShortCode && data.subjectName) {
       // Use human-readable identifiers
-      const studyValidation = await validateStudyShortCode(data.studyShortCode)
+      const studyValidation = await validateStudyShortCode(database, data.studyShortCode)
       if (!studyValidation.valid || !studyValidation.studyId) {
         return { valid: false, error: studyValidation.error || 'Invalid study' }
       }
       
-      const id = await resolveSubjectByNameAndStudy(data.subjectName, studyValidation.studyId)
+      const id = await resolveSubjectByNameAndStudy(database, data.subjectName, studyValidation.studyId)
       if (!id) {
         return { valid: false, error: `Subject '${data.subjectName}' not found in study '${data.studyShortCode}'` }
       }
@@ -289,7 +291,7 @@ export async function validateSpecimenData(data: {
   let specimenTypeId: number | undefined = data.specimenTypeId
   
   if (data.specimenTypeName) {
-    const resolvedId = await resolveSpecimenTypeByName(data.specimenTypeName)
+    const resolvedId = await resolveSpecimenTypeByName(database, data.specimenTypeName)
     if (!resolvedId) {
       return { valid: false, error: `Specimen type '${data.specimenTypeName}' not found` }
     }
@@ -352,9 +354,9 @@ export function checkDuplicateSpecimens(
  * Validate that a container type is allowed for a specimen type
  */
 export async function validateContainerTypeForSpecimenType(
+  database: Database,
   specimenTypeId: number,
-  containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well',
-  database: Database = db
+  containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well'
 ): Promise<{ valid: boolean; error?: string }> {
   // Check if relationship exists
   const relationship = await database
@@ -386,11 +388,12 @@ export async function validateContainerTypeForSpecimenType(
  * Validate that a unit is allowed for a container type
  */
 export async function validateUnitForContainerType(
+  database: Database,
   containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well',
   unitId: number
 ): Promise<{ valid: boolean; error?: string }> {
   // Check if relationship exists
-  const relationship = await db
+  const relationship = await database
     .select()
     .from(containerTypeUnit)
     .where(
@@ -403,7 +406,7 @@ export async function validateUnitForContainerType(
 
   if (!relationship) {
     // Get unit symbol for error message
-    const unitRecord = await db.select().from(unit).where(eq(unit.id, unitId)).get()
+    const unitRecord = await database.select().from(unit).where(eq(unit.id, unitId)).get()
     const unitSymbol = unitRecord?.symbol || `ID ${unitId}`
     
     return {

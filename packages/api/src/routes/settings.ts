@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import { unit, containerTypeUnit } from '../db/schema'
 import { eq, inArray, and } from 'drizzle-orm'
-import { adminMiddleware, authMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 import {
   getContainerDefaults,
   setContainerDefaults,
@@ -31,22 +31,25 @@ import {
   type ScannerConfigurations,
 } from '../lib/settings'
 
-const settings = new Hono()
+export function createSettingsRoutes(database: Database) {
+  const settings = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
+  const adminMiddleware = createAdminMiddleware(database)
 
-// GET /api/settings - Get all settings (user-aware)
-settings.get('/', authMiddleware, async (c) => {
-  try {
-    const user = c.get('user')
-    const userId = user?.id
+  // GET /api/settings - Get all settings (user-aware)
+  settings.get('/', authMiddleware, async (c) => {
+    try {
+      const user = c.get('user')
+      const userId = user?.id
 
-    const [containerDefaults, paginationSettings, passwordRequirements, sessionSettings, exportConfigurations, scannerConfigurations] = await Promise.all([
-      getContainerDefaults(),
-      getPaginationSettings(userId),
-      getPasswordRequirements(),
-      getSessionSettings(),
-      getExportConfigurations(userId),
-      getScannerConfigurations(userId),
-    ])
+      const [containerDefaults, paginationSettings, passwordRequirements, sessionSettings, exportConfigurations, scannerConfigurations] = await Promise.all([
+        getContainerDefaults(database),
+        getPaginationSettings(database, userId),
+        getPasswordRequirements(database),
+        getSessionSettings(database),
+        getExportConfigurations(database, userId),
+        getScannerConfigurations(database, userId),
+      ])
 
     return c.json({
       container_defaults: containerDefaults,
@@ -61,55 +64,55 @@ settings.get('/', authMiddleware, async (c) => {
   }
 })
 
-// GET /api/settings/units - Get all available units
-settings.get('/units', async (c) => {
-  try {
-    const units = await db
-      .select({
-        id: unit.id,
-        symbol: unit.symbol,
-        name: unit.name,
-        category: unit.category,
-      })
-      .from(unit)
-      .orderBy(unit.symbol)
-    
-    return c.json(units)
-  } catch (error: unknown) {
-    return c.json({ error: 'Internal server error' }, 500)
-  }
-})
-
-// GET /api/settings/:key - Get specific setting (user-aware)
-settings.get('/:key', authMiddleware, async (c) => {
-  try {
-    const key = c.req.param('key')
-    const user = c.get('user')
-    const userId = user?.id
-
-    let value: unknown = null
-    switch (key) {
-      case 'container_defaults':
-        value = await getContainerDefaults()
-        break
-      case 'pagination_settings':
-        value = await getPaginationSettings(userId)
-        break
-      case 'password_requirements':
-        value = await getPasswordRequirements()
-        break
-      case 'session_settings':
-        value = await getSessionSettings()
-        break
-      case 'export_configurations':
-        value = await getExportConfigurations(userId)
-        break
-      case 'scanner_configurations':
-        value = await getScannerConfigurations(userId)
-        break
-      default:
-        return c.json({ error: 'Invalid setting key' }, 400)
+  // GET /api/settings/units - Get all available units
+  settings.get('/units', async (c) => {
+    try {
+      const units = await database
+        .select({
+          id: unit.id,
+          symbol: unit.symbol,
+          name: unit.name,
+          category: unit.category,
+        })
+        .from(unit)
+        .orderBy(unit.symbol)
+      
+      return c.json(units)
+    } catch (error: unknown) {
+      return c.json({ error: 'Internal server error' }, 500)
     }
+  })
+
+  // GET /api/settings/:key - Get specific setting (user-aware)
+  settings.get('/:key', authMiddleware, async (c) => {
+    try {
+      const key = c.req.param('key')
+      const user = c.get('user')
+      const userId = user?.id
+
+      let value: unknown = null
+      switch (key) {
+        case 'container_defaults':
+          value = await getContainerDefaults(database)
+          break
+        case 'pagination_settings':
+          value = await getPaginationSettings(database, userId)
+          break
+        case 'password_requirements':
+          value = await getPasswordRequirements(database)
+          break
+        case 'session_settings':
+          value = await getSessionSettings(database)
+          break
+        case 'export_configurations':
+          value = await getExportConfigurations(database, userId)
+          break
+        case 'scanner_configurations':
+          value = await getScannerConfigurations(database, userId)
+          break
+        default:
+          return c.json({ error: 'Invalid setting key' }, 400)
+      }
 
     if (value === null) {
       return c.json({ error: 'Setting not found' }, 404)
@@ -190,10 +193,10 @@ const scannerConfigurationsSchema = z.object({
   })),
 })
 
-// PUT /api/settings/:key - Update a specific setting
-// Admin users can set system-wide (userId = null) or user-specific settings
-// Non-admin users can only set their own user-specific settings (for allowed keys)
-settings.put('/:key', authMiddleware, async (c) => {
+  // PUT /api/settings/:key - Update a specific setting
+  // Admin users can set system-wide (userId = null) or user-specific settings
+  // Non-admin users can only set their own user-specific settings (for allowed keys)
+  settings.put('/:key', authMiddleware, async (c) => {
   try {
     const key = c.req.param('key')
     const body = await c.req.json()
@@ -231,7 +234,7 @@ settings.put('/:key', authMiddleware, async (c) => {
           validated.static_well.defaultUnitSymbol,
         ]
         
-        const existingUnits = await db
+        const existingUnits = await database
           .select({ symbol: unit.symbol })
           .from(unit)
           .where(inArray(unit.symbol, unitSymbols))
@@ -245,38 +248,38 @@ settings.put('/:key', authMiddleware, async (c) => {
           }, 400)
         }
         
-        await setContainerDefaults(validated as ContainerDefaults)
-        clearSettingsCache('container_defaults')
+        await setContainerDefaults(database, validated as ContainerDefaults)
+        clearSettingsCache(database, 'container_defaults')
         return c.json({ key, value: validated })
       }
       case 'pagination_settings': {
         const validated = paginationSettingsSchema.parse(actualBody)
-        await setPaginationSettings(validated as PaginationSettings, targetUserId ?? null)
-        clearSettingsCache('pagination_settings', targetUserId)
+        await setPaginationSettings(database, validated as PaginationSettings, targetUserId ?? null)
+        clearSettingsCache(database, 'pagination_settings', targetUserId)
         return c.json({ key, value: validated, userId: targetUserId })
       }
       case 'password_requirements': {
         const validated = passwordRequirementsSchema.parse(actualBody)
-        await setPasswordRequirements(validated as PasswordRequirements)
-        clearSettingsCache('password_requirements')
+        await setPasswordRequirements(database, validated as PasswordRequirements)
+        clearSettingsCache(database, 'password_requirements')
         return c.json({ key, value: validated })
       }
       case 'session_settings': {
         const validated = sessionSettingsSchema.parse(actualBody)
-        await setSessionSettings(validated as SessionSettings)
-        clearSettingsCache('session_settings')
+        await setSessionSettings(database, validated as SessionSettings)
+        clearSettingsCache(database, 'session_settings')
         return c.json({ key, value: validated })
       }
       case 'export_configurations': {
         const validated = exportConfigurationsSchema.parse(actualBody)
-        await setExportConfigurations(validated as ExportConfigurations, targetUserId ?? null)
-        clearSettingsCache('export_configurations', targetUserId)
+        await setExportConfigurations(database, validated as ExportConfigurations, targetUserId ?? null)
+        clearSettingsCache(database, 'export_configurations', targetUserId)
         return c.json({ key, value: validated, userId: targetUserId })
       }
       case 'scanner_configurations': {
         const validated = scannerConfigurationsSchema.parse(actualBody)
-        await setScannerConfigurations(validated as ScannerConfigurations, targetUserId ?? null)
-        clearSettingsCache('scanner_configurations', targetUserId)
+        await setScannerConfigurations(database, validated as ScannerConfigurations, targetUserId ?? null)
+        clearSettingsCache(database, 'scanner_configurations', targetUserId)
         return c.json({ key, value: validated, userId: targetUserId })
       }
       default:
@@ -297,25 +300,25 @@ settings.put('/:key', authMiddleware, async (c) => {
   }
 })
 
-// DELETE /api/settings/:key/user - Reset user-specific setting to system default
-settings.delete('/:key/user', authMiddleware, async (c) => {
-  try {
-    const key = c.req.param('key')
-    const user = c.get('user')
-    const userId = user?.id
+  // DELETE /api/settings/:key/user - Reset user-specific setting to system default
+  settings.delete('/:key/user', authMiddleware, async (c) => {
+    try {
+      const key = c.req.param('key')
+      const user = c.get('user')
+      const userId = user?.id
 
-    if (!userId) {
-      return c.json({ error: 'Unauthorized' }, 401)
-    }
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401)
+      }
 
-    // Only allow resetting user-specific settings (not system settings)
-    const userSpecificKeys = ['pagination_settings']
-    if (!userSpecificKeys.includes(key)) {
-      return c.json({ error: 'Cannot reset this setting' }, 400)
-    }
+      // Only allow resetting user-specific settings (not system settings)
+      const userSpecificKeys = ['pagination_settings']
+      if (!userSpecificKeys.includes(key)) {
+        return c.json({ error: 'Cannot reset this setting' }, 400)
+      }
 
-    await deleteUserSetting(key, userId)
-    clearSettingsCache(key, userId)
+      await deleteUserSetting(database, key, userId)
+      clearSettingsCache(database, key, userId)
     
     return c.json({ success: true, message: 'Setting reset to system default' })
   } catch (error: unknown) {
@@ -326,51 +329,51 @@ settings.delete('/:key/user', authMiddleware, async (c) => {
 
 // Personal Export/Scanner Configuration Endpoints
 
-// GET /api/settings/export-configurations/shared - Get system-wide shared export configs
-settings.get('/export-configurations/shared', authMiddleware, async (c) => {
-  try {
-    const configs = await getSharedExportConfigurations()
-    return c.json(configs)
-  } catch (error: unknown) {
-    return c.json({ error: 'Internal server error' }, 500)
-  }
-})
-
-// GET /api/settings/export-configurations/personal - Get user's personal export configs
-settings.get('/export-configurations/personal', authMiddleware, async (c) => {
-  try {
-    const user = c.get('user')
-    const userId = user?.id
-    if (!userId) {
-      return c.json({ error: 'Unauthorized' }, 401)
+  // GET /api/settings/export-configurations/shared - Get system-wide shared export configs
+  settings.get('/export-configurations/shared', authMiddleware, async (c) => {
+    try {
+      const configs = await getSharedExportConfigurations(database)
+      return c.json(configs)
+    } catch (error: unknown) {
+      return c.json({ error: 'Internal server error' }, 500)
     }
-    const configs = await getPersonalExportConfigurations(userId)
-    return c.json(configs || { configurations: [] })
-  } catch (error: unknown) {
-    return c.json({ error: 'Internal server error' }, 500)
-  }
-})
+  })
 
-// POST /api/settings/export-configurations/personal - Create user personal export config
-settings.post('/export-configurations/personal', authMiddleware, async (c) => {
-  try {
-    const user = c.get('user')
-    const userId = user?.id
-    if (!userId) {
-      return c.json({ error: 'Unauthorized' }, 401)
+  // GET /api/settings/export-configurations/personal - Get user's personal export configs
+  settings.get('/export-configurations/personal', authMiddleware, async (c) => {
+    try {
+      const user = c.get('user')
+      const userId = user?.id
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401)
+      }
+      const configs = await getPersonalExportConfigurations(database, userId)
+      return c.json(configs || { configurations: [] })
+    } catch (error: unknown) {
+      return c.json({ error: 'Internal server error' }, 500)
     }
+  })
 
-    const body = await c.req.json()
-    const newConfig = exportConfigurationsSchema.shape.configurations.element.parse(body)
+  // POST /api/settings/export-configurations/personal - Create user personal export config
+  settings.post('/export-configurations/personal', authMiddleware, async (c) => {
+    try {
+      const user = c.get('user')
+      const userId = user?.id
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401)
+      }
 
-    // Get existing personal configs
-    const existing = await getPersonalExportConfigurations(userId)
-    const configs: ExportConfigurations = existing || { configurations: [] }
+      const body = await c.req.json()
+      const newConfig = exportConfigurationsSchema.shape.configurations.element.parse(body)
 
-    // Add new config
-    configs.configurations.push(newConfig)
-    await setExportConfigurations(configs, userId)
-    clearSettingsCache('export_configurations', userId)
+      // Get existing personal configs
+      const existing = await getPersonalExportConfigurations(database, userId)
+      const configs: ExportConfigurations = existing || { configurations: [] }
+
+      // Add new config
+      configs.configurations.push(newConfig)
+      await setExportConfigurations(database, configs, userId)
+      clearSettingsCache(database, 'export_configurations', userId)
 
     return c.json({ success: true, config: newConfig })
   } catch (error: unknown) {
@@ -384,18 +387,18 @@ settings.post('/export-configurations/personal', authMiddleware, async (c) => {
   }
 })
 
-// PUT /api/settings/export-configurations/personal - Update user personal export configs
-settings.put('/export-configurations/personal', authMiddleware, async (c) => {
-  try {
-    const user = c.get('user')
-    const userId = user?.id
-    if (!userId) {
-      return c.json({ error: 'Unauthorized' }, 401)
-    }
+  // PUT /api/settings/export-configurations/personal - Update user personal export configs
+  settings.put('/export-configurations/personal', authMiddleware, async (c) => {
+    try {
+      const user = c.get('user')
+      const userId = user?.id
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401)
+      }
 
-    const validated = exportConfigurationsSchema.parse(await c.req.json())
-    await setExportConfigurations(validated, userId)
-    clearSettingsCache('export_configurations', userId)
+      const validated = exportConfigurationsSchema.parse(await c.req.json())
+      await setExportConfigurations(database, validated, userId)
+      clearSettingsCache(database, 'export_configurations', userId)
 
     return c.json({ success: true, configurations: validated.configurations })
   } catch (error: unknown) {
@@ -409,51 +412,51 @@ settings.put('/export-configurations/personal', authMiddleware, async (c) => {
   }
 })
 
-// GET /api/settings/scanner-configurations/shared - Get system-wide shared scanner configs
-settings.get('/scanner-configurations/shared', authMiddleware, async (c) => {
-  try {
-    const configs = await getSharedScannerConfigurations()
-    return c.json(configs)
-  } catch (error: unknown) {
-    return c.json({ error: 'Internal server error' }, 500)
-  }
-})
-
-// GET /api/settings/scanner-configurations/personal - Get user's personal scanner configs
-settings.get('/scanner-configurations/personal', authMiddleware, async (c) => {
-  try {
-    const user = c.get('user')
-    const userId = user?.id
-    if (!userId) {
-      return c.json({ error: 'Unauthorized' }, 401)
+  // GET /api/settings/scanner-configurations/shared - Get system-wide shared scanner configs
+  settings.get('/scanner-configurations/shared', authMiddleware, async (c) => {
+    try {
+      const configs = await getSharedScannerConfigurations(database)
+      return c.json(configs)
+    } catch (error: unknown) {
+      return c.json({ error: 'Internal server error' }, 500)
     }
-    const configs = await getPersonalScannerConfigurations(userId)
-    return c.json(configs || { configurations: [] })
-  } catch (error: unknown) {
-    return c.json({ error: 'Internal server error' }, 500)
-  }
-})
+  })
 
-// POST /api/settings/scanner-configurations/personal - Create user personal scanner config
-settings.post('/scanner-configurations/personal', authMiddleware, async (c) => {
-  try {
-    const user = c.get('user')
-    const userId = user?.id
-    if (!userId) {
-      return c.json({ error: 'Unauthorized' }, 401)
+  // GET /api/settings/scanner-configurations/personal - Get user's personal scanner configs
+  settings.get('/scanner-configurations/personal', authMiddleware, async (c) => {
+    try {
+      const user = c.get('user')
+      const userId = user?.id
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401)
+      }
+      const configs = await getPersonalScannerConfigurations(database, userId)
+      return c.json(configs || { configurations: [] })
+    } catch (error: unknown) {
+      return c.json({ error: 'Internal server error' }, 500)
     }
+  })
 
-    const body = await c.req.json()
-    const newConfig = scannerConfigurationsSchema.shape.configurations.element.parse(body)
+  // POST /api/settings/scanner-configurations/personal - Create user personal scanner config
+  settings.post('/scanner-configurations/personal', authMiddleware, async (c) => {
+    try {
+      const user = c.get('user')
+      const userId = user?.id
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401)
+      }
 
-    // Get existing personal configs
-    const existing = await getPersonalScannerConfigurations(userId)
-    const configs: ScannerConfigurations = existing || { configurations: [] }
+      const body = await c.req.json()
+      const newConfig = scannerConfigurationsSchema.shape.configurations.element.parse(body)
 
-    // Add new config
-    configs.configurations.push(newConfig)
-    await setScannerConfigurations(configs, userId)
-    clearSettingsCache('scanner_configurations', userId)
+      // Get existing personal configs
+      const existing = await getPersonalScannerConfigurations(database, userId)
+      const configs: ScannerConfigurations = existing || { configurations: [] }
+
+      // Add new config
+      configs.configurations.push(newConfig)
+      await setScannerConfigurations(database, configs, userId)
+      clearSettingsCache(database, 'scanner_configurations', userId)
 
     return c.json({ success: true, config: newConfig })
   } catch (error: unknown) {
@@ -467,18 +470,18 @@ settings.post('/scanner-configurations/personal', authMiddleware, async (c) => {
   }
 })
 
-// PUT /api/settings/scanner-configurations/personal - Update user personal scanner configs
-settings.put('/scanner-configurations/personal', authMiddleware, async (c) => {
-  try {
-    const user = c.get('user')
-    const userId = user?.id
-    if (!userId) {
-      return c.json({ error: 'Unauthorized' }, 401)
-    }
+  // PUT /api/settings/scanner-configurations/personal - Update user personal scanner configs
+  settings.put('/scanner-configurations/personal', authMiddleware, async (c) => {
+    try {
+      const user = c.get('user')
+      const userId = user?.id
+      if (!userId) {
+        return c.json({ error: 'Unauthorized' }, 401)
+      }
 
-    const validated = scannerConfigurationsSchema.parse(await c.req.json())
-    await setScannerConfigurations(validated, userId)
-    clearSettingsCache('scanner_configurations', userId)
+      const validated = scannerConfigurationsSchema.parse(await c.req.json())
+      await setScannerConfigurations(database, validated, userId)
+      clearSettingsCache(database, 'scanner_configurations', userId)
 
     return c.json({ success: true, configurations: validated.configurations })
   } catch (error: unknown) {
@@ -496,122 +499,123 @@ settings.put('/scanner-configurations/personal', authMiddleware, async (c) => {
 
 const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', 'static_well'])
 
-// GET /api/settings/container-types/:containerType/units - Get allowed units for a container type
-settings.get('/container-types/:containerType/units', async (c) => {
-  try {
-    const containerType = c.req.param('containerType')
-    
-    if (!containerTypeSchema.safeParse(containerType).success) {
-      return c.json({ error: 'Invalid container type' }, 400)
+  // GET /api/settings/container-types/:containerType/units - Get allowed units for a container type
+  settings.get('/container-types/:containerType/units', async (c) => {
+    try {
+      const containerType = c.req.param('containerType')
+      
+      if (!containerTypeSchema.safeParse(containerType).success) {
+        return c.json({ error: 'Invalid container type' }, 400)
+      }
+
+      const relationships = await database
+        .select({
+          id: unit.id,
+          symbol: unit.symbol,
+          name: unit.name,
+          category: unit.category,
+        })
+        .from(containerTypeUnit)
+        .innerJoin(unit, eq(containerTypeUnit.unitId, unit.id))
+        .where(eq(containerTypeUnit.containerType, containerType as any))
+
+      return c.json({ units: relationships })
+    } catch (error) {
+      console.error('Error fetching units:', error)
+      return c.json({ error: 'Failed to fetch units' }, 500)
     }
+  })
 
-    const relationships = await db
-      .select({
-        id: unit.id,
-        symbol: unit.symbol,
-        name: unit.name,
-        category: unit.category,
-      })
-      .from(containerTypeUnit)
-      .innerJoin(unit, eq(containerTypeUnit.unitId, unit.id))
-      .where(eq(containerTypeUnit.containerType, containerType as any))
+  // POST /api/settings/container-types/:containerType/units - Add allowed unit for a container type (admin only)
+  settings.post('/container-types/:containerType/units', adminMiddleware, async (c) => {
+    try {
+      const containerType = c.req.param('containerType')
+      
+      if (!containerTypeSchema.safeParse(containerType).success) {
+        return c.json({ error: 'Invalid container type' }, 400)
+      }
 
-    return c.json({ units: relationships })
-  } catch (error) {
-    console.error('Error fetching units:', error)
-    return c.json({ error: 'Failed to fetch units' }, 500)
-  }
-})
+      const body = await c.req.json()
+      const { unitId } = z.object({ unitId: z.number().int().positive() }).parse(body)
 
-// POST /api/settings/container-types/:containerType/units - Add allowed unit for a container type (admin only)
-settings.post('/container-types/:containerType/units', adminMiddleware, async (c) => {
-  try {
-    const containerType = c.req.param('containerType')
-    
-    if (!containerTypeSchema.safeParse(containerType).success) {
-      return c.json({ error: 'Invalid container type' }, 400)
+      // Verify unit exists
+      const unitRecord = await database.select().from(unit).where(eq(unit.id, unitId)).get()
+      if (!unitRecord) {
+        return c.json({ error: 'Unit not found' }, 404)
+      }
+
+      await database.insert(containerTypeUnit).values({
+        containerType: containerType as any,
+        unitId,
+      }).onConflictDoNothing()
+
+      return c.json({ success: true, unitId })
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return c.json({ error: 'Invalid input', details: error.issues }, 400)
+      }
+      console.error('Error adding unit:', error)
+      return c.json({ error: 'Failed to add unit' }, 500)
     }
+  })
 
-    const body = await c.req.json()
-    const { unitId } = z.object({ unitId: z.number().int().positive() }).parse(body)
+  // DELETE /api/settings/container-types/:containerType/units/:unitId - Remove allowed unit (admin only)
+  settings.delete('/container-types/:containerType/units/:unitId', adminMiddleware, async (c) => {
+    try {
+      const containerType = c.req.param('containerType')
+      const unitId = parseInt(c.req.param('unitId'))
+      
+      if (!containerTypeSchema.safeParse(containerType).success) {
+        return c.json({ error: 'Invalid container type' }, 400)
+      }
 
-    // Verify unit exists
-    const unitRecord = await db.select().from(unit).where(eq(unit.id, unitId)).get()
-    if (!unitRecord) {
-      return c.json({ error: 'Unit not found' }, 404)
-    }
+      if (isNaN(unitId)) {
+        return c.json({ error: 'Invalid unit ID' }, 400)
+      }
 
-    await db.insert(containerTypeUnit).values({
-      containerType: containerType as any,
-      unitId,
-    }).onConflictDoNothing()
-
-    return c.json({ success: true, unitId })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error adding unit:', error)
-    return c.json({ error: 'Failed to add unit' }, 500)
-  }
-})
-
-// DELETE /api/settings/container-types/:containerType/units/:unitId - Remove allowed unit (admin only)
-settings.delete('/container-types/:containerType/units/:unitId', adminMiddleware, async (c) => {
-  try {
-    const containerType = c.req.param('containerType')
-    const unitId = parseInt(c.req.param('unitId'))
-    
-    if (!containerTypeSchema.safeParse(containerType).success) {
-      return c.json({ error: 'Invalid container type' }, 400)
-    }
-
-    if (isNaN(unitId)) {
-      return c.json({ error: 'Invalid unit ID' }, 400)
-    }
-
-    await db
-      .delete(containerTypeUnit)
-      .where(
-        and(
-          eq(containerTypeUnit.containerType, containerType as any),
-          eq(containerTypeUnit.unitId, unitId)
+      await database
+        .delete(containerTypeUnit)
+        .where(
+          and(
+            eq(containerTypeUnit.containerType, containerType as any),
+            eq(containerTypeUnit.unitId, unitId)
+          )
         )
-      )
 
-    return c.json({ success: true })
-  } catch (error) {
-    console.error('Error removing unit:', error)
-    return c.json({ error: 'Failed to remove unit' }, 500)
-  }
-})
-
-// GET /api/settings/units/container-types/:containerType - Get all units allowed for a container type (alias for above)
-settings.get('/units/container-types/:containerType', async (c) => {
-  try {
-    const containerType = c.req.param('containerType')
-    
-    if (!containerTypeSchema.safeParse(containerType).success) {
-      return c.json({ error: 'Invalid container type' }, 400)
+      return c.json({ success: true })
+    } catch (error) {
+      console.error('Error removing unit:', error)
+      return c.json({ error: 'Failed to remove unit' }, 500)
     }
+  })
 
-    const relationships = await db
-      .select({
-        id: unit.id,
-        symbol: unit.symbol,
-        name: unit.name,
-        category: unit.category,
-      })
-      .from(containerTypeUnit)
-      .innerJoin(unit, eq(containerTypeUnit.unitId, unit.id))
-      .where(eq(containerTypeUnit.containerType, containerType as any))
+  // GET /api/settings/units/container-types/:containerType - Get all units allowed for a container type (alias for above)
+  settings.get('/units/container-types/:containerType', async (c) => {
+    try {
+      const containerType = c.req.param('containerType')
+      
+      if (!containerTypeSchema.safeParse(containerType).success) {
+        return c.json({ error: 'Invalid container type' }, 400)
+      }
 
-    return c.json({ units: relationships })
-  } catch (error) {
-    console.error('Error fetching units:', error)
-    return c.json({ error: 'Failed to fetch units' }, 500)
-  }
-})
+      const relationships = await database
+        .select({
+          id: unit.id,
+          symbol: unit.symbol,
+          name: unit.name,
+          category: unit.category,
+        })
+        .from(containerTypeUnit)
+        .innerJoin(unit, eq(containerTypeUnit.unitId, unit.id))
+        .where(eq(containerTypeUnit.containerType, containerType as any))
 
-export default settings
+      return c.json({ units: relationships })
+    } catch (error) {
+      console.error('Error fetching units:', error)
+      return c.json({ error: 'Failed to fetch units' }, 500)
+    }
+  })
+
+  return settings
+}
 

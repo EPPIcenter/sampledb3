@@ -112,7 +112,7 @@ specimens.get('/', async (c) => {
     if (barcode) {
       // Find specimens that have a container with this barcode
       // This requires joins to all the container tables
-      const containerId = await resolveContainerByBarcode(barcode, dbInstance)
+      const containerId = await resolveContainerByBarcode(dbInstance, barcode)
       if (containerId) {
         const container = await dbInstance
           .select({ specimenId: storageContainer.specimenId })
@@ -142,7 +142,7 @@ specimens.get('/', async (c) => {
     }
     
     const page = validatePage(c.req.query('page'))
-    const limit = await validateLimit(c.req.query('limit'))
+    const limit = await validateLimit(database, c.req.query('limit'))
     const offset = (page - 1) * limit
     
     const countQuery = dbInstance

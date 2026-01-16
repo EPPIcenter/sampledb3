@@ -1,4 +1,4 @@
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import {
   containerDerivation,
   cryovialBox,
@@ -57,10 +57,11 @@ export interface CreateDerivationResult {
 }
 
 async function findOrCreateDerivedSpecimen(
+  database: Database,
   parentSpecimenId: number,
   specimenTypeName: string,
 ): Promise<number> {
-  const parentSpecimen = await db
+  const parentSpecimen = await database
     .select()
     .from(specimen)
     .where(eq(specimen.id, parentSpecimenId))
@@ -70,7 +71,7 @@ async function findOrCreateDerivedSpecimen(
     throw new Error('Parent specimen not found')
   }
 
-  const type = await db
+  const type = await database
     .select()
     .from(specimenType)
     .where(eq(specimenType.name, specimenTypeName))
@@ -101,7 +102,7 @@ async function findOrCreateDerivedSpecimen(
     where = and(where, eq(specimen.collectionDate, parentSpecimen.collectionDate)) as any
   }
 
-  const existing = await db
+  const existing = await database
     .select()
     .from(specimen)
     .where(where)
@@ -111,7 +112,7 @@ async function findOrCreateDerivedSpecimen(
     return existing.id
   }
 
-  const [created] = await db
+  const [created] = await database
     .insert(specimen)
     .values({
       studySubjectId: parentSpecimen.studySubjectId,
@@ -127,12 +128,13 @@ async function findOrCreateDerivedSpecimen(
 }
 
 async function resolveUnitIdForChild(
+  database: Database,
   containerType: CreateDerivationInput['containerType'],
   unitSymbol?: string,
 ): Promise<number> {
   // If explicit symbol is provided, use it
   if (unitSymbol) {
-    const u = await db
+    const u = await database
       .select()
       .from(unit)
       .where(eq(unit.symbol, unitSymbol))
@@ -144,10 +146,11 @@ async function resolveUnitIdForChild(
   }
 
   // Use the default unit for the child container type
-  return await getDefaultUnit(containerType)
+  return await getDefaultUnit(database, containerType)
 }
 
 async function adjustParentQuantity(
+  database: Database,
   parent: typeof storageContainer.$inferSelect,
   quantityUsed?: number,
   reduceParentQuantity?: boolean,
@@ -176,7 +179,7 @@ async function adjustParentQuantity(
 
   const newRemaining = Math.max(0, (parent.remainingQuantity ?? 0) - quantityUsed)
 
-  const [updated] = await db
+  const [updated] = await database
     .update(storageContainer)
     .set({
       remainingQuantity: newRemaining,
@@ -189,9 +192,10 @@ async function adjustParentQuantity(
 }
 
 export async function createDerivation(
+  database: Database,
   input: CreateDerivationInput,
 ): Promise<CreateDerivationResult> {
-  const parent = await db
+  const parent = await database
     .select()
     .from(storageContainer)
     .where(eq(storageContainer.id, input.parentContainerId))
@@ -201,10 +205,10 @@ export async function createDerivation(
     throw new Error('Parent container not found')
   }
 
-  const derivedSpecimenId = await findOrCreateDerivedSpecimen(parent.specimenId, input.specimenTypeName)
+  const derivedSpecimenId = await findOrCreateDerivedSpecimen(database, parent.specimenId, input.specimenTypeName)
 
   // Validate container type is allowed for the specimen type
-  const specType = await db
+  const specType = await database
     .select()
     .from(specimenType)
     .where(eq(specimenType.name, input.specimenTypeName))
@@ -215,6 +219,7 @@ export async function createDerivation(
   }
 
   const containerTypeValidation = await validateContainerTypeForSpecimenType(
+    database,
     specType.id,
     input.containerType
   )
@@ -223,13 +228,13 @@ export async function createDerivation(
     throw new Error(containerTypeValidation.error || 'Container type not allowed for this specimen type')
   }
 
-  const unitId = await resolveUnitIdForChild(input.containerType, input.unitSymbol)
+  const unitId = await resolveUnitIdForChild(database, input.containerType, input.unitSymbol)
   const quantity = input.quantity ?? 1.0
 
   // Resolve collection if only name/type provided
   let collectionId = input.collectionId
   if (!collectionId && input.collectionName && input.collectionType) {
-    const resolved = await resolveCollection(input.collectionName, input.collectionType as CollectionType)
+    const resolved = await resolveCollection(input.collectionName, input.collectionType as CollectionType, database)
     if (!resolved) {
       throw new Error(`Collection '${input.collectionName}' (${input.collectionType}) not found`)
     }
@@ -237,7 +242,7 @@ export async function createDerivation(
   }
 
   const now = new Date().toISOString()
-  const [child] = await db
+  const [child] = await database
     .insert(storageContainer)
     .values({
       specimenId: derivedSpecimenId,
@@ -253,7 +258,7 @@ export async function createDerivation(
   switch (input.containerType) {
     case 'micronix_tube': {
       if (!collectionId) throw new Error('collectionId is required for micronix_tube derivations')
-      await db.insert(micronixTube).values({
+      await database.insert(micronixTube).values({
         id: child.id,
         collectionId: collectionId,
         barcode: input.containerBarcode!,
@@ -263,7 +268,7 @@ export async function createDerivation(
     }
     case 'cryovial_tube': {
       if (!collectionId) throw new Error('collectionId is required for cryovial_tube derivations')
-      await db.insert(cryovialTube).values({
+      await database.insert(cryovialTube).values({
         id: child.id,
         collectionId: collectionId,
         barcode: input.containerBarcode || null,
@@ -273,7 +278,7 @@ export async function createDerivation(
     }
     case 'paper': {
       if (!collectionId) throw new Error('collectionId (sheetId) is required for paper derivations')
-      await db.insert(paper).values({
+      await database.insert(paper).values({
         id: child.id,
         sheetId: collectionId,
         barcode: input.containerBarcode || null,
@@ -283,7 +288,7 @@ export async function createDerivation(
     }
     case 'static_well': {
       // For now, we treat static wells like micronix_plate-based wells
-      await db.insert(sheet).values // placeholder to satisfy type imports; no-op for now
+      await database.insert(sheet).values // placeholder to satisfy type imports; no-op for now
       throw new Error('static_well derivations are not yet implemented')
     }
     default:
@@ -291,12 +296,13 @@ export async function createDerivation(
   }
 
   const { updatedParent, warnings } = await adjustParentQuantity(
+    database,
     parent,
     input.quantityUsed,
     input.reduceParentQuantity ?? true,
   )
 
-  const [derivation] = await db
+  const [derivation] = await database
     .insert(containerDerivation)
     .values({
       parentContainerId: parent.id,
@@ -311,7 +317,7 @@ export async function createDerivation(
     })
     .returning()
 
-  const derivedSpec = await db
+  const derivedSpec = await database
     .select()
     .from(specimen)
     .where(eq(specimen.id, derivedSpecimenId))

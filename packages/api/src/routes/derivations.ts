@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import {
   containerDerivation,
   storageContainer,
@@ -18,7 +18,12 @@ import {
 import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
 
-const derivations = new Hono()
+/**
+ * Create derivations routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createDerivationsRoutes(database: Database): Hono {
+  const derivations = new Hono()
 
 const createDerivationSchema = z.object({
   derivationType: z.string(),
@@ -43,7 +48,7 @@ const createDerivationSchema = z.object({
   operatorId: z.number().optional(),
 })
 
-async function createCollectionIfNeeded(input: z.infer<typeof createDerivationSchema>) {
+async function createCollectionIfNeeded(database: Database, input: z.infer<typeof createDerivationSchema>) {
   if (input.collectionId || !input.collectionName || !input.collectionType || !input.collectionLocationId) {
     return input.collectionId
   }
@@ -54,7 +59,7 @@ async function createCollectionIfNeeded(input: z.infer<typeof createDerivationSc
 
   switch (input.collectionType) {
     case 'micronix_plate': {
-      const [plate] = await db.insert(micronixPlate).values({
+      const [plate] = await database.insert(micronixPlate).values({
         name,
         locationId,
         barcode: null,
@@ -64,7 +69,7 @@ async function createCollectionIfNeeded(input: z.infer<typeof createDerivationSc
       return plate.id
     }
     case 'cryovial_box': {
-      const [boxRow] = await db.insert(cryovialBox).values({
+      const [boxRow] = await database.insert(cryovialBox).values({
         name,
         locationId,
         barcode: null,
@@ -74,7 +79,7 @@ async function createCollectionIfNeeded(input: z.infer<typeof createDerivationSc
       return boxRow.id
     }
     case 'box': {
-      const [boxRow] = await db.insert(box).values({
+      const [boxRow] = await database.insert(box).values({
         name,
         locationId,
         created: now,
@@ -83,7 +88,7 @@ async function createCollectionIfNeeded(input: z.infer<typeof createDerivationSc
       return boxRow.id
     }
     case 'bag': {
-      const [bagRow] = await db.insert(bag).values({
+      const [bagRow] = await database.insert(bag).values({
         name,
         locationId,
         created: now,
@@ -101,7 +106,7 @@ async function createCollectionIfNeeded(input: z.infer<typeof createDerivationSc
 
       if (input.sheetParentType === 'box') {
         // Find or create box at the location
-        let boxRecord = await db
+        let boxRecord = await database
           .select()
           .from(box)
           .where(and(eq(box.name, input.sheetParentName), eq(box.locationId, locationId)))
@@ -109,7 +114,7 @@ async function createCollectionIfNeeded(input: z.infer<typeof createDerivationSc
 
         if (!boxRecord) {
           // Create new box
-          const [newBox] = await db.insert(box).values({
+          const [newBox] = await database.insert(box).values({
             name: input.sheetParentName,
             locationId,
             created: now,
@@ -121,7 +126,7 @@ async function createCollectionIfNeeded(input: z.infer<typeof createDerivationSc
         }
 
         // Create sheet with boxId
-        const [newSheet] = await db.insert(sheet).values({
+        const [newSheet] = await database.insert(sheet).values({
           name,
           boxId: parentId,
           bagId: null,
@@ -131,7 +136,7 @@ async function createCollectionIfNeeded(input: z.infer<typeof createDerivationSc
         return newSheet.id
       } else {
         // Find or create bag at the location
-        let bagRecord = await db
+        let bagRecord = await database
           .select()
           .from(bag)
           .where(and(eq(bag.name, input.sheetParentName), eq(bag.locationId, locationId)))
@@ -139,7 +144,7 @@ async function createCollectionIfNeeded(input: z.infer<typeof createDerivationSc
 
         if (!bagRecord) {
           // Create new bag
-          const [newBag] = await db.insert(bag).values({
+          const [newBag] = await database.insert(bag).values({
             name: input.sheetParentName,
             locationId,
             created: now,
@@ -151,7 +156,7 @@ async function createCollectionIfNeeded(input: z.infer<typeof createDerivationSc
         }
 
         // Create sheet with bagId
-        const [newSheet] = await db.insert(sheet).values({
+        const [newSheet] = await database.insert(sheet).values({
           name,
           boxId: null,
           bagId: parentId,
@@ -177,9 +182,9 @@ derivations.post('/containers/:id/derive', async (c) => {
     const body = await c.req.json()
     const input = createDerivationSchema.parse(body)
 
-    const collectionId = await createCollectionIfNeeded(input)
+    const collectionId = await createCollectionIfNeeded(database, input)
 
-    const result = await createDerivation({
+    const result = await createDerivation(database, {
       parentContainerId: id,
       ...input,
       collectionId,
@@ -212,7 +217,7 @@ derivations.get('/containers/:id/derivations', async (c) => {
       )
       : eq(containerDerivation.parentContainerId, id)
 
-    const records = await db
+    const records = await database
       .select()
       .from(containerDerivation)
       .where(where)
@@ -236,7 +241,7 @@ derivations.get('/containers/:id/source', async (c) => {
     }
 
     // First check if this container is derived
-    const record = await db
+    const record = await database
       .select()
       .from(containerDerivation)
       .where(eq(containerDerivation.childContainerId, id))
@@ -244,7 +249,7 @@ derivations.get('/containers/:id/source', async (c) => {
 
     if (record) {
       // Container is derived - return derivation source
-      const parent = await db
+      const parent = await database
         .select()
         .from(storageContainer)
         .where(eq(storageContainer.id, record.parentContainerId))
@@ -254,7 +259,7 @@ derivations.get('/containers/:id/source', async (c) => {
         return c.json({ error: 'Parent container not found' }, 404)
       }
 
-      const parentSpecimen = await db
+      const parentSpecimen = await database
         .select()
         .from(specimen)
         .where(eq(specimen.id, parent.specimenId))
@@ -269,7 +274,7 @@ derivations.get('/containers/:id/source', async (c) => {
     }
 
     // Container is not derived - return original source (subject or control)
-    const container = await db
+    const container = await database
       .select()
       .from(storageContainer)
       .where(eq(storageContainer.id, id))
@@ -279,7 +284,7 @@ derivations.get('/containers/:id/source', async (c) => {
       return c.json({ error: 'Container not found' }, 404)
     }
 
-    const spec = await db
+    const spec = await database
       .select()
       .from(specimen)
       .where(eq(specimen.id, container.specimenId))
@@ -291,7 +296,7 @@ derivations.get('/containers/:id/source', async (c) => {
 
     let sourceInfo: any = null
     if (spec.studySubjectId) {
-      const subject = await db
+      const subject = await database
         .select({
           id: studySubject.id,
           name: studySubject.name,
@@ -317,7 +322,7 @@ derivations.get('/containers/:id/source', async (c) => {
         }
       }
     } else if (spec.controlBatchId) {
-      const batch = await db
+      const batch = await database
         .select({
           id: controlBatch.id,
           name: controlBatch.name,
@@ -372,14 +377,14 @@ derivations.get('/containers/:id/derivation-chain', async (c) => {
     const ancestors: any[] = []
     let currentId: number | null = id
     while (true) {
-      const record = await db
+      const record = await database
         .select()
         .from(containerDerivation)
         .where(eq(containerDerivation.childContainerId, currentId!))
         .get()
       if (!record) break
 
-      const parent = await db
+      const parent = await database
         .select()
         .from(storageContainer)
         .where(eq(storageContainer.id, record.parentContainerId))
@@ -391,14 +396,14 @@ derivations.get('/containers/:id/derivation-chain', async (c) => {
     }
 
     // Descendants: direct children only for now
-    const descendantsRecords = await db
+    const descendantsRecords = await database
       .select()
       .from(containerDerivation)
       .where(eq(containerDerivation.parentContainerId, id))
 
     const descendants = await Promise.all(
       descendantsRecords.map(async (d) => {
-        const child = await db
+        const child = await database
           .select()
           .from(storageContainer)
           .where(eq(storageContainer.id, d.childContainerId))
@@ -407,7 +412,7 @@ derivations.get('/containers/:id/derivation-chain', async (c) => {
       }),
     )
 
-    const current = await db
+    const current = await database
       .select()
       .from(storageContainer)
       .where(eq(storageContainer.id, id))
@@ -441,7 +446,7 @@ derivations.patch('/derivations/:id', async (c) => {
     })
     const data = schema.parse(body)
 
-    const [updated] = await db
+    const [updated] = await database
       .update(containerDerivation)
       .set({
         derivationDate: data.derivationDate,
@@ -474,7 +479,7 @@ derivations.delete('/derivations/:id', async (c) => {
       return c.json({ error: 'Invalid derivation ID' }, 400)
     }
 
-    const existing = await db
+    const existing = await database
       .select()
       .from(containerDerivation)
       .where(eq(containerDerivation.id, id))
@@ -484,7 +489,7 @@ derivations.delete('/derivations/:id', async (c) => {
       return c.json({ error: 'Derivation not found' }, 404)
     }
 
-    await db
+    await database
       .delete(containerDerivation)
       .where(eq(containerDerivation.id, id))
 
@@ -495,6 +500,7 @@ derivations.delete('/derivations/:id', async (c) => {
   }
 })
 
-export default derivations
+  return derivations
+}
 
 

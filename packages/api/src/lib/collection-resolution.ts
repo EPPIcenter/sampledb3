@@ -1,4 +1,3 @@
-import { db } from '../db/client'
 import type { Database } from '../db/client'
 import { micronixPlate, cryovialBox, box, bag, sheet } from '../db/schema'
 import { eq } from 'drizzle-orm'
@@ -11,7 +10,7 @@ export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' |
 export async function resolveCollectionByName(
   name: string,
   type: CollectionType,
-  database: Database = db
+  database: Database
 ): Promise<number | null> {
   switch (type) {
     case 'micronix_plate': {
@@ -65,7 +64,7 @@ export async function resolveCollectionByName(
 export async function resolveCollectionByBarcode(
   barcode: string,
   type: CollectionType,
-  database: Database = db
+  database: Database
 ): Promise<number | null> {
   switch (type) {
     case 'micronix_plate': {
@@ -96,7 +95,7 @@ export async function resolveCollectionByBarcode(
 export async function resolveCollection(
   identifier: string,
   type: CollectionType,
-  database: Database = db
+  database: Database
 ): Promise<number | null> {
   // Try by name first
   const byName = await resolveCollectionByName(identifier, type, database)
@@ -115,12 +114,13 @@ export async function resolveCollection(
  * Get collection location ID
  */
 export async function getCollectionLocation(
+  database: Database,
   collectionId: number,
   type: CollectionType
 ): Promise<number | null> {
   switch (type) {
     case 'micronix_plate': {
-      const plate = await db
+      const plate = await database
         .select({ locationId: micronixPlate.locationId })
         .from(micronixPlate)
         .where(eq(micronixPlate.id, collectionId))
@@ -128,7 +128,7 @@ export async function getCollectionLocation(
       return plate?.locationId ?? null
     }
     case 'cryovial_box': {
-      const box = await db
+      const box = await database
         .select({ locationId: cryovialBox.locationId })
         .from(cryovialBox)
         .where(eq(cryovialBox.id, collectionId))
@@ -136,7 +136,7 @@ export async function getCollectionLocation(
       return box?.locationId ?? null
     }
     case 'box': {
-      const boxRecord = await db
+      const boxRecord = await database
         .select({ locationId: box.locationId })
         .from(box)
         .where(eq(box.id, collectionId))
@@ -144,7 +144,7 @@ export async function getCollectionLocation(
       return boxRecord?.locationId ?? null
     }
     case 'bag': {
-      const bagRecord = await db
+      const bagRecord = await database
         .select({ locationId: bag.locationId })
         .from(bag)
         .where(eq(bag.id, collectionId))
@@ -152,17 +152,17 @@ export async function getCollectionLocation(
       return bagRecord?.locationId ?? null
     }
     case 'sheet': {
-      const sheetRecord = await db
+      const sheetRecord = await database
         .select({ boxId: sheet.boxId, bagId: sheet.bagId })
         .from(sheet)
         .where(eq(sheet.id, collectionId))
         .get()
       
       if (sheetRecord?.boxId) {
-        return getCollectionLocation(sheetRecord.boxId, 'box')
+        return getCollectionLocation(database, sheetRecord.boxId, 'box')
       }
       if (sheetRecord?.bagId) {
-        return getCollectionLocation(sheetRecord.bagId, 'bag')
+        return getCollectionLocation(database, sheetRecord.bagId, 'bag')
       }
       return null
     }

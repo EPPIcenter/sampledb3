@@ -1,4 +1,4 @@
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import {
   containerDerivation,
   controlBatch,
@@ -162,11 +162,11 @@ export function parseCsv(text: string): DerivationCsvRow[] {
   return rows
 }
 
-async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> {
+async function resolveParentContainerId(database: Database, row: DerivationCsvRow): Promise<number> {
   // 1. Explicit ID
   const explicitId = parseNumber(row.parent_container_id)
   if (explicitId) {
-    const existing = await db
+    const existing = await database
       .select({ id: storageContainer.id })
       .from(storageContainer)
       .where(eq(storageContainer.id, explicitId))
@@ -181,21 +181,21 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
   if (row.parent_container_barcode) {
     const barcode = row.parent_container_barcode.trim()
 
-    const micronix = await db
+    const micronix = await database
       .select({ id: micronixTube.id })
       .from(micronixTube)
       .where(eq(micronixTube.barcode, barcode))
       .get()
     if (micronix) return micronix.id
 
-    const cryovial = await db
+    const cryovial = await database
       .select({ id: cryovialTube.id })
       .from(cryovialTube)
       .where(eq(cryovialTube.barcode, barcode))
       .get()
     if (cryovial) return cryovial.id
 
-    const paperRec = await db
+    const paperRec = await database
       .select({ id: paper.id })
       .from(paper)
       .where(eq(paper.barcode, barcode))
@@ -216,7 +216,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
     if (row.parent_control_batch_id) {
       const batchIdNum = parseNumber(row.parent_control_batch_id)
       if (batchIdNum) {
-        const batch = await db
+        const batch = await database
           .select({ id: controlBatch.id })
           .from(controlBatch)
           .where(eq(controlBatch.id, batchIdNum))
@@ -227,7 +227,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
         batchId = batch.id
       }
     } else if (row.parent_control_batch_name) {
-      const batch = await db
+      const batch = await database
         .select({ id: controlBatch.id })
         .from(controlBatch)
         .where(eq(controlBatch.name, row.parent_control_batch_name.trim()))
@@ -243,7 +243,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
     }
 
     // Find specimen type
-    const typeRec = await db
+    const typeRec = await database
       .select({ id: specimenType.id })
       .from(specimenType)
       .where(eq(specimenType.name, row.parent_specimen_type_name.trim()))
@@ -259,7 +259,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
       sql`${specimen.studySubjectId} IS NULL`,
     ) as any
 
-    const candidates = await db
+    const candidates = await database
       .select({ id: specimen.id })
       .from(specimen)
       .where(row.parent_collection_date
@@ -280,7 +280,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
     const containerType = row.parent_container_type || 'paper'
 
     if (containerType === 'paper') {
-      const parentContainer = await db
+      const parentContainer = await database
         .select({ id: storageContainer.id })
         .from(storageContainer)
         .innerJoin(paper, eq(paper.id, storageContainer.id))
@@ -298,7 +298,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
       if (!row.parent_box_barcode || !row.parent_position) {
         throw new Error('Cryovial control parents require parent_box_barcode and parent_position')
       }
-      const box = await db
+      const box = await database
         .select({ id: cryovialBox.id })
         .from(cryovialBox)
         .where(eq(cryovialBox.barcode, row.parent_box_barcode.trim()))
@@ -306,7 +306,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
       if (!box) {
         throw new Error(`Cryovial box barcode '${row.parent_box_barcode}' not found`)
       }
-      const tube = await db
+      const tube = await database
         .select({ id: cryovialTube.id })
         .from(cryovialTube)
         .where(and(
@@ -318,7 +318,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
         throw new Error(`Cryovial tube not found at position '${row.parent_position}' in box '${row.parent_box_barcode}'`)
       }
       // Verify tube belongs to the specimen
-      const container = await db
+      const container = await database
         .select({ specimenId: storageContainer.specimenId })
         .from(storageContainer)
         .where(eq(storageContainer.id, tube.id))
@@ -340,7 +340,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
     if (!row.parent_box_barcode || !row.parent_position) {
       throw new Error('Cryovial parents require parent_box_barcode and parent_position')
     }
-    const box = await db
+    const box = await database
       .select({ id: cryovialBox.id })
       .from(cryovialBox)
       .where(eq(cryovialBox.barcode, row.parent_box_barcode.trim()))
@@ -348,7 +348,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
     if (!box) {
       throw new Error(`Cryovial box barcode '${row.parent_box_barcode}' not found`)
     }
-    const tube = await db
+    const tube = await database
       .select({ id: cryovialTube.id })
       .from(cryovialTube)
       .where(and(
@@ -373,7 +373,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
       throw new Error('Paper parents require either control batch identification (parent_control_batch_name + parent_specimen_type_name) or study subject identification (parent_study_short_code + parent_subject_name + parent_specimen_type_name)')
     }
 
-    const studyRec = await db
+    const studyRec = await database
       .select({ id: study.id })
       .from(study)
       .where(eq(study.shortCode, row.parent_study_short_code.trim()))
@@ -382,7 +382,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
       throw new Error(`Study short code '${row.parent_study_short_code}' not found`)
     }
 
-    const subjectRec = await db
+    const subjectRec = await database
       .select({ id: studySubject.id })
       .from(studySubject)
       .where(and(
@@ -394,7 +394,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
       throw new Error(`Subject '${row.parent_subject_name}' not found in study '${row.parent_study_short_code}'`)
     }
 
-    const typeRec = await db
+    const typeRec = await database
       .select({ id: specimenType.id })
       .from(specimenType)
       .where(eq(specimenType.name, row.parent_specimen_type_name.trim()))
@@ -408,7 +408,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
       eq(specimen.specimenTypeId, typeRec.id),
     ) as any
 
-    const candidates = await db
+    const candidates = await database
       .select({ id: specimen.id })
       .from(specimen)
       .where(row.parent_collection_date
@@ -425,7 +425,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
 
     const specId = candidates[0].id
 
-    const parentContainer = await db
+    const parentContainer = await database
       .select({ id: storageContainer.id })
       .from(storageContainer)
       .innerJoin(paper, eq(paper.id, storageContainer.id))
@@ -443,6 +443,7 @@ async function resolveParentContainerId(row: DerivationCsvRow): Promise<number> 
 }
 
 async function resolveCollectionId(
+  database: Database,
   containerType: DerivationCsvRow['container_type'],
   collectionName?: string,
   collectionBarcode?: string,
@@ -453,7 +454,7 @@ async function resolveCollectionId(
 
   if (containerType === 'micronix_tube') {
     if (collectionBarcode) {
-      const plate = await db
+      const plate = await database
         .select({ id: micronixPlate.id })
         .from(micronixPlate)
         .where(eq(micronixPlate.barcode, collectionBarcode.trim()))
@@ -461,7 +462,7 @@ async function resolveCollectionId(
       if (plate) return { id: plate.id, status: 'existing' }
     }
     if (collectionName) {
-      const plate = await db
+      const plate = await database
         .select({ id: micronixPlate.id })
         .from(micronixPlate)
         .where(eq(micronixPlate.name, collectionName.trim()))
@@ -473,7 +474,7 @@ async function resolveCollectionId(
 
   if (containerType === 'cryovial_tube') {
     if (collectionBarcode) {
-      const box = await db
+      const box = await database
         .select({ id: cryovialBox.id })
         .from(cryovialBox)
         .where(eq(cryovialBox.barcode, collectionBarcode.trim()))
@@ -481,7 +482,7 @@ async function resolveCollectionId(
       if (box) return { id: box.id, status: 'existing' }
     }
     if (collectionName) {
-      const box = await db
+      const box = await database
         .select({ id: cryovialBox.id })
         .from(cryovialBox)
         .where(eq(cryovialBox.name, collectionName.trim()))
@@ -492,7 +493,7 @@ async function resolveCollectionId(
   }
 
   if (containerType === 'paper') {
-    const sheetRec = await db
+    const sheetRec = await database
       .select({ id: paper.sheetId })
       .from(paper)
       .limit(1)
@@ -504,6 +505,7 @@ async function resolveCollectionId(
 }
 
 export async function validateDerivationsCsv(
+  database: Database,
   text: string,
   settings?: BulkDerivationSettings,
 ): Promise<ValidationResult> {
@@ -558,20 +560,20 @@ export async function validateDerivationsCsv(
       }
 
       // Resolve parent container
-      const parentContainerId = await resolveParentContainerId(row)
+      const parentContainerId = await resolveParentContainerId(database, row)
       validationRow.parentContainerId = parentContainerId
 
       // Get parent specimen type for validation
       let currentParentSpecimenTypeId: number | null = null
       if (settings?.validateSourceSpecimenType && parentContainerId) {
-        const parentContainer = await db
+        const parentContainer = await database
           .select({ specimenId: storageContainer.specimenId })
           .from(storageContainer)
           .where(eq(storageContainer.id, parentContainerId))
           .get()
         
         if (parentContainer) {
-          const parentSpecimen = await db
+          const parentSpecimen = await database
             .select({ specimenTypeId: specimen.specimenTypeId })
             .from(specimen)
             .where(eq(specimen.id, parentContainer.specimenId))
@@ -594,7 +596,7 @@ export async function validateDerivationsCsv(
 
       // Validate parent quantity if enabled
       if (settings?.validateParentQuantity && parentContainerId) {
-        const parentContainer = await db
+        const parentContainer = await database
           .select({ 
             remainingQuantity: storageContainer.remainingQuantity,
             unitId: storageContainer.unitId,
@@ -619,6 +621,7 @@ export async function validateDerivationsCsv(
       // Resolve collection and track status
       const containerType = row.container_type || settings?.containerType || 'micronix_tube'
       const collectionInfo = await resolveCollectionId(
+        database,
         containerType,
         row.collection_name,
         row.collection_barcode,
@@ -660,6 +663,7 @@ export async function validateDerivationsCsv(
 }
 
 export async function importDerivationsFromCsv(
+  database: Database,
   text: string,
   options: { dryRun?: boolean; settings?: BulkDerivationSettings } = {},
 ): Promise<{ rows: DerivationCsvResultRow[] }> {
@@ -697,12 +701,13 @@ export async function importDerivationsFromCsv(
     let transactionError: unknown = null
     
     try {
-      await db.transaction(async (tx) => {
+      await database.transaction(async (tx) => {
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i]
           try {
-            const parentContainerId = await resolveParentContainerId(row)
+            const parentContainerId = await resolveParentContainerId(tx, row)
             const collectionInfo = await resolveCollectionId(
+              tx,
               row.container_type || settings?.containerType || 'micronix_tube',
               row.collection_name,
               row.collection_barcode,
@@ -728,7 +733,7 @@ export async function importDerivationsFromCsv(
               position: row.position,
             }
 
-            const result = await createDerivation(input)
+            const result = await createDerivation(tx, input)
 
             results.push({
               index: i,
@@ -777,8 +782,9 @@ export async function importDerivationsFromCsv(
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
       try {
-        const parentContainerId = await resolveParentContainerId(row)
+        const parentContainerId = await resolveParentContainerId(database, row)
         const collectionInfo = await resolveCollectionId(
+          database,
           row.container_type || settings?.containerType || 'micronix_tube',
           row.collection_name,
           row.collection_barcode,
@@ -804,7 +810,7 @@ export async function importDerivationsFromCsv(
           position: row.position,
         }
 
-        const result = await createDerivation(input)
+        const result = await createDerivation(database, input)
 
         results.push({
           index: i,

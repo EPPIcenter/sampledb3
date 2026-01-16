@@ -1,4 +1,4 @@
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import { settings } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
 
@@ -50,16 +50,28 @@ export interface ScannerConfigurations {
 }
 
 // Cache for settings to avoid repeated queries
-// Cache key format: "key" for system settings, "key:userId" for user settings
+// Cache key format: "dbId:key" for system settings, "dbId:key:userId" for user settings
+// Using WeakMap to allow garbage collection when database instances are no longer referenced
 const settingsCache = new Map<string, any>()
+
+function getCacheKey(db: Database, key: string, userId: number | null): string {
+  // Use a simple identifier for the database (could be improved with a unique ID)
+  // Handle case where db might be undefined (shouldn't happen, but be defensive)
+  if (!db) {
+    throw new Error('Database instance is required for cache key generation')
+  }
+  const dbId = (db as any)._id || String(db)
+  return userId !== null ? `${dbId}:${key}:${userId}` : `${dbId}:${key}`
+}
 
 /**
  * Generic getter for any setting
+ * @param db - Database instance
  * @param key - Setting key
  * @param userId - Optional user ID. If provided, gets user-specific setting; if null, gets system setting
  */
-export async function getSetting<T>(key: string, userId: number | null = null): Promise<T | null> {
-  const cacheKey = userId !== null ? `${key}:${userId}` : key
+export async function getSetting<T>(db: Database, key: string, userId: number | null = null): Promise<T | null> {
+  const cacheKey = getCacheKey(db, key, userId)
   
   // Check cache first
   if (settingsCache.has(cacheKey)) {
@@ -87,11 +99,12 @@ export async function getSetting<T>(key: string, userId: number | null = null): 
 
 /**
  * Generic setter for any setting
+ * @param db - Database instance
  * @param key - Setting key
  * @param value - Setting value
  * @param userId - Optional user ID. If provided, saves as user-specific; if null, saves as system-wide
  */
-export async function setSetting<T>(key: string, value: T, userId: number | null = null): Promise<void> {
+export async function setSetting<T>(db: Database, key: string, value: T, userId: number | null = null): Promise<void> {
   await db
     .insert(settings)
     .values({
@@ -107,116 +120,129 @@ export async function setSetting<T>(key: string, value: T, userId: number | null
     })
 
   // Update cache
-  const cacheKey = userId !== null ? `${key}:${userId}` : key
+  const cacheKey = getCacheKey(db, key, userId)
   settingsCache.set(cacheKey, value)
   
   // Also clear system cache if setting user-specific (to ensure fallback works)
   if (userId !== null) {
-    settingsCache.delete(key)
+    const systemCacheKey = getCacheKey(db, key, null)
+    settingsCache.delete(systemCacheKey)
   }
 }
 
 /**
  * Get user setting with fallback to system default
+ * @param db - Database instance
  * @param key - Setting key
  * @param userId - User ID
  * @returns User-specific setting if exists, otherwise system default
  */
-export async function getUserSettingWithFallback<T>(key: string, userId: number): Promise<T | null> {
+export async function getUserSettingWithFallback<T>(db: Database, key: string, userId: number): Promise<T | null> {
   // Try user-specific setting first
-  const userSetting = await getSetting<T>(key, userId)
+  const userSetting = await getSetting<T>(db, key, userId)
   if (userSetting !== null) {
     return userSetting
   }
   
   // Fallback to system default
-  return getSetting<T>(key, null)
+  return getSetting<T>(db, key, null)
 }
 
 /**
  * Delete a user-specific setting (to reset to system default)
+ * @param db - Database instance
  * @param key - Setting key
  * @param userId - User ID
  */
-export async function deleteUserSetting(key: string, userId: number): Promise<void> {
+export async function deleteUserSetting(db: Database, key: string, userId: number): Promise<void> {
   await db
     .delete(settings)
     .where(and(eq(settings.key, key), eq(settings.userId, userId)))
   
   // Clear cache
-  settingsCache.delete(`${key}:${userId}`)
+  const cacheKey = getCacheKey(db, key, userId)
+  settingsCache.delete(cacheKey)
 }
 
 /**
  * Get container defaults
+ * @param db - Database instance
  */
-export async function getContainerDefaults(): Promise<ContainerDefaults | null> {
-  return getSetting<ContainerDefaults>('container_defaults')
+export async function getContainerDefaults(db: Database): Promise<ContainerDefaults | null> {
+  return getSetting<ContainerDefaults>(db, 'container_defaults')
 }
 
 /**
  * Set container defaults
+ * @param db - Database instance
  */
-export async function setContainerDefaults(defaults: ContainerDefaults): Promise<void> {
-  return setSetting('container_defaults', defaults)
+export async function setContainerDefaults(db: Database, defaults: ContainerDefaults): Promise<void> {
+  return setSetting(db, 'container_defaults', defaults)
 }
 
 /**
  * Get pagination settings (supports user-specific with system fallback)
+ * @param db - Database instance
  */
-export async function getPaginationSettings(userId?: number | null): Promise<PaginationSettings | null> {
+export async function getPaginationSettings(db: Database, userId?: number | null): Promise<PaginationSettings | null> {
   if (userId !== undefined && userId !== null) {
-    return getUserSettingWithFallback<PaginationSettings>('pagination_settings', userId)
+    return getUserSettingWithFallback<PaginationSettings>(db, 'pagination_settings', userId)
   }
-  return getSetting<PaginationSettings>('pagination_settings', null)
+  return getSetting<PaginationSettings>(db, 'pagination_settings', null)
 }
 
 /**
  * Set pagination settings
+ * @param db - Database instance
  * @param config - Pagination settings
  * @param userId - Optional user ID. If provided, saves as user-specific; if null/undefined, saves as system-wide
  */
-export async function setPaginationSettings(config: PaginationSettings, userId?: number | null): Promise<void> {
-  return setSetting('pagination_settings', config, userId ?? null)
+export async function setPaginationSettings(db: Database, config: PaginationSettings, userId?: number | null): Promise<void> {
+  return setSetting(db, 'pagination_settings', config, userId ?? null)
 }
 
 /**
  * Get password requirements
+ * @param db - Database instance
  */
-export async function getPasswordRequirements(): Promise<PasswordRequirements | null> {
-  return getSetting<PasswordRequirements>('password_requirements')
+export async function getPasswordRequirements(db: Database): Promise<PasswordRequirements | null> {
+  return getSetting<PasswordRequirements>(db, 'password_requirements')
 }
 
 /**
  * Set password requirements
+ * @param db - Database instance
  */
-export async function setPasswordRequirements(requirements: PasswordRequirements): Promise<void> {
-  return setSetting('password_requirements', requirements)
+export async function setPasswordRequirements(db: Database, requirements: PasswordRequirements): Promise<void> {
+  return setSetting(db, 'password_requirements', requirements)
 }
 
 /**
  * Get session settings
+ * @param db - Database instance
  */
-export async function getSessionSettings(): Promise<SessionSettings | null> {
-  return getSetting<SessionSettings>('session_settings')
+export async function getSessionSettings(db: Database): Promise<SessionSettings | null> {
+  return getSetting<SessionSettings>(db, 'session_settings')
 }
 
 /**
  * Set session settings
+ * @param db - Database instance
  */
-export async function setSessionSettings(config: SessionSettings): Promise<void> {
-  return setSetting('session_settings', config)
+export async function setSessionSettings(db: Database, config: SessionSettings): Promise<void> {
+  return setSetting(db, 'session_settings', config)
 }
 
 /**
  * Get export configurations (merged: system shared + user personal)
+ * @param db - Database instance
  * @param userId - Optional user ID. If provided, returns merged configs (shared + personal)
  */
-export async function getExportConfigurations(userId?: number | null): Promise<ExportConfigurations | null> {
-  const systemConfigs = await getSetting<ExportConfigurations>('export_configurations', null)
+export async function getExportConfigurations(db: Database, userId?: number | null): Promise<ExportConfigurations | null> {
+  const systemConfigs = await getSetting<ExportConfigurations>(db, 'export_configurations', null)
   
   if (userId !== undefined && userId !== null) {
-    const userConfigs = await getSetting<ExportConfigurations>('export_configurations', userId)
+    const userConfigs = await getSetting<ExportConfigurations>(db, 'export_configurations', userId)
     
     // Merge: system configs + user personal configs
     if (systemConfigs && userConfigs) {
@@ -236,34 +262,38 @@ export async function getExportConfigurations(userId?: number | null): Promise<E
 
 /**
  * Get only system-wide shared export configurations
+ * @param db - Database instance
  */
-export async function getSharedExportConfigurations(): Promise<ExportConfigurations | null> {
-  return getSetting<ExportConfigurations>('export_configurations', null)
+export async function getSharedExportConfigurations(db: Database): Promise<ExportConfigurations | null> {
+  return getSetting<ExportConfigurations>(db, 'export_configurations', null)
 }
 
 /**
  * Get only user-specific personal export configurations
+ * @param db - Database instance
  */
-export async function getPersonalExportConfigurations(userId: number): Promise<ExportConfigurations | null> {
-  return getSetting<ExportConfigurations>('export_configurations', userId)
+export async function getPersonalExportConfigurations(db: Database, userId: number): Promise<ExportConfigurations | null> {
+  return getSetting<ExportConfigurations>(db, 'export_configurations', userId)
 }
 
 /**
  * Set export configurations
+ * @param db - Database instance
  * @param configs - Export configurations
  * @param userId - Optional user ID. If provided, saves as user-specific; if null/undefined, saves as system-wide
  */
-export async function setExportConfigurations(configs: ExportConfigurations, userId?: number | null): Promise<void> {
-  return setSetting('export_configurations', configs, userId ?? null)
+export async function setExportConfigurations(db: Database, configs: ExportConfigurations, userId?: number | null): Promise<void> {
+  return setSetting(db, 'export_configurations', configs, userId ?? null)
 }
 
 /**
  * Get default export configuration
  * Checks for a configuration marked as default in export_configurations
  * Returns null if no default configuration exists
+ * @param db - Database instance
  */
-export async function getDefaultExportConfiguration(): Promise<{ columns: string[] } | null> {
-  const exportConfigs = await getExportConfigurations()
+export async function getDefaultExportConfiguration(db: Database): Promise<{ columns: string[] } | null> {
+  const exportConfigs = await getExportConfigurations(db)
   if (exportConfigs && exportConfigs.configurations) {
     const defaultConfig = exportConfigs.configurations.find(c => c.isDefault === true)
     if (defaultConfig) {
@@ -276,9 +306,10 @@ export async function getDefaultExportConfiguration(): Promise<{ columns: string
 
 /**
  * Get export configuration by name
+ * @param db - Database instance
  */
-export async function getExportConfigurationByName(name: string): Promise<{ columns: string[] } | null> {
-  const exportConfigs = await getExportConfigurations()
+export async function getExportConfigurationByName(db: Database, name: string): Promise<{ columns: string[] } | null> {
+  const exportConfigs = await getExportConfigurations(db)
   if (exportConfigs && exportConfigs.configurations) {
     const config = exportConfigs.configurations.find(c => c.name === name)
     if (config) {
@@ -290,10 +321,11 @@ export async function getExportConfigurationByName(name: string): Promise<{ colu
 
 /**
  * Get scanner configurations (merged: system shared + user personal)
+ * @param db - Database instance
  * @param userId - Optional user ID. If provided, returns merged configs (shared + personal)
  */
-export async function getScannerConfigurations(userId?: number | null): Promise<ScannerConfigurations | null> {
-  const systemConfigs = await getSetting<ScannerConfigurations>('scanner_configurations', null)
+export async function getScannerConfigurations(db: Database, userId?: number | null): Promise<ScannerConfigurations | null> {
+  const systemConfigs = await getSetting<ScannerConfigurations>(db, 'scanner_configurations', null)
   
   // Initialize system defaults if none exist
   if (!systemConfigs || !systemConfigs.configurations || systemConfigs.configurations.length === 0) {
@@ -328,11 +360,11 @@ export async function getScannerConfigurations(userId?: number | null): Promise<
         },
       ],
     }
-    await setScannerConfigurations(defaults, null)
-    const initialized = await getSetting<ScannerConfigurations>('scanner_configurations', null)
+    await setScannerConfigurations(db, defaults, null)
+    const initialized = await getSetting<ScannerConfigurations>(db, 'scanner_configurations', null)
     
     if (userId !== undefined && userId !== null) {
-      const userConfigs = await getSetting<ScannerConfigurations>('scanner_configurations', userId)
+      const userConfigs = await getSetting<ScannerConfigurations>(db, 'scanner_configurations', userId)
       if (initialized && userConfigs) {
         return {
           configurations: [
@@ -346,7 +378,7 @@ export async function getScannerConfigurations(userId?: number | null): Promise<
   }
   
   if (userId !== undefined && userId !== null) {
-    const userConfigs = await getSetting<ScannerConfigurations>('scanner_configurations', userId)
+    const userConfigs = await getSetting<ScannerConfigurations>(db, 'scanner_configurations', userId)
     
     // Merge: system configs + user personal configs
     if (systemConfigs && userConfigs) {
@@ -366,34 +398,38 @@ export async function getScannerConfigurations(userId?: number | null): Promise<
 
 /**
  * Get only system-wide shared scanner configurations
+ * @param db - Database instance
  */
-export async function getSharedScannerConfigurations(): Promise<ScannerConfigurations | null> {
-  return getSetting<ScannerConfigurations>('scanner_configurations', null)
+export async function getSharedScannerConfigurations(db: Database): Promise<ScannerConfigurations | null> {
+  return getSetting<ScannerConfigurations>(db, 'scanner_configurations', null)
 }
 
 /**
  * Get only user-specific personal scanner configurations
+ * @param db - Database instance
  */
-export async function getPersonalScannerConfigurations(userId: number): Promise<ScannerConfigurations | null> {
-  return getSetting<ScannerConfigurations>('scanner_configurations', userId)
+export async function getPersonalScannerConfigurations(db: Database, userId: number): Promise<ScannerConfigurations | null> {
+  return getSetting<ScannerConfigurations>(db, 'scanner_configurations', userId)
 }
 
 /**
  * Set scanner configurations
+ * @param db - Database instance
  * @param configs - Scanner configurations
  * @param userId - Optional user ID. If provided, saves as user-specific; if null/undefined, saves as system-wide
  */
-export async function setScannerConfigurations(configs: ScannerConfigurations, userId?: number | null): Promise<void> {
-  return setSetting('scanner_configurations', configs, userId ?? null)
+export async function setScannerConfigurations(db: Database, configs: ScannerConfigurations, userId?: number | null): Promise<void> {
+  return setSetting(db, 'scanner_configurations', configs, userId ?? null)
 }
 
 /**
  * Get default scanner configuration
  * Checks for a configuration marked as default in scanner_configurations
  * Returns null if no default configuration exists
+ * @param db - Database instance
  */
-export async function getDefaultScannerConfiguration(): Promise<ScannerConfiguration | null> {
-  const scannerConfigs = await getScannerConfigurations()
+export async function getDefaultScannerConfiguration(db: Database): Promise<ScannerConfiguration | null> {
+  const scannerConfigs = await getScannerConfigurations(db)
   if (scannerConfigs && scannerConfigs.configurations) {
     const defaultConfig = scannerConfigs.configurations.find(c => c.isDefault === true)
     if (defaultConfig) {
@@ -406,9 +442,10 @@ export async function getDefaultScannerConfiguration(): Promise<ScannerConfigura
 
 /**
  * Get scanner configuration by id
+ * @param db - Database instance
  */
-export async function getScannerConfigurationById(id: string): Promise<ScannerConfiguration | null> {
-  const scannerConfigs = await getScannerConfigurations()
+export async function getScannerConfigurationById(db: Database, id: string): Promise<ScannerConfiguration | null> {
+  const scannerConfigs = await getScannerConfigurations(db)
   if (scannerConfigs && scannerConfigs.configurations) {
     const config = scannerConfigs.configurations.find(c => c.id === id)
     if (config) {
@@ -420,18 +457,22 @@ export async function getScannerConfigurationById(id: string): Promise<ScannerCo
 
 /**
  * Clear the settings cache
+ * @param db - Database instance
  * @param key - Optional key to clear specific setting cache
  * @param userId - Optional user ID to clear user-specific cache
  */
-export function clearSettingsCache(key?: string, userId?: number | null): void {
-  if (key) {
+export function clearSettingsCache(db?: Database, key?: string, userId?: number | null): void {
+  if (db && key) {
     if (userId !== undefined && userId !== null) {
-      settingsCache.delete(`${key}:${userId}`)
+      const cacheKey = getCacheKey(db, key, userId)
+      settingsCache.delete(cacheKey)
     } else {
-      settingsCache.delete(key)
+      const cacheKey = getCacheKey(db, key, null)
+      settingsCache.delete(cacheKey)
       // Also clear all user-specific caches for this key
+      const dbId = (db as any)._id || String(db)
       for (const cacheKey of settingsCache.keys()) {
-        if (cacheKey.startsWith(`${key}:`)) {
+        if (cacheKey.startsWith(`${dbId}:${key}:`)) {
           settingsCache.delete(cacheKey)
         }
       }

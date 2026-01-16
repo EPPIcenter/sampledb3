@@ -136,7 +136,7 @@ export function createSubjectsRoutes(database: Database): Hono {
     const defaultsRecord = await dbInstance
       .select()
       .from(settings)
-      .where(eq(settings.key, 'container_defaults'))
+      .where(and(eq(settings.key, 'container_defaults'), isNull(settings.userId)))
       .get()
     
     if (!defaultsRecord || !defaultsRecord.value) {
@@ -172,7 +172,7 @@ export function createSubjectsRoutes(database: Database): Hono {
     const defaultsRecord = await dbInstance
       .select()
       .from(settings)
-      .where(eq(settings.key, 'container_defaults'))
+      .where(and(eq(settings.key, 'container_defaults'), isNull(settings.userId)))
       .get()
     
     if (!defaultsRecord || !defaultsRecord.value) {
@@ -191,7 +191,7 @@ export function createSubjectsRoutes(database: Database): Hono {
     const defaultsRecord = await dbInstance
       .select()
       .from(settings)
-      .where(eq(settings.key, 'container_defaults'))
+      .where(and(eq(settings.key, 'container_defaults'), isNull(settings.userId)))
       .get()
     
     if (!defaultsRecord || !defaultsRecord.value) {
@@ -209,7 +209,7 @@ export function createSubjectsRoutes(database: Database): Hono {
 subjects.get('/', async (c) => {
   try {
     const page = validatePage(c.req.query('page'))
-    const limit = await validateLimit(c.req.query('limit'))
+    const limit = await validateLimit(dbInstance, c.req.query('limit'))
     const offset = (page - 1) * limit
     
     const [subjectsList, countResult] = await Promise.all([
@@ -855,9 +855,9 @@ subjects.post('/with-specimens', async (c) => {
       if (spec.container && spec.container.containerType) {
         // Validate container type is allowed for specimen type
         const containerTypeValidation = await validateContainerTypeForSpecimenType(
+          dbInstance,
           specimenTypeId,
-          spec.container.containerType,
-          dbInstance
+          spec.container.containerType
         )
         if (!containerTypeValidation.valid) {
           return c.json({
@@ -953,7 +953,15 @@ subjects.post('/with-specimens', async (c) => {
           }
         } else if (containerType === 'paper') {
           if (collectionName) {
-            const existingBoxId = await resolveCollection(collectionName, 'box', dbInstance)
+            // Try to resolve existing collection
+            let existingBoxId: number | null = null
+            try {
+              existingBoxId = await resolveCollection(collectionName, 'box', dbInstance)
+            } catch (e) {
+              // Handle any unexpected errors from resolveCollection gracefully
+              existingBoxId = null
+            }
+            
             if (existingBoxId) {
               collectionMap.set(`box-${collectionName}`, existingBoxId)
             } else if (!collectionLocationId) {
@@ -1306,7 +1314,7 @@ subjects.post('/with-specimens', async (c) => {
       
       return {
         subject,
-        subjectCreated,
+        subjectCreated: !existingSubjectId,
         specimens: insertedSpecimens,
       }
       })

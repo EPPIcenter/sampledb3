@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import {
   micronixPlate,
   micronixTube,
@@ -25,7 +25,12 @@ import { executeMoves, resolveContainersByBarcodes, type BatchMoveRequest, type 
 import { resolveCollection } from '../lib/collection-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 
-const collections = new Hono()
+/**
+ * Create collections routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createCollectionsRoutes(database: Database): Hono {
+  const collections = new Hono()
 
 // Helper to build location path string
 function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | undefined {
@@ -56,7 +61,7 @@ type ContainerSource =
 
 // Helper to enrich a storage container
 async function enrichContainer(containerId: number) {
-  const container = await db
+  const container = await database
     .select()
     .from(storageContainer)
     .where(eq(storageContainer.id, containerId))
@@ -65,13 +70,13 @@ async function enrichContainer(containerId: number) {
   if (!container) return null
 
   const [containerUnit, spec] = await Promise.all([
-    db.select().from(unit).where(eq(unit.id, container.unitId)).get(),
-    db.select().from(specimen).where(eq(specimen.id, container.specimenId)).get(),
+    database.select().from(unit).where(eq(unit.id, container.unitId)).get(),
+    database.select().from(specimen).where(eq(specimen.id, container.specimenId)).get(),
   ])
 
   let source: ContainerSource = null
   if (spec?.studySubjectId) {
-    const subject = await db
+    const subject = await database
       .select({
         id: studySubject.id,
         name: studySubject.name,
@@ -97,7 +102,7 @@ async function enrichContainer(containerId: number) {
       }
     }
   } else if (spec?.controlBatchId) {
-    const batch = await db
+    const batch = await database
       .select({
         id: controlBatch.id,
         name: controlBatch.name,
@@ -138,13 +143,13 @@ collections.get('/plates/micronix/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid plate ID' }, 400)
 
-  const plate = await db.select().from(micronixPlate).where(eq(micronixPlate.id, id)).get()
+  const plate = await database.select().from(micronixPlate).where(eq(micronixPlate.id, id)).get()
   if (!plate) return c.json({ error: 'Plate not found' }, 404)
 
   const [loc, tubes, wells] = await Promise.all([
-    db.select().from(location).where(eq(location.id, plate.locationId)).get(),
-    db.select().from(micronixTube).where(eq(micronixTube.collectionId, id)),
-    db.select().from(staticWell).where(eq(staticWell.collectionId, id)),
+    database.select().from(location).where(eq(location.id, plate.locationId)).get(),
+    database.select().from(micronixTube).where(eq(micronixTube.collectionId, id)),
+    database.select().from(staticWell).where(eq(staticWell.collectionId, id)),
   ])
 
   const locationPath = buildLocationPath(loc)
@@ -195,11 +200,11 @@ collections.get('/boxes/cryovial/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid box ID' }, 400)
 
-  const boxRecord = await db.select().from(cryovialBox).where(eq(cryovialBox.id, id)).get()
+  const boxRecord = await database.select().from(cryovialBox).where(eq(cryovialBox.id, id)).get()
   if (!boxRecord) return c.json({ error: 'Box not found' }, 404)
 
-  const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
-  const tubes = await db.select().from(cryovialTube).where(eq(cryovialTube.collectionId, id))
+  const loc = await database.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+  const tubes = await database.select().from(cryovialTube).where(eq(cryovialTube.collectionId, id))
 
   const tubeEntries = await Promise.all(
     tubes.map(async (t) => {
@@ -245,18 +250,18 @@ collections.get('/boxes/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid box ID' }, 400)
 
-  const boxRecord = await db.select().from(box).where(eq(box.id, id)).get()
+  const boxRecord = await database.select().from(box).where(eq(box.id, id)).get()
   if (!boxRecord) return c.json({ error: 'Box not found' }, 404)
 
-  const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+  const loc = await database.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
 
   // Get all sheets in this box
-  const sheets = await db.select().from(sheet).where(eq(sheet.boxId, id))
+  const sheets = await database.select().from(sheet).where(eq(sheet.boxId, id))
   
   // Get all papers for all sheets in this box
   const sheetContents = await Promise.all(
     sheets.map(async (s) => {
-      const papers = await db.select().from(paper).where(eq(paper.sheetId, s.id))
+      const papers = await database.select().from(paper).where(eq(paper.sheetId, s.id))
       const paperEntries = await Promise.all(
         papers.map(async (p) => {
           const containerInfo = await enrichContainer(p.id)
@@ -293,18 +298,18 @@ collections.get('/bags/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid bag ID' }, 400)
 
-  const bagRecord = await db.select().from(bag).where(eq(bag.id, id)).get()
+  const bagRecord = await database.select().from(bag).where(eq(bag.id, id)).get()
   if (!bagRecord) return c.json({ error: 'Bag not found' }, 404)
 
-  const loc = await db.select().from(location).where(eq(location.id, bagRecord.locationId)).get()
+  const loc = await database.select().from(location).where(eq(location.id, bagRecord.locationId)).get()
   
   // Get all sheets in this bag
-  const sheets = await db.select().from(sheet).where(eq(sheet.bagId, id))
+  const sheets = await database.select().from(sheet).where(eq(sheet.bagId, id))
   
   // Get all papers for all sheets in this bag
   const contents = await Promise.all(
     sheets.map(async (s) => {
-      const papers = await db.select().from(paper).where(eq(paper.sheetId, s.id))
+      const papers = await database.select().from(paper).where(eq(paper.sheetId, s.id))
       const paperEntries = await Promise.all(
         papers.map(async (p) => {
           const containerInfo = await enrichContainer(p.id)
@@ -341,7 +346,7 @@ collections.get('/sheets/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid sheet ID' }, 400)
 
-  const sheetRecord = await db.select().from(sheet).where(eq(sheet.id, id)).get()
+  const sheetRecord = await database.select().from(sheet).where(eq(sheet.id, id)).get()
   if (!sheetRecord) return c.json({ error: 'Sheet not found' }, 404)
 
   // Get location info from parent bag or box
@@ -351,18 +356,18 @@ collections.get('/sheets/:id', async (c) => {
   let parentBag: { id: number; name: string } | null = null
   
   if (sheetRecord.boxId) {
-    const parent = await db.select({ box: box, location: location }).from(box).leftJoin(location, eq(box.locationId, location.id)).where(eq(box.id, sheetRecord.boxId)).get()
+    const parent = await database.select({ box: box, location: location }).from(box).leftJoin(location, eq(box.locationId, location.id)).where(eq(box.id, sheetRecord.boxId)).get()
     locationInfo = parent?.location ?? null
     locationPath = buildLocationPath(locationInfo)
     parentBox = parent?.box ? { id: parent.box.id, name: parent.box.name } : null
   } else if (sheetRecord.bagId) {
-    const parent = await db.select({ bag: bag, location: location }).from(bag).leftJoin(location, eq(bag.locationId, location.id)).where(eq(bag.id, sheetRecord.bagId)).get()
+    const parent = await database.select({ bag: bag, location: location }).from(bag).leftJoin(location, eq(bag.locationId, location.id)).where(eq(bag.id, sheetRecord.bagId)).get()
     locationInfo = parent?.location ?? null
     locationPath = buildLocationPath(locationInfo)
     parentBag = parent?.bag ? { id: parent.bag.id, name: parent.bag.name } : null
   }
 
-  const papers = await db.select().from(paper).where(eq(paper.sheetId, id))
+  const papers = await database.select().from(paper).where(eq(paper.sheetId, id))
   const paperEntries = await Promise.all(
     papers.map(async (p) => {
       const containerInfo = await enrichContainer(p.id)
@@ -402,7 +407,7 @@ collections.post('/check', async (c) => {
     const data = schema.parse(body)
     const results = await Promise.all(
       data.collections.map(async (col) => {
-        const exists = await resolveCollection(col.identifier, col.type)
+        const exists = await resolveCollection(col.identifier, col.type, database)
         return {
           identifier: col.identifier,
           type: col.type,
@@ -432,7 +437,7 @@ collections.post('/plates/micronix', async (c) => {
     const data = schema.parse(body)
     
     // Validate location can contain collections
-    const loc = await db.select().from(location).where(eq(location.id, data.locationId)).get()
+    const loc = await database.select().from(location).where(eq(location.id, data.locationId)).get()
     if (!loc) {
       return c.json({ error: 'Location not found' }, 404)
     }
@@ -440,12 +445,12 @@ collections.post('/plates/micronix', async (c) => {
       return c.json({ error: 'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.' }, 400)
     }
     
-    const existing = await db.select().from(micronixPlate).where(eq(micronixPlate.name, data.name)).get()
+    const existing = await database.select().from(micronixPlate).where(eq(micronixPlate.name, data.name)).get()
     if (existing) return c.json({ error: 'Plate with this name already exists' }, 400)
     
     const now = new Date().toISOString()
     const user = c.get('user')
-    const [newPlate] = await db.insert(micronixPlate).values({
+    const [newPlate] = await database.insert(micronixPlate).values({
       ...data,
       barcode: data.barcode || null,
       created: now,
@@ -474,7 +479,7 @@ collections.post('/boxes/cryovial', async (c) => {
     const data = schema.parse(body)
     
     // Validate location can contain collections
-    const loc = await db.select().from(location).where(eq(location.id, data.locationId)).get()
+    const loc = await database.select().from(location).where(eq(location.id, data.locationId)).get()
     if (!loc) {
       return c.json({ error: 'Location not found' }, 404)
     }
@@ -482,12 +487,12 @@ collections.post('/boxes/cryovial', async (c) => {
       return c.json({ error: 'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.' }, 400)
     }
     
-    const existing = await db.select().from(cryovialBox).where(eq(cryovialBox.name, data.name)).get()
+    const existing = await database.select().from(cryovialBox).where(eq(cryovialBox.name, data.name)).get()
     if (existing) return c.json({ error: 'Cryovial box with this name already exists' }, 400)
     
     const now = new Date().toISOString()
     const user = c.get('user')
-    const [newBox] = await db.insert(cryovialBox).values({
+    const [newBox] = await database.insert(cryovialBox).values({
       ...data,
       barcode: data.barcode || null,
       created: now,
@@ -515,7 +520,7 @@ collections.post('/boxes', async (c) => {
     const data = schema.parse(body)
     
     // Validate location can contain collections
-    const loc = await db.select().from(location).where(eq(location.id, data.locationId)).get()
+    const loc = await database.select().from(location).where(eq(location.id, data.locationId)).get()
     if (!loc) {
       return c.json({ error: 'Location not found' }, 404)
     }
@@ -523,12 +528,12 @@ collections.post('/boxes', async (c) => {
       return c.json({ error: 'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.' }, 400)
     }
     
-    const existing = await db.select().from(box).where(eq(box.name, data.name)).get()
+    const existing = await database.select().from(box).where(eq(box.name, data.name)).get()
     if (existing) return c.json({ error: 'Box with this name already exists' }, 400)
     
     const now = new Date().toISOString()
     const user = c.get('user')
-    const [newBox] = await db.insert(box).values({
+    const [newBox] = await database.insert(box).values({
       ...data,
       created: now,
       lastUpdated: now,
@@ -555,7 +560,7 @@ collections.post('/bags', async (c) => {
     const data = schema.parse(body)
     
     // Validate location can contain collections
-    const loc = await db.select().from(location).where(eq(location.id, data.locationId)).get()
+    const loc = await database.select().from(location).where(eq(location.id, data.locationId)).get()
     if (!loc) {
       return c.json({ error: 'Location not found' }, 404)
     }
@@ -563,12 +568,12 @@ collections.post('/bags', async (c) => {
       return c.json({ error: 'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.' }, 400)
     }
     
-    const existing = await db.select().from(bag).where(eq(bag.name, data.name)).get()
+    const existing = await database.select().from(bag).where(eq(bag.name, data.name)).get()
     if (existing) return c.json({ error: 'Bag with this name already exists' }, 400)
     
     const now = new Date().toISOString()
     const user = c.get('user')
-    const [newBag] = await db.insert(bag).values({
+    const [newBag] = await database.insert(bag).values({
       ...data,
       created: now,
       lastUpdated: now,
@@ -599,7 +604,7 @@ collections.post('/containers/resolve', async (c) => {
     
     const data = schema.parse(body)
     const { resolveContainersByIdentifiers } = await import('../lib/container-move')
-    const containers = await resolveContainersByIdentifiers(data.identifiers)
+    const containers = await resolveContainersByIdentifiers(database, data.identifiers)
     
     const result: Array<{ identifier: any; container: ContainerInfo }> = []
     for (const [key, container] of containers.entries()) {
@@ -642,7 +647,7 @@ collections.get('/list/:type', async (c) => {
 
     switch (type) {
       case 'micronix_plate': {
-        const plates = await db
+        const plates = await database
           .select({
             plate: micronixPlate,
             location: location,
@@ -667,7 +672,7 @@ collections.get('/list/:type', async (c) => {
         break
       }
       case 'cryovial_box': {
-        const boxes = await db
+        const boxes = await database
           .select({
             box: cryovialBox,
             location: location,
@@ -691,7 +696,7 @@ collections.get('/list/:type', async (c) => {
         break
       }
       case 'box': {
-        const boxes = await db
+        const boxes = await database
           .select({
             box: box,
             location: location,
@@ -714,7 +719,7 @@ collections.get('/list/:type', async (c) => {
         break
       }
       case 'bag': {
-        const bags = await db
+        const bags = await database
           .select({
             bag: bag,
             location: location,
@@ -737,7 +742,7 @@ collections.get('/list/:type', async (c) => {
         break
       }
       case 'sheet': {
-        const sheets = await db
+        const sheets = await database
           .select({
             sheet: sheet,
             paperCount: sql<number>`(SELECT COUNT(*) FROM ${paper} WHERE ${paper.sheetId} = ${sheet.id})`,
@@ -779,7 +784,7 @@ collections.post('/containers/move', async (c) => {
     })
     
     const data = schema.parse(body)
-    const result = await executeMoves(data as BatchMoveRequest)
+    const result = await executeMoves(database, data as BatchMoveRequest)
     
     if (!result.success) {
       return c.json({ error: 'Move operation failed', moved: result.moved, errors: result.errors }, 400)
@@ -827,14 +832,14 @@ collections.post('/sheets/move', async (c) => {
 
     // Verify target collection exists
     if (data.targetCollectionType === 'box') {
-      const exists = await db.select().from(box).where(eq(box.id, data.targetCollectionId)).get()
+      const exists = await database.select().from(box).where(eq(box.id, data.targetCollectionId)).get()
       if (!exists) return c.json({ error: 'Target box not found' }, 404)
     } else {
-      const exists = await db.select().from(bag).where(eq(bag.id, data.targetCollectionId)).get()
+      const exists = await database.select().from(bag).where(eq(bag.id, data.targetCollectionId)).get()
       if (!exists) return c.json({ error: 'Target bag not found' }, 404)
     }
 
-    db.transaction((tx) => {
+    await database.transaction(async (tx) => {
       for (const sheetId of data.sheetIds) {
         if (data.targetCollectionType === 'box') {
           tx.update(sheet)
@@ -905,7 +910,7 @@ collections.post('/move', async (c) => {
     }
     const data = result.data
 
-    const moveResult = await executeCollectionMoves(data as CollectionMoveRequest)
+    const moveResult = await executeCollectionMoves(database, data as CollectionMoveRequest)
 
     if (!moveResult.success) {
       return c.json({
@@ -933,4 +938,5 @@ collections.post('/move', async (c) => {
   }
 })
 
-export default collections
+  return collections
+}

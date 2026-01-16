@@ -25,15 +25,14 @@ import { createPlasmidsRoutes } from './routes/plasmids'
 import { createStandardsRoutes } from './routes/standards'
 import { createTagsRoutes } from './routes/tags'
 import { createUnitsRoutes } from './routes/units'
-// TODO: Convert remaining routes to factory functions
-import exportRoutes from './routes/export'
-import searchRoutes from './routes/search'
-import containersRoutes from './routes/containers'
-import derivationsRoutes from './routes/derivations'
-import importsRoutes from './routes/imports'
-import collectionsRoutes from './routes/collections'
-import statisticsRoutes from './routes/statistics'
-import settingsRoutes from './routes/settings'
+import { createExportRoutes } from './routes/export'
+import { createSearchRoutes } from './routes/search'
+import { createContainersRoutes } from './routes/containers'
+import { createDerivationsRoutes } from './routes/derivations'
+import { createImportsRoutes } from './routes/imports'
+import { createCollectionsRoutes } from './routes/collections'
+import { createStatisticsRoutes } from './routes/statistics'
+import { createSettingsRoutes } from './routes/settings'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -119,24 +118,24 @@ app.route('/api/locations', createLocationsRoutes(db, sqlite))
 // Rate limit expensive operations
 const exportApp = new Hono()
 exportApp.use('*', rateLimit(60, 60 * 1000)) // 60 requests per minute (increased from 10)
-exportApp.route('/', exportRoutes)
+exportApp.route('/', createExportRoutes(db))
 app.route('/api/export', exportApp)
 
 const searchApp = new Hono()
 searchApp.use('*', rateLimit(120, 60 * 1000)) // 120 requests per minute (increased from 30)
-searchApp.route('/', searchRoutes)
+searchApp.route('/', createSearchRoutes(db))
 app.route('/api/search', searchApp)
 
-app.route('/api/containers', containersRoutes)
-app.route('/api', derivationsRoutes)
+app.route('/api/containers', createContainersRoutes(db))
+app.route('/api', createDerivationsRoutes(db))
 
 const importsApp = new Hono()
 importsApp.use('*', rateLimit(30, 60 * 1000)) // 30 requests per minute (increased from 5)
-importsApp.route('/', importsRoutes)
+importsApp.route('/', createImportsRoutes(db))
 app.route('/api/imports', importsApp) // Fixed: mount at /api/imports instead of /api
 app.route('/api/subjects', createSubjectsRoutes(db))
 app.route('/api/activity', createActivityRoutes(db))
-app.route('/api/collections', collectionsRoutes)
+app.route('/api/collections', createCollectionsRoutes(db))
 app.route('/api/specimen-types', createSpecimenTypesRoutes(db))
 // States route removed - states deprecated
 app.route('/api/storage-types', createStorageTypesRoutes(db))
@@ -144,9 +143,9 @@ app.route('/api/strains', createStrainsRoutes(db))
 app.route('/api/cell-lines', createCellLinesRoutes(db))
 app.route('/api/plasmids', createPlasmidsRoutes(db))
 app.route('/api/standards', createStandardsRoutes(db))
-app.route('/api/statistics', statisticsRoutes)
+app.route('/api/statistics', createStatisticsRoutes(db, sqlite))
 app.route('/api/tags', createTagsRoutes(db))
-app.route('/api/settings', settingsRoutes)
+app.route('/api/settings', createSettingsRoutes(db))
 app.route('/api/units', createUnitsRoutes(db))
 
 // Serve static files from web build in production

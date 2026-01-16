@@ -1,4 +1,4 @@
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import {
   micronixPlate,
   cryovialBox,
@@ -71,11 +71,11 @@ function buildLocationPath(loc: typeof location.$inferSelect | null | undefined)
  * Note: Users should provide locationId directly. This function is only used
  * for programmatic API calls that provide locationPath strings.
  */
-export async function resolveLocationByPath(locationPath: string): Promise<number | null> {
+export async function resolveLocationByPath(database: Database, locationPath: string): Promise<number | null> {
   if (!locationPath) return null
 
   // Find by exact path match
-  const locByPath = await db
+  const locByPath = await database
     .select({ id: location.id })
     .from(location)
     .where(eq(location.path, locationPath))
@@ -88,6 +88,7 @@ export async function resolveLocationByPath(locationPath: string): Promise<numbe
  * Resolve collection by name and location
  */
 async function resolveCollectionByNameAndLocation(
+  database: Database,
   name: string,
   collectionType: MoveableCollectionType,
   locationId?: number,
@@ -98,18 +99,18 @@ async function resolveCollectionByNameAndLocation(
   if (locationId) {
     resolvedLocationId = locationId
   } else if (locationPath) {
-    resolvedLocationId = await resolveLocationByPath(locationPath)
+    resolvedLocationId = await resolveLocationByPath(database, locationPath)
     if (!resolvedLocationId) return null
   }
 
   switch (collectionType) {
     case 'micronix_plate': {
-      const plates = await db.select().from(micronixPlate).where(eq(micronixPlate.name, name))
+      const plates = await database.select().from(micronixPlate).where(eq(micronixPlate.name, name))
 
       if (plates.length === 0) return null
       if (plates.length === 1) {
         const plate = plates[0]
-        const loc = await db.select().from(location).where(eq(location.id, plate.locationId)).get()
+        const loc = await database.select().from(location).where(eq(location.id, plate.locationId)).get()
         return {
           collectionId: plate.id,
           collectionType: 'micronix_plate',
@@ -128,7 +129,7 @@ async function resolveCollectionByNameAndLocation(
       const plate = plates.find(p => p.locationId === resolvedLocationId)
       if (!plate) return null
 
-      const loc = await db.select().from(location).where(eq(location.id, plate.locationId)).get()
+      const loc = await database.select().from(location).where(eq(location.id, plate.locationId)).get()
       return {
         collectionId: plate.id,
         collectionType: 'micronix_plate',
@@ -140,12 +141,12 @@ async function resolveCollectionByNameAndLocation(
     }
 
     case 'cryovial_box': {
-      const boxes = await db.select().from(cryovialBox).where(eq(cryovialBox.name, name))
+      const boxes = await database.select().from(cryovialBox).where(eq(cryovialBox.name, name))
 
       if (boxes.length === 0) return null
       if (boxes.length === 1) {
         const boxRecord = boxes[0]
-        const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+        const loc = await database.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
         return {
           collectionId: boxRecord.id,
           collectionType: 'cryovial_box',
@@ -164,7 +165,7 @@ async function resolveCollectionByNameAndLocation(
       const boxRecord = boxes.find(b => b.locationId === resolvedLocationId)
       if (!boxRecord) return null
 
-      const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+      const loc = await database.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
       return {
         collectionId: boxRecord.id,
         collectionType: 'cryovial_box',
@@ -176,7 +177,7 @@ async function resolveCollectionByNameAndLocation(
     }
 
     case 'box': {
-      const boxRecord = await db
+      const boxRecord = await database
         .select()
         .from(box)
         .where(eq(box.name, name))
@@ -189,7 +190,7 @@ async function resolveCollectionByNameAndLocation(
         return null // Location mismatch
       }
 
-      const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+      const loc = await database.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
       return {
         collectionId: boxRecord.id,
         collectionType: 'box',
@@ -201,7 +202,7 @@ async function resolveCollectionByNameAndLocation(
     }
 
     case 'bag': {
-      const bagRecord = await db
+      const bagRecord = await database
         .select()
         .from(bag)
         .where(eq(bag.name, name))
@@ -214,7 +215,7 @@ async function resolveCollectionByNameAndLocation(
         return null // Location mismatch
       }
 
-      const loc = await db.select().from(location).where(eq(location.id, bagRecord.locationId)).get()
+      const loc = await database.select().from(location).where(eq(location.id, bagRecord.locationId)).get()
       return {
         collectionId: bagRecord.id,
         collectionType: 'bag',
@@ -233,6 +234,7 @@ async function resolveCollectionByNameAndLocation(
  * Resolve collection by barcode and location
  */
 async function resolveCollectionByBarcodeAndLocation(
+  database: Database,
   barcode: string,
   collectionType: MoveableCollectionType,
   locationId?: number,
@@ -243,13 +245,13 @@ async function resolveCollectionByBarcodeAndLocation(
   if (locationId) {
     resolvedLocationId = locationId
   } else if (locationPath) {
-    resolvedLocationId = await resolveLocationByPath(locationPath)
+    resolvedLocationId = await resolveLocationByPath(database, locationPath)
     if (!resolvedLocationId) return null
   }
 
   switch (collectionType) {
     case 'micronix_plate': {
-      const plate = await db
+      const plate = await database
         .select()
         .from(micronixPlate)
         .where(eq(micronixPlate.barcode, barcode))
@@ -262,7 +264,7 @@ async function resolveCollectionByBarcodeAndLocation(
         return null // Location mismatch
       }
 
-      const loc = await db.select().from(location).where(eq(location.id, plate.locationId)).get()
+      const loc = await database.select().from(location).where(eq(location.id, plate.locationId)).get()
       return {
         collectionId: plate.id,
         collectionType: 'micronix_plate',
@@ -274,7 +276,7 @@ async function resolveCollectionByBarcodeAndLocation(
     }
 
     case 'cryovial_box': {
-      const boxRecord = await db
+      const boxRecord = await database
         .select()
         .from(cryovialBox)
         .where(eq(cryovialBox.barcode, barcode))
@@ -287,7 +289,7 @@ async function resolveCollectionByBarcodeAndLocation(
         return null // Location mismatch
       }
 
-      const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+      const loc = await database.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
       return {
         collectionId: boxRecord.id,
         collectionType: 'cryovial_box',
@@ -308,12 +310,13 @@ async function resolveCollectionByBarcodeAndLocation(
  * Resolve collection by ID
  */
 async function resolveCollectionById(
+  database: Database,
   id: number,
   collectionType: MoveableCollectionType
 ): Promise<CollectionInfo | null> {
   switch (collectionType) {
     case 'micronix_plate': {
-      const plate = await db
+      const plate = await database
         .select()
         .from(micronixPlate)
         .where(eq(micronixPlate.id, id))
@@ -321,7 +324,7 @@ async function resolveCollectionById(
 
       if (!plate) return null
 
-      const loc = await db.select().from(location).where(eq(location.id, plate.locationId)).get()
+      const loc = await database.select().from(location).where(eq(location.id, plate.locationId)).get()
       return {
         collectionId: plate.id,
         collectionType: 'micronix_plate',
@@ -333,7 +336,7 @@ async function resolveCollectionById(
     }
 
     case 'cryovial_box': {
-      const boxRecord = await db
+      const boxRecord = await database
         .select()
         .from(cryovialBox)
         .where(eq(cryovialBox.id, id))
@@ -341,7 +344,7 @@ async function resolveCollectionById(
 
       if (!boxRecord) return null
 
-      const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+      const loc = await database.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
       return {
         collectionId: boxRecord.id,
         collectionType: 'cryovial_box',
@@ -353,7 +356,7 @@ async function resolveCollectionById(
     }
 
     case 'box': {
-      const boxRecord = await db
+      const boxRecord = await database
         .select()
         .from(box)
         .where(eq(box.id, id))
@@ -361,7 +364,7 @@ async function resolveCollectionById(
 
       if (!boxRecord) return null
 
-      const loc = await db.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
+      const loc = await database.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
       return {
         collectionId: boxRecord.id,
         collectionType: 'box',
@@ -373,7 +376,7 @@ async function resolveCollectionById(
     }
 
     case 'bag': {
-      const bagRecord = await db
+      const bagRecord = await database
         .select()
         .from(bag)
         .where(eq(bag.id, id))
@@ -381,7 +384,7 @@ async function resolveCollectionById(
 
       if (!bagRecord) return null
 
-      const loc = await db.select().from(location).where(eq(location.id, bagRecord.locationId)).get()
+      const loc = await database.select().from(location).where(eq(location.id, bagRecord.locationId)).get()
       return {
         collectionId: bagRecord.id,
         collectionType: 'bag',
@@ -400,15 +403,17 @@ async function resolveCollectionById(
  * Resolve collection by identifier
  */
 export async function resolveCollectionByIdentifier(
+  database: Database,
   identifier: CollectionIdentifier,
   collectionType: MoveableCollectionType
 ): Promise<CollectionInfo | null> {
   if (identifier.type === 'id' && identifier.id !== undefined) {
-    return resolveCollectionById(identifier.id, collectionType)
+    return resolveCollectionById(database, identifier.id, collectionType)
   }
 
   if (identifier.type === 'name' && identifier.name) {
     return resolveCollectionByNameAndLocation(
+      database,
       identifier.name,
       collectionType,
       identifier.locationId,
@@ -418,6 +423,7 @@ export async function resolveCollectionByIdentifier(
 
   if (identifier.type === 'barcode' && identifier.barcode) {
     return resolveCollectionByBarcodeAndLocation(
+      database,
       identifier.barcode,
       collectionType,
       identifier.locationId,
@@ -432,11 +438,12 @@ export async function resolveCollectionByIdentifier(
  * Validate collection move
  */
 async function validateCollectionMove(
+  database: Database,
   collectionInfo: CollectionInfo,
   targetLocationId: number
 ): Promise<{ valid: boolean; error?: string }> {
   // Verify target location exists
-  const targetLocation = await db
+  const targetLocation = await database
     .select()
     .from(location)
     .where(eq(location.id, targetLocationId))
@@ -463,6 +470,7 @@ async function validateCollectionMove(
  * Execute collection moves
  */
 export async function executeCollectionMoves(
+  database: Database,
   request: CollectionMoveRequest
 ): Promise<CollectionMoveResult> {
   try {
@@ -473,7 +481,7 @@ export async function executeCollectionMoves(
     // Resolve all collections
     for (let i = 0; i < moves.length; i++) {
       const move = moves[i]
-      const collectionInfo = await resolveCollectionByIdentifier(move.identifier, collectionType)
+      const collectionInfo = await resolveCollectionByIdentifier(database, move.identifier, collectionType)
 
       if (!collectionInfo) {
         errors.push({
@@ -484,7 +492,7 @@ export async function executeCollectionMoves(
       }
 
       // Validate move
-      const validation = await validateCollectionMove(collectionInfo, move.targetLocationId)
+      const validation = await validateCollectionMove(database, collectionInfo, move.targetLocationId)
       if (!validation.valid) {
         errors.push({
           row: i,
@@ -504,7 +512,7 @@ export async function executeCollectionMoves(
     }
 
     // Execute moves in transaction
-    db.transaction((tx) => {
+    await database.transaction(async (tx) => {
       const now = new Date().toISOString()
 
       for (const { collectionInfo, targetLocationId } of validMoves) {

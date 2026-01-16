@@ -1,4 +1,4 @@
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import {
   controlBatch,
   controlDefinition,
@@ -152,12 +152,12 @@ function normalizePosition(position: string | null | undefined): string | null {
 /**
  * Get unit ID by symbol
  */
-async function getUnitIdBySymbol(symbol: string, containerType: ContainerType): Promise<number> {
-  const unitRecord = await db.select().from(unit).where(eq(unit.symbol, symbol)).get()
+async function getUnitIdBySymbol(database: Database, symbol: string, containerType: ContainerType): Promise<number> {
+  const unitRecord = await database.select().from(unit).where(eq(unit.symbol, symbol)).get()
   if (unitRecord) return unitRecord.id as number
   
   // Fallback to default unit
-  return await getDefaultUnit(containerType)
+  return await getDefaultUnit(database, containerType)
 }
 
 /**
@@ -182,18 +182,18 @@ async function createContainer(
   tx: any
 ): Promise<number> {
   // Validate container type is allowed for specimen type
-  const containerTypeValidation = await validateContainerTypeForSpecimenType(specimenTypeId, containerData.type)
+  const containerTypeValidation = await validateContainerTypeForSpecimenType(tx, specimenTypeId, containerData.type)
   if (!containerTypeValidation.valid) {
     throw new Error(containerTypeValidation.error || 'Container type validation failed')
   }
 
   // Get unit
   const unitId = containerData.unitSymbol
-    ? await getUnitIdBySymbol(containerData.unitSymbol, containerData.type)
-    : await getDefaultUnit(containerData.type)
+    ? await getUnitIdBySymbol(tx, containerData.unitSymbol, containerData.type)
+    : await getDefaultUnit(tx, containerData.type)
 
   // Validate unit is allowed for container type
-  const unitValidation = await validateUnitForContainerType(containerData.type, unitId)
+  const unitValidation = await validateUnitForContainerType(tx, containerData.type, unitId)
   if (!unitValidation.valid) {
     throw new Error(unitValidation.error || 'Unit validation failed')
   }
@@ -392,6 +392,7 @@ async function createContainer(
  * Prepare container data - does all async validation and queries outside transaction
  */
 async function prepareContainerData(
+  database: Database,
   specimenTypeId: number,
   containerData: {
     type: 'paper' | 'cryovial_tube' | 'micronix_tube'
@@ -415,18 +416,18 @@ async function prepareContainerData(
   sheetName?: string
 }> {
   // Validate container type is allowed for specimen type
-  const containerTypeValidation = await validateContainerTypeForSpecimenType(specimenTypeId, containerData.type)
+  const containerTypeValidation = await validateContainerTypeForSpecimenType(database, specimenTypeId, containerData.type)
   if (!containerTypeValidation.valid) {
     throw new Error(containerTypeValidation.error || 'Container type validation failed')
   }
 
   // Get unit
   const unitId = containerData.unitSymbol
-    ? await getUnitIdBySymbol(containerData.unitSymbol, containerData.type)
-    : await getDefaultUnit(containerData.type)
+    ? await getUnitIdBySymbol(database, containerData.unitSymbol, containerData.type)
+    : await getDefaultUnit(database, containerData.type)
 
   // Validate unit is allowed for container type
-  const unitValidation = await validateUnitForContainerType(containerData.type, unitId)
+  const unitValidation = await validateUnitForContainerType(database, containerData.type, unitId)
   if (!unitValidation.valid) {
     throw new Error(unitValidation.error || 'Unit validation failed')
   }
@@ -439,8 +440,8 @@ async function prepareContainerData(
 
   if (containerData.type === 'paper') {
     if (containerData.collectionId) {
-      const boxRecord = await db.select().from(box).where(eq(box.id, containerData.collectionId)).get()
-      const bagRecord = await db.select().from(bag).where(eq(bag.id, containerData.collectionId)).get()
+      const boxRecord = await database.select().from(box).where(eq(box.id, containerData.collectionId)).get()
+      const bagRecord = await database.select().from(bag).where(eq(bag.id, containerData.collectionId)).get()
       if (boxRecord) {
         boxId = containerData.collectionId
       } else if (bagRecord) {
@@ -462,8 +463,8 @@ async function prepareContainerData(
           boxId = id
         }
       } else {
-        const existingBox = await db.select().from(box).where(eq(box.name, containerData.collectionName)).get()
-        const existingBag = await db.select().from(bag).where(eq(bag.name, containerData.collectionName)).get()
+        const existingBox = await database.select().from(box).where(eq(box.name, containerData.collectionName)).get()
+        const existingBag = await database.select().from(bag).where(eq(bag.name, containerData.collectionName)).get()
         
         if (existingBox && !isBag) {
           boxId = existingBox.id
@@ -490,7 +491,7 @@ async function prepareContainerData(
     if (boxId || bagId) {
       if (containerData.sheetName) {
         // Look for sheet by name within the box/bag
-        const existingSheet = await db
+        const existingSheet = await database
           .select()
           .from(sheet)
           .where(
@@ -507,7 +508,7 @@ async function prepareContainerData(
         // Otherwise will create in transaction with the specified name
       } else {
         // Fallback to old behavior: find any sheet in box/bag
-        const existingSheet = await db
+        const existingSheet = await database
           .select()
           .from(sheet)
           .where(
@@ -533,7 +534,7 @@ async function prepareContainerData(
       if (collectionMap.has(key)) {
         collectionId = collectionMap.get(key)!
       } else {
-        const existing = await db.select().from(cryovialBox).where(eq(cryovialBox.name, containerData.collectionName)).get()
+        const existing = await database.select().from(cryovialBox).where(eq(cryovialBox.name, containerData.collectionName)).get()
         if (existing) {
           collectionId = existing.id
           collectionMap.set(key, collectionId)
@@ -552,7 +553,7 @@ async function prepareContainerData(
       if (collectionMap.has(key)) {
         collectionId = collectionMap.get(key)!
       } else {
-        const existing = await db.select().from(micronixPlate).where(eq(micronixPlate.name, containerData.collectionName)).get()
+        const existing = await database.select().from(micronixPlate).where(eq(micronixPlate.name, containerData.collectionName)).get()
         if (existing) {
           collectionId = existing.id
           collectionMap.set(key, collectionId)
@@ -810,6 +811,7 @@ function createContainerSync(
  * Create batch with specimens and containers
  */
 export async function createBatchWithSpecimens(
+  database: Database,
   data: CreateBatchWithSpecimensRequest
 ): Promise<{
   batch: any
@@ -821,7 +823,7 @@ export async function createBatchWithSpecimens(
   const createdCollections: CreatedCollection[] = []
 
   // Validate and generate unique batch name before transaction
-  const definition = await db
+  const definition = await database
     .select()
     .from(controlDefinition)
     .where(eq(controlDefinition.id, data.batch.controlDefinitionId))
@@ -834,14 +836,14 @@ export async function createBatchWithSpecimens(
   let batchName: string
   if (data.batch.name) {
     // Validate provided name
-    const nameValidation = await validateControlBatchName(data.batch.name)
+    const nameValidation = await validateControlBatchName(database, data.batch.name)
     if (!nameValidation.valid) {
       throw new Error(nameValidation.error || 'Batch name must be unique')
     }
     batchName = data.batch.name
   } else {
     // Auto-generate unique name using definition name + production date
-    batchName = await generateUniqueBatchName(definition.name, data.batch.productionDate)
+    batchName = await generateUniqueBatchName(database, definition.name, data.batch.productionDate)
   }
 
   // Prepare collections
@@ -851,16 +853,16 @@ export async function createBatchWithSpecimens(
       // Check if exists
       let collectionId: number | undefined
       if (coll.type === 'box') {
-        const existing = await db.select().from(box).where(eq(box.name, coll.name)).get()
+        const existing = await database.select().from(box).where(eq(box.name, coll.name)).get()
         if (existing) collectionId = existing.id
       } else if (coll.type === 'bag') {
-        const existing = await db.select().from(bag).where(eq(bag.name, coll.name)).get()
+        const existing = await database.select().from(bag).where(eq(bag.name, coll.name)).get()
         if (existing) collectionId = existing.id
       } else if (coll.type === 'micronix_plate') {
-        const existing = await db.select().from(micronixPlate).where(eq(micronixPlate.name, coll.name)).get()
+        const existing = await database.select().from(micronixPlate).where(eq(micronixPlate.name, coll.name)).get()
         if (existing) collectionId = existing.id
       } else if (coll.type === 'cryovial_box') {
-        const existing = await db.select().from(cryovialBox).where(eq(cryovialBox.name, coll.name)).get()
+        const existing = await database.select().from(cryovialBox).where(eq(cryovialBox.name, coll.name)).get()
         if (existing) collectionId = existing.id
       }
 
@@ -888,7 +890,7 @@ export async function createBatchWithSpecimens(
   }> = []
 
   for (const specData of data.specimens) {
-    const specType = await db
+    const specType = await database
       .select()
       .from(specimenType)
       .where(eq(specimenType.name, specData.specimenTypeName))
@@ -909,7 +911,7 @@ export async function createBatchWithSpecimens(
     const preparedContainers = []
     for (const containerData of specData.containers) {
       try {
-        const prepared = await prepareContainerData(plainSpecType.id, containerData, collectionMap)
+        const prepared = await prepareContainerData(database, plainSpecType.id, containerData, collectionMap)
         preparedContainers.push({ containerData, prepared })
       } catch (error: any) {
         console.error('Error preparing container:', error)
@@ -921,7 +923,7 @@ export async function createBatchWithSpecimens(
   }
 
   // Now do all writes in a synchronous transaction
-  return db.transaction((tx) => {
+  return database.transaction((tx) => {
     // Create collections that don't exist yet
     if (data.createCollections) {
       for (let i = 0; i < data.createCollections.length; i++) {
@@ -1088,6 +1090,7 @@ export async function createBatchWithSpecimens(
  * Add specimens to existing batch
  */
 export async function addSpecimensToBatch(
+  database: Database,
   batchId: number,
   data: Omit<CreateBatchWithSpecimensRequest, 'batch'>
 ): Promise<{
@@ -1095,7 +1098,7 @@ export async function addSpecimensToBatch(
   createdCollections: CreatedCollection[]
 }> {
   // Verify batch exists (async, outside transaction)
-  const existingBatch = await db
+  const existingBatch = await database
     .select()
     .from(controlBatch)
     .where(eq(controlBatch.id, batchId))
@@ -1116,16 +1119,16 @@ export async function addSpecimensToBatch(
       // Check if exists
       let collectionId: number | undefined
       if (coll.type === 'box') {
-        const existing = await db.select().from(box).where(eq(box.name, coll.name)).get()
+        const existing = await database.select().from(box).where(eq(box.name, coll.name)).get()
         if (existing) collectionId = existing.id
       } else if (coll.type === 'bag') {
-        const existing = await db.select().from(bag).where(eq(bag.name, coll.name)).get()
+        const existing = await database.select().from(bag).where(eq(bag.name, coll.name)).get()
         if (existing) collectionId = existing.id
       } else if (coll.type === 'micronix_plate') {
-        const existing = await db.select().from(micronixPlate).where(eq(micronixPlate.name, coll.name)).get()
+        const existing = await database.select().from(micronixPlate).where(eq(micronixPlate.name, coll.name)).get()
         if (existing) collectionId = existing.id
       } else if (coll.type === 'cryovial_box') {
-        const existing = await db.select().from(cryovialBox).where(eq(cryovialBox.name, coll.name)).get()
+        const existing = await database.select().from(cryovialBox).where(eq(cryovialBox.name, coll.name)).get()
         if (existing) collectionId = existing.id
       }
 
@@ -1153,7 +1156,7 @@ export async function addSpecimensToBatch(
   }> = []
 
   for (const specData of data.specimens) {
-    const specType = await db
+    const specType = await database
       .select()
       .from(specimenType)
       .where(eq(specimenType.name, specData.specimenTypeName))
@@ -1174,7 +1177,7 @@ export async function addSpecimensToBatch(
     const preparedContainers = []
     for (const containerData of specData.containers) {
       try {
-        const prepared = await prepareContainerData(plainSpecType.id, containerData, collectionMap)
+        const prepared = await prepareContainerData(database, plainSpecType.id, containerData, collectionMap)
         preparedContainers.push({ containerData, prepared })
       } catch (error: any) {
         console.error('Error preparing container:', error)
@@ -1186,7 +1189,7 @@ export async function addSpecimensToBatch(
   }
 
   // Now do all writes in a synchronous transaction
-  return db.transaction((tx) => {
+  return database.transaction((tx) => {
     // Create collections that don't exist yet
     if (data.createCollections) {
       for (let i = 0; i < data.createCollections.length; i++) {

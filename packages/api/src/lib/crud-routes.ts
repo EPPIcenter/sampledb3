@@ -6,7 +6,7 @@ import type { InferSelectModel } from 'drizzle-orm'
 import type { Database } from '../db/client'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from './error-handler'
 import { listResponse, successResponse, createdResponse } from './response-helpers'
-import { adminMiddleware } from '../middleware/auth'
+import { createAdminMiddleware } from '../middleware/auth'
 
 export interface CrudRouteConfig<
   TTable extends SQLiteTable,
@@ -128,6 +128,7 @@ export function createCrudRoutes<
   const updateSchema = (providedUpdateSchema || createSchema) as z.ZodType<TUpdate>
 
   const routes = new Hono()
+  const adminMiddleware = createAdminMiddleware(database)
 
   // GET / - List all
   routes.get('/', async (c) => {

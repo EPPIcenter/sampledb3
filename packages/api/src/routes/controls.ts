@@ -1569,7 +1569,7 @@ controls.post('/batches/suggest-name', async (c) => {
       return c.json({ error: 'Control definition not found' }, 404)
     }
     
-    const suggestedName = await generateUniqueBatchName(definition.name, data.productionDate)
+    const suggestedName = await generateUniqueBatchName(dbInstance, definition.name, data.productionDate)
     
     return c.json({ name: suggestedName })
   } catch (error: any) {
@@ -1625,7 +1625,7 @@ controls.post('/:id/batches', async (c) => {
       batchName = data.name
     } else {
       // Auto-generate unique name using definition name + production date
-      batchName = await generateUniqueBatchName(definition.name, data.productionDate)
+      batchName = await generateUniqueBatchName(dbInstance, definition.name, data.productionDate)
     }
     
     const user = c.get('user')
@@ -1654,7 +1654,7 @@ controls.post('/:id/batches', async (c) => {
         .from(controlDefinition)
         .where(eq(controlDefinition.id, definitionId))
         .get()
-      const suggestion = def ? await generateUniqueBatchName(def.name, body.productionDate).catch(() => undefined) : undefined
+      const suggestion = def ? await generateUniqueBatchName(dbInstance, def.name, body.productionDate).catch(() => undefined) : undefined
       return c.json({ 
         error: 'Batch name already exists',
         suggestion
@@ -1669,7 +1669,7 @@ controls.post('/batches/create-with-specimens', async (c) => {
   try {
     const body = await c.req.json()
     const { createBatchWithSpecimens } = await import('../lib/control-batch-creation')
-    const result = await createBatchWithSpecimens(body)
+    const result = await createBatchWithSpecimens(dbInstance, body)
     return c.json(result, 201)
   } catch (error) {
     return handleRouteError(error, c)
@@ -1684,7 +1684,7 @@ controls.post('/batches/:id/specimens/bulk', async (c) => {
 
     const body = await c.req.json()
     const { addSpecimensToBatch } = await import('../lib/control-batch-creation')
-    const result = await addSpecimensToBatch(batchId, body)
+    const result = await addSpecimensToBatch(dbInstance, batchId, body)
     return c.json(result, 201)
   } catch (error: any) {
     console.error('Error adding specimens to batch:', error)

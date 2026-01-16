@@ -7,10 +7,28 @@ import { z } from 'zod'
 import { nanoid } from 'nanoid'
 import type { Database } from '../db/client'
 import { getPasswordRequirements, getSessionSettings } from '../lib/settings'
-import { authMiddleware, adminMiddleware } from '../middleware/auth'
+import { createAuthMiddleware, createAdminMiddleware } from '../middleware/auth'
 
-export function createAuthRoutes(database: Database) {
+export function createAuthRoutes(database: Database, settingsDb?: Database) {
   const auth = new Hono()
+  // Use settingsDb if provided (for tests), otherwise use the passed database
+  const dbForSettings = settingsDb || database
+  
+  // Create middleware with the test database
+  const authMiddleware = createAuthMiddleware(database)
+  const adminMiddleware = createAdminMiddleware(database)
+
+  // Helper to get password requirements from the correct database
+  const getPasswordRequirementsFromDb = async () => {
+    const dbForSettings = settingsDb || database
+    return await getPasswordRequirements(dbForSettings)
+  }
+
+  // Helper to get session settings from the correct database
+  const getSessionSettingsFromDb = async () => {
+    const dbForSettings = settingsDb || database
+    return await getSessionSettings(dbForSettings)
+  }
 
 const loginSchema = z.object({
   emailOrUsername: z.string().min(1),
@@ -19,7 +37,7 @@ const loginSchema = z.object({
 
 // Dynamic register schema - password min length will be set based on settings
 const createRegisterSchema = async () => {
-  const passwordRequirements = await getPasswordRequirements()
+  const passwordRequirements = await getPasswordRequirementsFromDb()
   if (!passwordRequirements) {
     throw new Error('Password requirements are not configured. Please run database initialization.')
   }
@@ -62,7 +80,7 @@ auth.post('/login', async (c) => {
     }
 
     // Get session settings
-    const sessionSettings = await getSessionSettings()
+    const sessionSettings = await getSessionSettingsFromDb()
     if (!sessionSettings) {
       return c.json({ error: 'Session settings are not configured. Please run database initialization.' }, 500)
     }
@@ -339,7 +357,7 @@ auth.patch('/me/password', authMiddleware, async (c) => {
     const { currentPassword, newPassword } = schema.parse(body)
 
     // Get password requirements
-    const passwordRequirements = await getPasswordRequirements()
+    const passwordRequirements = await getPasswordRequirementsFromDb()
     if (!passwordRequirements) {
       return c.json({ error: 'Password requirements are not configured' }, 500)
     }
@@ -462,7 +480,7 @@ auth.post('/switch', authMiddleware, async (c) => {
     }
     
     // Get session settings
-    const sessionSettings = await getSessionSettings()
+    const sessionSettings = await getSessionSettingsFromDb()
     if (!sessionSettings) {
       return c.json({ error: 'Session settings are not configured. Please run database initialization.' }, 500)
     }
@@ -637,7 +655,7 @@ auth.patch('/users/:id/password', adminMiddleware, async (c) => {
     const { password } = schema.parse(body)
 
     // Get password requirements
-    const passwordRequirements = await getPasswordRequirements()
+    const passwordRequirements = await getPasswordRequirementsFromDb()
     if (!passwordRequirements) {
       return c.json({ error: 'Password requirements are not configured' }, 500)
     }

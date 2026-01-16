@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import {
   specimen,
   studySubject,
@@ -32,7 +32,12 @@ import {
 import { resolveSubjectNamesByStudy } from '../lib/identifier-resolution'
 import { resolveStudyByShortCode } from '../lib/identifier-resolution'
 
-const export_ = new Hono()
+/**
+ * Create export routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createExportRoutes(database: Database): Hono {
+  const export_ = new Hono()
 
 // Export specimens as CSV
 export_.get('/specimens.csv', async (c) => {
@@ -40,7 +45,7 @@ export_.get('/specimens.csv', async (c) => {
     const studyCode = c.req.query('study')
     const sourceType = c.req.query('source_type')
     
-    let query = db
+    let query = database
       .select({
         id: specimen.id,
         studySubjectId: specimen.studySubjectId,
@@ -61,14 +66,14 @@ export_.get('/specimens.csv', async (c) => {
     }
     
     if (studyCode) {
-      const studyRecord = await db
+      const studyRecord = await database
         .select()
         .from(study)
         .where(eq(study.shortCode, studyCode))
         .get()
       
       if (studyRecord) {
-        const subjects = await db
+        const subjects = await database
           .select({ id: studySubject.id })
           .from(studySubject)
           .where(eq(studySubject.studyId, studyRecord.id))
@@ -119,7 +124,7 @@ export_.get('/specimens.csv', async (c) => {
 export_.get('/inventory.csv', async (c) => {
   try {
     // Get all specimens
-    const allSpecimens = await db
+    const allSpecimens = await database
       .select({
         studySubjectId: specimen.studySubjectId,
         controlBatchId: specimen.controlBatchId,
@@ -212,7 +217,7 @@ export_.get('/containers', async (c) => {
     // Build query and get containers
     let containers, study, specimens
     try {
-      const result = await buildContainerQuery(filters)
+      const result = await buildContainerQuery(database, filters)
       containers = result.containers
       study = result.study
       specimens = result.specimens
@@ -229,14 +234,14 @@ export_.get('/containers', async (c) => {
       let filteredContainers = containers
       if (filters.container_types && filters.container_types.length > 0) {
         const containerIds = containers.map(c => c.id)
-        const matchingIds = await filterContainersByType(containerIds, filters.container_types)
+        const matchingIds = await filterContainersByType(database, containerIds, filters.container_types)
         filteredContainers = containers.filter(c => matchingIds.includes(c.id))
       }
       return c.json({ count: filteredContainers.length })
     }
 
     // Enrich container data (this also applies container type filtering)
-    const enrichedData = await enrichContainerData(containers, specimens || [], study, filters.container_types, undefined)
+    const enrichedData = await enrichContainerData(database, containers, specimens || [], study, filters.container_types, undefined)
 
     // Determine format
     const format = (c.req.query('format') || 'csv') as 'csv' | 'xlsx' | 'json'
@@ -246,21 +251,21 @@ export_.get('/containers', async (c) => {
     const filename = `study_${study.shortCode}_export_${timestamp}`
 
     if (format === 'json') {
-      const jsonData = await formatAsJSON(enrichedData, filters, study, configName)
+      const jsonData = await formatAsJSON(database, enrichedData, filters, study, configName)
       c.header('Content-Type', 'application/json')
       c.header('Content-Disposition', `attachment; filename="${filename}.json"`)
       return c.json(jsonData)
     }
 
     if (format === 'csv') {
-      const csv = await formatAsCSV(enrichedData, configName)
+      const csv = await formatAsCSV(database, enrichedData, configName)
       c.header('Content-Type', 'text/csv')
       c.header('Content-Disposition', `attachment; filename="${filename}.csv"`)
       return c.text(csv)
     }
 
     if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(enrichedData, configName)
+      const excelBuffer = await formatAsExcel(database, enrichedData, configName)
       c.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       c.header('Content-Disposition', `attachment; filename="${filename}.xlsx"`)
       return c.body(new Uint8Array(excelBuffer), 200, {
@@ -285,7 +290,7 @@ export_.post('/containers', async (c) => {
     }
 
     // Resolve study
-    const studyId = await resolveStudyByShortCode(studyCode)
+    const studyId = await resolveStudyByShortCode(database, studyCode)
     if (!studyId) {
       return c.json({ error: 'Study not found' }, 404)
     }
@@ -297,7 +302,7 @@ export_.post('/containers', async (c) => {
     }
 
     // Resolve subject names to IDs
-    const subjectNameToId = await resolveSubjectNamesByStudy(subjectNames, studyId)
+    const subjectNameToId = await resolveSubjectNamesByStudy(database, subjectNames, studyId)
     const subjectIds = Array.from(subjectNameToId.values())
     
     // Build subject ID to name map
@@ -369,7 +374,7 @@ export_.post('/containers', async (c) => {
     // Build query and get containers
     let containers, study, specimens
     try {
-      const result = await buildContainerQuery(filters)
+      const result = await buildContainerQuery(database, filters)
       containers = result.containers
       study = result.study
       specimens = result.specimens
@@ -382,7 +387,7 @@ export_.post('/containers', async (c) => {
       let filteredContainers = containers
       if (filters.container_types && filters.container_types.length > 0) {
         const containerIds = containers.map(c => c.id)
-        const matchingIds = await filterContainersByType(containerIds, filters.container_types)
+        const matchingIds = await filterContainersByType(database, containerIds, filters.container_types)
         filteredContainers = containers.filter(c => matchingIds.includes(c.id))
       }
       
@@ -399,7 +404,7 @@ export_.post('/containers', async (c) => {
     }
 
     // Enrich container data
-    const enrichedData = await enrichContainerData(containers, specimens || [], study, filters.container_types, undefined)
+    const enrichedData = await enrichContainerData(database, containers, specimens || [], study, filters.container_types, undefined)
 
     // Build summary
     const summary = await buildExportSummary(
@@ -418,7 +423,7 @@ export_.post('/containers', async (c) => {
     const filename = `study_${study.shortCode}_export_${timestamp}`
 
     if (format === 'json') {
-      const jsonData = await formatAsJSON(enrichedData, filters, study, configName)
+      const jsonData = await formatAsJSON(database, enrichedData, filters, study, configName)
       return c.json({
         summary,
         data: jsonData.containers,
@@ -428,7 +433,7 @@ export_.post('/containers', async (c) => {
     }
 
         if (format === 'csv') {
-          const csv = await formatAsCSV(enrichedData, configName)
+          const csv = await formatAsCSV(database, enrichedData, configName)
           const base64Csv = Buffer.from(csv).toString('base64')
       return c.json({
         summary,
@@ -439,7 +444,7 @@ export_.post('/containers', async (c) => {
     }
 
     if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(enrichedData, configName)
+      const excelBuffer = await formatAsExcel(database, enrichedData, configName)
       const base64Excel = excelBuffer.toString('base64')
       return c.json({
         summary,
@@ -465,7 +470,7 @@ export_.get('/available-types', async (c) => {
     }
 
     // Get the study
-    const studyRecord = await db
+    const studyRecord = await database
       .select()
       .from(study)
       .where(eq(study.shortCode, studyCode))
@@ -476,7 +481,7 @@ export_.get('/available-types', async (c) => {
     }
 
     // Get subject IDs for this study
-    const subjects = await db
+    const subjects = await database
       .select({ id: studySubject.id })
       .from(studySubject)
       .where(eq(studySubject.studyId, studyRecord.id))
@@ -490,7 +495,7 @@ export_.get('/available-types', async (c) => {
     }
 
     // Get specimens for this study
-    let specimensQuery = db
+    let specimensQuery = database
       .select({
         id: specimen.id,
         specimenTypeId: specimen.specimenTypeId,
@@ -519,13 +524,13 @@ export_.get('/available-types', async (c) => {
 
     // Get unique specimen type IDs
     const specimenTypeIds = [...new Set(specimens.map(s => s.specimenTypeId))]
-    const specimenTypes = await db
+    const specimenTypes = await database
       .select()
       .from(specimenType)
       .where(inArray(specimenType.id, specimenTypeIds))
 
     // Get containers for these specimens
-    const containers = await db
+    const containers = await database
       .select({ id: storageContainer.id })
       .from(storageContainer)
       .where(inArray(storageContainer.specimenId, specimenIds))
@@ -540,10 +545,10 @@ export_.get('/available-types', async (c) => {
 
     // Check which container types exist
     const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
-      db.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, containerIds)),
-      db.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, containerIds)),
-      db.select({ id: paper.id }).from(paper).where(inArray(paper.id, containerIds)),
-      db.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, containerIds)),
+      database.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, containerIds)),
+      database.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, containerIds)),
+      database.select({ id: paper.id }).from(paper).where(inArray(paper.id, containerIds)),
+      database.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, containerIds)),
     ])
 
     const containerTypes: string[] = []
@@ -572,7 +577,7 @@ export_.post('/containers/validate-studies', async (c) => {
       return c.json({ error: 'study_codes array is required' }, 400)
     }
     
-    const validation = await validateStudyCodes(studyCodes)
+    const validation = await validateStudyCodes(database, studyCodes)
     
     return c.json({
       valid: Array.from(validation.valid.entries()).map(([code, id]) => ({
@@ -637,7 +642,7 @@ export_.post('/containers/multi-study', async (c) => {
     const countOnly = body.count_only === true
     
     // Build multi-study query
-    const result = await buildMultiStudyContainerQuery(entries as MultiStudyExportEntry[], filters, dateTolerance)
+    const result = await buildMultiStudyContainerQuery(database, entries as MultiStudyExportEntry[], filters, dateTolerance)
     
     if (countOnly) {
       return c.json({
@@ -659,7 +664,7 @@ export_.post('/containers/multi-study', async (c) => {
         ? Array.from(result.studies.values())[0]
         : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', description: null, leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '', createdBy: null, updatedBy: null }
       const dummyFilters: ExportFilters = { study: 'MULTI' }
-      const jsonData = await formatAsJSON(result.containers, dummyFilters, firstStudy, configName)
+      const jsonData = await formatAsJSON(database, result.containers, dummyFilters, firstStudy, configName)
       return c.json({
         summary: result.summary,
         data: jsonData.containers,
@@ -669,7 +674,7 @@ export_.post('/containers/multi-study', async (c) => {
     }
     
         if (format === 'csv') {
-          const csv = await formatAsCSV(result.containers, configName)
+          const csv = await formatAsCSV(database, result.containers, configName)
           const base64Csv = Buffer.from(csv).toString('base64')
       return c.json({
         summary: result.summary,
@@ -680,7 +685,7 @@ export_.post('/containers/multi-study', async (c) => {
     }
     
     if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(result.containers, configName)
+      const excelBuffer = await formatAsExcel(database, result.containers, configName)
       const base64Excel = excelBuffer.toString('base64')
       return c.json({
         summary: result.summary,
@@ -708,7 +713,7 @@ export_.post('/containers/by-barcodes', async (c) => {
     }
 
     // Resolve barcodes to container IDs (only micronix tubes)
-    const barcodeToContainerId = await resolveMicronixBarcodesToContainers(barcodes)
+    const barcodeToContainerId = await resolveMicronixBarcodesToContainers(database, barcodes)
     const containerIds = Array.from(barcodeToContainerId.values())
     
     // Track which barcodes were found/not found
@@ -733,7 +738,7 @@ export_.post('/containers/by-barcodes', async (c) => {
     // Build query to get containers with specimen/subject data
     let containers, specimens, studies, subjectToStudyMap
     try {
-      const result = await buildContainerQueryByMicronixBarcodes(containerIds)
+      const result = await buildContainerQueryByMicronixBarcodes(database, containerIds)
       containers = result.containers
       specimens = result.specimens
       studies = result.studies
@@ -762,7 +767,7 @@ export_.post('/containers/by-barcodes', async (c) => {
       ? studies[0] 
       : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', description: null, leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '', createdBy: null, updatedBy: null }
     
-    const enrichedData = await enrichContainerData(containers, specimens, firstStudy, undefined, subjectToStudyMap)
+    const enrichedData = await enrichContainerData(database, containers, specimens, firstStudy, undefined, subjectToStudyMap)
 
     // Build summary
     const summary = {
@@ -780,7 +785,7 @@ export_.post('/containers/by-barcodes', async (c) => {
     if (format === 'json') {
       const dummyFilters: ExportFilters = { study: 'MULTI' }
       const studyWithDescription = firstStudy.description !== undefined ? firstStudy : { ...firstStudy, description: null as string | null }
-      const jsonData = await formatAsJSON(enrichedData, dummyFilters, studyWithDescription, configName)
+      const jsonData = await formatAsJSON(database, enrichedData, dummyFilters, studyWithDescription, configName)
       return c.json({
         summary,
         data: jsonData.containers,
@@ -790,7 +795,7 @@ export_.post('/containers/by-barcodes', async (c) => {
     }
 
     if (format === 'csv') {
-      const csv = await formatAsCSV(enrichedData, configName)
+      const csv = await formatAsCSV(database, enrichedData, configName)
       const base64Csv = Buffer.from(csv).toString('base64')
       return c.json({
         summary,
@@ -801,7 +806,7 @@ export_.post('/containers/by-barcodes', async (c) => {
     }
 
     if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(enrichedData, configName)
+      const excelBuffer = await formatAsExcel(database, enrichedData, configName)
       const base64Excel = excelBuffer.toString('base64')
       return c.json({
         summary,
@@ -818,4 +823,5 @@ export_.post('/containers/by-barcodes', async (c) => {
   }
 })
 
-export default export_
+  return export_
+}

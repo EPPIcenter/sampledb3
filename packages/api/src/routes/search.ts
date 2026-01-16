@@ -1,9 +1,14 @@
 import { Hono } from 'hono'
-import { db } from '../db/client'
+import type { Database } from '../db/client'
 import { specimen, study, studySubject, micronixTube, cryovialTube, micronixPlate, cryovialBox, box, bag, location, controlBatch, controlDefinition, type Location } from '../db/schema'
 import { eq, or, like, sql } from 'drizzle-orm'
 
-const search = new Hono()
+/**
+ * Create search routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createSearchRoutes(database: Database): Hono {
+  const search = new Hono()
 
 // Unified search endpoint
 search.get('/', async (c) => {
@@ -36,7 +41,7 @@ search.get('/', async (c) => {
     if (searchTypes.includes('specimen') || searchTypes.includes('all')) {
       const queryNum = parseInt(query)
       if (!isNaN(queryNum)) {
-        const specimens = await db
+        const specimens = await database
           .select({
             id: specimen.id,
             studySubjectId: specimen.studySubjectId,
@@ -65,7 +70,7 @@ search.get('/', async (c) => {
     // Search containers by barcode (micronix, cryovial, etc.)
     if (searchTypes.includes('container') || searchTypes.includes('all')) {
       // Search micronix tubes by barcode
-      const micronixTubes = await db
+      const micronixTubes = await database
         .select({
           id: micronixTube.id,
           barcode: micronixTube.barcode,
@@ -91,7 +96,7 @@ search.get('/', async (c) => {
       }
 
       // Search cryovial tubes by barcode
-      const cryovialTubes = await db
+      const cryovialTubes = await database
         .select({
           id: cryovialTube.id,
           barcode: cryovialTube.barcode,
@@ -120,7 +125,7 @@ search.get('/', async (c) => {
       const queryNum = parseInt(query)
       if (!isNaN(queryNum)) {
         // Check if it's a micronix tube ID
-        const micronixById = await db
+        const micronixById = await database
           .select()
           .from(micronixTube)
           .where(eq(micronixTube.id, queryNum))
@@ -138,7 +143,7 @@ search.get('/', async (c) => {
           })
         } else {
           // Check if it's a cryovial tube ID
-          const cryovialById = await db
+          const cryovialById = await database
             .select()
             .from(cryovialTube)
             .where(eq(cryovialTube.id, queryNum))
@@ -161,7 +166,7 @@ search.get('/', async (c) => {
 
     // Search studies by code or title
     if (searchTypes.includes('study') || searchTypes.includes('all')) {
-      const studies = await db
+      const studies = await database
         .select()
         .from(study)
         .where(
@@ -186,7 +191,7 @@ search.get('/', async (c) => {
 
     // Search subjects by name
     if (searchTypes.includes('subject') || searchTypes.includes('all')) {
-      const subjects = await db
+      const subjects = await database
         .select({
           id: studySubject.id,
           name: studySubject.name,
@@ -216,7 +221,7 @@ search.get('/', async (c) => {
       const isNumeric = !isNaN(queryNum)
 
       // Search micronix plates by name or barcode
-      const micronixPlates = await db
+      const micronixPlates = await database
         .select({
           id: micronixPlate.id,
           name: micronixPlate.name,
@@ -256,7 +261,7 @@ search.get('/', async (c) => {
       }
 
       // Search cryovial boxes by name or barcode
-      const cryovialBoxes = await db
+      const cryovialBoxes = await database
         .select({
           id: cryovialBox.id,
           name: cryovialBox.name,
@@ -296,7 +301,7 @@ search.get('/', async (c) => {
       }
 
       // Search boxes by name
-      const boxes = await db
+      const boxes = await database
         .select({
           id: box.id,
           name: box.name,
@@ -327,7 +332,7 @@ search.get('/', async (c) => {
       }
 
       // Search bags by name
-      const bags = await db
+      const bags = await database
         .select({
           id: bag.id,
           name: bag.name,
@@ -358,7 +363,7 @@ search.get('/', async (c) => {
       }
 
       // Search control batches by name
-      const controlBatches = await db
+      const controlBatches = await database
         .select({
           id: controlBatch.id,
           name: controlBatch.name,
@@ -408,4 +413,5 @@ search.get('/', async (c) => {
   }
 })
 
-export default search
+  return search
+}

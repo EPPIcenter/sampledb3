@@ -1,8 +1,14 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
+import type { Database } from '../db/client'
 import { importDerivationsFromCsv, validateDerivationsCsv, type BulkDerivationSettings } from '../lib/derivations-csv'
 
-const imports = new Hono()
+/**
+ * Create imports routes with database injection
+ * @param database - Database instance (required)
+ */
+export function createImportsRoutes(database: Database): Hono {
+  const imports = new Hono()
 
 const bulkDerivationSettingsSchema = z.object({
   derivationType: z.string(),
@@ -30,7 +36,7 @@ imports.post('/derivations-csv', async (c) => {
     })
     const data = schema.parse(body)
 
-    const result = await importDerivationsFromCsv(data.csv, { 
+    const result = await importDerivationsFromCsv(database, data.csv, { 
       dryRun: data.dryRun,
       settings: data.settings,
     })
@@ -55,7 +61,7 @@ imports.post('/derivations-csv/validate', async (c) => {
     })
     const data = schema.parse(body)
 
-    const result = await validateDerivationsCsv(data.csv, data.settings)
+    const result = await validateDerivationsCsv(database, data.csv, data.settings)
     return c.json(result)
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -66,6 +72,7 @@ imports.post('/derivations-csv/validate', async (c) => {
   }
 })
 
-export default imports
+  return imports
+}
 
 

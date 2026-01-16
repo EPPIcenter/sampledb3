@@ -1,12 +1,13 @@
-import { db, sqlite } from '../db/client'
+import type { Database } from '../db/client'
+import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { location, micronixPlate, cryovialBox, box, bag } from '../db/schema'
 import { eq, sql, and, isNull, isNotNull, inArray } from 'drizzle-orm'
 
 /**
  * Build full path string for a location by walking up the parent chain
  */
-export async function buildLocationPath(locationId: number): Promise<string | null> {
-  const stmt = sqlite.prepare(`
+export async function buildLocationPath(sqliteDatabase: SQLiteDatabase, locationId: number): Promise<string | null> {
+  const stmt = sqliteDatabase.prepare(`
     WITH RECURSIVE location_paths AS (
       -- Base case: start with the location
       SELECT id, parent_id, name, name as path, 0 as depth
@@ -32,8 +33,8 @@ export async function buildLocationPath(locationId: number): Promise<string | nu
 /**
  * Get all ancestors of a location (parent, grandparent, etc.)
  */
-export async function getLocationAncestors(locationId: number): Promise<typeof location.$inferSelect[]> {
-  const stmt = sqlite.prepare(`
+export async function getLocationAncestors(sqliteDatabase: SQLiteDatabase, locationId: number): Promise<typeof location.$inferSelect[]> {
+  const stmt = sqliteDatabase.prepare(`
     WITH RECURSIVE location_ancestors AS (
       -- Base case: get the location's parent
       SELECT id, parent_id, name, storage_type_id, description, 
@@ -61,8 +62,8 @@ export async function getLocationAncestors(locationId: number): Promise<typeof l
 /**
  * Get all descendants of a location (children, grandchildren, etc.)
  */
-export async function getLocationDescendants(locationId: number): Promise<typeof location.$inferSelect[]> {
-  const stmt = sqlite.prepare(`
+export async function getLocationDescendants(sqliteDatabase: SQLiteDatabase, locationId: number): Promise<typeof location.$inferSelect[]> {
+  const stmt = sqliteDatabase.prepare(`
     WITH RECURSIVE location_descendants AS (
       -- Base case: get direct children
       SELECT id, parent_id, name, storage_type_id, description,
@@ -90,6 +91,8 @@ export async function getLocationDescendants(locationId: number): Promise<typeof
  * Returns null if valid, error message if invalid
  */
 export async function validateLocationHierarchy(
+  database: Database,
+  sqliteDatabase: SQLiteDatabase,
   parentId: number | null,
   locationId?: number
 ): Promise<string | null> {
@@ -105,14 +108,14 @@ export async function validateLocationHierarchy(
   
   // Check if the parent is a descendant of this location (would create cycle)
   if (locationId) {
-    const descendants = await getLocationDescendants(locationId)
+    const descendants = await getLocationDescendants(sqliteDatabase, locationId)
     if (descendants.some(d => d.id === parentId)) {
       return 'Cannot set parent: would create a circular reference (parent is a descendant)'
     }
   }
   
   // Verify parent exists
-  const parent = await db
+  const parent = await database
     .select()
     .from(location)
     .where(eq(location.id, parentId))
@@ -128,8 +131,8 @@ export async function validateLocationHierarchy(
 /**
  * Get only locations where can_contain_collections = true
  */
-export async function getLocationsForCollections(): Promise<typeof location.$inferSelect[]> {
-  return await db
+export async function getLocationsForCollections(database: Database): Promise<typeof location.$inferSelect[]> {
+  return await database
     .select()
     .from(location)
     .where(eq(location.canContainCollections, true))
@@ -156,8 +159,8 @@ export function buildLocationTree(locations: typeof location.$inferSelect[]): Ma
 /**
  * Get direct children of a location
  */
-export async function getLocationChildren(locationId: number): Promise<typeof location.$inferSelect[]> {
-  return await db
+export async function getLocationChildren(database: Database, locationId: number): Promise<typeof location.$inferSelect[]> {
+  return await database
     .select()
     .from(location)
     .where(eq(location.parentId, locationId))
@@ -166,21 +169,21 @@ export async function getLocationChildren(locationId: number): Promise<typeof lo
 /**
  * Update materialized path for a location and all its descendants
  */
-export async function updateLocationPath(locationId: number): Promise<void> {
+export async function updateLocationPath(database: Database, sqliteDatabase: SQLiteDatabase, locationId: number): Promise<void> {
   // Build path for this location
-  const path = await buildLocationPath(locationId)
+  const path = await buildLocationPath(sqliteDatabase, locationId)
   
   // Update this location's path
-  await db
+  await database
     .update(location)
     .set({ path: path || null })
     .where(eq(location.id, locationId))
   
   // Update all descendants' paths
-  const descendants = await getLocationDescendants(locationId)
+  const descendants = await getLocationDescendants(sqliteDatabase, locationId)
   for (const desc of descendants) {
-    const descPath = await buildLocationPath(desc.id)
-    await db
+    const descPath = await buildLocationPath(sqliteDatabase, desc.id)
+    await database
       .update(location)
       .set({ path: descPath || null })
       .where(eq(location.id, desc.id))
@@ -191,8 +194,8 @@ export async function updateLocationPath(locationId: number): Promise<void> {
  * Get the storage type ID for a location by walking up to the root
  * Only root locations have storage_type_id, so we need to find the root
  */
-export async function getLocationStorageTypeId(locationId: number): Promise<string | null> {
-  const loc = await db
+export async function getLocationStorageTypeId(database: Database, locationId: number): Promise<string | null> {
+  const loc = await database
     .select()
     .from(location)
     .where(eq(location.id, locationId))
@@ -212,7 +215,7 @@ export async function getLocationStorageTypeId(locationId: number): Promise<stri
   let currentId: number | null = loc.parentId
   
   while (currentId) {
-    const parent = await db
+    const parent = await database
       .select()
       .from(location)
       .where(eq(location.id, currentId))
@@ -236,7 +239,7 @@ export async function getLocationStorageTypeId(locationId: number): Promise<stri
  * Calculate hierarchy statistics for a location
  * Returns aggregated statistics including depth, descendant counts, and container counts
  */
-export async function getLocationHierarchyStats(locationId: number): Promise<{
+export async function getLocationHierarchyStats(database: Database, sqliteDatabase: SQLiteDatabase, locationId: number): Promise<{
   depth: number
   totalDescendants: number
   directContainers: {
@@ -264,19 +267,19 @@ export async function getLocationHierarchyStats(locationId: number): Promise<{
   }>
 }> {
   // Get all descendants
-  const descendants = await getLocationDescendants(locationId)
+  const descendants = await getLocationDescendants(sqliteDatabase, locationId)
   const allLocationIds = [locationId, ...descendants.map(d => d.id)]
   
   // Calculate depth by walking up to root
-  const ancestors = await getLocationAncestors(locationId)
+  const ancestors = await getLocationAncestors(sqliteDatabase, locationId)
   const depth = ancestors.length
   
   // Get direct container counts (this location only)
   const [directPlatesCount, directCryovialCount, directBoxesCount, directBagsCount] = await Promise.all([
-    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(micronixPlate).where(eq(micronixPlate.locationId, locationId)),
-    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(cryovialBox).where(eq(cryovialBox.locationId, locationId)),
-    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(box).where(eq(box.locationId, locationId)),
-    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(bag).where(eq(bag.locationId, locationId)),
+    database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(micronixPlate).where(eq(micronixPlate.locationId, locationId)),
+    database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(cryovialBox).where(eq(cryovialBox.locationId, locationId)),
+    database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(box).where(eq(box.locationId, locationId)),
+    database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(bag).where(eq(bag.locationId, locationId)),
   ])
   
   const directContainers = {
@@ -288,10 +291,10 @@ export async function getLocationHierarchyStats(locationId: number): Promise<{
   
   // Get aggregated container counts (this location + all descendants)
   const [aggregatedPlatesCount, aggregatedCryovialCount, aggregatedBoxesCount, aggregatedBagsCount] = await Promise.all([
-    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(micronixPlate).where(inArray(micronixPlate.locationId, allLocationIds)),
-    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(cryovialBox).where(inArray(cryovialBox.locationId, allLocationIds)),
-    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(box).where(inArray(box.locationId, allLocationIds)),
-    db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(bag).where(inArray(bag.locationId, allLocationIds)),
+    database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(micronixPlate).where(inArray(micronixPlate.locationId, allLocationIds)),
+    database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(cryovialBox).where(inArray(cryovialBox.locationId, allLocationIds)),
+    database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(box).where(inArray(box.locationId, allLocationIds)),
+    database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(bag).where(inArray(bag.locationId, allLocationIds)),
   ])
   
   const aggregatedContainers = {
@@ -302,17 +305,17 @@ export async function getLocationHierarchyStats(locationId: number): Promise<{
   }
   
   // Get per-child-location statistics
-  const children = await getLocationChildren(locationId)
+  const children = await getLocationChildren(database, locationId)
   const childLocationStats = await Promise.all(
     children.map(async (child) => {
-      const childDescendants = await getLocationDescendants(child.id)
+      const childDescendants = await getLocationDescendants(sqliteDatabase, child.id)
       const childLocationIds = [child.id, ...childDescendants.map(d => d.id)]
       
       const [childPlatesCount, childCryovialCount, childBoxesCount, childBagsCount] = await Promise.all([
-        db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(micronixPlate).where(inArray(micronixPlate.locationId, childLocationIds)),
-        db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(cryovialBox).where(inArray(cryovialBox.locationId, childLocationIds)),
-        db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(box).where(inArray(box.locationId, childLocationIds)),
-        db.select({ count: sql<number>`COUNT(*)`.as('count') }).from(bag).where(inArray(bag.locationId, childLocationIds)),
+        database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(micronixPlate).where(inArray(micronixPlate.locationId, childLocationIds)),
+        database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(cryovialBox).where(inArray(cryovialBox.locationId, childLocationIds)),
+        database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(box).where(inArray(box.locationId, childLocationIds)),
+        database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(bag).where(inArray(bag.locationId, childLocationIds)),
       ])
       
       return {

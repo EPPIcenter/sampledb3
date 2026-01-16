@@ -266,18 +266,18 @@ const initSchema = z.object({
       }
 
       // 9. Seed default settings
-      await setContainerDefaults({
+      await setContainerDefaults(database, {
         micronix_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'items' },
         cryovial_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'items' },
         paper: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'spots' },
         static_well: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'spots' },
       })
-      await setPaginationSettings({ defaultPageSize: 50, maxPageSize: 1000 })
-      await setPasswordRequirements({ minLength: 8 })
-      await setSessionSettings({ maxAgeSeconds: 604800 }) // 7 days
+      await setPaginationSettings(database, { defaultPageSize: 50, maxPageSize: 1000 })
+      await setPasswordRequirements(database, { minLength: 8 })
+      await setSessionSettings(database, { maxAgeSeconds: 604800 }) // 7 days
       
       // Create default export configuration with all available columns
-      await setExportConfigurations({
+      await setExportConfigurations(database, {
         configurations: [
           {
             name: 'All Columns',
@@ -315,7 +315,7 @@ const initSchema = z.object({
       })
 
       // Create default scanner configurations for different plate scanning devices
-      await setScannerConfigurations({
+      await setScannerConfigurations(database, {
         configurations: [
           {
             id: 'traxcer',

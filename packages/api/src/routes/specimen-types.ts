@@ -15,7 +15,7 @@ import { eq, and, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { parseId } from '../lib/common-validators'
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
-import { adminMiddleware } from '../middleware/auth'
+import { createAdminMiddleware } from '../middleware/auth'
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -187,6 +187,7 @@ function onUpdateDefaults() {
  * @param database - Database instance (required)
  */
 export function createSpecimenTypesRoutes(database: Database): Hono {
+  const adminMiddleware = createAdminMiddleware(database)
   const specimenTypes = createCrudRoutes({
     table: specimenType,
     database,
