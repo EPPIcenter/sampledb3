@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { createTestClient } from '../helpers/test-client'
+import { createTestClient, loginAndGetCookie, createAuthenticatedClientWrapper, authenticatedRequest } from '../helpers/test-client'
 import { setupTestDatabase, cleanupTestDatabase } from '../helpers/db-setup'
 import { 
   createTestControlDefinition, 
@@ -9,22 +9,47 @@ import {
 } from '../helpers/factories'
 import type { Database } from '../../db/client'
 import { createControlsRoutes } from '../../routes/controls'
+import { createAuthRoutes } from '../../routes/auth'
+import { setupPasswordRequirements, setupSessionSettings, createTestUser } from '../helpers/auth-helpers'
+import { Hono } from 'hono'
 
 describe('Control Batch Creation Integration Tests', () => {
   let testDb: Database
   let sqlite: any
   let client: ReturnType<typeof createTestClient>
+  let cookieHeader: string
+  let app: Hono
 
   beforeEach(async () => {
     const setup = await setupTestDatabase()
     testDb = setup.db
     sqlite = setup.sqlite
 
-    const app = new (await import('hono')).Hono()
+    // Setup required settings for auth to work
+    await setupPasswordRequirements(testDb, 8)
+    await setupSessionSettings(testDb, 604800)
+
+    // Create a test user for authentication
+    await createTestUser(testDb, {
+      email: 'test@example.com',
+      name: 'Test User',
+      password: 'password123',
+      role: 'member',
+    })
+
+    app = new Hono()
     // Use factory pattern with test database
     const controlsRoutes = createControlsRoutes(testDb)
+    const authRoutes = createAuthRoutes(testDb, testDb)
     app.route('/api/blood-controls', controlsRoutes)
-    client = createTestClient(app)
+    app.route('/api/auth', authRoutes)
+    
+    // Login to get session cookie
+    cookieHeader = await loginAndGetCookie(app, 'test@example.com', 'password123')
+    
+    // Create authenticated client
+    const baseClient = createTestClient(app)
+    client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
   })
 
   afterEach(() => {
@@ -40,9 +65,10 @@ describe('Control Batch Creation Integration Tests', () => {
       controlType: 'blood',
     })
 
-    // Create batch using RPC client with correct nested path
-    const response = await (client as any).api['blood-controls'][':id']['batches'].$post({
-      param: { id: definition.id.toString() },
+    // Create batch using authenticated request
+    const response = await authenticatedRequest(app, `/api/blood-controls/${definition.id}/batches`, {
+      method: 'POST',
+      cookie: cookieHeader,
       json: {
         productionDate: '2024-01-01',
       },
@@ -60,8 +86,9 @@ describe('Control Batch Creation Integration Tests', () => {
   })
 
   it('should return 404 when control definition does not exist', async () => {
-    const response = await (client as any).api['blood-controls'][':id']['batches'].$post({
-      param: { id: '99999' },
+    const response = await authenticatedRequest(app, '/api/blood-controls/99999/batches', {
+      method: 'POST',
+      cookie: cookieHeader,
       json: {
         productionDate: '2024-01-01',
       },

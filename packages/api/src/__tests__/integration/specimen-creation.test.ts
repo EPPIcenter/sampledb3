@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { createTestClient } from '../helpers/test-client'
+import { createTestClient, loginAndGetCookie, createAuthenticatedClientWrapper, authenticatedRequest } from '../helpers/test-client'
 import { setupTestDatabase, cleanupTestDatabase } from '../helpers/db-setup'
 import { 
   createTestStudy,
@@ -11,14 +11,18 @@ import {
 import { micronixPlate, specimenTypeContainerType, unit, containerTypeUnit } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { createSpecimensRoutes } from '../../routes/specimens'
-import { setupPasswordRequirements, setupSessionSettings } from '../helpers/auth-helpers'
+import { createAuthRoutes } from '../../routes/auth'
+import { setupPasswordRequirements, setupSessionSettings, createTestUser } from '../helpers/auth-helpers'
 import { setContainerDefaults } from '../../lib/settings'
 import { eq } from 'drizzle-orm'
+import { Hono } from 'hono'
 
 describe('Specimen Creation Integration Tests', () => {
   let testDb: Database
   let sqlite: any
   let client: ReturnType<typeof createTestClient>
+  let cookieHeader: string
+  let app: Hono
 
   beforeEach(async () => {
     const setup = await setupTestDatabase()
@@ -73,11 +77,27 @@ describe('Specimen Creation Integration Tests', () => {
       static_well: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'spots' },
     })
 
-    const app = new (await import('hono')).Hono()
+    // Create a test user for authentication
+    await createTestUser(testDb, {
+      email: 'test@example.com',
+      name: 'Test User',
+      password: 'password123',
+      role: 'member',
+    })
+
+    app = new Hono()
     // Use factory pattern with test database
     const specimensRoutes = createSpecimensRoutes(testDb)
+    const authRoutes = createAuthRoutes(testDb, testDb)
     app.route('/api/specimens', specimensRoutes)
-    client = createTestClient(app)
+    app.route('/api/auth', authRoutes)
+    
+    // Login to get session cookie
+    cookieHeader = await loginAndGetCookie(app, 'test@example.com', 'password123')
+    
+    // Create authenticated client
+    const baseClient = createTestClient(app)
+    client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
   })
 
   afterEach(() => {
@@ -98,8 +118,10 @@ describe('Specimen Creation Integration Tests', () => {
     })
     const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
 
-    // Create specimen using RPC client
-    const response = await (client as any).api.specimens.$post({
+    // Create specimen using authenticated request
+    const response = await authenticatedRequest(app, '/api/specimens', {
+      method: 'POST',
+      cookie: cookieHeader,
       json: {
         sourceType: 'subject',
         sourceId: subject.id,
@@ -144,7 +166,9 @@ describe('Specimen Creation Integration Tests', () => {
       barcode: 'PLATE001',
     }).returning()
 
-    const response = await (client as any).api.specimens.$post({
+    const response = await authenticatedRequest(app, '/api/specimens', {
+      method: 'POST',
+      cookie: cookieHeader,
       json: {
         sourceType: 'subject',
         sourceId: subject.id,
