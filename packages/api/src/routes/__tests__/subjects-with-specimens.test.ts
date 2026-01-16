@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient } from '../../__tests__/helpers/test-client'
+import { createTestClient, loginAndGetCookie, createAuthenticatedClientWrapper, authenticatedRequest } from '../../__tests__/helpers/test-client'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
+import { createAuthRoutes } from '../auth'
+import { setupPasswordRequirements, setupSessionSettings, createTestUser } from '../../__tests__/helpers/auth-helpers'
 import {
   createTestStudy,
   createTestStudySubject,
@@ -38,6 +40,7 @@ describe('Subjects with Specimens API', () => {
   let testLocation: any
   let testUnit: any
   let testStorageType: any
+  let cookieHeader: string
 
   beforeEach(async () => {
     const setup = await setupTestDatabase()
@@ -139,10 +142,27 @@ describe('Subjects with Specimens API', () => {
       } as any,
     })
 
+    // Setup required settings for auth to work
+    await setupPasswordRequirements(testDb, 8)
+    await setupSessionSettings(testDb, 604800)
+
+    // Create a test user for authentication
+    await createTestUser(testDb, {
+      email: 'test@example.com',
+      name: 'Test User',
+      password: 'password123',
+      role: 'member',
+    })
+
     // Create subjects routes with test database
     const subjectsRoutes = createSubjectsRoutes(testDb)
+    const authRoutes = createAuthRoutes(testDb, testDb)
     app = new Hono()
     app.route('/api/subjects', subjectsRoutes)
+    app.route('/api/auth', authRoutes)
+    
+    // Login to get session cookie
+    cookieHeader = await loginAndGetCookie(app, 'test@example.com', 'password123')
   })
 
   afterEach(() => {
@@ -151,7 +171,14 @@ describe('Subjects with Specimens API', () => {
     }
   })
 
+  // Helper to create authenticated client - available to all tests
+  function createAuthClient() {
+    const baseClient = createTestClient(app)
+    return createAuthenticatedClientWrapper(baseClient, cookieHeader)
+  }
+
   describe('Creating New Subjects with Specimens and Containers', () => {
+
     it('should create new subject with cryovial tube container', async () => {
       // Create cryovial box collection
       const now = new Date().toISOString()
@@ -165,8 +192,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-001',
@@ -218,8 +246,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-002',
@@ -276,8 +305,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-003',
@@ -321,8 +351,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-004',
@@ -376,8 +407,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-005',
@@ -440,8 +472,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'EXISTING-SUBJ',
@@ -498,8 +531,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-WITH-SPECS',
@@ -548,8 +582,9 @@ describe('Subjects with Specimens API', () => {
 
   describe('Transaction Rollback Tests', () => {
     it('should rollback on invalid specimen type', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERROR',
@@ -572,8 +607,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should rollback on container creation failure', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERROR-2',
@@ -648,8 +684,9 @@ describe('Subjects with Specimens API', () => {
       })
 
       // Try to create another with same barcode
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NEW',
@@ -692,8 +729,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-EXISTING-COLL',
@@ -723,8 +761,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should create collection if location provided', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NEW-COLL',
@@ -754,8 +793,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should fail gracefully on missing collection without location', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-MISSING-COLL',
@@ -781,8 +821,9 @@ describe('Subjects with Specimens API', () => {
   describe('Response Format Tests', () => {
     it('should include subjectCreated flag', async () => {
       // Test new subject
-      const client = createTestClient(app) as any
-      const res1 = await client.api.subjects['with-specimens'].$post({
+      const res1 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'NEW-SUBJ-FLAG',
@@ -804,7 +845,9 @@ describe('Subjects with Specimens API', () => {
         name: 'EXISTING-SUBJ-FLAG',
       })
 
-      const res2 = await client.api.subjects['with-specimens'].$post({
+      const res2 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'EXISTING-SUBJ-FLAG',
@@ -833,8 +876,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-RESPONSE',
@@ -875,8 +919,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-SUMMARY',
@@ -912,8 +957,9 @@ describe('Subjects with Specimens API', () => {
 
   describe('Validation Error Tests', () => {
     it('should return 400 for invalid study short code', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'INVALID',
           subjectName: 'SUBJ',
@@ -929,8 +975,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for invalid specimen type name', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ',
@@ -949,10 +996,10 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for missing required container fields', async () => {
-      const client = createTestClient(app) as any
-      
       // Test cryovial without collection
-      const res1 = await client.api.subjects['with-specimens'].$post({
+      const res1 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERR-1',
@@ -970,7 +1017,9 @@ describe('Subjects with Specimens API', () => {
       expect(res1.status).toBe(400)
 
       // Test micronix without barcode
-      const res2 = await client.api.subjects['with-specimens'].$post({
+      const res2 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERR-2',
@@ -989,7 +1038,9 @@ describe('Subjects with Specimens API', () => {
       expect(res2.status).toBe(400)
 
       // Test paper without label
-      const res3 = await client.api.subjects['with-specimens'].$post({
+      const res3 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERR-3',
@@ -1011,8 +1062,9 @@ describe('Subjects with Specimens API', () => {
 
   describe('Edge Cases', () => {
     it('should handle empty specimens array', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-EMPTY',
@@ -1028,8 +1080,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should handle specimens without containers', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NO-CONTAINERS',
@@ -1053,8 +1106,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should handle subject name with whitespace', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: '  SUBJ-WHITESPACE  ',

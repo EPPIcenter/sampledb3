@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { createTestClient, loginAndGetCookie, authenticatedRequest, extractSessionId } from '../../__tests__/helpers/test-client'
+import { createTestClient, loginAndGetCookie, authenticatedRequest, extractSessionId, createAuthenticatedClientWrapper } from '../../__tests__/helpers/test-client'
 import { Hono } from 'hono'
 import { createAuthRoutes } from '../auth'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
@@ -18,6 +18,7 @@ describe('Auth API', () => {
   let app: Hono
   let testDb: Database
   let sqlite: any
+  let adminCookieHeader: string
 
   beforeEach(async () => {
     const setup = await setupTestDatabase()
@@ -28,10 +29,21 @@ describe('Auth API', () => {
     await setupPasswordRequirements(testDb, 8)
     await setupSessionSettings(testDb, 604800) // 7 days
 
+    // Create an admin user for registration tests
+    await createTestUser(testDb, {
+      email: 'admin@test.com',
+      name: 'Admin User',
+      password: 'password123',
+      role: 'admin',
+    })
+
     // Pass testDb as both database and settingsDb for tests
     const authRoutes = createAuthRoutes(testDb, testDb)
     app = new Hono()
     app.route('/api/auth', authRoutes)
+
+    // Login as admin to get cookie for registration tests
+    adminCookieHeader = await loginAndGetCookie(app, 'admin@test.com', 'password123')
   })
 
   afterEach(() => {
@@ -42,8 +54,9 @@ describe('Auth API', () => {
 
   describe('POST /api/auth/register', () => {
     it('should register a new user', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'test@example.com',
           name: 'Test User',
@@ -61,8 +74,9 @@ describe('Auth API', () => {
     })
 
     it('should reject invalid email', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'invalid-email',
           name: 'Test User',
@@ -74,8 +88,9 @@ describe('Auth API', () => {
     })
 
     it('should reject short password', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'test@example.com',
           name: 'Test User',
@@ -87,10 +102,10 @@ describe('Auth API', () => {
     })
 
     it('should reject duplicate email', async () => {
-      const client = createTestClient(app) as any
-
       // Register first user
-      await client.api.auth.register.$post({
+      await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'duplicate@example.com',
           name: 'User 1',
@@ -99,7 +114,9 @@ describe('Auth API', () => {
       })
 
       // Try to register with same email
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'duplicate@example.com',
           name: 'User 2',
@@ -235,8 +252,9 @@ describe('Auth API', () => {
 
   describe('POST /api/auth/register with username', () => {
     it('should register a new user with username', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'newuser@example.com',
           name: 'New User',
@@ -254,8 +272,9 @@ describe('Auth API', () => {
     })
 
     it('should register a user without username (username optional)', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'nousername@example.com',
           name: 'No Username',
@@ -271,10 +290,10 @@ describe('Auth API', () => {
     })
 
     it('should reject duplicate username during registration', async () => {
-      const client = createTestClient(app) as any
-
       // Register first user with username
-      await client.api.auth.register.$post({
+      await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'first@example.com',
           name: 'First User',
@@ -284,7 +303,9 @@ describe('Auth API', () => {
       })
 
       // Try to register with same username
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'second@example.com',
           name: 'Second User',

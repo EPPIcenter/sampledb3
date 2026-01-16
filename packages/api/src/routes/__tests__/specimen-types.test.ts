@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest, createAuthenticatedClientWrapper } from '../../__tests__/helpers/test-client'
 import { Hono } from 'hono'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import type { Database } from '../../db/client'
@@ -106,8 +106,10 @@ describe('Specimen Types API', () => {
 
   describe('GET /specimen-types', () => {
     it('should return list of specimen types', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api['specimen-types'].$get()
+      const res = await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
 
       expect(res.status).toBe(200)
       const data = await getResponseData<SpecimenType[]>(res)
@@ -178,9 +180,9 @@ describe('Specimen Types API', () => {
       const created = await getResponseData<SpecimenType>(createRes)
       const id = created.id
 
-      const client = createTestClient(app) as any
-      const res = await client.api['specimen-types'][':id'].$get({
-        param: { id: String(id) },
+      const res = await authenticatedRequest(app, `/api/specimen-types/${id}`, {
+        method: 'GET',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(200)
@@ -190,18 +192,18 @@ describe('Specimen Types API', () => {
     })
 
     it('should return 404 for non-existent ID', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api['specimen-types'][':id'].$get({
-        param: { id: '99999' },
+      const res = await authenticatedRequest(app, '/api/specimen-types/99999', {
+        method: 'GET',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(404)
     })
 
     it('should return 400 for invalid ID', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api['specimen-types'][':id'].$get({
-        param: { id: 'invalid' },
+      const res = await authenticatedRequest(app, '/api/specimen-types/invalid', {
+        method: 'GET',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(400)
@@ -279,9 +281,9 @@ describe('Specimen Types API', () => {
       expect(res.status).toBe(200)
 
       // Verify it's deleted
-      const client = createTestClient(app) as any
-      const getRes = await client.api['specimen-types'][':id'].$get({
-        param: { id: String(id) },
+      const getRes = await authenticatedRequest(app, `/api/specimen-types/${id}`, {
+        method: 'GET',
+        cookie: cookieHeader,
       })
       expect(getRes.status).toBe(404)
     })
@@ -309,8 +311,10 @@ describe('Specimen Types API', () => {
         json: { name: 'Type 2' },
       })
 
-      const client = createTestClient(app) as any
-      const res = await client.api['specimen-types'].$get()
+      const res = await authenticatedRequest(app, '/api/specimen-types', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
       expect(res.status).toBe(200)
       // Check that list items have the transformed structure
       const data = await getResponseData<SpecimenType[]>(res)

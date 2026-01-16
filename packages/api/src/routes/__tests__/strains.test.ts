@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest, createAuthenticatedClientWrapper } from '../../__tests__/helpers/test-client'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import { createTestStrain } from '../../__tests__/helpers/factories'
 import type { Database } from '../../db/client'
@@ -67,9 +67,13 @@ describe('Strains API', () => {
     it('should return empty array when no strains exist', async () => {
       const app = new Hono()
       app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
-      const res = await client.api.strains.$get()
+      const res = await authenticatedRequest(app, '/api/strains', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
       expect(res.status).toBe(200)
       const data = await getResponseData(res) as any
       expect(data).toEqual([])
@@ -81,9 +85,11 @@ describe('Strains API', () => {
 
       const app = new Hono()
       app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
 
-      const res = await client.api.strains.$get()
+      const res = await authenticatedRequest(app, '/api/strains', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
       expect(res.status).toBe(200)
       const data = await getResponseData(res) as any
       expect(data).toHaveLength(2)
@@ -95,7 +101,8 @@ describe('Strains API', () => {
     it('should create a new strain', async () => {
       const app = new Hono()
       app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, '/api/strains', {
         method: 'POST',
@@ -117,7 +124,8 @@ describe('Strains API', () => {
 
       const app = new Hono()
       app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, '/api/strains', {
         method: 'POST',
@@ -139,10 +147,10 @@ describe('Strains API', () => {
 
       const app = new Hono()
       app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
 
-      const res = await client.api.strains[':id'].$get({
-        param: { id: String(testStrain.id) },
+      const res = await authenticatedRequest(app, `/api/strains/${testStrain.id}`, {
+        method: 'GET',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(200)
@@ -158,7 +166,8 @@ describe('Strains API', () => {
 
       const app = new Hono()
       app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, `/api/strains/${testStrain.id}`, {
         method: 'PUT',
@@ -181,7 +190,8 @@ describe('Strains API', () => {
 
       const app = new Hono()
       app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, `/api/strains/${testStrain.id}`, {
         method: 'DELETE',

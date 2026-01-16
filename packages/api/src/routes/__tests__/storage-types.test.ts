@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest, createAuthenticatedClientWrapper } from '../../__tests__/helpers/test-client'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import { createTestStorageType, createTestLocation } from '../../__tests__/helpers/factories'
 import type { Database } from '../../db/client'
@@ -90,9 +90,13 @@ describe('Storage Types API', () => {
     it('should return empty array when no storage types exist', async () => {
       const app = new Hono()
       app.route('/api/storage-types', storageTypesRoutes)
-      const client = createTestClient(app) as any
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
-      const res = await client.api['storage-types'].$get()
+      const res = await authenticatedRequest(app, '/api/storage-types', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
       expect(res.status).toBe(200)
       const data = await getResponseData(res) as any
       expect(data).toEqual([])
@@ -104,9 +108,11 @@ describe('Storage Types API', () => {
 
       const app = new Hono()
       app.route('/api/storage-types', storageTypesRoutes)
-      const client = createTestClient(app) as any
 
-      const res = await client.api['storage-types'].$get()
+      const res = await authenticatedRequest(app, '/api/storage-types', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
       expect(res.status).toBe(200)
       const data = await getResponseData(res) as any
       expect(data).toHaveLength(2)
@@ -117,7 +123,8 @@ describe('Storage Types API', () => {
     it('should create a new storage type', async () => {
       const app = new Hono()
       app.route('/api/storage-types', storageTypesRoutes)
-      const client = createTestClient(app) as any
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, '/api/storage-types', {
         method: 'POST',
@@ -137,7 +144,8 @@ describe('Storage Types API', () => {
     it('should create storage type without description', async () => {
       const app = new Hono()
       app.route('/api/storage-types', storageTypesRoutes)
-      const client = createTestClient(app) as any
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, '/api/storage-types', {
         method: 'POST',
@@ -157,7 +165,8 @@ describe('Storage Types API', () => {
 
       const app = new Hono()
       app.route('/api/storage-types', storageTypesRoutes)
-      const client = createTestClient(app) as any
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, '/api/storage-types', {
         method: 'POST',
@@ -179,10 +188,10 @@ describe('Storage Types API', () => {
 
       const app = new Hono()
       app.route('/api/storage-types', storageTypesRoutes)
-      const client = createTestClient(app) as any
 
-      const res = await client.api['storage-types'][':id'].$get({
-        param: { id: String(testType.id) },
+      const res = await authenticatedRequest(app, `/api/storage-types/${testType.id}`, {
+        method: 'GET',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(200)
@@ -194,10 +203,10 @@ describe('Storage Types API', () => {
     it('should return 404 for non-existent ID', async () => {
       const app = new Hono()
       app.route('/api/storage-types', storageTypesRoutes)
-      const client = createTestClient(app) as any
 
-      const res = await client.api['storage-types'][':id'].$get({
-        param: { id: '99999' },
+      const res = await authenticatedRequest(app, '/api/storage-types/99999', {
+        method: 'GET',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(404)
@@ -210,7 +219,8 @@ describe('Storage Types API', () => {
 
       const app = new Hono()
       app.route('/api/storage-types', storageTypesRoutes)
-      const client = createTestClient(app) as any
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, `/api/storage-types/${testType.id}`, {
         method: 'PUT',
@@ -234,7 +244,8 @@ describe('Storage Types API', () => {
 
       const app = new Hono()
       app.route('/api/storage-types', storageTypesRoutes)
-      const client = createTestClient(app) as any
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, `/api/storage-types/${testType.id}`, {
         method: 'DELETE',
@@ -256,7 +267,8 @@ describe('Storage Types API', () => {
 
       const app = new Hono()
       app.route('/api/storage-types', storageTypesRoutes)
-      const client = createTestClient(app) as any
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, `/api/storage-types/${testType.id}`, {
         method: 'DELETE',
