@@ -42,7 +42,7 @@ export function createExportRoutes(database: Database): Hono {
   const authMiddleware = createAuthMiddleware(database)
 
 // Export specimens as CSV
-export_.get('/specimens.csv', async (c) => {
+export_.get('/specimens.csv', authMiddleware, async (c) => {
   try {
     const studyCode = c.req.query('study')
     const sourceType = c.req.query('source_type')
@@ -123,7 +123,7 @@ export_.get('/specimens.csv', async (c) => {
 })
 
 // Export inventory summary
-export_.get('/inventory.csv', async (c) => {
+export_.get('/inventory.csv', authMiddleware, async (c) => {
   try {
     // Get all specimens
     const allSpecimens = await database
@@ -164,7 +164,7 @@ export_.get('/inventory.csv', async (c) => {
 })
 
 // Export containers with full context
-export_.get('/containers', async (c) => {
+export_.get('/containers', authMiddleware, async (c) => {
   try {
     const studyCode = c.req.query('study')
     if (!studyCode) {
@@ -464,7 +464,7 @@ export_.post('/containers', authMiddleware, async (c) => {
 })
 
 // Get available specimen types and container types for a study
-export_.get('/available-types', async (c) => {
+export_.get('/available-types', authMiddleware, async (c) => {
   try {
     const studyCode = c.req.query('study')
     if (!studyCode) {

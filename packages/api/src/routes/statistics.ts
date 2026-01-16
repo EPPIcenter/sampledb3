@@ -28,7 +28,7 @@ import {
 import { eq, and, or, sql, gte, lte, inArray, isNull, gt } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { cache, cacheKeys } from '../lib/cache'
-import { createAdminMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create statistics routes with database injection
@@ -37,6 +37,7 @@ import { createAdminMiddleware } from '../middleware/auth'
  */
 export function createStatisticsRoutes(database: Database, sqliteDatabase: SQLiteDatabase) {
   const statistics = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
   const adminMiddleware = createAdminMiddleware(database)
 
 // Helper to build date filter conditions
@@ -97,7 +98,7 @@ async function getContainerTypes(containerIds: number[]): Promise<Map<number, st
   return typeMap
 }
 
-statistics.get('/', async (c) => {
+statistics.get('/', authMiddleware, async (c) => {
   try {
     // Parse query parameters
     const studyCode = c.req.query('study')

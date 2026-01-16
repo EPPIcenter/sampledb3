@@ -12,6 +12,7 @@ import {
   staticWell,
 } from '../db/schema'
 import { sql, eq } from 'drizzle-orm'
+import { createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create activity routes with database injection
@@ -19,9 +20,10 @@ import { sql, eq } from 'drizzle-orm'
  */
 export function createActivityRoutes(database: Database): Hono {
   const activity = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
   // Get recent activity across all entity types
-  activity.get('/recent', async (c) => {
+  activity.get('/recent', authMiddleware, async (c) => {
   try {
     const limit = parseInt(c.req.query('limit') || '10')
     
