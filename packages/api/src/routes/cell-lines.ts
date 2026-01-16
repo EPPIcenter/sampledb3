@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { Database } from '../db/client'
 import { cellLine } from '../db/schema'
 import { eq } from 'drizzle-orm'
+import { createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create cell lines routes with database injection
@@ -9,9 +10,10 @@ import { eq } from 'drizzle-orm'
  */
 export function createCellLinesRoutes(database: Database): Hono {
   const cellLines = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
   // List all cell lines
-  cellLines.get('/', async (c) => {
+  cellLines.get('/', authMiddleware, async (c) => {
     try {
       const lines = await database.select().from(cellLine).orderBy(cellLine.name)
       return c.json({ cellLines: lines })
@@ -22,7 +24,7 @@ export function createCellLinesRoutes(database: Database): Hono {
   })
 
   // Get cell line by ID
-  cellLines.get('/:id', async (c) => {
+  cellLines.get('/:id', authMiddleware, async (c) => {
     const id = parseInt(c.req.param('id'))
     
     if (isNaN(id)) {

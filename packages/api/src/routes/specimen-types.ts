@@ -15,7 +15,7 @@ import { eq, and, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { parseId } from '../lib/common-validators'
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
-import { createAdminMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -187,6 +187,7 @@ function onUpdateDefaults() {
  * @param database - Database instance (required)
  */
 export function createSpecimenTypesRoutes(database: Database): Hono {
+  const authMiddleware = createAuthMiddleware(database)
   const adminMiddleware = createAdminMiddleware(database)
   const specimenTypes = createCrudRoutes({
     table: specimenType,
@@ -205,7 +206,7 @@ export function createSpecimenTypesRoutes(database: Database): Hono {
   const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', 'static_well'])
 
   // GET /specimen-types/:id/container-types - Get allowed container types for a specimen type
-  specimenTypes.get('/:id/container-types', async (c) => {
+  specimenTypes.get('/:id/container-types', authMiddleware, async (c) => {
     try {
       const id = parseId(c.req.param('id'))
     if (!id) {
@@ -303,7 +304,7 @@ specimenTypes.delete('/:id/container-types/:containerType', adminMiddleware, asy
 })
 
   // GET /specimen-types/container-types/:containerType - Get all specimen types allowed for a container type
-  specimenTypes.get('/container-types/:containerType', async (c) => {
+  specimenTypes.get('/container-types/:containerType', authMiddleware, async (c) => {
     try {
       const containerType = c.req.param('containerType')
       
