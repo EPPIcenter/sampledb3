@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
+import { createAuthMiddleware } from '../middleware/auth'
 import { 
   studySubject, 
   study, 
@@ -42,6 +43,7 @@ interface ExtendedContainerData extends ContainerData {
 export function createSubjectsRoutes(database: Database): Hono {
   const dbInstance = database
   const subjects = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
   // Wrapper functions that use dbInstance instead of global db
   async function resolveStudyByShortCodeLocal(shortCode: string): Promise<number | null> {
@@ -588,7 +590,7 @@ subjects.get('/:id/summary', async (c) => {
 })
 
 // Create single subject
-subjects.post('/', async (c) => {
+subjects.post('/', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -642,7 +644,7 @@ subjects.post('/', async (c) => {
 })
 
 // Create multiple subjects (bulk)
-subjects.post('/bulk', async (c) => {
+subjects.post('/bulk', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -772,7 +774,7 @@ function normalizePosition(position: string | null | undefined): string | null {
 }
 
 // Create subject with specimens atomically
-subjects.post('/with-specimens', async (c) => {
+subjects.post('/with-specimens', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     
@@ -1426,7 +1428,7 @@ subjects.post('/with-specimens', async (c) => {
   }
 
 // Merge subjects endpoint
-subjects.post('/:targetId/merge', async (c) => {
+subjects.post('/:targetId/merge', authMiddleware, async (c) => {
   try {
     const targetId = parseInt(c.req.param('targetId'))
     

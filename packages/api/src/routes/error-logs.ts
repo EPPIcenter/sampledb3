@@ -5,6 +5,7 @@ import { errorLogs } from '../db/schema'
 import { logFrontendError, cleanupOldErrorLogs, type ErrorLogContext } from '../lib/error-logger'
 import { handleRouteError } from '../lib/error-handler'
 import { eq, and, desc, sql, like, or } from 'drizzle-orm'
+import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 
 // Schema for frontend error submission
 const frontendErrorSchema = z.object({
@@ -42,15 +43,17 @@ const errorLogQuerySchema = z.object({
  */
 export function createErrorLogsRoutes(database: Database): Hono {
   const errorLogsRoutes = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
+  const adminMiddleware = createAdminMiddleware(database)
 
   // POST /api/error-logs - Accept frontend error reports
-  errorLogsRoutes.post('/', async (c) => {
+  errorLogsRoutes.post('/', authMiddleware, async (c) => {
     try {
       const body = await c.req.json()
       const errorData = frontendErrorSchema.parse(body)
       
       // Extract context from request
-      const user = c.get('user') as { id: number } | undefined
+      const user = c.get('user')!
       const url = c.req.header('referer') || c.req.url
       const userAgent = c.req.header('user-agent')
       
@@ -80,7 +83,7 @@ export function createErrorLogsRoutes(database: Database): Hono {
   })
 
   // GET /api/error-logs - Retrieve error logs with filtering and pagination
-  errorLogsRoutes.get('/', async (c) => {
+  errorLogsRoutes.get('/', adminMiddleware, async (c) => {
     try {
       const queryParams = errorLogQuerySchema.parse(c.req.query())
       const { source, level, resolved, page, limit, search } = queryParams
@@ -147,7 +150,7 @@ export function createErrorLogsRoutes(database: Database): Hono {
   })
 
   // GET /api/error-logs/:id - Get a specific error log
-  errorLogsRoutes.get('/:id', async (c) => {
+  errorLogsRoutes.get('/:id', adminMiddleware, async (c) => {
     try {
       const id = parseInt(c.req.param('id'))
       
@@ -172,7 +175,7 @@ export function createErrorLogsRoutes(database: Database): Hono {
   })
 
   // PATCH /api/error-logs/:id/resolve - Mark error as resolved
-  errorLogsRoutes.patch('/:id/resolve', async (c) => {
+  errorLogsRoutes.patch('/:id/resolve', adminMiddleware, async (c) => {
     try {
       const id = parseInt(c.req.param('id'))
       
@@ -180,10 +183,7 @@ export function createErrorLogsRoutes(database: Database): Hono {
         return c.json({ error: 'Invalid error log ID' }, 400)
       }
       
-      const user = c.get('user') as { id: number } | undefined
-      if (!user) {
-        return c.json({ error: 'Unauthorized' }, 401)
-      }
+      const user = c.get('user')!
       
       const log = await database
         .select()
@@ -211,12 +211,9 @@ export function createErrorLogsRoutes(database: Database): Hono {
   })
 
   // POST /api/error-logs/cleanup - Clean up old error logs based on retention policy
-  errorLogsRoutes.post('/cleanup', async (c) => {
+  errorLogsRoutes.post('/cleanup', adminMiddleware, async (c) => {
     try {
-      const user = c.get('user') as { id: number } | undefined
-      if (!user) {
-        return c.json({ error: 'Unauthorized' }, 401)
-      }
+      const user = c.get('user')!
       
       // Optional retention days override in request body
       let retentionDays: number | undefined = undefined

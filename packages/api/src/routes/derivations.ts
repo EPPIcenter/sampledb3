@@ -17,6 +17,7 @@ import {
 } from '../db/schema'
 import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
+import { createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create derivations routes with database injection
@@ -24,6 +25,7 @@ import { createDerivation } from '../lib/derivations'
  */
 export function createDerivationsRoutes(database: Database): Hono {
   const derivations = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
 const createDerivationSchema = z.object({
   derivationType: z.string(),
@@ -172,7 +174,7 @@ async function createCollectionIfNeeded(database: Database, input: z.infer<typeo
 }
 
 // Create derivation from parent container
-derivations.post('/containers/:id/derive', async (c) => {
+derivations.post('/containers/:id/derive', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) {

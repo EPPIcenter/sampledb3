@@ -26,6 +26,7 @@ import { validateControlBatchName, generateUniqueBatchName } from '../lib/valida
 import { generateControlDefinitionName, generateUniqueControlDefinitionName } from '../lib/control-name-generation'
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
 import type { BloodControlProperties, ParsedControlProperties } from '../types/properties'
+import { createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create controls routes with database injection
@@ -34,6 +35,7 @@ import type { BloodControlProperties, ParsedControlProperties } from '../types/p
 export function createControlsRoutes(database: Database): Hono {
   const dbInstance = database
   const controls = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
 // Helper function to extract strain/density data from properties JSON
 function parseControlProperties(properties: unknown, strainMap?: Map<number, { name: string }>): ParsedControlProperties {
@@ -1003,7 +1005,7 @@ controls.get('/:id/summary', async (c) => {
 })
 
 // Check for duplicate control definition (only checks blood controls)
-controls.post('/check-unique', async (c) => {
+controls.post('/check-unique', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1093,7 +1095,7 @@ controls.post('/check-unique', async (c) => {
 })
 
 // Suggest name for control definition (preview without creating)
-controls.post('/suggest-name', async (c) => {
+controls.post('/suggest-name', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1217,7 +1219,7 @@ controls.post('/suggest-name', async (c) => {
 })
 
 // Create control definition (defaults to blood)
-controls.post('/', async (c) => {
+controls.post('/', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1526,7 +1528,7 @@ controls.get('/:id/batches', async (c) => {
 })
 
 // Validate batch name
-controls.post('/batches/validate-name', async (c) => {
+controls.post('/batches/validate-name', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1548,7 +1550,7 @@ controls.post('/batches/validate-name', async (c) => {
 })
 
 // Generate suggested batch name
-controls.post('/batches/suggest-name', async (c) => {
+controls.post('/batches/suggest-name', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1582,7 +1584,7 @@ controls.post('/batches/suggest-name', async (c) => {
 })
 
 // Create a new batch (only for blood controls)
-controls.post('/:id/batches', async (c) => {
+controls.post('/:id/batches', authMiddleware, async (c) => {
   const definitionId = parseInt(c.req.param('id'))
   if (isNaN(definitionId)) return c.json({ error: 'Invalid blood control ID' }, 400)
 
@@ -1665,7 +1667,7 @@ controls.post('/:id/batches', async (c) => {
 })
 
 // Create batch with specimens
-controls.post('/batches/create-with-specimens', async (c) => {
+controls.post('/batches/create-with-specimens', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const { createBatchWithSpecimens } = await import('../lib/control-batch-creation')
@@ -1677,7 +1679,7 @@ controls.post('/batches/create-with-specimens', async (c) => {
 })
 
 // Add specimens to existing batch
-controls.post('/batches/:id/specimens/bulk', async (c) => {
+controls.post('/batches/:id/specimens/bulk', authMiddleware, async (c) => {
   try {
     const batchId = parseInt(c.req.param('id'))
     if (isNaN(batchId)) return c.json({ error: 'Invalid batch ID' }, 400)
@@ -1693,7 +1695,7 @@ controls.post('/batches/:id/specimens/bulk', async (c) => {
 })
 
 // Validate CSV
-controls.post('/batches/validate-csv', async (c) => {
+controls.post('/batches/validate-csv', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const { csvText } = body

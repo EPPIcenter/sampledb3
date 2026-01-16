@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { Database } from '../db/client'
 import { importDerivationsFromCsv, validateDerivationsCsv, type BulkDerivationSettings } from '../lib/derivations-csv'
+import { createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create imports routes with database injection
@@ -9,6 +10,7 @@ import { importDerivationsFromCsv, validateDerivationsCsv, type BulkDerivationSe
  */
 export function createImportsRoutes(database: Database): Hono {
   const imports = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
 const bulkDerivationSettingsSchema = z.object({
   derivationType: z.string(),
@@ -26,7 +28,7 @@ const bulkDerivationSettingsSchema = z.object({
 
 // Bulk import container derivations from CSV
 // Expects JSON body: { csv: string, dryRun?: boolean, settings?: BulkDerivationSettings }
-imports.post('/derivations-csv', async (c) => {
+imports.post('/derivations-csv', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -52,7 +54,7 @@ imports.post('/derivations-csv', async (c) => {
 
 // Validate derivations CSV without importing
 // Expects JSON body: { csv: string, settings?: BulkDerivationSettings }
-imports.post('/derivations-csv/validate', async (c) => {
+imports.post('/derivations-csv/validate', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({

@@ -8,6 +8,7 @@ import { resolveContainerByBarcode } from '../lib/identifier-resolution'
 import { validateSpecimenData, checkDuplicateSpecimens } from '../lib/validation'
 import { createContainerForSpecimen, type ContainerData } from '../lib/container-creation'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import { createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create specimens routes with database injection
@@ -16,6 +17,7 @@ import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-h
 export function createSpecimensRoutes(database: Database): Hono {
   const dbInstance = database
   const specimens = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
 // Search specimens
 specimens.get('/', async (c) => {
@@ -217,7 +219,7 @@ specimens.get('/:id', async (c) => {
 })
 
 // Create specimen
-specimens.post('/', async (c) => {
+specimens.post('/', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     

@@ -5,6 +5,7 @@ import { eq, and, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import type { CollectionInfo } from '../types/collections'
+import { createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create containers routes with database injection
@@ -12,6 +13,7 @@ import type { CollectionInfo } from '../types/collections'
  */
 export function createContainersRoutes(database: Database): Hono {
   const containers = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
 // Helper function to build full location path
 function buildLocationPath(loc: Location | null | undefined, parentName?: string): string {
@@ -445,7 +447,7 @@ containers.get('/:id/tags', async (c) => {
 })
 
 // Add tag to container
-containers.post('/:id/tags', async (c) => {
+containers.post('/:id/tags', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     

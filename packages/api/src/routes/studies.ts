@@ -16,6 +16,7 @@ import { eq, and, like, sql, or, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from '../lib/error-handler'
+import { createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create studies routes with database injection
@@ -24,6 +25,7 @@ import { handleRouteError, NotFoundError, ConflictError, ValidationError } from 
  */
 export function createStudiesRoutes(database: Database, sqliteDatabase: SQLiteDatabase): Hono {
   const studies = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
 // List all studies
 studies.get('/', async (c) => {
@@ -701,7 +703,7 @@ studies.get('/:id/timeline', async (c) => {
 })
 
 // Create study
-studies.post('/', async (c) => {
+studies.post('/', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({

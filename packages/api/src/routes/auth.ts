@@ -169,7 +169,7 @@ auth.get('/me', authMiddleware, async (c) => {
 })
 
 // Register (admin only in production)
-auth.post('/register', async (c) => {
+auth.post('/register', adminMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const registerSchema = await createRegisterSchema()

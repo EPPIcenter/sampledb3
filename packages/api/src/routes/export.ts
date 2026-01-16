@@ -31,6 +31,7 @@ import {
 } from '../lib/export-helpers'
 import { resolveSubjectNamesByStudy } from '../lib/identifier-resolution'
 import { resolveStudyByShortCode } from '../lib/identifier-resolution'
+import { createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create export routes with database injection
@@ -38,6 +39,7 @@ import { resolveStudyByShortCode } from '../lib/identifier-resolution'
  */
 export function createExportRoutes(database: Database): Hono {
   const export_ = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
 // Export specimens as CSV
 export_.get('/specimens.csv', async (c) => {
@@ -281,7 +283,7 @@ export_.get('/containers', async (c) => {
 })
 
 // Export containers by subject names (POST endpoint)
-export_.post('/containers', async (c) => {
+export_.post('/containers', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const studyCode = body.study
@@ -568,7 +570,7 @@ export_.get('/available-types', async (c) => {
 })
 
 // Validate study codes (for multi-study export)
-export_.post('/containers/validate-studies', async (c) => {
+export_.post('/containers/validate-studies', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const studyCodes = body.study_codes || []
@@ -598,7 +600,7 @@ export_.post('/containers/validate-studies', async (c) => {
 })
 
 // Multi-study export endpoint
-export_.post('/containers/multi-study', async (c) => {
+export_.post('/containers/multi-study', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const entries = body.entries || []
@@ -703,7 +705,7 @@ export_.post('/containers/multi-study', async (c) => {
 })
 
 // Export containers by micronix barcodes (POST endpoint)
-export_.post('/containers/by-barcodes', async (c) => {
+export_.post('/containers/by-barcodes', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const barcodes = body.barcodes || []
