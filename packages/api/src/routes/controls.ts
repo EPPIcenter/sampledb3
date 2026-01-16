@@ -86,7 +86,7 @@ function parseControlProperties(properties: unknown, strainMap?: Map<number, { n
 // --- Control Batches ---
 
 // List all control batches
-controls.get('/batches', async (c) => {
+controls.get('/batches', authMiddleware, async (c) => {
   const spotCountSubquery = dbInstance
     .select({
       batchId: specimen.controlBatchId,
@@ -164,7 +164,7 @@ controls.get('/batches', async (c) => {
 })
 
 // Get batch detail (only for blood control batches)
-controls.get('/batches/:id', async (c) => {
+controls.get('/batches/:id', authMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
@@ -187,7 +187,7 @@ controls.get('/batches/:id', async (c) => {
 })
 
 // Delete batch and all associated data
-controls.delete('/batches/:id', async (c) => {
+controls.delete('/batches/:id', authMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
@@ -290,7 +290,7 @@ controls.delete('/batches/:id', async (c) => {
 })
 
 // Get batch summary with enriched specimen data
-controls.get('/batches/:id/summary', async (c) => {
+controls.get('/batches/:id/summary', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
@@ -683,7 +683,7 @@ controls.get('/batches/:id/summary', async (c) => {
 // --- Control Definitions ---
 
 // List all control definitions (filtered to blood controls)
-controls.get('/', async (c) => {
+controls.get('/', authMiddleware, async (c) => {
   const batchCountSubquery = dbInstance
     .select({
       definitionId: controlBatch.controlDefinitionId,
@@ -774,7 +774,7 @@ controls.get('/', async (c) => {
 })
 
 // Get control definition by ID (filtered to blood controls)
-controls.get('/:id', async (c) => {
+controls.get('/:id', authMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   
   if (isNaN(id)) {
@@ -798,7 +798,7 @@ controls.get('/:id', async (c) => {
 })
 
 // Get control definition summary with composition and batches
-controls.get('/:id/summary', async (c) => {
+controls.get('/:id/summary', authMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid control ID' }, 400)
 
@@ -1396,7 +1396,7 @@ controls.post('/', authMiddleware, async (c) => {
 })
 
 // Update control definition (only blood controls)
-controls.patch('/:id', async (c) => {
+controls.patch('/:id', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
@@ -1500,7 +1500,7 @@ controls.patch('/:id', async (c) => {
 })
 
 // List batches for a definition (filtered to blood controls)
-controls.get('/:id/batches', async (c) => {
+controls.get('/:id/batches', authMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
 

@@ -203,7 +203,7 @@ derivations.post('/containers/:id/derive', authMiddleware, async (c) => {
 })
 
 // List derivations from a parent container
-derivations.get('/containers/:id/derivations', async (c) => {
+derivations.get('/containers/:id/derivations', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) {
@@ -235,7 +235,7 @@ derivations.get('/containers/:id/derivations', async (c) => {
 })
 
 // Get derivation source for a child container, or original source if not derived
-derivations.get('/containers/:id/source', async (c) => {
+derivations.get('/containers/:id/source', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) {
@@ -368,7 +368,7 @@ derivations.get('/containers/:id/source', async (c) => {
 })
 
 // Simple derivation chain: ancestors and direct descendants
-derivations.get('/containers/:id/derivation-chain', async (c) => {
+derivations.get('/containers/:id/derivation-chain', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) {
@@ -432,7 +432,7 @@ derivations.get('/containers/:id/derivation-chain', async (c) => {
 })
 
 // Update derivation metadata
-derivations.patch('/derivations/:id', async (c) => {
+derivations.patch('/derivations/:id', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) {
@@ -474,7 +474,7 @@ derivations.patch('/derivations/:id', async (c) => {
 })
 
 // Delete derivation (relationship only)
-derivations.delete('/derivations/:id', async (c) => {
+derivations.delete('/derivations/:id', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) {

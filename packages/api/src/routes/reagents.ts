@@ -15,7 +15,7 @@ export function createReagentsRoutes(database: Database): Hono {
   const authMiddleware = createAuthMiddleware(database)
 
   // List all reagents
-  reagents.get('/', async (c) => {
+  reagents.get('/', authMiddleware, async (c) => {
     const type = c.req.query('type')
     const expiringWithinDays = c.req.query('expiring_within_days')
     
@@ -49,7 +49,7 @@ export function createReagentsRoutes(database: Database): Hono {
 })
 
 // Get reagent by ID
-reagents.get('/:id', async (c) => {
+reagents.get('/:id', authMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   
   if (isNaN(id)) {
@@ -107,7 +107,7 @@ reagents.post('/', authMiddleware, async (c) => {
 })
 
 // Update reagent
-reagents.patch('/:id', async (c) => {
+reagents.patch('/:id', authMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) {

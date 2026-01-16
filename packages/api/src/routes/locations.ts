@@ -16,7 +16,7 @@ import {
   getLocationHierarchyStats,
 } from '../lib/location-helpers'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
-import { createAdminMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create locations routes with database injection
@@ -25,10 +25,11 @@ import { createAdminMiddleware } from '../middleware/auth'
  */
 export function createLocationsRoutes(database: Database, sqliteDatabase: SQLiteDatabase): Hono {
   const locations = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
   const adminMiddleware = createAdminMiddleware(database)
 
 // List all locations
-locations.get('/', async (c) => {
+locations.get('/', authMiddleware, async (c) => {
   try {
     const search = c.req.query('search')
     // Make pagination optional: if neither page nor limit is provided, return all locations
@@ -116,7 +117,7 @@ locations.get('/', async (c) => {
 })
 
 // Get location by ID
-locations.get('/:id', async (c) => {
+locations.get('/:id', authMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   
   if (isNaN(id)) {
