@@ -220,3 +220,50 @@ export async function createAuthenticatedTestClient(
   return createAuthenticatedClient(app, db, emailOrUsername, password)
 }
 
+/**
+ * Create an authenticated wrapper around a test client
+ * This automatically adds the Cookie header to all requests
+ * 
+ * @param client - The base test client
+ * @param cookieHeader - The cookie header string (e.g., "session_id=abc123")
+ * @returns A wrapped client that automatically includes the cookie in all requests
+ */
+export function createAuthenticatedClientWrapper(
+  client: ReturnType<typeof createTestClient>,
+  cookieHeader: string
+): ReturnType<typeof createTestClient> {
+  // Create a proxy that intercepts method calls
+  return new Proxy(client, {
+    get(target, prop) {
+      const value = (target as any)[prop]
+      
+      // If it's a function that looks like a request method ($get, $post, etc.)
+      if (typeof value === 'function' && typeof prop === 'string' && prop.startsWith('$')) {
+        return function(...args: any[]) {
+          // The first argument is typically an options object
+          const options = args[0] || {}
+          
+          // Merge in the cookie header
+          const headers = options.headers || {}
+          const mergedHeaders = {
+            ...headers,
+            Cookie: cookieHeader,
+          }
+          
+          // Call the original method with updated options
+          return value.call(target, {
+            ...options,
+            headers: mergedHeaders,
+          })
+        }
+      }
+      
+      // If it's an object (like client.api), recursively wrap it
+      if (value && typeof value === 'object' && !Array.isArray(value) && value !== null) {
+        return createAuthenticatedClientWrapper(value as any, cookieHeader)
+      }
+      
+      return value
+    },
+  }) as any
+}
