@@ -94,7 +94,7 @@ describe('Storage Types API', () => {
 
       const res = await client.api['storage-types'].$get()
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data).toEqual([])
     })
 
@@ -108,7 +108,7 @@ describe('Storage Types API', () => {
 
       const res = await client.api['storage-types'].$get()
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data).toHaveLength(2)
     })
   })
@@ -129,7 +129,7 @@ describe('Storage Types API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data.name).toBe('New Storage Type')
       expect(data.description).toBe('Test description')
     })
@@ -148,7 +148,7 @@ describe('Storage Types API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data.name).toBe('Simple Type')
     })
 
@@ -168,7 +168,7 @@ describe('Storage Types API', () => {
       })
 
       expect(res.status).toBe(409)
-      const data = await res.json()
+      const data = await res.json() as any
       expect(data.error).toContain('already exists')
     })
   })
@@ -186,7 +186,7 @@ describe('Storage Types API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data.id).toBe(testType.id)
       expect(data.name).toBe('Test Type')
     })
@@ -222,7 +222,7 @@ describe('Storage Types API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data.name).toBe('Updated')
       expect(data.description).toBe('New description')
     })
@@ -264,7 +264,7 @@ describe('Storage Types API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as any
       expect(data.error).toContain('in use')
     })
 

@@ -368,7 +368,7 @@ containers.patch('/:id', async (c) => {
       if (containerType) {
         // Validate unit is allowed for container type
         const { validateUnitForContainerType } = await import('../lib/validation')
-        const validation = await validateUnitForContainerType(containerType, unitId)
+        const validation = await validateUnitForContainerType(database, containerType, unitId)
         if (!validation.valid) {
           return c.json({ error: validation.error }, 400)
         }

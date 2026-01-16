@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import { users, sessions } from '../db/schema'
-import { eq, and, isNull, gt, ne, or } from 'drizzle-orm'
+import { eq, and, isNull, gt, ne, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { nanoid } from 'nanoid'
@@ -601,7 +601,7 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
     // Prevent removing the last admin
     if (data.role && data.role !== 'admin' && existing.role === 'admin') {
       const adminCount = await database
-        .select({ count: z.number() })
+        .select({ count: sql<number>`count(*)` })
         .from(users)
         .where(and(
           eq(users.role, 'admin'),

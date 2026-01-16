@@ -408,7 +408,7 @@ locations.put('/:id', adminMiddleware, async (c) => {
 
     // Validate parent if being changed
     if (data.parentId !== undefined) {
-      const validationError = await validateLocationHierarchy(data.parentId ?? null, id)
+      const validationError = await validateLocationHierarchy(database, sqliteDatabase, data.parentId ?? null, id)
       if (validationError) {
         return c.json({ error: validationError }, 400)
       }

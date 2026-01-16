@@ -4,20 +4,17 @@ import api, {
   studiesApi,
   activityApi,
   statisticsApi,
-  locationsApi,
   controlsApi,
   searchApi,
   type Study,
   type SearchResult,
   type StudySummaryBasic,
   type StatisticsData,
-  type Location,
 } from '../lib/api'
 import MetricCard from '../components/dashboard/MetricCard'
 import RecentStudies from '../components/dashboard/RecentStudies'
 import ActivityFeed from '../components/dashboard/ActivityFeed'
 import SystemInsights from '../components/dashboard/SystemInsights'
-import StorageOverview from '../components/dashboard/StorageOverview'
 import SkeletonCard from '../components/SkeletonCard'
 import { calculateTrend } from '../utils/trends'
 
@@ -59,8 +56,6 @@ export default function Dashboard() {
   const [statisticsData, setStatisticsData] = useState<StatisticsData | null>(null)
   const [recentStudies, setRecentStudies] = useState<Array<Study & { summary?: StudySummaryBasic | null }>>([])
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
-  const [locations, setLocations] = useState<Location[]>([])
-  const [locationCounts, setLocationCounts] = useState<Record<string, number>>({})
   const [hasControls, setHasControls] = useState(false)
   
   const [loading, setLoading] = useState<LoadingState>({
@@ -148,31 +143,17 @@ export default function Dashboard() {
         statisticsRes,
         studiesListRes,
         activityRes,
-        locationsRes,
         controlsRes,
       ] = await Promise.all([
         statisticsApi.get().catch(() => ({ data: null })),
         studiesApi.list(undefined, { limit: 15 }).catch(() => ({ studies: [] })),
         activityApi.recent(20).catch(() => ({ data: { activity: [] } })),
-        locationsApi.list().catch(() => ({ data: { locations: [] } })),
         controlsApi.list().catch(() => ({ data: { controls: [] } })),
       ])
 
       // Set statistics data
       if (statisticsRes.data) {
         setStatisticsData(statisticsRes.data)
-        
-        // Extract location counts from statistics
-        // byRootLocation uses root location names as keys
-        // We'll match locations by name to get counts
-        const counts: Record<string, number> = {}
-        if (statisticsRes.data.storage.byRootLocation) {
-          // Store counts by root location name
-          Object.entries(statisticsRes.data.storage.byRootLocation).forEach(([name, count]) => {
-            counts[name] = count as number
-          })
-        }
-        setLocationCounts(counts)
       }
 
       // Load study summaries
@@ -209,9 +190,6 @@ export default function Dashboard() {
           context: item.context,
         }))
       )
-
-      // Set locations
-      setLocations(locationsRes.data.locations || [])
 
       // Check if controls exist
       setHasControls((controlsRes.data.controls || []).length > 0)
@@ -380,13 +358,6 @@ export default function Dashboard() {
 
       {/* System Insights */}
       <SystemInsights data={statisticsData} loading={loading.secondary} />
-
-      {/* Storage Overview */}
-      <StorageOverview
-        locations={locations}
-        locationCounts={locationCounts}
-        loading={loading.secondary}
-      />
 
       {/* Controls Inventory (Conditional) */}
       {hasControls && !loading.secondary && (

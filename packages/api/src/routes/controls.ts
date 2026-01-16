@@ -1535,7 +1535,7 @@ controls.post('/batches/validate-name', async (c) => {
     })
     
     const data = schema.parse(body)
-    const validation = await validateControlBatchName(data.name, data.excludeId)
+    const validation = await validateControlBatchName(database, data.name, data.excludeId)
     
     return c.json(validation)
   } catch (error: any) {
@@ -1615,7 +1615,7 @@ controls.post('/:id/batches', async (c) => {
     let batchName: string
     if (data.name) {
       // Validate provided name
-      const nameValidation = await validateControlBatchName(data.name)
+      const nameValidation = await validateControlBatchName(database, data.name)
       if (!nameValidation.valid) {
         return c.json({ 
           error: nameValidation.error,

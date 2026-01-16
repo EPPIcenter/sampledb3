@@ -12,6 +12,7 @@ import {
   setupPasswordRequirements,
   setupSessionSettings,
 } from '../../__tests__/helpers/auth-helpers'
+import type { ErrorResponse, UserResponse, ValidationErrorResponse, SuccessResponse } from '../../__tests__/helpers/test-types'
 
 describe('Auth API', () => {
   let app: Hono
@@ -52,7 +53,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user).toBeDefined()
       expect(data.user.email).toBe('test@example.com')
       expect(data.user.name).toBe('Test User')
@@ -133,7 +134,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user).toBeDefined()
       expect(data.user.email).toBe('login@example.com')
 
@@ -188,7 +189,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as any
       expect(data.user).toBeDefined()
       expect(data.user.email).toBe('user@example.com')
       expect(data.user.username).toBe('testuser')
@@ -246,7 +247,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as any
       expect(data.user).toBeDefined()
       expect(data.user.email).toBe('newuser@example.com')
       expect(data.user.username).toBe('newuser')
@@ -264,7 +265,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as any
       expect(data.user).toBeDefined()
       expect(data.user.username).toBeUndefined()
     })
@@ -293,7 +294,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as any
       expect(data.error).toContain('Username already in use')
     })
   })
@@ -325,7 +326,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user.name).toBe('Updated Name')
       expect(data.user.email).toBe('profile@example.com')
       expect(data.user.username).toBe('profileuser')
@@ -341,7 +342,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as any
       expect(data.user.email).toBe('newemail@example.com')
       expect(data.user.name).toBe('Profile User')
     })
@@ -356,7 +357,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user.username).toBe('newusername')
     })
 
@@ -372,7 +373,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user.name).toBe('New Name')
       expect(data.user.email).toBe('newemail@example.com')
       expect(data.user.username).toBe('newusername')
@@ -388,7 +389,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user.username).toBeUndefined()
     })
 
@@ -409,7 +410,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('Email already in use')
     })
 
@@ -431,7 +432,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as any
       expect(data.error).toContain('Username already in use')
     })
 
@@ -480,7 +481,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user).toHaveProperty('id')
       expect(data.user).toHaveProperty('email')
       expect(data.user).toHaveProperty('username')
@@ -517,7 +518,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as SuccessResponse
       expect(data.message).toContain('Password changed successfully')
 
       // Verify we can login with new password
@@ -543,7 +544,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(401)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('Current password is incorrect')
     })
 
@@ -558,7 +559,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('Password must be at least')
     })
 

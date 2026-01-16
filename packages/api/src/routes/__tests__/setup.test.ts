@@ -2,13 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import type { Database } from '../../db/client'
-import { Database } from 'bun:sqlite'
+import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { createSetupRoutes } from '../setup'
 import { users, unit, specimenType, storageType, location, containerTypeUnit, specimenTypeContainerType } from '../../db/schema'
 
 describe('Setup Route', () => {
   let testDb: Database
-  let sqlite: Database
+  let sqlite: SQLiteDatabase
 
   function createTestApp(): Hono {
     // Create a fresh app instance for each test to avoid state leakage

@@ -8,6 +8,8 @@ export const testStudy1: Omit<Study, 'id'> = {
   leadPerson: 'Dr. Test',
   created: '2024-01-01T00:00:00.000Z',
   lastUpdated: '2024-01-01T00:00:00.000Z',
+  createdBy: null,
+  updatedBy: null,
 }
 
 export const testStudy2: Omit<Study, 'id'> = {
@@ -18,6 +20,8 @@ export const testStudy2: Omit<Study, 'id'> = {
   leadPerson: 'Dr. Test',
   created: '2024-01-02T00:00:00.000Z',
   lastUpdated: '2024-01-02T00:00:00.000Z',
+  createdBy: null,
+  updatedBy: null,
 }
 
 

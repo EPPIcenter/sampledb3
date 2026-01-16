@@ -9,6 +9,7 @@ import { z } from 'zod'
 import type { Database } from '../../db/client'
 import { createTestTag, createTestStorageContainer, createTestSpecimenType, createTestSpecimen, createTestUnit } from '../../__tests__/helpers/factories'
 import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
+import type { ErrorResponse, SuccessResponse, ValidationErrorResponse } from '../../__tests__/helpers/test-types'
 
 describe('createCrudRoutes Factory', () => {
   let testDb: Database
@@ -66,7 +67,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await client.api.tags.$get()
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData<Array<{ id: number; name: string }>>(res)
       expect(Array.isArray(data)).toBe(true)
     })
 
@@ -96,7 +97,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as { id: number; name: string }
       expect(data).toBeDefined()
       expect(data.id).toBe(testTag.id)
       expect(data.name).toBe('Test Tag')
@@ -125,7 +126,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(404)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toBe('Tag with id 99999 not found')
     })
 
@@ -152,7 +153,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('Invalid Tag ID')
     })
 
@@ -181,7 +182,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as { id: number; name: string }
       expect(data).toBeDefined()
       expect(data.name).toBe('New Tag')
       expect(data.id).toBeDefined()
@@ -215,7 +216,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as { name: string }
       expect(data.name).toBe('Updated Name')
     })
 
@@ -245,7 +246,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as SuccessResponse
       expect(data.message).toContain('deleted successfully')
 
       // Verify it's deleted
@@ -284,7 +285,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ValidationErrorResponse
       expect(data.error).toBe('Validation error')
       expect(data.details).toBeDefined()
     })
@@ -345,7 +346,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(409)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('already exists')
     })
 
@@ -378,7 +379,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(409)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('already exists')
     })
 
@@ -450,7 +451,7 @@ describe('createCrudRoutes Factory', () => {
 
       expect(validateCreateCalled).toBe(true)
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toBe('Custom validation failed')
     })
 
@@ -492,7 +493,7 @@ describe('createCrudRoutes Factory', () => {
 
       expect(validateUpdateCalled).toBe(true)
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toBe('Custom update validation failed')
     })
   })
@@ -559,7 +560,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('in use')
     })
 
@@ -636,7 +637,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await client.api.tags.$get()
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as Array<{ name: string }>
       expect(data[0].name).toBe('TAG 1')
       expect(data[1].name).toBe('TAG 2')
     })
@@ -673,7 +674,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as { name: string; transformed: boolean }
       expect(data.name).toBe('TEST TAG')
       expect(data.transformed).toBe(true)
     })
@@ -774,10 +775,10 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await client.api.tags.$get()
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as Array<{ name: string }>
       expect(data.length).toBeGreaterThanOrEqual(3)
       // Should be ordered by name
-      const names = data.map((s: any) => s.name)
+      const names = data.map((s) => s.name)
       expect(names).toEqual([...names].sort())
     })
   })

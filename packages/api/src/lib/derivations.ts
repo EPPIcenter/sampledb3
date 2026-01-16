@@ -1,4 +1,7 @@
 import type { Database } from '../db/client'
+import type { ExtractTablesWithRelations } from 'drizzle-orm'
+import type { SQLiteTransaction } from 'drizzle-orm/sqlite-core'
+import type * as schema from '../db/schema'
 import {
   containerDerivation,
   cryovialBox,
@@ -57,7 +60,7 @@ export interface CreateDerivationResult {
 }
 
 async function findOrCreateDerivedSpecimen(
-  database: Database,
+  database: DatabaseOrTransaction,
   parentSpecimenId: number,
   specimenTypeName: string,
 ): Promise<number> {
@@ -128,7 +131,7 @@ async function findOrCreateDerivedSpecimen(
 }
 
 async function resolveUnitIdForChild(
-  database: Database,
+  database: DatabaseOrTransaction,
   containerType: CreateDerivationInput['containerType'],
   unitSymbol?: string,
 ): Promise<number> {
@@ -146,11 +149,11 @@ async function resolveUnitIdForChild(
   }
 
   // Use the default unit for the child container type
-  return await getDefaultUnit(database, containerType)
+  return await getDefaultUnit(database as Database, containerType)
 }
 
 async function adjustParentQuantity(
-  database: Database,
+  database: DatabaseOrTransaction,
   parent: typeof storageContainer.$inferSelect,
   quantityUsed?: number,
   reduceParentQuantity?: boolean,
@@ -191,8 +194,10 @@ async function adjustParentQuantity(
   return { updatedParent: updated, warnings }
 }
 
+type DatabaseOrTransaction = Database | SQLiteTransaction<'sync', void, typeof schema, ExtractTablesWithRelations<typeof schema>>
+
 export async function createDerivation(
-  database: Database,
+  database: DatabaseOrTransaction,
   input: CreateDerivationInput,
 ): Promise<CreateDerivationResult> {
   const parent = await database
@@ -219,7 +224,7 @@ export async function createDerivation(
   }
 
   const containerTypeValidation = await validateContainerTypeForSpecimenType(
-    database,
+    database as Database,
     specType.id,
     input.containerType
   )
@@ -234,7 +239,7 @@ export async function createDerivation(
   // Resolve collection if only name/type provided
   let collectionId = input.collectionId
   if (!collectionId && input.collectionName && input.collectionType) {
-    const resolved = await resolveCollection(input.collectionName, input.collectionType as CollectionType, database)
+    const resolved = await resolveCollection(input.collectionName, input.collectionType as CollectionType, database as Database)
     if (!resolved) {
       throw new Error(`Collection '${input.collectionName}' (${input.collectionType}) not found`)
     }

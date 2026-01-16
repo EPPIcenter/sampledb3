@@ -1,4 +1,9 @@
 import type { Database } from '../db/client'
+import type { ExtractTablesWithRelations } from 'drizzle-orm'
+import type { SQLiteTransaction } from 'drizzle-orm/sqlite-core'
+import type * as schema from '../db/schema'
+
+type DatabaseOrTransaction = Database | SQLiteTransaction<'sync', void, typeof schema, ExtractTablesWithRelations<typeof schema>>
 import {
   containerDerivation,
   controlBatch,
@@ -162,7 +167,7 @@ export function parseCsv(text: string): DerivationCsvRow[] {
   return rows
 }
 
-async function resolveParentContainerId(database: Database, row: DerivationCsvRow): Promise<number> {
+async function resolveParentContainerId(database: DatabaseOrTransaction, row: DerivationCsvRow): Promise<number> {
   // 1. Explicit ID
   const explicitId = parseNumber(row.parent_container_id)
   if (explicitId) {
@@ -443,7 +448,7 @@ async function resolveParentContainerId(database: Database, row: DerivationCsvRo
 }
 
 async function resolveCollectionId(
-  database: Database,
+  database: DatabaseOrTransaction,
   containerType: DerivationCsvRow['container_type'],
   collectionName?: string,
   collectionBarcode?: string,

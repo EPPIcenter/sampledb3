@@ -4,16 +4,16 @@ import { Hono } from 'hono'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import type { Database } from '../../db/client'
 import { createCrudRoutes } from '../../lib/crud-routes'
-import { specimenType, specimen } from '../../db/schema'
+import { specimenType, specimen, type SpecimenType } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
+import type { ErrorResponse } from '../../__tests__/helpers/test-types'
 
 describe('Specimen Types API', () => {
   let app: Hono
   let testDb: Database
-  let sqlite: any
-  let specimenTypesRoutes: any
+  let sqlite: unknown
   let cookieHeader: string
 
   beforeEach(async () => {
@@ -44,7 +44,7 @@ describe('Specimen Types API', () => {
       name: z.string().min(1, 'Name is required'),
     })
 
-    function transformList(item: any) {
+    function transformList(item: SpecimenType) {
       return {
         id: item.id,
         name: item.name,
@@ -53,7 +53,7 @@ describe('Specimen Types API', () => {
       }
     }
 
-    async function checkSpecimenTypeInUse(id: number, database: any): Promise<string | null> {
+    async function checkSpecimenTypeInUse(id: number, database: Database): Promise<string | null> {
       const inUse = await database
         .select()
         .from(specimen)
@@ -81,7 +81,7 @@ describe('Specimen Types API', () => {
       }
     }
 
-    specimenTypesRoutes = createCrudRoutes({
+    const specimenTypesRoutes = createCrudRoutes({
       table: specimenType,
       database: testDb,
       entityName: 'Specimen type',
@@ -100,7 +100,7 @@ describe('Specimen Types API', () => {
 
   afterEach(() => {
     if (sqlite) {
-      cleanupTestDatabase(sqlite)
+      cleanupTestDatabase(sqlite as Parameters<typeof cleanupTestDatabase>[0])
     }
   })
 
@@ -110,7 +110,7 @@ describe('Specimen Types API', () => {
       const res = await client.api['specimen-types'].$get()
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData<SpecimenType[]>(res)
       expect(Array.isArray(data)).toBe(true)
     })
   })
@@ -126,7 +126,7 @@ describe('Specimen Types API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await getResponseData(res)
+      const data = await getResponseData<SpecimenType>(res)
       expect(data).toBeDefined()
       expect(data.name).toBe('Test Type')
       expect(data.id).toBeDefined()
@@ -162,7 +162,7 @@ describe('Specimen Types API', () => {
       })
 
       expect(res.status).toBe(409)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('already exists')
     })
   })
@@ -175,7 +175,7 @@ describe('Specimen Types API', () => {
         cookie: cookieHeader,
         json: { name: 'Get Test Type' },
       })
-      const created = await getResponseData(createRes)
+      const created = await getResponseData<SpecimenType>(createRes)
       const id = created.id
 
       const client = createTestClient(app) as any
@@ -184,7 +184,7 @@ describe('Specimen Types API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData<SpecimenType>(res)
       expect(data.id).toBe(id)
       expect(data.name).toBe('Get Test Type')
     })
@@ -216,7 +216,7 @@ describe('Specimen Types API', () => {
         cookie: cookieHeader,
         json: { name: 'Original Name' },
       })
-      const created = await getResponseData(createRes)
+      const created = await getResponseData<SpecimenType>(createRes)
       const id = created.id
 
       const res = await authenticatedRequest(app, `/api/specimen-types/${id}`, {
@@ -228,7 +228,7 @@ describe('Specimen Types API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData<SpecimenType>(res)
       expect(data.name).toBe('Updated Name')
     })
 
@@ -239,7 +239,7 @@ describe('Specimen Types API', () => {
         cookie: cookieHeader,
         json: { name: 'Type A' },
       })
-      const type1 = await getResponseData(create1)
+      const type1 = await getResponseData<SpecimenType>(create1)
 
       await authenticatedRequest(app, '/api/specimen-types', {
         method: 'POST',
@@ -268,7 +268,7 @@ describe('Specimen Types API', () => {
         cookie: cookieHeader,
         json: { name: 'Delete Test Type' },
       })
-      const created = await getResponseData(createRes)
+      const created = await getResponseData<SpecimenType>(createRes)
       const id = created.id
 
       const res = await authenticatedRequest(app, `/api/specimen-types/${id}`, {
@@ -313,7 +313,7 @@ describe('Specimen Types API', () => {
       const res = await client.api['specimen-types'].$get()
       expect(res.status).toBe(200)
       // Check that list items have the transformed structure
-      const data = await getResponseData(res)
+      const data = await getResponseData<SpecimenType[]>(res)
       if (data.length > 0) {
         const item = data[0]
         expect(item).toHaveProperty('id')
@@ -333,7 +333,7 @@ describe('Specimen Types API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await getResponseData(res)
+      const data = await getResponseData<SpecimenType>(res)
       expect(data.created).toBeDefined()
       expect(data.lastUpdated).toBeDefined()
       expect(new Date(data.created).getTime()).toBeGreaterThan(0)
@@ -345,7 +345,7 @@ describe('Specimen Types API', () => {
         cookie: cookieHeader,
         json: { name: 'Update Timestamp Test' },
       })
-      const created = await getResponseData(createRes)
+      const created = await getResponseData<SpecimenType>(createRes)
       const originalUpdated = created.lastUpdated
 
       // Wait a bit to ensure timestamp difference
@@ -358,7 +358,7 @@ describe('Specimen Types API', () => {
       })
 
       expect(updateRes.status).toBe(200)
-      const updated = await getResponseData(updateRes)
+      const updated = await getResponseData<SpecimenType>(updateRes)
       expect(updated.lastUpdated).not.toBe(originalUpdated)
     })
   })

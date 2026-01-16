@@ -161,7 +161,7 @@ async function createMicronixTube(
 async function createCryovialTube(
   specimenId: number,
   data: ContainerData,
-  database: Database = db,
+  database: Database,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
@@ -213,7 +213,7 @@ async function createCryovialTube(
 async function createPaper(
   specimenId: number,
   data: ContainerData,
-  database: Database = db,
+  database: Database,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
@@ -266,7 +266,7 @@ async function createPaper(
 async function createStaticWell(
   specimenId: number,
   data: ContainerData,
-  database: Database = db,
+  database: Database,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {

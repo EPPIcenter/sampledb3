@@ -71,7 +71,7 @@ describe('Strains API', () => {
 
       const res = await client.api.strains.$get()
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data).toEqual([])
     })
 
@@ -85,7 +85,7 @@ describe('Strains API', () => {
 
       const res = await client.api.strains.$get()
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data).toHaveLength(2)
       expect(data[0].name).toBe('Strain A')
     })
@@ -107,7 +107,7 @@ describe('Strains API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data.name).toBe('New Strain')
       expect(data.description).toBe('Test description')
     })
@@ -128,7 +128,7 @@ describe('Strains API', () => {
       })
 
       expect(res.status).toBe(409)
-      const data = await res.json()
+      const data = await res.json() as any
       expect(data.error).toContain('already exists')
     })
   })
@@ -146,7 +146,7 @@ describe('Strains API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data.id).toBe(testStrain.id)
       expect(data.name).toBe('Test Strain')
     })
@@ -170,7 +170,7 @@ describe('Strains API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data.name).toBe('Updated')
     })
   })
