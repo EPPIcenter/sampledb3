@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { collectionsApi, locationsApi, type Location } from '../lib/api'
 import CryovialBoxPicker, { type CryovialBox } from '../components/CryovialBoxPicker'
+import { useUser } from '../contexts/UserContext'
 
 interface CSVRow {
   [key: string]: string
@@ -49,8 +50,21 @@ interface FileData {
 type Step = 'upload' | 'resolve' | 'execute'
 
 export default function ContainerMoveCryovial() {
+  const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [searchParams, setSearchParams] = useSearchParams()
   const currentStep = (searchParams.get('step') as Step) || 'upload'
+  
+  // Redirect if user doesn't have write permissions
+  useEffect(() => {
+    if (!canWrite) {
+      navigate('/', { replace: true })
+    }
+  }, [canWrite, navigate])
+  
+  if (!canWrite) {
+    return null
+  }
 
   const setCurrentStep = (step: Step) => {
     setSearchParams((prev) => {

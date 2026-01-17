@@ -7,6 +7,7 @@ import ContainerConfigurationStep from '../components/wizards/ContainerConfigura
 import ReviewStep from '../components/wizards/ReviewStep'
 import { controlsApi, specimenTypesApi } from '../lib/api'
 import type { ControlDefinition, SpecimenType } from '../lib/api'
+import { useUser } from '../contexts/UserContext'
 
 export type WizardStep = 'batch-info' | 'specimen-types' | 'csv-upload' | 'containers' | 'review'
 
@@ -60,8 +61,20 @@ export interface CSVFileData {
 
 export default function ControlBatchWizard() {
   const navigate = useNavigate()
+  const { canWrite } = useUser()
   const { id: batchId } = useParams<{ id?: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
+  
+  // Redirect if user doesn't have write permissions
+  useEffect(() => {
+    if (!canWrite) {
+      navigate('/blood-controls', { replace: true })
+    }
+  }, [canWrite, navigate])
+  
+  if (!canWrite) {
+    return null
+  }
   
   const isAddMode = !!batchId
   // In add mode, skip batch-info step and go directly to specimen-types

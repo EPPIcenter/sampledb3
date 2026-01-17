@@ -35,9 +35,8 @@ export default function ReferenceDataTable<T extends { id: number }>({
   loading = false,
   readOnly = false,
 }: ReferenceDataTableProps<T>) {
-  const { user } = useUser()
-  const isAdmin = user?.role === 'admin'
-  const canEdit = !readOnly && isAdmin
+  const { canManageReferenceData } = useUser()
+  const canEdit = !readOnly && canManageReferenceData
   const [internalSearch, setInternalSearch] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
 

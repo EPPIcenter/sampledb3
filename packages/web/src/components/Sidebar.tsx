@@ -21,7 +21,7 @@ interface SidebarProps {
 
 export default function Sidebar({ isMobileOpen = false, onMobileClose }: SidebarProps) {
   const location = useLocation()
-  const { user } = useUser()
+  const { user, canWrite } = useUser()
   
   // Initialize expanded items - check if any child routes are active
   const getInitialExpandedItems = () => {
@@ -165,7 +165,7 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
     {
       title: 'Operations',
       items: [
-        {
+        ...(canWrite ? [{
           label: 'Import',
           to: '/import',
           icon: (
@@ -173,7 +173,7 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
           ),
-        },
+        }] : []),
         {
           label: 'Export',
           icon: (
@@ -202,52 +202,54 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
             },
           ],
         },
-        {
-          label: 'Move Containers',
-          icon: (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-            </svg>
-          ),
-          children: [
-            {
-              label: 'Move Micronix Tubes',
-              to: '/container-move/micronix',
-              icon: (
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-              ),
-            },
-            {
-              label: 'Move Cryovial Tubes',
-              to: '/container-move/cryovial',
-              icon: (
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-              ),
-            },
-            {
-              label: 'Move Papers',
-              to: '/container-move/papers',
-              icon: (
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-              ),
-            },
-          ],
-        },
-        {
-          label: 'Move Collections',
-          icon: (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-            </svg>
-          ),
-          to: '/collection-move',
-        },
+        ...(canWrite ? [
+          {
+            label: 'Move Containers',
+            icon: (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            ),
+            children: [
+              {
+                label: 'Move Micronix Tubes',
+                to: '/container-move/micronix',
+                icon: (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                ),
+              },
+              {
+                label: 'Move Cryovial Tubes',
+                to: '/container-move/cryovial',
+                icon: (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                ),
+              },
+              {
+                label: 'Move Papers',
+                to: '/container-move/papers',
+                icon: (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                ),
+              },
+            ],
+          },
+          {
+            label: 'Move Collections',
+            icon: (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            ),
+            to: '/collection-move',
+          },
+        ] : []),
       ],
     },
     {

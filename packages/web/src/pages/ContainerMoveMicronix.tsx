@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { collectionsApi, locationsApi, scannerConfigurationsApi, type Location, type ScannerConfiguration } from '../lib/api'
 import MicronixPlatePicker, { type MicronixPlate } from '../components/MicronixPlatePicker'
+import { useUser } from '../contexts/UserContext'
 
 interface CSVRow {
   [key: string]: string
@@ -49,7 +50,20 @@ interface FileData {
 type Step = 'upload' | 'resolve' | 'execute'
 
 export default function ContainerMoveMicronix() {
+  const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [searchParams, setSearchParams] = useSearchParams()
+  
+  // Redirect if user doesn't have write permissions
+  useEffect(() => {
+    if (!canWrite) {
+      navigate('/', { replace: true })
+    }
+  }, [canWrite, navigate])
+  
+  if (!canWrite) {
+    return null
+  }
   const currentStep = (searchParams.get('step') as Step) || 'upload'
 
   const setCurrentStep = (step: Step) => {

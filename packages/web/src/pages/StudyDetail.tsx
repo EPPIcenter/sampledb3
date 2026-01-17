@@ -14,10 +14,12 @@ import SubjectForm from '../components/forms/SubjectForm'
 import StudyForm from '../components/forms/StudyForm'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import SubjectMergeModal from '../components/SubjectMergeModal'
+import { useUser } from '../contexts/UserContext'
 
 export default function StudyDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [study, setStudy] = useState<Study | null>(null)
   const [subjects, setSubjects] = useState<StudySubject[]>([])
   const [summary, setSummary] = useState<StudySummary | null>(null)
@@ -233,24 +235,28 @@ export default function StudyDetail() {
             <p className="text-gray-500 mt-1">Code: {study.shortCode}</p>
           </div>
           <div className="flex space-x-3">
-            <button
-              onClick={() => setEditStudyModalOpen(true)}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium"
-            >
-              Edit Study
-            </button>
-            <button
-              onClick={() => setCreateSubjectModalOpen(true)}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
-            >
-              Create Subject
-            </button>
-            <button
-              onClick={() => setMergeModalOpen(true)}
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium"
-            >
-              Merge Subjects
-            </button>
+            {canWrite && (
+              <>
+                <button
+                  onClick={() => setEditStudyModalOpen(true)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium"
+                >
+                  Edit Study
+                </button>
+                <button
+                  onClick={() => setCreateSubjectModalOpen(true)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                >
+                  Create Subject
+                </button>
+                <button
+                  onClick={() => setMergeModalOpen(true)}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium"
+                >
+                  Merge Subjects
+                </button>
+              </>
+            )}
             <button
               onClick={() => setExportModalOpen(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"

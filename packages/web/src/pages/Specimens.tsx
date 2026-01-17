@@ -5,6 +5,7 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import SpecimenFilter, { type SpecimenFilters } from '../components/SpecimenFilter'
 import { getModifierKey } from '../lib/hotkeys'
+import { useUser } from '../contexts/UserContext'
 
 interface Specimen {
   id: number
@@ -33,6 +34,7 @@ interface Specimen {
 
 export default function Specimens() {
   const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [searchParams, setSearchParams] = useSearchParams()
   const [specimens, setSpecimens] = useState<Specimen[]>([])
   const [loading, setLoading] = useState(true)
@@ -152,13 +154,27 @@ export default function Specimens() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Specimens</h1>
-        <Link
-          to="/specimens/new"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap transition-colors inline-flex items-center"
-        >
+        {canWrite && (
+          <Link
+            to="/specimens/new"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap transition-colors inline-flex items-center"
+          >
             New Specimen
           </Link>
+        )}
       </div>
+      {!canWrite && (
+        <div className="mb-4 rounded-md bg-blue-50 border border-blue-200 p-3">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm font-medium text-blue-800">
+              You have view-only access. Contact an administrator or member to create or modify specimens.
+            </p>
+          </div>
+        </div>
+      )}
 
       <SpecimenFilter
         filters={filters}

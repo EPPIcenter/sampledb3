@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import StudyCard from '../components/StudyCard'
 import StudyCardSkeleton from '../components/StudyCardSkeleton'
 import { getModifierKey } from '../lib/hotkeys'
+import { useUser } from '../contexts/UserContext'
 
 type ViewMode = 'grid' | 'list' | 'compact'
 type SortOption = 'title' | 'date' | 'subjects' | 'specimens' | 'containers' | 'lead'
@@ -16,6 +17,7 @@ interface StudyWithSummary extends Study {
 
 export default function Studies() {
   const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [studies, setStudies] = useState<StudyWithSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -386,13 +388,27 @@ export default function Studies() {
               </p>
             )}
           </div>
-          <Link
-            to="/studies/new"
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap transition-colors inline-flex items-center justify-center"
-          >
-            New Study
-          </Link>
+          {canWrite && (
+            <Link
+              to="/studies/new"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap transition-colors inline-flex items-center justify-center"
+            >
+              New Study
+            </Link>
+          )}
         </div>
+        {!canWrite && (
+          <div className="mb-4 rounded-md bg-blue-50 border border-blue-200 p-3">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm font-medium text-blue-800">
+                You have view-only access. Contact an administrator or member to create or modify studies.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Search and Filters */}
         <div className="space-y-4">

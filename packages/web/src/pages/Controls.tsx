@@ -4,9 +4,11 @@ import DataTable, { Column } from '../components/DataTable'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import StatCard from '../components/StatCard'
 import SkeletonCard from '../components/SkeletonCard'
+import { useUser } from '../contexts/UserContext'
 
 export default function BloodControls() {
   const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [definitions, setDefinitions] = useState<ControlDefinition[]>([])
   const [batches, setBatches] = useState<Array<ControlBatch & { definitionName?: string }>>([])
   const [strains, setStrains] = useState<Strain[]>([])
@@ -278,27 +280,31 @@ export default function BloodControls() {
         <h1 className="text-3xl font-bold text-gray-900">Blood Controls Management</h1>
           <p className="text-gray-500 mt-1">Manage and track blood control definitions and their production batches.</p>
         </div>
-        {activeTab === 'definitions' && (
-          <button
-            onClick={() => navigate('/blood-controls/new')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            New Blood Control Definition
-          </button>
-        )}
-        {activeTab === 'batches' && (
-          <button
-            onClick={() => navigate('/blood-controls/batches/new')}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Create Batch
-          </button>
+        {canWrite && (
+          <>
+            {activeTab === 'definitions' && (
+              <button
+                onClick={() => navigate('/blood-controls/new')}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                New Blood Control Definition
+              </button>
+            )}
+            {activeTab === 'batches' && (
+              <button
+                onClick={() => navigate('/blood-controls/batches/new')}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Create Batch
+              </button>
+            )}
+          </>
         )}
       </div>
 

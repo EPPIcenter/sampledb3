@@ -8,10 +8,12 @@ import { getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
 import SpecimenForm from '../components/forms/SpecimenForm'
 import SubjectForm from '../components/forms/SubjectForm'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import { useUser } from '../contexts/UserContext'
 
 export default function SubjectDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [summaryData, setSummaryData] = useState<SubjectSummaryResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -139,20 +141,22 @@ export default function SubjectDetail() {
               </p>
             )}
           </div>
-          <div className="flex space-x-3">
-            <button
-              onClick={() => setEditSubjectModalOpen(true)}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium"
-            >
-              Edit Subject
-            </button>
-            <button
-              onClick={() => setCreateSpecimenModalOpen(true)}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
-            >
-              Add Specimen
-            </button>
-          </div>
+          {canWrite && (
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setEditSubjectModalOpen(true)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium"
+              >
+                Edit Subject
+              </button>
+              <button
+                onClick={() => setCreateSpecimenModalOpen(true)}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+              >
+                Add Specimen
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

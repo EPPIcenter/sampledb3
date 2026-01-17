@@ -1,13 +1,28 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { collectionsApi, locationsApi, type Location } from '../lib/api'
 import CollectionMoveTreePicker, { type Collection } from '../components/CollectionMoveTreePicker'
 import LocationTreePicker, { type LocationSelection } from '../components/LocationTreePicker'
+import { useUser } from '../contexts/UserContext'
 
 type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
 type Step = 'select-collections' | 'select-destination' | 'confirm' | 'execute'
 
 export default function CollectionMove() {
+  const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [currentStep, setCurrentStep] = useState<Step>('select-collections')
+  
+  // Redirect if user doesn't have write permissions
+  useEffect(() => {
+    if (!canWrite) {
+      navigate('/', { replace: true })
+    }
+  }, [canWrite, navigate])
+  
+  if (!canWrite) {
+    return null
+  }
   const [loading, setLoading] = useState(false)
   const [locations, setLocations] = useState<Location[]>([])
   const [collections, setCollections] = useState<Collection[]>([])

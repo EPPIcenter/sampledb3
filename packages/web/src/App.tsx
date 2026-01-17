@@ -59,10 +59,12 @@ import { Command } from './lib/commands'
 import { formatHotkey, getModifierKey, isMac } from './lib/hotkeys'
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { exportApi } from './lib/api'
+import { useUser } from './contexts/UserContext'
 
 function AppContent() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { canWrite } = useUser()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const {
     isHelpModalOpen,
@@ -183,13 +185,13 @@ function AppContent() {
         keywords: ['locations', 'location'],
         action: () => navigate('/locations'),
       },
-      {
+      ...(canWrite ? [{
         id: 'nav-import',
         label: 'Go to Import',
         category: 'Navigation',
         keywords: ['import'],
         action: () => navigate('/import'),
-      },
+      }] : []),
       {
         id: 'nav-controls',
         label: 'Go to Blood Controls',
@@ -248,34 +250,36 @@ function AppContent() {
         action: handleExportInventory,
       },
       // Bulk Operations commands
-      {
-        id: 'move-micronix',
-        label: 'Move Micronix Containers',
-        category: 'Bulk Operations',
-        keywords: ['move micronix', 'container move micronix'],
-        action: () => navigate('/container-move/micronix'),
-      },
-      {
-        id: 'move-cryovial',
-        label: 'Move Cryovial Containers',
-        category: 'Bulk Operations',
-        keywords: ['move cryovial', 'container move cryovial'],
-        action: () => navigate('/container-move/cryovial'),
-      },
-      {
-        id: 'move-papers',
-        label: 'Move Papers',
-        category: 'Bulk Operations',
-        keywords: ['move papers', 'container move papers'],
-        action: () => navigate('/container-move/papers'),
-      },
-      {
-        id: 'move-collections',
-        label: 'Move Collections',
-        category: 'Bulk Operations',
-        keywords: ['move collections', 'collection move'],
-        action: () => navigate('/collection-move'),
-      },
+      ...(canWrite ? [
+        {
+          id: 'move-micronix',
+          label: 'Move Micronix Containers',
+          category: 'Bulk Operations',
+          keywords: ['move micronix', 'container move micronix'],
+          action: () => navigate('/container-move/micronix'),
+        },
+        {
+          id: 'move-cryovial',
+          label: 'Move Cryovial Containers',
+          category: 'Bulk Operations',
+          keywords: ['move cryovial', 'container move cryovial'],
+          action: () => navigate('/container-move/cryovial'),
+        },
+        {
+          id: 'move-papers',
+          label: 'Move Papers',
+          category: 'Bulk Operations',
+          keywords: ['move papers', 'container move papers'],
+          action: () => navigate('/container-move/papers'),
+        },
+        {
+          id: 'move-collections',
+          label: 'Move Collections',
+          category: 'Bulk Operations',
+          keywords: ['move collections', 'collection move'],
+          action: () => navigate('/collection-move'),
+        },
+      ] : []),
       // Quick Actions commands
       {
         id: 'open-search',

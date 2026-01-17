@@ -7,10 +7,12 @@ import SimpleTimeline from '../components/SimpleTimeline'
 import { getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
 import SpecimenForm from '../components/forms/SpecimenForm'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import { useUser } from '../contexts/UserContext'
 
 export default function ControlBatchDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [summaryData, setSummaryData] = useState<ControlBatchSummaryResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -181,27 +183,29 @@ export default function ControlBatchDetail() {
               </p>
             )}
           </div>
-          <div className="flex space-x-3">
-            <button
-              onClick={() => navigate(`/blood-controls/batches/${batch.id}/add-specimens`)}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-sm"
-            >
-              Add Specimens
-            </button>
-            <button
-              onClick={() => setCreateSpecimenModalOpen(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm"
-            >
-              Add Single Specimen
-            </button>
-            <button
-              onClick={handleDeleteBatch}
-              disabled={deleting}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
-            >
-              {deleting ? 'Deleting...' : 'Delete Batch'}
-            </button>
-          </div>
+          {canWrite && (
+            <div className="flex space-x-3">
+              <button
+                onClick={() => navigate(`/blood-controls/batches/${batch.id}/add-specimens`)}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-sm"
+              >
+                Add Specimens
+              </button>
+              <button
+                onClick={() => setCreateSpecimenModalOpen(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm"
+              >
+                Add Single Specimen
+              </button>
+              <button
+                onClick={handleDeleteBatch}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
+              >
+                {deleting ? 'Deleting...' : 'Delete Batch'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom'
+import { useUser } from '../contexts/UserContext'
 
 export default function Derivations() {
+  const { canWrite } = useUser()
+  
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
@@ -11,12 +14,14 @@ export default function Derivations() {
               Track relationships between containers when materials are processed, extracted, diluted, or otherwise transformed.
             </p>
           </div>
-          <Link
-            to="/derivations/import"
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Import CSV
-          </Link>
+          {canWrite && (
+            <Link
+              to="/derivations/import"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Import CSV
+            </Link>
+          )}
         </div>
       </div>
 

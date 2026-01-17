@@ -144,7 +144,7 @@ export default function Profile() {
           <form onSubmit={handleProfileSubmit} className="px-6 py-4">
             <div className="space-y-4">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
                   Name
                 </label>
                 <input
@@ -153,12 +153,12 @@ export default function Profile() {
                   required
                   value={profileForm.name}
                   onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="form-input"
                 />
               </div>
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                   Email
                 </label>
                 <input
@@ -167,12 +167,12 @@ export default function Profile() {
                   required
                   value={profileForm.email}
                   onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="form-input"
                 />
               </div>
 
               <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
                   Username <span className="text-gray-500 text-xs">(optional)</span>
                 </label>
                 <input
@@ -181,7 +181,7 @@ export default function Profile() {
                   value={profileForm.username}
                   onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
                   placeholder="Leave empty to remove username"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="form-input"
                 />
                 <p className="mt-1 text-xs text-gray-500">
                   You can use your username or email to log in
@@ -212,17 +212,17 @@ export default function Profile() {
           <form onSubmit={handlePasswordSubmit} className="px-6 py-4">
             <div className="space-y-4">
               <div>
-                <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-2">
                   Current Password
                 </label>
-                <div className="mt-1 relative">
+                <div className="relative">
                   <input
                     type={showPasswords ? 'text' : 'password'}
                     id="currentPassword"
                     required
                     value={passwordForm.currentPassword}
                     onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm pr-10"
+                    className="form-input pr-10"
                   />
                   <button
                     type="button"
@@ -244,7 +244,7 @@ export default function Profile() {
               </div>
 
               <div>
-                <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-2">
                   New Password
                 </label>
                 <input
@@ -253,12 +253,12 @@ export default function Profile() {
                   required
                   value={passwordForm.newPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="form-input"
                 />
               </div>
 
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
                   Confirm New Password
                 </label>
                 <input
@@ -267,7 +267,7 @@ export default function Profile() {
                   required
                   value={passwordForm.confirmPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="form-input"
                 />
               </div>
             </div>

@@ -1,9 +1,23 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SpecimenForm from '../components/forms/SpecimenForm'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
+import { useUser } from '../contexts/UserContext'
 
 export default function SpecimenNew() {
   const navigate = useNavigate()
+  const { canWrite } = useUser()
+  
+  // Redirect if user doesn't have write permissions
+  useEffect(() => {
+    if (!canWrite) {
+      navigate('/specimens', { replace: true })
+    }
+  }, [canWrite, navigate])
+  
+  if (!canWrite) {
+    return null
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">

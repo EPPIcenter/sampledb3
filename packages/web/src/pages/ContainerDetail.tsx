@@ -7,6 +7,7 @@ import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import ContainerDerivationModal from '../components/ContainerDerivationModal'
 import ContainerEditModal from '../components/ContainerEditModal'
 import DerivationChainView from '../components/DerivationChainView'
+import { useUser } from '../contexts/UserContext'
 
 interface ContainerDetail {
   id?: number
@@ -38,6 +39,7 @@ function statusColor(name: string): string {
 export default function ContainerDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [data, setData] = useState<ContainerDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [derivations, setDerivations] = useState<Derivation[]>([])
@@ -230,12 +232,14 @@ export default function ContainerDetail() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowEditModal(true)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
-              >
-                Edit
-              </button>
+              {canWrite && (
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Edit
+                </button>
+              )}
               {container.state?.name && (
                 <span
                   className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-white ${statusColor(container.state.name)}`}
@@ -626,12 +630,14 @@ export default function ContainerDetail() {
                   This container has not been used to create any derived containers yet. Create a derivation to track materials derived from this container.
                 </p>
               </div>
-              <button
-                onClick={() => setShowDerivationModal(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium whitespace-nowrap ml-4"
-              >
-                Create Derivation
-              </button>
+              {canWrite && (
+                <button
+                  onClick={() => setShowDerivationModal(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium whitespace-nowrap ml-4"
+                >
+                  Create Derivation
+                </button>
+              )}
             </div>
           </div>
         )}

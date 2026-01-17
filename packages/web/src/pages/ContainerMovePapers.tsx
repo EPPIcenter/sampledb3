@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { collectionsApi, locationsApi, type Location } from '../lib/api'
 import CollectionTreePicker from '../components/CollectionTreePicker'
+import { useUser } from '../contexts/UserContext'
 
 interface Paper {
   id: number
@@ -34,7 +35,20 @@ interface Collection {
 type Step = 'select-source' | 'select-sheets' | 'select-destination' | 'confirm' | 'execute'
 
 export default function ContainerMovePapers() {
+  const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [currentStep, setCurrentStep] = useState<Step>('select-source')
+  
+  // Redirect if user doesn't have write permissions
+  useEffect(() => {
+    if (!canWrite) {
+      navigate('/', { replace: true })
+    }
+  }, [canWrite, navigate])
+  
+  if (!canWrite) {
+    return null
+  }
 
   const [loading, setLoading] = useState(false)
   const [locations, setLocations] = useState<Location[]>([])

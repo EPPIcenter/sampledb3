@@ -13,10 +13,11 @@ import { useStorageTypes } from '../hooks/useReferenceData'
 import { locationsApi, specimenTypesApi, type Location, type SpecimenType } from '../lib/api'
 
 export default function ReferenceData() {
-  const { user } = useUser()
-  const isAdmin = user?.role === 'admin'
+  const { canManageReferenceData } = useUser()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = (searchParams.get('tab') as ReferenceDataType) || 'specimen-types'
+  // Keep isAdmin for backward compatibility in this file (used in multiple places)
+  const isAdmin = canManageReferenceData
 
   const setActiveTab = (tab: ReferenceDataType) => {
     setSearchParams((prev) => {
@@ -351,7 +352,7 @@ export default function ReferenceData() {
         </div>
 
         <div className="p-6">
-          {!isAdmin && (
+          {!canManageReferenceData && (
             <div className="mb-4 rounded-md bg-blue-50 border border-blue-200 p-3">
               <div className="flex items-center gap-2">
                 <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -365,7 +366,7 @@ export default function ReferenceData() {
           )}
 
           <div className="mb-4 flex justify-end">
-            {isAdmin && (
+            {canManageReferenceData && (
               <button
                 onClick={() => setEditingItem({})}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -386,7 +387,7 @@ export default function ReferenceData() {
             onSearchChange={config.requiresSearch ? setSearch : undefined}
             disableClientFilter={config.requiresSearch}
             loading={loading && config.requiresSearch}
-            readOnly={!isAdmin}
+            readOnly={!canManageReferenceData}
           />
 
           {config.requiresPagination && totalPages > 1 && (
@@ -401,7 +402,7 @@ export default function ReferenceData() {
         </div>
       </div>
 
-      {editingItem !== null && isAdmin && (
+      {editingItem !== null && canManageReferenceData && (
         <ReferenceDataForm
           item={editingItem}
           fields={getFormFields()}

@@ -7,6 +7,7 @@ import LocationDetailsSkeleton from '../components/LocationDetailsSkeleton'
 import LocationForm from '../components/LocationForm'
 import LocationHierarchyStatsDisplay from '../components/LocationHierarchyStats'
 import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
+import { useUser } from '../contexts/UserContext'
 
 interface Location {
   id: number
@@ -37,6 +38,7 @@ interface SelectedNode {
 
 export default function Locations() {
   const navigate = useNavigate()
+  const { canManageReferenceData } = useUser()
   const searchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const treeRef = useRef<HTMLDivElement>(null)
@@ -503,41 +505,43 @@ export default function Locations() {
               </div>
             </div>
           </button>
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-            <button
-              type="button"
-              onClick={(e) => handleAddChild(loc.id, e)}
-              className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-              title="Add child location"
-              disabled={mutationLoading}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={(e) => handleEdit(loc, e)}
-              className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-              title="Edit location"
-              disabled={mutationLoading}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={(e) => handleDeleteClick(loc, e)}
-              className="p-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-              title="Delete location"
-              disabled={mutationLoading}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          </div>
+          {canManageReferenceData && (
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+              <button
+                type="button"
+                onClick={(e) => handleAddChild(loc.id, e)}
+                className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                title="Add child location"
+                disabled={mutationLoading}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleEdit(loc, e)}
+                className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                title="Edit location"
+                disabled={mutationLoading}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleDeleteClick(loc, e)}
+                className="p-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                title="Delete location"
+                disabled={mutationLoading}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
 
         {children.length > 0 && isExpanded && (
@@ -964,18 +968,20 @@ export default function Locations() {
               <h2 className="text-sm font-semibold text-gray-900">
                 Storage tree
               </h2>
-              <button
-                type="button"
-                onClick={handleAddRoot}
-                disabled={mutationLoading}
-                className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Add root location"
-              >
-                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add Root
-              </button>
+              {canManageReferenceData && (
+                <button
+                  type="button"
+                  onClick={handleAddRoot}
+                  disabled={mutationLoading}
+                  className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Add root location"
+                >
+                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Root
+                </button>
+              )}
             </div>
             {renderTree()}
           </div>

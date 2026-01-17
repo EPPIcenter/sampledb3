@@ -11,6 +11,7 @@ import {
   type Unit,
 } from '../lib/api'
 import { generateDerivationsTemplate, type TemplateOptions } from '../lib/template-generator'
+import { useUser } from '../contexts/UserContext'
 
 const DERIVATION_TYPES = [
   { value: 'dna_extraction', label: 'DNA Extraction' },
@@ -36,6 +37,18 @@ type ParentContainerType = 'paper' | 'cryovial_tube' | 'micronix_tube'
 
 export default function DerivationsBulkImport() {
   const navigate = useNavigate()
+  const { canWrite } = useUser()
+  
+  // Redirect if user doesn't have write permissions
+  useEffect(() => {
+    if (!canWrite) {
+      navigate('/derivations', { replace: true })
+    }
+  }, [canWrite, navigate])
+  
+  if (!canWrite) {
+    return null
+  }
   const [currentStep, setCurrentStep] = useState<Step>(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
