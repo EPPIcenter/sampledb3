@@ -24,7 +24,7 @@ import { z } from 'zod'
 import { executeMoves, resolveContainersByBarcodes, type BatchMoveRequest, type ContainerInfo } from '../lib/container-move'
 import { resolveCollection } from '../lib/collection-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
-import { createAuthMiddleware } from '../middleware/auth'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
 
 /**
@@ -34,6 +34,7 @@ import { handleRouteError } from '../lib/error-handler'
 export function createCollectionsRoutes(database: Database): Hono {
   const collections = new Hono()
   const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
 // Helper to build location path string
 function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | undefined {
@@ -397,7 +398,7 @@ collections.get('/sheets/:id', authMiddleware, async (c) => {
 })
 
 // Check collection existence
-collections.post('/check', authMiddleware, async (c) => {
+collections.post('/check', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -428,7 +429,7 @@ collections.post('/check', authMiddleware, async (c) => {
 })
 
 // Create micronix plate
-collections.post('/plates/micronix', authMiddleware, async (c) => {
+collections.post('/plates/micronix', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -470,7 +471,7 @@ collections.post('/plates/micronix', authMiddleware, async (c) => {
 })
 
 // Create cryovial box
-collections.post('/boxes/cryovial', authMiddleware, async (c) => {
+collections.post('/boxes/cryovial', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -512,7 +513,7 @@ collections.post('/boxes/cryovial', authMiddleware, async (c) => {
 })
 
 // Create regular box
-collections.post('/boxes', authMiddleware, async (c) => {
+collections.post('/boxes', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -552,7 +553,7 @@ collections.post('/boxes', authMiddleware, async (c) => {
 })
 
 // Create bag
-collections.post('/bags', authMiddleware, async (c) => {
+collections.post('/bags', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -592,7 +593,7 @@ collections.post('/bags', authMiddleware, async (c) => {
 })
 
 // Resolve multiple identifiers to container info
-collections.post('/containers/resolve', authMiddleware, async (c) => {
+collections.post('/containers/resolve', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -946,7 +947,7 @@ collections.get('/list/:type', authMiddleware, async (c) => {
 })
 
 // Move containers
-collections.post('/containers/move', authMiddleware, async (c) => {
+collections.post('/containers/move', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -997,7 +998,7 @@ collections.post('/containers/move', authMiddleware, async (c) => {
 })
 
 // Move sheets
-collections.post('/sheets/move', authMiddleware, async (c) => {
+collections.post('/sheets/move', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1061,7 +1062,7 @@ collections.post('/sheets/move', authMiddleware, async (c) => {
 })
 
 // Move collections
-collections.post('/move', authMiddleware, async (c) => {
+collections.post('/move', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({

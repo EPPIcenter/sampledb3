@@ -5,7 +5,7 @@ import { eq, and, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import type { CollectionInfo } from '../types/collections'
-import { createAuthMiddleware } from '../middleware/auth'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 
 /**
  * Create containers routes with database injection
@@ -14,6 +14,7 @@ import { createAuthMiddleware } from '../middleware/auth'
 export function createContainersRoutes(database: Database): Hono {
   const containers = new Hono()
   const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
 // Helper function to build full location path
 function buildLocationPath(loc: Location | null | undefined, parentName?: string): string {
@@ -320,7 +321,7 @@ containers.get('/:id', authMiddleware, async (c) => {
 })
 
 // Update container
-containers.patch('/:id', authMiddleware, async (c) => {
+containers.patch('/:id', memberMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
@@ -447,7 +448,7 @@ containers.get('/:id/tags', authMiddleware, async (c) => {
 })
 
 // Add tag to container
-containers.post('/:id/tags', authMiddleware, async (c) => {
+containers.post('/:id/tags', memberMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
@@ -497,7 +498,7 @@ containers.post('/:id/tags', authMiddleware, async (c) => {
 })
 
 // Remove tag from container
-containers.delete('/:id/tags/:tagId', authMiddleware, async (c) => {
+containers.delete('/:id/tags/:tagId', memberMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     const tagId = parseInt(c.req.param('tagId'))

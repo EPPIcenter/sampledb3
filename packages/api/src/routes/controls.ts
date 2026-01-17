@@ -26,7 +26,7 @@ import { validateControlBatchName, generateUniqueBatchName } from '../lib/valida
 import { generateControlDefinitionName, generateUniqueControlDefinitionName } from '../lib/control-name-generation'
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
 import type { BloodControlProperties, ParsedControlProperties } from '../types/properties'
-import { createAuthMiddleware } from '../middleware/auth'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 
 /**
  * Create controls routes with database injection
@@ -36,6 +36,7 @@ export function createControlsRoutes(database: Database): Hono {
   const dbInstance = database
   const controls = new Hono()
   const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
 // Helper function to extract strain/density data from properties JSON
 function parseControlProperties(properties: unknown, strainMap?: Map<number, { name: string }>): ParsedControlProperties {
@@ -187,7 +188,7 @@ controls.get('/batches/:id', authMiddleware, async (c) => {
 })
 
 // Delete batch and all associated data
-controls.delete('/batches/:id', authMiddleware, async (c) => {
+controls.delete('/batches/:id', memberMiddleware, async (c) => {
   const id = parseInt(c.req.param('id'))
   if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
@@ -1005,7 +1006,7 @@ controls.get('/:id/summary', authMiddleware, async (c) => {
 })
 
 // Check for duplicate control definition (only checks blood controls)
-controls.post('/check-unique', authMiddleware, async (c) => {
+controls.post('/check-unique', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1095,7 +1096,7 @@ controls.post('/check-unique', authMiddleware, async (c) => {
 })
 
 // Suggest name for control definition (preview without creating)
-controls.post('/suggest-name', authMiddleware, async (c) => {
+controls.post('/suggest-name', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1219,7 +1220,7 @@ controls.post('/suggest-name', authMiddleware, async (c) => {
 })
 
 // Create control definition (defaults to blood)
-controls.post('/', authMiddleware, async (c) => {
+controls.post('/', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1396,7 +1397,7 @@ controls.post('/', authMiddleware, async (c) => {
 })
 
 // Update control definition (only blood controls)
-controls.patch('/:id', authMiddleware, async (c) => {
+controls.patch('/:id', memberMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
@@ -1528,7 +1529,7 @@ controls.get('/:id/batches', authMiddleware, async (c) => {
 })
 
 // Validate batch name
-controls.post('/batches/validate-name', authMiddleware, async (c) => {
+controls.post('/batches/validate-name', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1550,7 +1551,7 @@ controls.post('/batches/validate-name', authMiddleware, async (c) => {
 })
 
 // Generate suggested batch name
-controls.post('/batches/suggest-name', authMiddleware, async (c) => {
+controls.post('/batches/suggest-name', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1584,7 +1585,7 @@ controls.post('/batches/suggest-name', authMiddleware, async (c) => {
 })
 
 // Create a new batch (only for blood controls)
-controls.post('/:id/batches', authMiddleware, async (c) => {
+controls.post('/:id/batches', memberMiddleware, async (c) => {
   const definitionId = parseInt(c.req.param('id'))
   if (isNaN(definitionId)) return c.json({ error: 'Invalid blood control ID' }, 400)
 
@@ -1667,7 +1668,7 @@ controls.post('/:id/batches', authMiddleware, async (c) => {
 })
 
 // Create batch with specimens
-controls.post('/batches/create-with-specimens', authMiddleware, async (c) => {
+controls.post('/batches/create-with-specimens', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const { createBatchWithSpecimens } = await import('../lib/control-batch-creation')
@@ -1679,7 +1680,7 @@ controls.post('/batches/create-with-specimens', authMiddleware, async (c) => {
 })
 
 // Add specimens to existing batch
-controls.post('/batches/:id/specimens/bulk', authMiddleware, async (c) => {
+controls.post('/batches/:id/specimens/bulk', memberMiddleware, async (c) => {
   try {
     const batchId = parseInt(c.req.param('id'))
     if (isNaN(batchId)) return c.json({ error: 'Invalid batch ID' }, 400)
@@ -1695,7 +1696,7 @@ controls.post('/batches/:id/specimens/bulk', authMiddleware, async (c) => {
 })
 
 // Validate CSV
-controls.post('/batches/validate-csv', authMiddleware, async (c) => {
+controls.post('/batches/validate-csv', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const { csvText } = body

@@ -4,7 +4,7 @@ import { reagent } from '../db/schema'
 import { eq, and, lte } from 'drizzle-orm'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
-import { createAuthMiddleware } from '../middleware/auth'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 
 /**
  * Create reagents routes with database injection
@@ -13,6 +13,7 @@ import { createAuthMiddleware } from '../middleware/auth'
 export function createReagentsRoutes(database: Database): Hono {
   const reagents = new Hono()
   const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
   // List all reagents
   reagents.get('/', authMiddleware, async (c) => {
@@ -70,7 +71,7 @@ reagents.get('/:id', authMiddleware, async (c) => {
 })
 
 // Create reagent
-reagents.post('/', authMiddleware, async (c) => {
+reagents.post('/', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -107,7 +108,7 @@ reagents.post('/', authMiddleware, async (c) => {
 })
 
 // Update reagent
-reagents.patch('/:id', authMiddleware, async (c) => {
+reagents.patch('/:id', memberMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) {

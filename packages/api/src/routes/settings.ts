@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { Database } from '../db/client'
 import { unit, containerTypeUnit } from '../db/schema'
 import { eq, inArray, and } from 'drizzle-orm'
-import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import {
   getContainerDefaults,
   setContainerDefaults,
@@ -35,6 +35,7 @@ export function createSettingsRoutes(database: Database) {
   const settings = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const adminMiddleware = createAdminMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
   // GET /api/settings - Get all settings (user-aware)
   settings.get('/', authMiddleware, async (c) => {
@@ -196,7 +197,7 @@ const scannerConfigurationsSchema = z.object({
   // PUT /api/settings/:key - Update a specific setting
   // Admin users can set system-wide (userId = null) or user-specific settings
   // Non-admin users can only set their own user-specific settings (for allowed keys)
-  settings.put('/:key', authMiddleware, async (c) => {
+  settings.put('/:key', memberMiddleware, async (c) => {
   try {
     const key = c.req.param('key')
     const body = await c.req.json()
@@ -355,7 +356,7 @@ const scannerConfigurationsSchema = z.object({
   })
 
   // POST /api/settings/export-configurations/personal - Create user personal export config
-  settings.post('/export-configurations/personal', authMiddleware, async (c) => {
+  settings.post('/export-configurations/personal', memberMiddleware, async (c) => {
     try {
       const user = c.get('user')
       const userId = user?.id
@@ -388,7 +389,7 @@ const scannerConfigurationsSchema = z.object({
 })
 
   // PUT /api/settings/export-configurations/personal - Update user personal export configs
-  settings.put('/export-configurations/personal', authMiddleware, async (c) => {
+  settings.put('/export-configurations/personal', memberMiddleware, async (c) => {
     try {
       const user = c.get('user')
       const userId = user?.id
@@ -438,7 +439,7 @@ const scannerConfigurationsSchema = z.object({
   })
 
   // POST /api/settings/scanner-configurations/personal - Create user personal scanner config
-  settings.post('/scanner-configurations/personal', authMiddleware, async (c) => {
+  settings.post('/scanner-configurations/personal', memberMiddleware, async (c) => {
     try {
       const user = c.get('user')
       const userId = user?.id
@@ -471,7 +472,7 @@ const scannerConfigurationsSchema = z.object({
 })
 
   // PUT /api/settings/scanner-configurations/personal - Update user personal scanner configs
-  settings.put('/scanner-configurations/personal', authMiddleware, async (c) => {
+  settings.put('/scanner-configurations/personal', memberMiddleware, async (c) => {
     try {
       const user = c.get('user')
       const userId = user?.id

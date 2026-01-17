@@ -17,7 +17,7 @@ import {
 } from '../db/schema'
 import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
-import { createAuthMiddleware } from '../middleware/auth'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 
 /**
  * Create derivations routes with database injection
@@ -26,6 +26,7 @@ import { createAuthMiddleware } from '../middleware/auth'
 export function createDerivationsRoutes(database: Database): Hono {
   const derivations = new Hono()
   const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
 const createDerivationSchema = z.object({
   derivationType: z.string(),
@@ -174,7 +175,7 @@ async function createCollectionIfNeeded(database: Database, input: z.infer<typeo
 }
 
 // Create derivation from parent container
-derivations.post('/containers/:id/derive', authMiddleware, async (c) => {
+derivations.post('/containers/:id/derive', memberMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) {
@@ -432,7 +433,7 @@ derivations.get('/containers/:id/derivation-chain', authMiddleware, async (c) =>
 })
 
 // Update derivation metadata
-derivations.patch('/derivations/:id', authMiddleware, async (c) => {
+derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) {
@@ -474,7 +475,7 @@ derivations.patch('/derivations/:id', authMiddleware, async (c) => {
 })
 
 // Delete derivation (relationship only)
-derivations.delete('/derivations/:id', authMiddleware, async (c) => {
+derivations.delete('/derivations/:id', memberMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     if (isNaN(id)) {

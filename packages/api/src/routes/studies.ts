@@ -16,7 +16,7 @@ import { eq, and, like, sql, or, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from '../lib/error-handler'
-import { createAuthMiddleware } from '../middleware/auth'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 
 /**
  * Create studies routes with database injection
@@ -26,6 +26,7 @@ import { createAuthMiddleware } from '../middleware/auth'
 export function createStudiesRoutes(database: Database, sqliteDatabase: SQLiteDatabase): Hono {
   const studies = new Hono()
   const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
 // List all studies
 studies.get('/', authMiddleware, async (c) => {
@@ -703,7 +704,7 @@ studies.get('/:id/timeline', authMiddleware, async (c) => {
 })
 
 // Create study
-studies.post('/', authMiddleware, async (c) => {
+studies.post('/', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -735,7 +736,7 @@ studies.post('/', authMiddleware, async (c) => {
 })
 
 // Update study
-studies.put('/:id', authMiddleware, async (c) => {
+studies.put('/:id', memberMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     

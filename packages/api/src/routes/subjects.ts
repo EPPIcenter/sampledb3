@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
-import { createAuthMiddleware } from '../middleware/auth'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { 
   studySubject, 
   study, 
@@ -44,6 +44,7 @@ export function createSubjectsRoutes(database: Database): Hono {
   const dbInstance = database
   const subjects = new Hono()
   const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
   // Wrapper functions that use dbInstance instead of global db
   async function resolveStudyByShortCodeLocal(shortCode: string): Promise<number | null> {
@@ -590,7 +591,7 @@ subjects.get('/:id/summary', authMiddleware, async (c) => {
 })
 
 // Create single subject
-subjects.post('/', authMiddleware, async (c) => {
+subjects.post('/', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -644,7 +645,7 @@ subjects.post('/', authMiddleware, async (c) => {
 })
 
 // Create multiple subjects (bulk)
-subjects.post('/bulk', authMiddleware, async (c) => {
+subjects.post('/bulk', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -774,7 +775,7 @@ function normalizePosition(position: string | null | undefined): string | null {
 }
 
 // Create subject with specimens atomically
-subjects.post('/with-specimens', authMiddleware, async (c) => {
+subjects.post('/with-specimens', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     
@@ -1428,7 +1429,7 @@ subjects.post('/with-specimens', authMiddleware, async (c) => {
   }
 
 // Merge subjects endpoint
-subjects.post('/:targetId/merge', authMiddleware, async (c) => {
+subjects.post('/:targetId/merge', memberMiddleware, async (c) => {
   try {
     const targetId = parseInt(c.req.param('targetId'))
     
@@ -1588,7 +1589,7 @@ subjects.post('/:targetId/merge', authMiddleware, async (c) => {
 })
 
 // Update subject
-subjects.put('/:id', authMiddleware, async (c) => {
+subjects.put('/:id', memberMiddleware, async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
     
