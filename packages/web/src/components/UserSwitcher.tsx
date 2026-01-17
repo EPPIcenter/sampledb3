@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
 import { getRecentUsers, type LocalUser } from '../lib/localUserHistory'
+import { authApi } from '../lib/api'
 
 export default function UserSwitcher() {
-  const { user, switchUser } = useUser()
+  const { user, switchUser, refreshUser } = useUser()
+  const navigate = useNavigate()
   const [isOpen, setIsOpen] = useState(false)
   const [users, setUsers] = useState<LocalUser[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -11,7 +14,10 @@ export default function UserSwitcher() {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
   const [password, setPassword] = useState('')
   const [switching, setSwitching] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [openUpward, setOpenUpward] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   // Reload users when user changes (e.g., after switching)
   useEffect(() => {
@@ -28,6 +34,17 @@ export default function UserSwitcher() {
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside)
       loadUsers()
+      
+      // Calculate if dropdown should open upward
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect()
+        const spaceBelow = window.innerHeight - rect.bottom
+        const spaceAbove = rect.top
+        const dropdownHeight = 384 // max-h-96 = 24rem = 384px (approximate)
+        
+        // If there's not enough space below but enough space above, open upward
+        setOpenUpward(spaceBelow < dropdownHeight && spaceAbove > spaceBelow)
+      }
     }
 
     return () => {
@@ -89,21 +106,24 @@ export default function UserSwitcher() {
     <>
       <div className="relative" ref={dropdownRef}>
         <button
+          ref={buttonRef}
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors w-full"
+          className="group flex items-center gap-2 px-3 py-2.5 bg-white text-gray-700 rounded-lg shadow-md hover:shadow-lg border border-gray-200 hover:border-blue-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:scale-95"
           title={`Current user: ${user.name}`}
         >
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
-              {user.name.charAt(0).toUpperCase()}
+          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
+            {user.name.charAt(0).toUpperCase()}
+          </div>
+          <div className="flex flex-col items-start min-w-0">
+            <div className="text-xs font-medium text-gray-700 group-hover:text-blue-600 transition-colors truncate max-w-[120px]">
+              {user.name}
             </div>
-            <div className="flex-1 min-w-0 text-left">
-              <div className="font-medium truncate">{user.name}</div>
-              <div className="text-xs text-gray-500 truncate">{user.email}</div>
+            <div className="text-[10px] text-gray-500 truncate max-w-[120px]">
+              {user.email}
             </div>
           </div>
           <svg
-            className={`w-4 h-4 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
+            className={`w-4 h-4 transition-transform flex-shrink-0 text-gray-500 group-hover:text-blue-600 ${isOpen && !openUpward ? 'rotate-180' : ''}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -113,7 +133,11 @@ export default function UserSwitcher() {
         </button>
 
         {isOpen && (
-          <div className="absolute bottom-full left-0 mb-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto">
+          <div className={`absolute right-0 w-64 sm:w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto max-w-[calc(100vw-3rem)] ${
+            openUpward 
+              ? 'bottom-full mb-2' 
+              : 'top-full mt-2'
+          }`}>
             <div className="p-2">
               <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Switch User</div>
               <div className="px-3 py-1 text-xs text-gray-400">Recent users on this machine</div>
@@ -140,6 +164,34 @@ export default function UserSwitcher() {
                   ))}
                 </div>
               )}
+              
+              {/* Logout separator */}
+              <div className="border-t border-gray-200 my-2"></div>
+              
+              {/* Logout button */}
+              <button
+                onClick={async () => {
+                  try {
+                    setLoggingOut(true)
+                    await authApi.logout()
+                    await refreshUser()
+                    navigate('/login')
+                  } catch (err) {
+                    console.error('Logout failed:', err)
+                    setError('Failed to logout')
+                    setLoggingOut(false)
+                  }
+                }}
+                disabled={loggingOut}
+                className="w-full text-left px-3 py-2 rounded-md text-sm transition-colors hover:bg-red-50 text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  <span className="font-medium">{loggingOut ? 'Signing out...' : 'Sign Out'}</span>
+                </div>
+              </button>
             </div>
           </div>
         )}

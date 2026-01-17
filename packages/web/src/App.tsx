@@ -19,6 +19,7 @@ import ContainerMoveCryovial from './pages/ContainerMoveCryovial'
 import ContainerMovePapers from './pages/ContainerMovePapers'
 import CollectionMove from './pages/CollectionMove'
 import Sidebar from './components/Sidebar'
+import UserSwitcher from './components/UserSwitcher'
 import StudyNew from './pages/StudyNew'
 import SpecimenNew from './pages/SpecimenNew'
 import MicronixPlateDetail from './pages/MicronixPlateDetail'
@@ -584,6 +585,9 @@ function AppContent() {
               : `calc(100vh - 1.5rem - ${buttonsHeight}px)`,
           }}
         >
+          {/* User Switcher */}
+          <UserSwitcher />
+
           {/* Command palette button */}
           <button
             onClick={openCommandPalette}
