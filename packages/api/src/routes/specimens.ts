@@ -8,7 +8,7 @@ import { resolveContainerByBarcode } from '../lib/identifier-resolution'
 import { validateSpecimenData, checkDuplicateSpecimens } from '../lib/validation'
 import { createContainerForSpecimen, type ContainerData } from '../lib/container-creation'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
-import { createAuthMiddleware } from '../middleware/auth'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 
 /**
  * Create specimens routes with database injection
@@ -18,6 +18,7 @@ export function createSpecimensRoutes(database: Database): Hono {
   const dbInstance = database
   const specimens = new Hono()
   const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
 // Search specimens
 specimens.get('/', authMiddleware, async (c) => {
@@ -219,7 +220,7 @@ specimens.get('/:id', authMiddleware, async (c) => {
 })
 
 // Create specimen
-specimens.post('/', authMiddleware, async (c) => {
+specimens.post('/', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     
@@ -303,6 +304,95 @@ specimens.post('/', authMiddleware, async (c) => {
     return handleRouteError(error, c)
   }
   })
+
+// Create multiple specimens (bulk)
+specimens.post('/bulk', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      specimens: z.array(z.object({
+        sourceType: z.enum(['subject', 'control']),
+        sourceId: z.number().int().optional(),
+        studyShortCode: z.string().optional(),
+        subjectName: z.string().optional(),
+        specimenTypeName: z.string().min(1),
+        collectionDate: z.string().optional(),
+        containerBarcode: z.string().optional(),
+      })),
+    })
+    
+    const data = schema.parse(body)
+    
+    if (data.specimens.length === 0) {
+      return c.json({ error: 'No specimens provided' }, 400)
+    }
+    
+    const errors: Array<{ index: number; error: string }> = []
+    const createdSpecimens: any[] = []
+    const now = new Date().toISOString()
+    const user = c.get('user')
+    
+    // Process each specimen
+    for (let i = 0; i < data.specimens.length; i++) {
+      const spec = data.specimens[i]
+      
+      try {
+        // Validate specimen data
+        const validation = await validateSpecimenData({
+          sourceType: spec.sourceType,
+          sourceId: spec.sourceId,
+          studyShortCode: spec.studyShortCode,
+          subjectName: spec.subjectName,
+          specimenTypeName: spec.specimenTypeName,
+          collectionDate: spec.collectionDate,
+        }, dbInstance)
+        
+        if (!validation.valid || !validation.resolved) {
+          errors.push({
+            index: i,
+            error: validation.error || 'Invalid specimen data',
+          })
+          continue
+        }
+        
+        // Create specimen
+        const insertData: any = {
+          studySubjectId: validation.resolved.studySubjectId,
+          controlBatchId: validation.resolved.controlBatchId,
+          specimenTypeId: validation.resolved.specimenTypeId,
+          created: now,
+          lastUpdated: now,
+          createdBy: user?.id,
+          updatedBy: user?.id,
+        }
+        
+        if (spec.collectionDate) {
+          insertData.collectionDate = spec.collectionDate
+        }
+        
+        const [newSpecimen] = await dbInstance
+          .insert(specimen)
+          .values(insertData)
+          .returning()
+        
+        createdSpecimens.push(newSpecimen)
+      } catch (error: any) {
+        errors.push({
+          index: i,
+          error: error.message || 'Failed to create specimen',
+        })
+      }
+    }
+    
+    return c.json({
+      specimens: createdSpecimens,
+      created: createdSpecimens.length,
+      errors: errors.length > 0 ? errors : undefined,
+    }, 201)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
 
   return specimens
 }
