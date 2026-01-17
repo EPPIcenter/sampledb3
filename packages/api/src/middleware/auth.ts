@@ -98,6 +98,26 @@ export function createAdminMiddleware(database: Database) {
   }
 }
 
+export function createMemberMiddleware(database: Database) {
+  const auth = createAuthMiddleware(database)
+  return async (c: Context, next: Next) => {
+    // First check authentication
+    await auth(c, async () => {})
+    
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401)
+    }
+    
+    if (user.role !== 'admin' && user.role !== 'member') {
+      return c.json({ error: 'Forbidden: Member access required' }, 403)
+    }
+    
+    await next()
+  }
+}
+
 export function createOptionalAuthMiddleware(database: Database) {
   const auth = createAuthMiddleware(database)
   return async (c: Context, next: Next) => {

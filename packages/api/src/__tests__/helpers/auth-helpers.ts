@@ -11,11 +11,16 @@ export interface CreateTestUserOptions {
   name: string
   password?: string
   username?: string | null
-  role?: 'admin' | 'member' | 'viewer'
+  role?: 'admin' | 'member' | 'viewer' // Defaults to 'member'
 }
 
 /**
  * Create a test user in the database
+ * 
+ * Role permissions:
+ * - 'admin': Full access (create, read, update, delete everything)
+ * - 'member': Can create/edit/delete data (subjects, specimens, etc.) but NOT reference data
+ * - 'viewer': Read-only access to everything
  */
 export async function createTestUser(
   db: Database,
