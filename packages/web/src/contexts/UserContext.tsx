@@ -9,6 +9,11 @@ interface UserContextType {
   refreshUser: () => Promise<void>
   switchUser: (userId: number, password: string) => Promise<void>
   setUser: (user: User | null) => void
+  canWrite: boolean
+  canManageReferenceData: boolean
+  isAdmin: boolean
+  isMember: boolean
+  isViewer: boolean
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
@@ -96,10 +101,29 @@ export function UserProvider({ children }: { children: ReactNode }) {
     refreshUser()
   }, [refreshUser])
 
+  // Permission helpers
+  const canWrite = useMemo(() => user?.role === 'admin' || user?.role === 'member', [user])
+  const canManageReferenceData = useMemo(() => user?.role === 'admin', [user])
+  const isAdmin = useMemo(() => user?.role === 'admin', [user])
+  const isMember = useMemo(() => user?.role === 'member', [user])
+  const isViewer = useMemo(() => user?.role === 'viewer', [user])
+
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(
-    () => ({ user, loading, error, refreshUser, switchUser, setUser }),
-    [user, loading, error, refreshUser, switchUser, setUser]
+    () => ({ 
+      user, 
+      loading, 
+      error, 
+      refreshUser, 
+      switchUser, 
+      setUser,
+      canWrite,
+      canManageReferenceData,
+      isAdmin,
+      isMember,
+      isViewer,
+    }),
+    [user, loading, error, refreshUser, switchUser, setUser, canWrite, canManageReferenceData, isAdmin, isMember, isViewer]
   )
 
   return (
