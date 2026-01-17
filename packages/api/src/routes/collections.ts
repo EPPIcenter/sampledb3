@@ -25,6 +25,7 @@ import { executeMoves, resolveContainersByBarcodes, type BatchMoveRequest, type 
 import { resolveCollection } from '../lib/collection-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 import { createAuthMiddleware } from '../middleware/auth'
+import { handleRouteError } from '../lib/error-handler'
 
 /**
  * Create collections routes with database injection
@@ -1107,15 +1108,7 @@ collections.post('/move', authMiddleware, async (c) => {
       errors: moveResult.errors,
     })
   } catch (error: unknown) {
-    console.error('Error moving collections:', error)
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    return c.json(
-      {
-        error: 'Internal server error',
-        message: errorMessage,
-      },
-      500
-    )
+    return handleRouteError(error, c)
   }
 })
 

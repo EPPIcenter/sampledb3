@@ -93,22 +93,22 @@ export async function logError(
       contextJson.requestId = context.requestId
     }
 
-    // Insert error log (non-blocking - don't await, but handle errors)
-    db.insert(errorLogs).values({
-      timestamp: new Date().toISOString(),
-      source,
-      level,
-      message: message || errorDetails.message,
-      errorCode: errorDetails.errorCode,
-      stack: errorDetails.stack,
-      context: Object.keys(contextJson).length > 0 ? contextJson : null,
-      userId: context?.userId,
-      url: context?.url,
-      userAgent: context?.userAgent,
-      resolved: false,
-    }).then(() => {
-      // Successfully logged
-    }).catch((logError) => {
+    // Insert error log - await to ensure it completes, but don't let failures block
+    try {
+      await db.insert(errorLogs).values({
+        timestamp: new Date().toISOString(),
+        source,
+        level,
+        message: message || errorDetails.message,
+        errorCode: errorDetails.errorCode,
+        stack: errorDetails.stack,
+        context: Object.keys(contextJson).length > 0 ? contextJson : null,
+        userId: context?.userId,
+        url: context?.url,
+        userAgent: context?.userAgent,
+        resolved: false,
+      })
+    } catch (logError) {
       // Log to console as fallback if database logging fails
       console.error('[ERROR_LOGGER] Failed to log error to database:', logError)
       console.error('[ERROR_LOGGER] Original error:', {
@@ -118,7 +118,7 @@ export async function logError(
         errorCode: errorDetails.errorCode,
         context,
       })
-    })
+    }
   } catch (err) {
     // Fallback to console if anything goes wrong
     console.error('[ERROR_LOGGER] Critical error in error logger:', err)

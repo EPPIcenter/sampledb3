@@ -34,6 +34,7 @@ import { createCollectionsRoutes } from './routes/collections'
 import { createStatisticsRoutes } from './routes/statistics'
 import { createSettingsRoutes } from './routes/settings'
 import { createErrorLogsRoutes } from './routes/error-logs'
+import { handleRouteError } from './lib/error-handler'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -51,6 +52,11 @@ app.use('*', cors({
     : ['http://localhost:5173', 'http://localhost:3000'],
   credentials: true,
 }))
+
+// Global error handler - catches all unhandled errors
+app.onError((error, c) => {
+  return handleRouteError(error, c)
+})
 
 // Health check
 app.get('/health', async (c) => {
