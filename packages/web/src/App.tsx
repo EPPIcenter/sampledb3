@@ -54,7 +54,6 @@ import SearchModal from './components/SearchModal'
 import { ToastContainer } from './components/Toast'
 import { useHotkey, useModifierHotkey, useModifierShiftHotkey } from './hooks/useHotkey'
 import { useBrowserShortcutBlocker } from './hooks/useBrowserShortcutBlocker'
-import { useFloatingButtonsPosition } from './hooks/useFloatingButtonsPosition'
 import { Command } from './lib/commands'
 import { formatHotkey, getModifierKey, isMac } from './lib/hotkeys'
 import { useMemo, useState, useRef, useEffect } from 'react'
@@ -76,15 +75,15 @@ function AppContent() {
     openCommandPalette,
     closeCommandPalette,
   } = useHotkeyContext()
-  const shouldButtonsBeAtTop = useFloatingButtonsPosition()
-  const buttonsRef = useRef<HTMLDivElement>(null)
-  const [buttonsHeight, setButtonsHeight] = useState(120) // Default estimate
+  const [isButtonsExpanded, setIsButtonsExpanded] = useState(false)
+  const collapseTimeoutRef = useRef<number | null>(null)
 
-  // Measure actual height of buttons for accurate positioning
+  // Cleanup timeout on unmount
   useEffect(() => {
-    if (buttonsRef.current) {
-      const height = buttonsRef.current.offsetHeight
-      setButtonsHeight(height)
+    return () => {
+      if (collapseTimeoutRef.current) {
+        clearTimeout(collapseTimeoutRef.current)
+      }
     }
   }, [])
 
@@ -580,45 +579,98 @@ function AppContent() {
       {/* Floating action buttons - only show when authenticated */}
       {!isLoginPage && !isSetupPage && (
         <div 
-          ref={buttonsRef}
           data-floating-buttons="true"
-          className="fixed right-6 z-50 flex flex-col gap-2 transition-[top] duration-500 ease-in-out"
-          style={{
-            top: shouldButtonsBeAtTop 
-              ? '1.5rem' 
-              : `calc(100vh - 1.5rem - ${buttonsHeight}px)`,
+          className="group fixed right-6 bottom-6 z-50 p-2 -m-2"
+          onMouseEnter={() => {
+            // Clear any pending collapse
+            if (collapseTimeoutRef.current) {
+              clearTimeout(collapseTimeoutRef.current)
+              collapseTimeoutRef.current = null
+            }
+            setIsButtonsExpanded(true)
+          }}
+          onMouseLeave={() => {
+            // Add a delay before collapsing to allow mouse movement to expanded buttons
+            collapseTimeoutRef.current = setTimeout(() => {
+              setIsButtonsExpanded(false)
+              collapseTimeoutRef.current = null
+            }, 300) // 300ms delay before collapsing
           }}
         >
-          {/* User Switcher */}
-          <UserSwitcher />
-
-          {/* Command palette button */}
+          {/* Collapsed indicator button - always visible */}
           <button
-            onClick={openCommandPalette}
-            className="group flex items-center gap-2 px-3 py-2.5 bg-white text-gray-700 rounded-lg shadow-md hover:shadow-lg border border-gray-200 hover:border-blue-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:scale-95"
-            aria-label="Open command palette"
+            className="w-10 h-10 rounded-full bg-white shadow-md border border-gray-200 flex items-center justify-center hover:shadow-lg hover:border-blue-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            aria-label="Show actions"
+            aria-expanded={isButtonsExpanded}
           >
-            <svg className="w-4 h-4 text-gray-500 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+            <svg 
+              className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${isButtonsExpanded ? 'rotate-90' : ''}`}
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
             </svg>
-            <span className="text-xs font-medium text-gray-500 group-hover:text-blue-600 transition-colors">
-              {isMac() ? '⌘⇧K' : 'Ctrl+Shift+K'}
-            </span>
           </button>
 
-          {/* Search button */}
-          <button
-            onClick={openSearchModal}
-            className="group flex items-center gap-2 px-3 py-2.5 bg-white text-gray-700 rounded-lg shadow-md hover:shadow-lg border border-gray-200 hover:border-blue-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:scale-95"
-            aria-label="Open search"
+          {/* Expanded buttons - visible on hover, positioned to the left */}
+          <div 
+            className={`absolute right-full bottom-0 mr-1 flex flex-col gap-2 transition-all duration-300 ease-out ${
+              isButtonsExpanded 
+                ? 'opacity-100 translate-x-0 pointer-events-auto' 
+                : 'opacity-0 translate-x-2 pointer-events-none'
+            }`}
           >
-            <svg className="w-4 h-4 text-gray-500 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <span className="text-xs font-medium text-gray-500 group-hover:text-blue-600 transition-colors">
-              {isMac() ? '⌘K' : 'Ctrl+K'}
-            </span>
-          </button>
+            {/* User Switcher */}
+            <div 
+              className="transform transition-all duration-300"
+              style={{ 
+                transitionDelay: isButtonsExpanded ? '0ms' : '0ms',
+                opacity: isButtonsExpanded ? 1 : 0,
+                transform: isButtonsExpanded ? 'translateX(0)' : 'translateX(8px)'
+              }}
+            >
+              <UserSwitcher />
+            </div>
+
+            {/* Command palette button */}
+            <button
+              onClick={openCommandPalette}
+              className="group/btn flex items-center gap-2 px-3 py-2.5 bg-white text-gray-700 rounded-lg shadow-md hover:shadow-lg border border-gray-200 hover:border-blue-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:scale-95"
+              style={{ 
+                transitionDelay: isButtonsExpanded ? '50ms' : '0ms',
+                opacity: isButtonsExpanded ? 1 : 0,
+                transform: isButtonsExpanded ? 'translateX(0)' : 'translateX(8px)'
+              }}
+              aria-label="Open command palette"
+            >
+              <svg className="w-4 h-4 text-gray-500 group-hover/btn:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+              </svg>
+              <span className="text-xs font-medium text-gray-500 group-hover/btn:text-blue-600 transition-colors">
+                {isMac() ? '⌘⇧K' : 'Ctrl+Shift+K'}
+              </span>
+            </button>
+
+            {/* Search button */}
+            <button
+              onClick={openSearchModal}
+              className="group/btn flex items-center gap-2 px-3 py-2.5 bg-white text-gray-700 rounded-lg shadow-md hover:shadow-lg border border-gray-200 hover:border-blue-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:scale-95"
+              style={{ 
+                transitionDelay: isButtonsExpanded ? '100ms' : '0ms',
+                opacity: isButtonsExpanded ? 1 : 0,
+                transform: isButtonsExpanded ? 'translateX(0)' : 'translateX(8px)'
+              }}
+              aria-label="Open search"
+            >
+              <svg className="w-4 h-4 text-gray-500 group-hover/btn:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <span className="text-xs font-medium text-gray-500 group-hover/btn:text-blue-600 transition-colors">
+                {isMac() ? '⌘K' : 'Ctrl+K'}
+              </span>
+            </button>
+          </div>
         </div>
       )}
 

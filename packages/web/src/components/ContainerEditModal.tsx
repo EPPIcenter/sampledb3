@@ -37,7 +37,7 @@ export default function ContainerEditModal({
     tagIds: container.tags?.map(t => t.id) || [],
   })
 
-  // Reset form when modal opens or container changes
+  // Reset form when modal opens or container ID changes
   useEffect(() => {
     if (isOpen) {
       setFormData({
@@ -52,7 +52,10 @@ export default function ContainerEditModal({
         loadUnits(container.containerType)
       }
     }
-  }, [isOpen, container])
+    // Only depend on isOpen and container.id to avoid infinite loops
+    // The container values are used directly in the effect but not as dependencies
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, container.id])
 
   const loadTags = async () => {
     try {
