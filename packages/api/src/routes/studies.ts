@@ -267,14 +267,27 @@ studies.get('/:id/subjects', authMiddleware, async (c) => {
       return c.json({ error: 'Invalid study ID' }, 400)
     }
 
-    const page = validatePage(c.req.query('page'))
-    const limit = await validateLimit(database, c.req.query('limit'))
-    const offset = (page - 1) * limit
+    const pageParam = c.req.query('page')
+    const limitParam = c.req.query('limit')
+    
+    // If no pagination params provided, return all subjects (for client-side pagination)
+    const returnAll = !pageParam && !limitParam
+    
+    const page = pageParam ? validatePage(pageParam) : 1
+    let limit: number | undefined
+    if (returnAll) {
+      limit = undefined
+    } else if (limitParam) {
+      limit = await validateLimit(database, limitParam)
+    } else {
+      limit = 50 // Default limit when page is provided but limit is not
+    }
+    const offset = returnAll ? undefined : (page - 1) * limit!
 
     const whereClause = eq(studySubject.studyId, id)
     
-    // First get the subjects
-    const subjectsList = await database
+    // Get all subjects or paginated subset
+    let query = database
       .select({
         id: studySubject.id,
         studyId: studySubject.studyId,
@@ -284,10 +297,14 @@ studies.get('/:id/subjects', authMiddleware, async (c) => {
       })
       .from(studySubject)
       .where(whereClause)
-      .limit(limit)
-      .offset(offset)
+    
+    if (!returnAll) {
+      query = query.limit(limit!).offset(offset!) as any
+    }
+    
+    const subjectsList = await query
 
-    // Get total count for pagination
+    // Get total count for pagination info (even when returning all)
     const countResult = await database
       .select({ count: sql<number>`COUNT(*)`.as('count') })
       .from(studySubject)
@@ -295,7 +312,7 @@ studies.get('/:id/subjects', authMiddleware, async (c) => {
 
     const total = countResult[0]?.count || 0
 
-    // Get specimen counts for all subjects in this page using a batch query
+    // Get specimen counts for all subjects using a batch query
     const subjectIds = subjectsList.map(s => s.id)
     const specimenCounts: Record<number, number> = {}
     
@@ -328,11 +345,11 @@ studies.get('/:id/subjects', authMiddleware, async (c) => {
 
     return c.json({
       subjects: subjectsWithCounts,
-      pagination: {
+      pagination: returnAll ? undefined : {
         page,
-        limit,
+        limit: limit!,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / limit!),
       },
     })
   } catch (error) {

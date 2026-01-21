@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
 import ReferenceDataTable from '../components/ReferenceDataTable'
 import ReferenceDataForm from '../components/ReferenceDataForm'
-import Pagination from '../components/Pagination'
 import {
   referenceDataConfigs,
   getReferenceDataConfig,
@@ -36,11 +35,9 @@ export default function ReferenceData() {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<any[]>([])
 
-  // Pagination state (for locations)
+  // Client-side pagination state (for locations)
   const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [total, setTotal] = useState(0)
-  const limit = 50
+  const pageSize = 50
 
   // Search state (for locations)
   const [search, setSearch] = useState('')
@@ -211,19 +208,16 @@ export default function ReferenceData() {
   // Load data
   useEffect(() => {
     loadData()
-  }, [activeTab, page, searchDebounced])
+  }, [activeTab, searchDebounced])
 
   const loadData = async () => {
     setLoading(true)
     try {
       if (config.requiresPagination || config.requiresSearch) {
-        // Locations with pagination/search
-        const res = await locationsApi.list(page, limit, searchDebounced)
+        // Locations - load all (no pagination params = return all)
+        const res = await locationsApi.list(undefined, undefined, searchDebounced)
         setData((res.data as any)[config.getDataKey()] || [])
-        if (res.data.pagination) {
-          setTotalPages(res.data.pagination.totalPages)
-          setTotal(res.data.pagination.total)
-        }
+        setPage(1) // Reset to first page when data changes
       } else {
         // Simple list
         // The API returns { data: [...] } or { data: { [key]: [...] } }
@@ -388,17 +382,13 @@ export default function ReferenceData() {
             disableClientFilter={config.requiresSearch}
             loading={loading && config.requiresSearch}
             readOnly={!canManageReferenceData}
+            pagination={config.requiresPagination ? {
+              page,
+              pageSize,
+              onPageChange: setPage,
+              showPagination: true,
+            } : undefined}
           />
-
-          {config.requiresPagination && totalPages > 1 && (
-            <Pagination
-              currentPage={page}
-              totalPages={totalPages}
-              totalItems={total}
-              itemsPerPage={limit}
-              onPageChange={setPage}
-            />
-          )}
         </div>
       </div>
 

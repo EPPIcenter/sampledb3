@@ -5,7 +5,6 @@ import { studiesApi, subjectsApi, type Study, type StudySubject, type StudySumma
 import api from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import DataTable, { Column } from '../components/DataTable'
-import Pagination from '../components/Pagination'
 import ExportModal from '../components/ExportModal'
 import StudyStats from '../components/StudyStats'
 import StudyTimeline from '../components/StudyTimeline'
@@ -29,10 +28,9 @@ export default function StudyDetail() {
   const [summaryLoading, setSummaryLoading] = useState(true)
   const [timelineLoading, setTimelineLoading] = useState(true)
   const [subjectsPage, setSubjectsPage] = useState(1)
-  const [subjectsTotal, setSubjectsTotal] = useState(0)
-  const [subjectsTotalPages, setSubjectsTotalPages] = useState(1)
   const [specimenCount, setSpecimenCount] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
+  const pageSize = 50
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [createSubjectModalOpen, setCreateSubjectModalOpen] = useState(false)
   const [editStudyModalOpen, setEditStudyModalOpen] = useState(false)
@@ -82,8 +80,6 @@ export default function StudyDetail() {
     }
   }, { enabled: createSubjectModalOpen || editStudyModalOpen || mergeModalOpen, enableOnFormTags: true })
 
-  const limit = 50 // Default page size, matches backend DEFAULT_PAGE_SIZE
-
   useEffect(() => {
     if (id) {
       loadStudy()
@@ -91,7 +87,7 @@ export default function StudyDetail() {
       loadSummary()
       loadTimeline()
     }
-  }, [id, subjectsPage])
+  }, [id])
 
   useEffect(() => {
     if (study?.shortCode) {
@@ -114,17 +110,9 @@ export default function StudyDetail() {
   const loadSubjects = async () => {
     try {
       setLoading(true)
-      const response = await studiesApi.getSubjects(parseInt(id!), { page: subjectsPage, limit })
+      // Load all subjects at once (no pagination params = return all)
+      const response = await studiesApi.getSubjects(parseInt(id!))
       setSubjects(response.subjects || [])
-      if (response.pagination) {
-        setSubjectsTotal(response.pagination.total)
-        setSubjectsTotalPages(response.pagination.totalPages)
-      } else {
-        // Pagination should always be present - handle missing pagination as error case
-        console.warn('Missing pagination in subjects response')
-        setSubjectsTotal(response.subjects?.length || 0)
-        setSubjectsTotalPages(1)
-      }
     } catch (error) {
       console.error('Failed to load subjects:', error)
     } finally {
@@ -180,8 +168,6 @@ export default function StudyDetail() {
       </div>
     )
   }
-
-  const totalPages = subjectsTotalPages
 
   // Filter subjects by search query (client-side)
   const filteredSubjects = subjects.filter((subject) =>
@@ -374,16 +360,13 @@ export default function StudyDetail() {
               onRowClick={(subject) => navigate(`/subjects/${subject.id}`)}
               loading={loading}
               emptyMessage="No subjects found"
+              pagination={{
+                page: subjectsPage,
+                pageSize,
+                onPageChange: setSubjectsPage,
+                showPagination: true,
+              }}
             />
-            {!loading && totalPages > 1 && (
-              <Pagination
-                currentPage={subjectsPage}
-                totalPages={totalPages}
-                onPageChange={setSubjectsPage}
-                totalItems={subjectsTotal}
-                itemsPerPage={limit}
-              />
-            )}
           </div>
         </div>
       )}

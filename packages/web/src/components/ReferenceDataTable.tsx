@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useUser } from '../contexts/UserContext'
 import SkeletonTable from './SkeletonTable'
+import Pagination from './Pagination'
 
 export interface Column<T> {
   key: keyof T
@@ -20,6 +21,12 @@ interface ReferenceDataTableProps<T extends { id: number }> {
   disableClientFilter?: boolean
   loading?: boolean
   readOnly?: boolean
+  pagination?: {
+    page: number
+    pageSize: number
+    onPageChange: (page: number) => void
+    showPagination?: boolean
+  }
 }
 
 export default function ReferenceDataTable<T extends { id: number }>({
@@ -34,6 +41,7 @@ export default function ReferenceDataTable<T extends { id: number }>({
   disableClientFilter = false,
   loading = false,
   readOnly = false,
+  pagination,
 }: ReferenceDataTableProps<T>) {
   const { canManageReferenceData } = useUser()
   const canEdit = !readOnly && canManageReferenceData
@@ -67,6 +75,13 @@ export default function ReferenceDataTable<T extends { id: number }>({
         })
       })
     })
+
+  // Apply pagination if enabled
+  const paginatedData = pagination
+    ? filteredData.slice((pagination.page - 1) * pagination.pageSize, pagination.page * pagination.pageSize)
+    : filteredData
+  
+  const totalPages = pagination ? Math.ceil(filteredData.length / pagination.pageSize) : 1
 
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this item?')) {
@@ -121,7 +136,7 @@ export default function ReferenceDataTable<T extends { id: number }>({
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredData.map((item) => (
+              {paginatedData.map((item) => (
                 <tr key={item.id} className="hover:bg-gray-50">
                   {columns.map((col) => (
                     <td key={String(col.key)} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -149,6 +164,17 @@ export default function ReferenceDataTable<T extends { id: number }>({
               ))}
             </tbody>
           </table>
+          {pagination && pagination.showPagination !== false && totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-gray-100">
+              <Pagination
+                currentPage={pagination.page}
+                totalPages={totalPages}
+                onPageChange={pagination.onPageChange}
+                totalItems={filteredData.length}
+                itemsPerPage={pagination.pageSize}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

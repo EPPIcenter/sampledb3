@@ -22,19 +22,21 @@ const errorLogQuerySchema = z.object({
   level: z.enum(['error', 'warning', 'info']).optional(),
   resolved: z.string().optional().transform((val) => val === 'true'),
   page: z.preprocess((val) => {
+    if (val === undefined || val === null || val === '') return undefined
     if (typeof val === 'string') {
       const num = parseInt(val, 10)
-      return isNaN(num) ? 1 : num
+      return isNaN(num) ? undefined : num
     }
-    return 1
-  }, z.number().int().positive()),
+    return val
+  }, z.number().int().positive().optional()),
   limit: z.preprocess((val) => {
+    if (val === undefined || val === null || val === '') return undefined
     if (typeof val === 'string') {
       const num = parseInt(val, 10)
-      return isNaN(num) ? 50 : Math.min(num, 100)
+      return isNaN(num) ? undefined : Math.min(num, 100)
     }
-    return 50
-  }, z.number().int().positive().max(100)),
+    return val
+  }, z.number().int().positive().max(100).optional()),
   search: z.string().optional(),
 })
 
@@ -129,19 +131,22 @@ export function createErrorLogsRoutes(database: Database): Hono {
       
       const [{ count: totalCount }] = await countQuery
       
-      // Apply pagination
-      const offset = (page - 1) * limit
-      query = query.limit(limit).offset(offset) as any
+      // Apply pagination only if provided
+      const returnAll = page === undefined && limit === undefined
+      if (!returnAll && page !== undefined && limit !== undefined) {
+        const offset = (page - 1) * limit
+        query = query.limit(limit).offset(offset) as any
+      }
       
       const logs = await query
       
       return c.json({
         logs,
-        pagination: {
-          page,
-          limit,
+        pagination: returnAll ? undefined : {
+          page: page || 1,
+          limit: limit || 50,
           total: totalCount,
-          totalPages: Math.ceil(totalCount / limit),
+          totalPages: Math.ceil(totalCount / (limit || 50)),
         },
       })
     } catch (error) {

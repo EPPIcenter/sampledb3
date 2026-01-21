@@ -144,9 +144,22 @@ specimens.get('/', authMiddleware, async (c) => {
       query = query.where(and(...conditions) as any) as any
     }
     
-    const page = validatePage(c.req.query('page'))
-    const limit = await validateLimit(database, c.req.query('limit'))
-    const offset = (page - 1) * limit
+    const pageParam = c.req.query('page')
+    const limitParam = c.req.query('limit')
+    
+    // If no pagination params provided, return all specimens (for client-side pagination)
+    const returnAll = !pageParam && !limitParam
+    
+    const page = pageParam ? validatePage(pageParam) : 1
+    let limit: number | undefined
+    if (returnAll) {
+      limit = undefined
+    } else if (limitParam) {
+      limit = await validateLimit(database, limitParam)
+    } else {
+      limit = 50 // Default limit when page is provided but limit is not
+    }
+    const offset = returnAll ? undefined : (page - 1) * limit!
     
     const countQuery = dbInstance
       .select({ count: sql<number>`COUNT(*)` })
@@ -160,8 +173,13 @@ specimens.get('/', authMiddleware, async (c) => {
       countQuery.where(and(...conditions) as any) as any
     }
     
+    let queryWithOrder = query.orderBy(sql`${specimen.created} DESC`)
+    if (!returnAll) {
+      queryWithOrder = queryWithOrder.limit(limit!).offset(offset!) as any
+    }
+    
     const [specimensList, countResult] = await Promise.all([
-      query.limit(limit).offset(offset).orderBy(sql`${specimen.created} DESC`),
+      queryWithOrder,
       countQuery,
     ])
     
@@ -169,11 +187,11 @@ specimens.get('/', authMiddleware, async (c) => {
     
     return c.json({
       specimens: specimensList,
-      pagination: {
+      pagination: returnAll ? undefined : {
         page,
-        limit,
+        limit: limit!,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / limit!),
       },
     })
   } catch (error) {

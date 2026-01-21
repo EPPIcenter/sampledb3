@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import SkeletonTable from './SkeletonTable'
+import Pagination from './Pagination'
 
 export interface Column<T> {
   key: keyof T | string
@@ -17,6 +18,12 @@ interface DataTableProps<T> {
   initialSortColumn?: keyof T | string
   initialSortDirection?: 'asc' | 'desc'
   density?: 'normal' | 'compact'
+  pagination?: {
+    page: number
+    pageSize: number
+    onPageChange: (page: number) => void
+    showPagination?: boolean
+  }
 }
 
 export default function DataTable<T extends { id: number }>({
@@ -28,6 +35,7 @@ export default function DataTable<T extends { id: number }>({
   initialSortColumn = null as any,
   initialSortDirection = 'asc',
   density = 'normal',
+  pagination,
 }: DataTableProps<T>) {
   const [sortColumn, setSortColumn] = useState<keyof T | string | null>(initialSortColumn)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(initialSortDirection)
@@ -56,18 +64,44 @@ export default function DataTable<T extends { id: number }>({
     if (aValue === null || aValue === undefined) return 1
     if (bValue === null || bValue === undefined) return -1
     
-    const comparison = aValue < bValue ? -1 : 1
+    // Handle numeric comparison for specimenCount and dates
+    if (typeof aValue === 'number' && typeof bValue === 'number') {
+      const comparison = aValue < bValue ? -1 : 1
+      return sortDirection === 'asc' ? comparison : -comparison
+    }
+    
+    // Handle date strings
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      const aDate = new Date(aValue).getTime()
+      const bDate = new Date(bValue).getTime()
+      if (!isNaN(aDate) && !isNaN(bDate)) {
+        const comparison = aDate < bDate ? -1 : 1
+        return sortDirection === 'asc' ? comparison : -comparison
+      }
+    }
+    
+    // String comparison
+    const aStr = String(aValue).toLowerCase()
+    const bStr = String(bValue).toLowerCase()
+    const comparison = aStr < bStr ? -1 : 1
     return sortDirection === 'asc' ? comparison : -comparison
   })
 
-  // Reset selected row when data changes
+  // Apply pagination if enabled
+  const paginatedData = pagination
+    ? sortedData.slice((pagination.page - 1) * pagination.pageSize, pagination.page * pagination.pageSize)
+    : sortedData
+  
+  const totalPages = pagination ? Math.ceil(sortedData.length / pagination.pageSize) : 1
+
+  // Reset selected row when data changes, sort changes, or page changes
   useEffect(() => {
     setSelectedRowIndex(null)
-  }, [data.length, sortColumn, sortDirection])
+  }, [data.length, sortColumn, sortDirection, pagination?.page])
 
   // Handle keyboard navigation
   useEffect(() => {
-    if (!onRowClick || sortedData.length === 0) return
+    if (!onRowClick || paginatedData.length === 0) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle if focus is within the table or no input is focused
@@ -89,17 +123,17 @@ export default function DataTable<T extends { id: number }>({
         e.preventDefault()
         setSelectedRowIndex(prev => {
           if (prev === null) return 0
-          return Math.min(prev + 1, sortedData.length - 1)
+          return Math.min(prev + 1, paginatedData.length - 1)
         })
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
         setSelectedRowIndex(prev => {
-          if (prev === null) return sortedData.length - 1
+          if (prev === null) return paginatedData.length - 1
           return Math.max(prev - 1, 0)
         })
       } else if (e.key === 'Enter' && selectedRowIndex !== null) {
         e.preventDefault()
-        const selectedRow = sortedData[selectedRowIndex]
+        const selectedRow = paginatedData[selectedRowIndex]
         if (selectedRow) {
           onRowClick(selectedRow)
         }
@@ -108,7 +142,7 @@ export default function DataTable<T extends { id: number }>({
         setSelectedRowIndex(0)
       } else if (e.key === 'End') {
         e.preventDefault()
-        setSelectedRowIndex(sortedData.length - 1)
+        setSelectedRowIndex(paginatedData.length - 1)
       }
     }
 
@@ -123,18 +157,18 @@ export default function DataTable<T extends { id: number }>({
         tableRef.current.removeEventListener('keydown', handleKeyDown)
       }
     }
-  }, [sortedData, onRowClick, selectedRowIndex])
+  }, [paginatedData, onRowClick, selectedRowIndex])
 
   // Scroll selected row into view
   useEffect(() => {
-    if (selectedRowIndex !== null && sortedData[selectedRowIndex]) {
-      const rowId = sortedData[selectedRowIndex].id
+    if (selectedRowIndex !== null && paginatedData[selectedRowIndex]) {
+      const rowId = paginatedData[selectedRowIndex].id
       const rowElement = rowRefs.current.get(rowId)
       if (rowElement) {
         rowElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
       }
     }
-  }, [selectedRowIndex, sortedData])
+  }, [selectedRowIndex, paginatedData])
 
   if (loading) {
     return <SkeletonTable rows={5} columns={columns.length} density={density} />
@@ -183,7 +217,7 @@ export default function DataTable<T extends { id: number }>({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {sortedData.map((row, index) => {
+            {paginatedData.map((row, index) => {
               const isSelected = selectedRowIndex === index
               return (
                 <tr
@@ -211,6 +245,17 @@ export default function DataTable<T extends { id: number }>({
           </tbody>
         </table>
       </div>
+      {pagination && pagination.showPagination !== false && totalPages > 1 && (
+        <div className="px-6 py-4 border-t border-gray-100">
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={totalPages}
+            onPageChange={pagination.onPageChange}
+            totalItems={sortedData.length}
+            itemsPerPage={pagination.pageSize}
+          />
+        </div>
+      )}
     </div>
   )
 }

@@ -163,7 +163,8 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
           .sort((a, b) => a.date.localeCompare(b.date))
       : (summary.collectionTimeline || [])
 
-    // Calculate unique subjects
+    // Calculate unique subjects with filtered specimens (for display purposes only)
+    // Note: totalSubjects should always be the total enrolled subjects, not filtered
     const uniqueSubjectIds = timelineData
       ? new Set(
           timelineData.subjects
@@ -182,8 +183,9 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
         )
       : new Set<number>()
 
-    const totalSubjects = uniqueSubjectIds.size
     const totalSpecimens = filteredData.length
+    // Always use the original totalSubjects from summary - date filters should not affect total enrolled subjects
+    const totalSubjects = summary.totalSubjects
 
     return {
       ...summary,

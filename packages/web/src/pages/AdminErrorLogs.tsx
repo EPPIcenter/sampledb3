@@ -12,20 +12,13 @@ export default function AdminErrorLogs() {
   const [cleanupLoading, setCleanupLoading] = useState(false)
   
   // Filter states
-  const [filters, setFilters] = useState<ErrorLogsQueryParams>({
-    page: 1,
-    limit: 50,
-  })
+  const [filters, setFilters] = useState<Omit<ErrorLogsQueryParams, 'page' | 'limit'>>({})
   const [searchQuery, setSearchQuery] = useState('')
   const [searchDebounced, setSearchDebounced] = useState('')
   
-  // Pagination
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 50,
-    total: 0,
-    totalPages: 1,
-  })
+  // Client-side pagination
+  const [page, setPage] = useState(1)
+  const pageSize = 50
 
   // Debounce search
   useEffect(() => {
@@ -44,13 +37,14 @@ export default function AdminErrorLogs() {
     try {
       setLoading(true)
       setError(null)
-      const params: ErrorLogsQueryParams = {
+      // Load all logs (no pagination params = return all)
+      const params: Omit<ErrorLogsQueryParams, 'page' | 'limit'> = {
         ...filters,
         search: searchDebounced || undefined,
       }
-      const response = await errorLogsApi.list(params)
+      const response = await errorLogsApi.list(params as any)
       setLogs(response.data.logs)
-      setPagination(response.data.pagination)
+      setPage(1) // Reset to first page when data changes
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load error logs')
       console.error('Error loading error logs:', err)
@@ -59,12 +53,12 @@ export default function AdminErrorLogs() {
     }
   }, [filters, searchDebounced])
 
-  const handleFilterChange = (key: keyof ErrorLogsQueryParams, value: any) => {
+  const handleFilterChange = (key: keyof Omit<ErrorLogsQueryParams, 'page' | 'limit'>, value: any) => {
     setFilters((prev) => ({
       ...prev,
       [key]: value,
-      page: 1, // Reset to first page
     }))
+    setPage(1) // Reset to first page when filters change
   }
 
   const handleResolve = async (id: number) => {
@@ -251,7 +245,7 @@ export default function AdminErrorLogs() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {logs.map((log) => (
+                  {logs.slice((page - 1) * pageSize, page * pageSize).map((log) => (
                     <tr key={log.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                         {formatDate(log.timestamp)}
@@ -303,14 +297,14 @@ export default function AdminErrorLogs() {
                 </tbody>
               </table>
             </div>
-            {pagination.totalPages > 1 && (
+            {Math.ceil(logs.length / pageSize) > 1 && (
               <div className="px-4 py-3 border-t border-gray-200">
                 <Pagination
-                  currentPage={pagination.page}
-                  totalPages={pagination.totalPages}
-                  totalItems={pagination.total}
-                  itemsPerPage={pagination.limit}
-                  onPageChange={(page) => handleFilterChange('page', page)}
+                  currentPage={page}
+                  totalPages={Math.ceil(logs.length / pageSize)}
+                  totalItems={logs.length}
+                  itemsPerPage={pageSize}
+                  onPageChange={setPage}
                 />
               </div>
             )}
