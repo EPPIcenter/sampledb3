@@ -294,7 +294,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                         params.set('position', c.position)
                                       }
                                       // For paper containers without position, use container ID as fallback
-                                      if (c.type === 'paper' && !c.position && c.id) {
+                                      if (c.type === 'paper' && !c.position && c.id !== undefined) {
                                         params.set('containerId', String(c.id))
                                       }
                                       const queryString = params.toString()
@@ -340,7 +340,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                     params.set('position', c.position)
                                   }
                                   // For paper containers without position, use container ID as fallback
-                                  if (c.type === 'paper' && !c.position && c.id) {
+                                  if (c.type === 'paper' && !c.position && c.id !== undefined) {
                                     params.set('containerId', String(c.id))
                                   }
                                   const queryString = params.toString()

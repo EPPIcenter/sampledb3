@@ -207,6 +207,23 @@ export default function ContainerDetail() {
     }
   }
 
+  const buildCollectionUrlWithHighlight = (type: string, id: number, position?: string | null, containerId?: number) => {
+    const url = getCollectionUrl(type, id)
+    if (url === '#') return url
+    
+    const params = new URLSearchParams()
+    if (position) {
+      params.set('position', position)
+    }
+    // For paper containers without position, use container ID as fallback
+    if (type === 'sheet' && !position && containerId !== undefined) {
+      params.set('containerId', String(containerId))
+    }
+    
+    const queryString = params.toString()
+    return queryString ? `${url}?${queryString}` : url
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-4">
@@ -278,7 +295,12 @@ export default function ContainerDetail() {
                       </dt>
                       <dd className="text-sm text-gray-900">
                         <Link
-                          to={getCollectionUrl(effectiveCollection.type, effectiveCollection.id)}
+                          to={buildCollectionUrlWithHighlight(
+                            effectiveCollection.type,
+                            effectiveCollection.id,
+                            effectiveCollection.position,
+                            container.id
+                          )}
                           className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
                         >
                           {effectiveCollection.name}
