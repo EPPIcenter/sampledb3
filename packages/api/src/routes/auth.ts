@@ -8,6 +8,7 @@ import { nanoid } from 'nanoid'
 import type { Database } from '../db/client'
 import { getPasswordRequirements, getSessionSettings } from '../lib/settings'
 import { createAuthMiddleware, createAdminMiddleware } from '../middleware/auth'
+import { handleRouteError } from '../lib/error-handler'
 
 export function createAuthRoutes(database: Database, settingsDb?: Database) {
   const auth = new Hono()
@@ -123,7 +124,7 @@ auth.post('/login', async (c) => {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -233,33 +234,37 @@ auth.post('/register', adminMiddleware, async (c) => {
 
 // Get current user (alias for /me for consistency, requires authentication)
 auth.get('/current', authMiddleware, async (c) => {
-  const user = c.get('user')!
-  // Fetch full user data including username
-  const fullUser = await database
-    .select({
-      id: users.id,
-      email: users.email,
-      username: users.username,
-      name: users.name,
-      role: users.role,
-    })
-    .from(users)
-    .where(eq(users.id, user.id))
-    .get()
-  
-  if (!fullUser) {
-    return c.json({ error: 'User not found' }, 404)
-  }
-  
-  return c.json({ 
-    user: {
-      id: fullUser.id,
-      email: fullUser.email,
-      username: fullUser.username || undefined,
-      name: fullUser.name,
-      role: fullUser.role,
+  try {
+    const user = c.get('user')!
+    // Fetch full user data including username
+    const fullUser = await database
+      .select({
+        id: users.id,
+        email: users.email,
+        username: users.username,
+        name: users.name,
+        role: users.role,
+      })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .get()
+    
+    if (!fullUser) {
+      return c.json({ error: 'User not found' }, 404)
     }
-  })
+    
+    return c.json({ 
+      user: {
+        id: fullUser.id,
+        email: fullUser.email,
+        username: fullUser.username || undefined,
+        name: fullUser.name,
+        role: fullUser.role,
+      }
+    })
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
 })
 
 // Update current user profile (self-service)

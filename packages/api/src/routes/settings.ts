@@ -4,6 +4,7 @@ import type { Database } from '../db/client'
 import { unit, containerTypeUnit } from '../db/schema'
 import { eq, inArray, and } from 'drizzle-orm'
 import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { UnauthorizedError, handleRouteError } from '../lib/error-handler'
 import {
   getContainerDefaults,
   setContainerDefaults,
@@ -309,7 +310,7 @@ const scannerConfigurationsSchema = z.object({
       const userId = user?.id
 
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
 
       // Only allow resetting user-specific settings (not system settings)
@@ -323,8 +324,10 @@ const scannerConfigurationsSchema = z.object({
     
     return c.json({ success: true, message: 'Setting reset to system default' })
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    return c.json({ error: 'Internal server error', details: errorMessage }, 500)
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Validation error', details: error.issues }, 400)
+    }
+    return handleRouteError(error, c)
   }
 })
 
@@ -346,12 +349,15 @@ const scannerConfigurationsSchema = z.object({
       const user = c.get('user')
       const userId = user?.id
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
       const configs = await getPersonalExportConfigurations(database, userId)
       return c.json(configs || { configurations: [] })
     } catch (error: unknown) {
-      return c.json({ error: 'Internal server error' }, 500)
+      if (error instanceof z.ZodError) {
+        return c.json({ error: 'Validation error', details: error.issues }, 400)
+      }
+      return handleRouteError(error, c)
     }
   })
 
@@ -361,7 +367,7 @@ const scannerConfigurationsSchema = z.object({
       const user = c.get('user')
       const userId = user?.id
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
 
       const body = await c.req.json()
@@ -384,7 +390,7 @@ const scannerConfigurationsSchema = z.object({
         details: error.issues 
       }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -394,7 +400,7 @@ const scannerConfigurationsSchema = z.object({
       const user = c.get('user')
       const userId = user?.id
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
 
       const validated = exportConfigurationsSchema.parse(await c.req.json())
@@ -409,7 +415,7 @@ const scannerConfigurationsSchema = z.object({
         details: error.issues 
       }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -429,12 +435,15 @@ const scannerConfigurationsSchema = z.object({
       const user = c.get('user')
       const userId = user?.id
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
       const configs = await getPersonalScannerConfigurations(database, userId)
       return c.json(configs || { configurations: [] })
     } catch (error: unknown) {
-      return c.json({ error: 'Internal server error' }, 500)
+      if (error instanceof z.ZodError) {
+        return c.json({ error: 'Validation error', details: error.issues }, 400)
+      }
+      return handleRouteError(error, c)
     }
   })
 
@@ -444,7 +453,7 @@ const scannerConfigurationsSchema = z.object({
       const user = c.get('user')
       const userId = user?.id
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
 
       const body = await c.req.json()
@@ -467,7 +476,7 @@ const scannerConfigurationsSchema = z.object({
         details: error.issues 
       }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -477,7 +486,7 @@ const scannerConfigurationsSchema = z.object({
       const user = c.get('user')
       const userId = user?.id
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
 
       const validated = scannerConfigurationsSchema.parse(await c.req.json())
@@ -492,7 +501,7 @@ const scannerConfigurationsSchema = z.object({
         details: error.issues 
       }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 

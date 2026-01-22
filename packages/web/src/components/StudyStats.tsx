@@ -112,6 +112,13 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
     }
   }
 
+  // Check if date filtering is reducing the specimen count
+  const isFilteringSpecimens = useMemo(() => {
+    if (!filteredData || !timelineData) return false
+    // Show warning if filtered count differs from unfiltered count
+    return filteredData.length !== summary.totalSpecimens
+  }, [filteredData, timelineData, summary.totalSpecimens])
+
   // Recalculate stats if we have filtered data
   const displaySummary = useMemo(() => {
     if (!filteredData) {
@@ -191,7 +198,8 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
       ...summary,
       totalSubjects,
       totalSpecimens,
-      averageSpecimensPerSubject: totalSubjects > 0 ? totalSpecimens / totalSubjects : 0,
+      // Use unfiltered total specimens for average calculation
+      averageSpecimensPerSubject: totalSubjects > 0 ? summary.totalSpecimens / totalSubjects : 0,
       specimenTypes: Object.entries(specimenTypeCounts).map(([name, count]) => ({
         name,
         count,
@@ -322,6 +330,8 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
           title="Total Specimens"
           value={displaySummary.totalSpecimens.toLocaleString()}
           subtitle="Collected samples"
+          unfilteredValue={summary.totalSpecimens}
+          showUnfilteredWarning={isFilteringSpecimens}
         />
         <StatCard
           title="Total Containers"
