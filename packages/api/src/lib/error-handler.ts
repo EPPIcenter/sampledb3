@@ -1,6 +1,6 @@
 import { Context } from 'hono'
 import { z } from 'zod'
-import { logBackendError, type ErrorLogContext } from './error-logger'
+import { logBackendError, logError, type ErrorLogContext } from './error-logger'
 import { db } from '../db/client'
 
 export interface ErrorResponse {
@@ -29,13 +29,18 @@ export function handleRouteError(error: unknown, c: Context): Response {
     },
   }
   
-  // Log error asynchronously (non-blocking)
-  logBackendError(database, error, errorContext).catch((logErr) => {
-    // If logging fails, just log to console
-    console.error('[ERROR_HANDLER] Failed to log error:', logErr)
-  })
   // Handle Zod validation errors
   if (error instanceof z.ZodError) {
+    // Log validation errors as warnings (they're expected user input errors, but still worth tracking)
+    logError(database, 'backend', 'warning', 'Validation error', error, {
+      ...errorContext,
+      additionalContext: {
+        ...errorContext.additionalContext,
+        validationIssues: error.issues,
+      },
+    }).catch((logErr) => {
+      console.error('[ERROR_HANDLER] Failed to log error:', logErr)
+    })
     return c.json({
       error: 'Validation error',
       details: error.issues,
@@ -48,7 +53,22 @@ export function handleRouteError(error: unknown, c: Context): Response {
     const isDevelopment = process.env.NODE_ENV !== 'production'
     
     // Handle custom error classes
+    if (error instanceof UnauthorizedError) {
+      // Log 401 errors as warnings (they can be expected in some cases)
+      logError(database, 'backend', 'warning', error.message, error, errorContext).catch((logErr) => {
+        console.error('[ERROR_HANDLER] Failed to log error:', logErr)
+      })
+      return c.json({
+        error: error.message,
+        errorCode: 'UNAUTHORIZED'
+      }, 401)
+    }
+    
     if (error instanceof NotFoundError) {
+      // Log error asynchronously (non-blocking)
+      logBackendError(database, error, errorContext).catch((logErr) => {
+        console.error('[ERROR_HANDLER] Failed to log error:', logErr)
+      })
       return c.json({
         error: error.message,
         errorCode: 'NOT_FOUND'
@@ -56,6 +76,10 @@ export function handleRouteError(error: unknown, c: Context): Response {
     }
     
     if (error instanceof ConflictError) {
+      // Log error asynchronously (non-blocking)
+      logBackendError(database, error, errorContext).catch((logErr) => {
+        console.error('[ERROR_HANDLER] Failed to log error:', logErr)
+      })
       return c.json({
         error: error.message,
         errorCode: 'CONFLICT'
@@ -63,6 +87,10 @@ export function handleRouteError(error: unknown, c: Context): Response {
     }
     
     if (error instanceof ValidationError) {
+      // Log error asynchronously (non-blocking)
+      logBackendError(database, error, errorContext).catch((logErr) => {
+        console.error('[ERROR_HANDLER] Failed to log error:', logErr)
+      })
       return c.json({
         error: error.message,
         details: error.details,
@@ -70,6 +98,10 @@ export function handleRouteError(error: unknown, c: Context): Response {
       }, 400)
     }
     
+    // Log error asynchronously (non-blocking)
+    logBackendError(database, error, errorContext).catch((logErr) => {
+      console.error('[ERROR_HANDLER] Failed to log error:', logErr)
+    })
     return c.json({
       error: error.message,
       errorCode: error.name || 'APPLICATION_ERROR',
@@ -81,6 +113,10 @@ export function handleRouteError(error: unknown, c: Context): Response {
   }
 
   // Handle unknown errors
+  // Log error asynchronously (non-blocking)
+  logBackendError(database, error, errorContext).catch((logErr) => {
+    console.error('[ERROR_HANDLER] Failed to log error:', logErr)
+  })
   const isDevelopment = process.env.NODE_ENV !== 'production'
   return c.json({
     error: 'Internal server error',
@@ -110,5 +146,12 @@ export class ValidationError extends Error {
   constructor(message: string, public details?: any) {
     super(message)
     this.name = 'ValidationError'
+  }
+}
+
+export class UnauthorizedError extends Error {
+  constructor(message: string = 'Unauthorized') {
+    super(message)
+    this.name = 'UnauthorizedError'
   }
 }

@@ -5,7 +5,7 @@ import { errorLogs } from '../db/schema'
 import { logFrontendError, cleanupOldErrorLogs, type ErrorLogContext } from '../lib/error-logger'
 import { handleRouteError } from '../lib/error-handler'
 import { eq, and, desc, sql, like, or } from 'drizzle-orm'
-import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware, createOptionalAuthMiddleware } from '../middleware/auth'
 
 // Schema for frontend error submission
 const frontendErrorSchema = z.object({
@@ -46,16 +46,19 @@ const errorLogQuerySchema = z.object({
 export function createErrorLogsRoutes(database: Database): Hono {
   const errorLogsRoutes = new Hono()
   const authMiddleware = createAuthMiddleware(database)
+  const optionalAuthMiddleware = createOptionalAuthMiddleware(database)
   const adminMiddleware = createAdminMiddleware(database)
 
   // POST /api/error-logs - Accept frontend error reports
-  errorLogsRoutes.post('/', authMiddleware, async (c) => {
+  // Use optional auth so errors can be logged even if session expired
+  errorLogsRoutes.post('/', optionalAuthMiddleware, async (c) => {
     try {
       const body = await c.req.json()
       const errorData = frontendErrorSchema.parse(body)
       
       // Extract context from request
-      const user = c.get('user')!
+      // User may be undefined if not authenticated (e.g., session expired)
+      const user = c.get('user')
       const url = c.req.header('referer') || c.req.url
       const userAgent = c.req.header('user-agent')
       
@@ -70,11 +73,22 @@ export function createErrorLogsRoutes(database: Database): Hono {
       }
       
       // Log the error
+      // If stack trace exists, create Error object and preserve the original client-side stack
+      let errorToLog: unknown = errorData.message
+      if (errorData.stack) {
+        const error = new Error(errorData.message)
+        error.stack = errorData.stack // Preserve the original client-side stack trace
+        if (errorData.errorCode) {
+          error.name = errorData.errorCode
+        }
+        errorToLog = error
+      }
+      
       await logFrontendError(
         database,
         errorData.level,
         errorData.message,
-        errorData.stack ? new Error(errorData.message) : errorData.message,
+        errorToLog,
         errorContext
       )
       
