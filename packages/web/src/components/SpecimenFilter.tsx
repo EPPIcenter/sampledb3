@@ -128,11 +128,11 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search barcode or name..."
+                placeholder="Search subject, batch, or type..."
                 value={localFilters.search || ''}
                 onChange={(e) => updateFilter('search', e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                className="form-input w-64 pr-10 rounded-lg"
+                className="form-input w-80 pr-10 rounded-lg"
               />
               <button
                 onClick={handleSubmit}
