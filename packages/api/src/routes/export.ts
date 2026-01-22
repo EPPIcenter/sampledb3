@@ -18,6 +18,7 @@ import {
   enrichContainerData,
   filterContainersByType,
   formatAsCSV,
+  formatSimpleCSV,
   formatAsJSON,
   formatAsExcel,
   buildExportSummary,
@@ -28,10 +29,22 @@ import {
   type ExportFilters,
   type ExportSummary,
   type MultiStudyExportEntry,
+  type CSVExportOptions,
 } from '../lib/export-helpers'
 import { resolveSubjectNamesByStudy } from '../lib/identifier-resolution'
 import { resolveStudyByShortCode } from '../lib/identifier-resolution'
 import { createAuthMiddleware } from '../middleware/auth'
+
+/**
+ * Helper function to parse CSV options from query params or request body
+ */
+function parseCSVOptions(params: any): CSVExportOptions {
+  return {
+    delimiter: (params.csv_delimiter as ',' | ';' | '\t') || ',',
+    includeBOM: params.csv_bom !== false && params.csv_bom !== 'false', // Default to true
+    lineEnding: (params.csv_line_ending as 'LF' | 'CRLF') || 'CRLF',
+  }
+}
 
 /**
  * Create export routes with database injection
@@ -46,6 +59,13 @@ export_.get('/specimens.csv', authMiddleware, async (c) => {
   try {
     const studyCode = c.req.query('study')
     const sourceType = c.req.query('source_type')
+    
+    // Parse CSV options from query params
+    const csvOptions: CSVExportOptions = {
+      delimiter: (c.req.query('csv_delimiter') as ',' | ';' | '\t') || ',',
+      includeBOM: c.req.query('csv_bom') !== 'false', // Default to true
+      lineEnding: (c.req.query('csv_line_ending') as 'LF' | 'CRLF') || 'CRLF',
+    }
     
     let query = database
       .select({
@@ -97,7 +117,7 @@ export_.get('/specimens.csv', authMiddleware, async (c) => {
     
     const specimens = await query
   
-    // Convert to CSV
+    // Convert to CSV using the helper function
     const headers = ['id', 'subject_id', 'control_batch_id', 'specimen_type', 'collection_date', 'created']
     const rows = specimens.map(s => [
       s.id,
@@ -108,10 +128,7 @@ export_.get('/specimens.csv', authMiddleware, async (c) => {
       s.created,
     ])
     
-    const csv = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n')
+    const csv = formatSimpleCSV(headers, rows, csvOptions)
     
     c.header('Content-Type', 'text/csv')
     c.header('Content-Disposition', `attachment; filename="specimens_${Date.now()}.csv"`)
@@ -125,6 +142,13 @@ export_.get('/specimens.csv', authMiddleware, async (c) => {
 // Export inventory summary
 export_.get('/inventory.csv', authMiddleware, async (c) => {
   try {
+    // Parse CSV options from query params
+    const csvOptions: CSVExportOptions = {
+      delimiter: (c.req.query('csv_delimiter') as ',' | ';' | '\t') || ',',
+      includeBOM: c.req.query('csv_bom') !== 'false', // Default to true
+      lineEnding: (c.req.query('csv_line_ending') as 'LF' | 'CRLF') || 'CRLF',
+    }
+    
     // Get all specimens
     const allSpecimens = await database
       .select({
@@ -149,10 +173,10 @@ export_.get('/inventory.csv', authMiddleware, async (c) => {
       }
     }
     
-    const csv = [
-      'source_type,count',
-      ...Object.entries(counts).map(([type, count]) => `${type},${count}`)
-    ].join('\n')
+    // Convert to CSV using the helper function
+    const headers = ['source_type', 'count']
+    const rows = Object.entries(counts).map(([type, count]) => [type, count])
+    const csv = formatSimpleCSV(headers, rows, csvOptions)
     
     c.header('Content-Type', 'text/csv')
     c.header('Content-Disposition', `attachment; filename="inventory_${Date.now()}.csv"`)
@@ -260,7 +284,8 @@ export_.get('/containers', authMiddleware, async (c) => {
     }
 
     if (format === 'csv') {
-      const csv = await formatAsCSV(database, enrichedData, configName)
+      const csvOptions = parseCSVOptions(c.req.query())
+      const csv = await formatAsCSV(database, enrichedData, configName, csvOptions)
       c.header('Content-Type', 'text/csv')
       c.header('Content-Disposition', `attachment; filename="${filename}.csv"`)
       return c.text(csv)
@@ -435,7 +460,8 @@ export_.post('/containers', authMiddleware, async (c) => {
     }
 
         if (format === 'csv') {
-          const csv = await formatAsCSV(database, enrichedData, configName)
+          const csvOptions = parseCSVOptions(body)
+          const csv = await formatAsCSV(database, enrichedData, configName, csvOptions)
           const base64Csv = Buffer.from(csv).toString('base64')
       return c.json({
         summary,
@@ -676,7 +702,8 @@ export_.post('/containers/multi-study', authMiddleware, async (c) => {
     }
     
         if (format === 'csv') {
-          const csv = await formatAsCSV(database, result.containers, configName)
+          const csvOptions = parseCSVOptions(body)
+          const csv = await formatAsCSV(database, result.containers, configName, csvOptions)
           const base64Csv = Buffer.from(csv).toString('base64')
       return c.json({
         summary: result.summary,
@@ -797,7 +824,8 @@ export_.post('/containers/by-barcodes', authMiddleware, async (c) => {
     }
 
     if (format === 'csv') {
-      const csv = await formatAsCSV(database, enrichedData, configName)
+      const csvOptions = parseCSVOptions(body)
+      const csv = await formatAsCSV(database, enrichedData, configName, csvOptions)
       const base64Csv = Buffer.from(csv).toString('base64')
       return c.json({
         summary,

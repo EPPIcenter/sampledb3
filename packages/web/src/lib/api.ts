@@ -1015,11 +1015,28 @@ export interface ContainerExportData {
   last_updated: string
 }
 
+export interface CSVExportOptions {
+  delimiter?: ',' | ';' | '\t'
+  includeBOM?: boolean
+  lineEnding?: 'LF' | 'CRLF'
+}
+
 export const exportApi = {
-  specimens: (params?: { study?: string; source_type?: string }) =>
-    api.get('/export/specimens.csv', { params, responseType: 'blob' }),
-  inventory: () => api.get('/export/inventory.csv', { responseType: 'blob' }),
-  containers: (params: ExportFilters, format: 'csv' | 'xlsx' | 'json' = 'csv', configName?: string) => {
+  specimens: (params?: { study?: string; source_type?: string; csv_delimiter?: ',' | ';' | '\t'; csv_bom?: boolean; csv_line_ending?: 'LF' | 'CRLF' }) => {
+    const queryParams: any = { ...params }
+    if (params?.csv_delimiter) queryParams.csv_delimiter = params.csv_delimiter
+    if (params?.csv_bom !== undefined) queryParams.csv_bom = params.csv_bom
+    if (params?.csv_line_ending) queryParams.csv_line_ending = params.csv_line_ending
+    return api.get('/export/specimens.csv', { params: queryParams, responseType: 'blob' })
+  },
+  inventory: (csvOptions?: CSVExportOptions) => {
+    const params: any = {}
+    if (csvOptions?.delimiter) params.csv_delimiter = csvOptions.delimiter
+    if (csvOptions?.includeBOM !== undefined) params.csv_bom = csvOptions.includeBOM
+    if (csvOptions?.lineEnding) params.csv_line_ending = csvOptions.lineEnding
+    return api.get('/export/inventory.csv', { params, responseType: 'blob' })
+  },
+  containers: (params: ExportFilters, format: 'csv' | 'xlsx' | 'json' = 'csv', configName?: string, csvOptions?: CSVExportOptions) => {
     const queryParams: Record<string, string | number | number[] | string[] | undefined> = { format }
     // Add study
     queryParams.study = params.study
@@ -1042,6 +1059,12 @@ export const exportApi = {
     }
     if (params.subject_ids && params.subject_ids.length > 0) {
       queryParams.subject_ids = params.subject_ids
+    }
+    // Add CSV options if provided
+    if (csvOptions) {
+      if (csvOptions.delimiter) queryParams.csv_delimiter = csvOptions.delimiter
+      if (csvOptions.includeBOM !== undefined) queryParams.csv_bom = csvOptions.includeBOM
+      if (csvOptions.lineEnding) queryParams.csv_line_ending = csvOptions.lineEnding
     }
     return api.get('/export/containers', {
       params: queryParams,
@@ -1098,6 +1121,9 @@ export const exportApi = {
     date_to?: string
     created_from?: string
     created_to?: string
+    csv_delimiter?: ',' | ';' | '\t'
+    csv_bom?: boolean
+    csv_line_ending?: 'LF' | 'CRLF'
   }) => {
     return api.post<{
       summary: {
@@ -1162,6 +1188,9 @@ export const exportApi = {
     date_to?: string
     created_from?: string
     created_to?: string
+    csv_delimiter?: ',' | ';' | '\t'
+    csv_bom?: boolean
+    csv_line_ending?: 'LF' | 'CRLF'
   }) => {
     return api.post<{
       summary: {
@@ -1221,6 +1250,9 @@ export const exportApi = {
     barcodes: string[]
     format?: 'csv' | 'xlsx' | 'json'
     config_name?: string
+    csv_delimiter?: ',' | ';' | '\t'
+    csv_bom?: boolean
+    csv_line_ending?: 'LF' | 'CRLF'
   }) => {
     return api.post<{
       summary: {

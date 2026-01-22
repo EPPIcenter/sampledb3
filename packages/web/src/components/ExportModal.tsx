@@ -43,6 +43,11 @@ export default function ExportModal({
   const [exportFormat, setExportFormat] = useState<'csv' | 'xlsx' | 'json'>('csv')
   const [error, setError] = useState<string | null>(null)
   
+  // CSV export options
+  const [csvDelimiter, setCsvDelimiter] = useState<',' | ';' | '\t'>(',')
+  const [csvBOM, setCsvBOM] = useState<boolean>(true)
+  const [csvLineEnding, setCsvLineEnding] = useState<'LF' | 'CRLF'>('CRLF')
+  
   // CSV upload mode
   const [uploadMode, setUploadMode] = useState<'manual' | 'csv'>('manual')
   const [csvFile, setCsvFile] = useState<File | null>(null)
@@ -416,11 +421,19 @@ export default function ExportModal({
           date_to: filters.date_to,
           created_from: filters.created_from,
           created_to: filters.created_to,
+          csv_delimiter: exportFormat === 'csv' ? csvDelimiter : undefined,
+          csv_bom: exportFormat === 'csv' ? csvBOM : undefined,
+          csv_line_ending: exportFormat === 'csv' ? csvLineEnding : undefined,
         })
         summary = response.data.summary
         setExportSummary(summary)
       } else {
-        response = await exportApi.containers(filters, exportFormat, selectedConfigName || undefined)
+        const csvOptions = exportFormat === 'csv' ? {
+          delimiter: csvDelimiter,
+          includeBOM: csvBOM,
+          lineEnding: csvLineEnding,
+        } : undefined
+        response = await exportApi.containers(filters, exportFormat, selectedConfigName || undefined, csvOptions)
         summary = null
       }
 
@@ -849,6 +862,102 @@ export default function ExportModal({
                 ))}
               </div>
             </div>
+
+            {/* CSV Options - Only show when CSV format is selected */}
+            {exportFormat === 'csv' && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">CSV Options</h3>
+                
+                {/* Delimiter Selection */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Delimiter
+                  </label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="csvDelimiter"
+                        value=","
+                        checked={csvDelimiter === ','}
+                        onChange={() => setCsvDelimiter(',')}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Comma (,)</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="csvDelimiter"
+                        value=";"
+                        checked={csvDelimiter === ';'}
+                        onChange={() => setCsvDelimiter(';')}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Semicolon (;)</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="csvDelimiter"
+                        value="\t"
+                        checked={csvDelimiter === '\t'}
+                        onChange={() => setCsvDelimiter('\t')}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Tab</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* UTF-8 BOM Toggle */}
+                <div className="mb-4">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={csvBOM}
+                      onChange={(e) => setCsvBOM(e.target.checked)}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Include UTF-8 BOM (recommended for Excel)</span>
+                  </label>
+                  <p className="mt-1 text-xs text-gray-500 ml-6">
+                    Helps Excel recognize UTF-8 encoding automatically
+                  </p>
+                </div>
+
+                {/* Line Ending Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Line Ending
+                  </label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="csvLineEnding"
+                        value="CRLF"
+                        checked={csvLineEnding === 'CRLF'}
+                        onChange={() => setCsvLineEnding('CRLF')}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">CRLF (Windows, recommended for Excel)</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="csvLineEnding"
+                        value="LF"
+                        checked={csvLineEnding === 'LF'}
+                        onChange={() => setCsvLineEnding('LF')}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">LF (Unix)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Inline Export Summary - Only show for CSV mode */}
             {uploadMode === 'csv' && exportSummary && (
