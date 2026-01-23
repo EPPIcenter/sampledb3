@@ -20,7 +20,16 @@ const frontendErrorSchema = z.object({
 const errorLogQuerySchema = z.object({
   source: z.enum(['frontend', 'backend']).optional(),
   level: z.enum(['error', 'warning', 'info']).optional(),
-  resolved: z.string().optional().transform((val) => val === 'true'),
+  resolved: z.preprocess((val) => {
+    if (val === undefined || val === null || val === '') return undefined
+    if (typeof val === 'string') {
+      return val === 'true'
+    }
+    if (typeof val === 'boolean') {
+      return val
+    }
+    return undefined
+  }, z.boolean().optional()),
   page: z.preprocess((val) => {
     if (val === undefined || val === null || val === '') return undefined
     if (typeof val === 'string') {

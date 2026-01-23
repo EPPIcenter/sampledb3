@@ -11,8 +11,10 @@ export default function AdminErrorLogs() {
   const [showCleanupModal, setShowCleanupModal] = useState(false)
   const [cleanupLoading, setCleanupLoading] = useState(false)
   
-  // Filter states
-  const [filters, setFilters] = useState<Omit<ErrorLogsQueryParams, 'page' | 'limit'>>({})
+  // Filter states - default to unresolved
+  const [filters, setFilters] = useState<Omit<ErrorLogsQueryParams, 'page' | 'limit'>>({
+    resolved: false,
+  })
   const [searchQuery, setSearchQuery] = useState('')
   const [searchDebounced, setSearchDebounced] = useState('')
   
