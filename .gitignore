@@ -11,6 +11,7 @@ build/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+litestream-replicas/
 
 # Python
 __pycache__/
