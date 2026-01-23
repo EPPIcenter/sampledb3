@@ -151,15 +151,6 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
             </svg>
           ),
         },
-        {
-          label: 'Derivations',
-          to: '/derivations',
-          icon: (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          ),
-        },
       ],
     },
     {
@@ -250,6 +241,15 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
             to: '/collection-move',
           },
         ] : []),
+        {
+          label: 'Derivations',
+          to: '/derivations',
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          ),
+        },
       ],
     },
     {
@@ -369,7 +369,7 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
           <button
             onClick={() => toggleItem(itemKeyValue)}
             className={`
-              w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors
+              w-full flex items-center justify-between gap-2 px-2 py-1 rounded-md text-xs font-medium transition-colors
               ${itemActive
                 ? 'bg-blue-50 text-blue-700'
                 : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
@@ -411,7 +411,7 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
           }
         }}
         className={`
-          flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors
+          flex items-center gap-2 px-2 py-1 rounded-md text-xs font-medium transition-colors
           ${active
             ? 'bg-blue-50 text-blue-700'
             : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
@@ -427,9 +427,9 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
 
   const renderSection = (section: NavSection, sectionIndex: number) => {
     return (
-      <div key={section.title || `section-${sectionIndex}`} className="mb-4">
+      <div key={section.title || `section-${sectionIndex}`} className="mb-3">
         {section.title && (
-          <div className="px-2 py-1 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+          <div className="px-2 py-0.5 mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
             {section.title}
           </div>
         )}
@@ -462,7 +462,7 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between h-12 px-3 border-b border-gray-200">
+          <div className="flex items-center justify-between py-3 px-3">
             <Link to="/" className="flex items-center gap-2 text-lg font-bold text-blue-600" onClick={onMobileClose}>
               <img src="/icon.png" alt="SampleDB" className="h-8 w-auto" />
               <span>SampleDB</span>
@@ -479,12 +479,12 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-2 py-3">
+          <nav className="flex-1 px-2 py-2">
             {sections.map((section, index) => renderSection(section, index))}
           </nav>
 
           {/* EPPIcenter Footer */}
-          <div className="px-3 py-3 border-t border-gray-200">
+          <div className="px-3 py-3">
             <a
               href="https://eppicenter.ucsf.edu"
               target="_blank"
