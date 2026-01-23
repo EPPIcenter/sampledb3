@@ -20,8 +20,6 @@ export type CommandCategory =
   | 'Settings'
   | 'Export'
   | 'Bulk Operations'
-  | 'Quick Actions'
-  | 'Data Management'
 
 /**
  * Simple fuzzy match function

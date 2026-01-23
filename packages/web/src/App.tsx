@@ -56,14 +56,14 @@ import { useHotkey, useModifierHotkey, useModifierShiftHotkey } from './hooks/us
 import { useBrowserShortcutBlocker } from './hooks/useBrowserShortcutBlocker'
 import { Command } from './lib/commands'
 import { formatHotkey, getModifierKey, isMac } from './lib/hotkeys'
-import { useMemo, useState, useRef, useEffect } from 'react'
+import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import { exportApi } from './lib/api'
 import { useUser } from './contexts/UserContext'
 
 function AppContent() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { canWrite } = useUser()
+  const { canWrite, isAdmin } = useUser()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const {
     isHelpModalOpen,
@@ -130,20 +130,13 @@ function AppContent() {
   }
 
   // Helper function to clear filters based on current page
-  const handleClearFilters = () => {
-    if (location.pathname === '/specimens') {
-      navigate('/specimens')
-    } else if (location.pathname === '/studies') {
-      navigate('/studies')
-    } else if (location.pathname === '/statistics') {
-      navigate('/statistics')
+  const handleClearFilters = useCallback(() => {
+    // Navigate to the same path but with empty search params to clear filters
+    if (location.pathname === '/specimens' || location.pathname === '/studies' || location.pathname === '/statistics') {
+      // Navigate to pathname with empty search string to explicitly clear all query parameters
+      navigate({ pathname: location.pathname, search: '' }, { replace: true })
     }
-  }
-
-  // Helper function to refresh current page
-  const handleRefreshPage = () => {
-    window.location.reload()
-  }
+  }, [navigate, location.pathname])
 
   // Build commands based on current route
   const commands = useMemo<Command[]>(() => {
@@ -279,51 +272,52 @@ function AppContent() {
           action: () => navigate('/collection-move'),
         },
       ] : []),
-      // Quick Actions commands
+      // Actions commands
       {
         id: 'open-search',
         label: 'Open Search',
-        category: 'Quick Actions',
+        category: 'Actions',
         keywords: ['search', 'find', 'lookup'],
         action: () => openSearchModal(),
       },
-      {
-        id: 'view-statistics',
-        label: 'View Statistics',
-        category: 'Quick Actions',
-        keywords: ['statistics', 'stats', 'analytics', 'charts'],
-        action: () => navigate('/statistics'),
-      },
-      {
-        id: 'view-reference-data',
-        label: 'View Reference Data',
-        category: 'Quick Actions',
-        keywords: ['reference data', 'reference', 'config', 'settings reference'],
-        action: () => navigate('/reference-data'),
-      },
-      {
-        id: 'import-data',
-        label: 'Import Data',
-        category: 'Quick Actions',
-        keywords: ['import', 'upload', 'import data'],
-        action: () => navigate('/import'),
-      },
-      // Data Management commands
-      {
-        id: 'view-locations',
-        label: 'View All Locations',
-        category: 'Data Management',
-        keywords: ['locations', 'storage', 'location'],
-        action: () => navigate('/locations'),
-      },
-      // Advanced Navigation (already have controls, but adding setup)
-      {
-        id: 'go-to-setup',
-        label: 'Go to Setup',
-        category: 'Navigation',
-        keywords: ['setup', 'initial setup', 'configure'],
-        action: () => navigate('/setup'),
-      },
+      // Admin Navigation commands (conditional on admin role)
+      ...(isAdmin ? [
+        {
+          id: 'nav-admin-dashboard',
+          label: 'Go to Admin Dashboard',
+          category: 'Navigation',
+          keywords: ['admin', 'dashboard', 'admin dashboard'],
+          action: () => navigate('/admin'),
+        },
+        {
+          id: 'nav-admin-users',
+          label: 'Go to User Management',
+          category: 'Navigation',
+          keywords: ['admin', 'users', 'user management', 'manage users'],
+          action: () => navigate('/admin/users'),
+        },
+        {
+          id: 'nav-admin-settings',
+          label: 'Go to System Settings',
+          category: 'Navigation',
+          keywords: ['admin', 'system settings', 'admin settings'],
+          action: () => navigate('/admin/settings'),
+        },
+        {
+          id: 'nav-admin-statistics',
+          label: 'Go to System Statistics',
+          category: 'Navigation',
+          keywords: ['admin', 'system statistics', 'admin statistics'],
+          action: () => navigate('/admin/statistics'),
+        },
+        {
+          id: 'nav-admin-error-logs',
+          label: 'Go to Error Logs',
+          category: 'Navigation',
+          keywords: ['admin', 'error logs', 'logs', 'errors'],
+          action: () => navigate('/admin/error-logs'),
+        },
+      ] : []),
     ]
 
     // Context-specific commands
@@ -408,33 +402,28 @@ function AppContent() {
       })
     }
 
-    // Clear Filters command (context-specific)
+    // Clear Filters command (context-specific, only show when filters are active)
     if (
       location.pathname === '/specimens' ||
       location.pathname === '/studies' ||
       location.pathname === '/statistics'
     ) {
-      contextCommands.push({
-        id: 'clear-filters',
-        label: 'Clear Filters',
-        category: 'Data Management',
-        keywords: ['clear filters', 'reset filters', 'remove filters'],
-        action: handleClearFilters,
-        context: ['/specimens', '/studies', '/statistics'],
-      })
+      // Check if there are active filters in URL params
+      const hasActiveFilters = location.search && location.search.length > 0
+      if (hasActiveFilters) {
+        contextCommands.push({
+          id: 'clear-filters',
+          label: 'Clear Filters',
+          category: 'Actions',
+          keywords: ['clear filters', 'reset filters', 'remove filters'],
+          action: handleClearFilters,
+          context: ['/specimens', '/studies', '/statistics'],
+        })
+      }
     }
 
-    // Refresh Current Page command (available everywhere)
-    contextCommands.push({
-      id: 'refresh-page',
-      label: 'Refresh Current Page',
-      category: 'Data Management',
-      keywords: ['refresh', 'reload', 'update'],
-      action: handleRefreshPage,
-    })
-
     return [...baseCommands, ...contextCommands]
-  }, [navigate, location.pathname, openSearchModal])
+  }, [navigate, location.pathname, location.search, openSearchModal, canWrite, isAdmin, handleClearFilters])
 
   // Command palette (cmd+shift+k)
   useModifierShiftHotkey('k', () => {
