@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import {
   exportApi,
   exportConfigurationsApi,
@@ -8,6 +9,20 @@ import {
   type Tag,
   type ExportConfiguration,
 } from '../lib/api'
+
+/**
+ * Format a date as a filesystem-safe local datetime string
+ * Format: YYYY-MM-DD_HH-MM-SS (e.g., "2026-01-27_14-30-45")
+ */
+function formatLocalDateTime(date: Date = new Date()): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`
+}
 
 const CONTAINER_TYPES = [
   { value: 'micronix_tube', label: 'Micronix Tube' },
@@ -83,9 +98,10 @@ export default function Export() {
   const [tags, setTags] = useState<Tag[]>([])
   const [availableContainerTypes, setAvailableContainerTypes] = useState<string[]>([])
   const [loadingRefData, setLoadingRefData] = useState(false)
-  const [exportConfigurations, setExportConfigurations] = useState<ExportConfiguration[]>([])
-  const [selectedConfigName, setSelectedConfigName] = useState<string>('')
+  const [exportConfigurations, setExportConfigurations] = useState<Array<ExportConfiguration & { source?: 'shared' | 'personal' }>>([])
+  const [selectedConfigId, setSelectedConfigId] = useState<string>('') // Format: "source:name" to ensure uniqueness
   const [loadingConfigs, setLoadingConfigs] = useState(false)
+  const [focusedConfigIndex, setFocusedConfigIndex] = useState<number | null>(null)
 
   const loadReferenceData = useCallback(async () => {
     try {
@@ -125,16 +141,45 @@ export default function Export() {
   const loadExportConfigurations = useCallback(async () => {
     try {
       setLoadingConfigs(true)
-      const res = await exportConfigurationsApi.getAll()
-      if (res.data && res.data.configurations) {
-        setExportConfigurations(res.data.configurations)
-        // Set default config if available
-        const defaultConfig = res.data.configurations.find(c => c.isDefault)
+      // Load shared and personal configs separately to track source
+      const [sharedRes, personalRes] = await Promise.all([
+        exportConfigurationsApi.getShared(),
+        exportConfigurationsApi.getPersonal().catch(() => ({ data: { configurations: [] } })),
+      ])
+      
+      const sharedConfigs = sharedRes.data?.configurations || []
+      const personalConfigs = personalRes.data?.configurations || []
+      
+      // Check if user has a personal default
+      const hasPersonalDefault = personalConfigs.some(c => c.isDefault === true)
+      
+      // Merge: personal first, then shared (with default flag removed from shared if personal default exists)
+      const mergedConfigs = [
+        ...personalConfigs.map(c => ({
+          ...c,
+          source: 'personal' as const,
+        })),
+        ...sharedConfigs.map(c => ({
+          ...c,
+          isDefault: hasPersonalDefault ? false : c.isDefault,
+          source: 'shared' as const,
+        })),
+      ]
+      
+      // Always update state, even if empty (fixes Bug 1: stale data when all configs deleted)
+      setExportConfigurations(mergedConfigs)
+      
+      if (mergedConfigs.length > 0) {
+        // Set default config if available - backend ensures only one default exists (personal preferred)
+        const defaultConfig = mergedConfigs.find(c => c.isDefault)
         if (defaultConfig) {
-          setSelectedConfigName(defaultConfig.name)
-        } else if (res.data.configurations.length > 0) {
-          setSelectedConfigName(res.data.configurations[0].name)
+          setSelectedConfigId(`${defaultConfig.source}:${defaultConfig.name}`)
+        } else {
+          setSelectedConfigId(`${mergedConfigs[0].source}:${mergedConfigs[0].name}`)
         }
+      } else {
+        // Clear selection when no configs available
+        setSelectedConfigId('')
       }
     } catch (err: any) {
       console.error('Failed to load export configurations:', err)
@@ -345,11 +390,19 @@ export default function Export() {
       setError(null)
       setExportSummary(null)
 
+      // Get columns from selected config
+      // Split on first colon only to handle config names that contain colons
+      const firstColonIndex = selectedConfigId.indexOf(':')
+      const selectedSource = selectedConfigId.substring(0, firstColonIndex)
+      const selectedName = selectedConfigId.substring(firstColonIndex + 1)
+      const selectedConfig = exportConfigurations.find(c => c.source === selectedSource && c.name === selectedName)
+      const columns = selectedConfig?.columns
+
       const response = await exportApi.containersByNamesMultiStudy({
         entries: csvData,
         date_tolerance: dateTolerance,
         format: exportFormat,
-        config_name: selectedConfigName || undefined,
+        columns: columns,
         specimen_type_ids: filters.specimen_type_ids,
         container_types: filters.container_types,
         date_from: filters.date_from,
@@ -384,7 +437,7 @@ export default function Export() {
         blob = new Blob([JSON.stringify(response.data.data, null, 2)], { type: 'application/json' })
       }
       
-      filename = response.data.filename || `multi_study_export_${Date.now()}.${exportFormat}`
+      filename = response.data.filename || `multi_study_export_${formatLocalDateTime()}.${exportFormat}`
       
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -696,26 +749,141 @@ export default function Export() {
 
           {/* Export Configuration Selector */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Export Configuration
-            </label>
-            {loadingConfigs ? (
-              <div className="text-sm text-gray-500">Loading configurations...</div>
-            ) : (
-              <select
-                value={selectedConfigName}
-                onChange={(e) => setSelectedConfigName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Export Configuration
+              </label>
+              <Link
+                to="/settings?category=data-management&section=export-configurations"
+                className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
               >
-                <option value="">Default (all columns)</option>
-                {exportConfigurations.map(config => (
-                  <option key={config.name} value={config.name}>
-                    {config.name} {config.isDefault && '(Default)'}
-                  </option>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Manage in Settings
+              </Link>
+            </div>
+            {loadingConfigs ? (
+              <div className="space-y-1.5">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="w-full h-10 bg-gray-100 rounded border border-gray-200 animate-pulse" />
                 ))}
-              </select>
+              </div>
+            ) : exportConfigurations.length === 0 ? (
+              <div className="text-sm p-3 bg-gray-50 rounded border border-gray-200">
+                <p className="text-gray-700 mb-2">No export configurations available.</p>
+                <Link
+                  to="/settings?category=data-management&section=export-configurations"
+                  className="text-blue-600 hover:text-blue-800 hover:underline font-medium inline-flex items-center gap-1"
+                >
+                  Create one in Settings
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+              </div>
+            ) : (
+              <div 
+                className="space-y-1.5"
+                role="radiogroup"
+                aria-label="Export configuration"
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    const currentIndex = focusedConfigIndex ?? exportConfigurations.findIndex(c => `${c.source}:${c.name}` === selectedConfigId)
+                    let newIndex: number
+                    if (e.key === 'ArrowDown') {
+                      newIndex = currentIndex < exportConfigurations.length - 1 ? currentIndex + 1 : 0
+                    } else {
+                      newIndex = currentIndex > 0 ? currentIndex - 1 : exportConfigurations.length - 1
+                    }
+                    setFocusedConfigIndex(newIndex)
+                    const newConfig = exportConfigurations[newIndex]
+                    setSelectedConfigId(`${newConfig.source}:${newConfig.name}`)
+                    // Focus the button
+                    const button = e.currentTarget.children[newIndex] as HTMLElement
+                    button?.focus()
+                  } else if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    if (focusedConfigIndex !== null) {
+                      const focusedConfig = exportConfigurations[focusedConfigIndex]
+                      setSelectedConfigId(`${focusedConfig.source}:${focusedConfig.name}`)
+                    }
+                  }
+                }}
+              >
+                {exportConfigurations.map((config, index) => {
+                  const configId = `${config.source}:${config.name}` // Unique ID combining source and name
+                  const isSelected = configId === selectedConfigId
+                  const isFocused = focusedConfigIndex === index
+                  return (
+                    <button
+                      key={configId} // Use unique ID to prevent duplicate keys (fixes Bug 2)
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      aria-label={`${config.name}, ${config.source === 'personal' ? 'Personal' : 'Shared'} configuration, ${config.columns.length} columns${config.isDefault ? ', Default' : ''}`}
+                      onClick={() => {
+                        setSelectedConfigId(configId)
+                        setFocusedConfigIndex(index)
+                      }}
+                      onFocus={() => setFocusedConfigIndex(index)}
+                      onBlur={() => {
+                        // Only clear focus if not selected (selected items should keep focus styling)
+                        if (configId !== selectedConfigId) {
+                          setFocusedConfigIndex(null)
+                        }
+                      }}
+                      onMouseEnter={() => setFocusedConfigIndex(index)}
+                      onMouseLeave={() => {
+                        // Only clear focus if not selected (selected items should keep focus styling)
+                        if (configId !== selectedConfigId) {
+                          setFocusedConfigIndex(null)
+                        }
+                      }}
+                      className={`w-full text-left px-3 py-2 border rounded transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
+                        isSelected
+                          ? 'border-blue-500 bg-blue-50 shadow-sm'
+                          : isFocused
+                          ? 'border-blue-300 bg-blue-50/70'
+                          : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                      }`}
+                      title={config.columns.length > 0 ? `Columns: ${config.columns.slice(0, 5).join(', ')}${config.columns.length > 5 ? `, +${config.columns.length - 5} more` : ''}` : 'No columns'}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                          <span className={`font-medium text-sm truncate ${isSelected ? 'text-blue-900' : 'text-gray-900'}`}>
+                            {config.name}
+                          </span>
+                          {config.isDefault && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700 rounded flex-shrink-0" aria-label="Default configuration">
+                              Default
+                            </span>
+                          )}
+                          <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded flex-shrink-0 ${
+                            config.source === 'personal'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-gray-100 text-gray-700'
+                          }`} aria-label={config.source === 'personal' ? 'Personal configuration' : 'Shared configuration'}>
+                            {config.source === 'personal' ? 'Personal' : 'Shared'}
+                          </span>
+                          <span className="text-xs text-gray-500 flex-shrink-0" aria-label={`${config.columns.length} columns`}>
+                            {config.columns.length} cols
+                          </span>
+                        </div>
+                        {isSelected && (
+                          <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
             )}
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-2 text-xs text-gray-500">
               Select which columns to include in the export. Configure options in Settings.
             </p>
           </div>

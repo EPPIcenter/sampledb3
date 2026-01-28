@@ -252,7 +252,7 @@ export default function ExportConfigurationsManager({
     }
   }
 
-  const handleSetDefault = (index: number, type: 'shared' | 'personal') => {
+  const handleSetDefault = async (index: number, type: 'shared' | 'personal') => {
     const configs = type === 'shared' ? sharedConfigurations : personalConfigurations
     const updated = configs.map((c, i) => ({
       ...c,
@@ -262,7 +262,16 @@ export default function ExportConfigurationsManager({
     if (type === 'shared') {
       setSharedConfigurations(updated)
     } else {
-      setPersonalConfigurations(updated)
+      // Save personal config immediately when setting default
+      try {
+        await exportConfigurationsApi.updatePersonal({ configurations: updated })
+        setPersonalConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to set default configuration')
+        // Revert optimistic update on error
+        // The state will remain as it was before the failed update
+      }
     }
   }
 
@@ -539,7 +548,9 @@ export default function ExportConfigurationsManager({
                     {!config.isDefault && (
                       <button
                         type="button"
-                        onClick={() => handleSetDefault(index, activeTab)}
+                        onClick={async () => {
+                          await handleSetDefault(index, activeTab)
+                        }}
                         className="text-xs text-blue-600 hover:text-blue-800"
                       >
                         Set as Default

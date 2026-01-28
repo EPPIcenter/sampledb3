@@ -23,7 +23,7 @@ import {
 import { eq, and, or, inArray, gte, lte, sql } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
 import { resolveSubjectsByStudyGrouped } from './identifier-resolution'
-import { getExportConfigurationByName, getDefaultExportConfiguration } from './settings'
+import { getDefaultExportConfiguration } from './settings'
 
 type StudyType = InferSelectModel<typeof study>
 
@@ -929,8 +929,9 @@ export function formatSimpleCSV(
 export async function formatAsCSV(
   database: Database,
   data: ContainerExportData[],
-  configName?: string,
-  options?: CSVExportOptions
+  columns?: string[],
+  options?: CSVExportOptions,
+  userId?: number | null
 ): Promise<string> {
   if (data.length === 0) {
     return ''
@@ -1057,24 +1058,16 @@ export async function formatAsCSV(
   let headers: string[]
   const availableKeys = Object.keys(data[0])
 
-  // Try to get named configuration first
-  if (configName) {
-    const namedConfig = await getExportConfigurationByName(database, configName)
-    if (namedConfig && namedConfig.columns && namedConfig.columns.length > 0) {
-      headers = namedConfig.columns.filter(col => availableKeys.includes(col))
-      if (headers.length > 0) {
-        // Use named config columns
-      } else {
-        // Named config has no valid columns, fall through to default
-        headers = availableKeys
-      }
-    } else {
-      // Named config not found, fall through to default
+  // If columns are explicitly provided, use them
+  if (columns && columns.length > 0) {
+    headers = columns.filter(col => availableKeys.includes(col))
+    if (headers.length === 0) {
+      // No valid columns provided, fall back to all columns
       headers = availableKeys
     }
   } else {
-    // No config name specified, use default configuration
-    const defaultConfig = await getDefaultExportConfiguration(database)
+    // No columns specified, use default configuration
+    const defaultConfig = await getDefaultExportConfiguration(database, userId)
     if (defaultConfig && defaultConfig.columns && defaultConfig.columns.length > 0) {
       headers = defaultConfig.columns.filter(col => availableKeys.includes(col))
       // If no valid columns, fall back to all columns
@@ -1129,7 +1122,8 @@ export async function formatAsJSON(
   data: ContainerExportData[],
   filters: ExportFilters,
   study: StudyType,
-  configName?: string
+  columns?: string[],
+  userId?: number | null
 ): Promise<{
   export_metadata: {
     study: string
@@ -1142,25 +1136,22 @@ export async function formatAsJSON(
 }> {
   let filteredData = data
 
-  // Apply column filtering if config is specified
-  if (configName) {
-    const namedConfig = await getExportConfigurationByName(database, configName)
-    if (namedConfig && namedConfig.columns && namedConfig.columns.length > 0) {
-      const availableKeys = Object.keys(data[0] || {})
-      const validColumns = namedConfig.columns.filter(col => availableKeys.includes(col))
-      if (validColumns.length > 0) {
-        filteredData = data.map(row => {
-          const filtered: any = {}
-          for (const col of validColumns) {
-            filtered[col] = (row as any)[col]
-          }
-          return filtered as ContainerExportData
-        })
-      }
+  // If columns are explicitly provided, use them
+  if (columns && columns.length > 0) {
+    const availableKeys = Object.keys(data[0] || {})
+    const validColumns = columns.filter(col => availableKeys.includes(col))
+    if (validColumns.length > 0) {
+      filteredData = data.map(row => {
+        const filtered: any = {}
+        for (const col of validColumns) {
+          filtered[col] = (row as any)[col]
+        }
+        return filtered as ContainerExportData
+      })
     }
   } else {
     // Use default configuration
-    const defaultConfig = await getDefaultExportConfiguration(database)
+    const defaultConfig = await getDefaultExportConfiguration(database, userId)
     if (defaultConfig && defaultConfig.columns && defaultConfig.columns.length > 0) {
       const availableKeys = Object.keys(data[0] || {})
       const validColumns = defaultConfig.columns.filter(col => availableKeys.includes(col))
@@ -1189,7 +1180,12 @@ export async function formatAsJSON(
 }
 
 // Format as Excel (XLSX)
-export async function formatAsExcel(database: Database, data: ContainerExportData[], configName?: string): Promise<Buffer> {
+export async function formatAsExcel(
+  database: Database,
+  data: ContainerExportData[],
+  columns?: string[],
+  userId?: number | null
+): Promise<Buffer> {
   // Dynamic import to avoid loading xlsx if not needed
   const XLSX = await import('xlsx')
   
@@ -1203,22 +1199,16 @@ export async function formatAsExcel(database: Database, data: ContainerExportDat
   let headers: string[]
   const availableKeys = Object.keys(data[0])
 
-  // Try to get named configuration first
-  if (configName) {
-    const namedConfig = await getExportConfigurationByName(database, configName)
-    if (namedConfig && namedConfig.columns && namedConfig.columns.length > 0) {
-      headers = namedConfig.columns.filter(col => availableKeys.includes(col))
-      if (headers.length === 0) {
-        // Named config has no valid columns, fall through to default
-        headers = availableKeys
-      }
-    } else {
-      // Named config not found, fall through to default
+  // If columns are explicitly provided, use them
+  if (columns && columns.length > 0) {
+    headers = columns.filter(col => availableKeys.includes(col))
+    if (headers.length === 0) {
+      // No valid columns provided, fall back to all columns
       headers = availableKeys
     }
   } else {
-    // No config name specified, use default configuration
-    const defaultConfig = await getDefaultExportConfiguration(database)
+    // No columns specified, use default configuration
+    const defaultConfig = await getDefaultExportConfiguration(database, userId)
     if (defaultConfig && defaultConfig.columns && defaultConfig.columns.length > 0) {
       headers = defaultConfig.columns.filter(col => availableKeys.includes(col))
       // If no valid columns, fall back to all columns

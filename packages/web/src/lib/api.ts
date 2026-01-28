@@ -1036,7 +1036,7 @@ export const exportApi = {
     if (csvOptions?.lineEnding) params.csv_line_ending = csvOptions.lineEnding
     return api.get('/export/inventory.csv', { params, responseType: 'blob' })
   },
-  containers: (params: ExportFilters, format: 'csv' | 'xlsx' | 'json' = 'csv', configName?: string, csvOptions?: CSVExportOptions) => {
+  containers: (params: ExportFilters, format: 'csv' | 'xlsx' | 'json' = 'csv', columns?: string[], csvOptions?: CSVExportOptions) => {
     const queryParams: Record<string, string | number | number[] | string[] | undefined> = { format }
     // Add study
     queryParams.study = params.study
@@ -1045,8 +1045,8 @@ export const exportApi = {
     if (params.date_to) queryParams.date_to = params.date_to
     if (params.created_from) queryParams.created_from = params.created_from
     if (params.created_to) queryParams.created_to = params.created_to
-    // Add config_name if provided
-    if (configName) queryParams.config_name = configName
+    // Add columns if provided
+    if (columns && columns.length > 0) queryParams.columns = JSON.stringify(columns)
     // Add arrays - axios will serialize these correctly
     if (params.specimen_type_ids && params.specimen_type_ids.length > 0) {
       queryParams.specimen_type_ids = params.specimen_type_ids
@@ -1063,7 +1063,7 @@ export const exportApi = {
     // Add CSV options if provided
     if (csvOptions) {
       if (csvOptions.delimiter) queryParams.csv_delimiter = csvOptions.delimiter
-      if (csvOptions.includeBOM !== undefined) queryParams.csv_bom = csvOptions.includeBOM
+      if (csvOptions.includeBOM !== undefined) queryParams.csv_bom = csvOptions.includeBOM ? 'true' : 'false'
       if (csvOptions.lineEnding) queryParams.csv_line_ending = csvOptions.lineEnding
     }
     return api.get('/export/containers', {
@@ -1114,7 +1114,7 @@ export const exportApi = {
     subject_dates?: { [subjectName: string]: { exact?: string; from?: string; to?: string } }
     date_tolerance?: number
     format?: 'csv' | 'xlsx' | 'json'
-    config_name?: string
+    columns?: string[]
     specimen_type_ids?: number[]
     container_types?: string[]
     date_from?: string
@@ -1181,7 +1181,7 @@ export const exportApi = {
     subject_dates?: { [subjectName: string]: { exact?: string; from?: string; to?: string } }
     date_tolerance?: number
     format?: 'csv' | 'xlsx' | 'json'
-    config_name?: string
+    columns?: string[]
     specimen_type_ids?: number[]
     container_types?: string[]
     date_from?: string
@@ -1249,7 +1249,7 @@ export const exportApi = {
   containersByBarcodes: (params: {
     barcodes: string[]
     format?: 'csv' | 'xlsx' | 'json'
-    config_name?: string
+    columns?: string[]
     csv_delimiter?: ',' | ';' | '\t'
     csv_bom?: boolean
     csv_line_ending?: 'LF' | 'CRLF'

@@ -246,11 +246,21 @@ export async function getExportConfigurations(db: Database, userId?: number | nu
     
     // Merge: system configs + user personal configs
     if (systemConfigs && userConfigs) {
+      // Check if user has a personal default
+      const hasPersonalDefault = userConfigs.configurations.some(c => c.isDefault === true)
+      
+      // Merge configs: shared first, then personal
+      const mergedConfigs = [
+        // Remove default flag from shared configs if user has a personal default
+        ...systemConfigs.configurations.map(c => ({
+          ...c,
+          isDefault: hasPersonalDefault ? false : c.isDefault,
+        })),
+        ...userConfigs.configurations,
+      ]
+      
       return {
-        configurations: [
-          ...systemConfigs.configurations,
-          ...userConfigs.configurations,
-        ],
+        configurations: mergedConfigs,
       }
     } else if (userConfigs) {
       return userConfigs
@@ -289,15 +299,29 @@ export async function setExportConfigurations(db: Database, configs: ExportConfi
 /**
  * Get default export configuration
  * Checks for a configuration marked as default in export_configurations
+ * Prioritizes personal defaults over shared defaults
  * Returns null if no default configuration exists
  * @param db - Database instance
+ * @param userId - Optional user ID. If provided, checks personal configs first, then shared
  */
-export async function getDefaultExportConfiguration(db: Database): Promise<{ columns: string[] } | null> {
-  const exportConfigs = await getExportConfigurations(db)
-  if (exportConfigs && exportConfigs.configurations) {
-    const defaultConfig = exportConfigs.configurations.find(c => c.isDefault === true)
-    if (defaultConfig) {
-      return { columns: defaultConfig.columns }
+export async function getDefaultExportConfiguration(db: Database, userId?: number | null): Promise<{ columns: string[] } | null> {
+  // First check for personal default if userId is provided
+  if (userId !== undefined && userId !== null) {
+    const userConfigs = await getPersonalExportConfigurations(db, userId)
+    if (userConfigs && userConfigs.configurations) {
+      const personalDefault = userConfigs.configurations.find(c => c.isDefault === true)
+      if (personalDefault) {
+        return { columns: personalDefault.columns }
+      }
+    }
+  }
+  
+  // Fall back to shared default
+  const systemConfigs = await getSharedExportConfigurations(db)
+  if (systemConfigs && systemConfigs.configurations) {
+    const sharedDefault = systemConfigs.configurations.find(c => c.isDefault === true)
+    if (sharedDefault) {
+      return { columns: sharedDefault.columns }
     }
   }
   
@@ -306,16 +330,32 @@ export async function getDefaultExportConfiguration(db: Database): Promise<{ col
 
 /**
  * Get export configuration by name
+ * Prioritizes personal configs over shared configs when names collide
  * @param db - Database instance
+ * @param name - Configuration name
+ * @param userId - Optional user ID. If provided, checks personal configs first, then shared
  */
-export async function getExportConfigurationByName(db: Database, name: string): Promise<{ columns: string[] } | null> {
-  const exportConfigs = await getExportConfigurations(db)
-  if (exportConfigs && exportConfigs.configurations) {
-    const config = exportConfigs.configurations.find(c => c.name === name)
-    if (config) {
-      return { columns: config.columns }
+export async function getExportConfigurationByName(db: Database, name: string, userId?: number | null): Promise<{ columns: string[] } | null> {
+  // First check for personal config if userId is provided
+  if (userId !== undefined && userId !== null) {
+    const userConfigs = await getPersonalExportConfigurations(db, userId)
+    if (userConfigs && userConfigs.configurations) {
+      const personalConfig = userConfigs.configurations.find(c => c.name === name)
+      if (personalConfig) {
+        return { columns: personalConfig.columns }
+      }
     }
   }
+  
+  // Fall back to shared config
+  const systemConfigs = await getSharedExportConfigurations(db)
+  if (systemConfigs && systemConfigs.configurations) {
+    const sharedConfig = systemConfigs.configurations.find(c => c.name === name)
+    if (sharedConfig) {
+      return { columns: sharedConfig.columns }
+    }
+  }
+  
   return null
 }
 
