@@ -7,6 +7,8 @@ import {
   specimen, 
   specimenType, 
   storageContainer,
+  storageContainerTag,
+  containerDerivation,
   micronixTube,
   cryovialTube,
   paper,
@@ -16,7 +18,10 @@ import { eq, and, like, sql, or, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from '../lib/error-handler'
-import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { createAuthMiddleware, createMemberMiddleware, createAdminMiddleware } from '../middleware/auth'
+
+/** Short code prefix for tutorial namespace. Any study whose short code starts with this (case-insensitive) may be deleted by any authenticated user. */
+const TUTORIAL_SHORT_CODE_PREFIX = 'TUT'
 
 /**
  * Create studies routes with database injection
@@ -27,6 +32,7 @@ export function createStudiesRoutes(database: Database, sqliteDatabase: SQLiteDa
   const studies = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const memberMiddleware = createMemberMiddleware(database)
+  const adminMiddleware = createAdminMiddleware(database)
 
 // List all studies
 studies.get('/', authMiddleware, async (c) => {
@@ -821,6 +827,109 @@ studies.put('/:id', memberMiddleware, async (c) => {
       .returning()
     
     return c.json({ study: updatedStudy })
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
+// Delete study and all dependent data (cascade). Tutorial studies (short code in TUT* namespace) may be deleted by any user; others require admin.
+studies.delete('/:id', authMiddleware, async (c) => {
+  try {
+    const id = parseInt(c.req.param('id'))
+    if (isNaN(id)) {
+      return c.json({ error: 'Invalid study ID' }, 400)
+    }
+
+    const existingStudy = await database
+      .select()
+      .from(study)
+      .where(eq(study.id, id))
+      .get()
+
+    if (!existingStudy) {
+      throw new NotFoundError('Study', id)
+    }
+
+    const isTutorialStudy = existingStudy.shortCode.toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX)
+    if (!isTutorialStudy) {
+      const user = c.get('user')
+      if (!user || user.role !== 'admin') {
+        return c.json({ error: 'Only administrators can delete non-tutorial studies.' }, 403)
+      }
+    }
+
+    const subjects = await database
+      .select({ id: studySubject.id })
+      .from(studySubject)
+      .where(eq(studySubject.studyId, id))
+
+    const subjectIds = subjects.map((s) => s.id)
+    let specimenIds: number[] = []
+    if (subjectIds.length > 0) {
+      const specimens = await database
+        .select({ id: specimen.id })
+        .from(specimen)
+        .where(inArray(specimen.studySubjectId, subjectIds))
+      specimenIds = specimens.map((s) => s.id)
+    }
+
+    let containerIds: number[] = []
+    if (specimenIds.length > 0) {
+      const containers = await database
+        .select({ id: storageContainer.id })
+        .from(storageContainer)
+        .where(inArray(storageContainer.specimenId, specimenIds))
+      containerIds = containers.map((c) => c.id)
+    }
+
+    const SQLITE_BATCH = 500
+    const runBatch = <T>(ids: number[], fn: (batch: number[]) => void) => {
+      for (let i = 0; i < ids.length; i += SQLITE_BATCH) {
+        fn(ids.slice(i, i + SQLITE_BATCH))
+      }
+    }
+
+    database.transaction((tx) => {
+      if (containerIds.length > 0) {
+        runBatch(containerIds, (batch) => {
+          tx.delete(storageContainerTag)
+            .where(inArray(storageContainerTag.storageContainerId, batch))
+            .run()
+        })
+        runBatch(containerIds, (batch) => {
+          tx.delete(containerDerivation)
+            .where(
+              or(
+                inArray(containerDerivation.parentContainerId, batch),
+                inArray(containerDerivation.childContainerId, batch)
+              )
+            )
+            .run()
+        })
+        runBatch(containerIds, (batch) => {
+          tx.delete(paper).where(inArray(paper.id, batch)).run()
+          tx.delete(micronixTube).where(inArray(micronixTube.id, batch)).run()
+          tx.delete(cryovialTube).where(inArray(cryovialTube.id, batch)).run()
+          tx.delete(staticWell).where(inArray(staticWell.id, batch)).run()
+        })
+        runBatch(containerIds, (batch) => {
+          tx.delete(storageContainer).where(inArray(storageContainer.id, batch)).run()
+        })
+      }
+      if (specimenIds.length > 0) {
+        runBatch(specimenIds, (batch) => {
+          tx.delete(specimen).where(inArray(specimen.id, batch)).run()
+        })
+      }
+      if (subjectIds.length > 0) {
+        runBatch(subjectIds, (batch) => {
+          tx.delete(studySubject).where(inArray(studySubject.id, batch)).run()
+        })
+      }
+      tx.delete(study).where(eq(study.id, id)).run()
+    })
+
+    return c.json({ message: 'Study deleted successfully' })
   } catch (error) {
     return handleRouteError(error, c)
   }
