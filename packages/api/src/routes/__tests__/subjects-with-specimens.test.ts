@@ -31,6 +31,33 @@ import {
 } from '../../db/schema'
 import { createSubjectsRoutes } from '../subjects'
 
+interface SubjectWithSpecimensResponse {
+  subject: {
+    id: number
+    name: string
+    [key: string]: unknown
+  }
+  subjectCreated: boolean
+  specimens: Array<{
+    id: number
+    containerCreated: boolean
+    containerId?: number
+    [key: string]: unknown
+  }>
+  summary: {
+    subjectsCreated: number
+    subjectsUpdated: number
+    specimensCreated: number
+    containersCreated: number
+  }
+}
+
+interface ErrorResponse {
+  error: string
+  specimenIndex?: number
+  [key: string]: unknown
+}
+
 describe('Subjects with Specimens API', () => {
   let app: Hono
   let testDb: Database
@@ -213,7 +240,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.subjectCreated).toBe(true)
       expect(data.subject.name).toBe('SUBJ-001')
       expect(data.specimens).toHaveLength(1)
@@ -267,7 +294,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.specimens[0].containerCreated).toBe(true)
       
       // Verify container
@@ -326,7 +353,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.specimens[0].containerCreated).toBe(true)
       
       // Verify container
@@ -371,7 +398,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.specimens[0].containerCreated).toBe(true)
       
       // Verify container
@@ -443,7 +470,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.specimens).toHaveLength(3)
       expect(data.specimens[0].containerCreated).toBe(true)
       expect(data.specimens[1].containerCreated).toBe(true)
@@ -492,7 +519,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.subjectCreated).toBe(false)
       expect(data.subject.id).toBe(existingSubject.id)
       expect(data.specimens[0].containerCreated).toBe(true)
@@ -567,7 +594,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.summary.specimensCreated).toBe(3)
       expect(data.summary.containersCreated).toBe(3)
 
@@ -749,7 +776,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       
       // Verify container uses existing collection
       const container = await testDb
@@ -813,7 +840,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('not found')
     })
   })
@@ -836,7 +863,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res1.status).toBe(201)
-      const data1 = await res1.json()
+      const data1 = await res1.json() as SubjectWithSpecimensResponse
       expect(data1.subjectCreated).toBe(true)
 
       // Test existing subject
@@ -860,7 +887,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res2.status).toBe(201)
-      const data2 = await res2.json()
+      const data2 = await res2.json() as SubjectWithSpecimensResponse
       expect(data2.subjectCreated).toBe(false)
     })
 
@@ -900,7 +927,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.specimens[0].containerCreated).toBe(true)
       expect(data.specimens[0].containerId).toBeDefined()
       expect(data.specimens[1].containerCreated).toBe(false)
@@ -947,7 +974,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.summary.subjectsCreated).toBe(1)
       expect(data.summary.subjectsUpdated).toBe(0)
       expect(data.summary.specimensCreated).toBe(2)
@@ -990,7 +1017,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('not found')
       expect(data.specimenIndex).toBe(0)
     })
@@ -1073,7 +1100,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.subjectCreated).toBe(true)
       expect(data.specimens).toHaveLength(0)
       expect(data.summary.specimensCreated).toBe(0)
@@ -1098,7 +1125,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.specimens).toHaveLength(2)
       expect(data.specimens[0].containerCreated).toBe(false)
       expect(data.specimens[1].containerCreated).toBe(false)
@@ -1121,7 +1148,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.subject.name).toBe('SUBJ-WHITESPACE') // Trimmed
     })
   })
