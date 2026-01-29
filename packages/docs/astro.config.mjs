@@ -57,6 +57,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Initial Setup', link: '/guides/getting-started/setup/' },
 						{ label: 'Dashboard Overview', link: '/guides/getting-started/dashboard/' },
+						{ label: 'User Journey Guide', link: '/guides/getting-started/user-journey/' },
 					],
 				},
 				{
