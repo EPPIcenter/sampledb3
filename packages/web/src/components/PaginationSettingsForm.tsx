@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { settingsApi, type PaginationSettings } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
 import InfoTooltip from './InfoTooltip'
@@ -30,34 +30,19 @@ export default function PaginationSettingsForm({
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
+  const prevDataRef = useRef<PaginationSettings | null>(data)
 
-  // Fetch system default to compare
-  useEffect(() => {
-    const fetchSystemDefault = async () => {
-      try {
-        // Get system default by making a request as admin would (or we could add a specific endpoint)
-        // For now, we'll check if current data matches what we'd expect as default
-        // In a real implementation, you might want an endpoint to get system defaults
-        const response = await settingsApi.get('pagination_settings')
-        // If the response includes userId, it's user-specific
-        // Otherwise, we need to check differently
-      } catch (err) {
-        // Ignore errors
-      }
-    }
-    fetchSystemDefault()
-  }, [])
-
-  useEffect(() => {
+  // Sync form when data prop changes (during render to avoid extra pass)
+  if (data !== prevDataRef.current) {
+    prevDataRef.current = data
     if (data) {
       setFormData(data)
       setSavedFormData(data)
-      // Check if this is user-specific by comparing with system default
-      // For now, we'll assume it's user-specific if user is not admin
-      // In a real implementation, the API should indicate this
       setIsUserSpecific(user?.role !== 'admin')
     }
-  }, [data, user])
+  }
+
+  // System default fetch removed: was a no-op (did not set state). Use handleResetToDefault or a dedicated endpoint if comparison is needed.
 
   const handleChange = (field: keyof PaginationSettings, value: string) => {
     const numValue = parseInt(value, 10)

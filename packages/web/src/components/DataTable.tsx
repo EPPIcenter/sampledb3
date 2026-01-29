@@ -42,6 +42,7 @@ export default function DataTable<T extends { id: number }>({
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map())
+  const prevResetDepsRef = useRef([data.length, sortColumn, sortDirection, pagination?.page ?? 0])
 
   const handleSort = (column: Column<T>) => {
     if (!column.sortable) return
@@ -94,10 +95,17 @@ export default function DataTable<T extends { id: number }>({
   
   const totalPages = pagination ? Math.ceil(sortedData.length / pagination.pageSize) : 1
 
-  // Reset selected row when data changes, sort changes, or page changes
-  useEffect(() => {
+  // Reset selected row when data changes, sort changes, or page changes (during render to avoid extra pass)
+  const resetDeps = [data.length, sortColumn, sortDirection, pagination?.page ?? 0]
+  if (
+    prevResetDepsRef.current[0] !== resetDeps[0] ||
+    prevResetDepsRef.current[1] !== resetDeps[1] ||
+    prevResetDepsRef.current[2] !== resetDeps[2] ||
+    prevResetDepsRef.current[3] !== resetDeps[3]
+  ) {
+    prevResetDepsRef.current = resetDeps
     setSelectedRowIndex(null)
-  }, [data.length, sortColumn, sortDirection, pagination?.page])
+  }
 
   // Handle keyboard navigation
   useEffect(() => {

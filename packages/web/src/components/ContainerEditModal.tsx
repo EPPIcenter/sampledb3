@@ -16,12 +16,17 @@ interface ContainerEditModalProps {
   onSuccess: () => void
 }
 
-export default function ContainerEditModal({
-  isOpen,
-  onClose,
+type ContainerForEdit = ContainerEditModalProps['container']
+
+function ContainerEditModalForm({
   container,
+  onClose,
   onSuccess,
-}: ContainerEditModalProps) {
+}: {
+  container: ContainerForEdit
+  onClose: () => void
+  onSuccess: () => void
+}) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [availableTags, setAvailableTags] = useState<Tag[]>([])
@@ -37,25 +42,13 @@ export default function ContainerEditModal({
     tagIds: container.tags?.map(t => t.id) || [],
   })
 
-  // Reset form when modal opens or container ID changes
+  // Load tags and units when form mounts (key={container.id} resets form per container)
   useEffect(() => {
-    if (isOpen) {
-      setFormData({
-        comment: container.comment || '',
-        remainingQuantity: container.remainingQuantity?.toString() || '',
-        unitId: container.unit?.id || undefined,
-        tagIds: container.tags?.map(t => t.id) || [],
-      })
-      setError(null)
-      loadTags()
-      if (container.containerType) {
-        loadUnits(container.containerType)
-      }
+    loadTags()
+    if (container.containerType) {
+      loadUnits(container.containerType)
     }
-    // Only depend on isOpen and container.id to avoid infinite loops
-    // The container values are used directly in the effect but not as dependencies
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, container.id])
+  }, [container.id, container.containerType])
 
   const loadTags = async () => {
     try {
@@ -163,7 +156,7 @@ export default function ContainerEditModal({
 
   // Cmd/Ctrl+Enter to submit
   useModifierHotkey('enter', (e) => {
-    if (!loading && formRef.current && isOpen) {
+    if (!loading && formRef.current) {
       e.preventDefault()
       formRef.current.requestSubmit()
     }
@@ -171,8 +164,6 @@ export default function ContainerEditModal({
 
   // Escape to close
   useEffect(() => {
-    if (!isOpen) return
-
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !loading) {
         onClose()
@@ -181,20 +172,9 @@ export default function ContainerEditModal({
 
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
-  }, [isOpen, loading, onClose])
-
-  if (!isOpen) return null
+  }, [loading, onClose])
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
-        <div
-          className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-          onClick={loading ? undefined : onClose}
-        />
-
-        {/* Modal panel */}
         <div
           className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
           onClick={(e) => e.stopPropagation()}
@@ -362,6 +342,32 @@ export default function ContainerEditModal({
             </form>
           </div>
         </div>
+  )
+}
+
+export default function ContainerEditModal({
+  isOpen,
+  onClose,
+  container,
+  onSuccess,
+}: ContainerEditModalProps) {
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-[100] overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div
+          className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
+          onClick={onClose}
+          aria-hidden
+        />
+        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <ContainerEditModalForm
+          key={container.id}
+          container={container}
+          onClose={onClose}
+          onSuccess={onSuccess}
+        />
       </div>
     </div>
   )

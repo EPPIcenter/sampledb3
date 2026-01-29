@@ -35,22 +35,24 @@ export default function CollectionPicker({
   const debounceTimeoutRef = useRef<number | null>(null)
   const isSearchingRef = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const prevValueRef = useRef<string | undefined>(value)
 
-  // Sync search state when value prop changes (e.g., after creating a new collection)
-  useEffect(() => {
-    const currentValue = value || ''
-    if (currentValue !== search) {
-      setSearch(currentValue)
-      // If we have a validated collection that matches, keep it
-      // Otherwise, clear validation so it can be re-validated
-      if (validatedCollection && validatedCollection.name !== currentValue && validatedCollection.barcode !== currentValue) {
-        setValidatedCollection(null)
-      }
-    }
-  }, [value, search, validatedCollection])
+  // Sync search state when value prop changes (during render to avoid extra pass)
+  const currentValue = value || ''
+  if (currentValue !== prevValueRef.current) {
+    prevValueRef.current = currentValue
+    setSearch(currentValue)
+    setValidatedCollection((prev) => {
+      if (!prev) return null
+      if (prev.name === currentValue || prev.barcode === currentValue) return prev
+      return null
+    })
+  }
 
-  // Consolidated search effect with proper debouncing
+  // Consolidated search effect with proper debouncing and ignore flag for race conditions
   useEffect(() => {
+    let ignore = false
+
     // Clear any pending debounce
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current)
@@ -64,11 +66,16 @@ export default function CollectionPicker({
       if (open) {
         setOpen(false)
       }
-      return
+      return () => {
+        ignore = true
+        if (debounceTimeoutRef.current) {
+          clearTimeout(debounceTimeoutRef.current)
+        }
+      }
     }
 
     // Debounce search requests
-    debounceTimeoutRef.current = setTimeout(async () => {
+    debounceTimeoutRef.current = window.setTimeout(async () => {
       // Prevent concurrent searches
       if (isSearchingRef.current) {
         return
@@ -78,15 +85,17 @@ export default function CollectionPicker({
         isSearchingRef.current = true
         setLoading(true)
         setError(null)
-        
+
         // Use global search API to find collections
         const response = await api.get('/search', {
-          params: { 
-            q: search, 
-            type: collectionType === 'micronix_plate' ? 'micronix_plate' : collectionType === 'cryovial_box' ? 'cryovial_box' : undefined 
+          params: {
+            q: search,
+            type: collectionType === 'micronix_plate' ? 'micronix_plate' : collectionType === 'cryovial_box' ? 'cryovial_box' : undefined
           },
         })
-        
+
+        if (ignore) return
+
         // Filter results by type and extract collection info
         const results = (response.data.results || []).filter((r: SearchResult): r is CollectionSearchResult => {
           if (collectionType === 'micronix_plate') {
@@ -96,7 +105,7 @@ export default function CollectionPicker({
           }
           return false
         })
-        
+
         // Transform results to Collection format
         const transformed: Collection[] = results.map((r: CollectionSearchResult) => ({
           id: r.id,
@@ -105,41 +114,43 @@ export default function CollectionPicker({
           locationId: r.locationId || undefined,
           locationPath: r.locationPath || undefined,
         }))
-        
+
         setCollections(transformed)
-        
+
         // Check if current search value exactly matches a collection
         const exactMatch = transformed.find(
           (c) => c.name.toLowerCase() === search.toLowerCase() || c.barcode?.toLowerCase() === search.toLowerCase()
         )
-        
+
         if (exactMatch) {
           setValidatedCollection(exactMatch)
-          // Automatically select the matched collection (use the exact name from database)
           if (exactMatch.name !== search) {
             onChange(exactMatch.name)
           }
-          // Keep dropdown closed when exact match is found
           setOpen(false)
         } else {
           setValidatedCollection(null)
-          // Keep dropdown open if there are results or if it was already open
           if (transformed.length > 0 || open) {
             setOpen(true)
           }
         }
       } catch (error: unknown) {
-        console.error('Failed to search collections:', error)
-        setError('Failed to search collections')
-        setCollections([])
-        setValidatedCollection(null)
+        if (!ignore) {
+          console.error('Failed to search collections:', error)
+          setError('Failed to search collections')
+          setCollections([])
+          setValidatedCollection(null)
+        }
       } finally {
-        setLoading(false)
+        if (!ignore) {
+          setLoading(false)
+        }
         isSearchingRef.current = false
       }
-    }, 300) // 300ms debounce
+    }, 300)
 
     return () => {
+      ignore = true
       if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current)
       }

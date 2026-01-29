@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { studiesApi, type Study } from '../lib/api'
 import { specimenTypesApi, type SpecimenType } from '../lib/api'
 import { tagsApi, type Tag } from '../lib/api'
@@ -46,6 +46,7 @@ const CONTAINER_TYPES = [
 export default function StatisticsFilter({ filters, onChange, onSubmit, isLoading = false }: StatisticsFilterProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [localFilters, setLocalFilters] = useState<StatisticsFilters>(filters)
+  const prevFiltersRef = useRef<StatisticsFilters>(filters)
   const [studies, setStudies] = useState<Study[]>([])
   const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
   const [tags, setTags] = useState<Tag[]>([])
@@ -54,10 +55,11 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
   const [studySearch, setStudySearch] = useState('')
   const [studyLoading, setStudyLoading] = useState(false)
 
-  // Sync local filters when external filters change
-  useEffect(() => {
+  // Sync local filters when external filters change (during render to avoid extra pass)
+  if (filters !== prevFiltersRef.current) {
+    prevFiltersRef.current = filters
     setLocalFilters(filters)
-  }, [filters])
+  }
 
   useEffect(() => {
     if (isOpen) {

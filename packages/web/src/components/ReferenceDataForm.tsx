@@ -26,19 +26,18 @@ export default function ReferenceDataForm<T extends { id?: number }>({
   onCancel,
   title,
 }: ReferenceDataFormProps<T>) {
-  const [formData, setFormData] = useState<Partial<T>>({})
+  const [formData, setFormData] = useState<Partial<T>>(() => ({ ...(item ?? {}) } as Partial<T>))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldOptions, setFieldOptions] = useState<Record<string, Array<{ value: any; label: string }>>>({})
   const [loadingOptions, setLoadingOptions] = useState<Record<string, boolean>>({})
+  const prevItemIdRef = useRef<number | undefined | null>(item?.id ?? null)
 
-  useEffect(() => {
-    if (item) {
-      setFormData(item)
-    } else {
-      setFormData({})
-    }
-  }, [item])
+  // Sync form when item prop changes (during render to avoid extra pass). Parents can use key={item?.id} when switching items.
+  if ((item?.id ?? null) !== prevItemIdRef.current) {
+    prevItemIdRef.current = item?.id ?? null
+    setFormData({ ...(item ?? {}) } as Partial<T>)
+  }
 
   useEffect(() => {
     // Load async options for fields that have loadOptions

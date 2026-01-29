@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { settingsApi, type ContainerDefaults, type Unit } from '../lib/api'
 import InfoTooltip from './InfoTooltip'
 
@@ -101,24 +101,21 @@ export default function ContainerDefaultsForm({
     loadUnits()
   }, [])
 
-  useEffect(() => {
-    // Only initialize form data once units are loaded
-    // data can be null (meaning no settings exist yet) or an object
-    if (!loadingUnits && units.length > 0) {
+  const prevInitRef = useRef<{ dataKey: string; unitsKey: string }>({ dataKey: '', unitsKey: '' })
+
+  // Initialize form when units and data are ready (during render to avoid Effect chain)
+  if (!loadingUnits && units.length > 0) {
+    const dataKey = data === null ? 'null' : JSON.stringify(data)
+    const unitsKey = units.map((u) => u.symbol).join(',')
+    if (dataKey !== prevInitRef.current.dataKey || unitsKey !== prevInitRef.current.unitsKey) {
+      prevInitRef.current = { dataKey, unitsKey }
       if (data) {
-        // Data exists - use it with validation
-        const unitSymbols = new Set(units.map(u => u.symbol))
+        const unitSymbols = new Set(units.map((u) => u.symbol))
         const warnings: string[] = []
-        
         const getSafe = (preferred: string, containerType: string, savedSymbol?: string) => {
-          // If saved symbol exists and is valid, use it
-          if (savedSymbol && unitSymbols.has(savedSymbol)) {
-            return savedSymbol
-          }
-          // Otherwise, use fallback logic with warnings
+          if (savedSymbol && unitSymbols.has(savedSymbol)) return savedSymbol
           return getSafeUnitSymbol(preferred, containerType, units, unitSymbols, warnings)
         }
-        
         const safeData: ContainerDefaults = {
           micronix_tube: {
             totalQuantity: data.micronix_tube?.totalQuantity ?? 1.0,
@@ -141,24 +138,16 @@ export default function ContainerDefaultsForm({
             defaultUnitSymbol: getSafe('spots', 'Static Well', data.static_well?.defaultUnitSymbol),
           },
         }
-        
-        // Set warnings if any fallbacks were used
-        if (warnings.length > 0) {
-          setFallbackWarnings(warnings)
-        } else {
-          setFallbackWarnings([])
-        }
-        
+        setFallbackWarnings(warnings.length > 0 ? warnings : [])
         setFormData(safeData)
         setSavedFormData(safeData)
       } else {
-        // No data - use safe defaults with validated unit symbols
         const defaultData = getDefaultFormData(units)
         setFormData(defaultData)
         setSavedFormData(defaultData)
       }
     }
-  }, [data, units, loadingUnits])
+  }
 
   const loadUnits = async () => {
     try {

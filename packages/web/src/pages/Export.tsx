@@ -188,10 +188,12 @@ export default function Export() {
     }
   }, [])
 
+  // Single mount effect: load reference data and export configurations once when page is shown
   useEffect(() => {
     loadReferenceData()
     loadExportConfigurations()
-  }, [loadReferenceData, loadExportConfigurations])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const parseCSV = useCallback((file: File) => {
     return new Promise<CSVRow[]>((resolve, reject) => {
@@ -344,43 +346,58 @@ export default function Export() {
     }
   }, [])
 
-  const updateCount = useCallback(async () => {
-    if (csvData.length === 0) {
-      setCount(null)
-      return
-    }
+  const updateCount = useCallback(
+    async (getIgnore?: () => boolean) => {
+      if (csvData.length === 0) {
+        setCount(null)
+        return
+      }
 
-    try {
-      setLoadingCount(true)
-      setError(null)
-      
-      const response = await exportApi.containersCountByNamesMultiStudy({
-        entries: csvData,
-        date_tolerance: dateTolerance,
-        specimen_type_ids: filters.specimen_type_ids,
-        container_types: filters.container_types,
-        date_from: filters.date_from,
-        date_to: filters.date_to,
-        created_from: filters.created_from,
-        created_to: filters.created_to,
-      })
-      
-      setCount(response.data.count)
-    } catch (error: any) {
-      console.error('Failed to get count:', error)
-      setError(error.response?.data?.error || 'Failed to get count')
-      setCount(null)
-    } finally {
-      setLoadingCount(false)
-    }
-  }, [csvData, dateTolerance, filters])
+      const checkIgnore = getIgnore ?? (() => false)
+
+      try {
+        setLoadingCount(true)
+        setError(null)
+
+        const response = await exportApi.containersCountByNamesMultiStudy({
+          entries: csvData,
+          date_tolerance: dateTolerance,
+          specimen_type_ids: filters.specimen_type_ids,
+          container_types: filters.container_types,
+          date_from: filters.date_from,
+          date_to: filters.date_to,
+          created_from: filters.created_from,
+          created_to: filters.created_to,
+        })
+
+        if (!checkIgnore()) {
+          setCount(response.data.count)
+        }
+      } catch (error: unknown) {
+        if (!checkIgnore()) {
+          console.error('Failed to get count:', error)
+          const err = error as { response?: { data?: { error?: string } } }
+          setError(err.response?.data?.error || 'Failed to get count')
+          setCount(null)
+        }
+      } finally {
+        if (!checkIgnore()) {
+          setLoadingCount(false)
+        }
+      }
+    },
+    [csvData, dateTolerance, filters]
+  )
 
   useEffect(() => {
-    if (csvData.length > 0) {
-      const timer = setTimeout(() => {
-        updateCount()
-      }, 500)
-      return () => clearTimeout(timer)
+    if (csvData.length === 0) return
+    let ignore = false
+    const timer = setTimeout(() => {
+      void updateCount(() => ignore)
+    }, 500)
+    return () => {
+      ignore = true
+      clearTimeout(timer)
     }
   }, [csvData, dateTolerance, filters, updateCount])
 

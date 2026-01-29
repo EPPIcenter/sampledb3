@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { type Location } from '../lib/api'
 import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
 
@@ -32,17 +32,10 @@ export default function CollectionTreePicker({
   const [search, setSearch] = useState('')
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [lastSearch, setLastSearch] = useState('')
-  
-  // Debug: Log when expandedIds changes
-  useEffect(() => {
-    console.log('[CollectionTreePicker] expandedIds changed:', Array.from(expandedIds))
-  }, [expandedIds])
 
   // Filter to only collection-capable locations
   const collectionLocations = useMemo(() => {
-    const filtered = locations.filter(loc => loc.canContainCollections)
-    console.log('[CollectionTreePicker] collectionLocations:', filtered.length, filtered)
-    return filtered
+    return locations.filter(loc => loc.canContainCollections)
   }, [locations])
 
   // Map collections by location ID, and track collections without locations
@@ -54,23 +47,19 @@ export default function CollectionTreePicker({
         map[c.locationId].push(c)
       }
     })
-    console.log('[CollectionTreePicker] collectionsByLocation:', Object.keys(map).length, 'locations with collections', map)
     return map
   }, [collections])
 
   // Collections without a location, or with a location that doesn't support collections
   const unassignedCollections = useMemo(() => {
     const locationIds = new Set(collectionLocations.map(loc => loc.id))
-    const unassigned = collections.filter((c) => {
+    return collections.filter((c) => {
       // Include collections without locationId
       if (!c.locationId) return true
       // Include collections whose location doesn't support collections
       if (c.locationId && !locationIds.has(c.locationId)) return true
       return false
     })
-    console.log('[CollectionTreePicker] unassignedCollections:', unassigned.length, unassigned)
-    console.log('[CollectionTreePicker] locationIds that support collections:', Array.from(locationIds))
-    return unassigned
   }, [collections, collectionLocations])
 
   const toggleExpanded = (locationId: number) => {
@@ -79,10 +68,8 @@ export default function CollectionTreePicker({
       const wasExpanded = next.has(locationId)
       if (wasExpanded) {
         next.delete(locationId)
-        console.log('Collapsing location:', locationId, 'New expandedIds:', Array.from(next))
       } else {
         next.add(locationId)
-        console.log('Expanding location:', locationId, 'New expandedIds:', Array.from(next))
       }
       return next
     })
@@ -102,7 +89,6 @@ export default function CollectionTreePicker({
       filtered = filtered.filter((loc) => {
         return (collectionsByLocation[loc.id] || []).length > 0
       })
-      console.log('[CollectionTreePicker] After filterEmptyLocations:', filtered.length, 'locations with collections')
     }
 
     // Apply search filter
@@ -122,7 +108,6 @@ export default function CollectionTreePicker({
       })
     }
 
-    console.log('[CollectionTreePicker] filteredLocations:', filtered.length, filtered)
     return filtered
   }, [collectionLocations, search, collectionsByLocation, filterEmptyLocations])
 
@@ -150,7 +135,6 @@ export default function CollectionTreePicker({
       }
     })
     
-    console.log('[CollectionTreePicker] visibleLocationIds:', visible.size, Array.from(visible))
     return visible
   }, [filteredLocations, locations])
   
@@ -177,25 +161,29 @@ export default function CollectionTreePicker({
     })
     
     // Return locations from all locations that are visible
-    const result = locations.filter(loc => visible.has(loc.id))
-    console.log('[CollectionTreePicker] visibleLocations:', result.length, result)
-    return result
+    return locations.filter(loc => visible.has(loc.id))
   }, [filteredLocations, locations])
 
-  // Automatically expand all nodes when searching
-  // Only run when search text actually changes, not when other dependencies change
-  useEffect(() => {
-    // Only auto-expand if search text changed (not on every render)
-    if (search.trim() !== lastSearch.trim()) {
-      setLastSearch(search)
-      
-      if (search.trim()) {
-        const all = new Set<number>()
-        const allLocationMap = new Map(locations.map(loc => [loc.id, loc]))
-        
-        // Expand all matching locations and their ancestors
-        filteredLocations.forEach((loc) => {
-          let current: Location | undefined = loc
+  // Automatically expand all nodes when searching (adjust during render)
+  if (search.trim() !== lastSearch.trim()) {
+    setLastSearch(search)
+    if (search.trim()) {
+      const all = new Set<number>()
+      const allLocationMap = new Map(locations.map(loc => [loc.id, loc]))
+      filteredLocations.forEach((loc) => {
+        let current: Location | undefined = loc
+        while (current) {
+          all.add(current.id)
+          if (current.parentId !== null) {
+            current = allLocationMap.get(current.parentId)
+          } else {
+            break
+          }
+        }
+      })
+      collections.forEach((col) => {
+        if (col.name.toLowerCase().includes(search.toLowerCase()) && col.locationId) {
+          let current: Location | undefined = allLocationMap.get(col.locationId)
           while (current) {
             all.add(current.id)
             if (current.parentId !== null) {
@@ -204,33 +192,15 @@ export default function CollectionTreePicker({
               break
             }
           }
-        })
-        
-        // Also expand locations that have matching collections
-        collections.forEach((col) => {
-          if (col.name.toLowerCase().includes(search.toLowerCase()) && col.locationId) {
-            let current: Location | undefined = allLocationMap.get(col.locationId)
-            while (current) {
-              all.add(current.id)
-              if (current.parentId !== null) {
-                current = allLocationMap.get(current.parentId)
-              } else {
-                break
-              }
-            }
-          }
-        })
-        
-        // Merge with existing expandedIds to preserve manual expansions
-        setExpandedIds((prev) => {
-          const merged = new Set(prev)
-          all.forEach(id => merged.add(id))
-          return merged
-        })
-      }
-      // Don't clear expanded state when search is cleared - let users keep their manual expansions
+        }
+      })
+      setExpandedIds((prev) => {
+        const merged = new Set(prev)
+        all.forEach(id => merged.add(id))
+        return merged
+      })
     }
-  }, [search, lastSearch, filteredLocations, collections, locations])
+  }
 
   const renderLocationNode = (loc: Location, depth: number = 0): React.ReactNode => {
     // Check for children in ALL locations (to determine if expandable)
@@ -247,11 +217,6 @@ export default function CollectionTreePicker({
     
     // Show expand/collapse button if location has any children (even if not all are visible)
     const hasAnyChildren = allChildren.length > 0
-    
-    // Debug logging
-    if (hasAnyChildren && depth === 0) {
-      console.log(`Location ${loc.id} (${loc.name}): isExpanded=${isExpanded}, allChildren=${allChildren.length}, visibleChildren=${visibleChildren.length}, expandedIds=`, Array.from(expandedIds))
-    }
 
     return (
       <div key={loc.id} className={depth > 0 ? 'ml-4 border-l border-gray-100 pl-2 mb-1' : 'mb-2'}>
@@ -265,7 +230,6 @@ export default function CollectionTreePicker({
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              console.log('Button clicked for location:', loc.id, loc.name)
               toggleExpanded(loc.id)
             }}
             onTouchStart={(e) => {
@@ -369,9 +333,7 @@ export default function CollectionTreePicker({
   }
 
   const renderUnassignedCollections = () => {
-    console.log('[CollectionTreePicker] renderUnassignedCollections - unassignedCollections:', unassignedCollections.length)
     if (unassignedCollections.length === 0) {
-      console.log('[CollectionTreePicker] renderUnassignedCollections - returning null (no unassigned collections)')
       return null
     }
 
@@ -382,13 +344,10 @@ export default function CollectionTreePicker({
         )
       : unassignedCollections
 
-    console.log('[CollectionTreePicker] renderUnassignedCollections - filteredUnassigned:', filteredUnassigned.length)
     if (filteredUnassigned.length === 0) {
-      console.log('[CollectionTreePicker] renderUnassignedCollections - returning null (filtered out by search)')
       return null
     }
 
-    console.log('[CollectionTreePicker] renderUnassignedCollections - rendering', filteredUnassigned.length, 'collections')
     return (
       <div className="mb-4 pb-4 border-b border-gray-200">
         <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 px-1">
@@ -429,11 +388,6 @@ export default function CollectionTreePicker({
   const renderLocationTree = () => {
     // Get root locations from visible locations
     const rootLocations = getRootLocations(visibleLocations)
-    console.log('[CollectionTreePicker] renderLocationTree - filteredLocations:', filteredLocations.length)
-    console.log('[CollectionTreePicker] renderLocationTree - visibleLocations:', visibleLocations.length)
-    console.log('[CollectionTreePicker] renderLocationTree - rootLocations:', rootLocations.length, rootLocations)
-    console.log('[CollectionTreePicker] renderLocationTree - unassignedCollections:', unassignedCollections.length)
-    console.log('[CollectionTreePicker] renderLocationTree - loading:', loading)
     
     if (rootLocations.length === 0 && unassignedCollections.length === 0 && !loading) {
       return (

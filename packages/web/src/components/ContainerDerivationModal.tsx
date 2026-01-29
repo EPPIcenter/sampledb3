@@ -28,13 +28,19 @@ const CONTAINER_TYPES = [
   { value: 'static_well', label: 'Static Well' },
 ]
 
-export default function ContainerDerivationModal({
-  isOpen,
-  onClose,
+type ContainerDerivationModalContentProps = {
+  parentContainerId: number
+  parentContainer?: ContainerDerivationModalProps['parentContainer']
+  onClose: () => void
+  onSuccess: () => void
+}
+
+function ContainerDerivationModalContent({
   parentContainerId,
   parentContainer,
+  onClose,
   onSuccess,
-}: ContainerDerivationModalProps) {
+}: ContainerDerivationModalContentProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
@@ -70,94 +76,76 @@ export default function ContainerDerivationModal({
     position: '',
   })
 
+  // Load reference data when content mounts (key resets state on each open)
   useEffect(() => {
-    if (isOpen) {
-      loadReferenceData()
-      // Reset form when modal opens
-      setFormData({
-        derivationType: 'dna_extraction',
-        specimenTypeName: '',
-        containerType: 'micronix_tube',
-        quantity: 1.0,
-        unitSymbol: '',
-        quantityUsed: undefined,
-        reduceParentQuantity: true,
-        derivationDate: new Date().toISOString().split('T')[0],
-        protocol: '',
-        notes: '',
-        properties: undefined,
-        collectionId: undefined,
-        collectionName: undefined,
-        collectionType: undefined,
-        collectionLocationId: undefined,
-        containerBarcode: '',
-        position: '',
-      })
-      setPlacementMode('existing')
-      setNewCollectionLocationId(null)
-      setSheetParentType('box')
-      setSheetParentName('')
-      setCollectionSearch('')
-      setCollectionSearchResults([])
-      setShowCollectionResults(false)
-      setError(null)
-      setWarnings([])
-    }
-  }, [isOpen])
+    loadReferenceData()
+  }, [])
 
-  // Sync collectionSearch with formData.collectionName when it changes externally
-  useEffect(() => {
-    if (placementMode === 'existing' && formData.collectionName && formData.collectionName !== collectionSearch) {
-      setCollectionSearch(formData.collectionName)
-    }
-  }, [formData.collectionName, placementMode])
+  // Sync collectionSearch with formData.collectionName when it changes externally (adjust during render)
+  const prevCollectionNameRef = useRef(formData.collectionName ?? '')
+  if (placementMode === 'existing' && formData.collectionName && formData.collectionName !== prevCollectionNameRef.current) {
+    prevCollectionNameRef.current = formData.collectionName
+    setCollectionSearch(formData.collectionName)
+  } else if (!formData.collectionName) {
+    prevCollectionNameRef.current = ''
+  }
 
-  // Reset collection search when container type or placement mode changes
-  useEffect(() => {
-    if (placementMode === 'existing') {
-      setCollectionSearch('')
-      setCollectionSearchResults([])
-      setShowCollectionResults(false)
-    }
-  }, [formData.containerType, placementMode])
+  // Reset collection search when container type or placement mode changes (adjust during render)
+  const prevContainerTypeRef = useRef(formData.containerType)
+  const prevPlacementModeRef = useRef(placementMode)
+  if ((formData.containerType !== prevContainerTypeRef.current || placementMode !== prevPlacementModeRef.current) && placementMode === 'existing') {
+    prevContainerTypeRef.current = formData.containerType
+    prevPlacementModeRef.current = placementMode
+    setCollectionSearch('')
+    setCollectionSearchResults([])
+    setShowCollectionResults(false)
+  } else {
+    prevContainerTypeRef.current = formData.containerType
+    prevPlacementModeRef.current = placementMode
+  }
 
-  // Fetch allowed container types when specimen type changes
+  // Fetch allowed container types when specimen type changes (with ignore for race conditions)
   useEffect(() => {
+    if (specimenTypes.length === 0) return
+
+    let ignore = false
     const fetchAllowedContainerTypes = async () => {
       if (!formData.specimenTypeName) {
-        setAllowedContainerTypes([])
+        if (!ignore) setAllowedContainerTypes([])
         return
       }
 
       const selectedSpecimenType = specimenTypes.find(st => st.name === formData.specimenTypeName)
       if (!selectedSpecimenType) {
-        setAllowedContainerTypes([])
+        if (!ignore) setAllowedContainerTypes([])
         return
       }
 
       try {
         const response = await specimenTypesApi.getContainerTypes(selectedSpecimenType.id)
+        if (ignore) return
         const containerTypes = response.data.containerTypes || []
         setAllowedContainerTypes(containerTypes)
 
-        // If current container type is not allowed, reset it
         if (formData.containerType && !containerTypes.includes(formData.containerType)) {
           setFormData(prev => ({
             ...prev,
-            containerType: containerTypes.length > 0 ? (containerTypes[0] as any) : 'micronix_tube',
+            containerType: containerTypes.length > 0 ? (containerTypes[0] as CreateDerivationPayload['containerType']) : 'micronix_tube',
           }))
         }
-      } catch (err: any) {
-        console.error('Failed to fetch allowed container types:', err)
-        // On error, allow all container types (fallback)
-        setAllowedContainerTypes([])
+      } catch (err: unknown) {
+        if (!ignore) {
+          console.error('Failed to fetch allowed container types:', err)
+          setAllowedContainerTypes([])
+        }
       }
     }
 
-    if (isOpen && specimenTypes.length > 0) {
-      fetchAllowedContainerTypes()
+    void fetchAllowedContainerTypes()
+    return () => {
+      ignore = true
     }
-  }, [isOpen, formData.specimenTypeName, specimenTypes])
+  }, [formData.specimenTypeName, specimenTypes])
 
   const loadReferenceData = async () => {
     try {
@@ -378,21 +366,10 @@ export default function ContainerDerivationModal({
     }
   }
 
-  if (!isOpen) return null
-
   const parentRemainingQty = parentContainer?.remainingQuantity ?? 0
   const parentUnitSymbol = parentContainer?.unit?.symbol || ''
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
-        <div
-          className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-          onClick={onClose}
-        />
-        
-        {/* Modal panel */}
         <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full sm:max-h-[90vh]">
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between mb-6">
@@ -849,6 +826,43 @@ export default function ContainerDerivationModal({
           </form>
           </div>
         </div>
+  )
+}
+
+export default function ContainerDerivationModal({
+  isOpen,
+  onClose,
+  parentContainerId,
+  parentContainer,
+  onSuccess,
+}: ContainerDerivationModalProps) {
+  const [openKey, setOpenKey] = useState(0)
+  const prevOpenRef = useRef(false)
+
+  useEffect(() => {
+    if (isOpen && !prevOpenRef.current) {
+      setOpenKey((k) => k + 1)
+    }
+    prevOpenRef.current = isOpen
+  }, [isOpen])
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-[100] overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div
+          className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
+          onClick={onClose}
+        />
+        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <ContainerDerivationModalContent
+          key={`${parentContainerId}-${openKey}`}
+          parentContainerId={parentContainerId}
+          parentContainer={parentContainer}
+          onClose={onClose}
+          onSuccess={onSuccess}
+        />
       </div>
     </div>
   )

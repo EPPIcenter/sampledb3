@@ -1,38 +1,23 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { authApi } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
 
-export default function Profile() {
-  const { user, refreshUser } = useUser()
+function ProfileFormInner({ user }: { user: NonNullable<ReturnType<typeof useUser>['user']> }) {
+  const { refreshUser } = useUser()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-
-  // Profile form state
   const [profileForm, setProfileForm] = useState({
-    name: '',
-    email: '',
-    username: '',
+    name: user.name || '',
+    email: user.email || '',
+    username: user.username || '',
   })
-
-  // Password form state
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   })
   const [showPasswords, setShowPasswords] = useState(false)
-
-  // Initialize form with user data
-  useEffect(() => {
-    if (user) {
-      setProfileForm({
-        name: user.name || '',
-        email: user.email || '',
-        username: user.username || '',
-      })
-    }
-  }, [user])
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -99,16 +84,6 @@ export default function Profile() {
     } finally {
       setLoading(false)
     }
-  }
-
-  if (!user) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white shadow rounded-lg p-6">
-          <p className="text-gray-500">Loading profile...</p>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -286,4 +261,18 @@ export default function Profile() {
       </div>
     </div>
   )
+}
+
+export default function Profile() {
+  const { user } = useUser()
+  if (!user) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-white shadow rounded-lg p-6">
+          <p className="text-gray-500">Loading profile...</p>
+        </div>
+      </div>
+    )
+  }
+  return <ProfileFormInner key={user.id} user={user} />
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { locationsApi, type Location } from '../lib/api'
 import { buildLocationTree, filterLocationTree, getLocationLabel, getRootLocations, getLocationChildren, getLocationAncestors } from '../lib/location-tree'
 
@@ -78,28 +78,31 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
     [tree, search]
   )
 
-  // Auto-expand ancestors of selected locations
-  useEffect(() => {
-    if (selected.length > 0 && locations.length > 0) {
-      setExpandedIds((prev) => {
-        const next = new Set(prev)
+  // Auto-expand when selected, search, or locations change (adjust during render)
+  const selectedKey = selected.map((s) => s.locationId).sort().join(',')
+  const prevExpandedDepsRef = useRef({ selectedKey, search, locationsLength: locations.length })
+  const expandedDeps = { selectedKey, search, locationsLength: locations.length }
+  const expandedDepsChanged =
+    prevExpandedDepsRef.current.selectedKey !== selectedKey ||
+    prevExpandedDepsRef.current.search !== search ||
+    prevExpandedDepsRef.current.locationsLength !== locations.length
+  if (expandedDepsChanged && locations.length > 0) {
+    prevExpandedDepsRef.current = expandedDeps
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (search.trim()) {
+        locations.forEach((loc) => next.add(loc.id))
+      }
+      if (selected.length > 0) {
         selected.forEach((sel) => {
           const ancestors = getLocationAncestors(locations, sel.locationId)
           ancestors.forEach((a) => next.add(a.id))
           next.add(sel.locationId)
         })
-        return next
-      })
-    }
-  }, [selected, locations])
-
-  // Auto-expand all when searching
-  useEffect(() => {
-    if (search.trim() && locations.length > 0) {
-      const allIds = new Set(locations.map((loc) => loc.id))
-      setExpandedIds(allIds)
-    }
-  }, [search, locations])
+      }
+      return next
+    })
+  }
 
   const isSelected = useCallback((locationId: number): boolean => {
     return selected.some((s) => s.locationId === locationId)

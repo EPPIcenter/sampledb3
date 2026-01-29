@@ -205,6 +205,10 @@ export const studiesApi = {
     const response = await api.put<StudyResponse>(`/studies/${id}`, data)
     return response.data
   },
+  delete: async (id: number): Promise<{ message: string }> => {
+    const response = await api.delete<{ message: string }>(`/studies/${id}`)
+    return response.data
+  },
 }
 
 export interface SubjectSummarySpecimen {

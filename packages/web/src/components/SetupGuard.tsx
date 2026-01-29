@@ -9,44 +9,32 @@ export default function SetupGuard({ children }: { children: React.ReactNode }) 
   const [isInitialized, setIsInitialized] = useState<boolean | null>(null)
   const hasCheckedRef = useRef(false)
 
-  // Check setup status on initial mount only
+  // Check setup status on mount and redirect if not initialized (single Effect)
   useEffect(() => {
+    if (hasCheckedRef.current) return
+    hasCheckedRef.current = true
+
     const checkSetupStatus = async () => {
       try {
         setIsChecking(true)
         const response = await setupApi.status()
         const initialized = response.data.initialized
         setIsInitialized(initialized)
-        hasCheckedRef.current = true
 
-        // If not initialized and not on /setup route, redirect to setup
         if (!initialized && location.pathname !== '/setup') {
           navigate('/setup', { replace: true })
         }
       } catch (error) {
         console.error('Failed to check setup status:', error)
-        // On error, allow access (fail open) to prevent blocking users
         setIsInitialized(true)
-        hasCheckedRef.current = true
       } finally {
         setIsChecking(false)
       }
     }
 
-    // Only check on initial mount
-    if (!hasCheckedRef.current) {
-      checkSetupStatus()
-    }
+    checkSetupStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Empty dependency array - only run on mount
-
-  // Handle redirect if not initialized (after initial check)
-  useEffect(() => {
-    // Only redirect if we've checked and know it's not initialized
-    if (hasCheckedRef.current && isInitialized === false && location.pathname !== '/setup') {
-      navigate('/setup', { replace: true })
-    }
-  }, [navigate, location.pathname, isInitialized])
+  }, [])
 
   // Show loading state while checking
   if (isChecking) {

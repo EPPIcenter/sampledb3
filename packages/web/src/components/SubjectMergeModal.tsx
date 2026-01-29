@@ -8,20 +8,21 @@ interface SubjectMergeModalProps {
   onSuccess: () => void
 }
 
-export default function SubjectMergeModal({
-  isOpen,
-  onClose,
+function SubjectMergeModalContent({
   studyId,
+  onClose,
   onSuccess,
-}: SubjectMergeModalProps) {
+}: {
+  studyId: number
+  onClose: () => void
+  onSuccess: () => void
+}) {
   const [subjects, setSubjects] = useState<StudySubject[]>([])
   const [sourceSubjectId, setSourceSubjectId] = useState<number | null>(null)
   const [targetSubjectId, setTargetSubjectId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [merging, setMerging] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [sourceSpecimenCount, setSourceSpecimenCount] = useState<number | null>(null)
-  const [targetSpecimenCount, setTargetSpecimenCount] = useState<number | null>(null)
   const [loadingCounts, setLoadingCounts] = useState(false)
   const [sourceSearch, setSourceSearch] = useState('')
   const [targetSearch, setTargetSearch] = useState('')
@@ -35,10 +36,16 @@ export default function SubjectMergeModal({
   const sourceResultsRef = useRef<HTMLUListElement>(null)
   const targetResultsRef = useRef<HTMLUListElement>(null)
 
-  const getSpecimenCount = (subjectId: number | null): number | null => {
-    if (!subjectId) return null
-    return specimenCounts.get(subjectId) ?? null
-  }
+  // Derived from specimenCounts map during render
+  const sourceSpecimenCount = sourceSubjectId ? (specimenCounts.get(sourceSubjectId) ?? null) : null
+  const targetSpecimenCount = targetSubjectId ? (specimenCounts.get(targetSubjectId) ?? null) : null
+
+  // Load subjects when content mounts (key resets state on each open)
+  useEffect(() => {
+    if (studyId) {
+      loadSubjects()
+    }
+  }, [studyId])
 
   // Scroll selected item into view
   useEffect(() => {
@@ -63,24 +70,6 @@ export default function SubjectMergeModal({
     }
   }, [targetSelectedIndex])
 
-  useEffect(() => {
-    if (isOpen && studyId) {
-      loadSubjects()
-      // Reset selections when modal opens
-      setSourceSubjectId(null)
-      setTargetSubjectId(null)
-      setSourceSpecimenCount(null)
-      setTargetSpecimenCount(null)
-      setError(null)
-      setSourceSearch('')
-      setTargetSearch('')
-      setSourceOpen(false)
-      setTargetOpen(false)
-      setSourceSelectedIndex(-1)
-      setTargetSelectedIndex(-1)
-    }
-  }, [isOpen, studyId])
-
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -92,58 +81,16 @@ export default function SubjectMergeModal({
       }
     }
 
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [isOpen])
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
-  const loadSubjects = async () => {
-    if (!studyId) {
-      setError('Study ID is required')
-      setLoading(false)
-      return
-    }
-    
-    try {
-      setLoading(true)
-      setError(null)
-      const response = await studiesApi.getSubjects(studyId, { page: 1, limit: 1000 })
-      setSubjects(response.subjects || [])
-      if (!response.subjects || response.subjects.length === 0) {
-        setError('No subjects found in this study')
-      }
-    } catch (err: any) {
-      console.error('Failed to load subjects:', err)
-      setError(err.response?.data?.error || 'Failed to load subjects')
-      setSubjects([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Update selected counts when selections change
-  useEffect(() => {
-    if (sourceSubjectId) {
-      setSourceSpecimenCount(getSpecimenCount(sourceSubjectId))
-    } else {
-      setSourceSpecimenCount(null)
-    }
-  }, [sourceSubjectId, specimenCounts])
-
-  useEffect(() => {
-    if (targetSubjectId) {
-      setTargetSpecimenCount(getSpecimenCount(targetSubjectId))
-    } else {
-      setTargetSpecimenCount(null)
-    }
-  }, [targetSubjectId, specimenCounts])
-
-  const loadAllSpecimenCounts = async () => {
+  const loadAllSpecimenCounts = async (subjectsList: StudySubject[]) => {
+    if (subjectsList.length === 0) return
     try {
       const counts = new Map<number, number>()
-      // Load counts for all subjects in parallel (limit to avoid too many requests)
-      const promises = subjects.slice(0, 50).map(async (subject) => {
+      const toLoad = subjectsList.slice(0, 50)
+      const promises = toLoad.map(async (subject) => {
         try {
           const summary = await subjectsApi.getSummary(subject.id)
           counts.set(subject.id, summary.summary.totalSpecimens)
@@ -159,12 +106,33 @@ export default function SubjectMergeModal({
     }
   }
 
-  // Load specimen counts for all subjects when subjects are loaded
-  useEffect(() => {
-    if (subjects.length > 0) {
-      loadAllSpecimenCounts()
+  const loadSubjects = async () => {
+    if (!studyId) {
+      setError('Study ID is required')
+      setLoading(false)
+      return
     }
-  }, [subjects.length])
+
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await studiesApi.getSubjects(studyId, { page: 1, limit: 1000 })
+      const subjectsList = response.subjects || []
+      setSubjects(subjectsList)
+      if (subjectsList.length === 0) {
+        setError('No subjects found in this study')
+      } else {
+        void loadAllSpecimenCounts(subjectsList)
+      }
+    } catch (err: unknown) {
+      console.error('Failed to load subjects:', err)
+      const errObj = err as { response?: { data?: { error?: string } } }
+      setError(errObj.response?.data?.error || 'Failed to load subjects')
+      setSubjects([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleMerge = async () => {
     if (!sourceSubjectId || !targetSubjectId) {
@@ -223,17 +191,8 @@ export default function SubjectMergeModal({
              s.id.toString().includes(searchLower)
     })
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto overflow-x-visible">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <div
-          className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-          onClick={onClose}
-        />
-        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-        <div className="inline-block align-bottom bg-white rounded-lg text-left shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full sm:max-h-[90vh] relative z-10 overflow-visible">
+    <>
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-visible">
             <div className="sm:flex sm:items-start">
               <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
@@ -320,7 +279,7 @@ export default function SubjectMergeModal({
                             >
                               <ul ref={sourceResultsRef} className="divide-y divide-gray-200">
                                 {availableSourceSubjects.map((subject, index) => {
-                                  const count = getSpecimenCount(subject.id)
+                                  const count = specimenCounts.get(subject.id) ?? null
                                   return (
                                     <li key={subject.id}>
                                       <button
@@ -449,7 +408,7 @@ export default function SubjectMergeModal({
                             >
                               <ul ref={targetResultsRef} className="divide-y divide-gray-200">
                                 {availableTargetSubjects.map((subject, index) => {
-                                  const count = getSpecimenCount(subject.id)
+                                  const count = specimenCounts.get(subject.id) ?? null
                                   return (
                                     <li key={subject.id}>
                                       <button
@@ -564,6 +523,43 @@ export default function SubjectMergeModal({
               Cancel
             </button>
           </div>
+    </>
+  )
+}
+
+export default function SubjectMergeModal({
+  isOpen,
+  onClose,
+  studyId,
+  onSuccess,
+}: SubjectMergeModalProps) {
+  const [openKey, setOpenKey] = useState(0)
+  const prevOpenRef = useRef(false)
+
+  useEffect(() => {
+    if (isOpen && !prevOpenRef.current) {
+      setOpenKey((k) => k + 1)
+    }
+    prevOpenRef.current = isOpen
+  }, [isOpen])
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-[100] overflow-y-auto overflow-x-visible">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div
+          className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
+          onClick={onClose}
+        />
+        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <div className="inline-block align-bottom bg-white rounded-lg text-left shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full sm:max-h-[90vh] relative z-10 overflow-visible">
+          <SubjectMergeModalContent
+            key={`${studyId}-${openKey}`}
+            studyId={studyId}
+            onClose={onClose}
+            onSuccess={onSuccess}
+          />
         </div>
       </div>
     </div>

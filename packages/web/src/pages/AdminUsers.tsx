@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { adminApi, type User, type UserSession } from '../lib/api'
 
 interface CreateUserData {
@@ -16,7 +16,6 @@ interface EditUserData {
 
 export default function AdminUsers() {
   const [users, setUsers] = useState<User[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -45,8 +44,15 @@ export default function AdminUsers() {
     loadUsers()
   }, [showDeleted])
 
-  useEffect(() => {
-    filterUsers()
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) return users
+    const query = searchQuery.toLowerCase()
+    return users.filter(
+      (user) =>
+        user.name.toLowerCase().includes(query) ||
+        user.email.toLowerCase().includes(query) ||
+        user.role.toLowerCase().includes(query)
+    )
   }, [users, searchQuery])
 
   const loadUsers = async () => {
@@ -61,22 +67,6 @@ export default function AdminUsers() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const filterUsers = () => {
-    if (!searchQuery.trim()) {
-      setFilteredUsers(users)
-      return
-    }
-
-    const query = searchQuery.toLowerCase()
-    const filtered = users.filter(
-      (user) =>
-        user.name.toLowerCase().includes(query) ||
-        user.email.toLowerCase().includes(query) ||
-        user.role.toLowerCase().includes(query)
-    )
-    setFilteredUsers(filtered)
   }
 
   const handleCreate = async () => {

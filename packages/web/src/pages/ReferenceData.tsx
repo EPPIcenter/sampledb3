@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
 import ReferenceDataTable from '../components/ReferenceDataTable'
@@ -63,19 +63,20 @@ export default function ReferenceData() {
     return () => clearTimeout(timeoutId)
   }, [search])
 
-  // Reset pagination when switching tabs
-  useEffect(() => {
+  // Reset pagination/search/editing when tab or search changes (adjust during render)
+  const prevTabRef = useRef(activeTab)
+  const prevSearchRef = useRef(search)
+  if (prevTabRef.current !== activeTab) {
+    prevTabRef.current = activeTab
+    prevSearchRef.current = ''
     setPage(1)
     setSearch('')
     setEditingItem(null)
-  }, [activeTab])
-
-  // Reset to page 1 when search changes
-  useEffect(() => {
-    if (config.requiresSearch) {
-      setPage(1)
-    }
-  }, [search, config.requiresSearch])
+  }
+  if (config.requiresSearch && prevSearchRef.current !== search) {
+    prevSearchRef.current = search
+    setPage(1)
+  }
 
   // Load dependencies
   useEffect(() => {
@@ -394,6 +395,7 @@ export default function ReferenceData() {
 
       {editingItem !== null && canManageReferenceData && (
         <ReferenceDataForm
+          key={editingItem?.id ?? 'new'}
           item={editingItem}
           fields={getFormFields()}
           onSave={handleSave}

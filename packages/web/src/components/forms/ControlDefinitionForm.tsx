@@ -35,65 +35,63 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
   const [autoGenerateName, setAutoGenerateName] = useState(!propControlDefinition) // Auto-generate for new definitions
   const [suggestedName, setSuggestedName] = useState<string>('')
   const [isGeneratingName, setIsGeneratingName] = useState(false)
+  const formDataRef = useRef(formData)
+  const strainInputsRef = useRef(strainInputs)
+  const generateNameTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  formDataRef.current = formData
+  strainInputsRef.current = strainInputs
 
   useEffect(() => {
     loadStrains()
     loadUnits()
     if (id && !propControlDefinition) {
       loadControlDefinition()
-    } else if (!id && !propControlDefinition) {
-      // For new definitions, ensure strains section is shown
-      setShowStrains(true)
-      // Add one empty strain input to start
-      if (strains.length > 0) {
-        setStrainInputs([{
-          strainId: strains[0].id,
-          percentage: 100,
-          strainName: strains[0].name,
-        }])
-      }
     }
   }, [id, propControlDefinition])
-  
-  // Load strains first, then set initial strain input
-  useEffect(() => {
-    if (!id && !propControlDefinition && strains.length > 0 && strainInputs.length === 0) {
-      setStrainInputs([{
-        strainId: strains[0].id,
-        percentage: 100,
-        strainName: strains[0].name,
-      }])
-      setShowStrains(true)
-    }
-  }, [strains, id, propControlDefinition])
 
   useEffect(() => {
-    if (controlDefinition) {
-      // Parse strains and density from properties or from parsed fields
-      const props = controlDefinition.properties || {}
-      const strains = controlDefinition.strains || (Array.isArray(props.strains) ? props.strains : [])
-      const targetDensity = controlDefinition.targetDensity ?? props.targetDensity
-      const targetDensityUnitId = controlDefinition.targetDensityUnitId ?? props.targetDensityUnitId
-      
-      if (strains.length > 0) {
-        setStrainInputs(
-          strains.map((s: any) => ({
-            strainId: typeof s === 'number' ? s : s.id,
-            percentage: typeof s === 'number' ? 0 : (s.percentage || 0),
-            strainName: typeof s === 'number' ? undefined : s.name,
-          }))
-        )
-        setShowStrains(true)
+    return () => {
+      if (generateNameTimeoutRef.current) {
+        clearTimeout(generateNameTimeoutRef.current)
       }
-      
-      setFormData({
-        name: controlDefinition.name || '',
-        controlType: 'blood',
-        targetDensity: targetDensity?.toString() || '',
-        targetDensityUnitId: targetDensityUnitId?.toString() || '',
-      })
     }
-  }, [controlDefinition])
+  }, [])
+
+  // Initial strain input for new definitions when strains have loaded (adjust during render)
+  if (!id && !propControlDefinition && strains.length > 0 && strainInputs.length === 0) {
+    setStrainInputs([{
+      strainId: strains[0].id,
+      percentage: 100,
+      strainName: strains[0].name,
+    }])
+    setShowStrains(true)
+  }
+
+  // Sync form and strain inputs when controlDefinition is set from fetch (adjust during render)
+  const prevControlDefinitionRef = useRef<ControlDefinition | undefined>(undefined)
+  if (controlDefinition && controlDefinition !== prevControlDefinitionRef.current) {
+    prevControlDefinitionRef.current = controlDefinition
+    const props = controlDefinition.properties || {}
+    const defStrains = controlDefinition.strains || (Array.isArray(props.strains) ? props.strains : [])
+    const targetDensity = controlDefinition.targetDensity ?? props.targetDensity
+    const targetDensityUnitId = controlDefinition.targetDensityUnitId ?? props.targetDensityUnitId
+    if (defStrains.length > 0) {
+      setStrainInputs(
+        defStrains.map((s: unknown) => ({
+          strainId: typeof s === 'number' ? s : (s as { id?: number }).id ?? 0,
+          percentage: typeof s === 'number' ? 0 : (s as { percentage?: number }).percentage ?? 0,
+          strainName: typeof s === 'number' ? undefined : (s as { name?: string }).name,
+        }))
+      )
+      setShowStrains(true)
+    }
+    setFormData({
+      name: controlDefinition.name || '',
+      controlType: 'blood',
+      targetDensity: targetDensity?.toString() || '',
+      targetDensityUnitId: targetDensityUnitId?.toString() || '',
+    })
+  }
 
   const loadControlDefinition = async () => {
     if (!id) return
@@ -170,67 +168,76 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
       }
     }
     setStrainInputs(newInputs)
-    // Trigger name generation if auto-generate is enabled
     if (autoGenerateName) {
-      generateName(newInputs)
+      scheduleGenerateName()
     }
   }
-  
-  const generateName = async (currentStrainInputs: StrainInput[] = strainInputs) => {
-    // Only generate if we have density and strains
-    if (!formData.targetDensity || currentStrainInputs.length === 0) {
+
+  const scheduleGenerateName = () => {
+    if (generateNameTimeoutRef.current) {
+      clearTimeout(generateNameTimeoutRef.current)
+    }
+    generateNameTimeoutRef.current = setTimeout(() => {
+      generateNameTimeoutRef.current = null
+      generateNameFromRefs()
+    }, 300)
+  }
+
+  const generateNameFromRefs = async () => {
+    const fd = formDataRef.current
+    const inputs = strainInputsRef.current
+    if (!autoGenerateName || !fd.targetDensity || inputs.length === 0) {
       return
     }
-    
-    // Validate percentages total 100%
-    const total = currentStrainInputs.reduce((sum, s) => sum + s.percentage, 0)
+    const total = inputs.reduce((sum, s) => sum + s.percentage, 0)
     if (Math.abs(total - 100) >= 0.01) {
       return
     }
-    
+    setIsGeneratingName(true)
+    try {
+      const response = await controlsApi.suggestName({
+        controlType: 'blood',
+        targetDensity: parseFloat(fd.targetDensity),
+        targetDensityUnitId: fd.targetDensityUnitId ? parseInt(fd.targetDensityUnitId) : undefined,
+        strains: inputs.map(s => ({ strainId: s.strainId, percentage: s.percentage })),
+      })
+      setSuggestedName(response.data.suggestedName)
+      setFormData((prev) => ({ ...prev, name: response.data.suggestedName }))
+      if (response.data.exists && response.data.existingDefinition) {
+        setError(`A control definition with this combination already exists: "${response.data.existingDefinition.name}"`)
+      }
+    } catch (err) {
+      console.error('Failed to generate name:', err)
+    } finally {
+      setIsGeneratingName(false)
+    }
+  }
+
+  const generateName = async (currentStrainInputs: StrainInput[] = strainInputs) => {
+    if (!formData.targetDensity || currentStrainInputs.length === 0) return
+    const total = currentStrainInputs.reduce((sum, s) => sum + s.percentage, 0)
+    if (Math.abs(total - 100) >= 0.01) return
     setIsGeneratingName(true)
     try {
       const response = await controlsApi.suggestName({
         controlType: 'blood',
         targetDensity: parseFloat(formData.targetDensity),
         targetDensityUnitId: formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined,
-        strains: currentStrainInputs.map(s => ({
-          strainId: s.strainId,
-          percentage: s.percentage,
-        })),
+        strains: currentStrainInputs.map(s => ({ strainId: s.strainId, percentage: s.percentage })),
       })
-      
       setSuggestedName(response.data.suggestedName)
       if (autoGenerateName) {
-        setFormData({ ...formData, name: response.data.suggestedName })
+        setFormData((prev) => ({ ...prev, name: response.data.suggestedName }))
       }
-      
-      // Show warning if definition already exists
       if (response.data.exists && response.data.existingDefinition) {
         setError(`A control definition with this combination already exists: "${response.data.existingDefinition.name}"`)
       }
     } catch (err) {
       console.error('Failed to generate name:', err)
-      // Don't show error to user, just silently fail
     } finally {
       setIsGeneratingName(false)
     }
   }
-  
-  // Generate name when density, unit, or strain percentages change
-  useEffect(() => {
-    if (autoGenerateName && formData.targetDensity && strainInputs.length > 0) {
-      const total = strainInputs.reduce((sum, s) => sum + s.percentage, 0)
-      if (Math.abs(total - 100) < 0.01) {
-        // Use a timeout to debounce rapid changes
-        const timeoutId = setTimeout(() => {
-          generateName()
-        }, 300)
-        return () => clearTimeout(timeoutId)
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.targetDensity, formData.targetDensityUnitId, autoGenerateName, JSON.stringify(strainInputs.map(s => ({ id: s.strainId, pct: s.percentage })))])
 
   const totalPercentage = strainInputs.reduce((sum, s) => sum + s.percentage, 0)
   const isTotalValid = strainInputs.length === 0 || Math.abs(totalPercentage - 100) < 0.01
@@ -415,11 +422,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
                 onChange={(e) => {
                   setFormData({ ...formData, targetDensity: e.target.value })
                   if (autoGenerateName && e.target.value && strainInputs.length > 0) {
-                    // Trigger name generation after a short delay
-                    setTimeout(() => {
-                      if (formData.targetDensity !== e.target.value) return // Value changed again
-                      generateName()
-                    }, 300)
+                    scheduleGenerateName()
                   }
                 }}
                 className="form-input flex-1"
@@ -428,7 +431,12 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
               />
               <select
                 value={formData.targetDensityUnitId}
-                onChange={(e) => setFormData({ ...formData, targetDensityUnitId: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, targetDensityUnitId: e.target.value })
+                  if (autoGenerateName && formData.targetDensity && strainInputs.length > 0) {
+                    scheduleGenerateName()
+                  }
+                }}
                 className="form-input w-48"
               >
                 <option value="">Select unit</option>

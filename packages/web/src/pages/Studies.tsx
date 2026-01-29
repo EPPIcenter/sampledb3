@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { studiesApi, type Study, type StudySummaryBasic } from '../lib/api'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import StudyCard from '../components/StudyCard'
 import StudyCardSkeleton from '../components/StudyCardSkeleton'
 import { getModifierKey } from '../lib/hotkeys'
@@ -17,8 +17,10 @@ interface StudyWithSummary extends Study {
 
 export default function Studies() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { canWrite } = useUser()
   const [studies, setStudies] = useState<StudyWithSummary[]>([])
+  const showDeletedMessage = searchParams.get('deleted') === '1'
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [search, setSearch] = useState('')
@@ -66,16 +68,21 @@ export default function Studies() {
     return search !== '' || filterType !== 'all' || filterLead !== ''
   }, [search, filterType, filterLead])
 
-  // Load studies list - reset and load first page when filters change
-  useEffect(() => {
+  const prevFiltersRef = useRef([search, filterType, filterLead])
+  const prevFilters = prevFiltersRef.current
+  if (prevFilters[0] !== search || prevFilters[1] !== filterType || prevFilters[2] !== filterLead) {
+    prevFiltersRef.current = [search, filterType, filterLead]
     setPage(1)
     setClientPage(1)
     setStudies([])
     setHasMore(true)
+  }
+
+  // Load studies when filters change (state reset is done during render above)
+  useEffect(() => {
     if (!hasActiveFilters) {
       loadStudies(true)
     } else {
-      // When filters are active, load all studies for client-side filtering
       loadAllStudies()
     }
   }, [search, filterType, filterLead, hasActiveFilters])
@@ -87,10 +94,10 @@ export default function Studies() {
     }
   }, [page, hasActiveFilters, loading, hasMore])
 
-  // Save view mode preference
-  useEffect(() => {
-    localStorage.setItem('studies-view-mode', viewMode)
-  }, [viewMode])
+  const setViewModeAndPersist = (mode: ViewMode) => {
+    setViewMode(mode)
+    localStorage.setItem('studies-view-mode', mode)
+  }
 
   const loadStudies = async (reset: boolean = false) => {
     try {
@@ -368,6 +375,23 @@ export default function Studies() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {showDeletedMessage && (
+        <div className="mb-4 flex items-center justify-between rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-green-800">
+          <p className="text-sm font-medium">Study deleted successfully.</p>
+          <button
+            type="button"
+            onClick={() => setSearchParams((prev) => {
+              const next = new URLSearchParams(prev)
+              next.delete('deleted')
+              return next
+            })}
+            className="text-green-600 hover:text-green-800 font-medium"
+            aria-label="Dismiss"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
@@ -391,6 +415,7 @@ export default function Studies() {
           {canWrite && (
             <Link
               to="/studies/new"
+              data-tutorial="new-study"
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap transition-colors inline-flex items-center justify-center"
             >
               New Study
@@ -437,7 +462,7 @@ export default function Studies() {
             {/* View Toggle */}
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
               <button
-                onClick={() => setViewMode('grid')}
+                onClick={() => setViewModeAndPersist('grid')}
                 className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
                   viewMode === 'grid'
                     ? 'bg-white text-gray-900 shadow-sm'
@@ -448,7 +473,7 @@ export default function Studies() {
                 Grid
               </button>
               <button
-                onClick={() => setViewMode('list')}
+                onClick={() => setViewModeAndPersist('list')}
                 className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
                   viewMode === 'list'
                     ? 'bg-white text-gray-900 shadow-sm'
@@ -459,7 +484,7 @@ export default function Studies() {
                 List
               </button>
               <button
-                onClick={() => setViewMode('compact')}
+                onClick={() => setViewModeAndPersist('compact')}
                 className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
                   viewMode === 'compact'
                     ? 'bg-white text-gray-900 shadow-sm'

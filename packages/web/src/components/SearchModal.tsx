@@ -16,6 +16,13 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const navigate = useNavigate()
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
+  const prevResultsRef = useRef<SearchResult[]>(results)
+
+  // Reset selection when results change (during render to avoid extra pass)
+  if (results !== prevResultsRef.current) {
+    prevResultsRef.current = results
+    setSelectedIndex(0)
+  }
 
   // Close on Escape
   useHotkey('escape', () => {
@@ -46,24 +53,40 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
     }
   }, [isOpen])
 
-  // Search when query changes
+  // Search when query changes (with ignore flag to avoid race conditions)
   useEffect(() => {
     if (query.length >= 1) {
+      let ignore = false
       const timeoutId = setTimeout(() => {
-        performSearch(query)
-      }, 300) // Debounce 300ms
+        void (async () => {
+          try {
+            setLoading(true)
+            const response = await api.get('/search', { params: { q: query, type: 'all' } })
+            if (!ignore) {
+              setResults(response.data.results || [])
+            }
+          } catch (error) {
+            if (!ignore) {
+              console.error('Search failed:', error)
+              setResults([])
+            }
+          } finally {
+            if (!ignore) {
+              setLoading(false)
+            }
+          }
+        })()
+      }, 300)
 
-      return () => clearTimeout(timeoutId)
+      return () => {
+        ignore = true
+        clearTimeout(timeoutId)
+      }
     } else {
       setResults([])
       setSelectedIndex(0)
     }
   }, [query])
-
-  // Reset selection when results change
-  useEffect(() => {
-    setSelectedIndex(0)
-  }, [results])
 
   // Scroll selected item into view
   useEffect(() => {
@@ -76,20 +99,6 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
       }
     }
   }, [selectedIndex, results.length])
-
-  const performSearch = async (searchQuery: string) => {
-    try {
-      setLoading(true)
-      // Search all types
-      const response = await api.get('/search', { params: { q: searchQuery, type: 'all' } })
-      setResults(response.data.results || [])
-    } catch (error) {
-      console.error('Search failed:', error)
-      setResults([])
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleSelect = (result: SearchResult) => {
     navigate(result.url)

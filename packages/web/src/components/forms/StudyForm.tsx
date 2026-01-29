@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { studiesApi, type Study } from '../../lib/api'
 import { useNavigate } from 'react-router-dom'
 import { useModifierHotkey } from '../../hooks/useHotkey'
+import { useTutorialOptional, TUTORIAL_SHORT_CODE_PREFIX } from '../../contexts/TutorialContext'
 import UserBadge from '../UserBadge'
 
 interface StudyFormProps {
@@ -9,8 +10,13 @@ interface StudyFormProps {
   onSuccess?: () => void
 }
 
+function isTutorialNamespace(shortCode: string): boolean {
+  return shortCode.trim().toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX)
+}
+
 export default function StudyForm({ study, onSuccess }: StudyFormProps) {
   const navigate = useNavigate()
+  const tutorial = useTutorialOptional()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
@@ -39,6 +45,15 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
         }
       } else {
         // Create new study
+        if (tutorial?.active) {
+          const normalized = formData.shortCode.trim().toUpperCase()
+          const expected = tutorial.tutorialShortCode.trim().toUpperCase()
+          if (normalized !== expected) {
+            setError(`For this tutorial, use short code ${tutorial.tutorialShortCode}.`)
+            setLoading(false)
+            return
+          }
+        }
         await studiesApi.create(formData)
         if (onSuccess) {
           onSuccess()
@@ -46,8 +61,16 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
           navigate('/studies')
         }
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save study')
+    } catch (err: unknown) {
+      const message =
+        err &&
+        typeof err === 'object' &&
+        'response' in err &&
+        err.response &&
+        typeof (err.response as { data?: { error?: string } }).data?.error === 'string'
+          ? (err.response as { data: { error: string } }).data.error
+          : 'Failed to save study'
+      setError(message)
     } finally {
       setLoading(false)
     }
@@ -62,10 +85,16 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
   }, { preventDefault: true, enableOnFormTags: true })
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6" data-tutorial="create-study-form">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
           {error}
+        </div>
+      )}
+
+      {!study && !tutorial?.active && formData.shortCode && isTutorialNamespace(formData.shortCode) && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded" role="alert">
+          Studies whose short code starts with &quot;{TUTORIAL_SHORT_CODE_PREFIX}&quot; can be deleted by any user. Consider using a different code for production data.
         </div>
       )}
 

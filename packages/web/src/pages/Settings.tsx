@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { settingsApi, type AllSettings } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
@@ -155,12 +155,13 @@ export default function Settings() {
   const [expandedCategories, setExpandedCategories] = useState<Set<SettingsCategory>>(
     new Set([initial.category])
   )
-  
-  // Update active category/section when URL params change
-  useEffect(() => {
-    const category = searchParams.get('category') as SettingsCategory | null
-    const section = searchParams.get('section') as SettingsSection | null
-    
+  const prevParamsRef = useRef({ category: categoryParam, section: sectionParam })
+
+  // Update active category/section when URL params change (adjust during render)
+  const category = searchParams.get('category') as SettingsCategory | null
+  const section = searchParams.get('section') as SettingsSection | null
+  if (category !== prevParamsRef.current.category || section !== prevParamsRef.current.section) {
+    prevParamsRef.current = { category, section }
     if (category && section) {
       const categoryData = filteredSettingsStructure.find(c => c.id === category)
       if (categoryData && categoryData.sections.some(s => s.id === section)) {
@@ -168,13 +169,12 @@ export default function Settings() {
         setActiveSection(section)
         setExpandedCategories(prev => new Set([...prev, category]))
       } else {
-        // If trying to access admin-only section, redirect to first available
-        const initial = getInitialCategoryAndSection()
-        setSearchParams({ category: initial.category, section: initial.section }, { replace: true })
+        const initialSection = getInitialCategoryAndSection()
+        setSearchParams({ category: initialSection.category, section: initialSection.section }, { replace: true })
       }
     }
-  }, [searchParams, filteredSettingsStructure, getInitialCategoryAndSection, setSearchParams])
-  
+  }
+
   const handleSectionChange = (category: SettingsCategory, section: SettingsSection) => {
     setActiveCategory(category)
     setActiveSection(section)

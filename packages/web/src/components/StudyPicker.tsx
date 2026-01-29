@@ -14,20 +14,6 @@ export default function StudyPicker({ value, onChange }: StudyPickerProps) {
 
   const selectedStudy = studies.find((s) => s.id === value)
 
-  useEffect(() => {
-    if (open) {
-      void loadStudies()
-    }
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const timeout = setTimeout(() => {
-      void loadStudies()
-    }, 300)
-    return () => clearTimeout(timeout)
-  }, [search])
-
   const loadStudies = async () => {
     try {
       setLoading(true)
@@ -40,6 +26,33 @@ export default function StudyPicker({ value, onChange }: StudyPickerProps) {
     }
   }
 
+  // Debounced search when query changes (with ignore flag for race conditions)
+  useEffect(() => {
+    if (!open) return
+    let ignore = false
+    const timeout = setTimeout(async () => {
+      try {
+        setLoading(true)
+        const response = await studiesApi.list(search || undefined)
+        if (!ignore) {
+          setStudies(response.studies || [])
+        }
+      } catch (error) {
+        if (!ignore) {
+          console.error('Failed to load studies:', error)
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false)
+        }
+      }
+    }, 300)
+    return () => {
+      ignore = true
+      clearTimeout(timeout)
+    }
+  }, [search, open])
+
   return (
     <>
       <button
@@ -47,7 +60,10 @@ export default function StudyPicker({ value, onChange }: StudyPickerProps) {
         className="w-full px-3 py-2 border border-gray-100 rounded-md shadow-sm bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true)
+          void loadStudies()
+        }}
       >
         {selectedStudy ? (
           <span className="block truncate">

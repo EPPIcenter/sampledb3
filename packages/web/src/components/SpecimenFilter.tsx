@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { studiesApi, type Study } from '../lib/api'
 import { specimenTypesApi, type SpecimenType } from '../lib/api'
 
@@ -28,6 +28,7 @@ const SOURCE_TYPES = [
 
 export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading = false }: SpecimenFilterProps) {
   const [localFilters, setLocalFilters] = useState<SpecimenFilters>(filters)
+  const prevFiltersRef = useRef<SpecimenFilters>(filters)
   const [studies, setStudies] = useState<Study[]>([])
   const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
   const [loading, setLoading] = useState(false)
@@ -35,10 +36,11 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
   const [studySearch, setStudySearch] = useState('')
   const [studyLoading, setStudyLoading] = useState(false)
 
-  // Sync local filters when external filters change
-  useEffect(() => {
+  // Sync local filters when external filters change (during render to avoid extra pass)
+  if (filters !== prevFiltersRef.current) {
+    prevFiltersRef.current = filters
     setLocalFilters(filters)
-  }, [filters])
+  }
 
   useEffect(() => {
     loadReferenceData()
@@ -59,18 +61,30 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
   }
 
   useEffect(() => {
-    if (studyPickerOpen) {
-      void loadStudies()
-    }
-  }, [studyPickerOpen])
-
-  useEffect(() => {
     if (!studyPickerOpen) return
-    const timeout = setTimeout(() => {
-      void loadStudies()
+    let ignore = false
+    const timeout = setTimeout(async () => {
+      try {
+        setStudyLoading(true)
+        const response = await studiesApi.list(studySearch || undefined)
+        if (!ignore) {
+          setStudies(response.studies || [])
+        }
+      } catch (error) {
+        if (!ignore) {
+          console.error('Failed to load studies:', error)
+        }
+      } finally {
+        if (!ignore) {
+          setStudyLoading(false)
+        }
+      }
     }, 300)
-    return () => clearTimeout(timeout)
-  }, [studySearch])
+    return () => {
+      ignore = true
+      clearTimeout(timeout)
+    }
+  }, [studySearch, studyPickerOpen])
 
   const loadStudies = async () => {
     try {
@@ -169,7 +183,10 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
                 <button
                   type="button"
                   id="filter-study"
-                  onClick={() => setStudyPickerOpen(true)}
+                  onClick={() => {
+                setStudyPickerOpen(true)
+                void loadStudies()
+              }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400"
                 >
                   {selectedStudy ? (

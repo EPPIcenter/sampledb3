@@ -14,11 +14,12 @@ import StudyForm from '../components/forms/StudyForm'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import SubjectMergeModal from '../components/SubjectMergeModal'
 import { useUser } from '../contexts/UserContext'
+import { TUTORIAL_SHORT_CODE_PREFIX } from '../contexts/TutorialContext'
 
 export default function StudyDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { canWrite } = useUser()
+  const { canWrite, isAdmin } = useUser()
   const [study, setStudy] = useState<Study | null>(null)
   const [subjects, setSubjects] = useState<StudySubject[]>([])
   const [summary, setSummary] = useState<StudySummary | null>(null)
@@ -35,6 +36,10 @@ export default function StudyDetail() {
   const [createSubjectModalOpen, setCreateSubjectModalOpen] = useState(false)
   const [editStudyModalOpen, setEditStudyModalOpen] = useState(false)
   const [mergeModalOpen, setMergeModalOpen] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('')
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteInProgress, setDeleteInProgress] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = (searchParams.get('tab') as 'overview' | 'timeline' | 'subjects') || 'overview'
   const hasProcessedCreateSubject = useRef(false)
@@ -78,81 +83,91 @@ export default function StudyDetail() {
     if (mergeModalOpen) {
       setMergeModalOpen(false)
     }
-  }, { enabled: createSubjectModalOpen || editStudyModalOpen || mergeModalOpen, enableOnFormTags: true })
+    if (deleteModalOpen) {
+      setDeleteModalOpen(false)
+      setDeleteConfirmInput('')
+      setDeleteError(null)
+    }
+  }, { enabled: createSubjectModalOpen || editStudyModalOpen || mergeModalOpen || deleteModalOpen, enableOnFormTags: true })
 
   useEffect(() => {
-    if (id) {
-      loadStudy()
-      loadSubjects()
-      loadSummary()
-      loadTimeline()
+    if (!id) return
+    let ignore = false
+    const getIgnore = () => ignore
+    void loadStudy(getIgnore)
+    void loadSubjects(getIgnore)
+    void loadSummary(getIgnore)
+    void loadTimeline(getIgnore)
+    return () => {
+      ignore = true
     }
   }, [id])
 
-  useEffect(() => {
-    if (study?.shortCode) {
-      loadSpecimenCount()
-    }
-  }, [study?.shortCode])
-
-  const loadStudy = async () => {
+  const loadStudy = async (getIgnore?: () => boolean) => {
+    const checkIgnore = getIgnore ?? (() => false)
     try {
       setStudyLoading(true)
       const response = await studiesApi.get(parseInt(id!))
+      if (checkIgnore()) return
       setStudy(response.study)
+      if (response.study?.shortCode) {
+        void loadSpecimenCount(response.study.shortCode, checkIgnore)
+      }
     } catch (error) {
-      console.error('Failed to load study:', error)
+      if (!checkIgnore()) console.error('Failed to load study:', error)
     } finally {
-      setStudyLoading(false)
+      if (!checkIgnore()) setStudyLoading(false)
     }
   }
 
-  const loadSubjects = async () => {
+  const loadSubjects = async (getIgnore?: () => boolean) => {
+    const checkIgnore = getIgnore ?? (() => false)
     try {
       setLoading(true)
-      // Load all subjects at once (no pagination params = return all)
       const response = await studiesApi.getSubjects(parseInt(id!))
-      setSubjects(response.subjects || [])
+      if (!checkIgnore()) setSubjects(response.subjects || [])
     } catch (error) {
-      console.error('Failed to load subjects:', error)
+      if (!checkIgnore()) console.error('Failed to load subjects:', error)
     } finally {
-      setLoading(false)
+      if (!checkIgnore()) setLoading(false)
     }
   }
 
-  const loadSpecimenCount = async () => {
+  const loadSpecimenCount = async (shortCode: string, getIgnore?: () => boolean) => {
+    const checkIgnore = getIgnore ?? (() => false)
     try {
       const response = await api.get('/specimens', {
-        params: { study: study?.shortCode, limit: 1 },
+        params: { study: shortCode, limit: 1 },
       })
-      // Use pagination total instead of array length
-      setSpecimenCount(response.data.pagination?.total || 0)
+      if (!checkIgnore()) setSpecimenCount(response.data.pagination?.total || 0)
     } catch (error) {
-      console.error('Failed to load specimen count:', error)
+      if (!checkIgnore()) console.error('Failed to load specimen count:', error)
     }
   }
 
-  const loadSummary = async () => {
+  const loadSummary = async (getIgnore?: () => boolean) => {
+    const checkIgnore = getIgnore ?? (() => false)
     try {
       setSummaryLoading(true)
       const response = await studiesApi.getSummary(parseInt(id!))
-      setSummary(response)
+      if (!checkIgnore()) setSummary(response)
     } catch (error) {
-      console.error('Failed to load study summary:', error)
+      if (!checkIgnore()) console.error('Failed to load study summary:', error)
     } finally {
-      setSummaryLoading(false)
+      if (!checkIgnore()) setSummaryLoading(false)
     }
   }
 
-  const loadTimeline = async () => {
+  const loadTimeline = async (getIgnore?: () => boolean) => {
+    const checkIgnore = getIgnore ?? (() => false)
     try {
       setTimelineLoading(true)
       const response = await studiesApi.getTimeline(parseInt(id!))
-      setTimeline(response)
+      if (!checkIgnore()) setTimeline(response)
     } catch (error) {
-      console.error('Failed to load study timeline:', error)
+      if (!checkIgnore()) console.error('Failed to load study timeline:', error)
     } finally {
-      setTimelineLoading(false)
+      if (!checkIgnore()) setTimelineLoading(false)
     }
   }
 
@@ -177,6 +192,37 @@ export default function StudyDetail() {
   const handleMergeSuccess = () => {
     loadSubjects() // Refresh the subjects list
     setMergeModalOpen(false)
+  }
+
+  const handleDeleteStudy = async () => {
+    if (!study || deleteConfirmInput.trim() !== study.shortCode) return
+    setDeleteError(null)
+    setDeleteInProgress(true)
+    try {
+      await studiesApi.delete(study.id)
+      setDeleteModalOpen(false)
+      setDeleteConfirmInput('')
+      navigate('/studies?deleted=1')
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { error?: string } } }
+      const status = axiosErr.response?.status
+      const message = axiosErr.response?.data?.error ?? 'Failed to delete study.'
+      if (status === 403) {
+        setDeleteError('You do not have permission to delete studies. Only administrators can delete a study.')
+      } else if (status === 404) {
+        setDeleteError('Study not found. It may have already been deleted.')
+      } else {
+        setDeleteError(message)
+      }
+    } finally {
+      setDeleteInProgress(false)
+    }
+  }
+
+  const openDeleteModal = () => {
+    setDeleteConfirmInput('')
+    setDeleteError(null)
+    setDeleteModalOpen(true)
   }
 
   // Define columns for the DataTable
@@ -249,6 +295,15 @@ export default function StudyDetail() {
             >
               Export Data
             </button>
+            {(isAdmin || study.shortCode.toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX)) && (
+              <button
+                onClick={openDeleteModal}
+                className="px-4 py-2 border-2 border-red-600 text-red-600 rounded-lg hover:bg-red-50 font-medium"
+                data-tutorial="delete-study"
+              >
+                Delete study
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -449,6 +504,80 @@ export default function StudyDetail() {
                 loadStudy()
               }}
             />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteModalOpen && study && (
+        <div className="fixed inset-0 z-[100] overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
+              onClick={() => !deleteInProgress && (setDeleteModalOpen(false), setDeleteConfirmInput(''), setDeleteError(null))}
+            />
+            <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold text-gray-900">Delete study</h2>
+                  <button
+                    type="button"
+                    className="text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded disabled:opacity-50"
+                    onClick={() => !deleteInProgress && (setDeleteModalOpen(false), setDeleteConfirmInput(''), setDeleteError(null))}
+                    aria-label="Close"
+                    disabled={deleteInProgress}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="text-sm font-medium text-gray-700 mb-2">
+                  You are about to permanently delete the following. This cannot be undone.
+                </p>
+                <ul className="list-disc list-inside text-sm text-gray-600 mb-4 space-y-1">
+                  <li>The study &quot;{study.title}&quot; (short code: {study.shortCode})</li>
+                  <li>{(summary?.summary?.totalSubjects ?? 0).toLocaleString()} subject(s)</li>
+                  <li>{(summary?.summary?.totalSpecimens ?? 0).toLocaleString()} specimen(s)</li>
+                  <li>{(summary?.summary?.totalContainers ?? 0).toLocaleString()} storage container(s) (and any tags, derivations, and container-type records)</li>
+                </ul>
+                <div className="mb-4">
+                  <label htmlFor="delete-confirm" className="block text-sm font-medium text-gray-700 mb-1">
+                    Type the study short code <strong>{study.shortCode}</strong> below to confirm
+                  </label>
+                  <input
+                    id="delete-confirm"
+                    type="text"
+                    value={deleteConfirmInput}
+                    onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                    placeholder={study.shortCode}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    disabled={deleteInProgress}
+                    autoComplete="off"
+                  />
+                </div>
+                {deleteError && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+                    {deleteError}
+                  </div>
+                )}
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => !deleteInProgress && (setDeleteModalOpen(false), setDeleteConfirmInput(''), setDeleteError(null))}
+                    disabled={deleteInProgress}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteStudy}
+                    disabled={deleteInProgress || deleteConfirmInput.trim() !== study.shortCode}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deleteInProgress ? 'Deleting...' : 'Delete study'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

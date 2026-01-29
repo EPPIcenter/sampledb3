@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { settingsApi, type PasswordRequirements } from '../lib/api'
 import InfoTooltip from './InfoTooltip'
 
@@ -22,13 +22,16 @@ export default function PasswordRequirementsForm({
     minLength: 8,
   })
   const [saving, setSaving] = useState(false)
+  const prevDataRef = useRef<PasswordRequirements | null>(data)
 
-  useEffect(() => {
+  // Sync form when data prop changes (during render to avoid extra pass)
+  if (data !== prevDataRef.current) {
+    prevDataRef.current = data
     if (data) {
       setFormData(data)
       setSavedFormData(data)
     }
-  }, [data])
+  }
 
   const handleChange = (value: string) => {
     const numValue = parseInt(value, 10)

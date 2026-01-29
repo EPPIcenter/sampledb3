@@ -74,11 +74,14 @@ import { formatHotkey, getModifierKey, isMac } from './lib/hotkeys'
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import { exportApi } from './lib/api'
 import { useUser } from './contexts/UserContext'
+import { TutorialProvider, useTutorialOptional } from './contexts/TutorialContext'
+import TutorialTour from './components/TutorialTour'
 
 function AppContent() {
   const navigate = useNavigate()
   const location = useLocation()
   const { canWrite, isAdmin } = useUser()
+  const tutorial = useTutorialOptional()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const {
     isHelpModalOpen,
@@ -164,6 +167,17 @@ function AppContent() {
         keywords: ['dashboard', 'home', 'main'],
         action: () => navigate('/'),
       },
+      ...(tutorial && canWrite
+        ? [
+            {
+              id: 'start-tutorial',
+              label: 'Start tutorial',
+              category: 'Navigation',
+              keywords: ['tutorial', 'tour', 'guide', 'user journey'],
+              action: () => tutorial.startTutorial(),
+            },
+          ]
+        : []),
       {
         id: 'nav-studies',
         label: 'Go to Studies',
@@ -438,7 +452,7 @@ function AppContent() {
     }
 
     return [...baseCommands, ...contextCommands]
-  }, [navigate, location.pathname, location.search, openSearchModal, canWrite, isAdmin, handleClearFilters])
+  }, [navigate, location.pathname, location.search, openSearchModal, canWrite, isAdmin, handleClearFilters, tutorial])
 
   // Command palette (cmd+shift+k)
   useModifierShiftHotkey('k', () => {
@@ -681,6 +695,7 @@ function AppContent() {
       {/* Modals - only show when authenticated */}
       {!isLoginPage && !isSetupPage && (
         <>
+          <TutorialTour />
           <HotkeyHelpModal isOpen={isHelpModalOpen} onClose={toggleHelpModal} />
           <SearchModal isOpen={isSearchModalOpen} onClose={closeSearchModal} />
           <CommandPalette
@@ -701,7 +716,9 @@ function App() {
       <HotkeyProvider>
         <UserProvider>
           <BrowserRouter>
-            <AppContent />
+            <TutorialProvider>
+              <AppContent />
+            </TutorialProvider>
           </BrowserRouter>
         </UserProvider>
       </HotkeyProvider>

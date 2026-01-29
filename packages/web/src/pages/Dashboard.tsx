@@ -68,17 +68,10 @@ export default function Dashboard() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
 
-  // Load critical data first
+  // Load critical data on mount; secondary data is triggered from loadCriticalData's finally (single flow)
   useEffect(() => {
     loadCriticalData()
   }, [])
-
-  // Load secondary data after critical data is loaded
-  useEffect(() => {
-    if (!loading.critical) {
-      loadSecondaryData()
-    }
-  }, [loading.critical])
 
   const loadCriticalData = async () => {
     try {
@@ -133,6 +126,8 @@ export default function Dashboard() {
       console.error('Failed to load critical dashboard data:', error)
     } finally {
       setLoading((prev) => ({ ...prev, critical: false }))
+      // Load secondary data in same flow (avoids chain of Effects)
+      loadSecondaryData()
     }
   }
 

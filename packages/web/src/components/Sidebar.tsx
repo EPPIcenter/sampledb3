@@ -1,10 +1,15 @@
-import { useState, useEffect, ReactNode } from 'react'
+import { useState, useEffect, useRef, ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
+import { useTutorialOptional } from '../contexts/TutorialContext'
 
 interface NavItem {
   label: string
   to?: string
+  /** External URL (opens in new tab). Use instead of `to` for external links. */
+  href?: string
+  /** Run on click instead of navigating. Use for actions like "Start tutorial". */
+  action?: () => void
   icon: ReactNode
   children?: NavItem[]
 }
@@ -22,6 +27,7 @@ interface SidebarProps {
 export default function Sidebar({ isMobileOpen = false, onMobileClose }: SidebarProps) {
   const location = useLocation()
   const { user, canWrite } = useUser()
+  const tutorial = useTutorialOptional()
   
   // Initialize expanded items - check if any child routes are active
   const getInitialExpandedItems = () => {
@@ -42,31 +48,22 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
   }
   
   const [expandedItems, setExpandedItems] = useState<Set<string>>(getInitialExpandedItems())
-  
-  // Update expanded items when location changes
-  useEffect(() => {
-    const path = location.pathname
+  const prevPathRef = useRef(location.pathname)
+
+  // Update expanded items when location changes (adjust during render)
+  if (prevPathRef.current !== location.pathname) {
+    prevPathRef.current = location.pathname
     setExpandedItems((prev) => {
       const next = new Set(prev)
-      
-      // Auto-expand if on export routes
-      if (path === '/export' || path === '/barcode-export') {
+      if (location.pathname === '/export' || location.pathname === '/barcode-export') {
         next.add('export')
       }
-      
-      // Auto-expand if on move containers routes
-      if (path.startsWith('/container-move/')) {
+      if (location.pathname.startsWith('/container-move/')) {
         next.add('move-containers')
       }
-      
-      // Auto-expand if on derivations routes
-      if (path.startsWith('/derivations')) {
-        // Could expand a derivations section if we add sub-items later
-      }
-      
       return next
     })
-  }, [location.pathname])
+  }
 
   const toggleItem = (itemKey: string) => {
     setExpandedItems((prev) => {
@@ -109,6 +106,30 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
             </svg>
           ),
         },
+        {
+          label: 'User guide',
+          // @ts-expect-error - import.meta.env is provided by Vite
+          href: (import.meta.env.VITE_DOCS_URL as string | undefined) ?? '/docs',
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+          ),
+        },
+        ...(tutorial && canWrite
+          ? [
+              {
+                label: 'Run tutorial',
+                action: () => tutorial.startTutorial(),
+                icon: (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ),
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -398,13 +419,61 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
       )
     }
 
-    if (!item.to) return null
+    if (!item.to && !item.href && !item.action) return null
 
     const active = childActive
+
+    if (item.action) {
+      return (
+        <button
+          key={itemKeyValue}
+          type="button"
+          onClick={() => {
+            item.action!()
+            if (onMobileClose) {
+              onMobileClose()
+            }
+          }}
+          className={`
+            flex items-center gap-2 px-2 py-1 rounded-md text-xs font-medium transition-colors w-full text-left
+            text-gray-700 hover:bg-gray-100 hover:text-gray-900
+            ${isSubItem ? 'ml-1' : ''}
+          `}
+        >
+          <span className="text-gray-500 flex-shrink-0">{item.icon}</span>
+          <span className="truncate">{item.label}</span>
+        </button>
+      )
+    }
+
+    if (item.href) {
+      return (
+        <a
+          key={itemKeyValue}
+          href={item.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => {
+            if (onMobileClose) {
+              onMobileClose()
+            }
+          }}
+          className={`
+            flex items-center gap-2 px-2 py-1 rounded-md text-xs font-medium transition-colors
+            text-gray-700 hover:bg-gray-100 hover:text-gray-900
+            ${isSubItem ? 'ml-1' : ''}
+          `}
+        >
+          <span className="text-gray-500 flex-shrink-0">{item.icon}</span>
+          <span className="truncate">{item.label}</span>
+        </a>
+      )
+    }
+
     return (
       <Link
         key={itemKeyValue}
-        to={item.to}
+        to={item.to!}
         onClick={() => {
           if (onMobileClose) {
             onMobileClose()

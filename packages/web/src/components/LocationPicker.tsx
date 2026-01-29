@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { locationsApi, type Location } from '../lib/api'
 import { buildLocationTree, filterLocationTree, getLocationLabel, getRootLocations, getLocationChildren, getLocationAncestors } from '../lib/location-tree'
 
@@ -21,26 +21,28 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterCollectionsOnly])
 
-  // Auto-expand all nodes when searching to show matches
-  useEffect(() => {
-    if (search.trim() && locations.length > 0) {
-      const allIds = new Set(locations.map(loc => loc.id))
-      setExpandedIds(allIds)
-    }
-  }, [search, locations])
-
-  // Auto-expand ancestors of selected location
-  useEffect(() => {
-    if (value && locations.length > 0) {
-      const ancestors = getLocationAncestors(locations, value)
-      setExpandedIds(prev => {
-        const next = new Set(prev)
-        ancestors.forEach(a => next.add(a.id))
+  // Auto-expand when search or value/locations change (adjust during render)
+  const prevExpandedDepsRef = useRef({ search, value, locationsLength: locations.length })
+  const expandedDeps = { search, value, locationsLength: locations.length }
+  const depsChanged =
+    prevExpandedDepsRef.current.search !== search ||
+    prevExpandedDepsRef.current.value !== value ||
+    prevExpandedDepsRef.current.locationsLength !== locations.length
+  if (depsChanged && locations.length > 0) {
+    prevExpandedDepsRef.current = expandedDeps
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (search.trim()) {
+        locations.forEach((loc) => next.add(loc.id))
+      }
+      if (value) {
+        const ancestors = getLocationAncestors(locations, value)
+        ancestors.forEach((a) => next.add(a.id))
         next.add(value)
-        return next
-      })
-    }
-  }, [value, locations])
+      }
+      return next
+    })
+  }
 
   const loadLocations = async () => {
     try {
