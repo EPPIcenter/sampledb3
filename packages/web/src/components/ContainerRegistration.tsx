@@ -18,6 +18,7 @@ export interface ContainerData {
 }
 
 interface ContainerRegistrationProps {
+  /** When 'hidden', component returns null. Parent should clear its container value when passing mode='hidden'. */
   mode: 'required' | 'optional' | 'hidden'
   containerType?: ContainerType
   defaultValue?: ContainerData
@@ -99,18 +100,12 @@ export default function ContainerRegistration({
     }
   }
 
+  // Sync derived container data to parent when form state changes. Do not notify parent
+  // with null here: mode === 'hidden' is the parent's responsibility; optional unchecked
+  // is handled in the checkbox handler below.
   useEffect(() => {
-    if (mode === 'hidden') {
-      onChange(null)
-      return
-    }
-
-    if (!enabled && mode === 'optional') {
-      onChange(null)
-      if (onValidationChange) onValidationChange(true)
-      return
-    }
-
+    if (mode === 'hidden') return
+    if (!enabled && mode === 'optional') return
     updateContainerData()
   }, [enabled, containerType, formData, mode, selectedUnitId])
 
@@ -191,7 +186,14 @@ export default function ContainerRegistration({
             <input
               type="checkbox"
               checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
+              onChange={(e) => {
+                const checked = e.target.checked
+                setEnabled(checked)
+                if (!checked) {
+                  onChange(null)
+                  onValidationChange?.(true)
+                }
+              }}
               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
             <span className="text-sm text-gray-700">Add Container</span>
