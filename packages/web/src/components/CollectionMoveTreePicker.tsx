@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, memo, useEffect } from 'react'
+import { useState, useMemo, useCallback, memo } from 'react'
 import { type Location } from '../lib/api'
 import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
 
@@ -144,6 +144,9 @@ export default function CollectionMoveTreePicker({
     return visible
   }, [search, filteredLocations, locationMap])
 
+  // When searching, show all matching nodes expanded; otherwise use user's expand/collapse state
+  const effectiveExpandedIds = search.trim() ? visibleLocationIds : expandedIds
+
   // Pre-compute which locations should be visible when not searching (locations with collections or descendants with collections)
   const locationsWithCollections = useMemo(() => {
     const visible = new Set<number>()
@@ -179,13 +182,6 @@ export default function CollectionMoveTreePicker({
       return next
     })
   }, [])
-
-  // Automatically expand all nodes when searching
-  useEffect(() => {
-    if (search.trim()) {
-      setExpandedIds(visibleLocationIds)
-    }
-  }, [search, visibleLocationIds])
 
   const getCollectionTypeLabel = useCallback((type: string) => {
     switch (type) {
@@ -226,7 +222,7 @@ export default function CollectionMoveTreePicker({
   // Memoized location node renderer
   const renderLocationNode = useCallback((loc: Location, depth: number = 0): React.ReactNode => {
     const children = locationChildrenMap.get(loc.id) || []
-    const isExpanded = expandedIds.has(loc.id)
+    const isExpanded = effectiveExpandedIds.has(loc.id)
     const locCollections = collectionsByLocation[loc.id] || []
     const hasCollections = locCollections.length > 0
     const isLeaf = leafLocations.has(loc.id)
@@ -330,7 +326,7 @@ export default function CollectionMoveTreePicker({
     )
   }, [
     locationChildrenMap,
-    expandedIds,
+    effectiveExpandedIds,
     collectionsByLocation,
     selectedIds,
     leafLocations,
