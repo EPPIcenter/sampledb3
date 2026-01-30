@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { authApi } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
@@ -7,23 +7,14 @@ import { addRecentUser } from '../lib/localUserHistory'
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, refreshUser, setUser } = useUser()
+  const { refreshUser, setUser } = useUser()
   const [emailOrUsername, setEmailOrUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [loginSuccess, setLoginSuccess] = useState(false)
 
   // Get redirect path from location state, or default to dashboard
-  const from = (location.state as any)?.from?.pathname || '/'
-
-  // Redirect after successful login when user is set
-  useEffect(() => {
-    if (loginSuccess && user) {
-      setLoading(false)
-      navigate(from, { replace: true })
-    }
-  }, [loginSuccess, user, navigate, from])
+  const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || '/'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -33,22 +24,24 @@ export default function Login() {
     try {
       const response = await authApi.login(emailOrUsername, password)
       // The response structure from axios is: { data: { user: {...} } }
-      // So we access response.data.user
       const userData = response.data?.user
       if (userData) {
         setUser(userData)
-        // Save to local user history
         addRecentUser(userData)
-        setLoginSuccess(true)
-        // Don't set loading to false here - let the useEffect handle navigation
+        setLoading(false)
+        navigate(from, { replace: true })
       } else {
         // Fallback: refresh user context
         await refreshUser()
-        setLoginSuccess(true)
         setLoading(false)
+        navigate(from, { replace: true })
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed. Please check your credentials.')
+    } catch (err: unknown) {
+      const message =
+        typeof err === 'object' && err !== null && 'response' in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : null
+      setError(message || 'Login failed. Please check your credentials.')
       setLoading(false)
     }
   }
