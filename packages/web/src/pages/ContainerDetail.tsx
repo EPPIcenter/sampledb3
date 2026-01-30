@@ -55,6 +55,7 @@ export default function ContainerDetail() {
   } | null>(null)
   const [loadingDerivations, setLoadingDerivations] = useState(false)
   const [showDerivationModal, setShowDerivationModal] = useState(false)
+  const [derivationModalKey, setDerivationModalKey] = useState(0)
   const [showEditModal, setShowEditModal] = useState(false)
 
   useEffect(() => {
@@ -521,7 +522,10 @@ export default function ContainerDetail() {
                   Derived Containers <span className="text-gray-500 font-normal">({derivations.length})</span>
                 </h3>
                 <button
-                  onClick={() => setShowDerivationModal(true)}
+                  onClick={() => {
+                    setDerivationModalKey((k) => k + 1)
+                    setShowDerivationModal(true)
+                  }}
                   className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
                 >
                   Create New Derivation
@@ -654,7 +658,10 @@ export default function ContainerDetail() {
               </div>
               {canWrite && (
                 <button
-                  onClick={() => setShowDerivationModal(true)}
+                  onClick={() => {
+                    setDerivationModalKey((k) => k + 1)
+                    setShowDerivationModal(true)
+                  }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium whitespace-nowrap ml-4"
                 >
                   Create Derivation
@@ -677,6 +684,7 @@ export default function ContainerDetail() {
             containerType: effectiveContainerType,
           }}
           onSuccess={handleDerivationCreated}
+          openKey={derivationModalKey}
         />
       )}
 

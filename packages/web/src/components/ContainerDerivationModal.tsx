@@ -12,6 +12,8 @@ interface ContainerDerivationModalProps {
     containerType?: string
   }
   onSuccess: () => void
+  /** Pass a key that increments when opening to reset inner state; parent should increment in the open handler. */
+  openKey?: number
 }
 
 const DERIVATION_TYPES = [
@@ -835,17 +837,8 @@ export default function ContainerDerivationModal({
   parentContainerId,
   parentContainer,
   onSuccess,
+  openKey = 0,
 }: ContainerDerivationModalProps) {
-  const [openKey, setOpenKey] = useState(0)
-  const prevOpenRef = useRef(false)
-
-  useEffect(() => {
-    if (isOpen && !prevOpenRef.current) {
-      setOpenKey((k) => k + 1)
-    }
-    prevOpenRef.current = isOpen
-  }, [isOpen])
-
   if (!isOpen) return null
 
   return (

@@ -36,6 +36,7 @@ export default function StudyDetail() {
   const [createSubjectModalOpen, setCreateSubjectModalOpen] = useState(false)
   const [editStudyModalOpen, setEditStudyModalOpen] = useState(false)
   const [mergeModalOpen, setMergeModalOpen] = useState(false)
+  const [mergeModalKey, setMergeModalKey] = useState(0)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('')
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -282,7 +283,10 @@ export default function StudyDetail() {
                   Create Subject
                 </button>
                 <button
-                  onClick={() => setMergeModalOpen(true)}
+                  onClick={() => {
+                    setMergeModalKey((k) => k + 1)
+                    setMergeModalOpen(true)
+                  }}
                   className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium"
                 >
                   Merge Subjects
@@ -439,6 +443,7 @@ export default function StudyDetail() {
         onClose={() => setMergeModalOpen(false)}
         studyId={study.id}
         onSuccess={handleMergeSuccess}
+        openKey={mergeModalKey}
       />
 
       {createSubjectModalOpen && (

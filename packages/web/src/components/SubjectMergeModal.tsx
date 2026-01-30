@@ -6,6 +6,8 @@ interface SubjectMergeModalProps {
   onClose: () => void
   studyId: number
   onSuccess: () => void
+  /** Pass a key that increments when opening to reset inner state; parent should increment in the open handler. */
+  openKey?: number
 }
 
 function SubjectMergeModalContent({
@@ -532,17 +534,8 @@ export default function SubjectMergeModal({
   onClose,
   studyId,
   onSuccess,
+  openKey = 0,
 }: SubjectMergeModalProps) {
-  const [openKey, setOpenKey] = useState(0)
-  const prevOpenRef = useRef(false)
-
-  useEffect(() => {
-    if (isOpen && !prevOpenRef.current) {
-      setOpenKey((k) => k + 1)
-    }
-    prevOpenRef.current = isOpen
-  }, [isOpen])
-
   if (!isOpen) return null
 
   return (
