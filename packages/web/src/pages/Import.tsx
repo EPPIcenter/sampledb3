@@ -769,7 +769,6 @@ export default function Import() {
                   setImportResult(null)
                 }}
                 className="form-select"
-                data-tutorial="import-type"
               >
                 <option value="subjects">Subjects Only</option>
                 <option value="specimens">Specimens Only</option>
@@ -824,7 +823,7 @@ export default function Import() {
 
             {/* Only show file upload after import type (and container type if needed) is selected */}
             {(importType === 'subjects' || ((importType === 'specimens' || importType === 'combined') && containerType)) && (
-              <div data-tutorial="import-upload">
+              <div>
                 <div className="flex items-center justify-between mb-2">
                   <label
                     htmlFor="import-csv-file"

@@ -415,7 +415,6 @@ export default function Studies() {
           {canWrite && (
             <Link
               to="/studies/new"
-              data-tutorial="new-study"
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap transition-colors inline-flex items-center justify-center"
             >
               New Study

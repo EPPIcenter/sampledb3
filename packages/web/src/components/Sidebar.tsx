@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
-import { useTutorialOptional } from '../contexts/TutorialContext'
 
 interface NavItem {
   label: string
@@ -27,7 +26,6 @@ interface SidebarProps {
 export default function Sidebar({ isMobileOpen = false, onMobileClose }: SidebarProps) {
   const location = useLocation()
   const { user, canWrite } = useUser()
-  const tutorial = useTutorialOptional()
   
   // Initialize expanded items - check if any child routes are active
   const getInitialExpandedItems = () => {
@@ -116,20 +114,6 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
             </svg>
           ),
         },
-        ...(tutorial && canWrite
-          ? [
-              {
-                label: 'Run tutorial',
-                action: () => tutorial.startTutorial(),
-                icon: (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                ),
-              },
-            ]
-          : []),
       ],
     },
     {

@@ -14,7 +14,7 @@ import StudyForm from '../components/forms/StudyForm'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import SubjectMergeModal from '../components/SubjectMergeModal'
 import { useUser } from '../contexts/UserContext'
-import { TUTORIAL_SHORT_CODE_PREFIX } from '../contexts/TutorialContext'
+import { TUTORIAL_SHORT_CODE_PREFIX } from '../lib/constants'
 
 export default function StudyDetail() {
   const { id } = useParams<{ id: string }>()
@@ -303,7 +303,6 @@ export default function StudyDetail() {
               <button
                 onClick={openDeleteModal}
                 className="px-4 py-2 border-2 border-red-600 text-red-600 rounded-lg hover:bg-red-50 font-medium"
-                data-tutorial="delete-study"
               >
                 Delete study
               </button>

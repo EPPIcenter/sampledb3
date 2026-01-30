@@ -3,7 +3,7 @@ title: User Journey Guide
 description: Walk through creating a study, importing subjects, and importing specimens using tutorial data you can delete afterward
 ---
 
-This guide walks you through the main actions in SampleDB: creating a study, importing subjects, and importing specimens (and optionally containers). You'll use suggested **tutorial data**—a study whose short code is in the **TUT namespace** (e.g. **TUT01** or, in the in-app tutorial, a unique code like **TUT-123** per user)—so you can try the workflow without affecting real data. When you're done, any user can delete the tutorial study to clean up. Studies whose short code starts with **TUT** can be deleted by any user; when creating a study outside the tutorial with such a code, the app shows a warning.
+This guide walks you through the main actions in SampleDB: creating a study, importing subjects, and importing specimens (and optionally containers). You'll use suggested **tutorial data**—a study whose short code is in the **TUT namespace** (e.g. **TUT01**)—so you can try the workflow without affecting real data. When you're done, any user can delete the tutorial study to clean up. Studies whose short code starts with **TUT** can be deleted by any user; when creating a study outside the tutorial with such a code, the app shows a warning.
 
 For detailed explanations of each feature, see the linked guides. Here we focus on one end-to-end path so you see how the pieces fit together.
 
@@ -21,7 +21,7 @@ Create the tutorial study that everything else will use.
 2. Click **New Study** (or use the command palette: **Ctrl+K** / **Cmd+K** → "Create New Study").
 3. Fill in the form with these suggested values:
    - **Title:** Tutorial Study  
-   - **Short Code:** Use **TUT01** for this written guide (or, if you run the in-app **User journey tutorial**, it will assign you a unique code like **TUT-123** so multiple users can run the tutorial at once).  
+   - **Short Code:** Use **TUT01**.
    - **Lead person:** Tutorial  
    - **Description:** (optional)  
    - **Longitudinal:** Check if you want multiple collection timepoints per subject; leave unchecked for a simple single-timepoint example.
@@ -108,4 +108,3 @@ If you prefer to keep the data for practice, you can leave the tutorial study in
 - Use the same workflow with real studies, subjects, and specimen types.
 - Try [Bulk Export](/guides/bulk-operations/export/) to export data for your studies.
 - Explore [Container Movement](/guides/bulk-operations/container-movement/) and [Collection Move](/guides/features/collection-move/) to reorganize containers and collections.
-- In the app, use the **User journey tutorial** (if enabled) for a step-by-step guided tour that follows this path and ends with cleaning up the tutorial study.
