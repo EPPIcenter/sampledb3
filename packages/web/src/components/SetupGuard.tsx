@@ -1,38 +1,64 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { setupApi } from '../lib/api'
+
+// Run once per app load so Strict Mode double-mount doesn't run the check twice
+let setupDidInit = false
+let setupCachedInitialized: boolean | null = null
+/** Shared promise so remounts before first completion can wait instead of defaulting. */
+let setupPromise: Promise<void> | null = null
 
 export default function SetupGuard({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [isChecking, setIsChecking] = useState(true)
   const [isInitialized, setIsInitialized] = useState<boolean | null>(null)
-  const hasCheckedRef = useRef(false)
+  const isMountedRef = useRef(true)
 
-  // Check setup status on mount and redirect if not initialized (single Effect)
   useEffect(() => {
-    if (hasCheckedRef.current) return
-    hasCheckedRef.current = true
-
-    const checkSetupStatus = async () => {
-      try {
-        setIsChecking(true)
-        const response = await setupApi.status()
-        const initialized = response.data.initialized
-        setIsInitialized(initialized)
-
-        if (!initialized && location.pathname !== '/setup') {
-          navigate('/setup', { replace: true })
+    isMountedRef.current = true
+    if (!setupDidInit) {
+      setupDidInit = true
+      setupPromise = (async () => {
+        try {
+          if (isMountedRef.current) setIsChecking(true)
+          const response = await setupApi.status()
+          const initialized = response.data.initialized
+          setupCachedInitialized = initialized
+          if (isMountedRef.current) {
+            setIsInitialized(initialized)
+            if (!initialized && location.pathname !== '/setup') {
+              navigate('/setup', { replace: true })
+            }
+          }
+        } catch (error) {
+          console.error('Failed to check setup status:', error)
+          setupCachedInitialized = true
+          if (isMountedRef.current) setIsInitialized(true)
+        } finally {
+          if (isMountedRef.current) setIsChecking(false)
         }
-      } catch (error) {
-        console.error('Failed to check setup status:', error)
-        setIsInitialized(true)
-      } finally {
+      })()
+      void setupPromise
+    } else if (setupCachedInitialized !== null) {
+      // Already ran and we have a result (e.g. remount in Strict Mode after first completed)
+      if (isMountedRef.current) {
+        setIsInitialized(setupCachedInitialized)
         setIsChecking(false)
       }
+    } else {
+      // Remount before first run completed: stay in loading state and apply result when promise settles.
+      // Only update state if this instance is still mounted when the promise completes.
+      setupPromise?.finally(() => {
+        if (isMountedRef.current) {
+          setIsInitialized(setupCachedInitialized ?? true)
+          setIsChecking(false)
+        }
+      })
     }
-
-    checkSetupStatus()
+    return () => {
+      isMountedRef.current = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

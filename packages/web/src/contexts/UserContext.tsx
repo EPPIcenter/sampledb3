@@ -2,6 +2,12 @@ import { createContext, useContext, useState, useEffect, useMemo, useCallback, R
 import { authApi, type User } from '../lib/api'
 import { addRecentUser } from '../lib/localUserHistory'
 
+// Run refresh once per app load; cache result for remounts (e.g. Strict Mode)
+let userDidInit = false
+let userCachedUser: User | null = null
+let userCachedLoading = true
+let userCachedError: string | null = null
+
 interface UserContextType {
   user: User | null
   loading: boolean
@@ -19,38 +25,50 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined)
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUserState] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const setUser = useCallback((u: User | null) => {
+    setUserState(u)
+    userCachedUser = u
+    userCachedLoading = false
+    userCachedError = null
+  }, [])
+
   const refreshUser = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    userCachedLoading = true
+    userCachedError = null
     try {
-      setLoading(true)
-      setError(null)
       const response = await authApi.getCurrentUser()
       const userData = response.data.user
       setUser(userData)
-      // Save to local user history when user is refreshed
       if (userData) {
         addRecentUser(userData)
       }
     } catch (err: unknown) {
-      // If 401, user is not authenticated - this is expected, not an error
       if (typeof err === 'object' && err !== null && 'response' in err) {
         const axiosErr = err as { response?: { status?: number; data?: { error?: string } } }
         if (axiosErr.response?.status === 401) {
           setUser(null)
           setError(null)
         } else {
-          setError(axiosErr.response?.data?.error || 'Failed to load user')
+          const errMsg = axiosErr.response?.data?.error || 'Failed to load user'
+          setError(errMsg)
           setUser(null)
+          userCachedError = errMsg
         }
       } else {
-        setError('Failed to load user')
+        const errMsg = 'Failed to load user'
+        setError(errMsg)
         setUser(null)
+        userCachedError = errMsg
       }
     } finally {
       setLoading(false)
+      userCachedLoading = false
     }
   }, [])
 
@@ -98,7 +116,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    refreshUser()
+    if (!userDidInit) {
+      userDidInit = true
+      void refreshUser()
+    } else {
+      setUser(userCachedUser)
+      setLoading(userCachedLoading)
+      setError(userCachedError)
+    }
   }, [refreshUser])
 
   // Permission helpers
