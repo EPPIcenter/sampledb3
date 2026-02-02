@@ -10,6 +10,7 @@ import {
 } from '../config/reference-data-config'
 import { useStorageTypes } from '../hooks/useReferenceData'
 import { locationsApi, specimenTypesApi, type Location, type SpecimenType } from '../lib/api'
+import '../styles/reference-data.css'
 
 export default function ReferenceData() {
   const { canManageReferenceData } = useUser()
@@ -317,48 +318,46 @@ export default function ReferenceData() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Reference Data Management</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Manage static lookup tables and reference data used throughout the system
-        </p>
-      </div>
-
-      <div className="bg-white rounded-lg shadow">
-        <div className="border-b border-gray-100">
-          <nav className="flex -mb-px">
-            {referenceDataConfigs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id)
-                  setEditingItem(null)
-                }}
-                className={`px-6 py-3 text-sm font-medium border-b-2 ${activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200'
-                  }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+    <div className="reference-data-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+        <div className="mb-6 ref-data-reveal ref-data-reveal-1">
+          <h1 className="text-3xl font-bold">Reference Data Management</h1>
+          <p className="text-sm text-gray-600 mt-1 ref-data-description">
+            Manage static lookup tables and reference data used throughout the system
+          </p>
         </div>
 
-        <div className="p-6">
-          {!canManageReferenceData && (
-            <div className="mb-4 rounded-md bg-blue-50 border border-blue-200 p-3">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="text-sm font-medium text-blue-800">
-                  Reference data is view-only. Contact an administrator to add or modify reference data.
-                </p>
+        <div className="ref-data-card ref-data-reveal ref-data-reveal-2">
+          <div className="border-b border-gray-100">
+            <nav className="flex -mb-px">
+              {referenceDataConfigs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveTab(tab.id)
+                    setEditingItem(null)
+                  }}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 ref-data-tab ${activeTab === tab.id ? 'ref-data-tab-active border-b-2' : 'border-transparent'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div className="p-6">
+            {!canManageReferenceData && (
+              <div className="mb-4 rounded-md ref-data-notice p-3">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-sm font-medium">
+                    Reference data is view-only. Contact an administrator to add or modify reference data.
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           <div className="mb-4 flex justify-end">
             {canManageReferenceData && (
@@ -390,19 +389,21 @@ export default function ReferenceData() {
               showPagination: true,
             } : undefined}
           />
+          </div>
         </div>
-      </div>
 
-      {editingItem !== null && canManageReferenceData && (
-        <ReferenceDataForm
-          key={editingItem?.id ?? 'new'}
-          item={editingItem}
-          fields={getFormFields()}
-          onSave={handleSave}
-          onCancel={() => setEditingItem(null)}
-          title={getTitle()}
-        />
-      )}
+        {editingItem !== null && canManageReferenceData && (
+          <ReferenceDataForm
+            key={editingItem?.id ?? 'new'}
+            item={editingItem}
+            fields={getFormFields()}
+            onSave={handleSave}
+            onCancel={() => setEditingItem(null)}
+            title={getTitle()}
+            modalClassName="reference-data-form-modal"
+          />
+        )}
+      </div>
     </div>
   )
 }

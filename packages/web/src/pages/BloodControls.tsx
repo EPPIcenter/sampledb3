@@ -5,6 +5,9 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import StatCard from '../components/StatCard'
 import SkeletonCard from '../components/SkeletonCard'
 import { useUser } from '../contexts/UserContext'
+import '../styles/blood-controls.css'
+
+const PAGE_SIZE = 25
 
 export default function BloodControls() {
   const navigate = useNavigate()
@@ -16,6 +19,10 @@ export default function BloodControls() {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = (searchParams.get('tab') as 'definitions' | 'batches') || 'definitions'
 
+  // Pagination state (per tab)
+  const [definitionsPage, setDefinitionsPage] = useState(1)
+  const [batchesPage, setBatchesPage] = useState(1)
+
   // Filtering state
   const [searchTerm, setSearchTerm] = useState('')
   const [dateFrom, setDateFrom] = useState('')
@@ -23,6 +30,7 @@ export default function BloodControls() {
   
   // Blood control specific filters
   const [strainFilters, setStrainFilters] = useState<string[]>([])
+  const [strainMatchMode, setStrainMatchMode] = useState<'exact' | 'contains'>('contains')
   const [minDensity, setMinDensity] = useState('')
   const [maxDensity, setMaxDensity] = useState('')
 
@@ -37,6 +45,12 @@ export default function BloodControls() {
   useEffect(() => {
     loadData()
   }, [])
+
+  // Reset pagination when filters change so we don't land on an empty page
+  useEffect(() => {
+    setDefinitionsPage(1)
+    setBatchesPage(1)
+  }, [searchTerm, dateFrom, dateTo, strainFilters, strainMatchMode, minDensity, maxDensity])
 
   const loadData = async () => {
     try {
@@ -86,13 +100,16 @@ export default function BloodControls() {
                            (def.description || '').toLowerCase().includes(searchTerm.toLowerCase())
       
       // Blood control specific definition filters
-      const matchesStrain = strainFilters.length === 0 || strainFilters.every(id => def.strains?.some(s => s.id.toString() === id))
+      const defStrainIds = (def.strains ?? []).map((s) => s.id.toString())
+      const matchesContains = strainFilters.length === 0 || strainFilters.every((id) => def.strains?.some((s) => s.id.toString() === id))
+      const matchesExact = strainFilters.length === 0 || (strainFilters.length === defStrainIds.length && strainFilters.every((id) => defStrainIds.includes(id)))
+      const matchesStrain = strainMatchMode === 'exact' ? matchesExact : matchesContains
       const matchesMinDensity = !minDensity || (def.targetDensity !== undefined && def.targetDensity >= parseFloat(minDensity))
       const matchesMaxDensity = !maxDensity || (def.targetDensity !== undefined && def.targetDensity <= parseFloat(maxDensity))
 
       return matchesSearch && matchesStrain && matchesMinDensity && matchesMaxDensity
     })
-  }, [definitions, searchTerm, strainFilters, minDensity, maxDensity])
+  }, [definitions, searchTerm, strainFilters, strainMatchMode, minDensity, maxDensity])
 
   // Filtered batches
   const filteredBatches = useMemo(() => {
@@ -103,13 +120,16 @@ export default function BloodControls() {
       const matchesDateTo = !dateTo || (batch.productionDate && batch.productionDate <= dateTo)
       
       // Blood control specific batch filters
-      const matchesStrain = strainFilters.length === 0 || strainFilters.every(id => batch.strains?.some(s => s.id.toString() === id))
+      const batchStrainIds = (batch.strains ?? []).map((s) => s.id.toString())
+      const matchesContains = strainFilters.length === 0 || strainFilters.every((id) => batch.strains?.some((s) => s.id.toString() === id))
+      const matchesExact = strainFilters.length === 0 || (strainFilters.length === batchStrainIds.length && strainFilters.every((id) => batchStrainIds.includes(id)))
+      const matchesStrain = strainMatchMode === 'exact' ? matchesExact : matchesContains
       const matchesMinDensity = !minDensity || (batch.targetDensity !== undefined && batch.targetDensity >= parseFloat(minDensity))
       const matchesMaxDensity = !maxDensity || (batch.targetDensity !== undefined && batch.targetDensity <= parseFloat(maxDensity))
       
       return matchesSearch && matchesDateFrom && matchesDateTo && matchesStrain && matchesMinDensity && matchesMaxDensity
     })
-  }, [batches, searchTerm, dateFrom, dateTo, strainFilters, minDensity, maxDensity])
+  }, [batches, searchTerm, dateFrom, dateTo, strainFilters, strainMatchMode, minDensity, maxDensity])
 
 
   const definitionColumns: Column<ControlDefinition>[] = [
@@ -118,7 +138,7 @@ export default function BloodControls() {
       label: 'Name',
       sortable: true,
       render: (value, row) => (
-        <Link to={`/blood-controls/${row.id}`} className="text-blue-600 font-medium hover:underline">
+        <Link to={`/blood-controls/${row.id}`} className="dashboard-link font-medium hover:underline">
           {value}
         </Link>
       ),
@@ -215,8 +235,8 @@ export default function BloodControls() {
       render: (value, row) => (
         value ? (
           <div className="text-sm">
-            <span className="font-medium text-gray-900">{value.toLocaleString()}</span>
-            <span className="text-gray-500 ml-1">{row.unitSymbol}</span>
+            <span className="dashboard-stat-value font-medium">{value.toLocaleString()}</span>
+            <span className="dashboard-stat-muted ml-1">{row.unitSymbol}</span>
           </div>
         ) : <span className="text-gray-400">N/A</span>
       ),
@@ -234,7 +254,7 @@ export default function BloodControls() {
       label: 'Batch Name',
       sortable: true,
       render: (value, row) => (
-        <Link to={`/blood-controls/batches/${row.id}`} className="text-blue-600 font-medium hover:underline">
+        <Link to={`/blood-controls/batches/${row.id}`} className="dashboard-link font-medium hover:underline">
           {value}
         </Link>
       ),
@@ -246,8 +266,8 @@ export default function BloodControls() {
       render: (value, row) => (
         value ? (
           <div className="text-sm">
-            <span className="font-medium text-gray-900">{value.toLocaleString()}</span>
-            <span className="text-gray-500 ml-1">{row.unitSymbol}</span>
+            <span className="dashboard-stat-value font-medium">{value.toLocaleString()}</span>
+            <span className="dashboard-stat-muted ml-1">{row.unitSymbol}</span>
           </div>
         ) : <span className="text-gray-400">N/A</span>
       ),
@@ -335,252 +355,258 @@ export default function BloodControls() {
       label: 'Production Date',
       sortable: true,
       render: (value) => value ? (
-        <span className="text-gray-900">{new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+        <span className="dashboard-stat-value">{new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
       ) : <span className="text-gray-400 italic">Not set</span>,
     },
   ]
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-        <div>
-        <h1 className="text-3xl font-bold text-gray-900">Blood Controls Management</h1>
-          <p className="text-gray-500 mt-1">Manage and track blood control definitions and their production batches.</p>
-        </div>
-        {canWrite && (
-          <>
-            {activeTab === 'definitions' && (
-              <button
-                onClick={() => navigate('/blood-controls/new')}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                New Blood Control Definition
-              </button>
-            )}
-            {activeTab === 'batches' && (
-              <button
-                onClick={() => navigate('/blood-controls/batches/new')}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Create Batch
-              </button>
-            )}
-          </>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {loading ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <SkeletonCard key={i} height="h-24" />
-          ))
-        ) : (
-          <>
-            <StatCard
-              title="Total Definitions"
-              value={stats.totalDefinitions}
-              subtitle="Unique control types"
-            />
-            <StatCard
-              title="Total Batches"
-              value={stats.totalBatches}
-              subtitle="Cumulative production"
-            />
-            <StatCard
-              title="Total Spots"
-              value={stats.totalSpots}
-              subtitle="DBS / Paper spots available"
-            />
-            <StatCard
-              title="Total Tubes"
-              value={stats.totalTubes}
-              subtitle="Vials and tubes in stock"
-            />
-          </>
-        )}
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-8 overflow-hidden">
-        <div className="border-b border-gray-100 bg-gray-50/50">
-          <nav className="flex -mb-px px-6">
-            <button
-              onClick={() => setActiveTab('definitions')}
-              className={`px-6 py-4 text-sm font-semibold border-b-2 transition-colors ${
-                activeTab === 'definitions'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200'
-              }`}
-            >
-              Control Definitions
-            </button>
-            <button
-              onClick={() => setActiveTab('batches')}
-              className={`px-6 py-4 text-sm font-semibold border-b-2 transition-colors ${
-                activeTab === 'batches'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200'
-              }`}
-            >
-              Control Batches
-            </button>
-          </nav>
-        </div>
-
-        {/* Search & Filters */}
-        <div className="p-6 border-b border-gray-100 bg-white">
-          <div className="space-y-6">
-            {/* Top Row: Search and Core Filters */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-6">
-              <div className="relative col-span-1 lg:col-span-6">
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Search</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder={`Search ${activeTab === 'batches' ? 'batches' : 'definitions'}...`}
-                    className="block w-full pl-10 pr-3 py-2 border border-gray-100 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-shadow"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-              </div>
-
-            </div>
-
-            {/* Second Row: Blood Control Filters and Dates */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-6 pt-6 border-t border-gray-100">
-              <div className="lg:col-span-6">
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                  Strains <span className="normal-case font-medium">(Must contain ALL selected)</span>
-                </label>
-                <div className="flex flex-wrap gap-2 p-2 border border-gray-100 rounded-lg min-h-[42px] bg-white shadow-sm">
-                  {strains.map(s => {
-                    const isSelected = strainFilters.includes(s.id.toString());
-                    return (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          if (isSelected) {
-                            setStrainFilters(prev => prev.filter(id => id !== s.id.toString()));
-                          } else {
-                            setStrainFilters(prev => [...prev, s.id.toString()]);
-                          }
-                        }}
-                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                          isSelected 
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
-                            : 'bg-gray-50 text-gray-600 border-gray-100 hover:bg-gray-100'
-                        }`}
-                      >
-                        {s.name}
-                      </button>
-                    );
-                  })}
-                  {strainFilters.length === 0 && <span className="text-gray-400 text-sm ml-1 self-center italic">No strains selected...</span>}
-                </div>
-              </div>
-              
-              <div className="lg:col-span-3">
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                  Density Range <span className="normal-case font-medium">(parasites/µL)</span>
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    placeholder="Min"
-                    className="block w-full px-3 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow min-w-0"
-                    value={minDensity}
-                    onChange={(e) => setMinDensity(e.target.value)}
-                  />
-                  <span className="text-gray-400 font-medium text-xs">to</span>
-                  <input
-                    type="number"
-                    placeholder="Max"
-                    className="block w-full px-3 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow min-w-0"
-                    value={maxDensity}
-                    onChange={(e) => setMaxDensity(e.target.value)}
-                  />
-                </div>
-              </div>
-
+    <div className="blood-controls-page">
+      <div className="container mx-auto px-4 py-8 max-w-7xl relative z-[1]">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 blood-controls-reveal blood-controls-reveal-1">
+          <div>
+            <h1 className="text-3xl font-bold">Blood Controls Management</h1>
+            <p className="mt-1 text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Manage and track blood control definitions and their production batches.</p>
+          </div>
+          {canWrite && (
+            <>
+              {activeTab === 'definitions' && (
+                <button
+                  onClick={() => navigate('/blood-controls/new')}
+                  className="blood-controls-btn-primary px-4 py-2 flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  New Blood Control Definition
+                </button>
+              )}
               {activeTab === 'batches' && (
+                <button
+                  onClick={() => navigate('/blood-controls/batches/new')}
+                  className="blood-controls-btn-primary px-4 py-2 flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create Batch
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {loading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonCard key={i} height="h-24" className={`blood-controls-reveal blood-controls-reveal-${Math.min(i + 2, 5)}`} />
+            ))
+          ) : (
+            <>
+              <StatCard title="Total Definitions" value={stats.totalDefinitions} subtitle="Unique control types" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-2" />
+              <StatCard title="Total Batches" value={stats.totalBatches} subtitle="Cumulative production" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-3" />
+              <StatCard title="Total Spots" value={stats.totalSpots} subtitle="DBS / Paper spots available" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-4" />
+              <StatCard title="Total Tubes" value={stats.totalTubes} subtitle="Vials and tubes in stock" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-5" />
+            </>
+          )}
+        </div>
+
+        <div className="dashboard-card rounded-xl mb-8 overflow-hidden blood-controls-reveal blood-controls-reveal-6">
+          <div className="border-b blood-controls-tabs" style={{ borderColor: 'rgb(var(--dashboard-border))', background: 'rgb(var(--dashboard-surface) / 0.5)' }}>
+            <nav className="flex -mb-px px-6">
+              <button
+                onClick={() => setActiveTab('definitions')}
+                className={`px-6 py-4 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'definitions' ? 'blood-controls-tab-active' : ''}`}
+              >
+                Control Definitions
+              </button>
+              <button
+                onClick={() => setActiveTab('batches')}
+                className={`px-6 py-4 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'batches' ? 'blood-controls-tab-active' : ''}`}
+              >
+                Control Batches
+              </button>
+            </nav>
+          </div>
+
+          {/* Search & Filters */}
+          <div className="p-6">
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-6">
+                <div className="relative col-span-1 lg:col-span-6">
+                  <label className="block blood-controls-filter-label mb-2">Search</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder={`Search ${activeTab === 'batches' ? 'batches' : 'definitions'}...`}
+                      className="block w-full pl-10 pr-3 py-2 border rounded-lg leading-5 bg-white sm:text-sm transition-shadow"
+                      style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-6 pt-6 border-t" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+                <div className="lg:col-span-6">
+                  <div className="flex flex-wrap items-center gap-3 mb-2">
+                    <label className="block blood-controls-filter-label mb-0">Strains</label>
+                    <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+                      <button
+                        type="button"
+                        onClick={() => setStrainMatchMode('contains')}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${strainMatchMode === 'contains' ? 'blood-controls-pill-selected rounded-none' : 'blood-controls-pill rounded-none border-0'}`}
+                      >
+                        Contains
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStrainMatchMode('exact')}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${strainMatchMode === 'exact' ? 'blood-controls-pill-selected rounded-none' : 'blood-controls-pill rounded-none border-0'}`}
+                      >
+                        Exact
+                      </button>
+                    </div>
+                    <span className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                      {strainMatchMode === 'contains' ? 'Must contain all selected' : 'Exact strains only'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 p-2 border rounded-lg min-h-[42px] bg-white" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+                    {strains.map(s => {
+                      const isSelected = strainFilters.includes(s.id.toString());
+                      return (
+                        <button
+                          key={s.id}
+                          onClick={() => {
+                            if (isSelected) {
+                              setStrainFilters(prev => prev.filter(id => id !== s.id.toString()));
+                            } else {
+                              setStrainFilters(prev => [...prev, s.id.toString()]);
+                            }
+                          }}
+                          className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${isSelected ? 'blood-controls-pill-selected' : 'blood-controls-pill'}`}
+                        >
+                          {s.name}
+                        </button>
+                      );
+                    })}
+                    {strainFilters.length === 0 && <span className="text-sm ml-1 self-center italic" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No strains selected...</span>}
+                  </div>
+                </div>
                 <div className="lg:col-span-3">
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Production Date Range</label>
+                  <label className="block blood-controls-filter-label mb-2">
+                    Density Range <span className="normal-case font-medium">(parasites/µL)</span>
+                  </label>
                   <div className="flex items-center gap-2">
                     <input
-                      type="date"
-                      className="block w-full px-2 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow min-w-0"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
+                      type="number"
+                      placeholder="Min"
+                      className="block w-full px-3 py-2 border rounded-lg text-sm min-w-0 bg-white"
+                      style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                      value={minDensity}
+                      onChange={(e) => setMinDensity(e.target.value)}
                     />
-                    <span className="text-gray-400 font-medium">to</span>
+                    <span className="font-medium text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>to</span>
                     <input
-                      type="date"
-                      className="block w-full px-2 py-2 border border-gray-100 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow min-w-0"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
+                      type="number"
+                      placeholder="Max"
+                      className="block w-full px-3 py-2 border rounded-lg text-sm min-w-0 bg-white"
+                      style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                      value={maxDensity}
+                      onChange={(e) => setMaxDensity(e.target.value)}
                     />
                   </div>
+                </div>
+                {activeTab === 'batches' && (
+                  <div className="lg:col-span-3">
+                    <label className="block blood-controls-filter-label mb-2">Production Date Range</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        className="block w-full px-2 py-2 border rounded-lg text-sm min-w-0 bg-white"
+                        style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                      />
+                      <span className="font-medium" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>to</span>
+                      <input
+                        type="date"
+                        className="block w-full px-2 py-2 border rounded-lg text-sm min-w-0 bg-white"
+                        style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {(searchTerm || dateFrom || dateTo || strainFilters.length > 0 || minDensity || maxDensity) && (
+                <div className="flex justify-end items-center pt-2 border-t" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+                  <button
+                    onClick={() => {
+                      setSearchTerm('')
+                      setDateFrom('')
+                      setDateTo('')
+                      setStrainFilters([])
+                      setMinDensity('')
+                      setMaxDensity('')
+                    }}
+                    className="blood-controls-btn-danger flex items-center gap-2 text-sm px-4 py-2 rounded-lg"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Reset All Filters
+                  </button>
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Clear All Action */}
-            {(searchTerm || dateFrom || dateTo || strainFilters.length > 0 || minDensity || maxDensity) && (
-              <div className="flex justify-end items-center pt-2 border-t border-gray-50">
-                <button
-                  onClick={() => {
-                    setSearchTerm('')
-                    setDateFrom('')
-                    setDateTo('')
-                    setStrainFilters([])
-                    setMinDensity('')
-                    setMaxDensity('')
-                  }}
-                  className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 font-bold px-4 py-2 bg-red-50 hover:bg-red-100 rounded-lg transition-all duration-200 active:scale-95"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  Reset All Filters
-                </button>
-              </div>
+          <div className="pt-0">
+            {activeTab === 'batches' ? (
+              <DataTable
+                data={filteredBatches}
+                columns={batchColumns}
+                loading={loading}
+                initialSortColumn="productionDate"
+                initialSortDirection="desc"
+                onRowClick={(batch) => navigate(`/blood-controls/batches/${batch.id}`)}
+                emptyMessage={searchTerm || dateFrom || dateTo ? "No batches matching your filters" : "No blood control batches found"}
+                pagination={{
+                  page: batchesPage,
+                  pageSize: PAGE_SIZE,
+                  onPageChange: setBatchesPage,
+                  showPagination: true,
+                }}
+                className="dashboard-card overflow-hidden"
+              />
+            ) : (
+              <DataTable
+                data={filteredDefinitions}
+                columns={definitionColumns}
+                loading={loading}
+                initialSortColumn="name"
+                initialSortDirection="asc"
+                onRowClick={(def) => navigate(`/blood-controls/${def.id}`)}
+                emptyMessage={searchTerm || minDensity || maxDensity ? "No definitions matching your filters" : "No blood control definitions found"}
+                pagination={{
+                  page: definitionsPage,
+                  pageSize: PAGE_SIZE,
+                  onPageChange: setDefinitionsPage,
+                  showPagination: true,
+                }}
+                className="dashboard-card overflow-hidden"
+              />
             )}
           </div>
-        </div>
-
-        <div className="p-0">
-          {activeTab === 'batches' ? (
-            <DataTable
-              data={filteredBatches}
-              columns={batchColumns}
-              loading={loading}
-              initialSortColumn="productionDate"
-              initialSortDirection="desc"
-              onRowClick={(batch) => navigate(`/blood-controls/batches/${batch.id}`)}
-              emptyMessage={searchTerm || dateFrom || dateTo ? "No batches matching your filters" : "No blood control batches found"}
-            />
-          ) : (
-            <DataTable
-              data={filteredDefinitions}
-              columns={definitionColumns}
-              loading={loading}
-              initialSortColumn="name"
-              initialSortDirection="asc"
-              onRowClick={(def) => navigate(`/blood-controls/${def.id}`)}
-              emptyMessage={searchTerm || minDensity || maxDensity ? "No definitions matching your filters" : "No blood control definitions found"}
-            />
-          )}
         </div>
       </div>
     </div>

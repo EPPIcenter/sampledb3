@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { authApi } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
+import '../styles/profile.css'
 
 function ProfileFormInner({ user }: { user: NonNullable<ReturnType<typeof useUser>['user']> }) {
   const { refreshUser } = useUser()
@@ -48,8 +49,12 @@ function ProfileFormInner({ user }: { user: NonNullable<ReturnType<typeof useUse
       setSuccess('Profile updated successfully')
       setTimeout(() => setSuccess(null), 3000)
       await refreshUser()
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to update profile')
+    } catch (err: unknown) {
+      const message =
+        typeof err === 'object' && err !== null && 'response' in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : null
+      setError(message ?? 'Failed to update profile')
     } finally {
       setLoading(false)
     }
@@ -79,43 +84,48 @@ function ProfileFormInner({ user }: { user: NonNullable<ReturnType<typeof useUse
         newPassword: '',
         confirmPassword: '',
       })
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to change password')
+    } catch (err: unknown) {
+      const message =
+        typeof err === 'object' && err !== null && 'response' in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : null
+      setError(message ?? 'Failed to change password')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Manage your account information and security settings
-        </p>
-      </div>
-
-      {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
-          {error}
+    <div className="profile-page">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+        <div className="mb-6 profile-reveal profile-reveal-1">
+          <h1 className="text-3xl font-bold dashboard-stat-value">My Profile</h1>
+          <p className="mt-1 text-sm dashboard-stat-muted profile-description">
+            Manage your account information and security settings
+          </p>
         </div>
-      )}
 
-      {success && (
-        <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md text-sm">
-          {success}
-        </div>
-      )}
-
-      <div className="space-y-6">
-        {/* Profile Information Form */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-medium text-gray-900">Profile Information</h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Update your personal information
-            </p>
+        {error && (
+          <div className="mb-6 profile-alert-error px-4 py-3 rounded-md text-sm profile-reveal profile-reveal-2">
+            {error}
           </div>
+        )}
+
+        {success && (
+          <div className="mb-6 profile-alert-success px-4 py-3 rounded-md text-sm profile-reveal profile-reveal-2">
+            {success}
+          </div>
+        )}
+
+        <div className="space-y-6">
+          {/* Profile Information Form */}
+          <div className="profile-card profile-reveal profile-reveal-3">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-medium dashboard-stat-value">Profile Information</h2>
+              <p className="mt-1 text-sm dashboard-stat-muted profile-description">
+                Update your personal information
+              </p>
+            </div>
           <form onSubmit={handleProfileSubmit} className="px-6 py-4">
             <div className="space-y-4">
               <div>
@@ -148,7 +158,7 @@ function ProfileFormInner({ user }: { user: NonNullable<ReturnType<typeof useUse
 
               <div>
                 <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-                  Username <span className="text-gray-500 text-xs">(optional)</span>
+                  Username <span className="dashboard-stat-muted text-xs">(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -158,7 +168,7 @@ function ProfileFormInner({ user }: { user: NonNullable<ReturnType<typeof useUse
                   placeholder="Leave empty to remove username"
                   className="form-input"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs dashboard-stat-muted">
                   You can use your username or email to log in
                 </p>
               </div>
@@ -177,10 +187,10 @@ function ProfileFormInner({ user }: { user: NonNullable<ReturnType<typeof useUse
         </div>
 
         {/* Change Password Form */}
-        <div className="bg-white shadow rounded-lg">
+        <div className="profile-card profile-reveal profile-reveal-4">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-medium text-gray-900">Change Password</h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <h2 className="text-lg font-medium dashboard-stat-value">Change Password</h2>
+            <p className="mt-1 text-sm dashboard-stat-muted profile-description">
               Update your password to keep your account secure
             </p>
           </div>
@@ -258,6 +268,7 @@ function ProfileFormInner({ user }: { user: NonNullable<ReturnType<typeof useUse
             </div>
           </form>
         </div>
+        </div>
       </div>
     </div>
   )
@@ -267,9 +278,11 @@ export default function Profile() {
   const { user } = useUser()
   if (!user) {
     return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white shadow rounded-lg p-6">
-          <p className="text-gray-500">Loading profile...</p>
+      <div className="profile-page">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+          <div className="profile-card p-6">
+            <p className="dashboard-stat-muted profile-description">Loading profile...</p>
+          </div>
         </div>
       </div>
     )

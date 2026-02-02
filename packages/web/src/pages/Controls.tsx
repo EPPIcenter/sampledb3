@@ -23,6 +23,7 @@ export default function BloodControls() {
   
   // Blood control specific filters
   const [strainFilters, setStrainFilters] = useState<string[]>([])
+  const [strainMatchMode, setStrainMatchMode] = useState<'exact' | 'contains'>('contains')
   const [minDensity, setMinDensity] = useState('')
   const [maxDensity, setMaxDensity] = useState('')
 
@@ -86,13 +87,16 @@ export default function BloodControls() {
                            (def.description || '').toLowerCase().includes(searchTerm.toLowerCase())
       
       // Blood control specific definition filters
-      const matchesStrain = strainFilters.length === 0 || strainFilters.every(id => def.strains?.some(s => s.id.toString() === id))
+      const defStrainIds = (def.strains ?? []).map((s) => s.id.toString())
+      const matchesContains = strainFilters.length === 0 || strainFilters.every((id) => def.strains?.some((s) => s.id.toString() === id))
+      const matchesExact = strainFilters.length === 0 || (strainFilters.length === defStrainIds.length && strainFilters.every((id) => defStrainIds.includes(id)))
+      const matchesStrain = strainMatchMode === 'exact' ? matchesExact : matchesContains
       const matchesMinDensity = !minDensity || (def.targetDensity !== undefined && def.targetDensity >= parseFloat(minDensity))
       const matchesMaxDensity = !maxDensity || (def.targetDensity !== undefined && def.targetDensity <= parseFloat(maxDensity))
 
       return matchesSearch && matchesStrain && matchesMinDensity && matchesMaxDensity
     })
-  }, [definitions, searchTerm, strainFilters, minDensity, maxDensity])
+  }, [definitions, searchTerm, strainFilters, strainMatchMode, minDensity, maxDensity])
 
   // Filtered batches
   const filteredBatches = useMemo(() => {
@@ -103,13 +107,16 @@ export default function BloodControls() {
       const matchesDateTo = !dateTo || (batch.productionDate && batch.productionDate <= dateTo)
       
       // Blood control specific batch filters
-      const matchesStrain = strainFilters.length === 0 || strainFilters.every(id => batch.strains?.some(s => s.id.toString() === id))
+      const batchStrainIds = (batch.strains ?? []).map((s) => s.id.toString())
+      const matchesContains = strainFilters.length === 0 || strainFilters.every((id) => batch.strains?.some((s) => s.id.toString() === id))
+      const matchesExact = strainFilters.length === 0 || (strainFilters.length === batchStrainIds.length && strainFilters.every((id) => batchStrainIds.includes(id)))
+      const matchesStrain = strainMatchMode === 'exact' ? matchesExact : matchesContains
       const matchesMinDensity = !minDensity || (batch.targetDensity !== undefined && batch.targetDensity >= parseFloat(minDensity))
       const matchesMaxDensity = !maxDensity || (batch.targetDensity !== undefined && batch.targetDensity <= parseFloat(maxDensity))
       
       return matchesSearch && matchesDateFrom && matchesDateTo && matchesStrain && matchesMinDensity && matchesMaxDensity
     })
-  }, [batches, searchTerm, dateFrom, dateTo, strainFilters, minDensity, maxDensity])
+  }, [batches, searchTerm, dateFrom, dateTo, strainFilters, strainMatchMode, minDensity, maxDensity])
 
 
   const definitionColumns: Column<ControlDefinition>[] = [
@@ -393,9 +400,28 @@ export default function BloodControls() {
             {/* Second Row: Blood Control Filters and Dates */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-6 pt-6 border-t border-gray-100">
               <div className="lg:col-span-6">
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                  Strains <span className="normal-case font-medium">(Must contain ALL selected)</span>
-                </label>
+                <div className="flex flex-wrap items-center gap-3 mb-2">
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-0">Strains</label>
+                  <div className="flex rounded-lg border border-gray-100 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setStrainMatchMode('contains')}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${strainMatchMode === 'contains' ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-50 text-gray-600 border-gray-100 hover:bg-gray-100'}`}
+                    >
+                      Contains
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStrainMatchMode('exact')}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${strainMatchMode === 'exact' ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-50 text-gray-600 border-gray-100 hover:bg-gray-100'}`}
+                    >
+                      Exact
+                    </button>
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {strainMatchMode === 'contains' ? 'Must contain all selected' : 'Exact strains only'}
+                  </span>
+                </div>
                 <div className="flex flex-wrap gap-2 p-2 border border-gray-100 rounded-lg min-h-[42px] bg-white shadow-sm">
                   {strains.map(s => {
                     const isSelected = strainFilters.includes(s.id.toString());

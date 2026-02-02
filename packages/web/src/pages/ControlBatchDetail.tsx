@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useHotkey } from '../hooks/useHotkey'
 import { controlsApi, type ControlBatchSummaryResponse } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
@@ -8,6 +8,7 @@ import { getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
 import SpecimenForm from '../components/forms/SpecimenForm'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import { useUser } from '../contexts/UserContext'
+import '../styles/blood-controls.css'
 
 export default function ControlBatchDetail() {
   const { id } = useParams<{ id: string }>()
@@ -65,33 +66,35 @@ export default function ControlBatchDetail() {
   }
 
   if (loading) {
-    return <SkeletonDetailPage sections={1} />
+    return (
+      <div className="blood-controls-page">
+        <SkeletonDetailPage sections={1} />
+      </div>
+    )
   }
 
   if (error || !summaryData) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8 text-red-600">
-          {error || 'Control batch not found'}
+      <div className="blood-controls-page">
+        <div className="container mx-auto px-4 py-8 relative z-[1]">
+          <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-trend-down))' }}>
+            {error || 'Control batch not found'}
+          </div>
         </div>
       </div>
     )
   }
 
-  const getTypeBadgeColor = (type: string) => {
+  const getTypeBadgeClass = (type: string) => {
     switch (type) {
       case 'plasma_positive':
       case 'blood':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        return 'blood-controls-badge'
       case 'plasma_negative':
       case 'negative':
-        return 'bg-rose-50 text-red-700 border-rose-200'
-      case 'extraction':
-        return 'bg-purple-50 text-purple-700 border-purple-200'
-      case 'antibody':
-        return 'bg-sky-50 text-blue-700 border-sky-200'
+        return 'blood-controls-badge'
       default:
-        return 'bg-slate-50 text-slate-700 border-slate-200'
+        return 'blood-controls-badge'
     }
   }
 
@@ -104,47 +107,42 @@ export default function ControlBatchDetail() {
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {summary.inventory.map((item: any, index) => {
+        {summary.inventory.map((item: { type: string; unit: string; remainingQuantity: number; totalQuantity: number; containerCount: number }, index: number) => {
           const name = getContainerTypeName(item.type)
           const isExhausted = item.remainingQuantity <= 0
-          
           return (
-            <div key={`${item.type}-${item.unit}-${index}`} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+            <div key={`${item.type}-${item.unit}-${index}`} className="dashboard-card rounded-xl p-4 transition-shadow hover:shadow-md">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${isExhausted ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-600'}`}>
+                  <div className={`p-2 rounded-lg ${isExhausted ? 'opacity-60' : ''}`} style={{ background: isExhausted ? 'rgb(var(--dashboard-border))' : 'rgb(var(--dashboard-accent-muted))', color: isExhausted ? 'rgb(var(--dashboard-text-muted))' : 'rgb(var(--dashboard-accent-hover))' }}>
                     {getContainerTypeIcon(item.type)}
                   </div>
                   <div>
-                    <span className="font-bold text-gray-900 block leading-tight">{name}s</span>
-                    <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{item.containerCount} containers</span>
+                    <span className="font-bold block leading-tight" style={{ color: 'rgb(var(--dashboard-text))' }}>{name}s</span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{item.containerCount} containers</span>
                   </div>
                 </div>
-                <span className={`text-[10px] font-bold px-2 py-1 rounded-md border ${
-                  isExhausted ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'
-                }`}>
+                <span className="text-[10px] font-bold px-2 py-1 rounded-md border" style={isExhausted ? { background: 'rgb(var(--blood-controls-badge-bg))', color: 'rgb(var(--blood-controls-badge))', borderColor: 'rgb(var(--blood-controls-badge) / 0.3)' } : { background: 'rgb(var(--dashboard-trend-up) / 0.1)', color: 'rgb(var(--dashboard-trend-up))', borderColor: 'rgb(var(--dashboard-trend-up) / 0.3)' }}>
                   {isExhausted ? 'EXHAUSTED' : 'IN STOCK'}
                 </span>
               </div>
-              
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="space-y-0.5">
-                  <span className="text-[10px] text-gray-400 uppercase font-bold">Total Volume</span>
-                  <p className="text-sm font-semibold text-gray-700">{item.totalQuantity.toLocaleString()} {item.unit}</p>
+                  <span className="text-[10px] uppercase font-bold" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Total Volume</span>
+                  <p className="text-sm font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>{item.totalQuantity.toLocaleString()} {item.unit}</p>
                 </div>
                 <div className="space-y-0.5 text-right">
-                  <span className="text-[10px] text-gray-400 uppercase font-bold">Available</span>
-                  <p className={`text-sm font-bold ${isExhausted ? 'text-red-600' : 'text-green-600'}`}>
+                  <span className="text-[10px] uppercase font-bold" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Available</span>
+                  <p className="text-sm font-bold" style={{ color: isExhausted ? 'rgb(var(--dashboard-trend-down))' : 'rgb(var(--dashboard-trend-up))' }}>
                     {item.remainingQuantity.toLocaleString()} {item.unit}
                   </p>
                 </div>
               </div>
-
               {!isExhausted && (
-                <div className="w-full bg-gray-100 rounded-full h-1.5 mb-4">
-                  <div 
-                    className="bg-green-500 h-1.5 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.4)]" 
-                    style={{ width: `${Math.min(100, (item.remainingQuantity / item.totalQuantity) * 100)}%` }}
+                <div className="w-full rounded-full h-1.5 mb-4" style={{ background: 'rgb(var(--dashboard-border))' }}>
+                  <div
+                    className="h-1.5 rounded-full"
+                    style={{ width: `${Math.min(100, (item.remainingQuantity / item.totalQuantity) * 100)}%`, background: 'rgb(var(--dashboard-trend-up))' }}
                   />
                 </div>
               )}
@@ -156,193 +154,170 @@ export default function ControlBatchDetail() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <EntityBreadcrumbs
-          items={[
-            { label: 'Blood Controls', to: '/blood-controls' },
-            ...(definition ? [{ label: definition.name, to: `/blood-controls/${definition.id}` }] : []),
-            { label: batch.name },
-          ]}
-        />
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{batch.name}</h1>
-            {definition && (
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-gray-500">Definition:</span>
-                <span className="text-blue-600 font-medium">{definition.name}</span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wider ${getTypeBadgeColor(definition.controlType)}`}>
-                  {definition.controlType.replace('_', ' ')}
-                </span>
+    <div className="blood-controls-page">
+      <div className="container mx-auto px-4 py-8 relative z-[1]">
+        <div className="mb-6 blood-controls-reveal blood-controls-reveal-1">
+          <EntityBreadcrumbs
+            items={[
+              { label: 'Blood Controls', to: '/blood-controls' },
+              ...(definition ? [{ label: definition.name, to: `/blood-controls/${definition.id}` }] : []),
+              { label: batch.name },
+            ]}
+          />
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold">{batch.name}</h1>
+              {definition && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Definition:</span>
+                  <Link to={`/blood-controls/${definition.id}`} className="dashboard-link font-medium">{definition.name}</Link>
+                  <span className={getTypeBadgeClass(definition.controlType)}>
+                    {definition.controlType.replace('_', ' ')}
+                  </span>
+                </div>
+              )}
+              {batch.productionDate && (
+                <p className="text-sm mt-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                  Production Date: {new Date(batch.productionDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              )}
+            </div>
+            {canWrite && (
+              <div className="flex space-x-3">
+                <button onClick={() => navigate(`/blood-controls/batches/${batch.id}/add-specimens`)} className="blood-controls-btn-primary px-4 py-2">
+                  Add Specimens
+                </button>
+                <button onClick={() => setCreateSpecimenModalOpen(true)} className="blood-controls-btn-primary px-4 py-2">
+                  Add Single Specimen
+                </button>
+                <button onClick={handleDeleteBatch} disabled={deleting} className="blood-controls-btn-danger px-4 py-2">
+                  {deleting ? 'Deleting...' : 'Delete Batch'}
+                </button>
               </div>
-            )}
-            {batch.productionDate && (
-              <p className="text-gray-500 text-sm mt-1">
-                Production Date: {new Date(batch.productionDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
-              </p>
             )}
           </div>
-          {canWrite && (
-            <div className="flex space-x-3">
-              <button
-                onClick={() => navigate(`/blood-controls/batches/${batch.id}/add-specimens`)}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-sm"
-              >
-                Add Specimens
-              </button>
-              <button
-                onClick={() => setCreateSpecimenModalOpen(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm"
-              >
-                Add Single Specimen
-              </button>
-              <button
-                onClick={handleDeleteBatch}
-                disabled={deleting}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
-              >
-                {deleting ? 'Deleting...' : 'Delete Batch'}
-              </button>
-            </div>
-          )}
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-        {/* Sidebar: Definition & Composition */}
-        <div className="lg:col-span-1 space-y-8">
-          <div className="bg-white rounded-lg shadow p-6 border border-gray-100">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900">Definition Details</h2>
-            <div className="space-y-6">
-              {definition?.description && (
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">Description</p>
-                  <p className="text-gray-900 text-sm leading-relaxed">{definition.description}</p>
-                </div>
-              )}
-              
-              <div>
-                <p className="text-sm text-gray-500">Target Density</p>
-                <p className="text-gray-900 font-medium">
-                  {definition?.targetDensity ? (
-                    <>
-                      {definition.targetDensity.toLocaleString()} <span className="text-gray-500 text-sm">{definition.unitSymbol}</span>
-                    </>
-                  ) : (
-                    'Not specified'
-                  )}
-                </p>
-              </div>
-
-              {composition && (
-                <div className="pt-6 border-t border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-1">Composition</h3>
-                  <p className="text-xs text-gray-500 mb-4 font-medium">{composition.label}</p>
-                  <div className="space-y-4">
-                    {composition.strains.map((s) => (
-                      <div key={s.id} className="space-y-1.5">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-700 font-medium">{s.name}</span>
-                          <span className="text-gray-900 font-bold">{s.percentage}%</span>
-                        </div>
-                        <div className="w-full bg-gray-100 rounded-full h-1.5">
-                          <div 
-                            className="bg-blue-500 h-1.5 rounded-full transition-all duration-500" 
-                            style={{ width: `${s.percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-1 space-y-8">
+            <div className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-2">
+              <h2 className="blood-controls-section-title mb-4">Definition Details</h2>
+              <div className="space-y-6">
+                {definition?.description && (
+                  <div>
+                    <p className="text-sm mb-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Description</p>
+                    <p className="text-sm leading-relaxed" style={{ color: 'rgb(var(--dashboard-text))' }}>{definition.description}</p>
                   </div>
+                )}
+                <div>
+                  <p className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Target Density</p>
+                  <p className="font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                    {definition?.targetDensity ? (
+                      <>
+                        {definition.targetDensity.toLocaleString()} <span className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{definition.unitSymbol}</span>
+                      </>
+                    ) : (
+                      'Not specified'
+                    )}
+                  </p>
                 </div>
-              )}
-
-              {batch.properties && Object.keys(batch.properties).length > 0 && (
-                <div className="pt-6 border-t border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-2">Batch Properties</h3>
-                  <div className="bg-gray-50 rounded-lg p-3 space-y-2 border border-gray-100">
-                    {Object.entries(batch.properties)
-                      .map(([key, value]) => (
-                        <div key={key} className="flex justify-between text-xs">
-                          <span className="text-gray-500 capitalize">{key.replace('_', ' ')}</span>
-                          <span className="text-gray-900 font-medium">{String(value)}</span>
+                {composition && (
+                  <div className="pt-6 border-t" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+                    <h3 className="text-sm font-semibold mb-1" style={{ color: 'rgb(var(--dashboard-text))' }}>Composition</h3>
+                    <p className="text-xs mb-4 font-medium" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{composition.label}</p>
+                    <div className="space-y-4">
+                      {composition.strains.map((s) => (
+                        <div key={s.id} className="space-y-1.5">
+                          <div className="flex justify-between text-sm">
+                            <span className="font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>{s.name}</span>
+                            <span className="font-bold" style={{ color: 'rgb(var(--dashboard-text))' }}>{s.percentage}%</span>
+                          </div>
+                          <div className="w-full rounded-full h-1.5" style={{ background: 'rgb(var(--dashboard-border))' }}>
+                            <div className="h-1.5 rounded-full transition-all duration-500" style={{ width: `${s.percentage}%`, background: 'rgb(var(--dashboard-accent))' }} />
+                          </div>
                         </div>
                       ))}
+                    </div>
                   </div>
+                )}
+                {batch.properties && Object.keys(batch.properties).length > 0 && (
+                  <div className="pt-6 border-t" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+                    <h3 className="text-sm font-semibold mb-2" style={{ color: 'rgb(var(--dashboard-text))' }}>Batch Properties</h3>
+                    <div className="rounded-lg p-3 space-y-2 border" style={{ background: 'rgb(var(--dashboard-surface))', borderColor: 'rgb(var(--dashboard-border))' }}>
+                      {Object.entries(batch.properties).map(([key, value]) => (
+                        <div key={key} className="flex justify-between text-xs">
+                          <span className="capitalize" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{key.replace('_', ' ')}</span>
+                          <span className="font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>{String(value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-2 space-y-8">
+            <div className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-3">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="blood-controls-section-title">Stock & Availability</h2>
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border" style={{ background: 'rgb(var(--dashboard-trend-up) / 0.1)', color: 'rgb(var(--dashboard-trend-up))', borderColor: 'rgb(var(--dashboard-trend-up) / 0.3)' }}>
+                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'rgb(var(--dashboard-trend-up))' }} />
+                  <span className="text-xs font-bold uppercase tracking-tight">
+                    {(summary.totalRemainingQuantity || 0).toLocaleString()} units in stock
+                  </span>
                 </div>
-              )}
+              </div>
+              {formatInventorySummary()}
             </div>
+
+            {specimens.length > 0 && (
+              <div className="dashboard-card overflow-hidden blood-controls-reveal blood-controls-reveal-4">
+                <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: 'rgb(var(--dashboard-border))', background: 'rgb(var(--dashboard-surface))' }}>
+                  <h2 className="text-lg font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>Associated Specimens</h2>
+                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{specimens.length} Records</span>
+                </div>
+                <div className="p-4">
+                  <SimpleTimeline specimens={specimens} />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Main Content: Stock & Specimens */}
-        <div className="lg:col-span-2 space-y-8">
-          {/* Stock & Availability Section */}
-          <div className="bg-white rounded-lg shadow p-6 border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Stock & Availability</h2>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 rounded-full border border-green-100">
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <span className="text-green-700 text-xs font-bold uppercase tracking-tight">
-                  {(summary.totalRemainingQuantity || 0).toLocaleString()} units in stock
-                </span>
+        {createSpecimenModalOpen && (
+          <div className="fixed inset-0 z-[100] overflow-y-auto">
+            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+              <div className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md" onClick={() => setCreateSpecimenModalOpen(false)} />
+              <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full max-h-[90vh] overflow-y-auto" style={{ background: 'rgb(var(--dashboard-card))' }}>
+                <div className="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>Add Specimen</h2>
+                    <button
+                      type="button"
+                      className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                      style={{ color: 'rgb(var(--dashboard-text-muted))' }}
+                      onClick={() => setCreateSpecimenModalOpen(false)}
+                      aria-label="Close"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <SpecimenForm
+                    controlBatchId={batch.id}
+                    controlBatchName={batch.name}
+                    onSuccess={() => {
+                      setCreateSpecimenModalOpen(false)
+                      loadSummary()
+                    }}
+                    onCancel={() => setCreateSpecimenModalOpen(false)}
+                  />
+                </div>
               </div>
             </div>
-
-            {formatInventorySummary()}
           </div>
-
-          {/* Enriched Timeline View */}
-          {specimens.length > 0 && (
-            <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-100">
-              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Associated Specimens</h2>
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{specimens.length} Records</span>
-              </div>
-              <div className="p-4">
-                <SimpleTimeline specimens={specimens} />
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
-
-      {createSpecimenModalOpen && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-              onClick={() => setCreateSpecimenModalOpen(false)}
-            />
-            <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full max-h-[90vh] overflow-y-auto">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Add Specimen</h2>
-              <button
-                type="button"
-                className="text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-                onClick={() => setCreateSpecimenModalOpen(false)}
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-            <SpecimenForm
-              controlBatchId={batch.id}
-              controlBatchName={batch.name}
-              onSuccess={() => {
-                setCreateSpecimenModalOpen(false)
-                loadSummary()
-              }}
-              onCancel={() => setCreateSpecimenModalOpen(false)}
-            />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

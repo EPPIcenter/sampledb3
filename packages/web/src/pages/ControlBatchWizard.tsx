@@ -8,6 +8,7 @@ import ReviewStep from '../components/wizards/ReviewStep'
 import { controlsApi, specimenTypesApi } from '../lib/api'
 import type { ControlDefinition, SpecimenType } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
+import '../styles/blood-controls.css'
 
 export type WizardStep = 'batch-info' | 'specimen-types' | 'csv-upload' | 'containers' | 'review'
 
@@ -161,75 +162,75 @@ export default function ControlBatchWizard() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">Loading...</div>
+      <div className="blood-controls-page">
+        <div className="container mx-auto px-4 py-8 relative z-[1]">
+          <div className="text-center" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Loading...</div>
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center text-red-600">{error}</div>
+      <div className="blood-controls-page">
+        <div className="container mx-auto px-4 py-8 relative z-[1]">
+          <div className="text-center" style={{ color: 'rgb(var(--dashboard-trend-down))' }}>{error}</div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">
-          {isAddMode ? 'Add Specimens to Batch' : 'Create Control Batch'}
-        </h1>
-        <p className="text-gray-500 mt-1">
-          {isAddMode 
-            ? 'Add specimens and containers to an existing control batch'
-            : 'Create a new control batch and add specimens with containers'}
-        </p>
-      </div>
-
-      {/* Step indicator */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="flex items-center justify-between">
-          {steps.map((step, index) => (
-            <div key={step.id} className="flex items-center flex-1">
-              <div
-                className={`flex items-center cursor-pointer ${
-                  currentStep === step.id
-                    ? 'text-blue-600 font-semibold'
-                    : canProceedToStep(step.id)
-                    ? 'text-gray-500'
-                    : 'text-gray-400'
-                }`}
-                onClick={() => {
-                  if (canProceedToStep(step.id)) {
-                    setStep(step.id)
-                  }
-                }}
-              >
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    currentStep === step.id
-                      ? 'bg-blue-600 text-white'
-                      : canProceedToStep(step.id)
-                      ? 'bg-gray-200'
-                      : 'bg-gray-100'
-                  }`}
-                >
-                  {step.number}
-                </div>
-                <span className="ml-2 hidden sm:inline">{step.label}</span>
-              </div>
-              {index < steps.length - 1 && (
-                <div className="flex-1 h-1 bg-gray-200 mx-4" />
-              )}
-            </div>
-          ))}
+    <div className="blood-controls-page">
+      <div className="container mx-auto px-4 py-8 max-w-6xl relative z-[1]">
+        <div className="mb-6 blood-controls-reveal blood-controls-reveal-1">
+          <h1 className="text-3xl font-bold">
+            {isAddMode ? 'Add Specimens to Batch' : 'Create Control Batch'}
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            {isAddMode
+              ? 'Add specimens and containers to an existing control batch'
+              : 'Create a new control batch and add specimens with containers'}
+          </p>
         </div>
-      </div>
 
-      {/* Step content */}
-      <div className="bg-white rounded-lg shadow p-6">
+        {/* Step indicator */}
+        <div className="dashboard-card p-4 mb-6 blood-controls-reveal blood-controls-reveal-2">
+          <div className="flex items-center justify-between">
+            {steps.map((step, index) => (
+              <div key={step.id} className="flex items-center flex-1">
+                <div
+                  className={`flex items-center cursor-pointer ${currentStep === step.id ? 'font-semibold' : ''}`}
+                  style={{
+                    color: currentStep === step.id ? 'rgb(var(--dashboard-accent))' : canProceedToStep(step.id) ? 'rgb(var(--dashboard-text-muted))' : 'rgb(var(--dashboard-border))',
+                  }}
+                  onClick={() => {
+                    if (canProceedToStep(step.id)) {
+                      setStep(step.id)
+                    }
+                  }}
+                >
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{
+                      background: currentStep === step.id ? 'rgb(var(--dashboard-accent))' : canProceedToStep(step.id) ? 'rgb(var(--dashboard-border))' : 'rgb(var(--dashboard-surface))',
+                      color: currentStep === step.id ? 'white' : 'rgb(var(--dashboard-text-muted))',
+                    }}
+                  >
+                    {step.number}
+                  </div>
+                  <span className="ml-2 hidden sm:inline">{step.label}</span>
+                </div>
+                {index < steps.length - 1 && (
+                  <div className="flex-1 h-1 mx-4" style={{ background: 'rgb(var(--dashboard-border))' }} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Step content */}
+        <div className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-3">
         {currentStep === 'batch-info' && !isAddMode && (
           <BatchInfoStep
             batchInfo={batchInfo}
@@ -295,6 +296,7 @@ export default function ControlBatchWizard() {
             existingBatchId={batchId ? parseInt(batchId) : undefined}
           />
         )}
+        </div>
       </div>
     </div>
   )

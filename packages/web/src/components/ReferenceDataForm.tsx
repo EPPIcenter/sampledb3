@@ -17,6 +17,8 @@ interface ReferenceDataFormProps<T> {
   onSave: (data: Partial<T>) => Promise<void>
   onCancel: () => void
   title: string
+  /** Optional class for the modal root when opened from a themed page (e.g. Reference Data). */
+  modalClassName?: string
 }
 
 export default function ReferenceDataForm<T extends { id?: number }>({
@@ -25,6 +27,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
   onSave,
   onCancel,
   title,
+  modalClassName,
 }: ReferenceDataFormProps<T>) {
   const [formData, setFormData] = useState<Partial<T>>(() => ({ ...(item ?? {}) } as Partial<T>))
   const [loading, setLoading] = useState(false)
@@ -189,7 +192,13 @@ export default function ReferenceDataForm<T extends { id?: number }>({
   }, { preventDefault: true, enableOnFormTags: true })
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto">
+    <div
+      className={
+        modalClassName
+          ? `fixed inset-0 z-[100] overflow-y-auto ${modalClassName}`.trim()
+          : 'fixed inset-0 z-[100] overflow-y-auto'
+      }
+    >
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         {/* Background overlay */}
         <div
