@@ -1,0 +1,274 @@
+/**
+ * App sidebar – "Modern precision lab" theme
+ * Scoped to .app-sidebar. Same palette and fonts as dashboard/storage for cohesion.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap');
+
+/* Tokens – same as dashboard/storage */
+.app-sidebar {
+  --dashboard-bg: 248 250 252;
+  --dashboard-surface: 241 245 249;
+  --dashboard-card: 255 255 255;
+  --dashboard-accent: 20 184 166;
+  --dashboard-accent-hover: 13 148 136;
+  --dashboard-accent-muted: 204 251 241;
+  --dashboard-text: 30 41 59;
+  --dashboard-text-muted: 100 116 139;
+  --dashboard-border: 226 232 240;
+
+  font-family: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
+  background: linear-gradient(180deg, rgb(var(--dashboard-surface)) 0%, rgb(var(--dashboard-bg)) 100%);
+  border-right: 1px solid rgb(var(--dashboard-border));
+  color: rgb(var(--dashboard-text));
+}
+
+.app-sidebar__inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Header: logo + close button */
+.app-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0.75rem;
+}
+
+.app-sidebar__logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: rgb(var(--dashboard-accent-hover));
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.app-sidebar__logo:hover {
+  color: rgb(var(--dashboard-accent));
+}
+
+.app-sidebar__logo:focus-visible {
+  outline: 2px solid rgb(var(--dashboard-accent));
+  outline-offset: 2px;
+}
+
+.app-sidebar__close {
+  padding: 0.375rem;
+  border-radius: 0.5rem;
+  color: rgb(var(--dashboard-text-muted));
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.app-sidebar__close:hover {
+  color: rgb(var(--dashboard-text));
+  background: rgb(var(--dashboard-border) / 0.5);
+}
+
+.app-sidebar__close:focus-visible {
+  outline: 2px solid rgb(var(--dashboard-accent));
+  outline-offset: 2px;
+}
+
+/* Section title */
+.app-sidebar__section-title {
+  padding: 0.125rem 0.5rem 0.25rem;
+  margin-bottom: 0.25rem;
+  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgb(var(--dashboard-text-muted));
+}
+
+/* Nav block */
+.app-sidebar__nav {
+  flex: 1;
+  padding: 0.5rem;
+  overflow-y: auto;
+}
+
+.app-sidebar__section {
+  margin-bottom: 0.75rem;
+}
+
+.app-sidebar__section-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+/* Nav link / button (base) */
+.app-sidebar__link,
+.app-sidebar__link-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  color: rgb(var(--dashboard-text));
+  background: transparent;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.app-sidebar__link:hover,
+.app-sidebar__link-button:hover {
+  background: rgb(var(--dashboard-surface));
+  color: rgb(var(--dashboard-text));
+}
+
+.app-sidebar__link--active,
+.app-sidebar__link-button--active {
+  background: rgb(var(--dashboard-accent-muted));
+  color: rgb(var(--dashboard-accent-hover));
+  border-left: 2px solid rgb(var(--dashboard-accent));
+  margin-left: 0;
+  padding-left: calc(0.5rem - 2px);
+}
+
+.app-sidebar__link:focus-visible,
+.app-sidebar__link-button:focus-visible {
+  outline: 2px solid rgb(var(--dashboard-accent));
+  outline-offset: 2px;
+}
+
+.app-sidebar__link-icon {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  color: rgb(var(--dashboard-text-muted));
+}
+
+.app-sidebar__link--active .app-sidebar__link-icon,
+.app-sidebar__link-button--active .app-sidebar__link-icon {
+  color: rgb(var(--dashboard-accent));
+}
+
+.app-sidebar__link-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sub-item indent */
+.app-sidebar__link--sub,
+.app-sidebar__link-button--sub {
+  margin-left: 0.25rem;
+}
+
+.app-sidebar__link--sub.app-sidebar__link--active,
+.app-sidebar__link-button--sub.app-sidebar__link-button--active {
+  margin-left: 0.25rem;
+  padding-left: calc(0.5rem - 2px);
+}
+
+/* Expand/collapse chevron */
+.app-sidebar__chevron {
+  flex-shrink: 0;
+  width: 0.75rem;
+  height: 0.75rem;
+  transition: transform 0.2s ease;
+  color: rgb(var(--dashboard-text-muted));
+}
+
+.app-sidebar__link-button--active .app-sidebar__chevron {
+  color: rgb(var(--dashboard-accent));
+}
+
+.app-sidebar__chevron--open {
+  transform: rotate(180deg);
+}
+
+/* Children block */
+.app-sidebar__children {
+  margin-top: 0.125rem;
+  margin-left: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+/* Footer */
+.app-sidebar__footer {
+  padding: 0.75rem;
+}
+
+.app-sidebar__footer-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.app-sidebar__footer-link:hover {
+  opacity: 1;
+}
+
+.app-sidebar__footer-link:focus-visible {
+  outline: 2px solid rgb(var(--dashboard-accent));
+  outline-offset: 2px;
+}
+
+/* Mobile overlay */
+.app-sidebar__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(15 23 42 / 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 40;
+  transition: opacity 0.2s ease;
+}
+
+@media (min-width: 1024px) {
+  .app-sidebar__overlay {
+    display: none;
+  }
+}
+
+/* Mobile menu trigger (used in App.tsx) */
+.app-sidebar__mobile-trigger {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: rgb(255 255 255);
+  border: 1px solid rgb(226 232 240);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  color: rgb(100 116 139);
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.app-sidebar__mobile-trigger:hover {
+  background: rgb(241 245 249);
+  border-color: rgb(20 184 166 / 0.3);
+  color: rgb(13 148 136);
+}
+
+.app-sidebar__mobile-trigger:focus-visible {
+  outline: 2px solid rgb(20 184 166);
+  outline-offset: 2px;
+}
+
+@media (min-width: 1024px) {
+  .app-sidebar__mobile-trigger {
+    display: none;
+  }
+}

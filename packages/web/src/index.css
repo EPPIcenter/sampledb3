@@ -12,6 +12,78 @@
   .form-textarea {
     @apply w-full px-3 py-2 border border-gray-100 rounded-lg shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
   }
+
+  /* Native file input – consistent "Choose file" button (teal accent app-wide) */
+  .file-input-accent {
+    display: block;
+    width: 100%;
+    font-size: 0.875rem;
+    color: rgb(100 116 139);
+  }
+  .file-input-accent::file-selector-button {
+    margin-right: 1rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    border: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    background: rgb(204 251 241);
+    color: rgb(19 78 74); /* teal-900 for contrast on teal-100 */
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .file-input-accent::file-selector-button:hover {
+    background: rgb(20 184 166 / 0.25);
+  }
+  .file-input-accent:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .file-input-accent:disabled::file-selector-button {
+    cursor: not-allowed;
+  }
+
+  /* Trigger button/link that opens file picker – high-contrast teal (teal-900 on teal-100 when used as button) */
+  .file-input-trigger {
+    font-weight: 500;
+    color: rgb(19 78 74);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s ease;
+  }
+  .file-input-trigger:hover {
+    color: rgb(17 94 89); /* teal-800 */
+  }
+
+  /* Label used as "Choose file" button (wraps hidden input) – high-contrast teal on teal-100 */
+  .file-input-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    border: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    background: rgb(204 251 241);
+    color: rgb(19 78 74);
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .file-input-label:hover {
+    background: rgb(20 184 166 / 0.25);
+  }
+  .file-input-label:focus-within {
+    outline: 2px solid rgb(20 184 166);
+    outline-offset: 2px;
+  }
+
+  /* Numeric stat value: tabular-nums for alignment (color set by theme CSS when inside themed page) */
+  .dashboard-stat-value {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 body {
