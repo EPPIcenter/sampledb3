@@ -5,6 +5,8 @@ description: Organize your storage infrastructure with hierarchical locations
 
 Locations represent your physical storage infrastructure—the freezers, rooms, buildings, and other places where your collections are actually stored. SampleDB uses a hierarchical location system that mirrors your laboratory's physical organization, making it easy to track where samples are stored and to find them when you need them.
 
+The Locations page and related storage pages (location detail, collection detail, container detail, and move wizards) use a consistent "modern precision lab" visual theme aligned with the rest of the app; behavior is unchanged.
+
 The location hierarchy works like a tree, with parent locations containing child locations, creating a structure that matches how your lab is actually organized. This might be Building → Room → Freezer → Shelf, or Freezer → Rack → Shelf → Drawer, or any structure that makes sense for your physical layout. The flexibility of this system means you can organize locations in whatever way matches your laboratory's actual storage setup.
 
 ## Understanding How Location Hierarchies Work

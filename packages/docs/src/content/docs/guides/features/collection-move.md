@@ -5,6 +5,8 @@ description: Move entire collections between locations
 
 Collection move allows you to relocate entire collections (plates, boxes, bags) from one storage location to another. This is essential when you're reorganizing storage, moving to new freezers, consolidating locations, or making any changes to your physical storage infrastructure. Unlike moving individual containers, collection move relocates everything in a collection at once, which is much more efficient when entire plates or boxes need to move.
 
+The Collection Move wizard and other storage-related pages use a consistent "modern precision lab" visual theme aligned with the rest of the app; behavior is unchanged.
+
 The system tracks where collections are stored through location assignments, and updating these assignments when collections move physically ensures your records stay accurate. This accuracy is important because it helps you find samples when you need them and maintains proper inventory records.
 
 ## Understanding Collection Movement

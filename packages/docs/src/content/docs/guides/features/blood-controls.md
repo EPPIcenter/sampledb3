@@ -5,6 +5,8 @@ description: Manage control definitions, batches, and inventory
 
 Blood controls are reference samples used for quality control, calibration, and validation in laboratory work. SampleDB provides comprehensive tools for managing control definitions, creating control batches, and tracking inventory. This system helps you maintain quality control samples efficiently, whether you're working with dried blood spots, cryovial controls, or other control materials.
 
+The Blood Controls pages use the same "modern precision lab" visual theme as the rest of the app (dashboard, studies, storage); behavior is unchanged.
+
 The blood controls system is built around two main concepts: definitions and batches. A control definition describes what a type of control is—its composition, target properties, and intended use. A control batch is a specific production of that control type, with actual specimens that you can use in your work. This separation allows you to define control types once and then create multiple batches as needed.
 
 ## Understanding Control Definitions
@@ -65,9 +67,9 @@ This association helps you track which control batches are being used, how much 
 
 As your control inventory grows, being able to find specific definitions or batches becomes important. The Blood Controls interface provides filtering tools to help you locate what you need.
 
-For control definitions, you can filter by search term (which searches names and descriptions), by strains (showing only definitions that include certain strains), and by target density range (if you're looking for controls with specific density targets). These filters help you narrow down long lists to find the definitions you need.
+For control definitions, you can filter by search term (which searches names and descriptions), by strains (showing only definitions that include certain strains), and by target density range (if you're looking for controls with specific density targets). The strain filter has a toggle: **Contains** (default) shows definitions or batches that have all selected strains (and may have more), while **Exact** shows only those whose strain set equals the selected strains exactly. These filters help you narrow down long lists to find the definitions you need.
 
-For batches, you can filter by search term (searching batch names and definition names), by production date range (useful for finding batches from specific time periods), by strains (based on the definition's strains), and by density range. This makes it easy to find batches that meet specific criteria, whether you're looking for recent batches, batches with certain strain compositions, or batches within a density range.
+For batches, you can filter by search term (searching batch names and definition names), by production date range (useful for finding batches from specific time periods), by strains (based on the definition's strains, with the same Contains/Exact toggle), and by density range. This makes it easy to find batches that meet specific criteria, whether you're looking for recent batches, batches with certain strain compositions, or batches within a density range.
 
 ## Tracking Inventory
 

@@ -3,7 +3,7 @@ title: Settings
 description: Configure application settings and export configurations
 ---
 
-The Settings page allows you to configure various aspects of SampleDB, including export configurations, default settings, and system preferences. Understanding how to configure these settings helps you customize the system to match your laboratory's workflows and ensures exports and other operations work the way you need them to.
+The Settings page allows you to configure various aspects of SampleDB, including export configurations, default settings, and system preferences. The Settings UI uses a consistent "modern precision lab" visual theme aligned with the rest of the app; behavior is unchanged. Understanding how to configure these settings helps you customize the system to match your laboratory's workflows and ensures exports and other operations work the way you need them to.
 
 Export configurations are particularly important, as they determine which columns appear in exported data files. Creating and managing these configurations ensures your exports include the right information and are formatted appropriately for your needs.
 

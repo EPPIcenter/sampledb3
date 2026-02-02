@@ -9,7 +9,7 @@ Think of the dashboard as your command center. It shows you at a glance how many
 
 ## Understanding the Dashboard Layout
 
-The dashboard is organized into several distinct sections, each serving a different purpose. At the top, you'll find key metrics that give you a high-level view of your system. Below that, quick actions let you jump straight into common tasks. Further down, you'll see recent activity, system insights, and storage information that help you understand what's happening in your lab.
+The dashboard uses a "modern precision lab" theme with a clear header and sections. At the top you'll see a **Lab overview** title and the subtitle *Your samples at a glance*. Below that, key metrics give you a high-level view of your system. Next, Quick Actions let you jump straight into common tasks. Further down you'll see Recent Studies and Recent Activity side by side, then System Insights (charts), and optionally a Blood Controls summary. Each section uses consistent card styling and a teal accent for links and highlights. The same theme is used on the **Studies** list and study detail pages so that navigating from the dashboard to studies feels consistent.
 
 ### Key Metrics at a Glance
 
@@ -44,12 +44,6 @@ This feed helps you stay aware of recent changes in the system, which is especia
 The System Insights section provides information about storage utilization, specimen type distribution, container type usage, and other system-wide statistics. These insights help you understand how your samples are distributed across different types and locations, which can inform decisions about storage capacity, workflow optimization, and resource planning.
 
 For example, you might see that most of your specimens are Whole Blood stored in Cryovial Tubes, which could help you plan freezer capacity. Or you might notice that certain specimen types are more common than others, which could inform your procurement decisions.
-
-### Understanding Your Storage Distribution
-
-The Storage Overview section shows how containers are organized by root location, providing storage capacity information and location hierarchy statistics. This helps you understand how your samples are distributed across your physical storage infrastructure.
-
-You can see at a glance which locations contain the most containers, how storage is distributed across different areas of your lab, and whether any locations are approaching capacity. This information is valuable for planning storage expansion, reorganizing samples, or identifying locations that might need attention.
 
 ### Blood Controls Summary
 
