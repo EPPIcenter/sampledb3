@@ -24,6 +24,8 @@ interface DataTableProps<T> {
     onPageChange: (page: number) => void
     showPagination?: boolean
   }
+  /** Optional class for the root wrapper (e.g. dashboard-card for themed pages). */
+  className?: string
 }
 
 export default function DataTable<T extends { id: number }>({
@@ -36,6 +38,7 @@ export default function DataTable<T extends { id: number }>({
   initialSortDirection = 'asc',
   density = 'normal',
   pagination,
+  className,
 }: DataTableProps<T>) {
   const [sortColumn, setSortColumn] = useState<keyof T | string | null>(initialSortColumn)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(initialSortDirection)
@@ -188,8 +191,10 @@ export default function DataTable<T extends { id: number }>({
     )
   }
 
+  const wrapperClass = className ?? 'bg-white rounded-lg shadow overflow-hidden'
+
   return (
-    <div ref={tableRef} className="bg-white rounded-lg shadow overflow-hidden" tabIndex={0}>
+    <div ref={tableRef} className={wrapperClass} tabIndex={0}>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50">

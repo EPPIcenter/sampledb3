@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { useHotkey } from '../hooks/useHotkey'
 import { Command, filterCommands, groupCommandsByCategory } from '../lib/commands'
-import { getModifierKey, formatHotkey } from '../lib/hotkeys'
 
 interface CommandPaletteProps {
   isOpen: boolean
@@ -16,7 +15,6 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
-  const navigate = useNavigate()
 
   // Close on Escape
   useHotkey('escape', () => {
@@ -108,17 +106,17 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
 
   const highlightText = (text: string, query: string) => {
     if (!query) return text
-    
+
     const lowerQuery = query.toLowerCase()
     const lowerText = text.toLowerCase()
     const index = lowerText.indexOf(lowerQuery)
-    
+
     if (index === -1) return text
-    
+
     return (
       <>
         {text.substring(0, index)}
-        <mark className="bg-yellow-200">{text.substring(index, index + query.length)}</mark>
+        <mark>{text.substring(index, index + query.length)}</mark>
         {text.substring(index + query.length)}
       </>
     )
@@ -127,131 +125,99 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
-        <div
-          className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-          onClick={onClose}
-        />
+    <div className="palette-overlay">
+      <div
+        className="palette-overlay__backdrop"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div className="palette-panel sm:my-8 sm:max-w-2xl">
+        <div className="palette-panel__inner">
+          <div className="palette-input-wrap">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type a command or search..."
+              className="palette-input"
+              autoFocus
+              aria-label="Command palette"
+            />
+          </div>
 
-        {/* Modal panel */}
-        <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            {/* Search input */}
-            <div className="mb-4 relative">
-              <input
-                ref={inputRef}
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Type a command or search..."
-                className="w-full form-input pl-10 h-12 text-lg"
-                autoFocus
-              />
-              <svg
-                className="absolute left-3 top-3 h-6 w-6 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-            </div>
+          <div ref={resultsRef} className="palette-results">
+            {Object.keys(groupedCommands).length === 0 ? (
+              <div className="palette-empty">
+                <p>No commands found</p>
+                <p>Try a different search term</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {Object.entries(groupedCommands).map(([category, categoryCommands]) => (
+                  <div key={category}>
+                    <h4 className="palette-group-title">{category}</h4>
+                    <div className="palette-list">
+                      {categoryCommands.map((command) => {
+                        const flatIndex = flatCommands.indexOf(command)
+                        const isSelected = flatIndex === selectedIndex
 
-            {/* Results */}
-            <div
-              ref={resultsRef}
-              className="max-h-[60vh] overflow-y-auto"
-            >
-              {Object.keys(groupedCommands).length === 0 ? (
-                <div className="py-8 text-center text-gray-500">
-                  <p>No commands found</p>
-                  <p className="text-sm mt-2">Try a different search term</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {Object.entries(groupedCommands).map(([category, categoryCommands]) => (
-                    <div key={category}>
-                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 px-2">
-                        {category}
-                      </h4>
-                      <div className="space-y-1">
-                        {categoryCommands.map((command, index) => {
-                          const flatIndex = flatCommands.indexOf(command)
-                          const isSelected = flatIndex === selectedIndex
-                          
-                          return (
-                            <button
-                              key={command.id}
-                              data-command-index={flatIndex}
-                              onClick={() => executeCommand(command)}
-                              onMouseEnter={() => setSelectedIndex(flatIndex)}
-                              className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-                                isSelected
-                                  ? 'bg-blue-50 border-2 border-blue-500'
-                                  : 'bg-white border-2 border-transparent hover:bg-gray-50'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                  <div className="font-medium text-gray-900">
-                                    {highlightText(command.label, query)}
-                                  </div>
-                                  {command.description && (
-                                    <div className="text-sm text-gray-500 mt-0.5">
-                                      {command.description}
-                                    </div>
-                                  )}
+                        return (
+                          <button
+                            key={command.id}
+                            type="button"
+                            data-command-index={flatIndex}
+                            onClick={() => executeCommand(command)}
+                            onMouseEnter={() => setSelectedIndex(flatIndex)}
+                            className={`palette-item ${isSelected ? 'palette-item--selected' : ''}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="palette-item__title">
+                                  {highlightText(command.label, query)}
                                 </div>
-                                {command.icon && (
-                                  <div className="ml-4 text-gray-400">
-                                    {command.icon}
-                                  </div>
+                                {command.description && (
+                                  <div className="palette-item__subtitle">{command.description}</div>
                                 )}
                               </div>
-                            </button>
-                          )
-                        })}
-                      </div>
+                              {command.icon && (
+                                <div className="ml-4 flex-shrink-0 opacity-60 [&_svg]:w-5 [&_svg]:h-5">
+                                  {command.icon}
+                                </div>
+                              )}
+                            </div>
+                          </button>
+                        )
+                      })}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-            {/* Footer */}
-            <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-500">
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-1">
-                  <kbd className="px-1.5 py-0.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-300 rounded">
-                    ↑↓
-                  </kbd>
-                  <span>Navigate</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <kbd className="px-1.5 py-0.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-300 rounded">
-                    Enter
-                  </kbd>
-                  <span>Select</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <kbd className="px-1.5 py-0.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-300 rounded">
-                    Esc
-                  </kbd>
-                  <span>Close</span>
-                </div>
+          <div className="palette-footer">
+            <div className="palette-footer__hints">
+              <div className="palette-footer__hint">
+                <kbd className="palette-kbd">↑↓</kbd>
+                <span>Navigate</span>
               </div>
-              <div className="text-xs">
-                {flatCommands.length} {flatCommands.length === 1 ? 'command' : 'commands'}
+              <div className="palette-footer__hint">
+                <kbd className="palette-kbd">Enter</kbd>
+                <span>Select</span>
+              </div>
+              <div className="palette-footer__hint">
+                <kbd className="palette-kbd">Esc</kbd>
+                <span>Close</span>
               </div>
             </div>
+            <span className="text-xs">
+              {flatCommands.length} {flatCommands.length === 1 ? 'command' : 'commands'}
+            </span>
           </div>
         </div>
       </div>

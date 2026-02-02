@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, ReactNode } from 'react'
+import { useState, useRef, ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
 
@@ -377,21 +377,14 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
       return (
         <div key={itemKeyValue}>
           <button
+            type="button"
             onClick={() => toggleItem(itemKeyValue)}
-            className={`
-              w-full flex items-center justify-between gap-2 px-2 py-1 rounded-md text-xs font-medium transition-colors
-              ${itemActive
-                ? 'bg-blue-50 text-blue-700'
-                : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-              }
-            `}
+            className={`app-sidebar__link-button ${itemActive ? 'app-sidebar__link-button--active' : ''}`}
           >
-            <div className="flex items-center gap-2">
-              <span className={`${itemActive ? 'text-blue-600' : 'text-gray-500'} flex-shrink-0`}>{item.icon}</span>
-              <span className="truncate">{item.label}</span>
-            </div>
+            <span className="app-sidebar__link-icon">{item.icon}</span>
+            <span className="app-sidebar__link-text">{item.label}</span>
             <svg
-              className={`w-3 h-3 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''} ${itemActive ? 'text-blue-600' : 'text-gray-400'}`}
+              className={`app-sidebar__chevron ${isExpanded ? 'app-sidebar__chevron--open' : ''}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -400,7 +393,7 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
             </svg>
           </button>
           {isExpanded && (
-            <div className="space-y-0.5 mt-0.5 ml-1">
+            <div className="app-sidebar__children">
               {item.children!.map((child) => renderNavItem(child, true, `${itemKeyValue}-${child.label.toLowerCase().replace(/\s+/g, '-')}`))}
             </div>
           )}
@@ -423,14 +416,10 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
               onMobileClose()
             }
           }}
-          className={`
-            flex items-center gap-2 px-2 py-1 rounded-md text-xs font-medium transition-colors w-full text-left
-            text-gray-700 hover:bg-gray-100 hover:text-gray-900
-            ${isSubItem ? 'ml-1' : ''}
-          `}
+          className={`app-sidebar__link-button ${isSubItem ? 'app-sidebar__link-button--sub' : ''}`}
         >
-          <span className="text-gray-500 flex-shrink-0">{item.icon}</span>
-          <span className="truncate">{item.label}</span>
+          <span className="app-sidebar__link-icon">{item.icon}</span>
+          <span className="app-sidebar__link-text">{item.label}</span>
         </button>
       )
     }
@@ -447,14 +436,10 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
               onMobileClose()
             }
           }}
-          className={`
-            flex items-center gap-2 px-2 py-1 rounded-md text-xs font-medium transition-colors
-            text-gray-700 hover:bg-gray-100 hover:text-gray-900
-            ${isSubItem ? 'ml-1' : ''}
-          `}
+          className={`app-sidebar__link ${isSubItem ? 'app-sidebar__link--sub' : ''}`}
         >
-          <span className="text-gray-500 flex-shrink-0">{item.icon}</span>
-          <span className="truncate">{item.label}</span>
+          <span className="app-sidebar__link-icon">{item.icon}</span>
+          <span className="app-sidebar__link-text">{item.label}</span>
         </a>
       )
     }
@@ -468,30 +453,23 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
             onMobileClose()
           }
         }}
-        className={`
-          flex items-center gap-2 px-2 py-1 rounded-md text-xs font-medium transition-colors
-          ${active
-            ? 'bg-blue-50 text-blue-700'
-            : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-          }
-          ${isSubItem ? 'ml-1' : ''}
-        `}
+        className={`app-sidebar__link ${active ? 'app-sidebar__link--active' : ''} ${isSubItem ? 'app-sidebar__link--sub' : ''}`}
       >
-        <span className={`${active ? 'text-blue-600' : 'text-gray-500'} flex-shrink-0`}>{item.icon}</span>
-        <span className="truncate">{item.label}</span>
+        <span className="app-sidebar__link-icon">{item.icon}</span>
+        <span className="app-sidebar__link-text">{item.label}</span>
       </Link>
     )
   }
 
   const renderSection = (section: NavSection, sectionIndex: number) => {
     return (
-      <div key={section.title || `section-${sectionIndex}`} className="mb-3">
+      <div key={section.title || `section-${sectionIndex}`} className="app-sidebar__section">
         {section.title && (
-          <div className="px-2 py-0.5 mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+          <div className="app-sidebar__section-title">
             {section.title}
           </div>
         )}
-        <div className="space-y-0.5">
+        <div className="app-sidebar__section-items">
           {section.items.map((item) => renderNavItem(item))}
         </div>
       </div>
@@ -503,31 +481,32 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
       {/* Mobile overlay */}
       {isMobileOpen && (
         <div
-          className="fixed inset-0 bg-gray-900/40 backdrop-blur-md z-40 lg:hidden transition-opacity"
+          className="app-sidebar__overlay"
           onClick={onMobileClose}
+          aria-hidden="true"
         />
       )}
 
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 h-full bg-white border-r border-gray-200 z-50
-          w-52 overflow-y-auto
+          app-sidebar
+          fixed top-0 left-0 h-full w-52 overflow-y-auto z-50
           transform transition-transform duration-300 ease-in-out
           lg:translate-x-0 lg:z-auto
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
       >
-        <div className="flex flex-col h-full">
+        <div className="app-sidebar__inner">
           {/* Logo */}
-          <div className="flex items-center justify-between py-3 px-3">
-            <Link to="/" className="flex items-center gap-2 text-lg font-bold text-blue-600" onClick={onMobileClose}>
+          <div className="app-sidebar__header">
+            <Link to="/" className="app-sidebar__logo" onClick={onMobileClose}>
               <img src="/icon.png" alt="SampleDB" className="h-8 w-auto" />
               <span>SampleDB</span>
             </Link>
             <button
               onClick={onMobileClose}
-              className="lg:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              className="app-sidebar__close lg:hidden"
               aria-label="Close menu"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -537,17 +516,17 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-2 py-2">
+          <nav className="app-sidebar__nav">
             {sections.map((section, index) => renderSection(section, index))}
           </nav>
 
           {/* EPPIcenter Footer */}
-          <div className="px-3 py-3">
+          <div className="app-sidebar__footer">
             <a
               href="https://eppicenter.ucsf.edu"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center opacity-60 hover:opacity-100 transition-opacity"
+              className="app-sidebar__footer-link"
               title="EPPIcenter - UCSF"
             >
               <img

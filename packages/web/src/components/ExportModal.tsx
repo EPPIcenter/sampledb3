@@ -631,7 +631,7 @@ export default function ExportModal({
                   onClick={() => setUploadMode('manual')}
                   className={`py-4 px-1 border-b-2 font-medium text-sm ${
                     uploadMode === 'manual'
-                      ? 'border-blue-500 text-blue-600'
+                      ? 'border-teal-500 text-teal-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
@@ -641,7 +641,7 @@ export default function ExportModal({
                   onClick={() => setUploadMode('csv')}
                   className={`py-4 px-1 border-b-2 font-medium text-sm ${
                     uploadMode === 'csv'
-                      ? 'border-blue-500 text-blue-600'
+                      ? 'border-teal-500 text-teal-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
@@ -666,7 +666,7 @@ export default function ExportModal({
                         handleCSVUpload(file)
                       }
                     }}
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    className="file-input-accent"
                   />
                   <p className="mt-1 text-xs text-gray-500">
                     CSV should contain: subject_name (required), collection_date (optional), date_from (optional), date_to (optional)
@@ -692,7 +692,7 @@ export default function ExportModal({
                     min="0"
                     value={dateTolerance}
                     onChange={(e) => setDateTolerance(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                     placeholder="0 (exact match)"
                   />
                   <p className="mt-1 text-xs text-gray-500">
@@ -719,7 +719,7 @@ export default function ExportModal({
                           type="checkbox"
                           checked={filters.specimen_type_ids?.includes(type.id) || false}
                           onChange={() => toggleArrayFilter('specimen_type_ids', type.id)}
-                          className="rounded border-gray-100 text-blue-600 focus:ring-blue-500"
+                          className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
                         />
                         <span className="text-sm text-gray-700">{type.name}</span>
                       </label>
@@ -745,7 +745,7 @@ export default function ExportModal({
                           type="checkbox"
                           checked={filters.container_types?.includes(type.value) || false}
                           onChange={() => toggleArrayFilter('container_types', type.value)}
-                          className="rounded border-gray-100 text-blue-600 focus:ring-blue-500"
+                          className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
                         />
                         <span className="text-sm text-gray-700">{type.label}</span>
                       </label>
@@ -765,13 +765,13 @@ export default function ExportModal({
                       type="date"
                       value={filters.date_from || ''}
                       onChange={(e) => updateFilter('date_from', e.target.value || undefined)}
-                      className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                     />
                     <input
                       type="date"
                       value={filters.date_to || ''}
                       onChange={(e) => updateFilter('date_to', e.target.value || undefined)}
-                      className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                     />
                   </div>
                 </div>
@@ -784,13 +784,13 @@ export default function ExportModal({
                       type="date"
                       value={filters.created_from || ''}
                       onChange={(e) => updateFilter('created_from', e.target.value || undefined)}
-                      className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                     />
                     <input
                       type="date"
                       value={filters.created_to || ''}
                       onChange={(e) => updateFilter('created_to', e.target.value || undefined)}
-                      className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                     />
                   </div>
                 </div>
@@ -812,7 +812,7 @@ export default function ExportModal({
                             type="checkbox"
                             checked={filters.tag_ids?.includes(tag.id) || false}
                             onChange={() => toggleArrayFilter('tag_ids', tag.id)}
-                            className="rounded border-gray-100 text-blue-600 focus:ring-blue-500"
+                            className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
                           />
                           <span className="text-sm text-gray-700">{tag.name}</span>
                         </label>
@@ -835,7 +835,7 @@ export default function ExportModal({
                           type="checkbox"
                           checked={filters.subject_ids?.includes(subject.id) || false}
                           onChange={() => toggleArrayFilter('subject_ids', subject.id)}
-                          className="rounded border-gray-100 text-blue-600 focus:ring-blue-500"
+                          className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
                         />
                         <span className="text-sm text-gray-700">{subject.name}</span>
                       </label>
@@ -849,7 +849,7 @@ export default function ExportModal({
                 <div>
                   <button
                     onClick={clearFilters}
-                    className="text-sm text-blue-600 hover:text-blue-800"
+                    className="text-sm text-teal-600 hover:text-teal-800"
                   >
                     Clear All Filters
                   </button>
@@ -864,7 +864,7 @@ export default function ExportModal({
                 {loadingCount ? (
                   <span className="text-sm text-gray-500">Calculating...</span>
                 ) : (
-                  <span className="text-lg font-bold text-blue-600">
+                  <span className="text-lg font-bold text-teal-600">
                     {count !== null ? count.toLocaleString() : '—'}
                   </span>
                 )}
@@ -879,7 +879,7 @@ export default function ExportModal({
                 </label>
                 <Link
                   to="/settings?category=data-management&section=export-configurations"
-                  className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                  className="text-xs text-teal-600 hover:text-teal-800 hover:underline flex items-center gap-1"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -899,7 +899,7 @@ export default function ExportModal({
                   <p className="text-gray-700 mb-2">No export configurations available.</p>
                   <Link
                     to="/settings?category=data-management&section=export-configurations"
-                    className="text-blue-600 hover:text-blue-800 hover:underline font-medium inline-flex items-center gap-1"
+                    className="text-teal-600 hover:text-teal-800 hover:underline font-medium inline-flex items-center gap-1"
                   >
                     Create one in Settings
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -965,22 +965,22 @@ export default function ExportModal({
                             setFocusedConfigIndex(null)
                           }
                         }}
-                        className={`w-full text-left px-3 py-2 border rounded transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
+                        className={`w-full text-left px-3 py-2 border rounded transition-all focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${
                           isSelected
-                            ? 'border-blue-500 bg-blue-50 shadow-sm'
+                            ? 'border-teal-500 bg-teal-50 shadow-sm'
                             : isFocused
-                            ? 'border-blue-300 bg-blue-50/70'
-                            : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                            ? 'border-teal-300 bg-teal-50/70'
+                            : 'border-gray-200 hover:border-teal-300 hover:bg-teal-50/50'
                         }`}
                         title={config.columns.length > 0 ? `Columns: ${config.columns.slice(0, 5).join(', ')}${config.columns.length > 5 ? `, +${config.columns.length - 5} more` : ''}` : 'No columns'}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                            <span className={`font-medium text-sm truncate ${isSelected ? 'text-blue-900' : 'text-gray-900'}`}>
+                            <span className={`font-medium text-sm truncate ${isSelected ? 'text-teal-900' : 'text-gray-900'}`}>
                               {config.name}
                             </span>
                             {config.isDefault && (
-                              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700 rounded flex-shrink-0" aria-label="Default configuration">
+                              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-teal-100 text-teal-900 rounded flex-shrink-0" aria-label="Default configuration">
                                 Default
                               </span>
                             )}
@@ -996,7 +996,7 @@ export default function ExportModal({
                             </span>
                           </div>
                           {isSelected && (
-                            <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                            <svg className="w-4 h-4 text-teal-900 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           )}
@@ -1025,7 +1025,7 @@ export default function ExportModal({
                       value={format}
                       checked={exportFormat === format}
                       onChange={() => setExportFormat(format)}
-                      className="text-blue-600 focus:ring-blue-500"
+                      className="text-teal-600 focus:ring-teal-500"
                     />
                     <span className="text-sm text-gray-700 uppercase">{format}</span>
                   </label>
@@ -1051,7 +1051,7 @@ export default function ExportModal({
                         value=","
                         checked={csvDelimiter === ','}
                         onChange={() => setCsvDelimiter(',')}
-                        className="text-blue-600 focus:ring-blue-500"
+                        className="text-teal-600 focus:ring-teal-500"
                       />
                       <span className="text-sm text-gray-700">Comma (,)</span>
                     </label>
@@ -1062,7 +1062,7 @@ export default function ExportModal({
                         value=";"
                         checked={csvDelimiter === ';'}
                         onChange={() => setCsvDelimiter(';')}
-                        className="text-blue-600 focus:ring-blue-500"
+                        className="text-teal-600 focus:ring-teal-500"
                       />
                       <span className="text-sm text-gray-700">Semicolon (;)</span>
                     </label>
@@ -1073,7 +1073,7 @@ export default function ExportModal({
                         value="\t"
                         checked={csvDelimiter === '\t'}
                         onChange={() => setCsvDelimiter('\t')}
-                        className="text-blue-600 focus:ring-blue-500"
+                        className="text-teal-600 focus:ring-teal-500"
                       />
                       <span className="text-sm text-gray-700">Tab</span>
                     </label>
@@ -1087,7 +1087,7 @@ export default function ExportModal({
                       type="checkbox"
                       checked={csvBOM}
                       onChange={(e) => setCsvBOM(e.target.checked)}
-                      className="text-blue-600 focus:ring-blue-500"
+                      className="text-teal-600 focus:ring-teal-500"
                     />
                     <span className="text-sm text-gray-700">Include UTF-8 BOM (recommended for Excel)</span>
                   </label>
@@ -1109,7 +1109,7 @@ export default function ExportModal({
                         value="CRLF"
                         checked={csvLineEnding === 'CRLF'}
                         onChange={() => setCsvLineEnding('CRLF')}
-                        className="text-blue-600 focus:ring-blue-500"
+                        className="text-teal-600 focus:ring-teal-500"
                       />
                       <span className="text-sm text-gray-700">CRLF (Windows, recommended for Excel)</span>
                     </label>
@@ -1120,7 +1120,7 @@ export default function ExportModal({
                         value="LF"
                         checked={csvLineEnding === 'LF'}
                         onChange={() => setCsvLineEnding('LF')}
-                        className="text-blue-600 focus:ring-blue-500"
+                        className="text-teal-600 focus:ring-teal-500"
                       />
                       <span className="text-sm text-gray-700">LF (Unix)</span>
                     </label>
@@ -1170,10 +1170,10 @@ export default function ExportModal({
                 >
                   <div className="px-4 py-4 space-y-4 bg-white">
                     {/* Total Containers */}
-                    <div className="p-4 bg-blue-50 rounded-lg">
+                    <div className="p-4 bg-teal-50 rounded-lg">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-gray-700">Total Containers Exported:</span>
-                        <span className="text-2xl font-bold text-blue-600">
+                        <span className="text-2xl font-bold text-teal-900">
                           {exportSummary.total_containers.toLocaleString()}
                         </span>
                       </div>
@@ -1189,7 +1189,7 @@ export default function ExportModal({
                           {exportSummary.subjects_with_results.map((item, idx) => (
                             <div key={idx} className="flex justify-between items-center py-1 text-sm">
                               <span className="text-gray-700">{item.name}</span>
-                              <span className="font-medium text-blue-600">
+                              <span className="font-medium text-teal-600">
                                 {item.count.toLocaleString()} container{item.count !== 1 ? 's' : ''}
                               </span>
                             </div>
@@ -1259,7 +1259,7 @@ export default function ExportModal({
               <button
                 onClick={handleExport}
                 disabled={exporting || count === 0 || loadingCount || (uploadMode === 'csv' && csvData.length === 0)}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
                 {exporting ? 'Exporting...' : 'Export'}
               </button>

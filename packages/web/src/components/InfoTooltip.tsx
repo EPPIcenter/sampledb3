@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   useFloating,
   autoUpdate,
@@ -84,25 +85,27 @@ export default function InfoTooltip({ text, className = '' }: InfoTooltipProps) 
           />
         </svg>
       </span>
-      {isVisible && (
-        <span
-          ref={refs.setFloating}
-          style={{
-            ...floatingStyles,
-            width: 'max-content',
-            maxWidth: '32rem',
-            minWidth: '20rem',
-          }}
-          className="z-50 p-3 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg shadow-lg pointer-events-none block"
-        >
+      {isVisible &&
+        createPortal(
           <span
-            ref={arrowRef}
-            style={arrowStyle}
-            className={`w-0 h-0 border-4 border-transparent ${getArrowBorderClass()}`}
-          />
-          <span className="relative z-10 block">{text}</span>
-        </span>
-      )}
+            ref={refs.setFloating}
+            style={{
+              ...floatingStyles,
+              width: 'max-content',
+              maxWidth: '32rem',
+              minWidth: '20rem',
+            }}
+            className="z-[10060] p-3 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg shadow-lg pointer-events-none block"
+          >
+            <span
+              ref={arrowRef}
+              style={arrowStyle}
+              className={`w-0 h-0 border-4 border-transparent ${getArrowBorderClass()}`}
+            />
+            <span className="relative z-10 block">{text}</span>
+          </span>,
+          document.body
+        )}
     </span>
   )
 }

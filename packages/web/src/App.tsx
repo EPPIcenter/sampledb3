@@ -34,6 +34,8 @@ import ContainerMoveCryovial from './pages/ContainerMoveCryovial'
 import ContainerMovePapers from './pages/ContainerMovePapers'
 import CollectionMove from './pages/CollectionMove'
 import Sidebar from './components/Sidebar'
+import './styles/sidebar.css'
+import './styles/floating-palettes.css'
 import UserSwitcher from './components/UserSwitcher'
 import StudyNew from './pages/StudyNew'
 import SpecimenNew from './pages/SpecimenNew'
@@ -46,7 +48,7 @@ import ControlBatchDetail from './pages/ControlBatchDetail'
 import ControlBatchWizard from './pages/ControlBatchWizard'
 import ControlDefinitionDetail from './pages/ControlDefinitionDetail'
 import BloodControls from './pages/BloodControls'
-import ControlDefinitionForm from './components/forms/ControlDefinitionForm'
+import BloodControlDefinitionPage from './pages/BloodControlDefinitionPage'
 import ReferenceData from './pages/ReferenceData'
 import Settings from './pages/Settings'
 import Profile from './pages/Profile'
@@ -482,7 +484,7 @@ function AppContent() {
               {/* Mobile menu button - floating */}
               <button
                 onClick={() => setIsMobileSidebarOpen(true)}
-                className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-white rounded-lg shadow-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 border border-gray-200"
+                className="app-sidebar__mobile-trigger fixed top-4 left-4 z-50"
                 aria-label="Open menu"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -518,9 +520,9 @@ function AppContent() {
           <Route path="/collections/bags/:id" element={<BagDetail />} />
           <Route path="/collections/sheets/:id" element={<SheetDetail />} />
           <Route path="/blood-controls" element={<BloodControls />} />
-          <Route path="/blood-controls/new" element={<ControlDefinitionForm />} />
+          <Route path="/blood-controls/new" element={<BloodControlDefinitionPage />} />
           <Route path="/blood-controls/:id" element={<ControlDefinitionDetail />} />
-          <Route path="/blood-controls/:id/edit" element={<ControlDefinitionForm />} />
+          <Route path="/blood-controls/:id/edit" element={<BloodControlDefinitionPage />} />
           <Route path="/blood-controls/batches/new" element={<ControlBatchWizard />} />
           <Route path="/blood-controls/batches/:id" element={<ControlBatchDetail />} />
           <Route path="/blood-controls/batches/:id/add-specimens" element={<ControlBatchWizard />} />
@@ -589,7 +591,7 @@ function AppContent() {
       {!isLoginPage && !isSetupPage && (
         <div 
           data-floating-buttons="true"
-          className="group fixed right-6 bottom-6 z-50 p-2 -m-2"
+          className="floating-actions group fixed right-6 bottom-6 z-50 p-2 -m-2"
           onMouseEnter={() => {
             // Clear any pending collapse
             if (collapseTimeoutRef.current) {
@@ -608,23 +610,19 @@ function AppContent() {
         >
           {/* Collapsed indicator button - always visible */}
           <button
-            className="w-10 h-10 rounded-full bg-white shadow-md border border-gray-200 flex items-center justify-center hover:shadow-lg hover:border-blue-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            type="button"
+            className="floating-actions__trigger"
             aria-label="Show actions"
             aria-expanded={isButtonsExpanded}
           >
-            <svg 
-              className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${isButtonsExpanded ? 'rotate-90' : ''}`}
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
             </svg>
           </button>
 
           {/* Expanded buttons - visible on hover, positioned to the left */}
           <div 
-            className={`absolute right-full bottom-0 mr-1 flex flex-col gap-2 transition-all duration-300 ease-out ${
+            className={`absolute right-full bottom-0 mr-1 floating-actions__expanded transition-all duration-300 ease-out ${
               isButtonsExpanded 
                 ? 'opacity-100 translate-x-0 pointer-events-auto' 
                 : 'opacity-0 translate-x-2 pointer-events-none'
@@ -644,8 +642,9 @@ function AppContent() {
 
             {/* Command palette button */}
             <button
+              type="button"
               onClick={openCommandPalette}
-              className="group/btn flex items-center gap-2 px-3 py-2.5 bg-white text-gray-700 rounded-lg shadow-md hover:shadow-lg border border-gray-200 hover:border-blue-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:scale-95"
+              className="floating-actions__btn"
               style={{ 
                 transitionDelay: isButtonsExpanded ? '50ms' : '0ms',
                 opacity: isButtonsExpanded ? 1 : 0,
@@ -653,18 +652,19 @@ function AppContent() {
               }}
               aria-label="Open command palette"
             >
-              <svg className="w-4 h-4 text-gray-500 group-hover/btn:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
               </svg>
-              <span className="text-xs font-medium text-gray-500 group-hover/btn:text-blue-600 transition-colors">
+              <span className="floating-actions__kbd">
                 {isMac() ? '⌘⇧K' : 'Ctrl+Shift+K'}
               </span>
             </button>
 
             {/* Search button */}
             <button
+              type="button"
               onClick={openSearchModal}
-              className="group/btn flex items-center gap-2 px-3 py-2.5 bg-white text-gray-700 rounded-lg shadow-md hover:shadow-lg border border-gray-200 hover:border-blue-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:scale-95"
+              className="floating-actions__btn"
               style={{ 
                 transitionDelay: isButtonsExpanded ? '100ms' : '0ms',
                 opacity: isButtonsExpanded ? 1 : 0,
@@ -672,10 +672,10 @@ function AppContent() {
               }}
               aria-label="Open search"
             >
-              <svg className="w-4 h-4 text-gray-500 group-hover/btn:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              <span className="text-xs font-medium text-gray-500 group-hover/btn:text-blue-600 transition-colors">
+              <span className="floating-actions__kbd">
                 {isMac() ? '⌘K' : 'Ctrl+K'}
               </span>
             </button>

@@ -13,7 +13,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
   const [expandedSpecimens, setExpandedSpecimens] = useState<Map<number, boolean>>(new Map())
   if (specimens.length === 0) {
     return (
-      <div className="text-center py-4 text-gray-500 text-sm">
+      <div className="simple-timeline text-center py-4 dashboard-stat-muted text-sm">
         No collection events
       </div>
     )
@@ -162,7 +162,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
   }
 
   return (
-    <div>
+    <div className="simple-timeline">
       <div className="space-y-3">
         {Object.entries(groupedByDate).map(([dateKey, dateSpecimens]) => {
           const displayDate = dateSpecimens[0].collectionDate || dateSpecimens[0].created
@@ -202,19 +202,19 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                             {/* Top row: Type and Counts */}
                             <div className="flex items-center gap-3 flex-wrap">
                               <div className="flex items-center gap-2 min-w-0">
-                                <p className="font-medium text-gray-900 text-sm whitespace-nowrap">
+                                <p className="font-medium dashboard-stat-value text-sm whitespace-nowrap">
                                   {specimen.specimenTypeName}
                                 </p>
                               </div>
                           
-                              <div className="flex items-center text-xs text-gray-600 gap-1">
+                              <div className="flex items-center text-xs dashboard-stat-muted gap-1">
                                 <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                                 </svg>
                                 <span className="whitespace-nowrap">
-                                  <strong>{specimen.containerCount}</strong> {specimen.containerCount === 1 ? 'container' : 'containers'}
+                                  <strong className="dashboard-stat-value">{specimen.containerCount}</strong> {specimen.containerCount === 1 ? 'container' : 'containers'}
                                   {unitsLabel && (
-                                    <span className="ml-1 text-gray-500">
+                                    <span className="ml-1 dashboard-stat-muted">
                                       ({unitsLabel} available)
                                     </span>
                                   )}
@@ -224,14 +224,14 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                               {specimen.containerCount > 0 && specimen.containerBreakdown && Object.keys(specimen.containerBreakdown).length > 0 && (
                                 <>
                                   <span className="text-gray-300">•</span>
-                                  <div className="flex items-center text-xs text-gray-600 gap-1.5">
+                                  <div className="flex items-center text-xs dashboard-stat-muted gap-1.5">
                                     {Object.entries(specimen.containerBreakdown).map(([type, count]) => (
                                       <div key={type} className="flex items-center gap-0.5" title={getContainerTypeName(type)}>
-                                        <span className="text-gray-500">{getContainerTypeIcon(type)}</span>
-                                        <span className="text-gray-500">{count}</span>
+                                        <span className="dashboard-stat-muted">{getContainerTypeIcon(type)}</span>
+                                        <span className="dashboard-stat-value">{count}</span>
                                       </div>
                                     ))}
-                                    <span className="text-gray-500 ml-0.5 capitalize">
+                                    <span className="dashboard-stat-muted ml-0.5 capitalize">
                                       ({formatContainerBreakdown(specimen.containerBreakdown)})
                                     </span>
                                   </div>
@@ -268,7 +268,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                   e.stopPropagation()
                                   toggleSpecimenExpanded(specimen.id, specimen.containers?.length || 0)
                                 }}
-                                className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 transition-colors"
+                                className="flex items-center gap-1.5 text-xs dashboard-stat-muted hover:opacity-90 transition-colors"
                                 aria-expanded={isSpecimenExpanded(specimen.id, specimen.containers.length)}
                                 aria-label={`${isSpecimenExpanded(specimen.id, specimen.containers.length) ? 'Collapse' : 'Expand'} container locations`}
                               >
