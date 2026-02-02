@@ -150,6 +150,10 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
     name: z.string().optional().nullable(),
     standardLayout: z.record(z.string(), z.unknown()).optional().nullable(),
     status: z.enum(['setup', 'template_exported', 'results_uploaded']).optional(),
+    targetName: z.string().optional().nullable(),
+    fluorophore: z.string().optional().nullable(),
+    reporter: z.string().optional().nullable(),
+    instrumentType: z.string().optional().nullable(),
   })
 
   // GET / - List experiments
@@ -222,6 +226,42 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
     }
   })
 
+  // DELETE /:id - Delete experiment and all related data (wells, runs, well results, amplification data)
+  qpcr.delete('/:id', authMiddleware, memberMiddleware, async (c) => {
+    try {
+      const id = parseInt(c.req.param('id'))
+      if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400)
+      const exp = await database.select().from(qpcrExperiment).where(eq(qpcrExperiment.id, id)).get()
+      if (!exp) return c.json({ error: 'Not found' }, 404)
+
+      const runs = await database
+        .select({ id: qpcrRun.id })
+        .from(qpcrRun)
+        .where(eq(qpcrRun.qpcrExperimentId, id))
+      const runIds = runs.map((r) => r.id)
+      if (runIds.length > 0) {
+        const wellResults = await database
+          .select({ id: qpcrWellResult.id })
+          .from(qpcrWellResult)
+          .where(inArray(qpcrWellResult.qpcrRunId, runIds))
+        const wellResultIds = wellResults.map((w) => w.id)
+        if (wellResultIds.length > 0) {
+          await database
+            .delete(qpcrAmplificationData)
+            .where(inArray(qpcrAmplificationData.qpcrWellResultId, wellResultIds))
+        }
+        await database.delete(qpcrWellResult).where(inArray(qpcrWellResult.qpcrRunId, runIds))
+      }
+      await database.delete(qpcrRun).where(eq(qpcrRun.qpcrExperimentId, id))
+      await database.delete(qpcrExperimentWell).where(eq(qpcrExperimentWell.qpcrExperimentId, id))
+      await database.delete(qpcrExperiment).where(eq(qpcrExperiment.id, id))
+
+      return c.body(null, 204)
+    } catch (error) {
+      return handleRouteError(error, c)
+    }
+  })
+
   // PATCH /:id - Update experiment
   qpcr.patch('/:id', authMiddleware, memberMiddleware, async (c) => {
     try {
@@ -239,6 +279,10 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       if (data.name !== undefined) updates.name = data.name
       if (data.standardLayout !== undefined) updates.standardLayout = data.standardLayout
       if (data.status !== undefined) updates.status = data.status
+      if (data.targetName !== undefined) updates.targetName = data.targetName
+      if (data.fluorophore !== undefined) updates.fluorophore = data.fluorophore
+      if (data.reporter !== undefined) updates.reporter = data.reporter
+      if (data.instrumentType !== undefined) updates.instrumentType = data.instrumentType
       const [updated] = await database
         .update(qpcrExperiment)
         .set(updates)
@@ -268,6 +312,16 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       const data = plateUploadSchema.parse(body)
       const exp = await database.select().from(qpcrExperiment).where(eq(qpcrExperiment.id, id)).get()
       if (!exp) return c.json({ error: 'Not found' }, 404)
+      if (exp.status !== 'setup') {
+        return c.json(
+          {
+            error:
+              'Plate layout cannot be changed after template has been exported or results have been uploaded. Delete the experiment to start over.',
+            errorCode: 'PLATE_LOCKED',
+          },
+          409
+        )
+      }
 
       const config = await getScannerConfigurationById(database, data.scannerConfigurationId)
       if (!config) return c.json({ error: 'Scanner configuration not found' }, 400)
@@ -353,19 +407,10 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       for (const r of rows) {
         if (seenPositions.has(r.wellPosition)) continue
         seenPositions.add(r.wellPosition)
-        const containerId = r.barcode ? barcodeToContainerId.get(r.barcode) : undefined
-        if (!r.barcode) {
-          wellsToInsert.push({
-            qpcrExperimentId: id,
-            wellPosition: r.wellPosition,
-            barcode: null,
-            storageContainerId: null,
-            specimenId: null,
-            contentType: null,
-            standardDensity: null,
-          })
+        if (!r.barcode?.trim()) {
           continue
         }
+        const containerId = barcodeToContainerId.get(r.barcode)
         if (!containerId) continue
         const storage = containerToStorage.get(containerId)
         const specimenId = storage?.specimenId ?? null
@@ -520,27 +565,54 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
     }
   })
 
-  /** Map standard density to Biorad/QuantStudio sample label */
-  function sampleLabelForWell(well: { standardDensity: number | null; contentType: string | null; barcode: string | null }): string {
+  /** Sample name for template: subject name for study samples, label for controls */
+  function sampleNameForWell(
+    well: { contentType: string | null; standardDensity: number | null; barcode: string | null },
+    source: WellSource | null
+  ): string {
+    if (source?.type === 'subject') return source.name
     if (!well.barcode && well.contentType !== 'standard' && well.contentType !== 'negative') return ''
     if (well.contentType === 'negative' || (well.standardDensity !== null && well.standardDensity === 0)) return 'Neg ctrl'
-    if (well.standardDensity !== null) {
-      if (well.standardDensity >= 10000) return '10k'
-      if (well.standardDensity >= 1000) return '1k'
-      if (well.standardDensity >= 100) return '100 p/ul'
-      if (well.standardDensity >= 10) return '10 p/ul'
-      if (well.standardDensity >= 1) return '1 p/ul'
+    if (well.standardDensity != null) {
+      if (well.standardDensity >= 10000) return 'Std-10k'
+      if (well.standardDensity >= 1000) return 'Std-1k'
+      if (well.standardDensity >= 100) return 'Std-100'
+      if (well.standardDensity >= 10) return 'Std-10'
+      if (well.standardDensity >= 1) return 'Std-1'
     }
     return well.barcode ?? ''
   }
 
-  function taskForWell(well: { contentType: string | null; standardDensity: number | null }): string {
+  /** Bio-Rad CFX Maestro Content: Unk, Std, NTC, Pos, Neg */
+  function bioradContentForWell(well: { contentType: string | null; standardDensity: number | null }): string {
+    if (well.contentType === 'negative' || (well.standardDensity !== null && well.standardDensity === 0)) return 'NTC'
+    if (well.contentType === 'standard') return 'Std'
+    return 'Unk'
+  }
+
+  /** QuantStudio Task: UNKNOWN, STANDARD, NTC, PC */
+  function quantStudioTaskForWell(well: { contentType: string | null; standardDensity: number | null }): string {
     if (well.contentType === 'negative' || (well.standardDensity !== null && well.standardDensity === 0)) return 'NTC'
     if (well.contentType === 'standard') return 'STANDARD'
     return 'UNKNOWN'
   }
 
-  // GET /:id/template?format=biorad|quant_studio - Download plate template for machine
+  function wellPositionToIndex(pos: string): number {
+    const match = pos.match(/^([A-H])(\d{1,2})$/i)
+    if (!match) return 0
+    const rowIdx = ROWS.indexOf(match[1].toUpperCase())
+    const col = parseInt(match[2], 10)
+    return rowIdx * COLS + col
+  }
+
+  function wellPositionToA1(pos: string): string {
+    const match = pos.match(/^([A-H])(\d{1,2})$/i)
+    if (!match) return pos
+    return `${match[1].toUpperCase()}${parseInt(match[2], 10)}`
+  }
+
+  // GET /:id/template?format=biorad|quant_studio&fluorophore=FAM&targetName=varATS&reporter=FAM&instrumentType=...
+  // Bio-Rad uses Fluorophore only; QuantStudio uses Reporter + Quencher (Quencher inferred from Reporter: SYBR→None, else NFQ-MGB). See design/qpcr-fluorophore-reporter.md.
   qpcr.get('/:id/template', authMiddleware, async (c) => {
     try {
       const id = parseInt(c.req.param('id'))
@@ -555,19 +627,41 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         .select()
         .from(qpcrExperimentWell)
         .where(eq(qpcrExperimentWell.qpcrExperimentId, id))
-      const wellMap = new Map<string, typeof wells[0]>()
-      wells.forEach((w) => wellMap.set(w.wellPosition, w))
-      const targetName = exp.targetName ?? 'varATS'
+      const wellsWithSource = await Promise.all(
+        wells.map(async (w) => {
+          const source = await enrichWellSource(database, w.specimenId)
+          return { well: w, source }
+        })
+      )
+      const wellMap = new Map<string, { well: typeof wells[0]; source: WellSource }>()
+      wellsWithSource.forEach(({ well, source }) => wellMap.set(well.wellPosition, { well, source }))
+
+      const targetName = (c.req.query('targetName') as string | undefined) ?? exp.targetName ?? 'varATS'
+      const fluorophore = (c.req.query('fluorophore') as string | undefined) ?? exp.fluorophore ?? 'FAM'
+      const reporter = (c.req.query('reporter') as string | undefined) ?? exp.reporter ?? 'FAM'
+      // QuantStudio requires Quencher; infer from Reporter (SYBR → None, others → NFQ-MGB). See design/qpcr-fluorophore-reporter.md.
+      const quencher = (() => {
+        const r = (reporter ?? '').trim()
+        if (r.toLowerCase() === 'sybr') return 'None'
+        return 'NFQ-MGB'
+      })()
+      const instrumentType = (c.req.query('instrumentType') as string | undefined) ?? exp.instrumentType ?? 'QuantStudio 5 Real-Time PCR System'
 
       if (format === 'biorad') {
-        const header = 'Row,Column,*Target Name,*Sample Name'
+        const header = 'Well,Fluorophore,Target Name,Content,Sample Name,Quantity'
         const lines: string[] = [header]
         for (const row of ROWS) {
           for (let col = 1; col <= COLS; col++) {
             const pos = `${row}${col.toString().padStart(2, '0')}`
-            const well = wellMap.get(pos)
-            const sampleName = well ? sampleLabelForWell(well) : ''
-            lines.push(`${row},${col},${targetName},${sampleName}`)
+            const entry = wellMap.get(pos)
+            const well = entry?.well
+            if (!well) continue
+            const source = entry?.source ?? null
+            const sampleName = sampleNameForWell(well, source)
+            const content = bioradContentForWell(well)
+            const quantity = well.contentType === 'standard' && well.standardDensity != null ? String(well.standardDensity) : ''
+            const wellA1 = wellPositionToA1(pos)
+            lines.push(`${wellA1},${fluorophore},${targetName},${content},${sampleName},${quantity}`)
           }
         }
         const csv = lines.join('\n')
@@ -580,24 +674,36 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         })
       }
 
-      // QuantStudio: TSV (Well, Sample Name, Target Name, Task, Reporter, Quencher)
-      const header = 'Well\tSample Name\tTarget Name\tTask\tReporter\tQuencher'
-      const lines: string[] = [header]
+      const meta = [
+        '* Block Type = 96-Well',
+        '* Experiment Type = Standard Curve',
+        `* Instrument Type = ${instrumentType}`,
+        '* No. Of Wells = 96',
+        '* Set Up Well Section Info =',
+      ]
+      const dataHeader = 'Well\tWell Position\tSample Name\tTarget Name\tTask\tReporter\tQuencher\tQuantity'
+      const dataLines: string[] = [dataHeader]
       for (const row of ROWS) {
         for (let col = 1; col <= COLS; col++) {
           const pos = `${row}${col.toString().padStart(2, '0')}`
-          const well = wellMap.get(pos)
-          const sampleName = well ? sampleLabelForWell(well) : ''
-          const task = well ? taskForWell(well) : 'UNKNOWN'
-          lines.push(`${row}${col}\t${sampleName}\t${targetName}\t${task}\t\t`)
+          const entry = wellMap.get(pos)
+          const well = entry?.well
+          if (!well) continue
+          const source = entry?.source ?? null
+          const sampleName = sampleNameForWell(well, source)
+          const task = quantStudioTaskForWell(well)
+          const quantity = well.contentType === 'standard' && well.standardDensity != null ? String(well.standardDensity) : ''
+          const wellIdx = wellPositionToIndex(pos)
+          const wellPos = wellPositionToA1(pos)
+          dataLines.push(`${wellIdx}\t${wellPos}\t${sampleName}\t${targetName}\t${task}\t${reporter}\t${quencher}\t${quantity}`)
         }
       }
-      const tsv = lines.join('\n')
+      const tsv = [...meta, '', dataLines.join('\n')].join('\n')
       return new Response(tsv, {
         status: 200,
         headers: {
           'Content-Type': 'text/tab-separated-values; charset=utf-8',
-          'Content-Disposition': `attachment; filename="qpcr-experiment-${id}-quantstudio-template.tsv"`,
+          'Content-Disposition': `attachment; filename="qpcr-experiment-${id}-quantstudio-template.txt"`,
         },
       })
     } catch (error) {

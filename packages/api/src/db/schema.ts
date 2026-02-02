@@ -468,6 +468,10 @@ export const qpcrExperiment = sqliteTable('qpcr_experiment', {
   standardLayout: text('standard_layout', { mode: 'json' }), // optional mapping of positions to standard labels / control batch
   plateBarcode: text('plate_barcode'),
   targetName: text('target_name'),
+  fluorophore: text('fluorophore'),
+  reporter: text('reporter'),
+  quencher: text('quencher'),
+  instrumentType: text('instrument_type'),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
   createdBy: integer('created_by').references(() => users.id),

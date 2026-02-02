@@ -469,6 +469,48 @@ function createSchema(sqlite: Database) {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_container_derivation_child ON container_derivation(child_container_id)`)
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_container_derivation_type ON container_derivation(derivation_type)`)
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_container_derivation_date ON container_derivation(derivation_date)`)
+
+  // qPCR experiments (template tests)
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS qpcr_experiment (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT,
+      template_format TEXT NOT NULL,
+      status TEXT NOT NULL,
+      standard_layout TEXT,
+      plate_barcode TEXT,
+      target_name TEXT,
+      fluorophore TEXT,
+      reporter TEXT,
+      quencher TEXT,
+      instrument_type TEXT,
+      created TEXT NOT NULL DEFAULT (datetime('now')),
+      last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by INTEGER REFERENCES users(id),
+      updated_by INTEGER REFERENCES users(id)
+    )
+  `)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS qpcr_experiment_status_idx ON qpcr_experiment(status)`)
+
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS qpcr_experiment_well (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      qpcr_experiment_id INTEGER NOT NULL REFERENCES qpcr_experiment(id) ON DELETE CASCADE,
+      well_position TEXT NOT NULL,
+      barcode TEXT,
+      storage_container_id INTEGER REFERENCES storage_container(id),
+      specimen_id INTEGER REFERENCES specimen(id),
+      content_type TEXT,
+      standard_density REAL,
+      cq REAL,
+      starting_quantity REAL,
+      cq_mean REAL,
+      raw_sample_name TEXT,
+      UNIQUE (qpcr_experiment_id, well_position)
+    )
+  `)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS qpcr_experiment_well_experiment_idx ON qpcr_experiment_well(qpcr_experiment_id)`)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS qpcr_experiment_well_specimen_idx ON qpcr_experiment_well(specimen_id)`)
 }
 
 /**
