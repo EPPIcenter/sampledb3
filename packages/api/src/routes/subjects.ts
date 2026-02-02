@@ -18,6 +18,10 @@ import {
   staticWell,
   location,
   bag,
+  qpcrExperiment,
+  qpcrExperimentWell,
+  qpcrRun,
+  qpcrWellResult,
   type Location,
 } from '../db/schema'
 import { eq, sql, and, inArray, or, isNull } from 'drizzle-orm'
@@ -585,6 +589,76 @@ subjects.get('/:id/summary', authMiddleware, async (c) => {
         timeline,
       },
     })
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
+// Get qPCR result summary for this subject (wells linked via specimen)
+subjects.get('/:id/qpcr-results', authMiddleware, async (c) => {
+  try {
+    const id = parseInt(c.req.param('id'))
+    if (isNaN(id)) return c.json({ error: 'Invalid subject ID' }, 400)
+    const subjectRow = await dbInstance.select().from(studySubject).where(eq(studySubject.id, id)).get()
+    if (!subjectRow) return c.json({ error: 'Not found' }, 404)
+    const specimens = await dbInstance.select({ id: specimen.id }).from(specimen).where(eq(specimen.studySubjectId, id))
+    const specimenIds = specimens.map((s) => s.id)
+    if (specimenIds.length === 0) return c.json({ results: [] })
+    const wells = await dbInstance
+      .select({
+        qpcrExperimentId: qpcrExperimentWell.qpcrExperimentId,
+        wellPosition: qpcrExperimentWell.wellPosition,
+        specimenId: qpcrExperimentWell.specimenId,
+      })
+      .from(qpcrExperimentWell)
+      .where(inArray(qpcrExperimentWell.specimenId, specimenIds))
+    if (wells.length === 0) return c.json({ results: [] })
+    const experimentIds = [...new Set(wells.map((w) => w.qpcrExperimentId))]
+    const runs = await dbInstance
+      .select({ id: qpcrRun.id, qpcrExperimentId: qpcrRun.qpcrExperimentId, runStartedAt: qpcrRun.runStartedAt, fileName: qpcrRun.fileName })
+      .from(qpcrRun)
+      .where(inArray(qpcrRun.qpcrExperimentId, experimentIds))
+    const runIds = runs.map((r) => r.id)
+    if (runIds.length === 0) return c.json({ results: [] })
+    const wellResults = await dbInstance
+      .select({
+        id: qpcrWellResult.id,
+        qpcrRunId: qpcrWellResult.qpcrRunId,
+        wellPosition: qpcrWellResult.wellPosition,
+        targetName: qpcrWellResult.targetName,
+        cq: qpcrWellResult.cq,
+        quantity: qpcrWellResult.quantity,
+      })
+      .from(qpcrWellResult)
+      .where(inArray(qpcrWellResult.qpcrRunId, runIds))
+    const runMap = new Map(runs.map((r) => [r.id, r]))
+    const expMap = new Map<string, boolean>()
+    wells.forEach((w) => expMap.set(`${w.qpcrExperimentId}\t${w.wellPosition}`, true))
+    const experiments = await dbInstance
+      .select({ id: qpcrExperiment.id, name: qpcrExperiment.name })
+      .from(qpcrExperiment)
+      .where(inArray(qpcrExperiment.id, experimentIds))
+    const expNameMap = new Map(experiments.map((e) => [e.id, e.name]))
+    const results = wellResults
+      .filter((wr) => {
+        const run = runMap.get(wr.qpcrRunId)
+        return run && expMap.has(`${run.qpcrExperimentId}\t${wr.wellPosition}`)
+      })
+      .map((wr) => {
+        const run = runMap.get(wr.qpcrRunId)!
+        return {
+          experimentId: run.qpcrExperimentId,
+          experimentName: expNameMap.get(run.qpcrExperimentId) ?? null,
+          runId: run.id,
+          runStartedAt: run.runStartedAt,
+          fileName: run.fileName,
+          wellPosition: wr.wellPosition,
+          targetName: wr.targetName,
+          cq: wr.cq,
+          quantity: wr.quantity,
+        }
+      })
+    return c.json({ results })
   } catch (error) {
     return handleRouteError(error, c)
   }
