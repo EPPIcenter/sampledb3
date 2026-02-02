@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { errorLogsApi, type ErrorLog, type ErrorLogsQueryParams } from '../lib/api'
 import Pagination from '../components/Pagination'
+import '../styles/admin.css'
 
 export default function AdminErrorLogs() {
   const [logs, setLogs] = useState<ErrorLog[]>([])
@@ -44,18 +45,21 @@ export default function AdminErrorLogs() {
         ...filters,
         search: searchDebounced || undefined,
       }
-      const response = await errorLogsApi.list(params as any)
+      const response = await errorLogsApi.list(params as ErrorLogsQueryParams)
       setLogs(response.data.logs)
       setPage(1) // Reset to first page when data changes
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load error logs')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to load error logs')
       console.error('Error loading error logs:', err)
     } finally {
       setLoading(false)
     }
   }, [filters, searchDebounced])
 
-  const handleFilterChange = (key: keyof Omit<ErrorLogsQueryParams, 'page' | 'limit'>, value: any) => {
+  const handleFilterChange = (key: keyof Omit<ErrorLogsQueryParams, 'page' | 'limit'>, value: string | boolean | undefined) => {
     setFilters((prev) => ({
       ...prev,
       [key]: value,
@@ -71,8 +75,11 @@ export default function AdminErrorLogs() {
         setSelectedLog(null)
         setShowDetailModal(false)
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to resolve error log')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to resolve error log')
     }
   }
 
@@ -82,8 +89,11 @@ export default function AdminErrorLogs() {
       await errorLogsApi.cleanup(retentionDays)
       setShowCleanupModal(false)
       await loadLogs()
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to cleanup error logs')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to cleanup error logs')
     } finally {
       setCleanupLoading(false)
     }
@@ -94,8 +104,11 @@ export default function AdminErrorLogs() {
       const response = await errorLogsApi.get(id)
       setSelectedLog(response.data)
       setShowDetailModal(true)
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load error log details')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to load error log details')
     }
   }
 
@@ -128,32 +141,33 @@ export default function AdminErrorLogs() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Error Logs</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowCleanupModal(true)}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-          >
-            Cleanup Old Logs
-          </button>
+    <div className="admin-page">
+      <div className="relative z-10 container mx-auto px-4 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold">Error Logs</h1>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCleanupModal(true)}
+              className="admin-btn-secondary px-4 py-2"
+            >
+              Cleanup Old Logs
+            </button>
+          </div>
         </div>
-      </div>
 
-      {error && (
-        <div className="mb-4 rounded-md bg-red-50 border border-red-200 p-3">
-          <p className="text-sm text-red-800">{error}</p>
-        </div>
-      )}
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Search
-            </label>
+        {/* Filters */}
+        <div className="admin-card p-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
+                Search
+              </label>
             <input
               type="text"
               value={searchQuery}
@@ -163,7 +177,7 @@ export default function AdminErrorLogs() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
               Source
             </label>
             <select
@@ -177,7 +191,7 @@ export default function AdminErrorLogs() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
               Level
             </label>
             <select
@@ -192,7 +206,7 @@ export default function AdminErrorLogs() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
               Status
             </label>
             <select
@@ -214,19 +228,19 @@ export default function AdminErrorLogs() {
         </div>
       </div>
 
-      {/* Logs Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center text-gray-500">Loading error logs...</div>
-        ) : logs.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">No error logs found</div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+        {/* Logs Table */}
+        <div className="admin-card overflow-hidden">
+          {loading ? (
+            <div className="p-8 text-center text-[rgb(var(--dashboard-text-muted))]">Loading error logs...</div>
+          ) : logs.length === 0 ? (
+            <div className="p-8 text-center text-[rgb(var(--dashboard-text-muted))]">No error logs found</div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="admin-table min-w-full">
+                  <thead>
+                    <tr>
+                      <th className="px-4 py-3 text-left">
                       Timestamp
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -249,7 +263,7 @@ export default function AdminErrorLogs() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {logs.slice((page - 1) * pageSize, page * pageSize).map((log) => (
                     <tr key={log.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm dashboard-stat-value">
                         {formatDate(log.timestamp)}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -262,7 +276,7 @@ export default function AdminErrorLogs() {
                           {log.level}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 max-w-md truncate" title={log.message}>
+                      <td className="px-4 py-3 text-sm dashboard-stat-value max-w-md truncate" title={log.message}>
                         {log.message}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -300,7 +314,7 @@ export default function AdminErrorLogs() {
               </table>
             </div>
             {Math.ceil(logs.length / pageSize) > 1 && (
-              <div className="px-4 py-3 border-t border-gray-200">
+              <div className="px-4 py-3 border-t border-[rgb(var(--dashboard-border))]">
                 <Pagination
                   currentPage={page}
                   totalPages={Math.ceil(logs.length / pageSize)}
@@ -316,10 +330,10 @@ export default function AdminErrorLogs() {
 
       {/* Detail Modal */}
       {showDetailModal && selectedLog && (
-        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-900">Error Log Details</h2>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="admin-card max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-[rgb(var(--dashboard-border))]">
+            <div className="px-6 py-4 border-b border-[rgb(var(--dashboard-border))] flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Error Log Details</h2>
               <button
                 onClick={() => {
                   setShowDetailModal(false)
@@ -337,11 +351,11 @@ export default function AdminErrorLogs() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">ID</label>
-                    <p className="mt-1 text-sm text-gray-900">{selectedLog.id}</p>
+                    <p className="mt-1 text-sm dashboard-stat-value">{selectedLog.id}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Timestamp</label>
-                    <p className="mt-1 text-sm text-gray-900">{formatDate(selectedLog.timestamp)}</p>
+                    <p className="mt-1 text-sm dashboard-stat-value">{formatDate(selectedLog.timestamp)}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Source</label>
@@ -377,57 +391,55 @@ export default function AdminErrorLogs() {
                   {selectedLog.errorCode && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Error Code</label>
-                      <p className="mt-1 text-sm text-gray-900 font-mono">{selectedLog.errorCode}</p>
+                      <p className="mt-1 text-sm dashboard-stat-value font-mono">{selectedLog.errorCode}</p>
                     </div>
                   )}
                   {selectedLog.userId && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700">User ID</label>
-                      <p className="mt-1 text-sm text-gray-900">{selectedLog.userId}</p>
+                      <p className="mt-1 text-sm dashboard-stat-value">{selectedLog.userId}</p>
                     </div>
                   )}
                   {selectedLog.url && (
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700">URL</label>
-                      <p className="mt-1 text-sm text-gray-900 break-all">{selectedLog.url}</p>
+                      <p className="mt-1 text-sm dashboard-stat-value break-all">{selectedLog.url}</p>
                     </div>
                   )}
                   {selectedLog.userAgent && (
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700">User Agent</label>
-                      <p className="mt-1 text-sm text-gray-900 break-all">{selectedLog.userAgent}</p>
+                      <p className="mt-1 text-sm dashboard-stat-value break-all">{selectedLog.userAgent}</p>
                     </div>
                   )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Message</label>
-                  <p className="mt-1 text-sm text-gray-900 whitespace-pre-wrap break-words">{selectedLog.message}</p>
+                  <p className="mt-1 text-sm dashboard-stat-value whitespace-pre-wrap break-words">{selectedLog.message}</p>
                 </div>
                 {selectedLog.stack && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Stack Trace</label>
-                    <pre className="mt-1 text-xs text-gray-900 bg-gray-50 p-3 rounded border overflow-x-auto">
+                    <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))]">Stack Trace</label>
+                    <pre className="mt-1 text-xs text-[rgb(var(--dashboard-text))] bg-[rgb(var(--dashboard-surface))] p-3 rounded border border-[rgb(var(--dashboard-border))] overflow-x-auto">
                       {selectedLog.stack}
                     </pre>
                   </div>
                 )}
                 {selectedLog.context && Object.keys(selectedLog.context).length > 0 && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Context</label>
-                    <pre className="mt-1 text-xs text-gray-900 bg-gray-50 p-3 rounded border overflow-x-auto">
+                    <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))]">Context</label>
+                    <pre className="mt-1 text-xs text-[rgb(var(--dashboard-text))] bg-[rgb(var(--dashboard-surface))] p-3 rounded border border-[rgb(var(--dashboard-border))] overflow-x-auto">
                       {JSON.stringify(selectedLog.context, null, 2)}
                     </pre>
                   </div>
                 )}
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2">
+            <div className="px-6 py-4 border-t border-[rgb(var(--dashboard-border))] flex items-center justify-end gap-2">
               {!selectedLog.resolved && (
                 <button
-                  onClick={() => {
-                    handleResolve(selectedLog.id)
-                  }}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  onClick={() => handleResolve(selectedLog.id)}
+                  className="admin-btn-primary px-4 py-2"
                 >
                   Mark as Resolved
                 </button>
@@ -437,7 +449,7 @@ export default function AdminErrorLogs() {
                   setShowDetailModal(false)
                   setSelectedLog(null)
                 }}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                className="admin-btn-secondary px-4 py-2"
               >
                 Close
               </button>
@@ -448,18 +460,18 @@ export default function AdminErrorLogs() {
 
       {/* Cleanup Modal */}
       {showCleanupModal && (
-        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Cleanup Old Error Logs</h2>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="admin-card max-w-md w-full border border-[rgb(var(--dashboard-border))]">
+            <div className="px-6 py-4 border-b border-[rgb(var(--dashboard-border))]">
+              <h2 className="text-xl font-semibold">Cleanup Old Error Logs</h2>
             </div>
             <div className="px-6 py-4">
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm text-[rgb(var(--dashboard-text-muted))] mb-4">
                 This will delete error logs older than the retention period (default: 90 days).
                 You can optionally specify a custom retention period.
               </p>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
                   Retention Days (optional)
                 </label>
                 <input
@@ -471,11 +483,11 @@ export default function AdminErrorLogs() {
                 />
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2">
+            <div className="px-6 py-4 border-t border-[rgb(var(--dashboard-border))] flex items-center justify-end gap-2">
               <button
                 onClick={() => setShowCleanupModal(false)}
                 disabled={cleanupLoading}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
+                className="admin-btn-secondary px-4 py-2 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -498,6 +510,7 @@ export default function AdminErrorLogs() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

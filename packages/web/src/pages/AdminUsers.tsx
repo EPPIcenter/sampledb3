@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { adminApi, type User, type UserSession } from '../lib/api'
+import '../styles/admin.css'
 
 interface CreateUserData {
   email: string
@@ -61,8 +62,11 @@ export default function AdminUsers() {
       setError(null)
       const response = await adminApi.getUsers(showDeleted)
       setUsers(response.data.users)
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load users')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to load users')
       console.error('Error loading users:', err)
     } finally {
       setLoading(false)
@@ -85,8 +89,11 @@ export default function AdminUsers() {
       setShowCreateModal(false)
       setCreateForm({ email: '', name: '', password: '', role: 'member' })
       await loadUsers()
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to create user')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to create user')
     }
   }
 
@@ -99,8 +106,11 @@ export default function AdminUsers() {
       setSelectedUser(null)
       setEditForm({})
       await loadUsers()
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to update user')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to update user')
     }
   }
 
@@ -112,8 +122,11 @@ export default function AdminUsers() {
       setShowDeleteModal(false)
       setSelectedUser(null)
       await loadUsers()
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.response?.data?.details || 'Failed to delete user')
+    } catch (err: unknown) {
+      const res = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string; details?: string } } }).response?.data
+        : null
+      setError(res?.error || res?.details || 'Failed to delete user')
     }
   }
 
@@ -121,8 +134,11 @@ export default function AdminUsers() {
     try {
       await adminApi.restoreUser(user.id)
       await loadUsers()
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to restore user')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to restore user')
     }
   }
 
@@ -144,8 +160,11 @@ export default function AdminUsers() {
       setShowPasswordModal(false)
       setSelectedUser(null)
       setPasswordForm({ password: '', confirmPassword: '' })
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to reset password')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to reset password')
     }
   }
 
@@ -154,8 +173,11 @@ export default function AdminUsers() {
       setSessionsLoading(true)
       const response = await adminApi.getUserSessions(userId)
       setSessions(response.data.sessions)
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load sessions')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to load sessions')
     } finally {
       setSessionsLoading(false)
     }
@@ -167,8 +189,11 @@ export default function AdminUsers() {
       if (selectedUser) {
         await loadSessions(selectedUser.id)
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to revoke session')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to revoke session')
     }
   }
 
@@ -201,14 +226,16 @@ export default function AdminUsers() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">User Management</h1>
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="animate-pulse space-y-4">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="h-12 bg-gray-200 rounded"></div>
-              ))}
+      <div className="admin-page">
+        <div className="relative z-10 p-6">
+          <div className="max-w-7xl mx-auto">
+            <h1 className="text-2xl font-bold mb-6" style={{ color: 'rgb(var(--dashboard-text))' }}>User Management</h1>
+            <div className="admin-card p-6">
+              <div className="animate-pulse space-y-4">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="h-12 admin-skeleton rounded" />
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -217,68 +244,69 @@ export default function AdminUsers() {
   }
 
   return (
-    <div className="p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-            <p className="text-gray-600 mt-1">Manage users, roles, and permissions</p>
-          </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add User
-          </button>
-        </div>
-
-        {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-red-800">{error}</p>
-              <button onClick={() => setError(null)} className="text-red-600 hover:text-red-800">
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+    <div className="admin-page">
+      <div className="relative z-10 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-2xl font-bold">User Management</h1>
+              <p className="text-[rgb(var(--dashboard-text-muted))] mt-1">Manage users, roles, and permissions</p>
             </div>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="admin-btn-primary px-4 py-2 flex items-center gap-2"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add User
+            </button>
           </div>
-        )}
 
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6 flex items-center gap-4">
-          <div className="flex-1 relative">
-            <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search users..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+          {error && (
+            <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-red-800">{error}</p>
+                <button onClick={() => setError(null)} className="text-red-600 hover:text-red-800">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Filters */}
+          <div className="admin-card p-4 mb-6 flex items-center gap-4">
+            <div className="flex-1 relative">
+              <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[rgb(var(--dashboard-text-muted))]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
+              />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showDeleted}
+                onChange={(e) => setShowDeleted(e.target.checked)}
+                className="rounded border-[rgb(var(--dashboard-border))]"
+              />
+              <span className="text-sm text-[rgb(var(--dashboard-text))]">Show deleted users</span>
+            </label>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showDeleted}
-              onChange={(e) => setShowDeleted(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span className="text-sm text-gray-700">Show deleted users</span>
-          </label>
-        </div>
 
-        {/* Users Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          {/* Users Table */}
+          <div className="admin-card overflow-hidden">
+            <table className="admin-table min-w-full">
+              <thead>
+                <tr>
+                  <th className="px-6 py-3 text-left">
                   Name
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -306,7 +334,7 @@ export default function AdminUsers() {
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                      <div className="text-sm font-medium dashboard-stat-value">{user.name}</div>
                       {user.deletedAt && (
                         <span className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded">
                           Deleted
@@ -314,7 +342,7 @@ export default function AdminUsers() {
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm dashboard-stat-muted">
                     {user.email}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -330,12 +358,12 @@ export default function AdminUsers() {
                       {user.role}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm dashboard-stat-muted">
                     {user.createdAt
                       ? new Date(user.createdAt).toLocaleDateString()
                       : 'N/A'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm dashboard-stat-muted">
                     {user.lastLogin
                       ? new Date(user.lastLogin).toLocaleDateString()
                       : 'Never'}
@@ -400,7 +428,7 @@ export default function AdminUsers() {
             </tbody>
           </table>
           {filteredUsers.length === 0 && (
-            <div className="text-center py-12 text-gray-500">
+            <div className="text-center py-12 text-[rgb(var(--dashboard-text-muted))]">
               {showDeleted ? 'No deleted users found' : 'No users found'}
             </div>
           )}
@@ -408,34 +436,34 @@ export default function AdminUsers() {
 
         {/* Create User Modal */}
         {showCreateModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--dashboard-border))]">
               <h2 className="text-xl font-bold mb-4">Create New User</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
                     Name
                   </label>
                   <input
                     type="text"
                     value={createForm.name}
                     onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
                     Email
                   </label>
                   <input
                     type="email"
                     value={createForm.email}
                     onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
                     Password
                   </label>
                   <div className="relative">
@@ -443,7 +471,7 @@ export default function AdminUsers() {
                       type={showPassword ? 'text' : 'password'}
                       value={createForm.password}
                       onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
+                      className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input pr-10"
                     />
                     <button
                       type="button"
@@ -475,7 +503,7 @@ export default function AdminUsers() {
                         role: e.target.value as 'admin' | 'member' | 'viewer',
                       })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
                   >
                     <option value="viewer">Viewer</option>
                     <option value="member">Member</option>
@@ -484,10 +512,7 @@ export default function AdminUsers() {
                 </div>
               </div>
               <div className="flex gap-3 mt-6">
-                <button
-                  onClick={handleCreate}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
+                <button onClick={handleCreate} className="flex-1 admin-btn-primary px-4 py-2">
                   Create
                 </button>
                 <button
@@ -495,7 +520,7 @@ export default function AdminUsers() {
                     setShowCreateModal(false)
                     setCreateForm({ email: '', name: '', password: '', role: 'member' })
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+                  className="flex-1 admin-btn-secondary px-4 py-2"
                 >
                   Cancel
                 </button>
@@ -506,34 +531,34 @@ export default function AdminUsers() {
 
         {/* Edit User Modal */}
         {showEditModal && selectedUser && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--dashboard-border))]">
               <h2 className="text-xl font-bold mb-4">Edit User</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
                     Name
                   </label>
                   <input
                     type="text"
                     value={editForm.name || ''}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
                     Email
                   </label>
                   <input
                     type="email"
                     value={editForm.email || ''}
                     onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
                     Role
                   </label>
                   <select
@@ -544,7 +569,7 @@ export default function AdminUsers() {
                         role: e.target.value as 'admin' | 'member' | 'viewer',
                       })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
                   >
                     <option value="viewer">Viewer</option>
                     <option value="member">Member</option>
@@ -553,10 +578,7 @@ export default function AdminUsers() {
                 </div>
               </div>
               <div className="flex gap-3 mt-6">
-                <button
-                  onClick={handleEdit}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
+                <button onClick={handleEdit} className="flex-1 admin-btn-primary px-4 py-2">
                   Save
                 </button>
                 <button
@@ -565,7 +587,7 @@ export default function AdminUsers() {
                     setSelectedUser(null)
                     setEditForm({})
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+                  className="flex-1 admin-btn-secondary px-4 py-2"
                 >
                   Cancel
                 </button>
@@ -576,10 +598,10 @@ export default function AdminUsers() {
 
         {/* Delete Confirmation Modal */}
         {showDeleteModal && selectedUser && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--dashboard-border))]">
               <h2 className="text-xl font-bold mb-4">Delete User</h2>
-              <p className="text-gray-600 mb-4">
+              <p className="text-[rgb(var(--dashboard-text-muted))] mb-4">
                 Are you sure you want to soft delete <strong>{selectedUser.name}</strong>? This
                 action can be undone by restoring the user.
               </p>
@@ -595,7 +617,7 @@ export default function AdminUsers() {
                     setShowDeleteModal(false)
                     setSelectedUser(null)
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+                  className="flex-1 admin-btn-secondary px-4 py-2"
                 >
                   Cancel
                 </button>
@@ -606,13 +628,13 @@ export default function AdminUsers() {
 
         {/* Password Reset Modal */}
         {showPasswordModal && selectedUser && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--dashboard-border))]">
               <h2 className="text-xl font-bold mb-4">Reset Password</h2>
-              <p className="text-gray-600 mb-4">Reset password for {selectedUser.name}</p>
+              <p className="text-[rgb(var(--dashboard-text-muted))] mb-4">Reset password for {selectedUser.name}</p>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
                     New Password
                   </label>
                   <div className="relative">
@@ -622,7 +644,7 @@ export default function AdminUsers() {
                       onChange={(e) =>
                         setPasswordForm({ ...passwordForm, password: e.target.value })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
+                      className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input pr-10"
                     />
                     <button
                       type="button"
@@ -652,15 +674,12 @@ export default function AdminUsers() {
                     onChange={(e) =>
                       setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
                   />
                 </div>
               </div>
               <div className="flex gap-3 mt-6">
-                <button
-                  onClick={handleResetPassword}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
+                <button onClick={handleResetPassword} className="flex-1 admin-btn-primary px-4 py-2">
                   Reset Password
                 </button>
                 <button
@@ -669,7 +688,7 @@ export default function AdminUsers() {
                     setSelectedUser(null)
                     setPasswordForm({ password: '', confirmPassword: '' })
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+                  className="flex-1 admin-btn-secondary px-4 py-2"
                 >
                   Cancel
                 </button>
@@ -680,13 +699,13 @@ export default function AdminUsers() {
 
         {/* Sessions Modal */}
         {showSessionsModal && selectedUser && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="admin-card p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto border border-[rgb(var(--dashboard-border))]">
               <h2 className="text-xl font-bold mb-4">Active Sessions for {selectedUser.name}</h2>
               {sessionsLoading ? (
-                <div className="text-center py-8 text-gray-500">Loading sessions...</div>
+                <div className="text-center py-8 dashboard-stat-muted">Loading sessions...</div>
               ) : sessions.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">No active sessions</div>
+                <div className="text-center py-8 dashboard-stat-muted">No active sessions</div>
               ) : (
                 <div className="space-y-2">
                   {sessions.map((session) => (
@@ -695,9 +714,9 @@ export default function AdminUsers() {
                       className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
                     >
                       <div>
-                        <p className="text-sm font-medium text-gray-900">Session ID</p>
-                        <p className="text-xs text-gray-500 font-mono">{session.id}</p>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-sm font-medium dashboard-stat-value">Session ID</p>
+                        <p className="text-xs dashboard-stat-muted font-mono">{session.id}</p>
+                        <p className="text-xs dashboard-stat-muted mt-1">
                           Expires: {new Date(session.expiresAt * 1000).toLocaleString()}
                         </p>
                       </div>
@@ -718,7 +737,7 @@ export default function AdminUsers() {
                     setSelectedUser(null)
                     setSessions([])
                   }}
-                  className="w-full px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+                  className="w-full admin-btn-secondary px-4 py-2"
                 >
                   Close
                 </button>
@@ -726,6 +745,7 @@ export default function AdminUsers() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   )
