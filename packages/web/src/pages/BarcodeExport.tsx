@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { exportApi, exportConfigurationsApi, type ExportConfiguration } from '../lib/api'
+import '../styles/storage.css'
 
 /**
  * Format a date as a filesystem-safe local datetime string
@@ -261,21 +262,22 @@ export default function BarcodeExport() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-4">
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold text-gray-900">Micronix Barcode Export</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Upload a CSV file containing micronix tube barcodes to export linked subject and specimen information.
-        </p>
-      </div>
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-          {error}
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold mb-2">Micronix Barcode Export</h1>
+          <p className="text-sm mt-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            Upload a CSV file containing micronix tube barcodes to export linked subject and specimen information.
+          </p>
         </div>
-      )}
 
-      <div className="bg-white rounded-lg shadow p-6 space-y-6">
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="storage-card p-6 space-y-6 storage-reveal storage-reveal-1">
         {/* CSV Upload Section */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -290,7 +292,7 @@ export default function BarcodeExport() {
                 handleCSVUpload(file)
               }
             }}
-            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            className="file-input-accent"
           />
           <p className="mt-1 text-xs text-gray-500">
             CSV should contain a "barcode" column with micronix tube barcodes (one per row)
@@ -315,7 +317,7 @@ export default function BarcodeExport() {
             </label>
             <Link
               to="/settings?category=data-management&section=export-configurations"
-              className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+              className="storage-link text-xs hover:underline flex items-center gap-1"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -335,7 +337,7 @@ export default function BarcodeExport() {
               <p className="text-gray-700 mb-2">No export configurations available.</p>
               <Link
                 to="/settings?category=data-management&section=export-configurations"
-                className="text-blue-600 hover:text-blue-800 hover:underline font-medium inline-flex items-center gap-1"
+                className="storage-link font-medium inline-flex items-center gap-1"
               >
                 Create one in Settings
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -401,22 +403,19 @@ export default function BarcodeExport() {
                         setFocusedConfigIndex(null)
                       }
                     }}
-                    className={`w-full text-left px-3 py-2 border rounded transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
-                      isSelected
-                        ? 'border-blue-500 bg-blue-50 shadow-sm'
-                        : isFocused
-                        ? 'border-blue-300 bg-blue-50/70'
-                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                    className={`w-full text-left px-3 py-2 border rounded transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+                      isSelected ? 'shadow-sm' : 'border-gray-200'
                     }`}
+                    style={isSelected ? { borderColor: 'rgb(var(--dashboard-accent))', background: 'rgb(var(--dashboard-accent-muted))' } : isFocused ? { borderColor: 'rgb(var(--dashboard-accent)/0.5)', background: 'rgb(var(--dashboard-accent-muted)/0.7)' } : undefined}
                     title={config.columns.length > 0 ? `Columns: ${config.columns.slice(0, 5).join(', ')}${config.columns.length > 5 ? `, +${config.columns.length - 5} more` : ''}` : 'No columns'}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                        <span className={`font-medium text-sm truncate ${isSelected ? 'text-blue-900' : 'text-gray-900'}`}>
+                        <span className="font-medium text-sm truncate" style={isSelected ? { color: 'rgb(var(--dashboard-accent-hover))' } : { color: 'rgb(var(--dashboard-text))' }}>
                           {config.name}
                         </span>
                         {config.isDefault && (
-                          <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700 rounded flex-shrink-0" aria-label="Default configuration">
+                          <span className="px-1.5 py-0.5 text-[10px] font-medium rounded flex-shrink-0" style={{ background: 'rgb(var(--dashboard-accent-muted))', color: 'rgb(var(--dashboard-accent-hover))' }} aria-label="Default configuration">
                             Default
                           </span>
                         )}
@@ -432,7 +431,7 @@ export default function BarcodeExport() {
                         </span>
                       </div>
                       {isSelected && (
-                        <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                        <svg className="w-4 h-4 flex-shrink-0" style={{ color: 'rgb(var(--dashboard-accent-hover))' }} fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
                       )}
@@ -461,7 +460,7 @@ export default function BarcodeExport() {
                   value={format}
                   checked={exportFormat === format}
                   onChange={() => setExportFormat(format)}
-                  className="text-blue-600 focus:ring-blue-500"
+                  className="text-teal-600 focus:ring-teal-500"
                 />
                 <span className="text-sm text-gray-700 uppercase">{format}</span>
               </label>
@@ -487,7 +486,7 @@ export default function BarcodeExport() {
                     value=","
                     checked={csvDelimiter === ','}
                     onChange={() => setCsvDelimiter(',')}
-                    className="text-blue-600 focus:ring-blue-500"
+                    className="text-teal-600 focus:ring-teal-500"
                   />
                   <span className="text-sm text-gray-700">Comma (,)</span>
                 </label>
@@ -498,7 +497,7 @@ export default function BarcodeExport() {
                     value=";"
                     checked={csvDelimiter === ';'}
                     onChange={() => setCsvDelimiter(';')}
-                    className="text-blue-600 focus:ring-blue-500"
+                    className="text-teal-600 focus:ring-teal-500"
                   />
                   <span className="text-sm text-gray-700">Semicolon (;)</span>
                 </label>
@@ -509,7 +508,7 @@ export default function BarcodeExport() {
                     value="\t"
                     checked={csvDelimiter === '\t'}
                     onChange={() => setCsvDelimiter('\t')}
-                    className="text-blue-600 focus:ring-blue-500"
+                    className="text-teal-600 focus:ring-teal-500"
                   />
                   <span className="text-sm text-gray-700">Tab</span>
                 </label>
@@ -523,7 +522,7 @@ export default function BarcodeExport() {
                   type="checkbox"
                   checked={csvBOM}
                   onChange={(e) => setCsvBOM(e.target.checked)}
-                  className="text-blue-600 focus:ring-blue-500"
+                  className="text-teal-600 focus:ring-teal-500"
                 />
                 <span className="text-sm text-gray-700">Include UTF-8 BOM (recommended for Excel)</span>
               </label>
@@ -545,7 +544,7 @@ export default function BarcodeExport() {
                     value="CRLF"
                     checked={csvLineEnding === 'CRLF'}
                     onChange={() => setCsvLineEnding('CRLF')}
-                    className="text-blue-600 focus:ring-blue-500"
+                    className="text-teal-600 focus:ring-teal-500"
                   />
                   <span className="text-sm text-gray-700">CRLF (Windows, recommended for Excel)</span>
                 </label>
@@ -556,7 +555,7 @@ export default function BarcodeExport() {
                     value="LF"
                     checked={csvLineEnding === 'LF'}
                     onChange={() => setCsvLineEnding('LF')}
-                    className="text-blue-600 focus:ring-blue-500"
+                    className="text-teal-600 focus:ring-teal-500"
                   />
                   <span className="text-sm text-gray-700">LF (Unix)</span>
                 </label>
@@ -605,10 +604,10 @@ export default function BarcodeExport() {
               }`}
             >
               <div className="px-4 py-4 space-y-4 bg-white">
-                <div className="p-4 bg-blue-50 rounded-lg">
+                <div className="p-4 rounded-lg" style={{ background: 'rgb(var(--dashboard-accent-muted))' }}>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">Total Containers Exported:</span>
-                    <span className="text-2xl font-bold text-blue-600">
+                    <span className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Total Containers Exported:</span>
+                    <span className="text-2xl font-bold" style={{ color: 'rgb(var(--dashboard-accent-hover))' }}>
                       {exportSummary.total_containers.toLocaleString()}
                     </span>
                   </div>
@@ -653,10 +652,11 @@ export default function BarcodeExport() {
           <button
             onClick={handleExport}
             disabled={exporting || barcodes.length === 0}
-            className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="storage-btn-primary px-6 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {exporting ? 'Exporting...' : 'Export'}
           </button>
+        </div>
         </div>
       </div>
     </div>

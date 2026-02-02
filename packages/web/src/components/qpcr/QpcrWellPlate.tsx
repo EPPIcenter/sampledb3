@@ -34,7 +34,7 @@ function getWellContentType(well: QpcrExperimentWell | undefined): 'standard' | 
 
 const WELL_STYLES: Record<'standard' | 'unknown' | 'negative' | 'empty', string> = {
   standard: 'bg-amber-50 border-amber-300/80 text-amber-900',
-  unknown: 'bg-teal-50/90 border-teal-300/70 text-teal-800',
+  unknown: 'bg-teal-50/90 border-teal-300/70 text-teal-900',
   negative: 'bg-slate-100/90 border-slate-300/70 text-slate-600',
   empty: 'bg-slate-50/80 border-slate-200 text-slate-400',
 }

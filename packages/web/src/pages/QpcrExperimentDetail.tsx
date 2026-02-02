@@ -363,7 +363,7 @@ export default function QpcrExperimentDetail() {
                       isActive
                         ? 'bg-teal-500 text-white'
                         : isPast
-                          ? 'bg-teal-100 text-teal-800'
+                          ? 'bg-teal-100 text-teal-900'
                           : 'bg-slate-100 text-slate-500'
                     }`}
                   >
@@ -411,7 +411,7 @@ export default function QpcrExperimentDetail() {
                     ))}
                   </select>
                 </div>
-                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors focus-within:ring-2 focus-within:ring-teal-500 focus-within:ring-offset-1">
+                <label className="file-input-label">
                   <input
                     type="file"
                     accept=".csv"
@@ -693,7 +693,7 @@ export default function QpcrExperimentDetail() {
                     <option value="QuantStudio">Quant Studio (XLS)</option>
                   </select>
                 </div>
-                <label className="flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 px-5 py-3 text-sm font-medium text-slate-700 hover:border-teal-300 hover:bg-teal-50/50 transition-colors focus-within:ring-2 focus-within:ring-teal-500 focus-within:ring-offset-1">
+                <label className="file-input-label">
                   <input
                     type="file"
                     accept=".csv,.xls,.xlsx"

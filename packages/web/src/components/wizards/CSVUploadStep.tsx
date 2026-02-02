@@ -125,8 +125,8 @@ export default function CSVUploadStep({
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
         onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-lg p-8 text-center ${
-          dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white'
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+          dragActive ? 'border-teal-500 bg-teal-50' : 'border-gray-300 bg-white'
         }`}
       >
         <input
@@ -155,7 +155,7 @@ export default function CSVUploadStep({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="text-blue-600 hover:text-blue-700 font-medium"
+              className="file-input-trigger"
             >
               Click to upload
             </button>
@@ -216,7 +216,7 @@ export default function CSVUploadStep({
               <button
                 type="button"
                 onClick={downloadTemplate}
-                className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="px-3 py-1 text-sm bg-teal-600 text-white rounded hover:bg-teal-700"
               >
                 Download Template
               </button>
@@ -226,7 +226,7 @@ export default function CSVUploadStep({
           <button
             type="button"
             onClick={() => setShowTemplateDialog(true)}
-            className="text-sm text-blue-600 hover:text-blue-700"
+            className="text-sm text-teal-600 hover:text-teal-700"
           >
             Download CSV Template
           </button>
@@ -312,7 +312,7 @@ export default function CSVUploadStep({
           type="button"
           onClick={onNext}
           disabled={csvFiles.length === 0 || csvFiles.some(f => f.errors.length > 0)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Next: Configure Containers
         </button>

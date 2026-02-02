@@ -12,6 +12,7 @@ import {
 } from '../lib/api'
 import { generateDerivationsTemplate, type TemplateOptions } from '../lib/template-generator'
 import { useUser } from '../contexts/UserContext'
+import '../styles/storage.css'
 
 const DERIVATION_TYPES = [
   { value: 'dna_extraction', label: 'DNA Extraction' },
@@ -269,32 +270,29 @@ export default function DerivationsBulkImport() {
   const warningCount = importResults?.filter(r => r.warnings && r.warnings.length > 0).length || 0
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Bulk Derivation Import</h1>
-        <p className="text-gray-600">
-          Configure shared settings and upload a CSV to create multiple derivations at once.
-        </p>
-      </div>
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold mb-2">Bulk Derivation Import</h1>
+          <p className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            Configure shared settings and upload a CSV to create multiple derivations at once.
+          </p>
+        </div>
 
-      {/* Step Indicator */}
-      <div className="mb-6">
-        <div className="flex items-center">
-          <div className={`flex items-center ${currentStep >= 1 ? 'text-blue-600' : 'text-gray-400'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-              1
+        {/* Step Indicator */}
+        <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
+          <div className="storage-step-indicator">
+            <div className={`storage-step-item ${currentStep >= 1 ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">1</span>
+              <span>Configure Settings</span>
             </div>
-            <span className="ml-2 font-medium">Configure Settings</span>
-          </div>
-          <div className={`flex-1 h-1 mx-4 ${currentStep >= 2 ? 'bg-blue-600' : 'bg-gray-200'}`} />
-          <div className={`flex items-center ${currentStep >= 2 ? 'text-blue-600' : 'text-gray-400'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-              2
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep >= 2 ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">2</span>
+              <span>Upload CSV</span>
             </div>
-            <span className="ml-2 font-medium">Upload CSV</span>
           </div>
         </div>
-      </div>
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
@@ -304,13 +302,13 @@ export default function DerivationsBulkImport() {
 
       {/* Step 1: Configure Settings */}
       {currentStep === 1 && (
-        <div className="bg-white rounded-lg border border-gray-100 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Step 1: Configure Shared Settings</h2>
-          
+        <div className="storage-card p-6 storage-reveal storage-reveal-2">
+          <h2 className="storage-section-title text-xl font-semibold mb-4">Step 1: Configure Shared Settings</h2>
+
           <div className="space-y-4">
             {/* Source Type */}
-            <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">Source Configuration</h3>
+            <div className="p-4 rounded-md border" style={{ background: 'rgb(var(--dashboard-accent-muted))', borderColor: 'rgb(var(--dashboard-accent) / 0.3)' }}>
+              <h3 className="text-sm font-semibold mb-3" style={{ color: 'rgb(var(--dashboard-text))' }}>Source Configuration</h3>
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -565,11 +563,11 @@ export default function DerivationsBulkImport() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t">
+            <div className="flex justify-end gap-3 pt-4 border-t storage-card-divider">
               <button
                 type="button"
                 onClick={() => navigate('/derivations')}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                className="storage-btn-secondary"
                 disabled={loading}
               >
                 Cancel
@@ -577,7 +575,7 @@ export default function DerivationsBulkImport() {
               <button
                 type="button"
                 onClick={handleStep1Next}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={loading}
               >
                 Next: Upload CSV
@@ -590,13 +588,13 @@ export default function DerivationsBulkImport() {
       {/* Step 2: Upload CSV */}
       {currentStep === 2 && (
         <div className="space-y-6">
-          <div className="bg-white rounded-lg border border-gray-100 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Step 2: Upload CSV</h2>
-            
+          <div className="storage-card p-6 storage-reveal storage-reveal-2">
+            <h2 className="storage-section-title text-xl font-semibold mb-4">Step 2: Upload CSV</h2>
+
             <div className="mb-4">
               <button
                 onClick={downloadTemplate}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="storage-btn-primary"
                 disabled={loading}
               >
                 Download CSV Template
@@ -615,7 +613,7 @@ export default function DerivationsBulkImport() {
                 type="file"
                 accept=".csv"
                 onChange={handleFileSelect}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                className="file-input-accent"
                 disabled={loading}
               />
               {csvContent && (
@@ -629,7 +627,7 @@ export default function DerivationsBulkImport() {
               <button
                 type="button"
                 onClick={() => validateCsv()}
-                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="storage-btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={loading || !csvContent}
               >
                 {loading ? 'Validating...' : 'Validate CSV'}
@@ -650,7 +648,7 @@ export default function DerivationsBulkImport() {
               <button
                 type="button"
                 onClick={() => setCurrentStep(1)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                className="storage-btn-secondary"
                 disabled={loading}
               >
                 Back
@@ -658,7 +656,7 @@ export default function DerivationsBulkImport() {
               <button
                 type="button"
                 onClick={handleImport}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={loading || !csvContent}
               >
                 {loading ? (dryRun ? 'Validating...' : 'Importing...') : (dryRun ? 'Validate Only' : 'Import Derivations')}
@@ -666,7 +664,7 @@ export default function DerivationsBulkImport() {
               <button
                 type="button"
                 onClick={() => navigate('/derivations')}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                className="storage-btn-secondary"
                 disabled={loading}
               >
                 Cancel
@@ -676,9 +674,9 @@ export default function DerivationsBulkImport() {
 
           {/* Validation Results */}
           {validationResult && (
-            <div className="bg-white rounded-lg border border-gray-100 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Validation Results</h3>
-              
+            <div className="storage-card p-6 storage-reveal storage-reveal-3">
+              <h3 className="storage-section-title text-lg font-semibold mb-4">Validation Results</h3>
+
               <div className="grid grid-cols-4 gap-4 mb-6">
                 <div className="bg-green-50 border border-green-200 rounded p-3">
                   <div className="text-sm text-green-700 font-medium">Valid</div>
@@ -692,9 +690,9 @@ export default function DerivationsBulkImport() {
                   <div className="text-sm text-yellow-700 font-medium">Warnings</div>
                   <div className="text-2xl font-bold text-yellow-900">{validationResult.summary.warnings}</div>
                 </div>
-                <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                  <div className="text-sm text-blue-700 font-medium">Total</div>
-                  <div className="text-2xl font-bold text-blue-900">{validationResult.summary.total}</div>
+                <div className="rounded p-3" style={{ background: 'rgb(var(--dashboard-accent-muted))', border: '1px solid rgb(var(--dashboard-accent) / 0.3)' }}>
+                  <div className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-accent-hover))' }}>Total</div>
+                  <div className="text-2xl font-bold" style={{ color: 'rgb(var(--dashboard-text))' }}>{validationResult.summary.total}</div>
                 </div>
               </div>
 
@@ -720,7 +718,7 @@ export default function DerivationsBulkImport() {
               )}
 
               {/* All-or-nothing indicator */}
-              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-blue-700 text-sm">
+              <div className="mb-4 p-3 rounded text-sm" style={{ background: 'rgb(var(--dashboard-accent-muted))', border: '1px solid rgb(var(--dashboard-accent) / 0.3)', color: 'rgb(var(--dashboard-accent-hover))' }}>
                 <strong>All-or-nothing import:</strong> All derivations will be created, or none will be created if any row fails.
               </div>
 
@@ -785,8 +783,8 @@ export default function DerivationsBulkImport() {
 
           {/* Import Results */}
           {importResults && (
-            <div className="bg-white rounded-lg border border-gray-100 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            <div className="storage-card p-6 storage-reveal storage-reveal-4">
+              <h3 className="storage-section-title text-lg font-semibold mb-4">
                 Import Results {dryRun && '(Dry Run)'}
               </h3>
               
@@ -854,6 +852,7 @@ export default function DerivationsBulkImport() {
           )}
         </div>
       )}
+      </div>
     </div>
   )
 }

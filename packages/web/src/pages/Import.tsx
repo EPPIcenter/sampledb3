@@ -4,6 +4,7 @@ import { subjectsApi, specimensApi, collectionsApi, locationsApi, type Location 
 import { type ContainerType } from '../components/ContainerRegistration'
 import api from '../lib/api'
 import { useUser } from '../contexts/UserContext'
+import '../styles/storage.css'
 
 type ImportType = 'subjects' | 'specimens' | 'combined'
 type Step = 'upload' | 'collections' | 'import'
@@ -644,14 +645,16 @@ export default function Import() {
     const optional = getOptionalFields()
     const allFields = [...required, ...optional]
     
+    const infoBoxStyle = { background: 'rgb(var(--dashboard-accent-muted))', border: '1px solid rgb(var(--dashboard-accent) / 0.3)', color: 'rgb(var(--dashboard-text))' } as const
+
     if (importType === 'subjects') {
       return (
-        <div className="bg-blue-50 border border-blue-200 rounded p-4 text-sm">
-          <h4 className="font-semibold text-blue-900 mb-2">Required CSV Columns</h4>
+        <div className="rounded p-4 text-sm" style={infoBoxStyle}>
+          <h4 className="font-semibold mb-2">Required CSV Columns</h4>
           <div className="space-y-1">
             <div>
-              <span className="font-medium text-blue-800">Required:</span>
-              <span className="text-blue-700 ml-2 font-mono">{required.join(', ')}</span>
+              <span className="font-medium">Required:</span>
+              <span className="ml-2 font-mono" style={{ color: 'rgb(var(--dashboard-accent-on-tint))' }}>{required.join(', ')}</span>
             </div>
           </div>
         </div>
@@ -660,12 +663,12 @@ export default function Import() {
 
     if (!containerType || containerType === 'none') {
       return (
-        <div className="bg-blue-50 border border-blue-200 rounded p-4 text-sm">
-          <h4 className="font-semibold text-blue-900 mb-2">Required CSV Columns</h4>
+        <div className="rounded p-4 text-sm" style={infoBoxStyle}>
+          <h4 className="font-semibold mb-2">Required CSV Columns</h4>
           <div className="space-y-1">
             <div>
-              <span className="font-medium text-blue-800">Required:</span>
-              <span className="text-blue-700 ml-2 font-mono">{required.join(', ')}</span>
+              <span className="font-medium">Required:</span>
+              <span className="ml-2 font-mono" style={{ color: 'rgb(var(--dashboard-accent-on-tint))' }}>{required.join(', ')}</span>
             </div>
           </div>
         </div>
@@ -676,25 +679,25 @@ export default function Import() {
     const baseRequired = required.filter(f => ['study_short_code', 'subject_name', 'specimen_type_name'].includes(f))
 
     return (
-      <div className="bg-blue-50 border border-blue-200 rounded p-4 text-sm">
-        <h4 className="font-semibold text-blue-900 mb-2">Required CSV Columns for {containerType.replace('_', ' ')}</h4>
+      <div className="rounded p-4 text-sm" style={infoBoxStyle}>
+        <h4 className="font-semibold mb-2">Required CSV Columns for {containerType.replace('_', ' ')}</h4>
         <div className="space-y-2">
           <div>
-            <span className="font-medium text-blue-800">Base Required:</span>
-            <span className="text-blue-700 ml-2 font-mono">{baseRequired.join(', ')}</span>
+            <span className="font-medium">Base Required:</span>
+            <span className="ml-2 font-mono" style={{ color: 'rgb(var(--dashboard-accent-on-tint))' }}>{baseRequired.join(', ')}</span>
           </div>
           <div>
-            <span className="font-medium text-blue-800">Container Required:</span>
-            <span className="text-blue-700 ml-2 font-mono">{containerSpecific.join(', ')}</span>
+            <span className="font-medium">Container Required:</span>
+            <span className="ml-2 font-mono" style={{ color: 'rgb(var(--dashboard-accent-on-tint))' }}>{containerSpecific.join(', ')}</span>
           </div>
           {optional.length > 0 && (
             <div>
-              <span className="font-medium text-blue-800">Optional:</span>
-              <span className="text-blue-700 ml-2 font-mono">{optional.join(', ')}</span>
+              <span className="font-medium">Optional:</span>
+              <span className="ml-2 font-mono" style={{ color: 'rgb(var(--dashboard-accent-on-tint))' }}>{optional.join(', ')}</span>
             </div>
           )}
           {(containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'static_well') && (
-            <div className="text-blue-700 mt-2 pt-2 border-t border-blue-300">
+            <div className="mt-2 pt-2 border-t" style={{ borderColor: 'rgb(var(--dashboard-accent) / 0.3)', color: 'rgb(var(--dashboard-accent-on-tint))' }}>
               <strong>Position format:</strong> A01, B12 (letter + 2 digits) - <strong>Required</strong>
             </div>
           )}
@@ -704,43 +707,33 @@ export default function Import() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6 text-gray-900">Bulk Import</h1>
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10 max-w-4xl">
+        <h1 className="text-3xl font-bold mb-6">Bulk Import</h1>
 
-      {/* Step Indicator */}
-      {(importType === 'specimens' || importType === 'combined') && (
-        <div className="mb-6">
-          <div className="flex items-center space-x-4">
-            <div className={`flex items-center ${currentStep === 'upload' ? 'text-blue-600' : currentStep === 'collections' || currentStep === 'import' ? 'text-green-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'upload' ? 'bg-blue-600 text-white' : currentStep === 'collections' || currentStep === 'import' ? 'bg-green-600 text-white' : 'bg-gray-300'}`}>
-                1
+        {/* Step Indicator */}
+        {(importType === 'specimens' || importType === 'combined') && (
+          <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
+            <div className="storage-step-indicator">
+              <div className={`storage-step-item ${currentStep === 'upload' ? 'storage-step-item--active' : ''}`}>
+                <span className="storage-step-item__circle">1</span>
+                <span>Upload & Validate</span>
               </div>
-              <span className="ml-2 font-medium">Upload & Validate</span>
-            </div>
-            <div className="w-12 h-0.5 bg-gray-300"></div>
-            <div className={`flex items-center ${currentStep === 'collections' ? 'text-blue-600' : currentStep === 'import' ? 'text-green-600' : missingCollections.length > 0 ? 'text-gray-500' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'collections' ? 'bg-blue-600 text-white' : currentStep === 'import' ? 'bg-green-600 text-white' : missingCollections.length > 0 ? 'bg-gray-400 text-white' : 'bg-gray-300'}`}>
-                2
+              <div className="storage-step-connector" />
+              <div className={`storage-step-item ${currentStep === 'collections' ? 'storage-step-item--active' : ''}`}>
+                <span className="storage-step-item__circle">2</span>
+                <span>Create Collections{missingCollections.length === 0 && currentStep === 'upload' ? ' (if needed)' : ''}</span>
               </div>
-              <span className={`ml-2 font-medium ${missingCollections.length === 0 ? 'text-gray-400' : ''}`}>
-                Create Collections
-                {missingCollections.length === 0 && currentStep === 'upload' && (
-                  <span className="text-xs text-gray-400 ml-1">(if needed)</span>
-                )}
-              </span>
-            </div>
-            <div className="w-12 h-0.5 bg-gray-300"></div>
-            <div className={`flex items-center ${currentStep === 'import' ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'import' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>
-                3
+              <div className="storage-step-connector" />
+              <div className={`storage-step-item ${currentStep === 'import' ? 'storage-step-item--active' : ''}`}>
+                <span className="storage-step-item__circle">3</span>
+                <span>Import</span>
               </div>
-              <span className="ml-2 font-medium">Import</span>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="bg-white rounded-lg shadow p-6 max-w-4xl">
+        <div className="storage-card p-6 storage-reveal storage-reveal-2">
         {currentStep === 'upload' && (
           <form onSubmit={(e) => { e.preventDefault(); handleValidateAndCheck(); }} className="space-y-6">
             <div>
@@ -837,7 +830,7 @@ export default function Import() {
                     <button
                       type="button"
                       onClick={downloadTemplate}
-                      className="text-sm text-blue-600 hover:text-blue-700 underline"
+                      className="storage-link text-sm underline bg-transparent border-0 cursor-pointer p-0"
                     >
                       Download Template
                     </button>
@@ -848,7 +841,7 @@ export default function Import() {
                   type="file"
                   accept=".csv"
                   onChange={handleFileChange}
-                  className="form-input"
+                  className="file-input-accent"
                   required
                 />
                 {file && (
@@ -915,7 +908,7 @@ export default function Import() {
             <button
               type="submit"
               disabled={!file || loading || ((importType === 'specimens' || importType === 'combined') && !containerType)}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+              className="storage-btn-primary w-full py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
               {loading ? 'Validating...' : 'Validate & Continue'}
             </button>
@@ -954,7 +947,7 @@ export default function Import() {
                       <span className="text-green-600 text-sm font-medium">✓ Created</span>
                     )}
                     {collection.status === 'creating' && (
-                      <span className="text-blue-600 text-sm">Creating...</span>
+                      <span className="text-teal-600 text-sm">Creating...</span>
                     )}
                     {collection.status === 'error' && (
                       <span className="text-red-600 text-sm">Error</span>
@@ -1017,7 +1010,7 @@ export default function Import() {
               <button
                 type="button"
                 onClick={() => setCurrentStep('upload')}
-                className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50"
+                className="storage-btn-secondary"
               >
                 Back
               </button>
@@ -1025,7 +1018,7 @@ export default function Import() {
                 type="button"
                 onClick={handleCreateCollections}
                 disabled={loading || missingCollections.some(c => !c.locationId && c.status !== 'success')}
-                className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+                className="storage-btn-primary flex-1 py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
               >
                 {loading ? 'Creating Collections...' : 'Create Collections & Continue'}
               </button>
@@ -1075,12 +1068,13 @@ export default function Import() {
                 setMissingCollections([])
                 setValidatedData([])
               }}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-medium"
+              className="storage-btn-primary w-full py-2 font-medium"
             >
               Start New Import
             </button>
           </div>
         )}
+        </div>
       </div>
     </div>
   )

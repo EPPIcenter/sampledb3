@@ -52,7 +52,7 @@ export default function QpcrExperimentNew() {
           />
           <div className="mt-4 flex items-center gap-3">
             <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-teal-600"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-teal-900"
               aria-hidden
             >
               <svg

@@ -9,6 +9,7 @@ import {
   type Tag,
   type ExportConfiguration,
 } from '../lib/api'
+import '../styles/storage.css'
 
 /**
  * Format a date as a filesystem-safe local datetime string
@@ -517,10 +518,10 @@ export default function Export() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Export Containers (Multi-Study)</h1>
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10 max-w-6xl">
+        <div className="storage-card p-6 storage-reveal storage-reveal-1">
+          <h1 className="text-3xl font-bold mb-6">Export Containers (Multi-Study)</h1>
 
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
@@ -543,7 +544,7 @@ export default function Export() {
                     handleCSVUpload(file)
                   }
                 }}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                className="file-input-accent"
               />
               <p className="mt-1 text-xs text-gray-500">
                 CSV should contain: study_short_code (required), subject_name (required), collection_date (optional), date_from (optional), date_to (optional)
@@ -562,7 +563,7 @@ export default function Export() {
 
             {/* Study Validation Results */}
             {validating && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded text-blue-700 text-sm">
+              <div className="p-3 rounded text-sm" style={{ background: 'rgb(var(--dashboard-accent-muted))', border: '1px solid rgb(var(--dashboard-accent) / 0.3)', color: 'rgb(var(--dashboard-accent-hover))' }}>
                 Validating study codes...
               </div>
             )}
@@ -616,7 +617,7 @@ export default function Export() {
                 min="0"
                 value={dateTolerance}
                 onChange={(e) => setDateTolerance(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                 placeholder="0 (exact match)"
               />
               <p className="mt-1 text-xs text-gray-500">
@@ -642,7 +643,7 @@ export default function Export() {
                         type="checkbox"
                         checked={filters.specimen_type_ids?.includes(type.id) || false}
                         onChange={() => toggleArrayFilter('specimen_type_ids', type.id)}
-                        className="rounded border-gray-100 text-blue-600 focus:ring-blue-500"
+                        className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
                       />
                       <span className="text-sm text-gray-700">{type.name}</span>
                     </label>
@@ -663,7 +664,7 @@ export default function Export() {
                       type="checkbox"
                       checked={filters.container_types?.includes(type.value) || false}
                       onChange={() => toggleArrayFilter('container_types', type.value)}
-                      className="rounded border-gray-100 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
                     />
                     <span className="text-sm text-gray-700">{type.label}</span>
                   </label>
@@ -682,13 +683,13 @@ export default function Export() {
                     type="date"
                     value={filters.date_from || ''}
                     onChange={(e) => updateFilter('date_from', e.target.value || undefined)}
-                    className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                   />
                   <input
                     type="date"
                     value={filters.date_to || ''}
                     onChange={(e) => updateFilter('date_to', e.target.value || undefined)}
-                    className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                   />
                 </div>
               </div>
@@ -701,13 +702,13 @@ export default function Export() {
                     type="date"
                     value={filters.created_from || ''}
                     onChange={(e) => updateFilter('created_from', e.target.value || undefined)}
-                    className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                   />
                   <input
                     type="date"
                     value={filters.created_to || ''}
                     onChange={(e) => updateFilter('created_to', e.target.value || undefined)}
-                    className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                   />
                 </div>
               </div>
@@ -728,7 +729,7 @@ export default function Export() {
                         type="checkbox"
                         checked={filters.tag_ids?.includes(tag.id) || false}
                         onChange={() => toggleArrayFilter('tag_ids', tag.id)}
-                        className="rounded border-gray-100 text-blue-600 focus:ring-blue-500"
+                        className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
                       />
                       <span className="text-sm text-gray-700">{tag.name}</span>
                     </label>
@@ -742,7 +743,8 @@ export default function Export() {
               <div>
                 <button
                   onClick={clearFilters}
-                  className="text-sm text-blue-600 hover:text-blue-800"
+                  type="button"
+                  className="storage-link text-sm underline bg-transparent border-0 cursor-pointer p-0"
                 >
                   Clear All Filters
                 </button>
@@ -751,13 +753,13 @@ export default function Export() {
           </div>
 
           {/* Preview Count */}
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+          <div className="mb-6 p-4 rounded-lg" style={{ background: 'rgb(var(--dashboard-surface))' }}>
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Matching Containers:</span>
+              <span className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Matching Containers:</span>
               {loadingCount ? (
-                <span className="text-sm text-gray-500">Calculating...</span>
+                <span className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Calculating...</span>
               ) : (
-                <span className="text-lg font-bold text-blue-600">
+                <span className="text-lg font-bold" style={{ color: 'rgb(var(--dashboard-accent-hover))' }}>
                   {count !== null ? count.toLocaleString() : '—'}
                 </span>
               )}
@@ -772,7 +774,7 @@ export default function Export() {
               </label>
               <Link
                 to="/settings?category=data-management&section=export-configurations"
-                className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                className="storage-link text-xs hover:underline flex items-center gap-1"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -792,7 +794,7 @@ export default function Export() {
                 <p className="text-gray-700 mb-2">No export configurations available.</p>
                 <Link
                   to="/settings?category=data-management&section=export-configurations"
-                  className="text-blue-600 hover:text-blue-800 hover:underline font-medium inline-flex items-center gap-1"
+                  className="storage-link font-medium inline-flex items-center gap-1"
                 >
                   Create one in Settings
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -859,22 +861,21 @@ export default function Export() {
                           setFocusedConfigIndex(null)
                         }
                       }}
-                      className={`w-full text-left px-3 py-2 border rounded transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
+                      className={`w-full text-left px-3 py-2 border rounded transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
                         isSelected
-                          ? 'border-blue-500 bg-blue-50 shadow-sm'
-                          : isFocused
-                          ? 'border-blue-300 bg-blue-50/70'
-                          : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                          ? 'shadow-sm'
+                          : 'border-gray-200'
                       }`}
+                      style={isSelected ? { borderColor: 'rgb(var(--dashboard-accent))', background: 'rgb(var(--dashboard-accent-muted))' } : isFocused ? { borderColor: 'rgb(var(--dashboard-accent)/0.5)', background: 'rgb(var(--dashboard-accent-muted)/0.7)' } : undefined}
                       title={config.columns.length > 0 ? `Columns: ${config.columns.slice(0, 5).join(', ')}${config.columns.length > 5 ? `, +${config.columns.length - 5} more` : ''}` : 'No columns'}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                          <span className={`font-medium text-sm truncate ${isSelected ? 'text-blue-900' : 'text-gray-900'}`}>
+                          <span className="font-medium text-sm truncate" style={isSelected ? { color: 'rgb(var(--dashboard-accent-hover))' } : { color: 'rgb(var(--dashboard-text))' }}>
                             {config.name}
                           </span>
                           {config.isDefault && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700 rounded flex-shrink-0" aria-label="Default configuration">
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium rounded flex-shrink-0" style={{ background: 'rgb(var(--dashboard-accent-muted))', color: 'rgb(var(--dashboard-accent-hover))' }} aria-label="Default configuration">
                               Default
                             </span>
                           )}
@@ -890,7 +891,7 @@ export default function Export() {
                           </span>
                         </div>
                         {isSelected && (
-                          <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                          <svg className="w-4 h-4 flex-shrink-0" style={{ color: 'rgb(var(--dashboard-accent-hover))' }} fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                           </svg>
                         )}
@@ -919,7 +920,7 @@ export default function Export() {
                     value={format}
                     checked={exportFormat === format}
                     onChange={() => setExportFormat(format)}
-                    className="text-blue-600 focus:ring-blue-500"
+                    className="text-teal-600 focus:ring-teal-500"
                   />
                   <span className="text-sm text-gray-700 uppercase">{format}</span>
                 </label>
@@ -945,7 +946,7 @@ export default function Export() {
                       value=","
                       checked={csvDelimiter === ','}
                       onChange={() => setCsvDelimiter(',')}
-                      className="text-blue-600 focus:ring-blue-500"
+                      className="text-teal-600 focus:ring-teal-500"
                     />
                     <span className="text-sm text-gray-700">Comma (,)</span>
                   </label>
@@ -956,7 +957,7 @@ export default function Export() {
                       value=";"
                       checked={csvDelimiter === ';'}
                       onChange={() => setCsvDelimiter(';')}
-                      className="text-blue-600 focus:ring-blue-500"
+                      className="text-teal-600 focus:ring-teal-500"
                     />
                     <span className="text-sm text-gray-700">Semicolon (;)</span>
                   </label>
@@ -967,7 +968,7 @@ export default function Export() {
                       value="\t"
                       checked={csvDelimiter === '\t'}
                       onChange={() => setCsvDelimiter('\t')}
-                      className="text-blue-600 focus:ring-blue-500"
+                      className="text-teal-600 focus:ring-teal-500"
                     />
                     <span className="text-sm text-gray-700">Tab</span>
                   </label>
@@ -981,7 +982,7 @@ export default function Export() {
                     type="checkbox"
                     checked={csvBOM}
                     onChange={(e) => setCsvBOM(e.target.checked)}
-                    className="text-blue-600 focus:ring-blue-500"
+                    className="text-teal-600 focus:ring-teal-500"
                   />
                   <span className="text-sm text-gray-700">Include UTF-8 BOM (recommended for Excel)</span>
                 </label>
@@ -1003,7 +1004,7 @@ export default function Export() {
                       value="CRLF"
                       checked={csvLineEnding === 'CRLF'}
                       onChange={() => setCsvLineEnding('CRLF')}
-                      className="text-blue-600 focus:ring-blue-500"
+                      className="text-teal-600 focus:ring-teal-500"
                     />
                     <span className="text-sm text-gray-700">CRLF (Windows, recommended for Excel)</span>
                   </label>
@@ -1014,7 +1015,7 @@ export default function Export() {
                       value="LF"
                       checked={csvLineEnding === 'LF'}
                       onChange={() => setCsvLineEnding('LF')}
-                      className="text-blue-600 focus:ring-blue-500"
+                      className="text-teal-600 focus:ring-teal-500"
                     />
                     <span className="text-sm text-gray-700">LF (Unix)</span>
                   </label>
@@ -1066,10 +1067,10 @@ export default function Export() {
               >
                 <div className="px-4 py-4 space-y-4 bg-white">
                   {/* Total Containers */}
-                  <div className="p-4 bg-blue-50 rounded-lg">
+                  <div className="p-4 rounded-lg" style={{ background: 'rgb(var(--dashboard-accent-muted))' }}>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700">Total Containers Exported:</span>
-                      <span className="text-2xl font-bold text-blue-600">
+                      <span className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Total Containers Exported:</span>
+                      <span className="text-2xl font-bold" style={{ color: 'rgb(var(--dashboard-accent-hover))' }}>
                         {exportSummary.total_containers.toLocaleString()}
                       </span>
                     </div>
@@ -1085,7 +1086,7 @@ export default function Export() {
                       
                       <div className="text-sm mb-2">
                         <span className="font-medium">Containers: </span>
-                        <span className="text-blue-600">{study.containers.toLocaleString()}</span>
+                        <span style={{ color: 'rgb(var(--dashboard-accent-hover))' }}>{study.containers.toLocaleString()}</span>
                       </div>
 
                       {study.subjects_with_results.length > 0 && (
@@ -1097,7 +1098,7 @@ export default function Export() {
                             {study.subjects_with_results.map((item, i) => (
                               <div key={i} className="flex justify-between">
                                 <span>{item.name}</span>
-                                <span className="text-blue-600">{item.count}</span>
+                                <span style={{ color: 'rgb(var(--dashboard-accent-hover))' }}>{item.count}</span>
                               </div>
                             ))}
                           </div>
@@ -1149,7 +1150,7 @@ export default function Export() {
             <button
               onClick={handleExport}
               disabled={exporting || count === 0 || loadingCount || csvData.length === 0 || (validationResult?.invalid_count ?? 0) > 0}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="storage-btn-primary px-4 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {exporting ? 'Exporting...' : 'Export'}
             </button>
