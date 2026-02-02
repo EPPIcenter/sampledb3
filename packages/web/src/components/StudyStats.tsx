@@ -7,11 +7,15 @@ import { useDateFilter, defaultMinDate } from '../contexts/DateFilterContext'
 interface StudyStatsProps {
   summary: StudySummary['summary']
   timelineData?: StudyTimelineData
+  /** Optional class for StatCard wrappers (e.g. dashboard-card p-6 for studies/dashboard theme) */
+  statCardClassName?: string
+  /** Optional class for StatChart card wrappers (e.g. dashboard-card p-6) */
+  cardClassName?: string
 }
 
 type BinSize = 'day' | 'week' | 'month' | 'quarter' | 'year'
 
-export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
+export default function StudyStats({ summary, timelineData, statCardClassName, cardClassName }: StudyStatsProps) {
   const { settings } = useDateFilter()
   const { minDate, maxDate } = settings
   const [binSize, setBinSize] = useState<BinSize>('day')
@@ -325,6 +329,7 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
           title="Total Subjects"
           value={displaySummary.totalSubjects.toLocaleString()}
           subtitle="Enrolled participants"
+          className={statCardClassName}
         />
         <StatCard
           title="Total Specimens"
@@ -332,28 +337,31 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
           subtitle="Collected samples"
           unfilteredValue={summary.totalSpecimens}
           showUnfilteredWarning={isFilteringSpecimens}
+          className={statCardClassName}
         />
         <StatCard
           title="Total Containers"
           value={displaySummary.totalContainers.toLocaleString()}
           subtitle="Storage containers"
+          className={statCardClassName}
         />
         <StatCard
           title="Avg per Subject"
           value={displaySummary.averageSpecimensPerSubject.toFixed(1)}
           subtitle="Specimens per participant"
+          className={statCardClassName}
         />
       </div>
 
       {/* Study Duration and Date Range */}
       {(displaySummary.collectionDateRange || displaySummary.studyDurationDays !== null) && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Study Period</h3>
+        <div className={cardClassName ?? 'bg-white rounded-lg shadow p-6'}>
+          <h3 className="text-lg font-semibold mb-4 dashboard-stat-value">Study Period</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {displaySummary.collectionDateRange && (
               <div>
-                <p className="text-sm text-gray-500 mb-1">Collection Date Range</p>
-                <p className="text-gray-900 font-medium">
+                <p className="text-sm dashboard-stat-muted mb-1">Collection Date Range</p>
+                <p className="dashboard-stat-value font-medium">
                   {new Date(displaySummary.collectionDateRange.earliest).toLocaleDateString('en-US', {
                     month: 'long',
                     day: 'numeric',
@@ -370,8 +378,8 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
             )}
             {displaySummary.studyDurationDays !== null && (
               <div>
-                <p className="text-sm text-gray-500 mb-1">Study Duration</p>
-                <p className="text-gray-900 font-medium">
+                <p className="text-sm dashboard-stat-muted mb-1">Study Duration</p>
+                <p className="dashboard-stat-value font-medium">
                   {displaySummary.studyDurationDays} {displaySummary.studyDurationDays === 1 ? 'day' : 'days'}
                 </p>
               </div>
@@ -389,6 +397,7 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
             title="Specimens by Type"
             labelThreshold={5}
             showPercentageList={true}
+            cardClassName={cardClassName}
           />
         )}
         {containerTypeChartData.length > 0 && (
@@ -396,13 +405,14 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
             type="bar"
             data={containerTypeChartData}
             title="Containers by Type"
+            cardClassName={cardClassName}
           />
         )}
       </div>
 
       {/* Bin Size Selector - Above Histograms */}
       {(collectionTimelineData.collection.length > 0 || collectionTimelineData.enrollment.length > 0) && (
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className={cardClassName ? cardClassName.replace('p-6', 'p-4') : 'bg-white rounded-lg shadow p-4'}>
           <div className="flex items-center gap-4">
             <label className="text-sm font-medium text-gray-700">
               Histogram Bin Size:
@@ -432,6 +442,7 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
             xKey="name"
             yKey="value"
             dateKey="dateValue"
+            cardClassName={cardClassName}
           />
         )}
         {collectionTimelineData.enrollment.length > 0 && (
@@ -442,6 +453,7 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
             xKey="name"
             yKey="value"
             dateKey="dateValue"
+            cardClassName={cardClassName}
           />
         )}
       </div>

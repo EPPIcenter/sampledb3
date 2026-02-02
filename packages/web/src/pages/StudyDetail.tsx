@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useHotkey } from '../hooks/useHotkey'
 import { studiesApi, subjectsApi, type Study, type StudySubject, type StudySummary, type StudyTimelineData } from '../lib/api'
 import api from '../lib/api'
-import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
+import StudyDetailHeader from '../components/StudyDetailHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ExportModal from '../components/ExportModal'
 import StudyStats from '../components/StudyStats'
@@ -15,6 +15,7 @@ import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import SubjectMergeModal from '../components/SubjectMergeModal'
 import { useUser } from '../contexts/UserContext'
 import { TUTORIAL_SHORT_CODE_PREFIX } from '../lib/constants'
+import '../styles/studies.css'
 
 export default function StudyDetail() {
   const { id } = useParams<{ id: string }>()
@@ -44,6 +45,9 @@ export default function StudyDetail() {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = (searchParams.get('tab') as 'overview' | 'timeline' | 'subjects') || 'overview'
   const hasProcessedCreateSubject = useRef(false)
+  const [descExpanded, setDescExpanded] = useState(false)
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
+  const actionsMenuRef = useRef<HTMLDivElement>(null)
 
   const setActiveTab = (tab: 'overview' | 'timeline' | 'subjects') => {
     setSearchParams((prev) => {
@@ -73,8 +77,11 @@ export default function StudyDetail() {
     hasProcessedCreateSubject.current = false
   }, [id])
 
-  // Close modals on Escape
+  // Close modals and actions menu on Escape
   useHotkey('escape', () => {
+    if (actionsMenuOpen) {
+      setActionsMenuOpen(false)
+    }
     if (createSubjectModalOpen) {
       setCreateSubjectModalOpen(false)
     }
@@ -89,7 +96,19 @@ export default function StudyDetail() {
       setDeleteConfirmInput('')
       setDeleteError(null)
     }
-  }, { enabled: createSubjectModalOpen || editStudyModalOpen || mergeModalOpen || deleteModalOpen, enableOnFormTags: true })
+  }, { enabled: actionsMenuOpen || createSubjectModalOpen || editStudyModalOpen || mergeModalOpen || deleteModalOpen, enableOnFormTags: true })
+
+  // Close actions dropdown on click outside
+  useEffect(() => {
+    if (!actionsMenuOpen) return
+    const handleClick = (e: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node)) {
+        setActionsMenuOpen(false)
+      }
+    }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [actionsMenuOpen])
 
   useEffect(() => {
     if (!id) return
@@ -179,8 +198,10 @@ export default function StudyDetail() {
 
   if (!study) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8 text-red-600">Study not found</div>
+      <div className="studies-page min-h-screen">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <div className="text-center py-8 text-red-600">Study not found</div>
+        </div>
       </div>
     )
   }
@@ -253,105 +274,68 @@ export default function StudyDetail() {
     },
   ]
 
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <EntityBreadcrumbs
-          items={[
-            { label: 'Studies', to: '/studies' },
-            { label: study.title },
-          ]}
-        />
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{study.title}</h1>
-            <p className="text-gray-500 mt-1">Code: {study.shortCode}</p>
-          </div>
-          <div className="flex space-x-3">
-            {canWrite && (
-              <>
-                <button
-                  onClick={() => setEditStudyModalOpen(true)}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium"
-                >
-                  Edit Study
-                </button>
-                <button
-                  onClick={() => setCreateSubjectModalOpen(true)}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
-                >
-                  Create Subject
-                </button>
-                <button
-                  onClick={() => {
-                    setMergeModalKey((k) => k + 1)
-                    setMergeModalOpen(true)
-                  }}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium"
-                >
-                  Merge Subjects
-                </button>
-              </>
-            )}
-            <button
-              onClick={() => setExportModalOpen(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-            >
-              Export Data
-            </button>
-            {(isAdmin || study.shortCode.toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX)) && (
-              <button
-                onClick={openDeleteModal}
-                className="px-4 py-2 border-2 border-red-600 text-red-600 rounded-lg hover:bg-red-50 font-medium"
-              >
-                Delete study
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+  const canDelete = isAdmin || study.shortCode.toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX)
 
-      {/* Study Info */}
-      {study.description && (
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-2 text-gray-900">Description</h2>
-          <p className="text-gray-600">{study.description}</p>
-        </div>
-      )}
+  return (
+    <div className="studies-page min-h-screen">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+        <StudyDetailHeader
+          study={study}
+          summaryLoading={summaryLoading}
+          summaryData={summary?.summary}
+          canWrite={canWrite}
+          canDelete={canDelete}
+          descExpanded={descExpanded}
+          setDescExpanded={setDescExpanded}
+          actionsMenuOpen={actionsMenuOpen}
+          setActionsMenuOpen={setActionsMenuOpen}
+          actionsMenuRef={actionsMenuRef}
+          onEditStudy={() => setEditStudyModalOpen(true)}
+          onMergeSubjects={() => {
+            setMergeModalKey((k) => k + 1)
+            setMergeModalOpen(true)
+          }}
+          onCreateSubject={() => setCreateSubjectModalOpen(true)}
+          onExport={() => setExportModalOpen(true)}
+          onDelete={openDeleteModal}
+        />
 
       {/* Tabs */}
       <div className="mb-6">
-        <div className="border-b border-gray-100">
+        <div className="border-b" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'overview'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200'
+                  ? ''
+                  : 'border-transparent hover:border-[rgb(var(--dashboard-border))]'
               }`}
+              style={activeTab === 'overview' ? { borderBottomColor: 'rgb(var(--dashboard-accent))', color: 'rgb(var(--dashboard-accent))' } : { color: 'rgb(var(--dashboard-text-muted))' }}
             >
               Overview
             </button>
             {study.isLongitudinal && (
               <button
                 onClick={() => setActiveTab('timeline')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                   activeTab === 'timeline'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200'
+                    ? ''
+                    : 'border-transparent hover:border-[rgb(var(--dashboard-border))]'
                 }`}
+                style={activeTab === 'timeline' ? { borderBottomColor: 'rgb(var(--dashboard-accent))', color: 'rgb(var(--dashboard-accent))' } : { color: 'rgb(var(--dashboard-text-muted))' }}
               >
                 Timeline
               </button>
             )}
             <button
               onClick={() => setActiveTab('subjects')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'subjects'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200'
+                  ? ''
+                  : 'border-transparent hover:border-[rgb(var(--dashboard-border))]'
               }`}
+              style={activeTab === 'subjects' ? { borderBottomColor: 'rgb(var(--dashboard-accent))', color: 'rgb(var(--dashboard-accent))' } : { color: 'rgb(var(--dashboard-text-muted))' }}
             >
               Subjects
             </button>
@@ -363,22 +347,27 @@ export default function StudyDetail() {
       {activeTab === 'overview' && (
         <div>
           {summaryLoading ? (
-            <div className="text-center py-8">Loading summary...</div>
+            <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Loading summary...</div>
           ) : summary ? (
             <>
-              <div className="bg-white rounded-lg shadow p-4 mb-6">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Date Filter</h3>
-                <p className="text-xs text-gray-500 mb-3">
+              <div className="dashboard-card rounded-xl p-4 mb-6">
+                <h3 className="text-sm font-medium mb-3" style={{ color: 'rgb(var(--dashboard-text))' }}>Date Filter</h3>
+                <p className="text-xs mb-3" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
                   Filter statistics and charts by collection date. Default minimum is year 2000 to exclude invalid dates.
                 </p>
                 <DateFilterControls
                   maxAvailableDate={summary.summary.collectionDateRange?.latest.split('T')[0]}
                 />
               </div>
-              <StudyStats summary={summary.summary} timelineData={timeline || undefined} />
+              <StudyStats
+                summary={summary.summary}
+                timelineData={timeline || undefined}
+                statCardClassName="dashboard-card p-6 rounded-xl"
+                cardClassName="dashboard-card p-6 rounded-xl"
+              />
             </>
           ) : (
-            <div className="text-center py-8 text-gray-500">Failed to load summary</div>
+            <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Failed to load summary</div>
           )}
         </div>
       )}
@@ -386,28 +375,44 @@ export default function StudyDetail() {
       {activeTab === 'timeline' && study.isLongitudinal && (
         <div>
           {timelineLoading ? (
-            <div className="text-center py-8">Loading timeline...</div>
+            <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Loading timeline...</div>
           ) : timeline ? (
             <StudyTimeline data={timeline} />
           ) : (
-            <div className="text-center py-8 text-gray-500">Failed to load timeline</div>
+            <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Failed to load timeline</div>
           )}
         </div>
       )}
 
       {activeTab === 'subjects' && (
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-900">Subjects</h2>
-              <div className="w-64">
+        <div className="dashboard-card rounded-xl overflow-hidden">
+          <div className="p-6 border-b" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-2">
+                <h2 className="dashboard-section-title text-xl font-semibold">Subjects</h2>
+                <span className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                  {filteredSubjects.length} subject{filteredSubjects.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
                 <input
                   type="text"
                   placeholder="Search subjects..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-64 px-4 py-2 border rounded-lg form-input"
+                  style={{ borderColor: 'rgb(var(--dashboard-border))' }}
                 />
+                {canWrite && (
+                  <button
+                    type="button"
+                    onClick={() => setCreateSubjectModalOpen(true)}
+                    className="px-3 py-2 text-white rounded-lg font-medium text-sm transition-colors"
+                    style={{ backgroundColor: 'rgb(var(--dashboard-accent))' }}
+                  >
+                    Add subject
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -587,6 +592,7 @@ export default function StudyDetail() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
