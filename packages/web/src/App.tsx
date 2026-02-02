@@ -52,6 +52,9 @@ import Settings from './pages/Settings'
 import Profile from './pages/Profile'
 import Derivations from './pages/Derivations'
 import DerivationsBulkImport from './pages/DerivationsBulkImport'
+import QpcrExperiments from './pages/QpcrExperiments'
+import QpcrExperimentNew from './pages/QpcrExperimentNew'
+import QpcrExperimentDetail from './pages/QpcrExperimentDetail'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminUsers from './pages/AdminUsers'
 import AdminSettings from './pages/AdminSettings'
@@ -526,6 +529,9 @@ function AppContent() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/derivations" element={<Derivations />} />
               <Route path="/derivations/import" element={<DerivationsBulkImport />} />
+              <Route path="/qpcr-experiments" element={<QpcrExperiments />} />
+              <Route path="/qpcr-experiments/new" element={<QpcrExperimentNew />} />
+              <Route path="/qpcr-experiments/:id" element={<QpcrExperimentDetail />} />
               {/* Admin routes */}
               <Route
                 path="/admin"
