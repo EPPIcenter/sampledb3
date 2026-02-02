@@ -1,0 +1,6 @@
+Dear Jessica and Max,
+Attached are the qPCR templates.
+Important to note is that the QuantStudio template is supposed to be output/saved as a "Text Tab delimited" file once all the information regarding samples and controls being run has been entered as this is the file accepted by Quantstudio software, whereas that of Biorad is maintained as a csv file. The Positions marked with STANDARD (controls) are positions where our controls are usually run and we replace the Sample naming of 10k, 1k, 100, 10, 1 with the actual tube Micronic Tube IDs/Barcodes of controls used on that run for proper tracking purposes
+
+Regards,
+Innocent W.
