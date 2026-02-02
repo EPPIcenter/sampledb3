@@ -30,6 +30,7 @@ __pycache__/
 .env.production.local
 
 # IDE & Editor
+.cursor/
 .vscode/
 .idea/
 *.swp
