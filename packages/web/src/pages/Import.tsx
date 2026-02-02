@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams, useNavigate, Navigate } from 'react-router-dom'
 import { subjectsApi, specimensApi, collectionsApi, locationsApi, type Location } from '../lib/api'
 import { type ContainerType } from '../components/ContainerRegistration'
 import api from '../lib/api'
@@ -31,16 +31,9 @@ export default function Import() {
   const { canWrite } = useUser()
   const [searchParams, setSearchParams] = useSearchParams()
   const currentStep = (searchParams.get('step') as Step) || 'upload'
-  
-  // Redirect if user doesn't have write permissions
-  useEffect(() => {
-    if (!canWrite) {
-      navigate('/', { replace: true })
-    }
-  }, [canWrite, navigate])
-  
+
   if (!canWrite) {
-    return null
+    return <Navigate to="/" replace />
   }
 
   const setCurrentStep = (step: Step) => {

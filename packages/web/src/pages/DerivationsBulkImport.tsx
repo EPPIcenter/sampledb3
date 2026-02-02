@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { 
   derivationsApi, 
   specimenTypesApi, 
@@ -38,17 +38,11 @@ type ParentContainerType = 'paper' | 'cryovial_tube' | 'micronix_tube'
 export default function DerivationsBulkImport() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
-  
-  // Redirect if user doesn't have write permissions
-  useEffect(() => {
-    if (!canWrite) {
-      navigate('/derivations', { replace: true })
-    }
-  }, [canWrite, navigate])
-  
+
   if (!canWrite) {
-    return null
+    return <Navigate to="/derivations" replace />
   }
+
   const [currentStep, setCurrentStep] = useState<Step>(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

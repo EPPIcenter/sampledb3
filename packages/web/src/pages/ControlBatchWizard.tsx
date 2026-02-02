@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams, Navigate } from 'react-router-dom'
 import BatchInfoStep from '../components/wizards/BatchInfoStep'
 import SpecimenTypesStep from '../components/wizards/SpecimenTypesStep'
 import CSVUploadStep from '../components/wizards/CSVUploadStep'
@@ -64,18 +64,11 @@ export default function ControlBatchWizard() {
   const { canWrite } = useUser()
   const { id: batchId } = useParams<{ id?: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
-  
-  // Redirect if user doesn't have write permissions
-  useEffect(() => {
-    if (!canWrite) {
-      navigate('/blood-controls', { replace: true })
-    }
-  }, [canWrite, navigate])
-  
+
   if (!canWrite) {
-    return null
+    return <Navigate to="/blood-controls" replace />
   }
-  
+
   const isAddMode = !!batchId
   // In add mode, skip batch-info step and go directly to specimen-types
   const defaultStep = isAddMode ? 'specimen-types' : 'batch-info'
