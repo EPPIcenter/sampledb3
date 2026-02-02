@@ -1,0 +1,186 @@
+/**
+ * qPCR experiment UI – "Precision lab" theme
+ * Scoped to .qpcr-theme wrapper on list, new, and detail pages.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap');
+
+.qpcr-theme {
+  --qpcr-accent: 20 184 166;
+  --qpcr-accent-hover: 13 148 136;
+  --qpcr-accent-muted: 204 251 241;
+  --qpcr-standard: 245 158 11;
+  --qpcr-standard-muted: 254 243 199;
+  --qpcr-surface: 248 250 252;
+  --qpcr-surface-card: 255 255 255;
+  --qpcr-text: 30 41 59;
+  --qpcr-text-muted: 100 116 139;
+  font-family: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
+}
+
+.qpcr-theme h1,
+.qpcr-theme h2,
+.qpcr-theme h3 {
+  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Form overrides: teal focus within qPCR pages */
+.qpcr-theme .qpcr-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.5rem;
+  background: white;
+  color: rgb(30 41 59);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+.qpcr-theme .qpcr-input:focus {
+  outline: none;
+  border-color: rgb(20 184 166);
+  box-shadow: 0 0 0 2px rgb(20 184 166 / 0.3);
+}
+
+.qpcr-theme .qpcr-select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.5rem;
+  background: white;
+  color: rgb(30 41 59);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+.qpcr-theme .qpcr-select:focus {
+  outline: none;
+  border-color: rgb(20 184 166);
+  box-shadow: 0 0 0 2px rgb(20 184 166 / 0.3);
+}
+
+/* Primary CTA */
+.qpcr-theme .qpcr-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  color: white;
+  background-color: rgb(var(--qpcr-accent));
+  transition: background-color 0.15s;
+}
+.qpcr-theme .qpcr-btn-primary:hover:not(:disabled) {
+  background-color: rgb(var(--qpcr-accent-hover));
+}
+.qpcr-theme .qpcr-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Secondary / outline */
+.qpcr-theme .qpcr-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  border: 1px solid rgb(226 232 240);
+  background: white;
+  color: rgb(51 65 85);
+  transition: background-color 0.15s;
+}
+.qpcr-theme .qpcr-btn-secondary:hover {
+  background: rgb(248 250 252);
+}
+
+/* Danger */
+.qpcr-theme .qpcr-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid rgb(254 202 202);
+  background: white;
+  color: rgb(185 28 28);
+  transition: background-color 0.15s;
+}
+.qpcr-theme .qpcr-btn-danger:hover {
+  background: rgb(254 242 242);
+}
+.qpcr-theme .qpcr-btn-danger:disabled {
+  opacity: 0.5;
+}
+
+/* Status pills */
+.qpcr-theme .qpcr-pill-setup {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: rgb(254 243 199);
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(146 64 14);
+}
+.qpcr-theme .qpcr-pill-template {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: rgb(204 251 241);
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(17 94 89);
+}
+.qpcr-theme .qpcr-pill-results {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: rgb(209 250 229);
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(6 78 59);
+}
+
+/* Card surface */
+.qpcr-theme .qpcr-card {
+  border-radius: 0.75rem;
+  border: 1px solid rgb(226 232 240 / 0.9);
+  background: white;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+}
+
+/* Staggered reveal */
+.qpcr-theme .qpcr-reveal {
+  animation: qpcr-fade-in 0.4s ease-out forwards;
+}
+@keyframes qpcr-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Well selection: selected well gets teal ring and soft tint */
+.qpcr-theme .qpcr-well-plate .qpcr-well--selected {
+  box-shadow: 0 0 0 2px rgb(var(--qpcr-accent));
+  background-color: rgb(var(--qpcr-accent-muted) / 0.5);
+}
+
+/* Well detail panel: links use teal to match theme */
+.qpcr-theme .qpcr-well-panel a[href].qpcr-well-panel-link {
+  color: rgb(var(--qpcr-accent));
+  font-weight: 500;
+}
+.qpcr-theme .qpcr-well-panel a[href].qpcr-well-panel-link:hover {
+  color: rgb(var(--qpcr-accent-hover));
+  text-decoration: underline;
+}

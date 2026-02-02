@@ -1796,6 +1796,10 @@ export interface QpcrExperiment {
   standardLayout: Record<string, unknown> | null
   plateBarcode?: string | null
   targetName?: string | null
+  fluorophore?: string | null
+  reporter?: string | null
+  quencher?: string | null
+  instrumentType?: string | null
   created: string
   lastUpdated: string
   createdBy: number | null
@@ -1835,12 +1839,14 @@ export const qpcrExperimentsApi = {
     api.get<QpcrExperimentDetailResponse>(`/qpcr-experiments/${id}`),
   create: (data: { name?: string | null; templateFormat: 'biorad' | 'quant_studio'; standardLayout?: Record<string, unknown> | null }) =>
     api.post<QpcrExperiment>('/qpcr-experiments', data),
-  update: (id: number, data: { name?: string | null; standardLayout?: Record<string, unknown> | null; status?: 'setup' | 'template_exported' | 'results_uploaded' }) =>
+  update: (id: number, data: { name?: string | null; standardLayout?: Record<string, unknown> | null; status?: 'setup' | 'template_exported' | 'results_uploaded'; targetName?: string | null; fluorophore?: string | null; reporter?: string | null; instrumentType?: string | null }) =>
     api.patch<QpcrExperiment>(`/qpcr-experiments/${id}`, data),
   uploadPlate: (id: number, data: { csvText: string; scannerConfigurationId: string; plateBarcode?: string | null }) =>
     api.post<{ wells: QpcrExperimentWell[]; unresolved: Array<{ wellPosition: string; barcode: string }> }>(`/qpcr-experiments/${id}/plate`, data),
   uploadResults: (id: number, data: { fileContent: string; fileName: string; instrumentType: 'Biorad_CFX' | 'QuantStudio' }) =>
     api.post<{ run: { id: number }; wellResultCount: number; amplificationCount: number }>(`/qpcr-experiments/${id}/results`, data),
+  delete: (id: number) =>
+    api.delete<void>(`/qpcr-experiments/${id}`),
 }
 
 export const errorLogsApi = {
