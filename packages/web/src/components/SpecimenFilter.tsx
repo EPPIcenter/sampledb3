@@ -387,7 +387,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
             <button
               type="button"
               onClick={clearFilters}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              className="subject-specimen-btn-secondary disabled:opacity-50"
               disabled={isLoading}
             >
               Clear All
@@ -396,7 +396,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
               type="button"
               onClick={handleSubmit}
               disabled={isLoading || !hasChanges}
-              className="px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+              className="subject-specimen-btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isLoading && (
                 <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
