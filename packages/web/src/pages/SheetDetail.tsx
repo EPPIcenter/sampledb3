@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import api, { collectionsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import '../styles/storage.css'
 
 export default function SheetDetail() {
   const { id } = useParams<{ id: string }>()
@@ -48,13 +49,21 @@ export default function SheetDetail() {
   }, [targetPosition, data])
 
   if (loading) {
-    return <SkeletonDetailPage sections={1} />
+    return (
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <SkeletonDetailPage sections={1} />
+        </div>
+      </div>
+    )
   }
 
   if (!data?.sheet) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8 text-red-600">Sheet not found</div>
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <div className="text-center py-8 text-red-600">Sheet not found</div>
+        </div>
       </div>
     )
   }
@@ -72,27 +81,28 @@ export default function SheetDetail() {
   ].filter(Boolean) as Array<{ label: string; to?: string }>
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+      <div className="mb-6 storage-reveal storage-reveal-1">
         <EntityBreadcrumbs items={breadcrumbItems} />
-        <h1 className="text-3xl font-bold text-gray-900">
+        <h1 className="text-3xl font-bold">
           Sheet: {sheet.name}
         </h1>
         {sheet.locationPath && (
-          <p className="mt-1 text-sm text-gray-600 font-mono">{sheet.locationPath}</p>
+          <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{sheet.locationPath}</p>
         )}
       </div>
 
-      <div className="bg-white rounded-lg shadow border border-gray-100 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex justify-between items-center">
+      <div className="storage-card p-6 storage-reveal storage-reveal-2">
+        <h2 className="text-lg font-semibold storage-section-title mb-4 flex justify-between items-center">
           DBS Spots
-          <span className="text-sm font-normal text-gray-500">
+          <span className="text-sm font-normal" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
             {papers.reduce((sum: number, p: any) => sum + (p.container?.totalQuantity || 0), 0)} total spots
           </span>
         </h2>
         
         {papers.length === 0 ? (
-          <p className="text-sm text-gray-500 italic">No spots recorded on this sheet.</p>
+          <p className="text-sm italic" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No spots recorded on this sheet.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {papers.map((p: any) => {
@@ -162,6 +172,7 @@ export default function SheetDetail() {
             })}
           </div>
         )}
+      </div>
       </div>
     </div>
   )

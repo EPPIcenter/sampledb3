@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate, Navigate } from 'react-router-dom'
 import { collectionsApi, locationsApi, type Location } from '../lib/api'
 import CryovialBoxPicker, { type CryovialBox } from '../components/CryovialBoxPicker'
 import { useUser } from '../contexts/UserContext'
+import '../styles/storage.css'
 
 interface CSVRow {
   [key: string]: string
@@ -574,32 +575,27 @@ BOX-002,A1,B2`
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Move Cryovial Tubes</h1>
 
         {/* Step indicator */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className={`flex items-center ${currentStep === 'upload' ? 'text-blue-600 font-semibold' : 'text-gray-500'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'upload' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                1
-              </div>
-              <span className="ml-2">Upload & Configure</span>
+        <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
+          <div className="storage-step-indicator">
+            <div className={`storage-step-item ${currentStep === 'upload' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">1</span>
+              <span>Upload & Configure</span>
             </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div className={`flex items-center ${currentStep === 'resolve' ? 'text-blue-600 font-semibold' : currentStep === 'upload' ? 'text-gray-500' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'resolve' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                2
-              </div>
-              <span className="ml-2">Resolve</span>
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep === 'resolve' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">2</span>
+              <span>Resolve</span>
             </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div className={`flex items-center ${currentStep === 'execute' ? 'text-blue-600 font-semibold' : 'text-gray-500'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'execute' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                3
-              </div>
-              <span className="ml-2">Execute</span>
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep === 'execute' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">3</span>
+              <span>Execute</span>
             </div>
           </div>
         </div>
@@ -607,7 +603,7 @@ BOX-002,A1,B2`
         {/* Step 1: Upload & Configure */}
         {currentStep === 'upload' && (
           <>
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
               <button
                 type="button"
                 onClick={() => setInstructionsExpanded(!instructionsExpanded)}
@@ -672,12 +668,12 @@ BOX-002,A1,B2`
               )}
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold">Upload CSV Files</h2>
                 <button
                   onClick={downloadTemplate}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                  className="storage-btn-secondary"
                 >
                   Download Template
                 </button>
@@ -689,7 +685,7 @@ BOX-002,A1,B2`
                 multiple
                 onChange={handleFileChange}
                 disabled={loading}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
+                className="file-input-accent"
               />
 
               {files.length > 0 && (
@@ -796,7 +792,7 @@ BOX-002,A1,B2`
               <button
                 onClick={handleValidateAndResolve}
                 disabled={files.length === 0 || loading || files.some(f => !f.selectedBoxName || f.validationErrors.length > 0)}
-                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Processing...' : 'Next: Resolve Containers'}
               </button>
@@ -807,7 +803,7 @@ BOX-002,A1,B2`
         {/* Step 2: Resolve */}
         {currentStep === 'resolve' && (
           <>
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
               <h2 className="text-xl font-semibold mb-4">Resolved Cryovial Tubes</h2>
               
               <div className="mb-4">
@@ -888,14 +884,14 @@ BOX-002,A1,B2`
             <div className="flex justify-end gap-4">
               <button
                 onClick={() => setCurrentStep('upload')}
-                className="px-6 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                className="storage-btn-secondary"
               >
                 Back
               </button>
               <button
                 onClick={handleExecuteMoves}
                 disabled={files.some(f => f.resolvedContainers.length === 0)}
-                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Execute Moves
               </button>
@@ -981,13 +977,14 @@ BOX-002,A1,B2`
                   setInstructionsExpanded(false)
                   setCurrentStep('upload')
                 }}
-                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="storage-btn-primary px-6 py-2"
               >
                 Start New Move
               </button>
             </div>
           </>
         )}
+      </div>
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { collectionsApi, locationsApi, type Location } from '../lib/api'
 import CollectionTreePicker from '../components/CollectionTreePicker'
 import { useUser } from '../contexts/UserContext'
+import '../styles/storage.css'
 
 interface Paper {
   id: number
@@ -297,46 +298,37 @@ export default function ContainerMovePapers() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Move Papers</h1>
 
         {/* Step indicator */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className={`flex items-center ${currentStep === 'select-source' ? 'text-blue-600 font-semibold' : 'text-gray-500'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'select-source' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                1
-              </div>
-              <span className="ml-2">Choose Source</span>
+        <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
+          <div className="storage-step-indicator">
+            <div className={`storage-step-item ${currentStep === 'select-source' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">1</span>
+              <span>Choose Source</span>
             </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div className={`flex items-center ${currentStep === 'select-sheets' ? 'text-blue-600 font-semibold' : ['select-source'].includes(currentStep) ? 'text-gray-500' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'select-sheets' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                2
-              </div>
-              <span className="ml-2">Select Sheets</span>
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep === 'select-sheets' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">2</span>
+              <span>Select Sheets</span>
             </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div className={`flex items-center ${currentStep === 'select-destination' ? 'text-blue-600 font-semibold' : ['select-source', 'select-sheets'].includes(currentStep) ? 'text-gray-500' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'select-destination' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                3
-              </div>
-              <span className="ml-2">Choose Destination</span>
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep === 'select-destination' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">3</span>
+              <span>Choose Destination</span>
             </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div className={`flex items-center ${currentStep === 'confirm' ? 'text-blue-600 font-semibold' : ['select-source', 'select-sheets', 'select-destination'].includes(currentStep) ? 'text-gray-500' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'confirm' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                4
-              </div>
-              <span className="ml-2">Review & Confirm</span>
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep === 'confirm' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">4</span>
+              <span>Review & Confirm</span>
             </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div className={`flex items-center ${currentStep === 'execute' ? 'text-blue-600 font-semibold' : 'text-gray-500'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'execute' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                5
-              </div>
-              <span className="ml-2">Complete</span>
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep === 'execute' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">5</span>
+              <span>Complete</span>
             </div>
           </div>
         </div>
@@ -344,7 +336,7 @@ export default function ContainerMovePapers() {
         {/* Step 1: Choose Source Collection */}
         {currentStep === 'select-source' && (
           <>
-            <div className="bg-white rounded-lg shadow p-6 mb-6 relative" style={{ isolation: 'isolate' }}>
+            <div className="storage-card p-6 mb-6 relative storage-reveal storage-reveal-2" style={{ isolation: 'isolate' }}>
               <h2 className="text-xl font-semibold mb-4">Choose Source Collection</h2>
               <p className="text-gray-700 mb-6">
                 Select the box or bag containing the sheets you want to move.
@@ -392,7 +384,7 @@ export default function ContainerMovePapers() {
         {/* Step 2: Select Sheets */}
         {currentStep === 'select-sheets' && (
           <>
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
               <div className="mb-4">
                 <h2 className="text-xl font-semibold">Select Sheets to Move</h2>
                 <p className="text-sm text-gray-600 mt-1">
@@ -413,7 +405,7 @@ export default function ContainerMovePapers() {
                       value={sheetSearch}
                       onChange={(e) => setSheetSearch(e.target.value)}
                       placeholder="Search sheets by name..."
-                      className="w-full px-4 py-2 border rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      className="w-full px-4 py-2 border rounded-lg shadow-sm focus:ring-teal-500 focus:border-teal-500 text-sm"
                     />
                   </div>
 
@@ -452,7 +444,7 @@ export default function ContainerMovePapers() {
                                     setSelectedSheetIds(newSelected)
                                   }
                                 }}
-                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                className="text-xs text-teal-600 hover:text-teal-800 font-medium"
                               >
                                 {allFilteredSelected ? 'Deselect All Visible' : 'Select All Visible'}
                               </button>
@@ -464,15 +456,15 @@ export default function ContainerMovePapers() {
                                   <label
                                     key={sheet.id}
                                     className={`flex items-center gap-2 p-2 border rounded cursor-pointer transition-colors ${isSelected
-                                        ? 'bg-blue-50 border-blue-300'
-                                        : 'hover:border-blue-200 hover:bg-gray-50'
+                                        ? 'bg-teal-50 border-teal-300'
+                                        : 'hover:border-teal-200 hover:bg-gray-50'
                                       }`}
                                   >
                                     <input
                                       type="checkbox"
                                       checked={isSelected}
                                       onChange={() => handleSheetToggle(sheet.id)}
-                                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 flex-shrink-0"
+                                      className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 flex-shrink-0"
                                     />
                                     <div className="flex-1 min-w-0">
                                       <div className="font-medium text-sm text-gray-900 truncate">
@@ -498,7 +490,7 @@ export default function ContainerMovePapers() {
               {selectedSheetIds.size > 0 && (
                 <div className="mt-4 pt-4 border-t">
                   <p className="text-sm text-gray-700">
-                    <span className="font-medium text-blue-600">{selectedSheetIds.size}</span> sheet{selectedSheetIds.size !== 1 ? 's' : ''} selected
+                    <span className="font-medium text-teal-600">{selectedSheetIds.size}</span> sheet{selectedSheetIds.size !== 1 ? 's' : ''} selected
                   </p>
                 </div>
               )}
@@ -510,14 +502,14 @@ export default function ContainerMovePapers() {
                   setSheetSearch('')
                   setCurrentStep('select-source')
                 }}
-                className="px-6 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                className="storage-btn-secondary"
               >
                 Back
               </button>
               <button
                 onClick={() => setCurrentStep('select-destination')}
                 disabled={selectedSheetIds.size === 0}
-                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next: Select Destination
               </button>
@@ -528,7 +520,7 @@ export default function ContainerMovePapers() {
         {/* Step 3: Choose Destination Collection */}
         {currentStep === 'select-destination' && (
           <>
-            <div className="bg-white rounded-lg shadow p-6 mb-6 relative" style={{ isolation: 'isolate' }}>
+            <div className="storage-card p-6 mb-6 relative storage-reveal storage-reveal-2" style={{ isolation: 'isolate' }}>
               <h2 className="text-xl font-semibold mb-4">Choose Destination Collection</h2>
               <p className="text-gray-700 mb-6">
                 Select where to move the {selectedSheetIds.size} selected sheet{selectedSheetIds.size !== 1 ? 's' : ''}.
@@ -548,7 +540,7 @@ export default function ContainerMovePapers() {
             <div className="flex justify-end gap-4">
               <button
                 onClick={() => setCurrentStep('select-sheets')}
-                className="px-6 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                className="storage-btn-secondary"
               >
                 Back
               </button>
@@ -559,7 +551,7 @@ export default function ContainerMovePapers() {
         {/* Step 4: Review & Confirm */}
         {currentStep === 'confirm' && (
           <>
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
               <h2 className="text-xl font-semibold mb-4">Review & Confirm Move</h2>
               <p className="text-gray-700 mb-6">
                 Please review the move details below before confirming.
@@ -575,7 +567,7 @@ export default function ContainerMovePapers() {
                   <>
                     <div className="space-y-6">
                       {/* Source Collection */}
-                      <div className="border-l-4 border-blue-500 pl-4">
+                      <div className="border-l-4 border-teal-500 pl-4">
                         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
                           Source Collection
                         </h3>
@@ -629,16 +621,16 @@ export default function ContainerMovePapers() {
 
                       {/* Validation Status */}
                       {isValid ? (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
                           <div className="flex items-start">
-                            <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 text-teal-900 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             <div>
-                              <p className="text-sm font-medium text-blue-900">
+                              <p className="text-sm font-medium text-teal-900">
                                 Move is valid and ready to execute
                               </p>
-                              <p className="text-xs text-blue-700 mt-1">
+                              <p className="text-xs text-teal-900 mt-1">
                                 All {selectedSheetIds.size} selected sheet{selectedSheetIds.size !== 1 ? 's' : ''} will be moved from {sourceCollectionName} to {destinationCollectionName}.
                               </p>
                             </div>
@@ -666,7 +658,7 @@ export default function ContainerMovePapers() {
                     <div className="flex justify-end gap-4 mt-6">
                       <button
                         onClick={() => setCurrentStep('select-destination')}
-                        className="px-6 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                        className="storage-btn-secondary"
                       >
                         Back
                       </button>
@@ -678,7 +670,7 @@ export default function ContainerMovePapers() {
                           }
                         }}
                         disabled={!isValid}
-                        className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        className="storage-btn-primary px-6 py-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Confirm Move
                       </button>
@@ -694,7 +686,7 @@ export default function ContainerMovePapers() {
         {currentStep === 'execute' && (
           <>
             {loading ? (
-              <div className="bg-white rounded-lg shadow p-6 mb-6">
+              <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
                 <div className="text-center py-8">
                   <p className="text-gray-700">Moving sheets...</p>
                 </div>
@@ -702,7 +694,7 @@ export default function ContainerMovePapers() {
             ) : moveResult ? (
               <>
                 {moveResult.success ? (
-                  <div className="bg-white rounded-lg shadow p-6 mb-6">
+                  <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
                     <div className="flex items-center mb-6">
                       <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mr-4">
                         <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -725,17 +717,17 @@ export default function ContainerMovePapers() {
                         </h3>
                         <Link
                           to={`/collections/${sourceCollectionType === 'box' ? 'boxes' : 'bags'}/${sourceCollectionId}`}
-                          className="inline-flex items-center px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors group"
+                          className="inline-flex items-center px-4 py-3 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors group"
                         >
                           <div className="flex-1">
-                            <div className="font-semibold text-blue-900 group-hover:text-blue-700">
+                            <div className="font-semibold text-teal-900 group-hover:text-teal-900">
                               {sourceCollectionName}
                             </div>
-                            <div className="text-sm text-blue-600 mt-0.5">
+                            <div className="text-sm text-teal-900 mt-0.5">
                               {sourceCollectionType === 'box' ? 'Box' : 'Bag'} • View collection →
                             </div>
                           </div>
-                          <svg className="w-5 h-5 text-blue-600 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5 text-teal-900 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
                         </Link>
@@ -783,7 +775,7 @@ export default function ContainerMovePapers() {
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-white rounded-lg shadow p-6 mb-6">
+                  <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
                     <div className="flex items-center mb-4">
                       <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mr-4">
                         <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -810,7 +802,7 @@ export default function ContainerMovePapers() {
                   )}
                   <button
                     onClick={handleStartOver}
-                    className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+                    className="storage-btn-primary px-6 py-2 font-medium"
                   >
                     Start New Move
                   </button>
@@ -819,6 +811,7 @@ export default function ContainerMovePapers() {
             ) : null}
           </>
         )}
+      </div>
       </div>
     </div>
   )

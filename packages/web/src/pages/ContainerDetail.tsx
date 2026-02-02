@@ -8,6 +8,7 @@ import ContainerDerivationModal from '../components/ContainerDerivationModal'
 import ContainerEditModal from '../components/ContainerEditModal'
 import DerivationChainView from '../components/DerivationChainView'
 import { useUser } from '../contexts/UserContext'
+import '../styles/storage.css'
 
 interface ContainerDetail {
   id?: number
@@ -132,13 +133,21 @@ export default function ContainerDetail() {
   }
 
   if (loading) {
-    return <SkeletonDetailPage sections={1} />
+    return (
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <SkeletonDetailPage sections={1} />
+        </div>
+      </div>
+    )
   }
 
   if (!data || (!data.container && !data.id)) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8 text-red-600">Container not found</div>
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <div className="text-center py-8 text-red-600">Container not found</div>
+        </div>
       </div>
     )
   }
@@ -226,23 +235,24 @@ export default function ContainerDetail() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-4">
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+      <div className="mb-4 storage-reveal storage-reveal-1">
         <EntityBreadcrumbs items={breadcrumbItems} />
       </div>
 
       {/* Main Container Information Card */}
-      <div className="bg-white rounded-lg border border-gray-100 shadow-sm">
+      <div className="storage-card storage-reveal storage-reveal-2">
         {/* Header with Title and Badges */}
-        <div className="px-6 py-4 border-b border-gray-100">
+        <div className="storage-card-divider px-6 py-4 border-b">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="text-2xl text-gray-600">{containerTypeIcon}</div>
+              <div className="text-2xl" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{containerTypeIcon}</div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{containerTypeName}</h1>
+                <h1 className="text-2xl font-bold">{containerTypeName}</h1>
                 {(effectiveCollection?.position || effectiveCollection?.barcode || effectiveCollection?.label) && (
                   <div className="mt-1">
-                    <span className="text-sm font-mono text-gray-600">
+                    <span className="text-sm font-mono" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
                       {effectiveCollection?.position || effectiveCollection?.barcode || effectiveCollection?.label}
                     </span>
                   </div>
@@ -253,7 +263,7 @@ export default function ContainerDetail() {
               {canWrite && (
                 <button
                   onClick={() => setShowEditModal(true)}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+                  className="storage-btn-primary px-4 py-2 text-sm font-medium"
                 >
                   Edit
                 </button>
@@ -281,20 +291,20 @@ export default function ContainerDetail() {
             <div className="space-y-4">
               {/* Container Details */}
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Container Details</h3>
+                <h3 className="storage-subsection-title">Container Details</h3>
                 <dl className="space-y-2">
                   {container.id && (
                     <div>
-                      <dt className="text-sm text-gray-500">Container ID</dt>
-                      <dd className="text-sm font-mono text-gray-900">{container.id}</dd>
+                      <dt className="storage-detail-dt">Container ID</dt>
+                      <dd className="storage-detail-dd font-mono">{container.id}</dd>
                     </div>
                   )}
                   {effectiveCollection && (
                     <div>
-                      <dt className="text-sm text-gray-500">
+                      <dt className="storage-detail-dt">
                         {getContainerTypeName(effectiveCollection.type)}
                       </dt>
-                      <dd className="text-sm text-gray-900">
+                      <dd className="storage-detail-dd">
                         <Link
                           to={buildCollectionUrlWithHighlight(
                             effectiveCollection.type,
@@ -302,7 +312,7 @@ export default function ContainerDetail() {
                             effectiveCollection.position,
                             container.id
                           )}
-                          className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                          className="dashboard-link hover:underline font-medium"
                         >
                           {effectiveCollection.name}
                         </Link>
@@ -311,11 +321,11 @@ export default function ContainerDetail() {
                   )}
                   {effectiveLocation && displayLocationPath && (
                     <div>
-                      <dt className="text-sm text-gray-500">Storage Location</dt>
-                      <dd className="text-sm text-gray-900">
+                      <dt className="storage-detail-dt">Storage Location</dt>
+                      <dd className="storage-detail-dd">
                         <Link
                           to={`/locations/${effectiveLocation.id}`}
-                          className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                          className="dashboard-link hover:underline font-medium"
                         >
                           {displayLocationPath}
                         </Link>
@@ -327,26 +337,26 @@ export default function ContainerDetail() {
 
               {/* Quantity Information */}
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Quantity</h3>
+                <h3 className="storage-subsection-title">Quantity</h3>
                 <dl className="space-y-2">
                   <div>
-                    <dt className="text-sm text-gray-500">Remaining</dt>
-                    <dd className="text-lg font-semibold text-gray-900">
+                    <dt className="storage-detail-dt">Remaining</dt>
+                    <dd className="storage-detail-dd text-lg font-semibold">
                       {container.remainingQuantity?.toLocaleString() || '0'} {container.unit?.symbol || 'units'}
                     </dd>
                   </div>
                   {container.totalQuantity !== undefined && (
                     <div>
-                      <dt className="text-sm text-gray-500">Total</dt>
-                      <dd className="text-sm text-gray-700">
+                      <dt className="storage-detail-dt">Total</dt>
+                      <dd className="storage-detail-dd">
                         {container.totalQuantity?.toLocaleString() || '0'} {container.unit?.symbol || 'units'}
                       </dd>
                     </div>
                   )}
                   {container.totalQuantity && container.remainingQuantity !== undefined && (
                     <div>
-                      <dt className="text-sm text-gray-500">Used</dt>
-                      <dd className="text-sm text-gray-700">
+                      <dt className="storage-detail-dt">Used</dt>
+                      <dd className="storage-detail-dd">
                         {(container.totalQuantity - container.remainingQuantity).toLocaleString()} {container.unit?.symbol || 'units'}
                       </dd>
                     </div>
@@ -360,14 +370,14 @@ export default function ContainerDetail() {
               {/* Specimen Information */}
               {specimen && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Specimen</h3>
+                  <h3 className="storage-subsection-title">Specimen</h3>
                   <dl className="space-y-2">
                     <div>
-                      <dt className="text-sm text-gray-500">Specimen Type</dt>
-                      <dd className="text-sm text-gray-900">
+                      <dt className="storage-detail-dt">Specimen Type</dt>
+                      <dd className="storage-detail-dd">
                         <Link
                           to={`/specimens/${specimen.id}`}
-                          className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                          className="dashboard-link inline-flex items-center gap-2 hover:underline font-medium"
                         >
                           <span>{getSpecimenTypeIcon(specimen.specimenType?.name || 'specimen')}</span>
                           <span>{specimen.specimenType?.name || 'Specimen'}</span>
@@ -376,8 +386,8 @@ export default function ContainerDetail() {
                     </div>
                     {specimen.collectionDate && (
                       <div>
-                        <dt className="text-sm text-gray-500">Collection Date</dt>
-                        <dd className="text-sm text-gray-900">
+                        <dt className="storage-detail-dt">Collection Date</dt>
+                        <dd className="storage-detail-dd">
                           {new Date(specimen.collectionDate).toLocaleDateString('en-US', {
                             year: 'numeric',
                             month: 'long',
@@ -393,22 +403,22 @@ export default function ContainerDetail() {
               {/* Source Information */}
               {source && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Source</h3>
+                  <h3 className="storage-subsection-title">Source</h3>
                   <dl className="space-y-2">
                     <div>
-                      <dt className="text-sm text-gray-500 capitalize">{source.type}</dt>
-                      <dd className="text-sm text-gray-900">
+                      <dt className="storage-detail-dt capitalize">{source.type}</dt>
+                      <dd className="storage-detail-dd">
                         {source.type === 'subject' ? (
                           <Link
                             to={`/subjects/${source.id}`}
-                            className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                            className="dashboard-link hover:underline font-medium"
                           >
                             {source.name}
                           </Link>
                         ) : source.type === 'control' ? (
                           <Link
                             to={`/blood-controls/batches/${source.id}`}
-                            className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                            className="dashboard-link hover:underline font-medium"
                           >
                             {source.name}
                           </Link>
@@ -419,25 +429,25 @@ export default function ContainerDetail() {
                     </div>
                     {source.type === 'subject' && source.study && (
                       <div>
-                        <dt className="text-sm text-gray-500">Study</dt>
-                        <dd className="text-sm text-gray-900">
+                        <dt className="storage-detail-dt">Study</dt>
+                        <dd className="storage-detail-dd">
                           <Link
                             to={`/studies/${source.study.id}`}
-                            className="text-blue-600 hover:text-blue-800 hover:underline"
+                            className="dashboard-link hover:underline"
                           >
                             {source.study.title}
-                            {source.study.code && <span className="text-gray-500"> ({source.study.code})</span>}
+                            {source.study.code && <span style={{ color: 'rgb(var(--dashboard-text-muted))' }}> ({source.study.code})</span>}
                           </Link>
                         </dd>
                       </div>
                     )}
                     {source.type === 'control' && source.definition && (
                       <div>
-                        <dt className="text-sm text-gray-500">Control Definition</dt>
-                        <dd className="text-sm text-gray-900">
+                        <dt className="storage-detail-dt">Control Definition</dt>
+                        <dd className="storage-detail-dd">
                           <Link
                             to={`/blood-controls/${source.definition.id}`}
-                            className="text-blue-600 hover:text-blue-800 hover:underline"
+                            className="dashboard-link hover:underline"
                           >
                             {source.definition.name}
                           </Link>
@@ -452,9 +462,9 @@ export default function ContainerDetail() {
 
           {/* Comment Section */}
           {container.comment && (
-            <div className="mt-6 pt-6 border-t border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Notes</h3>
-              <p className="text-sm text-gray-900 whitespace-pre-wrap">{container.comment}</p>
+            <div className="storage-card-divider mt-6 pt-6 border-t">
+              <h3 className="storage-subsection-title">Notes</h3>
+              <p className="storage-detail-dd whitespace-pre-wrap">{container.comment}</p>
             </div>
           )}
         </div>
@@ -464,14 +474,14 @@ export default function ContainerDetail() {
       <div className="mt-6 space-y-4">
         {/* Source Derivation Information (if this container is a child via derivation) */}
         {sourceDerivation && sourceDerivation.type === 'derivation' && sourceDerivation.derivation && (
-          <div className="bg-white rounded-lg border border-gray-100 shadow-sm">
-            <div className="px-6 py-4 border-b border-gray-100">
+          <div className="storage-card storage-reveal storage-reveal-3">
+            <div className="storage-card-divider px-6 py-4 border-b">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Source Derivation</h3>
+                <h3 className="text-lg font-semibold storage-section-title">Source Derivation</h3>
                 {sourceDerivation.parentContainer && (
                   <button
                     onClick={() => navigate(`/containers/${sourceDerivation.parentContainer.id}`)}
-                    className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                    className="dashboard-link text-sm hover:underline font-medium"
                   >
                     View Parent Container →
                   </button>
@@ -481,13 +491,13 @@ export default function ContainerDetail() {
             <div className="px-6 py-5">
               <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <dt className="text-sm text-gray-500 mb-1">Derivation Type</dt>
-                  <dd className="text-sm font-medium text-gray-900">{sourceDerivation.derivation.derivationType}</dd>
+                  <dt className="storage-detail-dt mb-1">Derivation Type</dt>
+                  <dd className="storage-detail-dd font-medium">{sourceDerivation.derivation.derivationType}</dd>
                 </div>
                 {sourceDerivation.derivation.derivationDate && (
                   <div>
-                    <dt className="text-sm text-gray-500 mb-1">Derivation Date</dt>
-                    <dd className="text-sm text-gray-900">
+                    <dt className="storage-detail-dt mb-1">Derivation Date</dt>
+                    <dd className="storage-detail-dd">
                       {new Date(sourceDerivation.derivation.derivationDate).toLocaleDateString('en-US', {
                         year: 'numeric',
                         month: 'long',
@@ -498,14 +508,14 @@ export default function ContainerDetail() {
                 )}
                 {sourceDerivation.derivation.protocol && (
                   <div className="md:col-span-2">
-                    <dt className="text-sm text-gray-500 mb-1">Protocol</dt>
-                    <dd className="text-sm text-gray-900">{sourceDerivation.derivation.protocol}</dd>
+                    <dt className="storage-detail-dt mb-1">Protocol</dt>
+                    <dd className="storage-detail-dd">{sourceDerivation.derivation.protocol}</dd>
                   </div>
                 )}
                 {sourceDerivation.derivation.notes && (
                   <div className="md:col-span-2">
-                    <dt className="text-sm text-gray-500 mb-1">Notes</dt>
-                    <dd className="text-sm text-gray-900 whitespace-pre-wrap">{sourceDerivation.derivation.notes}</dd>
+                    <dt className="storage-detail-dt mb-1">Notes</dt>
+                    <dd className="storage-detail-dd whitespace-pre-wrap">{sourceDerivation.derivation.notes}</dd>
                   </div>
                 )}
               </dl>
@@ -515,18 +525,18 @@ export default function ContainerDetail() {
 
         {/* Derived Containers (if this container is a parent) */}
         {derivations.length > 0 && (
-          <div className="bg-white rounded-lg border border-gray-100 shadow-sm">
-            <div className="px-6 py-4 border-b border-gray-100">
+          <div className="storage-card storage-reveal storage-reveal-4">
+            <div className="storage-card-divider px-6 py-4 border-b">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Derived Containers <span className="text-gray-500 font-normal">({derivations.length})</span>
+                <h3 className="text-lg font-semibold storage-section-title">
+                  Derived Containers <span style={{ color: 'rgb(var(--dashboard-text-muted))', fontWeight: 400 }}>({derivations.length})</span>
                 </h3>
                 <button
                   onClick={() => {
                     setDerivationModalKey((k) => k + 1)
                     setShowDerivationModal(true)
                   }}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+                  className="storage-btn-primary px-4 py-2 text-sm font-medium"
                 >
                   Create New Derivation
                 </button>
@@ -534,7 +544,7 @@ export default function ContainerDetail() {
             </div>
             <div className="px-6 py-5">
               {loadingDerivations ? (
-                <div className="text-sm text-gray-500 py-4">Loading derivations...</div>
+                <div className="storage-detail-dt py-4">Loading derivations...</div>
               ) : (
                 <div className="space-y-2">
                   {derivations.map((derivation) => {
@@ -552,15 +562,15 @@ export default function ContainerDetail() {
                     return (
                       <div
                         key={derivation.id}
-                        className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                        className="storage-sub-card p-3"
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2">
-                              {containerTypeIcon && <span className="text-gray-600">{containerTypeIcon}</span>}
-                              <span className="font-semibold text-gray-900">{containerTypeName}</span>
+                              {containerTypeIcon && <span style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{containerTypeIcon}</span>}
+                              <span className="font-semibold storage-detail-dd">{containerTypeName}</span>
                               {derivation.derivationType && (
-                                <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded border border-gray-300">
+                                <span className="text-xs storage-detail-dt bg-white px-2 py-0.5 rounded border storage-card-divider">
                                   {derivation.derivationType}
                                 </span>
                               )}
@@ -577,20 +587,20 @@ export default function ContainerDetail() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-sm">
                               {container?.remainingQuantity !== undefined && container?.unit && (
                                 <div className="flex items-start gap-2">
-                                  <span className="text-gray-500 whitespace-nowrap">Quantity:</span>
-                                  <span className="text-gray-900 font-medium">
+                                  <span className="storage-detail-dt whitespace-nowrap">Quantity:</span>
+                                  <span className="storage-detail-dd font-medium">
                                     {container.remainingQuantity?.toLocaleString() || '0'} {container.unit?.symbol || 'units'}
                                   </span>
                                 </div>
                               )}
                               {effectiveCollection && (
                                 <div className="flex items-start gap-2">
-                                  <span className="text-gray-500 whitespace-nowrap">
+                                  <span className="storage-detail-dt whitespace-nowrap">
                                     {getContainerTypeName(effectiveCollection.type)}:
                                   </span>
-                                  <span className="text-gray-900 font-mono">{effectiveCollection.name}</span>
+                                  <span className="storage-detail-dd font-mono">{effectiveCollection.name}</span>
                                   {(effectiveCollection.position || effectiveCollection.barcode || effectiveCollection.label) && (
-                                    <span className="text-gray-600">
+                                    <span style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
                                       ({effectiveCollection.position || effectiveCollection.barcode || effectiveCollection.label})
                                     </span>
                                   )}
@@ -598,20 +608,20 @@ export default function ContainerDetail() {
                               )}
                               {displayLocationPath && (
                                 <div className="flex items-start gap-2 md:col-span-2">
-                                  <span className="text-gray-500 whitespace-nowrap">Location:</span>
-                                  <span className="text-gray-900 font-mono">{displayLocationPath}</span>
+                                  <span className="storage-detail-dt whitespace-nowrap">Location:</span>
+                                  <span className="storage-detail-dd font-mono">{displayLocationPath}</span>
                                 </div>
                               )}
                               {derivation.protocol && (
                                 <div className="flex items-start gap-2">
-                                  <span className="text-gray-500 whitespace-nowrap">Protocol:</span>
-                                  <span className="text-gray-900">{derivation.protocol}</span>
+                                  <span className="storage-detail-dt whitespace-nowrap">Protocol:</span>
+                                  <span className="storage-detail-dd">{derivation.protocol}</span>
                                 </div>
                               )}
                               {derivation.derivationDate && (
                                 <div className="flex items-start gap-2">
-                                  <span className="text-gray-500 whitespace-nowrap">Derived:</span>
-                                  <span className="text-gray-900">
+                                  <span className="storage-detail-dt whitespace-nowrap">Derived:</span>
+                                  <span className="storage-detail-dd">
                                     {new Date(derivation.derivationDate).toLocaleDateString('en-US', {
                                       month: 'short',
                                       day: 'numeric',
@@ -622,8 +632,8 @@ export default function ContainerDetail() {
                               )}
                               {derivation.notes && (
                                 <div className="flex items-start gap-2 md:col-span-2">
-                                  <span className="text-gray-500 whitespace-nowrap">Notes:</span>
-                                  <span className="text-gray-900">{derivation.notes}</span>
+                                  <span className="storage-detail-dt whitespace-nowrap">Notes:</span>
+                                  <span className="storage-detail-dd">{derivation.notes}</span>
                                 </div>
                               )}
                             </div>
@@ -631,7 +641,7 @@ export default function ContainerDetail() {
                           {derivation.childContainerId && (
                             <Link
                               to={`/containers/${derivation.childContainerId}`}
-                              className="flex-shrink-0 text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium whitespace-nowrap"
+                              className="dashboard-link flex-shrink-0 text-sm hover:underline font-medium whitespace-nowrap"
                             >
                               View →
                             </Link>
@@ -648,11 +658,11 @@ export default function ContainerDetail() {
 
         {/* Create Derivation Button (if no derivations yet) */}
         {!loadingDerivations && derivations.length === 0 && (
-          <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+          <div className="storage-card storage-reveal storage-reveal-4 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">No Derived Containers</h3>
-                <p className="text-sm text-gray-600">
+                <h3 className="text-lg font-semibold storage-section-title mb-1">No Derived Containers</h3>
+                <p className="storage-detail-dd">
                   This container has not been used to create any derived containers yet. Create a derivation to track materials derived from this container.
                 </p>
               </div>
@@ -662,7 +672,7 @@ export default function ContainerDetail() {
                     setDerivationModalKey((k) => k + 1)
                     setShowDerivationModal(true)
                   }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium whitespace-nowrap ml-4"
+                  className="storage-btn-primary px-4 py-2 font-medium whitespace-nowrap ml-4"
                 >
                   Create Derivation
                 </button>
@@ -716,6 +726,7 @@ export default function ContainerDetail() {
             <DerivationChainView containerId={parseInt(id)} />
           </div>
         )}
+      </div>
     </div>
   )
 }

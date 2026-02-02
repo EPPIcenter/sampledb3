@@ -201,7 +201,7 @@ export default function CollectionMoveTreePicker({
   const getCollectionTypeBadgeColor = useCallback((type: string) => {
     switch (type) {
       case 'micronix_plate':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-teal-100 text-teal-900'
       case 'cryovial_box':
         return 'bg-green-100 text-green-800'
       case 'box':
@@ -255,7 +255,7 @@ export default function CollectionMoveTreePicker({
             )}
             <span className="font-medium">{loc.name}</span>
             {loc.path && loc.path !== loc.name && (
-              <span className="text-xs text-gray-500">({loc.path})</span>
+              <span className="text-xs dashboard-stat-muted">({loc.path})</span>
             )}
             {hasCollections && (
               <span className="text-xs text-gray-400 ml-1">
@@ -272,7 +272,7 @@ export default function CollectionMoveTreePicker({
               }}
               className={`ml-auto text-xs px-2 py-1 rounded ${
                 allSelectedAtLocation
-                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  ? 'bg-teal-100 text-teal-900 hover:bg-teal-200 hover:text-teal-900'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               } transition-colors`}
             >
@@ -292,11 +292,11 @@ export default function CollectionMoveTreePicker({
                   type="checkbox"
                   checked={selectedIds.has(col.id)}
                   onChange={() => onToggle(col.id)}
-                  className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 flex-shrink-0"
+                  className="mt-0.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500 flex-shrink-0"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-gray-900">{col.name}</span>
+                    <span className="font-medium dashboard-stat-value">{col.name}</span>
                     <span
                       className={`text-xs px-1.5 py-0.5 rounded font-medium ${getCollectionTypeBadgeColor(
                         col.type
@@ -305,7 +305,7 @@ export default function CollectionMoveTreePicker({
                       {getCollectionTypeLabel(col.type)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                  <div className="flex items-center gap-3 text-xs dashboard-stat-muted">
                     <span>{col.itemCount} item{col.itemCount !== 1 ? 's' : ''}</span>
                     {col.barcode && (
                       <span className="font-mono">Barcode: {col.barcode}</span>
@@ -345,14 +345,14 @@ export default function CollectionMoveTreePicker({
     
     if (rootLocations.length === 0 && !loading) {
       return (
-        <div className="p-4 text-center text-gray-500 text-sm">
+        <div className="p-4 text-center dashboard-stat-muted text-sm">
           No matching locations or collections found.
         </div>
       )
     }
 
     if (loading) {
-      return <div className="p-4 text-center text-gray-500 text-sm">Loading...</div>
+      return <div className="p-4 text-center dashboard-stat-muted text-sm">Loading...</div>
     }
 
     return (
@@ -370,7 +370,7 @@ export default function CollectionMoveTreePicker({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Filter by location or collection name..."
-          className="w-full px-4 py-2 border border-gray-100 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+          className="w-full px-4 py-2 border border-gray-100 rounded-lg shadow-sm focus:ring-teal-500 focus:border-teal-500 text-sm"
         />
         {search && (
           <button
@@ -383,15 +383,15 @@ export default function CollectionMoveTreePicker({
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <span className="text-sm font-medium text-blue-900">
+        <div className="flex items-center justify-between p-3 bg-teal-50 border border-teal-200 rounded-lg">
+          <span className="text-sm font-medium text-teal-900">
             {selectedIds.size} collection{selectedIds.size !== 1 ? 's' : ''} selected
           </span>
           <div className="flex gap-2">
             {onSelectAll && (
               <button
                 onClick={onSelectAll}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                className="text-xs text-teal-900 hover:text-teal-900 font-medium"
               >
                 Select All
               </button>
@@ -399,7 +399,7 @@ export default function CollectionMoveTreePicker({
             {onDeselectAll && (
               <button
                 onClick={onDeselectAll}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                className="text-xs text-teal-900 hover:text-teal-900 font-medium"
               >
                 Clear
               </button>

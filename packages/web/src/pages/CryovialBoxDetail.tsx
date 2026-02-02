@@ -4,6 +4,7 @@ import { collectionsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import CollectionGrid from '../components/CollectionGrid'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import '../styles/storage.css'
 
 function statusColor(name: string): string {
   const key = name.toLowerCase()
@@ -97,21 +98,21 @@ export default function CryovialBoxDetail() {
   }, [data])
 
   if (loading) {
-    return <SkeletonDetailPage sections={1} />
-  }
-
-  if (!data?.box) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8">Loading...</div>
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <SkeletonDetailPage sections={1} />
+        </div>
       </div>
     )
   }
 
   if (!data?.box) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8 text-red-600">Cryovial box not found</div>
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <div className="text-center py-8 text-red-600">Cryovial box not found</div>
+        </div>
       </div>
     )
   }
@@ -127,27 +128,28 @@ export default function CryovialBoxDetail() {
   ].filter(Boolean) as Array<{ label: string; to?: string }>
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+      <div className="mb-6 storage-reveal storage-reveal-1">
         <EntityBreadcrumbs items={breadcrumbItems} />
-        <h1 className="text-3xl font-bold text-gray-900">
+        <h1 className="text-3xl font-bold">
           Cryovial Box {box.name || `#${box.id}`}
         </h1>
         {box.barcode && (
-          <p className="mt-1 text-sm text-gray-600 font-mono">Barcode: {box.barcode}</p>
+          <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Barcode: {box.barcode}</p>
         )}
         {box.locationPath && (
-          <p className="mt-1 text-sm text-gray-600 font-mono">{box.locationPath}</p>
+          <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{box.locationPath}</p>
         )}
       </div>
 
       {layout && (
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-2">
           <div className="flex items-start justify-between mb-3 gap-4">
-            <h2 className="text-lg font-semibold text-gray-900">Box Layout</h2>
+            <h2 className="text-lg font-semibold storage-section-title">Box Layout</h2>
             {legend.length > 0 && (
-              <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-600">
-                <span className="font-semibold text-gray-700">Legend:</span>
+              <div className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                <span className="font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>Legend:</span>
                 {legend.map((name) => (
                   <span key={name} className="inline-flex items-center gap-1">
                     <span
@@ -162,6 +164,7 @@ export default function CryovialBoxDetail() {
             )}
           </div>
           <CollectionGrid
+            theme="storage"
             rows={layout.rows}
             columns={layout.cols}
             getKey={(row, col) => `${row}${col.padStart(2, '0')}`}
@@ -266,6 +269,7 @@ export default function CryovialBoxDetail() {
           />
         </div>
       )}
+      </div>
     </div>
   )
 }

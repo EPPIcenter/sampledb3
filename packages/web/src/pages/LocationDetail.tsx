@@ -9,6 +9,7 @@ import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
 import Pagination from '../components/Pagination'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import ContentCard from '../components/ContentCard'
+import '../styles/storage.css'
 
 interface LocationContents {
   micronixPlates?: any[]
@@ -141,65 +142,74 @@ export default function LocationDetail() {
   }, [location, allLocations])
 
   if (loading) {
-    return <SkeletonDetailPage sections={2} />
+    return (
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <SkeletonDetailPage sections={2} />
+        </div>
+      </div>
+    )
   }
 
   if (!location) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8 text-red-600">Location not found</div>
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <div className="text-center py-8 text-red-600">Location not found</div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+      <div className="mb-6 storage-reveal storage-reveal-1">
         <EntityBreadcrumbs
           items={[
             { label: 'Locations', to: '/locations' },
             { label: pathLabel || `Location #${location.id}` },
           ]}
         />
-        <h1 className="text-3xl font-bold text-gray-900">Location Details</h1>
-        <p className="mt-1 text-gray-600 font-mono">{pathLabel}</p>
+        <h1 className="text-3xl font-bold">Location Details</h1>
+        <p className="mt-1 font-mono" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{pathLabel}</p>
       </div>
 
       {/* Summary stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-lg shadow p-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 storage-reveal storage-reveal-2">
+        <div className="storage-card p-4">
           <div className="flex items-center justify-between mb-1">
-            <h2 className="text-sm font-medium text-gray-500">Storage Type</h2>
+            <h2 className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Storage Type</h2>
             <LocationCapabilityBadge canContainCollections={location.canContainCollections} size="sm" />
           </div>
-          <p className="text-lg font-semibold text-gray-900">
+          <p className="text-lg font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>
             {location.effectiveStorageTypeName || location.storageTypeName || location.storageTypeId || 'N/A'}
           </p>
           {location.description && (
-            <p className="mt-1 text-xs text-gray-500">{location.description}</p>
+            <p className="mt-1 text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{location.description}</p>
           )}
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-sm font-medium text-gray-500 mb-1">Storage Units</h2>
-          <p className="text-2xl font-bold text-blue-600">
+        <div className="storage-card p-4">
+          <h2 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Storage Units</h2>
+          <p className="text-2xl font-bold" style={{ color: 'rgb(var(--dashboard-accent))' }}>
             {stats.storageUnits.toLocaleString()}
           </p>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
             Plates, boxes and bags stored here
           </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-sm font-medium text-gray-500 mb-1">Created</h2>
-          <p className="text-lg font-semibold text-gray-900">
+        <div className="storage-card p-4">
+          <h2 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Created</h2>
+          <p className="text-lg font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>
             {new Date(location.created).toLocaleDateString()}
           </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-sm font-medium text-gray-500 mb-1">Last Updated</h2>
-          <p className="text-lg font-semibold text-gray-900">
+        <div className="storage-card p-4">
+          <h2 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Last Updated</h2>
+          <p className="text-lg font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>
             {new Date(location.lastUpdated).toLocaleDateString()}
           </p>
         </div>
@@ -207,34 +217,35 @@ export default function LocationDetail() {
 
       {/* Hierarchy Statistics */}
       {hierarchyStats && (
-        <div className="mb-8">
+        <div className="mb-8 storage-reveal storage-reveal-3">
           <LocationHierarchyStatsDisplay
             stats={hierarchyStats}
             locationName={location.name}
             canContainCollections={location.canContainCollections}
+            className="storage-hierarchy-stats"
           />
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 storage-reveal storage-reveal-4">
         {/* Hierarchy context */}
-        <div className="bg-white rounded-lg shadow p-6 lg:col-span-1 max-h-[600px] flex flex-col">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Hierarchy</h2>
+        <div className="storage-card p-6 lg:col-span-1 max-h-[600px] flex flex-col">
+          <h2 className="text-xl font-semibold storage-section-title mb-4">Hierarchy</h2>
           <div className="space-y-4 flex flex-col min-h-0">
             <div className="flex-shrink-0">
-              <h3 className="text-sm font-medium text-gray-500 mb-1">Path</h3>
-              <p className="text-sm text-gray-900">{pathLabel || 'N/A'}</p>
-              <p className="text-xs text-gray-500 mt-1">
+              <h3 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Path</h3>
+              <p className="text-sm" style={{ color: 'rgb(var(--dashboard-text))' }}>{pathLabel || 'N/A'}</p>
+              <p className="text-xs mt-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
                 Tree shows all locations in the same hierarchy.
               </p>
             </div>
 
             <div className="flex-1 flex flex-col min-h-0">
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Tree</h3>
+              <h3 className="text-sm font-medium mb-2" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Tree</h3>
               {loadingContext ? (
-                <p className="text-xs text-gray-500">Loading hierarchy…</p>
+                <p className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Loading hierarchy…</p>
               ) : sameRootLocations.length === 0 ? (
-                <p className="text-xs text-gray-500">No hierarchy information available.</p>
+                <p className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No hierarchy information available.</p>
               ) : (
                 <div className="flex-1 overflow-y-auto min-h-0">
                   <LocationHierarchyTree
@@ -246,29 +257,30 @@ export default function LocationDetail() {
                         className="block"
                       >
                         <div
-                          className={`flex items-center justify-between rounded px-2 py-1 ${
+                          className={`flex items-center justify-between rounded px-2 py-1 border transition-colors ${
                             isCurrent
-                              ? 'bg-blue-50 border border-blue-200'
-                              : 'hover:bg-gray-50 border border-transparent'
+                              ? 'border shadow-sm'
+                              : 'border-transparent hover:bg-[rgb(var(--dashboard-surface))]'
                           }`}
+                          style={isCurrent ? { backgroundColor: 'rgb(var(--dashboard-accent-muted))', borderColor: 'rgb(var(--dashboard-accent) / 0.4)' } : undefined}
                         >
                           <div>
-                            <p className="text-xs text-gray-900">
+                            <p className="text-xs" style={{ color: 'rgb(var(--dashboard-text))' }}>
                               {loc.name}
                             </p>
                             {loc.path && (
-                              <p className="text-[10px] text-gray-400 font-mono truncate">
+                              <p className="text-[10px] font-mono truncate" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
                                 {loc.path}
                               </p>
                             )}
                             {loc.description && (
-                              <p className="text-[11px] text-gray-500 truncate">
+                              <p className="text-[11px] truncate" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
                                 {loc.description}
                               </p>
                             )}
                           </div>
                           {isCurrent && (
-                            <span className="text-[10px] font-mono text-blue-700">
+                            <span className="text-[10px] font-mono" style={{ color: 'rgb(var(--dashboard-accent))' }}>
                               current
                             </span>
                           )}
@@ -283,13 +295,13 @@ export default function LocationDetail() {
         </div>
 
         {/* Contents breakdown */}
-        <div className="bg-white rounded-lg shadow p-6 lg:col-span-2">
+        <div className="storage-card p-6 lg:col-span-2">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Contents</h2>
+            <h2 className="text-xl font-semibold storage-section-title">Contents</h2>
           </div>
 
           {!contents && (
-            <div className="text-gray-500 text-center py-8">No contents information available</div>
+            <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No contents information available</div>
           )}
 
           {contents && (
@@ -297,8 +309,8 @@ export default function LocationDetail() {
               {stats.micronixCount > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Micronix Plates</h3>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <h3 className="text-lg font-semibold storage-section-title">Micronix Plates</h3>
+                    <span className="storage-badge-plate">
                       {stats.micronixCount}
                     </span>
                   </div>
@@ -339,8 +351,8 @@ export default function LocationDetail() {
               {stats.cryovialBoxCount > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Cryovial Boxes</h3>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    <h3 className="text-lg font-semibold storage-section-title">Cryovial Boxes</h3>
+                    <span className="storage-badge-cryovial">
                       {stats.cryovialBoxCount}
                     </span>
                   </div>
@@ -381,8 +393,8 @@ export default function LocationDetail() {
               {stats.boxCount > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Boxes</h3>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <h3 className="text-lg font-semibold storage-section-title">Boxes</h3>
+                    <span className="storage-badge-box">
                       {stats.boxCount}
                     </span>
                   </div>
@@ -423,8 +435,8 @@ export default function LocationDetail() {
               {stats.bagCount > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Bags</h3>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                    <h3 className="text-lg font-semibold storage-section-title">Bags</h3>
+                    <span className="storage-badge-bag">
                       {stats.bagCount}
                     </span>
                   </div>
@@ -463,11 +475,12 @@ export default function LocationDetail() {
               )}
 
               {stats.storageUnits === 0 && (
-                <div className="text-gray-500 text-center py-8">No contents found</div>
+                <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No contents found</div>
               )}
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   )

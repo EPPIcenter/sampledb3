@@ -1,10 +1,11 @@
 /**
  * Skeleton loader for location details panel
- * Matches the structure of the actual location details to prevent layout shifts
+ * Matches the structure of the actual location details to prevent layout shifts.
+ * Pass className="storage-skeleton" when used inside .storage-page for token-based pulse color.
  */
-export default function LocationDetailsSkeleton() {
+export default function LocationDetailsSkeleton({ className = '' }: { className?: string }) {
   return (
-    <div className="space-y-4 animate-pulse">
+    <div className={`space-y-4 animate-pulse ${className}`.trim()}>
       {/* Location Preview Card */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-start justify-between gap-4">

@@ -4,6 +4,7 @@ import { collectionsApi, locationsApi, type Location } from '../lib/api'
 import CollectionMoveTreePicker, { type Collection } from '../components/CollectionMoveTreePicker'
 import LocationTreePicker, { type LocationSelection } from '../components/LocationTreePicker'
 import { useUser } from '../contexts/UserContext'
+import '../styles/storage.css'
 
 type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
 type Step = 'select-collections' | 'select-destination' | 'confirm' | 'execute'
@@ -251,86 +252,39 @@ export default function CollectionMove() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Move Collections</h1>
 
         {/* Step indicator */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div
-              className={`flex items-center ${
-                currentStep === 'select-collections' ? 'text-blue-600 font-semibold' : 'text-gray-500'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  currentStep === 'select-collections' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                }`}
-              >
-                1
-              </div>
-              <span className="ml-2">Select Collections</span>
+        <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
+          <div className="storage-step-indicator">
+            <div className={`storage-step-item ${currentStep === 'select-collections' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">1</span>
+              <span>Select Collections</span>
             </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div
-              className={`flex items-center ${
-                currentStep === 'select-destination'
-                  ? 'text-blue-600 font-semibold'
-                  : currentStep === 'select-collections'
-                  ? 'text-gray-500'
-                  : 'text-gray-400'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  currentStep === 'select-destination' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                }`}
-              >
-                2
-              </div>
-              <span className="ml-2">Choose Destination</span>
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep === 'select-destination' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">2</span>
+              <span>Choose Destination</span>
             </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div
-              className={`flex items-center ${
-                currentStep === 'confirm'
-                  ? 'text-blue-600 font-semibold'
-                  : ['select-collections', 'select-destination'].includes(currentStep)
-                  ? 'text-gray-500'
-                  : 'text-gray-400'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  currentStep === 'confirm' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                }`}
-              >
-                3
-              </div>
-              <span className="ml-2">Review & Confirm</span>
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep === 'confirm' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">3</span>
+              <span>Review & Confirm</span>
             </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div
-              className={`flex items-center ${
-                currentStep === 'execute' ? 'text-blue-600 font-semibold' : 'text-gray-500'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  currentStep === 'execute' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                }`}
-              >
-                4
-              </div>
-              <span className="ml-2">Complete</span>
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep === 'execute' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">4</span>
+              <span>Complete</span>
             </div>
           </div>
         </div>
 
         {/* Step 1: Select Collections */}
         {currentStep === 'select-collections' && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             <div className="mb-4">
               <h2 className="text-xl font-semibold">Select Collections to Move</h2>
               <p className="text-sm text-gray-600 mt-1">
@@ -360,7 +314,7 @@ export default function CollectionMove() {
               <div className="mt-4 flex justify-end">
                 <button
                   onClick={() => setCurrentStep('select-destination')}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="storage-btn-primary"
                 >
                   Continue with {selectedCollectionIds.size} collection
                   {selectedCollectionIds.size !== 1 ? 's' : ''}
@@ -372,7 +326,7 @@ export default function CollectionMove() {
 
         {/* Step 2: Select Destination Location */}
         {currentStep === 'select-destination' && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             <h2 className="text-xl font-semibold mb-4">Choose Destination Location</h2>
             <p className="text-gray-700 mb-6">
               Select the target location where the collections will be moved.
@@ -398,7 +352,7 @@ export default function CollectionMove() {
 
         {/* Step 3: Confirm */}
         {currentStep === 'confirm' && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             <h2 className="text-xl font-semibold mb-4">Review & Confirm</h2>
 
             <div className="space-y-4">
@@ -433,14 +387,14 @@ export default function CollectionMove() {
             <div className="mt-6 flex gap-3 justify-end">
               <button
                 onClick={() => setCurrentStep('select-destination')}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                className="storage-btn-secondary"
               >
                 Back
               </button>
               <button
                 onClick={handleExecuteMove}
                 disabled={loading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Moving...' : 'Confirm & Move'}
               </button>
@@ -450,7 +404,7 @@ export default function CollectionMove() {
 
         {/* Step 4: Results */}
         {currentStep === 'execute' && moveResult && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             {moveResult.success ? (
               <>
                 <div className="mb-4">
@@ -519,13 +473,14 @@ export default function CollectionMove() {
             <div className="mt-6">
               <button
                 onClick={handleStartOver}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="storage-btn-primary"
               >
                 Move More Collections
               </button>
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   )

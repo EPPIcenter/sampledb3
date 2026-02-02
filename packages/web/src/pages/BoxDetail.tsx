@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { collectionsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import '../styles/storage.css'
 
 export default function BoxDetail() {
   const { id } = useParams<{ id: string }>()
@@ -47,13 +48,21 @@ export default function BoxDetail() {
   }, [sheets.length])
 
   if (loading) {
-    return <SkeletonDetailPage sections={1} />
+    return (
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <SkeletonDetailPage sections={1} />
+        </div>
+      </div>
+    )
   }
 
   if (!data?.box) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8 text-red-600">Box not found</div>
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <div className="text-center py-8 text-red-600">Box not found</div>
+        </div>
       </div>
     )
   }
@@ -92,39 +101,40 @@ export default function BoxDetail() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-4">
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+      <div className="mb-4 storage-reveal storage-reveal-1">
         <EntityBreadcrumbs items={breadcrumbItems} />
-        <h1 className="text-2xl font-bold text-gray-900">
+        <h1 className="text-2xl font-bold">
           Box {box.name || `#${box.id}`}
         </h1>
         {box.locationPath && (
-          <p className="mt-1 text-xs text-gray-600 font-mono">{box.locationPath}</p>
+          <p className="mt-1 text-xs font-mono" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{box.locationPath}</p>
         )}
       </div>
 
       {/* Summary Statistics Bar */}
-      <div className="bg-white rounded-lg shadow p-3 mb-4">
+      <div className="storage-card p-3 mb-4 storage-reveal storage-reveal-2">
         <div className="flex flex-wrap items-center gap-4 text-xs">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-700">Sheets:</span>
-            <span className="text-gray-900">{sheets.length}</span>
+            <span className="font-semibold" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Sheets:</span>
+            <span style={{ color: 'rgb(var(--dashboard-text))' }}>{sheets.length}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-700">Spots:</span>
-            <span className="text-gray-900">{totalSpots}</span>
+            <span className="font-semibold" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Spots:</span>
+            <span style={{ color: 'rgb(var(--dashboard-text))' }}>{totalSpots}</span>
             {activeSpots > 0 && (
-              <span className="text-green-600">({activeSpots} active)</span>
+              <span style={{ color: 'rgb(var(--dashboard-accent))' }}>({activeSpots} active)</span>
             )}
           </div>
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 storage-reveal storage-reveal-3">
         <div className="space-y-3">
-          <h2 className="text-base font-semibold text-gray-900">Sheets in this Box</h2>
+          <h2 className="text-base font-semibold storage-section-title">Sheets in this Box</h2>
           {sheets.length === 0 && (
-            <p className="text-xs text-gray-500">No sheets in this box.</p>
+            <p className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No sheets in this box.</p>
           )}
           {sheets.map((sheet: any) => {
             const isExpanded = expandedSheets.has(sheet.id)
@@ -132,7 +142,7 @@ export default function BoxDetail() {
             const activeSheetSpots = sheet.papers?.filter((p: any) => p.container?.remainingQuantity > 0).length || 0
             
             return (
-              <div key={sheet.id} className="bg-white rounded-lg shadow border border-gray-100 overflow-hidden">
+              <div key={sheet.id} className="storage-card overflow-hidden">
                 <button
                   type="button"
                   onClick={() => toggleSheet(sheet.id)}
@@ -205,6 +215,7 @@ export default function BoxDetail() {
             )
           })}
         </div>
+      </div>
       </div>
     </div>
   )
