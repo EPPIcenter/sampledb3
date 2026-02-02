@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import '../styles/dashboard.css'
 import api, {
   studiesApi,
   activityApi,
@@ -234,162 +235,157 @@ export default function Dashboard() {
   const isLoading = loading.critical || loading.secondary
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6 text-gray-900">Dashboard</h1>
+    <div className="dashboard-page">
+      <div className="relative z-10 container mx-auto px-4 py-8">
+        {/* Welcome / header */}
+        <header className="mb-8 dashboard-reveal dashboard-reveal-1">
+          <h1 className="text-3xl font-bold mb-1">Lab overview</h1>
+          <p className="text-[rgb(var(--dashboard-text-muted))] text-lg">Your samples at a glance</p>
+        </header>
 
-      {/* Hero Metrics Section */}
-      {loading.critical ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <SkeletonCard key={i} height="h-24" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-          <MetricCard
-            title="Studies"
-            value={stats.studies}
-            linkTo="/studies"
-            color="blue"
-          />
-          <MetricCard
-            title="Specimens"
-            value={stats.specimens}
-            linkTo="/specimens"
-            trend={specimensTrend ? { value: specimensTrend.value, positive: specimensTrend.positive, label: '30d' } : undefined}
-            color="green"
-          />
-          <MetricCard
-            title="Subjects"
-            value={stats.subjects}
-            trend={subjectsTrend ? { value: subjectsTrend.value, positive: subjectsTrend.positive, label: '30d' } : undefined}
-            color="purple"
-          />
-          <MetricCard
-            title="Containers"
-            value={stats.containers}
-            linkTo="/locations"
-            color="orange"
-          />
-          <MetricCard
-            title="Locations"
-            value={stats.locations}
-            linkTo="/locations"
-            color="indigo"
-          />
-        </div>
-      )}
-
-      {/* Quick Actions Section */}
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
-        <h2 className="text-xl font-semibold mb-4 text-gray-900">Quick Actions</h2>
-        <div className={`grid grid-cols-1 ${canWrite ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-1'} gap-4`}>
-          {canWrite && (
-            <>
-              <Link
-                to="/specimens/new"
-                className="flex items-center gap-3 p-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                aria-label="Register new specimen"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <div className="text-left">
-                  <div className="font-medium">Register New Specimen</div>
-                  <div className="text-sm text-blue-100">Add a new specimen to the system</div>
-                </div>
-              </Link>
-              <Link
-                to="/studies/new"
-                className="flex items-center gap-3 p-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                aria-label="Create new study"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <div className="text-left">
-                  <div className="font-medium">Create New Study</div>
-                  <div className="text-sm text-green-100">Start a new research study</div>
-                </div>
-              </Link>
-              <Link
-                to="/import"
-                className="flex items-center gap-3 p-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                aria-label="Bulk import"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <div className="text-left">
-                  <div className="font-medium">Bulk Import</div>
-                  <div className="text-sm text-purple-100">Import data from CSV</div>
-                </div>
-              </Link>
-            </>
-          )}
-          <form onSubmit={handleSearch} className="flex flex-col gap-2">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Quick search..."
-                className="form-input flex-1"
-                aria-label="Quick search"
-              />
-              <button
-                type="submit"
-                disabled={searchLoading}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
-                aria-label="Search"
-              >
-                {searchLoading ? '...' : 'Search'}
-              </button>
-            </div>
-            <div className="text-xs text-gray-500">Press Enter to search</div>
-          </form>
-        </div>
-        {!canWrite && (
-          <div className="mt-4 rounded-md bg-blue-50 border border-blue-200 p-3">
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-sm font-medium text-blue-800">
-                You have view-only access. Contact an administrator or member to create or modify data.
-              </p>
-            </div>
+        {/* Hero Metrics Section */}
+        {loading.critical ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SkeletonCard key={i} height="h-24" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+            <MetricCard title="Studies" value={stats.studies} linkTo="/studies" color="blue" index={1} />
+            <MetricCard
+              title="Specimens"
+              value={stats.specimens}
+              linkTo="/specimens"
+              trend={specimensTrend ? { value: specimensTrend.value, positive: specimensTrend.positive, label: '30d' } : undefined}
+              color="green"
+              index={2}
+            />
+            <MetricCard
+              title="Subjects"
+              value={stats.subjects}
+              trend={subjectsTrend ? { value: subjectsTrend.value, positive: subjectsTrend.positive, label: '30d' } : undefined}
+              color="purple"
+              index={3}
+            />
+            <MetricCard title="Containers" value={stats.containers} linkTo="/locations" color="orange" index={4} />
+            <MetricCard title="Locations" value={stats.locations} linkTo="/locations" color="indigo" index={5} />
           </div>
         )}
-      </div>
 
-      {/* Recent Studies and Activity Feed */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <RecentStudies studies={recentStudies} loading={loading.secondary} />
-        <ActivityFeed activities={recentActivity} loading={loading.secondary} />
-      </div>
-
-      {/* System Insights */}
-      <SystemInsights data={statisticsData} loading={loading.secondary} />
-
-      {/* Controls Inventory (Conditional) */}
-      {hasControls && !loading.secondary && (
-        <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Blood Controls</h2>
-            <Link
-              to="/blood-controls"
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-              aria-label="View all blood controls"
-            >
-              View All Controls →
-            </Link>
+        {/* Quick Actions Section */}
+        <section className="dashboard-card p-6 mb-8 dashboard-reveal dashboard-reveal-6" aria-labelledby="quick-actions-title">
+          <h2 id="quick-actions-title" className="dashboard-section-title mb-4">Quick Actions</h2>
+          <div className={`grid grid-cols-1 ${canWrite ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-1'} gap-4`}>
+            {canWrite && (
+              <>
+                <Link
+                  to="/specimens/new"
+                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-card))] hover:border-[rgb(var(--dashboard-accent))] hover:shadow-md transition-all duration-200"
+                  aria-label="Register new specimen"
+                >
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--dashboard-accent-muted))] flex items-center justify-center text-[rgb(var(--dashboard-accent))]">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </span>
+                  <div className="text-left min-w-0">
+                    <div className="font-medium text-[rgb(var(--dashboard-text))]">Register New Specimen</div>
+                    <div className="text-sm text-[rgb(var(--dashboard-text-muted))]">Add a new specimen to the system</div>
+                  </div>
+                </Link>
+                <Link
+                  to="/studies/new"
+                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-card))] hover:border-[rgb(var(--dashboard-accent))] hover:shadow-md transition-all duration-200"
+                  aria-label="Create new study"
+                >
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--dashboard-accent-muted))] flex items-center justify-center text-[rgb(var(--dashboard-accent))]">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                  </span>
+                  <div className="text-left min-w-0">
+                    <div className="font-medium text-[rgb(var(--dashboard-text))]">Create New Study</div>
+                    <div className="text-sm text-[rgb(var(--dashboard-text-muted))]">Start a new research study</div>
+                  </div>
+                </Link>
+                <Link
+                  to="/import"
+                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-card))] hover:border-[rgb(var(--dashboard-accent))] hover:shadow-md transition-all duration-200"
+                  aria-label="Bulk import"
+                >
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--dashboard-accent-muted))] flex items-center justify-center text-[rgb(var(--dashboard-accent))]">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                  </span>
+                  <div className="text-left min-w-0">
+                    <div className="font-medium text-[rgb(var(--dashboard-text))]">Bulk Import</div>
+                    <div className="text-sm text-[rgb(var(--dashboard-text-muted))]">Import data from CSV</div>
+                  </div>
+                </Link>
+              </>
+            )}
+            <form onSubmit={handleSearch} className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Quick search..."
+                  className="form-input flex-1 border-[rgb(var(--dashboard-border))] focus:ring-[rgb(var(--dashboard-accent))] focus:border-[rgb(var(--dashboard-accent))]"
+                  aria-label="Quick search"
+                />
+                <button
+                  type="submit"
+                  disabled={searchLoading}
+                  className="px-4 py-2 rounded-lg font-medium text-white bg-[rgb(var(--dashboard-accent))] hover:bg-[rgb(var(--dashboard-accent-hover))] disabled:opacity-50 transition-colors"
+                  aria-label="Search"
+                >
+                  {searchLoading ? '...' : 'Search'}
+                </button>
+              </div>
+              <div className="text-xs text-[rgb(var(--dashboard-text-muted))]">Press Enter to search</div>
+            </form>
           </div>
-          <div className="text-gray-600">
-            Blood control definitions and batches are available. Visit the Blood Controls page to manage them.
-          </div>
+          {!canWrite && (
+            <div className="mt-4 rounded-lg p-3 bg-[rgb(var(--dashboard-accent-muted))] border border-[rgb(var(--dashboard-accent)/0.3)]">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-[rgb(var(--dashboard-accent))]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm font-medium text-[rgb(var(--dashboard-text))]">
+                  You have view-only access. Contact an administrator or member to create or modify data.
+                </p>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Recent Studies and Activity Feed */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <RecentStudies studies={recentStudies} loading={loading.secondary} />
+          <ActivityFeed activities={recentActivity} loading={loading.secondary} />
         </div>
-      )}
+
+        {/* System Insights */}
+        <SystemInsights data={statisticsData} loading={loading.secondary} />
+
+        {/* Controls Inventory (Conditional) */}
+        {hasControls && !loading.secondary && (
+          <section className="dashboard-card p-6 mb-8" aria-labelledby="blood-controls-title">
+            <div className="flex items-center justify-between mb-4">
+              <h2 id="blood-controls-title" className="dashboard-section-title">Blood Controls</h2>
+              <Link to="/blood-controls" className="dashboard-link text-sm" aria-label="View all blood controls">
+                View All Controls →
+              </Link>
+            </div>
+            <p className="text-[rgb(var(--dashboard-text-muted))]">
+              Blood control definitions and batches are available. Visit the Blood Controls page to manage them.
+            </p>
+          </section>
+        )}
+      </div>
     </div>
   )
 }

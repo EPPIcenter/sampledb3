@@ -5,8 +5,51 @@ import StatisticsFilter, { type StatisticsFilters } from '../components/Statisti
 import StatCard from '../components/StatCard'
 import StatChart from '../components/StatChart'
 import SkeletonCard from '../components/SkeletonCard'
+import '../styles/statistics.css'
 
 type BinSize = 'day' | 'week' | 'month' | 'quarter' | 'year'
+
+/** Time-range presets for histogram minimum date (client-side). */
+const TIME_PRESETS = [
+  { label: 'Last 30 days', getMinDate: () => formatDateOffset(30) },
+  { label: 'Last 6 months', getMinDate: () => formatDateOffset(180) },
+  { label: 'This year', getMinDate: () => {
+    const d = new Date()
+    return `${d.getFullYear()}-01-01`
+  }},
+  { label: 'All time', getMinDate: () => '2000-01-01' },
+] as const
+
+function formatDateOffset(daysAgo: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - daysAgo)
+  return d.toISOString().slice(0, 10)
+}
+
+/** Build human-readable filter chip labels from applied filters. */
+function buildFilterChips(f: StatisticsFilters): Array<{ key: keyof StatisticsFilters; label: string }> {
+  const chips: Array<{ key: keyof StatisticsFilters; label: string }> = []
+  if (f.study) chips.push({ key: 'study', label: `Study: ${f.study}` })
+  if (f.sourceType) {
+    const label = { subject: 'Subject', control: 'Control', reagent: 'Reagent', cell_line: 'Cell Line', plasmid: 'Plasmid', standard: 'Standard' }[f.sourceType] ?? f.sourceType
+    chips.push({ key: 'sourceType', label: `Source: ${label}` })
+  }
+  if (f.specimenTypeId) chips.push({ key: 'specimenTypeId', label: `Specimen type: ${f.specimenTypeId}` })
+  if (f.containerType) {
+    const label = { micronix_tube: 'Micronix Tube', cryovial_tube: 'Cryovial Tube', paper: 'Paper', static_well: 'Static Well' }[f.containerType] ?? f.containerType
+    chips.push({ key: 'containerType', label: `Container: ${label}` })
+  }
+  if (f.tagIds?.length) chips.push({ key: 'tagIds', label: `Tags: ${f.tagIds.length} selected` })
+  if (f.collectionDateFrom) chips.push({ key: 'collectionDateFrom', label: `Collection from: ${f.collectionDateFrom}` })
+  if (f.collectionDateTo) chips.push({ key: 'collectionDateTo', label: `Collection to: ${f.collectionDateTo}` })
+  if (f.createdFrom) chips.push({ key: 'createdFrom', label: `Created from: ${f.createdFrom}` })
+  if (f.createdTo) chips.push({ key: 'createdTo', label: `Created to: ${f.createdTo}` })
+  if (f.locationId || (f.locationSelections?.length ?? 0) > 0) {
+    const name = f.locationSelections?.[0]?.name ?? `Location ${f.locationId ?? ''}`
+    chips.push({ key: 'locationId', label: `Location: ${name}` })
+  }
+  return chips
+}
 
 export default function Statistics() {
   const [data, setData] = useState<StatisticsData | null>(null)
@@ -69,6 +112,46 @@ export default function Statistics() {
   const handleFilterSubmit = (newFilters: StatisticsFilters) => {
     loadStatistics(newFilters)
   }
+
+  const handleRemoveFilter = (key: keyof StatisticsFilters) => {
+    const next = { ...appliedFilters }
+    if (key === 'locationId') {
+      delete next.locationId
+      delete next.locationSelections
+    } else {
+      delete next[key]
+    }
+    setFilters(next)
+    loadStatistics(next)
+  }
+
+  const hasActiveFilters = Object.keys(appliedFilters).length > 0
+  const filterChips = useMemo(() => buildFilterChips(appliedFilters), [appliedFilters])
+  const isEmptyWithFilters = data !== null && data.specimens.total === 0 && hasActiveFilters
+
+  /** Section one-liners derived from current data. */
+  const specimenSummary = useMemo(() => {
+    if (!data) return ''
+    const n = data.specimens.total
+    const studies = Object.keys(data.specimens.byStudy).length
+    const top = Object.entries(data.specimens.bySpecimenType).sort((a, b) => b[1] - a[1])[0]
+    const topType = top ? top[0] : '—'
+    return `${n.toLocaleString()} specimens across ${studies} studies; top type: ${topType}`
+  }, [data])
+  const containerSummary = useMemo(() => {
+    if (!data) return ''
+    const n = data.containers.total
+    const types = Object.keys(data.containers.byType).length
+    const avg = data.containers.averagePerSpecimen.toFixed(1)
+    return `${n.toLocaleString()} containers across ${types} types; avg ${avg} per specimen`
+  }, [data])
+  const storageSummary = useMemo(() => {
+    if (!data) return ''
+    const n = data.storage.byLocation.length
+    const top = data.storage.byLocation[0]
+    const topName = top ? (top.location.length > 25 ? top.location.slice(0, 25) + '…' : top.location) : '—'
+    return `${n} locations; top: ${topName}`
+  }, [data])
 
   // Transform data for charts
   const sourceTypeChartData = useMemo(() => {
@@ -243,221 +326,312 @@ export default function Statistics() {
 
   if (loading && !data) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8">Loading statistics...</div>
+      <div className="statistics-page relative z-10 min-h-full">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <div className="mb-6">
+            <div className="statistics-skeleton h-9 w-64 rounded animate-pulse" />
+            <div className="statistics-skeleton mt-2 h-5 w-96 rounded animate-pulse" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonCard key={i} height="h-24" className="statistics-card border border-slate-200" />
+            ))}
+          </div>
+          <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            Loading statistics…
+          </div>
+        </div>
       </div>
     )
   }
 
   if (!data) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8 text-red-600">Failed to load statistics</div>
+      <div className="statistics-page relative z-10 min-h-full">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold">Statistics & Analytics</h1>
+            <p className="mt-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Comprehensive statistics about specimens, containers, and storage utilization</p>
+          </div>
+          <div className="statistics-card p-6 text-center" style={{ color: 'rgb(var(--dashboard-trend-down))' }}>
+            Failed to load statistics
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Statistics & Analytics</h1>
-        <p className="text-gray-500 mt-1">Comprehensive statistics about specimens, containers, and storage utilization</p>
-      </div>
+    <div className="statistics-page relative z-10 min-h-full">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+        {/* Hero */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold">Statistics & Analytics</h1>
+          <p className="mt-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            Comprehensive statistics about specimens, containers, and storage utilization
+          </p>
+        </div>
 
-      {/* Histogram Controls - At the top */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="flex items-center gap-6 flex-wrap">
-          <div className="flex items-center gap-4">
-            <label className="text-sm font-medium text-gray-700">
-              Histogram Bin Size:
-            </label>
-            <select
-              value={binSize}
-              onChange={(e) => setBinSize(e.target.value as BinSize)}
-              className="px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="day">Daily</option>
-              <option value="week">Weekly</option>
-              <option value="month">Monthly</option>
-              <option value="quarter">Quarterly</option>
-              <option value="year">Yearly</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-4">
-            <label className="text-sm font-medium text-gray-700">
-              Minimum Date:
-            </label>
-            <input
-              type="date"
-              value={histogramMinDate}
-              onChange={(e) => setHistogramMinDate(e.target.value)}
-              className="px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+        <StatisticsFilter
+          filters={appliedFilters}
+          onChange={setFilters}
+          onSubmit={handleFilterSubmit}
+          isLoading={loading}
+          className="statistics-card mb-6"
+        />
+
+        {/* Filter chips */}
+        {filterChips.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {filterChips.map(({ key, label }) => (
+              <span
+                key={key}
+                className="statistics-chip inline-flex items-center gap-1.5 pl-3 pr-1 py-1"
+              >
+                <span>{label}</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFilter(key)}
+                  className="rounded p-0.5 hover:bg-black/10 focus:outline-none focus-visible:ring-2"
+                  style={{ color: 'rgb(var(--dashboard-text))' }}
+                  aria-label={`Remove ${label}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </span>
+            ))}
             <button
-              onClick={() => setHistogramMinDate('2000-01-01')}
-              className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              type="button"
+              onClick={() => {
+                setFilters({})
+                loadStatistics({})
+              }}
+              className="statistics-link text-sm"
             >
-              Reset
+              Clear all
             </button>
           </div>
-        </div>
-      </div>
+        )}
 
-      <StatisticsFilter 
-        filters={appliedFilters} 
-        onChange={setFilters} 
-        onSubmit={handleFilterSubmit}
-        isLoading={loading}
-      />
+        {/* Loading overlay when refreshing with data */}
+        {loading && data && (
+          <div className="mb-6 p-4 rounded-lg flex items-center gap-3 border" style={{ backgroundColor: 'rgb(var(--dashboard-accent-muted))', borderColor: 'rgb(var(--dashboard-accent) / 0.3)' }}>
+            <svg className="animate-spin h-5 w-5 flex-shrink-0" style={{ color: 'rgb(var(--dashboard-accent-hover))' }} fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="font-medium" style={{ color: 'rgb(var(--dashboard-accent-hover))' }}>Updating statistics…</span>
+          </div>
+        )}
 
-      {/* Loading Overlay */}
-      {loading && data && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
-          <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          <span className="text-blue-800 font-medium">Updating statistics...</span>
-        </div>
-      )}
+        {/* Unified empty state */}
+        {isEmptyWithFilters && (
+          <div className="statistics-card p-6 mb-8 text-center">
+            <p className="text-lg font-medium mb-2" style={{ color: 'rgb(var(--dashboard-text))' }}>
+              No data for this filter combination
+            </p>
+            <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              Try broadening or clearing filters to see statistics.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setFilters({})
+                loadStatistics({})
+              }}
+              className="statistics-btn-primary px-4 py-2 rounded-lg text-sm"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {loading && !data ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <SkeletonCard key={i} height="h-24" />
-          ))
-        ) : data ? (
+        {/* Summary Cards */}
+        {!isEmptyWithFilters && (
           <>
-            <StatCard
-              title="Total Specimens"
-              value={data.specimens.total}
-              subtitle={`Across ${Object.keys(data.specimens.byStudy).length} studies`}
-            />
-            <StatCard
-              title="Total Containers"
-              value={data.containers.total}
-              subtitle={`Avg ${data.containers.averagePerSpecimen.toFixed(2)} per specimen`}
-            />
-            <StatCard
-              title="Container Types"
-              value={Object.keys(data.containers.byType).length}
-              subtitle="Different container types in use"
-            />
-            <StatCard
-              title="Storage Locations"
-              value={data.storage.byLocation.length}
-              subtitle="Active storage locations"
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <StatCard
+                title="Total Specimens"
+                value={data.specimens.total}
+                subtitle={`Across ${Object.keys(data.specimens.byStudy).length} studies`}
+                className="statistics-card p-6"
+              />
+              <StatCard
+                title="Total Containers"
+                value={data.containers.total}
+                subtitle={`Avg ${data.containers.averagePerSpecimen.toFixed(2)} per specimen`}
+                className="statistics-card p-6"
+              />
+              <StatCard
+                title="Storage Locations"
+                value={data.storage.byLocation.length}
+                subtitle="Active storage locations"
+                className="statistics-card p-6"
+              />
+              <StatCard
+                title="Container Types"
+                value={Object.keys(data.containers.byType).length}
+                subtitle="Different container types in use"
+                className="statistics-card p-6"
+              />
+            </div>
+
+            {/* Timeline chart display: bin/date apply only to Collection and Creation timeline charts */}
+            <div className="statistics-card p-4 mb-8">
+              <h3 className="text-sm font-semibold mb-1" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                Timeline chart display
+              </h3>
+              <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                Bin size and date range apply only to the Collection Timeline and Creation Timeline charts below.
+              </p>
+              <div className="flex flex-wrap items-center gap-4 md:gap-6">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                    Bin size:
+                  </label>
+                  <select
+                    value={binSize}
+                    onChange={(e) => setBinSize(e.target.value as BinSize)}
+                    className="px-3 py-2 rounded-lg border text-sm focus:ring-2 focus:ring-offset-0"
+                    style={{ borderColor: 'rgb(var(--dashboard-border))', outlineColor: 'rgb(var(--dashboard-accent))' }}
+                  >
+                    <option value="day">Daily</option>
+                    <option value="week">Weekly</option>
+                    <option value="month">Monthly</option>
+                    <option value="quarter">Quarterly</option>
+                    <option value="year">Yearly</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                    Min date:
+                  </label>
+                  <input
+                    type="date"
+                    value={histogramMinDate}
+                    onChange={(e) => setHistogramMinDate(e.target.value)}
+                    className="px-3 py-2 rounded-lg border text-sm focus:ring-2 focus:ring-offset-0"
+                    style={{ borderColor: 'rgb(var(--dashboard-border))', outlineColor: 'rgb(var(--dashboard-accent))' }}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {TIME_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setHistogramMinDate(preset.getMinDate())}
+                      className="statistics-link text-sm px-2 py-1 rounded hover:underline"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setHistogramMinDate('2000-01-01')}
+                    className="text-sm px-3 py-1.5 rounded border transition-colors hover:bg-slate-100"
+                    style={{ borderColor: 'rgb(var(--dashboard-border))', color: 'rgb(var(--dashboard-text-muted))' }}
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            </div>
           </>
-        ) : null}
+        )}
+
+        {/* Specimen Statistics */}
+        {!isEmptyWithFilters && (
+          <div className="mb-8">
+            <h2 className="statistics-section-title mb-1">Specimen Overview</h2>
+            <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{specimenSummary}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <StatChart
+                type="pie"
+                data={sourceTypeChartData}
+                title="Specimens by Source Type"
+                showPercentageList={true}
+                cardClassName="statistics-card p-6"
+              />
+              <StatChart
+                type="bar"
+                data={specimenTypeChartData}
+                title="Top Specimen Types"
+                cardClassName="statistics-card p-6"
+              />
+              <StatChart
+                type="bar"
+                data={studyChartData}
+                title="Specimens by Study"
+                cardClassName="statistics-card p-6"
+              />
+              <StatChart
+                type="bar"
+                data={collectionTimelineData}
+                title="Collection Timeline"
+                xKey="name"
+                yKey="value"
+                cardClassName="statistics-card p-6"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Container Statistics */}
+        {!isEmptyWithFilters && (
+          <div className="mb-8">
+            <h2 className="statistics-section-title mb-1">Container Overview</h2>
+            <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{containerSummary}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <StatChart
+                type="pie"
+                data={containerTypeChartData}
+                title="Containers by Type"
+                showPercentageList={true}
+                cardClassName="statistics-card p-6"
+              />
+              <StatChart
+                type="bar"
+                data={containerTagChartData}
+                title="Containers by Tags"
+                cardClassName="statistics-card p-6"
+              />
+              <StatChart
+                type="bar"
+                data={creationTimelineData}
+                title="Creation Timeline"
+                xKey="name"
+                yKey="value"
+                cardClassName="statistics-card p-6"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Storage Statistics */}
+        {!isEmptyWithFilters && (
+          <div className="mb-8">
+            <h2 className="statistics-section-title mb-1">Storage Utilization</h2>
+            <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{storageSummary}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <StatChart
+                type="bar"
+                data={locationChartData}
+                title="Top Storage Locations"
+                cardClassName="statistics-card p-6"
+              />
+              <StatChart
+                type="pie"
+                data={byRootLocationChartData}
+                title="Containers by Root Location"
+                showPercentageList={true}
+                cardClassName="statistics-card p-6"
+              />
+            </div>
+          </div>
+        )}
       </div>
-
-      {/* Specimen Statistics */}
-      {loading && !data ? (
-        <div className="mb-8">
-          <div className="h-8 bg-gray-200 rounded w-48 mb-4 animate-pulse"></div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <SkeletonCard key={i} height="h-64" />
-            ))}
-          </div>
-        </div>
-      ) : data ? (
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Specimen Overview</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <StatChart
-              type="pie"
-              data={sourceTypeChartData}
-              title="Specimens by Source Type"
-              showPercentageList={true}
-            />
-            <StatChart
-              type="bar"
-              data={specimenTypeChartData}
-              title="Top Specimen Types"
-            />
-            <StatChart
-              type="bar"
-              data={studyChartData}
-              title="Specimens by Study"
-            />
-            <StatChart
-              type="bar"
-              data={collectionTimelineData}
-              title="Collection Timeline"
-              xKey="name"
-              yKey="value"
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {/* Container Statistics */}
-      {loading && !data ? (
-        <div className="mb-8">
-          <div className="h-8 bg-gray-200 rounded w-48 mb-4 animate-pulse"></div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <SkeletonCard key={i} height="h-64" />
-            ))}
-          </div>
-        </div>
-      ) : data ? (
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Container Overview</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <StatChart
-              type="pie"
-              data={containerTypeChartData}
-              title="Containers by Type"
-              showPercentageList={true}
-            />
-            <StatChart
-              type="bar"
-              data={containerTagChartData}
-              title="Containers by Tags"
-            />
-            <StatChart
-              type="bar"
-              data={creationTimelineData}
-              title="Creation Timeline"
-              xKey="name"
-              yKey="value"
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {/* Storage Statistics */}
-      {loading && !data ? (
-        <div className="mb-8">
-          <div className="h-8 bg-gray-200 rounded w-48 mb-4 animate-pulse"></div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {Array.from({ length: 2 }).map((_, i) => (
-              <SkeletonCard key={i} height="h-64" />
-            ))}
-          </div>
-        </div>
-      ) : data ? (
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Storage Utilization</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <StatChart
-              type="bar"
-              data={locationChartData}
-              title="Top Storage Locations"
-            />
-            <StatChart
-              type="pie"
-              data={byRootLocationChartData}
-              title="Containers by Root Location"
-              showPercentageList={true}
-            />
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

@@ -93,22 +93,23 @@ function getActivityIcon(type: ActivityItem['type']) {
   }
 }
 
+/* Dashboard palette: muted badge colors that fit the lab theme */
 function getActivityBadgeColor(type: ActivityItem['type']): string {
   switch (type) {
     case 'specimen':
-      return 'bg-green-100 text-green-800'
+      return 'bg-emerald-50 text-emerald-700'
     case 'study':
-      return 'bg-blue-100 text-blue-800'
+      return 'bg-blue-50 text-blue-700'
     case 'container':
-      return 'bg-orange-100 text-orange-800'
+      return 'bg-amber-50 text-amber-700'
     case 'subject':
-      return 'bg-purple-100 text-purple-800'
+      return 'bg-violet-50 text-violet-700'
     case 'control':
-      return 'bg-pink-100 text-pink-800'
+      return 'bg-rose-50 text-rose-700'
     case 'location':
-      return 'bg-indigo-100 text-indigo-800'
+      return 'bg-indigo-50 text-indigo-700'
     default:
-      return 'bg-gray-100 text-gray-800'
+      return 'bg-slate-100 text-slate-700'
   }
 }
 
@@ -153,17 +154,17 @@ function renderActivityGroup(title: string, activities: ActivityItem[]) {
 
   return (
     <div className="mb-4">
-      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{title}</h3>
+      <h3 className="text-xs font-semibold text-[rgb(var(--dashboard-text-muted))] uppercase tracking-wider mb-2">{title}</h3>
       <div className="space-y-2">
         {activities.map((item, index) => (
           <Link
             key={`${item.type}-${item.id}-${index}`}
             to={getActivityUrl(item)}
-            className="block p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors"
+            className="block p-3 border border-[rgb(var(--dashboard-border))] rounded-lg hover:border-[rgb(var(--dashboard-accent)/0.4)] hover:bg-[rgb(var(--dashboard-surface))] transition-all duration-200"
             aria-label={`${item.label || `${item.type} #${item.id}`}`}
           >
             <div className="flex items-start gap-3">
-              <div className={`flex-shrink-0 p-1.5 rounded ${getActivityBadgeColor(item.type)}`}>
+              <div className={`flex-shrink-0 p-1.5 rounded-lg ${getActivityBadgeColor(item.type)}`}>
                 {getActivityIcon(item.type)}
               </div>
               <div className="flex-1 min-w-0">
@@ -171,15 +172,15 @@ function renderActivityGroup(title: string, activities: ActivityItem[]) {
                   <span className={`px-2 py-0.5 text-xs font-medium rounded ${getActivityBadgeColor(item.type)}`}>
                     {item.type}
                   </span>
-                  <span className="font-medium text-gray-900 truncate">
+                  <span className="font-medium text-[rgb(var(--dashboard-text))] truncate">
                     {item.label || `${item.type.charAt(0).toUpperCase() + item.type.slice(1)} #${item.id}`}
                   </span>
                 </div>
                 {item.context && (
-                  <p className="text-sm text-gray-600 truncate">{item.context}</p>
+                  <p className="text-sm text-[rgb(var(--dashboard-text-muted))] truncate">{item.context}</p>
                 )}
               </div>
-              <span className="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
+              <span className="text-xs text-[rgb(var(--dashboard-text-muted))] flex-shrink-0 whitespace-nowrap">
                 {formatRelativeTime(item.timestamp)}
               </span>
             </div>
@@ -193,34 +194,34 @@ function renderActivityGroup(title: string, activities: ActivityItem[]) {
 export default function ActivityFeed({ activities, loading }: ActivityFeedProps) {
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold mb-4 text-gray-900">Recent Activity</h2>
+      <section className="dashboard-card p-6" aria-labelledby="recent-activity-title">
+        <h2 id="recent-activity-title" className="dashboard-section-title mb-4">Recent Activity</h2>
         <SkeletonList count={5} itemHeight="h-16" />
-      </div>
+      </section>
     )
   }
 
   if (activities.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold mb-4 text-gray-900">Recent Activity</h2>
-        <div className="text-center py-8 text-gray-500">No recent activity</div>
-      </div>
+      <section className="dashboard-card p-6" aria-labelledby="recent-activity-title">
+        <h2 id="recent-activity-title" className="dashboard-section-title mb-4">Recent Activity</h2>
+        <div className="text-center py-8 text-[rgb(var(--dashboard-text-muted))]">No recent activity</div>
+      </section>
     )
   }
 
   const grouped = groupActivitiesByDate(activities)
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-semibold mb-4 text-gray-900">Recent Activity</h2>
+    <section className="dashboard-card p-6" aria-labelledby="recent-activity-title">
+      <h2 id="recent-activity-title" className="dashboard-section-title mb-4">Recent Activity</h2>
       <div className="space-y-4">
         {renderActivityGroup('Today', grouped.today)}
         {renderActivityGroup('Yesterday', grouped.yesterday)}
         {renderActivityGroup('This Week', grouped.thisWeek)}
         {renderActivityGroup('Older', grouped.older)}
       </div>
-    </div>
+    </section>
   )
 }
 

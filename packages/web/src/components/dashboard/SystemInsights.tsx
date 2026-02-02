@@ -3,6 +3,18 @@ import StatChart from '../StatChart'
 import { StatisticsData } from '../../lib/api'
 import SkeletonCard from '../SkeletonCard'
 
+/** Dashboard chart palette: teal accent + neutrals for cohesion with dashboard theme */
+const DASHBOARD_CHART_COLORS = [
+  '#14b8a6', // teal (dashboard accent)
+  '#0d9488', // teal-600
+  '#2dd4bf', // teal-400
+  '#5eead4', // teal-300
+  '#64748b', // slate-500
+  '#94a3b8', // slate-400
+  '#cbd5e1', // slate-300
+  '#475569', // slate-600
+]
+
 interface SystemInsightsProps {
   data: StatisticsData | null
   loading?: boolean
@@ -11,16 +23,14 @@ interface SystemInsightsProps {
 export default function SystemInsights({ data, loading }: SystemInsightsProps) {
   if (loading || !data) {
     return (
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-gray-900">System Insights</h2>
-        </div>
+      <section className="mb-8" aria-labelledby="system-insights-title">
+        <h2 id="system-insights-title" className="dashboard-section-title mb-4">System Insights</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {Array.from({ length: 4 }).map((_, i) => (
             <SkeletonCard key={i} height="h-64" />
           ))}
         </div>
-      </div>
+      </section>
     )
   }
 
@@ -100,33 +110,25 @@ export default function SystemInsights({ data, loading }: SystemInsightsProps) {
 
   if (!hasCharts) {
     return (
-      <div className="mb-8">
+      <section className="mb-8" aria-labelledby="system-insights-title">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-gray-900">System Insights</h2>
-          <Link
-            to="/statistics"
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-            aria-label="View full statistics"
-          >
+          <h2 id="system-insights-title" className="dashboard-section-title">System Insights</h2>
+          <Link to="/statistics" className="dashboard-link text-sm" aria-label="View full statistics">
             View Full Statistics →
           </Link>
         </div>
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="text-center py-8 text-gray-500">No data available for insights</div>
+        <div className="dashboard-card p-6">
+          <div className="text-center py-8 text-[rgb(var(--dashboard-text-muted))]">No data available for insights</div>
         </div>
-      </div>
+      </section>
     )
   }
 
   return (
-    <div className="mb-8">
+    <section className="mb-8" aria-labelledby="system-insights-title">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-gray-900">System Insights</h2>
-        <Link
-          to="/statistics"
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
-          aria-label="View full statistics"
-        >
+        <h2 id="system-insights-title" className="dashboard-section-title">System Insights</h2>
+        <Link to="/statistics" className="dashboard-link text-sm transition-colors" aria-label="View full statistics">
           View Full Statistics →
         </Link>
       </div>
@@ -137,6 +139,8 @@ export default function SystemInsights({ data, loading }: SystemInsightsProps) {
             data={sourceTypeData}
             title="Specimens by Source Type"
             showPercentageList={true}
+            colors={DASHBOARD_CHART_COLORS}
+            cardClassName="dashboard-card p-6"
           />
         )}
 
@@ -148,6 +152,8 @@ export default function SystemInsights({ data, loading }: SystemInsightsProps) {
             dateKey="date"
             xKey="name"
             yKey="value"
+            colors={DASHBOARD_CHART_COLORS}
+            cardClassName="dashboard-card p-6"
           />
         )}
 
@@ -158,6 +164,8 @@ export default function SystemInsights({ data, loading }: SystemInsightsProps) {
             title="Container Types Distribution"
             xKey="name"
             yKey="value"
+            colors={DASHBOARD_CHART_COLORS}
+            cardClassName="dashboard-card p-6"
           />
         )}
 
@@ -168,10 +176,12 @@ export default function SystemInsights({ data, loading }: SystemInsightsProps) {
             title="Top Studies by Specimen Count"
             xKey="name"
             yKey="value"
+            colors={DASHBOARD_CHART_COLORS}
+            cardClassName="dashboard-card p-6"
           />
         )}
       </div>
-    </div>
+    </section>
   )
 }
 

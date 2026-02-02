@@ -9,17 +9,19 @@ interface StatCardProps {
   }
   unfilteredValue?: number
   showUnfilteredWarning?: boolean
+  /** Optional class for the root card wrapper (e.g. studies-card p-6 for studies theme) */
+  className?: string
 }
 
-export default function StatCard({ title, value, subtitle, trend, unfilteredValue, showUnfilteredWarning }: StatCardProps) {
+export default function StatCard({ title, value, subtitle, trend, unfilteredValue, showUnfilteredWarning, className }: StatCardProps) {
   const hasUnfiltered = unfilteredValue !== undefined && unfilteredValue !== Number(value)
   
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h3 className="text-sm font-medium text-gray-500 mb-1">{title}</h3>
+    <div className={className ?? 'bg-white rounded-lg shadow p-6'}>
+      <h3 className="stat-card-title text-sm font-medium text-gray-500 mb-1">{title}</h3>
       <div className="flex items-baseline justify-between">
         <div className="flex-1">
-          <p className="text-3xl font-bold text-gray-900">{value.toLocaleString()}</p>
+          <p className="stat-card-value text-3xl font-bold text-gray-900">{value.toLocaleString()}</p>
           {hasUnfiltered && showUnfilteredWarning && (
             <div className="mt-1 flex items-center gap-1.5">
               <svg 

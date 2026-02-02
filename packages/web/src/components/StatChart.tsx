@@ -18,6 +18,8 @@ interface StatChartProps {
   colors?: string[]
   labelThreshold?: number // Percentage threshold below which labels are hidden (default: 5)
   showPercentageList?: boolean // Show percentage list for pie charts
+  /** Optional class for the card wrapper (e.g. dashboard-card p-6 for dashboard theme) */
+  cardClassName?: string
 }
 
 const DEFAULT_COLORS = [
@@ -41,13 +43,14 @@ export default function StatChart({
   dateKey,
   colors = DEFAULT_COLORS,
   labelThreshold = 5,
-  showPercentageList = false
+  showPercentageList = false,
+  cardClassName = 'bg-white rounded-lg shadow p-6',
 }: StatChartProps) {
   if (data.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        {title && <h3 className="text-lg font-semibold mb-4 text-gray-900">{title}</h3>}
-        <div className="flex items-center justify-center h-64 text-gray-500">
+      <div className={cardClassName}>
+        {title && <h3 className="stat-chart-title text-lg font-semibold mb-4 text-gray-900">{title}</h3>}
+        <div className="stat-chart-empty flex items-center justify-center h-64 text-gray-500">
           No data available
         </div>
       </div>
@@ -222,8 +225,8 @@ export default function StatChart({
   )
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      {title && <h3 className="text-lg font-semibold mb-4 text-gray-900">{title}</h3>}
+    <div className={cardClassName}>
+      {title && <h3 className="stat-chart-title text-lg font-semibold mb-4 text-gray-900">{title}</h3>}
       <div className={showPercentageList && type === 'pie' ? 'flex gap-6 items-start' : ''}>
         {chartContent}
         {showPercentageList && type === 'pie' && (

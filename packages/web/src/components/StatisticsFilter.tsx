@@ -23,6 +23,8 @@ interface StatisticsFilterProps {
   onChange: (filters: StatisticsFilters) => void
   onSubmit: (filters: StatisticsFilters) => void
   isLoading?: boolean
+  /** Optional class for the outer card (e.g. statistics-card when inside .statistics-page). */
+  className?: string
 }
 
 const SOURCE_TYPES = [
@@ -43,7 +45,7 @@ const CONTAINER_TYPES = [
   { value: 'static_well', label: 'Static Well' },
 ]
 
-export default function StatisticsFilter({ filters, onChange, onSubmit, isLoading = false }: StatisticsFilterProps) {
+export default function StatisticsFilter({ filters, onChange, onSubmit, isLoading = false, className }: StatisticsFilterProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [localFilters, setLocalFilters] = useState<StatisticsFilters>(filters)
   const prevFiltersRef = useRef<StatisticsFilters>(filters)
@@ -182,8 +184,10 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
   const hasActiveFilters = Object.keys(localFilters).length > 0
   const hasChanges = JSON.stringify(localFilters) !== JSON.stringify(filters)
 
+  const rootClassName = className ? `${className} overflow-hidden` : 'bg-white rounded-lg shadow mb-6'
+
   return (
-    <div className="bg-white rounded-lg shadow mb-6">
+    <div className={rootClassName}>
       <div className="p-4 border-b border-gray-100">
         <div className="flex items-center justify-between">
           <button
