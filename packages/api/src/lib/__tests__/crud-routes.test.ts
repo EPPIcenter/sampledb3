@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
 import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest, createAuthenticatedClientWrapper } from '../../__tests__/helpers/test-client'
 import { createCrudRoutes } from '../crud-routes'
+import { handleRouteError } from '../error-handler'
 import { setupTestDatabase, cleanupTestDatabase, resetTestDatabase } from '../../__tests__/helpers/db-setup'
 import { tag, storageContainer, storageContainerTag } from '../../db/schema'
 import { eq } from 'drizzle-orm'
@@ -20,6 +21,18 @@ describe('createCrudRoutes Factory', () => {
   function createAuthClient(app: Hono) {
     const baseClient = createTestClient(app)
     return createAuthenticatedClientWrapper(baseClient, cookieHeader)
+  }
+
+  // Helper to create app with db context and error handler so error_logs table is used
+  function createTagsApp(routes: Hono): Hono {
+    const app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
+    app.onError((err, c) => handleRouteError(err, c))
+    app.route('/api/tags', routes)
+    return app
   }
 
   beforeEach(async () => {
@@ -67,8 +80,7 @@ describe('createCrudRoutes Factory', () => {
         createSchema,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'GET',
@@ -96,8 +108,7 @@ describe('createCrudRoutes Factory', () => {
       // Create a test tag
       const testTag = await createTestTag(testDb, { name: 'Test Tag' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'GET',
@@ -125,8 +136,7 @@ describe('createCrudRoutes Factory', () => {
         createSchema,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, '/api/tags/99999', {
         method: 'GET',
@@ -152,8 +162,7 @@ describe('createCrudRoutes Factory', () => {
         createSchema,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, '/api/tags/invalid', {
         method: 'GET',
@@ -179,8 +188,7 @@ describe('createCrudRoutes Factory', () => {
         createSchema,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, '/api/tags', {
@@ -213,8 +221,7 @@ describe('createCrudRoutes Factory', () => {
       // Create a test state
       const testTag = await createTestTag(testDb, { name: 'Original Name' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
@@ -245,8 +252,7 @@ describe('createCrudRoutes Factory', () => {
       // Create a test state
       const testTag = await createTestTag(testDb, { name: 'To Delete' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'DELETE',
@@ -258,8 +264,7 @@ describe('createCrudRoutes Factory', () => {
       expect(data.message).toContain('deleted successfully')
 
       // Verify it's deleted
-      const app2 = new Hono()
-      app2.route('/api/tags', routes)
+      const app2 = createTagsApp(routes)
       const getRes = await authenticatedRequest(app2, `/api/tags/${testTag.id}`, {
         method: 'GET',
         cookie: cookieHeader,
@@ -283,8 +288,7 @@ describe('createCrudRoutes Factory', () => {
         createSchema,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'POST',
@@ -314,8 +318,7 @@ describe('createCrudRoutes Factory', () => {
 
       const testTag = await createTestTag(testDb, { name: 'Test' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
@@ -343,8 +346,7 @@ describe('createCrudRoutes Factory', () => {
 
       await createTestTag(testDb, { name: 'Duplicate' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, '/api/tags', {
@@ -375,8 +377,7 @@ describe('createCrudRoutes Factory', () => {
       const tag1 = await createTestTag(testDb, { name: 'Tag 1' })
       await createTestTag(testDb, { name: 'Tag 2' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       // Try to update state1 to have the same name as state2
@@ -407,8 +408,7 @@ describe('createCrudRoutes Factory', () => {
 
       const testTag = await createTestTag(testDb, { name: 'Original' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       // Update with the same name should work
@@ -447,8 +447,7 @@ describe('createCrudRoutes Factory', () => {
         validateCreate,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, '/api/tags', {
@@ -489,8 +488,7 @@ describe('createCrudRoutes Factory', () => {
         validateUpdate,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
@@ -558,8 +556,7 @@ describe('createCrudRoutes Factory', () => {
         checkInUse,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
@@ -603,8 +600,7 @@ describe('createCrudRoutes Factory', () => {
         checkInUse,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'DELETE',
@@ -639,8 +635,7 @@ describe('createCrudRoutes Factory', () => {
         transformList,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'GET',
@@ -675,8 +670,7 @@ describe('createCrudRoutes Factory', () => {
         transformDetail,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'GET',
@@ -710,8 +704,7 @@ describe('createCrudRoutes Factory', () => {
         onCreateDefaults,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, '/api/tags', {
@@ -746,8 +739,7 @@ describe('createCrudRoutes Factory', () => {
         onUpdateDefaults,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
@@ -779,8 +771,7 @@ describe('createCrudRoutes Factory', () => {
         createSchema,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'GET',

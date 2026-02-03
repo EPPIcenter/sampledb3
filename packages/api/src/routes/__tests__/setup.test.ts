@@ -4,6 +4,7 @@ import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/
 import type { Database } from '../../db/client'
 import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { createSetupRoutes } from '../setup'
+import { handleRouteError } from '../../lib/error-handler'
 import { users, unit, specimenType, storageType, location, containerTypeUnit, specimenTypeContainerType } from '../../db/schema'
 
 describe('Setup Route', () => {
@@ -14,6 +15,11 @@ describe('Setup Route', () => {
     // Create a fresh app instance for each test to avoid state leakage
     const setupRoutes = createSetupRoutes(testDb)
     const app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
+    app.onError((err, c) => handleRouteError(err, c))
     app.route('/setup', setupRoutes)
     return app
   }

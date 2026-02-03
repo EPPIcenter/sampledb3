@@ -470,6 +470,30 @@ function createSchema(sqlite: Database) {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_container_derivation_type ON container_derivation(derivation_type)`)
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_container_derivation_date ON container_derivation(derivation_date)`)
 
+  // Error logging
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS error_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+      source TEXT NOT NULL,
+      level TEXT NOT NULL,
+      message TEXT NOT NULL,
+      error_code TEXT,
+      stack TEXT,
+      context TEXT,
+      user_id INTEGER,
+      url TEXT,
+      user_agent TEXT,
+      resolved INTEGER NOT NULL DEFAULT 0,
+      resolved_at TEXT,
+      resolved_by INTEGER
+    )
+  `)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS error_logs_timestamp_idx ON error_logs(timestamp)`)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS error_logs_source_idx ON error_logs(source)`)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS error_logs_level_idx ON error_logs(level)`)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS error_logs_resolved_idx ON error_logs(resolved)`)
+
   // qPCR experiments (template tests)
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS qpcr_experiment (
@@ -479,10 +503,6 @@ function createSchema(sqlite: Database) {
       status TEXT NOT NULL,
       standard_layout TEXT,
       plate_barcode TEXT,
-      target_name TEXT,
-      fluorophore TEXT,
-      reporter TEXT,
-      quencher TEXT,
       instrument_type TEXT,
       created TEXT NOT NULL DEFAULT (datetime('now')),
       last_updated TEXT NOT NULL DEFAULT (datetime('now')),
@@ -491,6 +511,19 @@ function createSchema(sqlite: Database) {
     )
   `)
   sqlite.exec(`CREATE INDEX IF NOT EXISTS qpcr_experiment_status_idx ON qpcr_experiment(status)`)
+
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS qpcr_experiment_target (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      qpcr_experiment_id INTEGER NOT NULL REFERENCES qpcr_experiment(id) ON DELETE CASCADE,
+      target_name TEXT NOT NULL,
+      fluorophore TEXT,
+      reporter TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      UNIQUE (qpcr_experiment_id, target_name)
+    )
+  `)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS qpcr_experiment_target_experiment_idx ON qpcr_experiment_target(qpcr_experiment_id)`)
 
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS qpcr_experiment_well (

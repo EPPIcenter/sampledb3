@@ -30,6 +30,7 @@ import {
   settings,
 } from '../../db/schema'
 import { createSubjectsRoutes } from '../subjects'
+import { handleRouteError } from '../../lib/error-handler'
 
 interface SubjectWithSpecimensResponse {
   subject: {
@@ -185,6 +186,11 @@ describe('Subjects with Specimens API', () => {
     const subjectsRoutes = createSubjectsRoutes(testDb)
     const authRoutes = createAuthRoutes(testDb, testDb)
     app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
+    app.onError((err, c) => handleRouteError(err, c))
     app.route('/api/subjects', subjectsRoutes)
     app.route('/api/auth', authRoutes)
     

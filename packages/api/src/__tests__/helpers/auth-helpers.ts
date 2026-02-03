@@ -113,6 +113,29 @@ export async function setupSessionSettings(db: Database, maxAgeSeconds: number =
 }
 
 /**
+ * Setup pagination settings for tests (uses test database).
+ * Required for routes that call validateLimit() (e.g. locations, studies, subjects list/detail).
+ */
+export async function setupPaginationSettings(
+  db: Database,
+  config: { defaultPageSize: number; maxPageSize: number } = { defaultPageSize: 25, maxPageSize: 100 }
+) {
+  await db
+    .insert(settings)
+    .values({
+      key: 'pagination_settings',
+      userId: null,
+      value: config,
+    })
+    .onConflictDoUpdate({
+      target: [settings.key, settings.userId],
+      set: {
+        value: config,
+      },
+    })
+}
+
+/**
  * Create an authenticated session for a user
  * Returns the session ID and cookie string
  */

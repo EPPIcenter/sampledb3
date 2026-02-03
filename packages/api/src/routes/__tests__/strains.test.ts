@@ -9,6 +9,7 @@ import { strain } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
+import { handleRouteError } from '../../lib/error-handler'
 
 describe('Strains API', () => {
   let testDb: Database
@@ -63,10 +64,20 @@ describe('Strains API', () => {
     }
   })
 
+  function createApp(): Hono {
+    const app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
+    app.onError((err, c) => handleRouteError(err, c))
+    app.route('/api/strains', strainsRoutes)
+    return app
+  }
+
   describe('GET /strains', () => {
     it('should return empty array when no strains exist', async () => {
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
+      const app = createApp()
       const baseClient = createTestClient(app) as any
       const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
@@ -83,8 +94,7 @@ describe('Strains API', () => {
       await createTestStrain(testDb, { name: 'Strain A', description: 'Description A' })
       await createTestStrain(testDb, { name: 'Strain B' })
 
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
+      const app = createApp()
 
       const res = await authenticatedRequest(app, '/api/strains', {
         method: 'GET',
@@ -99,8 +109,7 @@ describe('Strains API', () => {
 
   describe('POST /strains', () => {
     it('should create a new strain', async () => {
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
+      const app = createApp()
       const baseClient = createTestClient(app) as any
       const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
@@ -122,8 +131,7 @@ describe('Strains API', () => {
     it('should reject duplicate names', async () => {
       await createTestStrain(testDb, { name: 'Existing Strain' })
 
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
+      const app = createApp()
       const baseClient = createTestClient(app) as any
       const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
@@ -145,8 +153,7 @@ describe('Strains API', () => {
     it('should return strain by ID', async () => {
       const testStrain = await createTestStrain(testDb, { name: 'Test Strain' })
 
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
+      const app = createApp()
 
       const res = await authenticatedRequest(app, `/api/strains/${testStrain.id}`, {
         method: 'GET',
@@ -164,8 +171,7 @@ describe('Strains API', () => {
     it('should update strain', async () => {
       const testStrain = await createTestStrain(testDb, { name: 'Original' })
 
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
+      const app = createApp()
       const baseClient = createTestClient(app) as any
       const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
@@ -188,8 +194,7 @@ describe('Strains API', () => {
     it('should delete strain when not in use', async () => {
       const testStrain = await createTestStrain(testDb, { name: 'Safe to Delete' })
 
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
+      const app = createApp()
       const baseClient = createTestClient(app) as any
       const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 

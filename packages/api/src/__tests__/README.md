@@ -171,6 +171,19 @@ Coverage reports are generated in:
 - `expectError(response, expectedMessage?)`: Asserts error response
 - `expectJsonStructure(response, structure)`: Asserts JSON structure
 
+## Running Tests From Repo Root
+
+From the repository root you can run all package tests and coverage:
+
+```bash
+bun run test          # Run API and web tests
+bun run test:coverage # Run API and web tests with coverage
+```
+
+## New Tests and Failing Behavior
+
+New tests are allowed to **fail** initially if they correctly express expected behavior. Follow-up work will update the implementation to satisfy the tests. Do not remove or relax assertions solely to make tests pass; fix the code under test instead.
+
 ## Best Practices
 
 1. **Always use test database**: Use `setupTestDatabase()` to get a fresh database for each test

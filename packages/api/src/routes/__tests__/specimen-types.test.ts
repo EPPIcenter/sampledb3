@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
 import type { ErrorResponse } from '../../__tests__/helpers/test-types'
+import { handleRouteError } from '../../lib/error-handler'
 
 describe('Specimen Types API', () => {
   let app: Hono
@@ -95,6 +96,11 @@ describe('Specimen Types API', () => {
     })
 
     app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
+    app.onError((err, c) => handleRouteError(err, c))
     app.route('/api/specimen-types', specimenTypesRoutes)
   })
 

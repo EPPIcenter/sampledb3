@@ -9,6 +9,7 @@ import { storageType, location } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
+import { handleRouteError } from '../../lib/error-handler'
 
 describe('Storage Types API', () => {
   let testDb: Database
@@ -86,10 +87,20 @@ describe('Storage Types API', () => {
     }
   })
 
+  function createApp(): Hono {
+    const app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
+    app.onError((err, c) => handleRouteError(err, c))
+    app.route('/api/storage-types', storageTypesRoutes)
+    return app
+  }
+
   describe('GET /storage-types', () => {
     it('should return empty array when no storage types exist', async () => {
-      const app = new Hono()
-      app.route('/api/storage-types', storageTypesRoutes)
+      const app = createApp()
       const baseClient = createTestClient(app) as any
       const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
@@ -106,8 +117,7 @@ describe('Storage Types API', () => {
       await createTestStorageType(testDb, { name: 'Freezer', description: 'Cold storage' })
       await createTestStorageType(testDb, { name: 'Refrigerator', description: 'Cool storage' })
 
-      const app = new Hono()
-      app.route('/api/storage-types', storageTypesRoutes)
+      const app = createApp()
 
       const res = await authenticatedRequest(app, '/api/storage-types', {
         method: 'GET',
@@ -121,8 +131,7 @@ describe('Storage Types API', () => {
 
   describe('POST /storage-types', () => {
     it('should create a new storage type', async () => {
-      const app = new Hono()
-      app.route('/api/storage-types', storageTypesRoutes)
+      const app = createApp()
       const baseClient = createTestClient(app) as any
       const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
@@ -142,8 +151,7 @@ describe('Storage Types API', () => {
     })
 
     it('should create storage type without description', async () => {
-      const app = new Hono()
-      app.route('/api/storage-types', storageTypesRoutes)
+      const app = createApp()
       const baseClient = createTestClient(app) as any
       const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
@@ -163,8 +171,7 @@ describe('Storage Types API', () => {
     it('should reject duplicate names', async () => {
       await createTestStorageType(testDb, { name: 'Existing Type' })
 
-      const app = new Hono()
-      app.route('/api/storage-types', storageTypesRoutes)
+      const app = createApp()
       const baseClient = createTestClient(app) as any
       const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
@@ -186,8 +193,7 @@ describe('Storage Types API', () => {
     it('should return storage type by ID', async () => {
       const testType = await createTestStorageType(testDb, { name: 'Test Type' })
 
-      const app = new Hono()
-      app.route('/api/storage-types', storageTypesRoutes)
+      const app = createApp()
 
       const res = await authenticatedRequest(app, `/api/storage-types/${testType.id}`, {
         method: 'GET',
@@ -201,8 +207,7 @@ describe('Storage Types API', () => {
     })
 
     it('should return 404 for non-existent ID', async () => {
-      const app = new Hono()
-      app.route('/api/storage-types', storageTypesRoutes)
+      const app = createApp()
 
       const res = await authenticatedRequest(app, '/api/storage-types/99999', {
         method: 'GET',
@@ -217,8 +222,7 @@ describe('Storage Types API', () => {
     it('should update storage type', async () => {
       const testType = await createTestStorageType(testDb, { name: 'Original' })
 
-      const app = new Hono()
-      app.route('/api/storage-types', storageTypesRoutes)
+      const app = createApp()
       const baseClient = createTestClient(app) as any
       const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
@@ -242,8 +246,7 @@ describe('Storage Types API', () => {
     it('should delete storage type when not in use', async () => {
       const testType = await createTestStorageType(testDb, { name: 'Safe to Delete' })
 
-      const app = new Hono()
-      app.route('/api/storage-types', storageTypesRoutes)
+      const app = createApp()
       const baseClient = createTestClient(app) as any
       const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
@@ -265,8 +268,7 @@ describe('Storage Types API', () => {
         path: 'Root',
       })
 
-      const app = new Hono()
-      app.route('/api/storage-types', storageTypesRoutes)
+      const app = createApp()
       const baseClient = createTestClient(app) as any
       const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 

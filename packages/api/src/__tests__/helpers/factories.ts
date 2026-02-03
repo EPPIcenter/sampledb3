@@ -1,5 +1,5 @@
 import type { Database } from '../../db/client'
-import { tag, storageType, specimenType, strain, storageContainer, location, controlDefinition, specimen, unit, study, studySubject, controlBatch } from '../../db/schema'
+import { tag, storageType, specimenType, strain, storageContainer, location, controlDefinition, specimen, unit, study, studySubject, controlBatch, micronixPlate } from '../../db/schema'
 
 /**
  * Test data factories for creating test entities
@@ -106,6 +106,25 @@ export async function createTestStorageContainer(
     unitId: unitId as number,
     totalQuantity: 1.0,
     remainingQuantity: 1.0,
+  }).returning()
+  return result
+}
+
+/**
+ * Create a test micronix plate (for collections route tests)
+ */
+export async function createTestMicronixPlate(db: Database, data: {
+  name: string
+  locationId: number
+  barcode?: string | null
+}) {
+  const now = new Date().toISOString()
+  const [result] = await db.insert(micronixPlate).values({
+    name: data.name,
+    locationId: data.locationId,
+    barcode: data.barcode ?? null,
+    created: now,
+    lastUpdated: now,
   }).returning()
   return result
 }

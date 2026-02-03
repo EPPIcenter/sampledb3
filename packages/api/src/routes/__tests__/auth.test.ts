@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createTestClient, loginAndGetCookie, authenticatedRequest, extractSessionId, createAuthenticatedClientWrapper } from '../../__tests__/helpers/test-client'
 import { Hono } from 'hono'
 import { createAuthRoutes } from '../auth'
+import { handleRouteError } from '../../lib/error-handler'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import { users, sessions } from '../../db/schema'
 import { eq } from 'drizzle-orm'
@@ -40,6 +41,11 @@ describe('Auth API', () => {
     // Pass testDb as both database and settingsDb for tests
     const authRoutes = createAuthRoutes(testDb, testDb)
     app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
+    app.onError((err, c) => handleRouteError(err, c))
     app.route('/api/auth', authRoutes)
 
     // Login as admin to get cookie for registration tests
