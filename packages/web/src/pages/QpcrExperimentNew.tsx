@@ -42,21 +42,22 @@ export default function QpcrExperimentNew() {
 
   return (
     <div className="qpcr-theme min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      <div className="container mx-auto px-4 py-8 max-w-xl">
-        <div className="mb-8">
-          <EntityBreadcrumbs
-            items={[
-              { label: 'qPCR Experiments', to: '/qpcr-experiments' },
-              { label: 'New Experiment' },
-            ]}
-          />
-          <div className="mt-4 flex items-center gap-3">
+      <div className="container mx-auto px-4 py-8 max-w-3xl">
+        <EntityBreadcrumbs
+          items={[
+            { label: 'qPCR Experiments', to: '/qpcr-experiments' },
+            { label: 'New Experiment' },
+          ]}
+        />
+
+        <header className="mt-6 mb-8">
+          <div className="flex items-start gap-4">
             <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-teal-900"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-teal-700"
               aria-hidden
             >
               <svg
-                className="h-5 w-5"
+                className="h-6 w-6"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -69,29 +70,29 @@ export default function QpcrExperimentNew() {
                 />
               </svg>
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-2xl font-semibold text-slate-800 tracking-tight">
                 New qPCR Experiment
               </h1>
-              <p className="text-sm text-slate-600 mt-0.5">
+              <p className="mt-1 text-sm text-slate-600">
                 Create an experiment, then upload your plate layout to get started.
               </p>
             </div>
           </div>
-        </div>
+        </header>
 
-        <div className="qpcr-card p-6">
+        <div className="qpcr-card qpcr-reveal p-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
               <div
-                className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+                className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
                 role="alert"
               >
                 {error}
               </div>
             )}
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="name" className="mb-1.5 block text-sm font-medium text-slate-700">
                 Name (optional)
               </label>
               <input
@@ -103,7 +104,7 @@ export default function QpcrExperimentNew() {
                 placeholder="e.g. varATS-IM-25-048"
               />
             </div>
-            <div className="flex gap-3 pt-1">
+            <div className="flex flex-wrap gap-3 pt-1">
               <button
                 type="submit"
                 disabled={submitting}

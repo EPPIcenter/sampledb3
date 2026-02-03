@@ -1,16 +1,23 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState, useCallback } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { qpcrExperimentsApi, type QpcrExperiment } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import DataTable from '../components/DataTable'
+import type { Column } from '../components/DataTable'
 import { useUser } from '../contexts/UserContext'
 import '../styles/qpcr.css'
+
+const TEMPLATE_LABELS: Record<string, string> = {
+  biorad: 'Bio-Rad CFX 96',
+  quant_studio: 'Quant Studio',
+}
 
 function getStatusPillClass(status: string): string {
   switch (status) {
     case 'setup':
       return 'qpcr-pill-setup'
-    case 'template_exported':
+    case 'in_progress':
       return 'qpcr-pill-template'
     case 'results_uploaded':
       return 'qpcr-pill-results'
@@ -23,8 +30,8 @@ function getStatusLabel(status: string): string {
   switch (status) {
     case 'setup':
       return 'Setup'
-    case 'template_exported':
-      return 'Template ready'
+    case 'in_progress':
+      return 'In progress'
     case 'results_uploaded':
       return 'Results imported'
     default:
@@ -32,22 +39,165 @@ function getStatusLabel(status: string): string {
   }
 }
 
+function formatShortDate(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return '—'
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  } catch {
+    return '—'
+  }
+}
+
 export default function QpcrExperiments() {
+  const navigate = useNavigate()
   const { canWrite } = useUser()
   const [experiments, setExperiments] = useState<QpcrExperiment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<string>('')
 
-  useEffect(() => {
-    qpcrExperimentsApi.list()
+  const loadExperiments = useCallback(() => {
+    setLoading(true)
+    setError(null)
+    qpcrExperimentsApi
+      .list(statusFilter ? { status: statusFilter } : undefined)
       .then((res) => setExperiments(res.data.experiments ?? []))
       .catch((err: { response?: { data?: { error?: string } } }) => {
         setError(err.response?.data?.error ?? 'Failed to load qPCR experiments')
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [statusFilter])
 
-  if (loading) {
+  useEffect(() => {
+    loadExperiments()
+  }, [loadExperiments])
+
+  const handleRowClick = useCallback(
+    (row: QpcrExperiment) => {
+      navigate(`/qpcr-experiments/${row.id}`)
+    },
+    [navigate]
+  )
+
+  const columns: Column<QpcrExperiment>[] = [
+    {
+      key: 'name',
+      label: 'Name',
+      sortable: true,
+      render: (_, row) => (
+        <span className="font-medium text-slate-800">
+          {row.name?.trim() || `Experiment ${row.id}`}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      sortable: true,
+      render: (_, row) => (
+        <span className={`inline-flex ${getStatusPillClass(row.status)}`}>
+          {getStatusLabel(row.status)}
+        </span>
+      ),
+    },
+    {
+      key: 'templateFormat',
+      label: 'Template',
+      sortable: true,
+      render: (_, row) => (
+        <span className="text-slate-700">
+          {TEMPLATE_LABELS[row.templateFormat] ?? row.templateFormat}
+        </span>
+      ),
+    },
+    {
+      key: 'plateBarcode',
+      label: 'Plate',
+      sortable: true,
+      render: (val) => (
+        <span className="text-slate-600">{(val as string | null)?.trim() || '—'}</span>
+      ),
+    },
+    {
+      key: 'targets',
+      label: 'Target(s)',
+      sortable: false,
+      render: (_, row) => {
+        const targets = row.targets ?? []
+        const names = targets.map((t) => t.targetName?.trim()).filter(Boolean)
+        return (
+          <span className="text-slate-600">{names.length > 0 ? names.join(', ') : '—'}</span>
+        )
+      },
+    },
+    {
+      key: 'assay',
+      label: 'Assay',
+      sortable: false,
+      render: (_, row) => {
+        const targets = row.targets ?? []
+        if (targets.length === 0) return <span className="text-slate-400">—</span>
+        if (targets.length > 1) return <span className="text-slate-600">Multiple</span>
+        const dye =
+          row.templateFormat === 'quant_studio'
+            ? (targets[0].reporter ?? targets[0].fluorophore)
+            : (targets[0].fluorophore ?? targets[0].reporter)
+        return (
+          <span className="text-slate-600">{(dye ?? '').trim() || '—'}</span>
+        )
+      },
+    },
+    {
+      key: 'wellCount',
+      label: 'Wells',
+      sortable: true,
+      render: (_, row) =>
+        row.wellCount != null ? (
+          <span className="text-slate-600">{row.wellCount}</span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
+    {
+      key: 'runCount',
+      label: 'Runs',
+      sortable: true,
+      render: (_, row) =>
+        row.runCount != null ? (
+          <span className="text-slate-600">{row.runCount}</span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
+    {
+      key: 'lastRunAt',
+      label: 'Last run',
+      sortable: true,
+      render: (_, row) => (
+        <span className="text-slate-600">{formatShortDate(row.lastRunAt ?? undefined)}</span>
+      ),
+    },
+    {
+      key: 'created',
+      label: 'Created',
+      sortable: true,
+      render: (val) => (
+        <span className="text-slate-600">{formatShortDate(val as string | null)}</span>
+      ),
+    },
+    {
+      key: 'lastUpdated',
+      label: 'Updated',
+      sortable: true,
+      render: (val) => (
+        <span className="text-slate-600">{formatShortDate(val as string | null)}</span>
+      ),
+    },
+  ]
+
+  if (loading && experiments.length === 0) {
     return (
       <div className="qpcr-theme min-h-screen bg-gradient-to-b from-slate-50 to-white">
         <SkeletonDetailPage sections={1} />
@@ -57,23 +207,21 @@ export default function QpcrExperiments() {
 
   return (
     <div className="qpcr-theme min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="mb-8">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <EntityBreadcrumbs items={[{ label: 'qPCR Experiments' }]} />
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <EntityBreadcrumbs items={[{ label: 'qPCR Experiments' }]} />
-              <h1 className="text-3xl font-semibold text-slate-800 mt-2 mb-2 tracking-tight">
+              <h1 className="text-3xl font-semibold text-slate-800 mt-0 mb-2 tracking-tight">
                 qPCR Experiments
               </h1>
               <p className="text-slate-600 max-w-xl">
-                Create experiments, upload plate layouts, download machine templates, and import run results.
+                Create experiments, upload plate layouts, download machine templates, and import run
+                results.
               </p>
             </div>
             {canWrite && (
-              <Link
-                to="/qpcr-experiments/new"
-                className="qpcr-btn-primary shrink-0"
-              >
+              <Link to="/qpcr-experiments/new" className="qpcr-btn-primary shrink-0">
                 New Experiment
               </Link>
             )}
@@ -89,11 +237,8 @@ export default function QpcrExperiments() {
           </div>
         )}
 
-        {experiments.length === 0 ? (
-          <div
-            className="qpcr-card p-12 text-center"
-            style={{ animationDelay: '0ms' }}
-          >
+        {experiments.length === 0 && !loading ? (
+          <div className="qpcr-card p-12 text-center" style={{ animationDelay: '0ms' }}>
             <div className="flex flex-col items-center gap-4">
               <div
                 className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"
@@ -116,7 +261,8 @@ export default function QpcrExperiments() {
               <div>
                 <h2 className="text-lg font-semibold text-slate-800">No qPCR experiments yet</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Create an experiment to define a plate layout, download an instrument template, and import results.
+                  Create an experiment to define a plate layout, download an instrument template, and
+                  import results.
                 </p>
               </div>
               {canWrite && (
@@ -127,41 +273,38 @@ export default function QpcrExperiments() {
             </div>
           </div>
         ) : (
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {experiments.map((exp, index) => (
-              <li
-                key={exp.id}
-                className="qpcr-reveal"
-                style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
+          <>
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <label htmlFor="qpcr-status-filter" className="text-sm font-medium text-slate-700">
+                Status
+              </label>
+              <select
+                id="qpcr-status-filter"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="qpcr-select w-auto min-w-[10rem] text-sm"
+                aria-label="Filter by status"
               >
-                <Link
-                  to={`/qpcr-experiments/${exp.id}`}
-                  className="qpcr-card block p-5 transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 rounded-xl"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <span className="font-medium text-slate-800 truncate block">
-                        {exp.name ?? `Experiment ${exp.id}`}
-                      </span>
-                      <span className={`mt-2 inline-flex ${getStatusPillClass(exp.status)}`}>
-                        {getStatusLabel(exp.status)}
-                      </span>
-                      {exp.plateBarcode && (
-                        <p className="mt-2 text-xs text-slate-500 truncate">
-                          Plate: {exp.plateBarcode}
-                        </p>
-                      )}
-                    </div>
-                    <span className="shrink-0 text-slate-400" aria-hidden>
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </span>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+                <option value="">All</option>
+                <option value="setup">Setup</option>
+                <option value="in_progress">In progress</option>
+                <option value="results_uploaded">Results imported</option>
+              </select>
+            </div>
+            <div className="qpcr-table-wrapper">
+              <DataTable<QpcrExperiment>
+                data={experiments}
+                columns={columns}
+                onRowClick={handleRowClick}
+                loading={loading && experiments.length === 0}
+                emptyMessage="No experiments match the current filter."
+                initialSortColumn="lastUpdated"
+                initialSortDirection="desc"
+                density="compact"
+                className="qpcr-card overflow-hidden"
+              />
+            </div>
+          </>
         )}
       </div>
     </div>

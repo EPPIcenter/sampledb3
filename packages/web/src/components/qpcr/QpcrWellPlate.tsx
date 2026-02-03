@@ -19,17 +19,21 @@ function getWellLabel(well: QpcrExperimentWell | undefined): string {
 }
 
 function getWellContentType(well: QpcrExperimentWell | undefined): 'standard' | 'unknown' | 'negative' | 'empty' {
-  if (!well || !well.barcode) return 'empty'
-  switch (well.contentType) {
-    case 'standard':
-      return 'standard'
-    case 'negative':
-      return 'negative'
-    case 'unknown':
-      return 'unknown'
-    default:
-      return 'unknown'
+  if (!well) return 'empty'
+  if (well.barcode != null && well.barcode.trim() !== '') {
+    switch (well.contentType) {
+      case 'standard':
+        return 'standard'
+      case 'negative':
+        return 'negative'
+      case 'unknown':
+        return 'unknown'
+      default:
+        return 'unknown'
+    }
   }
+  // Empty position: NTC if contentType is negative, else empty
+  return well.contentType === 'negative' ? 'negative' : 'empty'
 }
 
 const WELL_STYLES: Record<'standard' | 'unknown' | 'negative' | 'empty', string> = {
@@ -83,28 +87,27 @@ export default function QpcrWellPlate({ wells, selectedWellPosition = null, onWe
                 const selectedClass = isSelected ? ' qpcr-well--selected' : ''
                 const focusClass = isSelectable ? ' focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1' : ''
 
+                const displayLabel =
+                  label ? (label.length > 4 ? `${label.slice(0, 3)}…` : label) : contentType === 'negative' ? 'NTC' : well?.barcode ? '…' : ''
+                const titleLabel = well ? (contentType === 'negative' ? 'NTC' : label || well.barcode || 'empty') : 'empty'
                 if (isSelectable) {
                   return (
                     <button
                       key={pos}
                       type="button"
                       className={baseClasses + selectedClass + focusClass}
-                      title={well ? `${pos}: ${label || well.barcode || 'empty'}` : pos}
+                      title={`${pos}: ${titleLabel}`}
                       aria-pressed={isSelected}
-                      aria-label={`Well ${pos}${well ? `, ${label || well.barcode || 'empty'}` : ', empty'}`}
+                      aria-label={`Well ${pos}, ${titleLabel}`}
                       onClick={() => onWellSelect(pos, well)}
                     >
-                      {label ? (label.length > 4 ? `${label.slice(0, 3)}…` : label) : well?.barcode ? '…' : ''}
+                      {displayLabel}
                     </button>
                   )
                 }
                 return (
-                  <div
-                    key={pos}
-                    className={baseClasses}
-                    title={well ? `${pos}: ${label || well.barcode || 'empty'}` : pos}
-                  >
-                    {label ? (label.length > 4 ? `${label.slice(0, 3)}…` : label) : well?.barcode ? '…' : ''}
+                  <div key={pos} className={baseClasses} title={`${pos}: ${titleLabel}`}>
+                    {displayLabel}
                   </div>
                 )
               })}
@@ -120,7 +123,7 @@ export default function QpcrWellPlate({ wells, selectedWellPosition = null, onWe
           <span className="h-3.5 w-3.5 rounded border border-teal-300/70 bg-teal-50" /> Unknown (study sample)
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded border border-slate-300/70 bg-slate-100" /> Negative
+          <span className="h-3.5 w-3.5 rounded border border-slate-300/70 bg-slate-100" /> Negative (NTC)
         </span>
         <span className="flex items-center gap-2">
           <span className="h-3.5 w-3.5 rounded border border-slate-200 bg-slate-50" /> Empty

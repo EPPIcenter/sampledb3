@@ -241,6 +241,14 @@
   border-radius: 0.25rem;
 }
 
+/* Scan-friendly barcode (container detail primary identifier) */
+.storage-page .storage-barcode {
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
+  font-size: 1.125rem;
+  letter-spacing: 0.05em;
+  color: rgb(var(--dashboard-text));
+}
+
 /* Collection grid (plate/box) when used inside storage theme */
 .storage-page .storage-grid-table th {
   background: rgb(var(--dashboard-surface));

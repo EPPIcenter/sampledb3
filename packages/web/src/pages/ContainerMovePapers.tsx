@@ -39,18 +39,6 @@ export default function ContainerMovePapers() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
   const [currentStep, setCurrentStep] = useState<Step>('select-source')
-  
-  // Redirect if user doesn't have write permissions
-  useEffect(() => {
-    if (!canWrite) {
-      navigate('/', { replace: true })
-    }
-  }, [canWrite, navigate])
-  
-  if (!canWrite) {
-    return null
-  }
-
   const [loading, setLoading] = useState(false)
   const [locations, setLocations] = useState<Location[]>([])
   const [sourceCollectionType, setSourceCollectionType] = useState<'box' | 'bag' | null>(null)
@@ -70,6 +58,13 @@ export default function ContainerMovePapers() {
     error?: string
     movedSheets?: Sheet[]
   } | null>(null)
+
+  // Redirect if user doesn't have write permissions
+  useEffect(() => {
+    if (!canWrite) {
+      navigate('/', { replace: true })
+    }
+  }, [canWrite, navigate])
 
   // Load available collections and locations
   useEffect(() => {
@@ -295,6 +290,10 @@ export default function ContainerMovePapers() {
     setDestinationCollectionId(null)
     setDestinationCollectionName('')
     setMoveResult(null)
+  }
+
+  if (!canWrite) {
+    return null
   }
 
   return (

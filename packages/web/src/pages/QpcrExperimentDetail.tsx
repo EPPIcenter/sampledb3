@@ -6,7 +6,20 @@ import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import QpcrWellPlate from '../components/qpcr/QpcrWellPlate'
 import { getContainerTypeIcon, getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
 import { useUser } from '../contexts/UserContext'
+import { useToast } from '../contexts/ToastContext'
 import '../styles/qpcr.css'
+
+const PLATE_ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
+const PLATE_COLS = 12
+function allPlatePositions(): string[] {
+  const positions: string[] = []
+  for (const row of PLATE_ROWS) {
+    for (let col = 1; col <= PLATE_COLS; col++) {
+      positions.push(`${row}${col.toString().padStart(2, '0')}`)
+    }
+  }
+  return positions
+}
 
 /** Container API response shape (GET /containers/:id) */
 interface WellDetailContainerResponse {
@@ -45,6 +58,13 @@ const DEFAULT_INSTRUMENT_TYPE = 'QuantStudio 5 Real-Time PCR System'
 
 const FLUOROPHORE_OPTIONS = ['FAM', 'HEX', 'VIC', 'TET', 'NED', 'CY5', 'ROX', 'SYBR']
 
+export interface TargetRow {
+  key: string
+  targetName: string
+  fluorophore: string
+  reporter: string
+}
+
 function fluorophoreOptions(current: string): string[] {
   const set = new Set([...FLUOROPHORE_OPTIONS, current].filter(Boolean))
   return [...set]
@@ -58,12 +78,23 @@ function orDefault(value: string | null | undefined, defaultVal: string): string
   return t
 }
 
+function targetsFromExperiment(experiment: { targets?: Array<{ id: number; targetName: string; fluorophore: string | null; reporter: string | null }> }): TargetRow[] {
+  const list = experiment.targets ?? []
+  if (list.length === 0) return [{ key: '1', targetName: DEFAULT_TARGET_NAME, fluorophore: DEFAULT_FLUOROPHORE, reporter: DEFAULT_REPORTER }]
+  return list.map((t, i) => ({
+    key: `t-${t.id}-${i}`,
+    targetName: t.targetName || DEFAULT_TARGET_NAME,
+    fluorophore: t.fluorophore ?? DEFAULT_FLUOROPHORE,
+    reporter: t.reporter ?? DEFAULT_REPORTER,
+  }))
+}
+
 function getStatusLabel(status: string): string {
   switch (status) {
     case 'setup':
       return 'Setup'
-    case 'template_exported':
-      return 'Template ready'
+    case 'in_progress':
+      return 'In progress'
     case 'results_uploaded':
       return 'Results imported'
     default:
@@ -75,7 +106,7 @@ function getStatusPillClass(status: string): string {
   switch (status) {
     case 'setup':
       return 'qpcr-pill-setup'
-    case 'template_exported':
+    case 'in_progress':
       return 'qpcr-pill-template'
     case 'results_uploaded':
       return 'qpcr-pill-results'
@@ -93,8 +124,7 @@ const STEPS = [
 
 function getCurrentStep(status: string, hasPlate: boolean): number {
   if (status === 'results_uploaded') return 4
-  if (status === 'template_exported') return 3
-  if (hasPlate) return 2
+  if (status === 'in_progress' || hasPlate) return 2
   return 1
 }
 
@@ -113,6 +143,8 @@ export default function QpcrExperimentDetail() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { canWrite } = useUser()
+  const { error: showError, success: showSuccess } = useToast()
+  const [wellsUpdating, setWellsUpdating] = useState(false)
   const [data, setData] = useState<QpcrExperimentDetailResponse | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -124,22 +156,14 @@ export default function QpcrExperimentDetail() {
   const [resultsUploading, setResultsUploading] = useState(false)
   const [resultsError, setResultsError] = useState<string | null>(null)
   const instrumentSelectRef = useRef<HTMLSelectElement>(null)
-  const [targetName, setTargetName] = useState(DEFAULT_TARGET_NAME)
-  const [fluorophore, setFluorophore] = useState(DEFAULT_FLUOROPHORE)
-  const [reporter, setReporter] = useState(DEFAULT_REPORTER)
+  const [targets, setTargets] = useState<TargetRow[]>(() => [{ key: '1', targetName: DEFAULT_TARGET_NAME, fluorophore: DEFAULT_FLUOROPHORE, reporter: DEFAULT_REPORTER }])
   const [instrumentType, setInstrumentType] = useState(DEFAULT_INSTRUMENT_TYPE)
   const [savingSettings, setSavingSettings] = useState(false)
   const selectedWellPosition = normalizeWellParam(searchParams.get('well'))
   const [wellDetails, setWellDetails] = useState<WellDetailContainerResponse | null>(null)
   const [wellDetailsLoading, setWellDetailsLoading] = useState(false)
   const [wellDetailsError, setWellDetailsError] = useState<string | null>(null)
-  const prevExperimentSyncRef = useRef<{
-    id: number
-    targetName: string
-    fluorophore: string
-    reporter: string
-    instrumentType: string
-  } | null>(null)
+  const prevExperimentSyncRef = useRef<{ id: number; targetsSig: string; instrumentType: string } | null>(null)
 
   const loadData = () => {
     if (!id) return
@@ -174,29 +198,18 @@ export default function QpcrExperimentDetail() {
   // Sync form state from data.experiment when it changes (during render to avoid extra pass)
   if (data?.experiment) {
     const exp = data.experiment
-    const nextTarget = orDefault(exp.targetName ?? null, DEFAULT_TARGET_NAME)
-    const nextFluorophore = orDefault(exp.fluorophore ?? null, DEFAULT_FLUOROPHORE)
-    const nextReporter = orDefault(exp.reporter ?? null, DEFAULT_REPORTER)
+    const nextTargets = targetsFromExperiment(exp)
     const nextInstrument = orDefault(exp.instrumentType ?? null, DEFAULT_INSTRUMENT_TYPE)
+    const targetsSig = JSON.stringify(exp.targets ?? [])
     const prev = prevExperimentSyncRef.current
     if (
       prev === null ||
       prev.id !== exp.id ||
-      prev.targetName !== nextTarget ||
-      prev.fluorophore !== nextFluorophore ||
-      prev.reporter !== nextReporter ||
+      prev.targetsSig !== targetsSig ||
       prev.instrumentType !== nextInstrument
     ) {
-      prevExperimentSyncRef.current = {
-        id: exp.id,
-        targetName: nextTarget,
-        fluorophore: nextFluorophore,
-        reporter: nextReporter,
-        instrumentType: nextInstrument,
-      }
-      setTargetName(nextTarget)
-      setFluorophore(nextFluorophore)
-      setReporter(nextReporter)
+      prevExperimentSyncRef.current = { id: exp.id, targetsSig, instrumentType: nextInstrument }
+      setTargets(nextTargets)
       setInstrumentType(nextInstrument)
     }
   }
@@ -243,7 +256,7 @@ export default function QpcrExperimentDetail() {
   if (error || !data) {
     return (
       <div className="qpcr-theme min-h-screen bg-gradient-to-b from-slate-50 to-white">
-        <div className="container mx-auto px-4 py-8 max-w-5xl">
+        <div className="container mx-auto px-4 py-8 max-w-7xl">
           <div className="text-center py-12 text-red-600 font-medium">{error ?? 'Experiment not found'}</div>
           <Link to="/qpcr-experiments" className="text-teal-600 hover:underline text-sm font-medium">
             Back to qPCR experiments
@@ -264,12 +277,10 @@ export default function QpcrExperimentDetail() {
 
   const apiBase = '/api'
   const templateBase = `${apiBase}/qpcr-experiments/${experiment.id}/template`
+  const hasTargets = targets.length > 0 && targets.some((t) => (t.targetName ?? '').trim() !== '')
   const templateUrl = (format: 'biorad' | 'quant_studio') => {
-    const params = new URLSearchParams({ format, targetName: targetName.trim() || DEFAULT_TARGET_NAME })
-    if (format === 'biorad') {
-      params.set('fluorophore', fluorophore.trim() || DEFAULT_FLUOROPHORE)
-    } else {
-      params.set('reporter', reporter.trim() || DEFAULT_REPORTER)
+    const params = new URLSearchParams({ format })
+    if (format === 'quant_studio') {
       params.set('instrumentType', instrumentType.trim() || DEFAULT_INSTRUMENT_TYPE)
     }
     return `${templateBase}?${params.toString()}`
@@ -280,9 +291,11 @@ export default function QpcrExperimentDetail() {
     setSavingSettings(true)
     try {
       await qpcrExperimentsApi.update(parseInt(id), {
-        targetName: targetName.trim() || null,
-        fluorophore: fluorophore.trim() || null,
-        reporter: reporter.trim() || null,
+        targets: targets.map((t) => ({
+          targetName: t.targetName.trim() || DEFAULT_TARGET_NAME,
+          fluorophore: t.fluorophore.trim() || null,
+          reporter: t.reporter.trim() || null,
+        })),
         instrumentType: instrumentType.trim() || null,
       })
       loadData()
@@ -290,6 +303,20 @@ export default function QpcrExperimentDetail() {
       setSavingSettings(false)
     }
   }
+
+  const addTarget = () => {
+    setTargets((prev) => [
+      ...prev,
+      { key: `new-${Date.now()}`, targetName: DEFAULT_TARGET_NAME, fluorophore: DEFAULT_FLUOROPHORE, reporter: DEFAULT_REPORTER },
+    ])
+  }
+  const removeTarget = (key: string) => {
+    setTargets((prev) => (prev.length <= 1 ? prev : prev.filter((t) => t.key !== key)))
+  }
+  const updateTarget = (key: string, field: keyof TargetRow, value: string) => {
+    setTargets((prev) => prev.map((t) => (t.key === key ? { ...t, [field]: value } : t)))
+  }
+  const targetsLocked = experiment.status === 'results_uploaded'
 
   const handleDelete = async () => {
     if (!id || !window.confirm('Delete this experiment and all its plate layout, template, and results? This cannot be undone.')) return
@@ -318,9 +345,75 @@ export default function QpcrExperimentDetail() {
     )
   }
 
+  const wellsEditable = canWrite && (experiment.status === 'setup' || experiment.status === 'in_progress')
+  const wellMap = new Map(wells.map((w) => [w.wellPosition, w]))
+  const selectedWell = selectedWellPosition != null ? wellMap.get(selectedWellPosition) : undefined
+  const isSelectedWellEmpty = selectedWellPosition != null && wellDetails == null && !wellDetailsLoading && !wellDetailsError
+  const isSelectedWellNTC = selectedWell != null && (selectedWell.barcode == null || selectedWell.barcode.trim() === '') && selectedWell.contentType === 'negative'
+
+  const emptyWellPositions = allPlatePositions().filter((pos) => {
+    const w = wellMap.get(pos)
+    return w == null || w.barcode == null || w.barcode.trim() === ''
+  })
+  const ntcWellPositions = emptyWellPositions.filter((pos) => {
+    const w = wellMap.get(pos)
+    return w != null && w.contentType === 'negative'
+  })
+
+  const handleSetWellContentType = async (contentType: 'empty' | 'negative') => {
+    if (!id || !selectedWellPosition) return
+    setWellsUpdating(true)
+    try {
+      const res = await qpcrExperimentsApi.updateWells(parseInt(id), { wellPosition: selectedWellPosition, contentType })
+      setData((prev) => (prev ? { ...prev, wells: res.data.wells } : null))
+      showSuccess(contentType === 'negative' ? 'Well set as NTC' : 'Well set as empty')
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
+        ? (err as { response: { data: { error: string } } }).response.data.error
+        : 'Failed to update well'
+      showError(msg)
+    } finally {
+      setWellsUpdating(false)
+    }
+  }
+
+  const handleSetAllEmptyToNTC = async () => {
+    if (!id || emptyWellPositions.length === 0) return
+    setWellsUpdating(true)
+    try {
+      const res = await qpcrExperimentsApi.updateWells(parseInt(id), { positions: emptyWellPositions, contentType: 'negative' })
+      setData((prev) => (prev ? { ...prev, wells: res.data.wells } : null))
+      showSuccess(`Set ${emptyWellPositions.length} well(s) to NTC`)
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
+        ? (err as { response: { data: { error: string } } }).response.data.error
+        : 'Failed to update wells'
+      showError(msg)
+    } finally {
+      setWellsUpdating(false)
+    }
+  }
+
+  const handleSetAllNTCToEmpty = async () => {
+    if (!id || ntcWellPositions.length === 0) return
+    setWellsUpdating(true)
+    try {
+      const res = await qpcrExperimentsApi.updateWells(parseInt(id), { positions: ntcWellPositions, contentType: 'empty' })
+      setData((prev) => (prev ? { ...prev, wells: res.data.wells } : null))
+      showSuccess(`Set ${ntcWellPositions.length} well(s) to empty`)
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
+        ? (err as { response: { data: { error: string } } }).response.data.error
+        : 'Failed to update wells'
+      showError(msg)
+    } finally {
+      setWellsUpdating(false)
+    }
+  }
+
   return (
     <div className="qpcr-theme min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="mb-8">
           <EntityBreadcrumbs items={breadcrumbItems} />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
@@ -458,6 +551,26 @@ export default function QpcrExperimentDetail() {
                   selectedWellPosition={selectedWellPosition}
                   onWellSelect={handleWellSelect}
                 />
+                {wellsEditable && hasPlate && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSetAllEmptyToNTC}
+                      disabled={wellsUpdating || emptyWellPositions.length === 0}
+                      className="qpcr-btn-secondary text-xs py-1.5 px-2"
+                    >
+                      Set all empty to NTC
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSetAllNTCToEmpty}
+                      disabled={wellsUpdating || ntcWellPositions.length === 0}
+                      className="qpcr-btn-secondary text-xs py-1.5 px-2"
+                    >
+                      Set all NTC to empty
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="qpcr-well-panel qpcr-card min-w-0 lg:min-w-[280px] lg:max-w-md p-4">
                 {selectedWellPosition == null ? (
@@ -478,7 +591,34 @@ export default function QpcrExperimentDetail() {
                       </p>
                     )}
                     {!wellDetailsLoading && !wellDetailsError && wellDetails == null && (
-                      <p className="text-sm text-slate-500">No container in this well.</p>
+                      <>
+                        <p className="text-sm text-slate-500">No container in this well.</p>
+                        {wellsEditable && isSelectedWellEmpty && (
+                          <div className="mt-3 flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                            <p className="text-xs font-medium text-slate-500">
+                              Type: {isSelectedWellNTC ? 'NTC' : 'Empty'}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleSetWellContentType('negative')}
+                                disabled={wellsUpdating || isSelectedWellNTC}
+                                className="qpcr-btn-secondary text-xs py-1.5 px-2"
+                              >
+                                Set as NTC
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSetWellContentType('empty')}
+                                disabled={wellsUpdating || !isSelectedWellNTC}
+                                className="qpcr-btn-secondary text-xs py-1.5 px-2"
+                              >
+                                Set as empty
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                     {!wellDetailsLoading && !wellDetailsError && wellDetails != null && (
                       <div className="qpcr-reveal flex flex-col gap-4">
@@ -583,57 +723,87 @@ export default function QpcrExperimentDetail() {
         <section className={`qpcr-card p-6 mb-6 ${!hasPlate ? 'opacity-75' : ''}`}>
           <h2 className="text-lg font-semibold text-slate-800 mb-1">2. Template settings and download</h2>
           <p className="text-sm text-slate-600 mb-4">
-            Templates use study subject names for samples and parasite density for standard controls. Defaults match typical varATS TaqMan assays. Change as needed for your assay.
+            Templates use study subject names for samples and parasite density for standard controls. Add one or more targets (multiplex); each target can have its own fluorophore/reporter.
           </p>
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Target name</label>
-                <input
-                  type="text"
-                  value={targetName}
-                  onChange={(e) => setTargetName(e.target.value)}
-                  className="qpcr-input text-sm"
-                  placeholder="e.g. varATS"
-                />
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs font-medium text-slate-500">Targets</span>
+                {canWrite && !targetsLocked && (
+                  <button type="button" onClick={addTarget} className="qpcr-btn-secondary text-xs py-1.5 px-2">
+                    Add target
+                  </button>
+                )}
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Fluorophore (Bio-Rad)</label>
-                <select
-                  value={fluorophore}
-                  onChange={(e) => setFluorophore(e.target.value)}
-                  className="qpcr-select text-sm"
-                >
-                  {fluorophoreOptions(fluorophore).map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Reporter (Quant Studio)</label>
-                <select
-                  value={reporter}
-                  onChange={(e) => setReporter(e.target.value)}
-                  className="qpcr-select text-sm"
-                >
-                  {fluorophoreOptions(reporter).map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-                <p className="mt-0.5 text-xs text-slate-500">Quencher: SYBR → None, others → NFQ-MGB.</p>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-slate-500 mb-1">Instrument type (Quant Studio)</label>
-                <input
-                  type="text"
-                  value={instrumentType}
-                  onChange={(e) => setInstrumentType(e.target.value)}
-                  className="qpcr-input text-sm"
-                  placeholder="e.g. QuantStudio 5 Real-Time PCR System"
-                />
-              </div>
+              <ul className="space-y-3">
+                {targets.map((t) => (
+                  <li key={t.key} className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                    <div className="min-w-[100px] flex-1">
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Target name</label>
+                      <input
+                        type="text"
+                        value={t.targetName}
+                        onChange={(e) => updateTarget(t.key, 'targetName', e.target.value)}
+                        className="qpcr-input text-sm"
+                        placeholder="e.g. varATS"
+                        disabled={targetsLocked}
+                        readOnly={targetsLocked}
+                      />
+                    </div>
+                    <div className="min-w-[90px]">
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Fluorophore (Bio-Rad)</label>
+                      <select
+                        value={t.fluorophore}
+                        onChange={(e) => updateTarget(t.key, 'fluorophore', e.target.value)}
+                        className="qpcr-select text-sm"
+                        disabled={targetsLocked}
+                      >
+                        {fluorophoreOptions(t.fluorophore).map((opt) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="min-w-[90px]">
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Reporter (Quant Studio)</label>
+                      <select
+                        value={t.reporter}
+                        onChange={(e) => updateTarget(t.key, 'reporter', e.target.value)}
+                        className="qpcr-select text-sm"
+                        disabled={targetsLocked}
+                      >
+                        {fluorophoreOptions(t.reporter).map((opt) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {canWrite && !targetsLocked && targets.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeTarget(t.key)}
+                        className="qpcr-btn-danger text-xs py-1.5 px-2"
+                        aria-label={`Remove target ${t.targetName}`}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-xs text-slate-500">Quencher (Quant Studio): SYBR → None, others → NFQ-MGB.</p>
             </div>
-            {canWrite && (
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Instrument type (Quant Studio)</label>
+              <input
+                type="text"
+                value={instrumentType}
+                onChange={(e) => setInstrumentType(e.target.value)}
+                className="qpcr-input text-sm max-w-md"
+                placeholder="e.g. QuantStudio 5 Real-Time PCR System"
+                disabled={targetsLocked}
+                readOnly={targetsLocked}
+              />
+            </div>
+            {canWrite && !targetsLocked && (
               <button
                 type="button"
                 onClick={handleSaveSettings}
@@ -645,20 +815,24 @@ export default function QpcrExperimentDetail() {
             )}
           </div>
           <div className="mt-4 flex flex-wrap gap-3">
-            {INSTRUMENTS.map((inst) => (
-              <a
-                key={inst.id}
-                href={templateUrl(inst.format as 'biorad' | 'quant_studio')}
-                download={`qpcr-experiment-${experiment.id}-${inst.id}-template.${inst.ext}`}
-                className={hasPlate ? 'qpcr-btn-primary' : 'qpcr-btn-primary opacity-50 pointer-events-none cursor-not-allowed'}
-                aria-disabled={!hasPlate}
-                onClick={(e) => !hasPlate && e.preventDefault()}
-              >
-                Download {inst.label} ({inst.ext.toUpperCase()})
-              </a>
-            ))}
+            {!hasTargets ? (
+              <span className="text-sm text-slate-500">Add at least one target to download template.</span>
+            ) : (
+              INSTRUMENTS.map((inst) => (
+                <a
+                  key={inst.id}
+                  href={hasPlate ? templateUrl(inst.format as 'biorad' | 'quant_studio') : '#'}
+                  download={hasPlate ? `qpcr-experiment-${experiment.id}-${inst.id}-template.${inst.ext}` : undefined}
+                  className={hasPlate ? 'qpcr-btn-primary' : 'qpcr-btn-primary opacity-50 pointer-events-none cursor-not-allowed'}
+                  aria-disabled={!hasPlate}
+                  onClick={(e) => (!hasPlate || !hasTargets) && e.preventDefault()}
+                >
+                  Download {inst.label} ({inst.ext.toUpperCase()})
+                </a>
+              ))
+            )}
           </div>
-          {!hasPlate && (
+          {!hasPlate && hasTargets && (
             <p className="mt-2 text-xs text-slate-500">Upload a plate layout above to enable template download.</p>
           )}
         </section>

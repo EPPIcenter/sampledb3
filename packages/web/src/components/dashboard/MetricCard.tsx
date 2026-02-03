@@ -79,7 +79,7 @@ export default function MetricCard({ title, value, linkTo, trend, color = 'blue'
 
   const content = (
     <div
-      className={`dashboard-card p-6 transition-all duration-200 cursor-pointer hover:shadow-md hover:border-[rgb(var(--dashboard-accent)/0.4)] ${revealClass}`}
+      className={`dashboard-card p-6 transition-all duration-200 cursor-pointer hover:shadow-md hover:border-[rgb(var(--dashboard-accent)/0.4)] overflow-hidden min-w-0 ${revealClass}`}
       onClick={onClick}
       role={linkTo || onClick ? 'button' : undefined}
       tabIndex={linkTo || onClick ? 0 : undefined}
@@ -92,11 +92,11 @@ export default function MetricCard({ title, value, linkTo, trend, color = 'blue'
       }}
       aria-label={linkTo || onClick ? `${title}: ${formattedValue}` : undefined}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-medium text-[rgb(var(--dashboard-text-muted))] mb-2">{title}</h2>
-          <div className="flex items-baseline justify-between gap-2">
-            <p className={`text-3xl font-bold text-[rgb(var(--dashboard-text))]`}>{formattedValue}</p>
+      <div className="flex items-start justify-between gap-3 min-w-0">
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <h2 className="text-xs font-medium text-[rgb(var(--dashboard-text-muted))] mb-1.5 leading-tight">{title}</h2>
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0">
+            <p className="text-xl sm:text-2xl font-bold text-[rgb(var(--dashboard-text))] tabular-nums break-words">{formattedValue}</p>
             {trend && (
               <div className="flex items-center gap-1 flex-shrink-0">
                 <svg
@@ -113,13 +113,13 @@ export default function MetricCard({ title, value, linkTo, trend, color = 'blue'
                   )}
                 </svg>
                 <span
-                  className={`text-sm font-medium ${trend.positive !== false ? 'text-[rgb(var(--dashboard-trend-up))]' : 'text-[rgb(var(--dashboard-trend-down))]'}`}
+                  className={`text-xs font-medium ${trend.positive !== false ? 'text-[rgb(var(--dashboard-trend-up))]' : 'text-[rgb(var(--dashboard-trend-down))]'}`}
                 >
                   {trend.positive !== false ? '+' : ''}
                   {trend.value}%
                 </span>
                 {trend.label && (
-                  <span className="text-xs text-[rgb(var(--dashboard-text-muted))] ml-1">{trend.label}</span>
+                  <span className="text-[10px] text-[rgb(var(--dashboard-text-muted))]">{trend.label}</span>
                 )}
               </div>
             )}
@@ -132,7 +132,7 @@ export default function MetricCard({ title, value, linkTo, trend, color = 'blue'
 
   if (linkTo) {
     return (
-      <Link to={linkTo} className="block" aria-label={`${title}: ${formattedValue}`}>
+      <Link to={linkTo} className="block min-w-0" aria-label={`${title}: ${formattedValue}`}>
         {content}
       </Link>
     )

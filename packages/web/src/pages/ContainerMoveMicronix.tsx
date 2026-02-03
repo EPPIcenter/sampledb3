@@ -54,21 +54,7 @@ export default function ContainerMoveMicronix() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
   const [searchParams, setSearchParams] = useSearchParams()
-
-  if (!canWrite) {
-    return <Navigate to="/" replace />
-  }
-
   const currentStep = (searchParams.get('step') as Step) || 'upload'
-
-  const setCurrentStep = (step: Step) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.set('step', step)
-      return next
-    })
-  }
-
   const [files, setFiles] = useState<FileData[]>([])
   const [loading, setLoading] = useState(false)
   const [availablePlates, setAvailablePlates] = useState<MicronixPlate[]>([])
@@ -127,6 +113,18 @@ export default function ContainerMoveMicronix() {
       console.error('Failed to load collections, locations, or scanner configurations:', error)
     })
   }, [])
+
+  const setCurrentStep = (step: Step) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('step', step)
+      return next
+    })
+  }
+
+  if (!canWrite) {
+    return <Navigate to="/" replace />
+  }
 
   // Parse filename to infer plate name - requires exact match
   const parseFilename = (filename: string): string => {

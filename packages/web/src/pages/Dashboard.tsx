@@ -1,22 +1,23 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import '../styles/dashboard.css'
 import api, {
   studiesApi,
   activityApi,
   statisticsApi,
   controlsApi,
-  searchApi,
+  qpcrExperimentsApi,
   type Study,
-  type SearchResult,
   type StudySummaryBasic,
   type StatisticsData,
+  type QpcrExperiment,
 } from '../lib/api'
 import MetricCard from '../components/dashboard/MetricCard'
 import RecentStudies from '../components/dashboard/RecentStudies'
 import ActivityFeed from '../components/dashboard/ActivityFeed'
 import SystemInsights from '../components/dashboard/SystemInsights'
 import SkeletonCard from '../components/SkeletonCard'
+import SearchModal from '../components/SearchModal'
 import { calculateTrend } from '../utils/trends'
 import { useUser } from '../contexts/UserContext'
 
@@ -42,7 +43,6 @@ interface LoadingState {
 }
 
 export default function Dashboard() {
-  const navigate = useNavigate()
   const { canWrite } = useUser()
   
   // Critical data (loads first)
@@ -60,14 +60,19 @@ export default function Dashboard() {
   const [recentStudies, setRecentStudies] = useState<Array<Study & { summary?: StudySummaryBasic | null }>>([])
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
   const [hasControls, setHasControls] = useState(false)
+  const [recentQpcrExperiments, setRecentQpcrExperiments] = useState<QpcrExperiment[]>([])
+
+  // Hero search: open SearchModal with prefilled query
+  const [searchModalOpen, setSearchModalOpen] = useState(false)
+  const [searchInitialQuery, setSearchInitialQuery] = useState('')
+
+  // Data freshness (set when critical load completes)
+  const [dataAsOf, setDataAsOf] = useState<Date | null>(null)
   
   const [loading, setLoading] = useState<LoadingState>({
     critical: true,
     secondary: true,
   })
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
-  const [searchLoading, setSearchLoading] = useState(false)
 
   // Load critical data on mount; secondary data is triggered from loadCriticalData's finally (single flow)
   useEffect(() => {
@@ -126,6 +131,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Failed to load critical dashboard data:', error)
     } finally {
+      setDataAsOf(new Date())
       setLoading((prev) => ({ ...prev, critical: false }))
       // Load secondary data in same flow (avoids chain of Effects)
       loadSecondaryData()
@@ -142,11 +148,13 @@ export default function Dashboard() {
         studiesListRes,
         activityRes,
         controlsRes,
+        qpcrRes,
       ] = await Promise.all([
         statisticsApi.get().catch(() => ({ data: null })),
         studiesApi.list(undefined, { limit: 15 }).catch(() => ({ studies: [] })),
         activityApi.recent(20).catch(() => ({ data: { activity: [] } })),
         controlsApi.list().catch(() => ({ data: { controls: [] } })),
+        qpcrExperimentsApi.list().catch(() => ({ data: { experiments: [] } })),
       ])
 
       // Set statistics data
@@ -191,6 +199,13 @@ export default function Dashboard() {
 
       // Check if controls exist
       setHasControls((controlsRes.data.controls || []).length > 0)
+
+      // Recent qPCR experiments (most recently updated first, limit 5)
+      const allExperiments = (qpcrRes.data?.experiments ?? []) as QpcrExperiment[]
+      const sorted = [...allExperiments].sort(
+        (a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
+      )
+      setRecentQpcrExperiments(sorted.slice(0, 5))
     } catch (error) {
       console.error('Failed to load secondary dashboard data:', error)
     } finally {
@@ -198,84 +213,63 @@ export default function Dashboard() {
     }
   }
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!searchQuery.trim()) return
-
-    try {
-      setSearchLoading(true)
-      const response = await searchApi.search(searchQuery.trim())
-      setSearchResults(response.data.results || [])
-      
-      // Navigate to first result if available
-      if (response.data.results && response.data.results.length > 0) {
-        const firstResult = response.data.results[0]
-        // Navigate based on result type
-        if (firstResult.type === 'specimen') {
-          navigate(`/specimens/${firstResult.id}`)
-        } else if (firstResult.type === 'study') {
-          navigate(`/studies/${firstResult.id}`)
-        } else if (firstResult.type === 'container') {
-          navigate(`/containers/${firstResult.id}`)
-        } else if (firstResult.type === 'subject') {
-          navigate(`/subjects/${firstResult.id}`)
-        }
-      }
-    } catch (error) {
-      console.error('Search failed:', error)
-    } finally {
-      setSearchLoading(false)
-    }
-  }
-
   // Calculate trends
   const specimensTrend = previousStats ? calculateTrend(stats.specimens, previousStats.specimens) : null
   const subjectsTrend = previousStats ? calculateTrend(stats.subjects, previousStats.subjects) : null
 
-  const isLoading = loading.critical || loading.secondary
+  const handleSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const form = e.currentTarget
+    const input = form.querySelector<HTMLInputElement>('input[name="dashboard-search"]')
+    const q = input?.value?.trim() ?? ''
+    if (q) {
+      setSearchInitialQuery(q)
+      setSearchModalOpen(true)
+    }
+  }
+
+  const formatDataAsOf = (d: Date) =>
+    d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
 
   return (
     <div className="dashboard-page">
+      <SearchModal
+        isOpen={searchModalOpen}
+        onClose={() => { setSearchModalOpen(false); setSearchInitialQuery('') }}
+        initialQuery={searchInitialQuery || undefined}
+      />
       <div className="relative z-10 container mx-auto px-4 py-8">
-        {/* Welcome / header */}
-        <header className="mb-8 dashboard-reveal dashboard-reveal-1">
-          <h1 className="text-3xl font-bold mb-1">Lab overview</h1>
-          <p className="text-[rgb(var(--dashboard-text-muted))] text-lg">Your samples at a glance</p>
+        {/* Hero + search */}
+        <header className="mb-6 dashboard-reveal dashboard-reveal-1">
+          <h1 className="text-3xl font-bold mb-1">Lab Overview</h1>
+          <p className="text-[rgb(var(--dashboard-text-muted))] text-lg mb-4">Find samples, track activity, run workflows</p>
+          <form onSubmit={handleSearchSubmit} className="dashboard-search-form max-w-2xl">
+            <div className="flex gap-2">
+              <input
+                type="search"
+                name="dashboard-search"
+                placeholder="Search by barcode, study code, subject, or ID"
+                className="dashboard-search-input flex-1 rounded-xl border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-card))] px-4 py-3 text-[rgb(var(--dashboard-text))] placeholder:text-[rgb(var(--dashboard-text-muted))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] focus:border-transparent"
+                aria-label="Search samples and studies"
+              />
+              <button
+                type="submit"
+                className="dashboard-search-btn rounded-xl px-4 py-3 font-medium text-white bg-[rgb(var(--dashboard-accent))] hover:bg-[rgb(var(--dashboard-accent-hover))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] focus:ring-offset-2 transition-colors"
+              >
+                Search
+              </button>
+            </div>
+          </form>
+          {dataAsOf && (
+            <p className="mt-2 text-sm text-[rgb(var(--dashboard-text-muted))]" aria-live="polite">
+              Data as of {formatDataAsOf(dataAsOf)}
+            </p>
+          )}
         </header>
 
-        {/* Hero Metrics Section */}
-        {loading.critical ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <SkeletonCard key={i} height="h-24" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-            <MetricCard title="Studies" value={stats.studies} linkTo="/studies" color="blue" index={1} />
-            <MetricCard
-              title="Specimens"
-              value={stats.specimens}
-              linkTo="/specimens"
-              trend={specimensTrend ? { value: specimensTrend.value, positive: specimensTrend.positive, label: '30d' } : undefined}
-              color="green"
-              index={2}
-            />
-            <MetricCard
-              title="Subjects"
-              value={stats.subjects}
-              trend={subjectsTrend ? { value: subjectsTrend.value, positive: subjectsTrend.positive, label: '30d' } : undefined}
-              color="purple"
-              index={3}
-            />
-            <MetricCard title="Containers" value={stats.containers} linkTo="/locations" color="orange" index={4} />
-            <MetricCard title="Locations" value={stats.locations} linkTo="/locations" color="indigo" index={5} />
-          </div>
-        )}
-
-        {/* Quick Actions Section */}
-        <section className="dashboard-card p-6 mb-8 dashboard-reveal dashboard-reveal-6" aria-labelledby="quick-actions-title">
-          <h2 id="quick-actions-title" className="dashboard-section-title mb-4">Quick Actions</h2>
+        {/* Primary actions */}
+        <section className="mb-8 dashboard-reveal dashboard-reveal-2" aria-labelledby="quick-actions-title">
+          <h2 id="quick-actions-title" className="dashboard-section-title mb-4 sr-only">Quick Actions</h2>
           <div className={`grid grid-cols-1 ${canWrite ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-1'} gap-4`}>
             {canWrite && (
               <>
@@ -324,29 +318,42 @@ export default function Dashboard() {
                     <div className="text-sm text-[rgb(var(--dashboard-text-muted))]">Import data from CSV</div>
                   </div>
                 </Link>
+                <Link
+                  to="/locations"
+                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-card))] hover:border-[rgb(var(--dashboard-accent))] hover:shadow-md transition-all duration-200"
+                  aria-label="Browse storage"
+                >
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--dashboard-accent-muted))] flex items-center justify-center text-[rgb(var(--dashboard-accent))]">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </span>
+                  <div className="text-left min-w-0">
+                    <div className="font-medium text-[rgb(var(--dashboard-text))]">Browse Storage</div>
+                    <div className="text-sm text-[rgb(var(--dashboard-text-muted))]">View locations and collections</div>
+                  </div>
+                </Link>
               </>
             )}
-            <form onSubmit={handleSearch} className="flex flex-col gap-2">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Quick search..."
-                  className="form-input flex-1 border-[rgb(var(--dashboard-border))] focus:ring-[rgb(var(--dashboard-accent))] focus:border-[rgb(var(--dashboard-accent))]"
-                  aria-label="Quick search"
-                />
-                <button
-                  type="submit"
-                  disabled={searchLoading}
-                  className="px-4 py-2 rounded-lg font-medium text-white bg-[rgb(var(--dashboard-accent))] hover:bg-[rgb(var(--dashboard-accent-hover))] disabled:opacity-50 transition-colors"
-                  aria-label="Search"
-                >
-                  {searchLoading ? '...' : 'Search'}
-                </button>
-              </div>
-              <div className="text-xs text-[rgb(var(--dashboard-text-muted))]">Press Enter to search</div>
-            </form>
+            {!canWrite && (
+              <Link
+                to="/locations"
+                className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-card))] hover:border-[rgb(var(--dashboard-accent))] hover:shadow-md transition-all duration-200"
+                aria-label="Browse storage"
+              >
+                <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--dashboard-accent-muted))] flex items-center justify-center text-[rgb(var(--dashboard-accent))]">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </span>
+                <div className="text-left min-w-0">
+                  <div className="font-medium text-[rgb(var(--dashboard-text))]">Browse Storage</div>
+                  <div className="text-sm text-[rgb(var(--dashboard-text-muted))]">View locations and collections</div>
+                </div>
+              </Link>
+            )}
           </div>
           {!canWrite && (
             <div className="mt-4 rounded-lg p-3 bg-[rgb(var(--dashboard-accent-muted))] border border-[rgb(var(--dashboard-accent)/0.3)]">
@@ -357,6 +364,84 @@ export default function Dashboard() {
                 <p className="text-sm font-medium text-[rgb(var(--dashboard-text))]">
                   You have view-only access. Contact an administrator or member to create or modify data.
                 </p>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Next steps: qPCR Experiments */}
+        <section className="dashboard-card p-6 mb-8 dashboard-reveal dashboard-reveal-3" aria-labelledby="qpcr-experiments-title">
+          <div className="flex items-center justify-between mb-4">
+            <h2 id="qpcr-experiments-title" className="dashboard-section-title">qPCR Experiments</h2>
+            {canWrite && (
+              <Link to="/qpcr-experiments/new" className="dashboard-link text-sm" aria-label="New qPCR experiment">
+                New qPCR experiment
+              </Link>
+            )}
+          </div>
+          {loading.secondary ? (
+            <SkeletonCard height="h-24" className="mb-2" />
+          ) : recentQpcrExperiments.length === 0 ? (
+            <p className="text-[rgb(var(--dashboard-text-muted))] py-2">
+              No qPCR experiments yet — {canWrite ? 'create one to get started.' : 'qPCR experiments will appear here.'}
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {recentQpcrExperiments.map((exp) => (
+                <li key={exp.id}>
+                  <Link
+                    to={`/qpcr-experiments/${exp.id}`}
+                    className="flex items-center justify-between p-3 rounded-lg border border-[rgb(var(--dashboard-border))] hover:border-[rgb(var(--dashboard-accent)/0.4)] hover:bg-[rgb(var(--dashboard-surface))] transition-all duration-200"
+                    aria-label={`View qPCR experiment ${exp.name ?? exp.id}`}
+                  >
+                    <span className="font-medium text-[rgb(var(--dashboard-text))] truncate">
+                      {exp.name ?? `Experiment #${exp.id}`}
+                    </span>
+                    <span
+                      className={`flex-shrink-0 ml-2 px-2 py-0.5 text-xs font-medium rounded dashboard-qpcr-state dashboard-qpcr-state-${exp.status.replace('_', '-')}`}
+                      aria-label={`Status: ${exp.status}`}
+                    >
+                      {exp.status === 'setup' && 'Setup'}
+                      {exp.status === 'in_progress' && 'In progress'}
+                      {exp.status === 'results_uploaded' && 'Results imported'}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Metrics: grouped by Inventory / Studies / Storage */}
+        <section className="mb-8 dashboard-reveal dashboard-reveal-4" aria-labelledby="metrics-title">
+          <h2 id="metrics-title" className="dashboard-section-title mb-4 sr-only">Key metrics</h2>
+          {loading.critical ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <SkeletonCard key={i} height="h-24" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="dashboard-metrics-group">
+                <h3 className="dashboard-metrics-group-label">Inventory</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <MetricCard title="Specimens" value={stats.specimens} linkTo="/specimens" trend={specimensTrend ? { value: specimensTrend.value, positive: specimensTrend.positive, label: '30d' } : undefined} color="green" index={4} />
+                  <MetricCard title="Containers" value={stats.containers} linkTo="/locations" color="orange" index={5} />
+                </div>
+              </div>
+              <div className="dashboard-metrics-group">
+                <h3 className="dashboard-metrics-group-label">Studies</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <MetricCard title="Studies" value={stats.studies} linkTo="/studies" color="blue" index={6} />
+                  <MetricCard title="Subjects" value={stats.subjects} trend={subjectsTrend ? { value: subjectsTrend.value, positive: subjectsTrend.positive, label: '30d' } : undefined} color="purple" index={7} />
+                </div>
+              </div>
+              <div className="dashboard-metrics-group">
+                <h3 className="dashboard-metrics-group-label">Storage</h3>
+                <div className="grid grid-cols-1 gap-4">
+                  <MetricCard title="Locations" value={stats.locations} linkTo="/locations" color="indigo" index={8} />
+                </div>
               </div>
             </div>
           )}

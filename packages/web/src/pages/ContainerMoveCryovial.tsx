@@ -55,19 +55,6 @@ export default function ContainerMoveCryovial() {
   const { canWrite } = useUser()
   const [searchParams, setSearchParams] = useSearchParams()
   const currentStep = (searchParams.get('step') as Step) || 'upload'
-
-  if (!canWrite) {
-    return <Navigate to="/" replace />
-  }
-
-  const setCurrentStep = (step: Step) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.set('step', step)
-      return next
-    })
-  }
-
   const [files, setFiles] = useState<FileData[]>([])
   const [loading, setLoading] = useState(false)
   const [availableBoxes, setAvailableBoxes] = useState<CryovialBox[]>([])
@@ -107,6 +94,18 @@ export default function ContainerMoveCryovial() {
       console.error('Failed to load collections or locations:', error)
     })
   }, [])
+
+  const setCurrentStep = (step: Step) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('step', step)
+      return next
+    })
+  }
+
+  if (!canWrite) {
+    return <Navigate to="/" replace />
+  }
 
   // Parse filename to infer box name - requires exact match
   const parseFilename = (filename: string): string => {

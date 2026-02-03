@@ -6,9 +6,11 @@ import { useHotkey } from '../hooks/useHotkey'
 interface SearchModalProps {
   isOpen: boolean
   onClose: () => void
+  /** When provided, modal opens with this query prefilled and search runs (e.g. from dashboard hero search). */
+  initialQuery?: string
 }
 
-export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
+export default function SearchModal({ isOpen, onClose, initialQuery }: SearchModalProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
@@ -31,15 +33,15 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
     }
   }, { enabled: isOpen, enableOnFormTags: true })
 
-  // Focus input when modal opens
+  // Focus input when modal opens; prefill query when initialQuery provided (e.g. from dashboard hero search)
   useEffect(() => {
     if (isOpen) {
       inputRef.current?.focus()
-      setQuery('')
+      setQuery(initialQuery ?? '')
       setResults([])
       setSelectedIndex(0)
     }
-  }, [isOpen])
+  }, [isOpen, initialQuery])
 
   // Prevent body scroll when modal is open
   useEffect(() => {

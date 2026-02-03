@@ -174,3 +174,47 @@
     transform: translateY(0);
   }
 }
+
+/* Hero search bar */
+.dashboard-page .dashboard-search-form {
+  width: 100%;
+}
+.dashboard-page .dashboard-search-input:focus {
+  border-color: rgb(var(--dashboard-accent));
+  box-shadow: 0 0 0 2px rgb(var(--dashboard-accent) / 0.2);
+}
+.dashboard-page .dashboard-search-btn:focus-visible {
+  outline: 2px solid rgb(var(--dashboard-accent));
+  outline-offset: 2px;
+}
+
+/* Metrics grouping */
+.dashboard-page .dashboard-metrics-group {
+  padding: 0;
+}
+.dashboard-page .dashboard-metrics-group-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgb(var(--dashboard-text-muted));
+  margin-bottom: 0.5rem;
+}
+
+/* qPCR experiment state badges (next steps card) */
+.dashboard-page .dashboard-qpcr-state {
+  background: rgb(var(--dashboard-surface));
+  color: rgb(var(--dashboard-text-muted));
+}
+.dashboard-page .dashboard-qpcr-state-setup {
+  background: rgb(var(--dashboard-accent-muted));
+  color: rgb(var(--dashboard-accent-hover));
+}
+.dashboard-page .dashboard-qpcr-state-template-exported {
+  background: rgb(254 243 199);
+  color: rgb(180 83 9);
+}
+.dashboard-page .dashboard-qpcr-state-results-uploaded {
+  background: rgb(220 252 231);
+  color: rgb(22 101 52);
+}

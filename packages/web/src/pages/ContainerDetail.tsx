@@ -165,12 +165,11 @@ export default function ContainerDetail() {
   const containerTypeName = getContainerTypeName(effectiveContainerType)
   const containerTypeIcon = getContainerTypeIcon(effectiveContainerType)
 
-  // Get identifier for header (position, barcode, or type)
-  const containerIdentifier = 
-    effectiveCollection?.position || 
-    effectiveCollection?.barcode || 
-    effectiveCollection?.label ||
-    containerTypeName
+  // Primary lab identifier for header: barcode (micronix/cryovial/paper when present), else position, else type
+  const hasBarcode = effectiveCollection?.barcode && (effectiveContainerType === 'micronix_tube' || effectiveContainerType === 'cryovial_tube' || effectiveContainerType === 'paper')
+  const containerIdentifier = hasBarcode
+    ? effectiveCollection.barcode
+    : effectiveCollection?.position || effectiveCollection?.label || containerTypeName
 
   // Build breadcrumbs - use identifier instead of ID
   const breadcrumbItems = []
@@ -252,8 +251,15 @@ export default function ContainerDetail() {
                 <h1 className="text-2xl font-bold">{containerTypeName}</h1>
                 {(effectiveCollection?.position || effectiveCollection?.barcode || effectiveCollection?.label) && (
                   <div className="mt-1">
-                    <span className="text-sm font-mono" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
-                      {effectiveCollection?.position || effectiveCollection?.barcode || effectiveCollection?.label}
+                    <span
+                      className={
+                        effectiveContainerType === 'micronix_tube' && effectiveCollection?.barcode
+                          ? 'storage-barcode text-lg'
+                          : 'text-sm font-mono'
+                      }
+                      style={effectiveContainerType === 'micronix_tube' && effectiveCollection?.barcode ? undefined : { color: 'rgb(var(--dashboard-text-muted))' }}
+                    >
+                      {containerIdentifier}
                     </span>
                   </div>
                 )}
@@ -284,100 +290,117 @@ export default function ContainerDetail() {
           </div>
         </div>
 
-        {/* Information Grid */}
-        <div className="px-6 py-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Left Column */}
-            <div className="space-y-4">
-              {/* Container Details */}
-              <div>
-                <h3 className="storage-subsection-title">Container Details</h3>
-                <dl className="space-y-2">
-                  {container.id && (
-                    <div>
-                      <dt className="storage-detail-dt">Container ID</dt>
-                      <dd className="storage-detail-dd font-mono">{container.id}</dd>
-                    </div>
-                  )}
-                  {effectiveCollection && (
-                    <div>
-                      <dt className="storage-detail-dt">
-                        {getContainerTypeName(effectiveCollection.type)}
-                      </dt>
-                      <dd className="storage-detail-dd">
-                        <Link
-                          to={buildCollectionUrlWithHighlight(
-                            effectiveCollection.type,
-                            effectiveCollection.id,
-                            effectiveCollection.position,
-                            container.id
-                          )}
-                          className="dashboard-link hover:underline font-medium"
-                        >
-                          {effectiveCollection.name}
-                        </Link>
-                      </dd>
-                    </div>
-                  )}
-                  {effectiveLocation && displayLocationPath && (
-                    <div>
-                      <dt className="storage-detail-dt">Storage Location</dt>
-                      <dd className="storage-detail-dd">
-                        <Link
-                          to={`/locations/${effectiveLocation.id}`}
-                          className="dashboard-link hover:underline font-medium"
-                        >
-                          {displayLocationPath}
-                        </Link>
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              </div>
-
-              {/* Quantity Information */}
-              <div>
-                <h3 className="storage-subsection-title">Quantity</h3>
-                <dl className="space-y-2">
+        {/* Dense lab-oriented grid: Identifier | Location | Quantity on row 1; Specimen | Source row 2; Tags/Notes/Audit */}
+        <div className="px-6 py-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            {/* 1. Identifier */}
+            <div className="min-w-0">
+              <h3 className="storage-subsection-title mb-2 text-sm font-semibold">Identifier</h3>
+              <dl className="space-y-1.5 text-sm">
+                {hasBarcode && (
                   <div>
-                    <dt className="storage-detail-dt">Remaining</dt>
-                    <dd className="storage-detail-dd text-lg font-semibold">
-                      {container.remainingQuantity?.toLocaleString() || '0'} {container.unit?.symbol || 'units'}
+                    <dt className="storage-detail-dt text-xs">Barcode</dt>
+                    <dd className="storage-detail-dd mt-0.5">
+                      <span className="storage-barcode font-mono text-base">{effectiveCollection!.barcode}</span>
                     </dd>
                   </div>
-                  {container.totalQuantity !== undefined && (
-                    <div>
-                      <dt className="storage-detail-dt">Total</dt>
-                      <dd className="storage-detail-dd">
-                        {container.totalQuantity?.toLocaleString() || '0'} {container.unit?.symbol || 'units'}
-                      </dd>
-                    </div>
-                  )}
-                  {container.totalQuantity && container.remainingQuantity !== undefined && (
-                    <div>
-                      <dt className="storage-detail-dt">Used</dt>
-                      <dd className="storage-detail-dd">
-                        {(container.totalQuantity - container.remainingQuantity).toLocaleString()} {container.unit?.symbol || 'units'}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              </div>
+                )}
+                {effectiveCollection?.position && (
+                  <div>
+                    <dt className="storage-detail-dt text-xs">{effectiveContainerType === 'static_well' ? 'Well' : 'Position'}</dt>
+                    <dd className="storage-detail-dd font-mono mt-0.5">{effectiveCollection.position}</dd>
+                  </div>
+                )}
+                {effectiveCollection && (
+                  <div>
+                    <dt className="storage-detail-dt text-xs">In collection</dt>
+                    <dd className="storage-detail-dd mt-0.5">
+                      <Link
+                        to={buildCollectionUrlWithHighlight(
+                          effectiveCollection.type,
+                          effectiveCollection.id,
+                          effectiveCollection.position,
+                          container.id
+                        )}
+                        className="dashboard-link hover:underline font-medium break-all"
+                      >
+                        {effectiveCollection.name}
+                      </Link>
+                      <span className="text-xs ml-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                        (View in {effectiveCollection.type === 'micronix_plate' ? 'plate' : effectiveCollection.type === 'cryovial_box' ? 'box' : 'sheet'})
+                      </span>
+                    </dd>
+                  </div>
+                )}
+              </dl>
             </div>
 
-            {/* Right Column */}
-            <div className="space-y-4">
-              {/* Specimen Information */}
-              {specimen && (
+            {/* 2. Storage location */}
+            {effectiveLocation && displayLocationPath && (
+              <div className="min-w-0">
+                <h3 className="storage-subsection-title mb-2 text-sm font-semibold">Storage location</h3>
+                <p className="storage-detail-dd text-sm mt-0.5">
+                  <Link
+                    to={`/locations/${effectiveLocation.id}`}
+                    className="dashboard-link hover:underline font-medium break-all"
+                  >
+                    {displayLocationPath}
+                  </Link>
+                </p>
+              </div>
+            )}
+
+            {/* 3. Quantity */}
+            <div className="min-w-0">
+              <h3 className="storage-subsection-title mb-2 text-sm font-semibold">Quantity</h3>
+              <dl className="grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
                 <div>
-                  <h3 className="storage-subsection-title">Specimen</h3>
-                  <dl className="space-y-2">
+                  <dt className="storage-detail-dt text-xs">Remaining</dt>
+                  <dd className="storage-detail-dd font-semibold mt-0.5">
+                    {container.remainingQuantity?.toLocaleString() ?? '0'} {container.unit?.symbol || ''}
+                  </dd>
+                </div>
+                {container.totalQuantity != null && (
+                  <div>
+                    <dt className="storage-detail-dt text-xs">Total</dt>
+                    <dd className="storage-detail-dd mt-0.5">
+                      {container.totalQuantity.toLocaleString()} {container.unit?.symbol || ''}
+                    </dd>
+                  </div>
+                )}
+                {container.totalQuantity != null && container.remainingQuantity != null && (
+                  <div>
+                    <dt className="storage-detail-dt text-xs">Used</dt>
+                    <dd className="storage-detail-dd mt-0.5">
+                      {(container.totalQuantity - container.remainingQuantity).toLocaleString()} {container.unit?.symbol || ''}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+              {container.totalQuantity != null && container.totalQuantity > 0 && container.remainingQuantity != null && (
+                <div className="mt-1.5 h-1 w-full max-w-[12rem] rounded-full bg-gray-200 overflow-hidden" role="presentation" aria-hidden>
+                  <div
+                    className="h-full rounded-full bg-green-500"
+                    style={{ width: `${Math.min(100, (container.remainingQuantity / container.totalQuantity) * 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 4. Sample: Specimen | Source (same row, dense) */}
+          {(specimen || source) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-4 pt-4 border-t border-gray-100">
+              {specimen && (
+                <div className="min-w-0">
+                  <h3 className="storage-subsection-title mb-2 text-sm font-semibold">Specimen</h3>
+                  <dl className="space-y-1.5 text-sm">
                     <div>
-                      <dt className="storage-detail-dt">Specimen Type</dt>
-                      <dd className="storage-detail-dd">
+                      <dt className="storage-detail-dt text-xs">Type</dt>
+                      <dd className="storage-detail-dd mt-0.5">
                         <Link
                           to={`/specimens/${specimen.id}`}
-                          className="dashboard-link inline-flex items-center gap-2 hover:underline font-medium"
+                          className="dashboard-link inline-flex items-center gap-1.5 hover:underline font-medium"
                         >
                           <span>{getSpecimenTypeIcon(specimen.specimenType?.name || 'specimen')}</span>
                           <span>{specimen.specimenType?.name || 'Specimen'}</span>
@@ -386,40 +409,28 @@ export default function ContainerDetail() {
                     </div>
                     {specimen.collectionDate && (
                       <div>
-                        <dt className="storage-detail-dt">Collection Date</dt>
-                        <dd className="storage-detail-dd">
-                          {new Date(specimen.collectionDate).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          })}
+                        <dt className="storage-detail-dt text-xs">Collection date</dt>
+                        <dd className="storage-detail-dd mt-0.5">
+                          {new Date(specimen.collectionDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
                         </dd>
                       </div>
                     )}
                   </dl>
                 </div>
               )}
-
-              {/* Source Information */}
               {source && (
-                <div>
-                  <h3 className="storage-subsection-title">Source</h3>
-                  <dl className="space-y-2">
+                <div className="min-w-0">
+                  <h3 className="storage-subsection-title mb-2 text-sm font-semibold">Source</h3>
+                  <dl className="space-y-1.5 text-sm">
                     <div>
-                      <dt className="storage-detail-dt capitalize">{source.type}</dt>
-                      <dd className="storage-detail-dd">
+                      <dt className="storage-detail-dt text-xs capitalize">{source.type}</dt>
+                      <dd className="storage-detail-dd mt-0.5">
                         {source.type === 'subject' ? (
-                          <Link
-                            to={`/subjects/${source.id}`}
-                            className="dashboard-link hover:underline font-medium"
-                          >
+                          <Link to={`/subjects/${source.id}`} className="dashboard-link hover:underline font-medium break-all">
                             {source.name}
                           </Link>
                         ) : source.type === 'control' ? (
-                          <Link
-                            to={`/blood-controls/batches/${source.id}`}
-                            className="dashboard-link hover:underline font-medium"
-                          >
+                          <Link to={`/blood-controls/batches/${source.id}`} className="dashboard-link hover:underline font-medium break-all">
                             {source.name}
                           </Link>
                         ) : (
@@ -429,12 +440,9 @@ export default function ContainerDetail() {
                     </div>
                     {source.type === 'subject' && source.study && (
                       <div>
-                        <dt className="storage-detail-dt">Study</dt>
-                        <dd className="storage-detail-dd">
-                          <Link
-                            to={`/studies/${source.study.id}`}
-                            className="dashboard-link hover:underline"
-                          >
+                        <dt className="storage-detail-dt text-xs">Study</dt>
+                        <dd className="storage-detail-dd mt-0.5">
+                          <Link to={`/studies/${source.study.id}`} className="dashboard-link hover:underline break-all">
                             {source.study.title}
                             {source.study.code && <span style={{ color: 'rgb(var(--dashboard-text-muted))' }}> ({source.study.code})</span>}
                           </Link>
@@ -443,12 +451,9 @@ export default function ContainerDetail() {
                     )}
                     {source.type === 'control' && source.definition && (
                       <div>
-                        <dt className="storage-detail-dt">Control Definition</dt>
-                        <dd className="storage-detail-dd">
-                          <Link
-                            to={`/blood-controls/${source.definition.id}`}
-                            className="dashboard-link hover:underline"
-                          >
+                        <dt className="storage-detail-dt text-xs">Definition</dt>
+                        <dd className="storage-detail-dd mt-0.5">
+                          <Link to={`/blood-controls/${source.definition.id}`} className="dashboard-link hover:underline break-all">
                             {source.definition.name}
                           </Link>
                         </dd>
@@ -458,13 +463,42 @@ export default function ContainerDetail() {
                 </div>
               )}
             </div>
-          </div>
+          )}
 
-          {/* Comment Section */}
-          {container.comment && (
-            <div className="storage-card-divider mt-6 pt-6 border-t">
-              <h3 className="storage-subsection-title">Notes</h3>
-              <p className="storage-detail-dd whitespace-pre-wrap">{container.comment}</p>
+          {/* 5. Tags + 6. Notes (compact) + 7. Audit footer */}
+          {((container.tags && Array.isArray(container.tags) && container.tags.length > 0) || container.comment) && (
+            <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+              {container.tags && Array.isArray(container.tags) && container.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {container.tags.map((tag: { id: number; name: string }) => (
+                    <span
+                      key={tag.id}
+                      className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-gray-200 bg-gray-50 text-gray-700"
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {container.comment && (
+                <div className="min-w-0">
+                  <span className="storage-detail-dt text-xs block mb-0.5">Notes</span>
+                  <p className="storage-detail-dd text-sm whitespace-pre-wrap break-words mt-0">{container.comment}</p>
+                </div>
+              )}
+            </div>
+          )}
+          {(container.created || container.lastUpdated) && (
+            <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end">
+              <p className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                {container.created && (
+                  <span>Created {new Date(container.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                )}
+                {container.created && container.lastUpdated && ' · '}
+                {container.lastUpdated && (
+                  <span>Updated {new Date(container.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                )}
+              </p>
             </div>
           )}
         </div>
