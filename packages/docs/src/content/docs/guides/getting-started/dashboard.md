@@ -9,23 +9,23 @@ Think of the dashboard as your command center. It shows you at a glance how many
 
 ## Understanding the Dashboard Layout
 
-The dashboard uses a "modern precision lab" theme with a clear header and sections. At the top you'll see a **Lab overview** title and the subtitle *Your samples at a glance*. Below that, key metrics give you a high-level view of your system. Next, Quick Actions let you jump straight into common tasks. Further down you'll see Recent Studies and Recent Activity side by side, then System Insights (charts), and optionally a Blood Controls summary. Each section uses consistent card styling and a teal accent for links and highlights. The same theme is used on the **Studies** list and study detail pages so that navigating from the dashboard to studies feels consistent.
+The dashboard uses a "modern precision lab" theme with a workflow-first layout. At the top you'll see a **Lab Overview** title and the subtitle *Find samples, track activity, run workflows*. Below that is a **prominent search bar** where you can search by barcode, study code, subject name, or ID; a "Data as of" timestamp shows when the dashboard data was last loaded. Next, **primary actions** let you jump straight into common tasks: Register New Specimen, Create New Study, Bulk Import, and **Browse Storage** (view locations and collections). A **qPCR Experiments** section shows your recent qPCR experiments and a link to create a new one. **Key metrics** are grouped into Inventory (Specimens, Containers), Studies (Studies, Subjects), and Storage (Locations). Further down you'll see Recent Studies and Recent Activity side by side, then System Insights (charts), and optionally a Blood Controls summary. Each section uses consistent card styling and a teal accent for links and highlights.
 
-### Key Metrics at a Glance
+### Hero Search Bar
 
-At the very top of the dashboard, you'll see five metric cards that show important counts at a glance. The Studies card shows the total number of research studies in your system. The Specimens card shows how many biological specimens have been registered. The Subjects card shows the total number of subjects across all studies. The Containers card shows how many physical containers you're tracking. And the Locations card shows how many storage locations are in your hierarchy.
+The search bar at the top of the dashboard is the fastest way to find a specific sample, study, subject, or container. Type a barcode, study short code, subject name, or ID and press Enter or click Search. A search results panel opens so you can pick the matching item and jump to its detail page. You can also open search from anywhere using the command palette (Ctrl+K or Cmd+K).
 
-Some of these metrics show trend indicators—small arrows pointing up or down—that compare the current count to what it was 30 days ago. This helps you track growth over time. If you see an upward trend in specimens, for example, you know your lab has been busy collecting samples. These trends update automatically, giving you a sense of how your inventory is growing.
+### Primary Actions
 
-Each metric card is clickable, taking you directly to the relevant section when you need more detail. Click on Studies to see all your studies, or click on Containers to explore your container inventory.
+The primary actions provide fast access to the tasks you perform most frequently. "Register New Specimen" opens the specimen registration form. "Create New Study" takes you to the study creation form. "Bulk Import" opens the import page where you can upload CSV files to import subjects, specimens, or both. **Browse Storage** takes you to the locations page so you can view your storage hierarchy and collections. If you have view-only access, you'll see Browse Storage and an explanation that create actions require member or admin access.
 
-### Quick Actions for Common Tasks
+### qPCR Experiments (Next Steps)
 
-The Quick Actions section provides fast access to the tasks you perform most frequently. Instead of navigating through menus, you can jump straight to what you need. The "Register New Specimen" button opens the specimen registration form immediately, perfect for quickly adding individual specimens without going through the full import process. The "Create New Study" button takes you directly to the study creation form when you're ready to start a new research project.
+If your lab uses qPCR experiments, the dashboard shows your five most recent experiments with their status (Setup, Template ready, or Results imported). Click an experiment to open it, or use "New qPCR experiment" to create one. If you don't have any qPCR experiments yet, the section shows an empty state with a link to create your first one.
 
-The "Bulk Import" button gives you quick access to the import page where you can upload CSV files to import subjects, specimens, or both in bulk. This is especially useful when you have existing data to bring into the system or when you're adding many items at once.
+### Key Metrics (Grouped)
 
-Perhaps most useful is the Quick Search box, which allows you to quickly find studies, subjects, specimens, or containers from anywhere. Simply type your search term—whether it's a study short code, subject name, specimen ID, barcode, or container identifier—and press Enter or click Search. If the system finds a match, you'll be automatically navigated to that item's detail page. This is much faster than browsing through lists when you know what you're looking for.
+Metrics are grouped to match how you think about your lab: **Inventory** (Specimens, Containers), **Studies** (Studies, Subjects), and **Storage** (Locations). Each metric card shows a count; some show trend indicators comparing the current count to 30 days ago. Each card is clickable and takes you to the relevant section (e.g. Specimens, Studies, or Locations).
 
 ### Recent Studies Overview
 
@@ -49,13 +49,11 @@ For example, you might see that most of your specimens are Whole Blood stored in
 
 If your system has blood control definitions or batches, a summary section will appear on the dashboard showing the total number of control definitions, total batches, and inventory counts. This gives you a quick view of your quality control sample inventory without having to navigate to the Blood Controls section.
 
-## Making the Most of Quick Actions
+## Making the Most of the Dashboard
 
-The Quick Actions section is designed to save you time by putting the most common tasks right at your fingertips. When you need to register a single specimen quickly, the "Register New Specimen" button opens the form immediately. When you're ready to start a new research project, "Create New Study" gets you started right away.
+Use the hero search bar whenever you need to find a specific item by barcode, study code, subject name, or ID. Use the primary actions to register a specimen, create a study, run a bulk import, or browse storage. If you use qPCR experiments, check the qPCR Experiments section to see recent runs and their status. The "Data as of" timestamp tells you when the dashboard numbers were last refreshed.
 
-The bulk import action is perfect for those times when you have a spreadsheet of data to bring into the system. Instead of entering items one by one, you can upload a CSV file and let the system process everything at once.
-
-The search functionality is perhaps the most powerful quick action. Whether you're looking for a specific study by its short code, a subject by name, a specimen by ID, or a container by barcode, the search box can find it instantly. This is especially useful when you're working with large datasets and need to jump to a specific item quickly.
+The dashboard updates when you load or refresh the page. For the most current counts, refresh the page; the "Data as of" line shows the time of the last load.
 
 ## Navigating the System
 
