@@ -10,6 +10,17 @@ export interface ErrorResponse {
   stack?: string
 }
 
+/**
+ * Detect ZodError: use instanceof when possible, else duck-check for .issues array
+ * (avoids issues with multiple zod instances in tests/bundles).
+ */
+function isZodError(error: unknown): error is z.ZodError {
+  if (error instanceof z.ZodError) return true
+  if (error === null || typeof error !== 'object') return false
+  const obj = error as { issues?: unknown }
+  return 'issues' in obj && Array.isArray(obj.issues)
+}
+
 export function handleRouteError(error: unknown, c: Context): Response {
   // Get database from context if available, otherwise use default
   const database = (c.get('db') as typeof db | undefined) || db
@@ -30,7 +41,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
   }
   
   // Handle Zod validation errors
-  if (error instanceof z.ZodError) {
+  if (isZodError(error)) {
     // Log validation errors as warnings (they're expected user input errors, but still worth tracking)
     logError(database, 'backend', 'warning', 'Validation error', error, {
       ...errorContext,
