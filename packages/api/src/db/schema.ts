@@ -36,6 +36,7 @@ export type SpecimenTypeContainerType = InferSelectModel<typeof specimenTypeCont
 export type ContainerTypeUnit = InferSelectModel<typeof containerTypeUnit>
 export type ContainerDerivation = InferSelectModel<typeof containerDerivation>
 export type QpcrExperiment = InferSelectModel<typeof qpcrExperiment>
+export type QpcrExperimentTarget = InferSelectModel<typeof qpcrExperimentTarget>
 export type QpcrExperimentWell = InferSelectModel<typeof qpcrExperimentWell>
 export type QpcrRun = InferSelectModel<typeof qpcrRun>
 export type QpcrWellResult = InferSelectModel<typeof qpcrWellResult>
@@ -464,13 +465,9 @@ export const qpcrExperiment = sqliteTable('qpcr_experiment', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name'),
   templateFormat: text('template_format').notNull(), // 'biorad' | 'quant_studio'
-  status: text('status').notNull(), // 'setup' | 'template_exported' | 'results_uploaded'
+  status: text('status').notNull(), // 'setup' | 'in_progress' | 'results_uploaded'
   standardLayout: text('standard_layout', { mode: 'json' }), // optional mapping of positions to standard labels / control batch
   plateBarcode: text('plate_barcode'),
-  targetName: text('target_name'),
-  fluorophore: text('fluorophore'),
-  reporter: text('reporter'),
-  quencher: text('quencher'),
   instrumentType: text('instrument_type'),
   created: text('created').notNull().default(sql`current_timestamp`),
   lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
@@ -479,6 +476,28 @@ export const qpcrExperiment = sqliteTable('qpcr_experiment', {
 }, (table) => ({
   statusIdx: index('qpcr_experiment_status_idx').on(table.status),
 }))
+
+// qPCR experiment targets: multiple targets per experiment (multiplex)
+export const qpcrExperimentTarget = sqliteTable(
+  'qpcr_experiment_target',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    qpcrExperimentId: integer('qpcr_experiment_id')
+      .notNull()
+      .references(() => qpcrExperiment.id, { onDelete: 'cascade' }),
+    targetName: text('target_name').notNull(),
+    fluorophore: text('fluorophore'),
+    reporter: text('reporter'),
+    sortOrder: integer('sort_order').notNull().default(0),
+  },
+  (table) => ({
+    experimentTargetUnique: unique('qpcr_experiment_target_unique').on(
+      table.qpcrExperimentId,
+      table.targetName
+    ),
+    experimentIdx: index('qpcr_experiment_target_experiment_idx').on(table.qpcrExperimentId),
+  })
+)
 
 export const qpcrExperimentWell = sqliteTable('qpcr_experiment_well', {
   id: integer('id').primaryKey({ autoIncrement: true }),
