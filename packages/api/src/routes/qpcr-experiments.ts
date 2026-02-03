@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { Database } from '../db/client'
 import {
   qpcrExperiment,
+  qpcrExperimentTarget,
   qpcrExperimentWell,
   qpcrRun,
   qpcrWellResult,
@@ -13,7 +14,7 @@ import {
   controlDefinition,
   storageContainer,
 } from '../db/schema'
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, sql, asc } from 'drizzle-orm'
 import { parseBioradCsv, parseQuantStudioXls } from '../lib/qpcr-result-parse'
 import { z } from 'zod'
 import { handleRouteError } from '../lib/error-handler'
@@ -100,6 +101,15 @@ function normalizeWellPosition(pos: string): string {
   return t
 }
 
+/** Validate and normalize well position (A–H, 1–12). Returns normalized position or null if invalid. */
+function validateWellPosition(pos: string): string | null {
+  const normalized = normalizeWellPosition(pos)
+  if (!normalized) return null
+  const col = parseInt(normalized.slice(1), 10)
+  if (Number.isNaN(col) || col < 1 || col > 12) return null
+  return normalized
+}
+
 /**
  * Parse plate CSV with scanner config; returns rows with well_position and barcode.
  * Skips empty barcode rows (empty wells).
@@ -146,27 +156,89 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
     standardLayout: z.record(z.string(), z.unknown()).optional().nullable(),
   })
 
+  const targetSchema = z.object({
+    targetName: z.string(),
+    fluorophore: z.string().optional().nullable(),
+    reporter: z.string().optional().nullable(),
+  })
   const updateSchema = z.object({
     name: z.string().optional().nullable(),
     standardLayout: z.record(z.string(), z.unknown()).optional().nullable(),
-    status: z.enum(['setup', 'template_exported', 'results_uploaded']).optional(),
-    targetName: z.string().optional().nullable(),
-    fluorophore: z.string().optional().nullable(),
-    reporter: z.string().optional().nullable(),
+    status: z.enum(['setup', 'in_progress', 'results_uploaded']).optional(),
+    targets: z.array(targetSchema).optional(),
     instrumentType: z.string().optional().nullable(),
   })
 
-  // GET / - List experiments
+  // GET / - List experiments (with well count, run count, last run date per experiment)
   qpcr.get('/', authMiddleware, async (c) => {
     try {
       const statusFilter = c.req.query('status')
-      const experiments = statusFilter
+      const rows = statusFilter
         ? await database
             .select()
             .from(qpcrExperiment)
             .where(eq(qpcrExperiment.status, statusFilter))
             .orderBy(qpcrExperiment.id)
         : await database.select().from(qpcrExperiment).orderBy(qpcrExperiment.id)
+
+      const experimentIds = rows.map((r) => r.id)
+      if (experimentIds.length === 0) {
+        return c.json({ experiments: [] })
+      }
+
+      const wellCounts = await database
+        .select({
+          qpcrExperimentId: qpcrExperimentWell.qpcrExperimentId,
+          wellCount: sql<number>`count(*)`.as('well_count'),
+        })
+        .from(qpcrExperimentWell)
+        .where(inArray(qpcrExperimentWell.qpcrExperimentId, experimentIds))
+        .groupBy(qpcrExperimentWell.qpcrExperimentId)
+
+      const runStats = await database
+        .select({
+          qpcrExperimentId: qpcrRun.qpcrExperimentId,
+          runCount: sql<number>`count(*)`.as('run_count'),
+          lastRunAt: sql<string | null>`max(${qpcrRun.created})`.as('last_run_at'),
+        })
+        .from(qpcrRun)
+        .where(inArray(qpcrRun.qpcrExperimentId, experimentIds))
+        .groupBy(qpcrRun.qpcrExperimentId)
+
+      const wellCountByExp = new Map(wellCounts.map((w) => [w.qpcrExperimentId, w.wellCount]))
+      const runStatsByExp = new Map(
+        runStats.map((r) => [r.qpcrExperimentId, { runCount: r.runCount, lastRunAt: r.lastRunAt }])
+      )
+
+      const targetsByExp = new Map<number, { id: number; targetName: string; fluorophore: string | null; reporter: string | null; sortOrder: number }[]>()
+      const targetsRows = await database
+        .select()
+        .from(qpcrExperimentTarget)
+        .where(inArray(qpcrExperimentTarget.qpcrExperimentId, experimentIds))
+        .orderBy(asc(qpcrExperimentTarget.qpcrExperimentId), asc(qpcrExperimentTarget.sortOrder))
+      for (const t of targetsRows) {
+        const list = targetsByExp.get(t.qpcrExperimentId) ?? []
+        list.push({
+          id: t.id,
+          targetName: t.targetName,
+          fluorophore: t.fluorophore,
+          reporter: t.reporter,
+          sortOrder: t.sortOrder,
+        })
+        targetsByExp.set(t.qpcrExperimentId, list)
+      }
+
+      const experiments = rows.map((row) => {
+        const stats = runStatsByExp.get(row.id)
+        return {
+          ...row,
+          wellCount: wellCountByExp.get(row.id) ?? 0,
+          runCount: stats?.runCount ?? 0,
+          lastRunAt: stats?.lastRunAt ?? null,
+          targets: targetsByExp.get(row.id) ?? [],
+        }
+      })
+
       return c.json({ experiments })
     } catch (error) {
       return handleRouteError(error, c)
@@ -203,13 +275,18 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
     }
   })
 
-  // GET /:id - Detail with wells and resolved source
+  // GET /:id - Detail with wells and resolved source, and targets
   qpcr.get('/:id', authMiddleware, async (c) => {
     try {
       const id = parseInt(c.req.param('id'))
       if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400)
       const exp = await database.select().from(qpcrExperiment).where(eq(qpcrExperiment.id, id)).get()
       if (!exp) return c.json({ error: 'Not found' }, 404)
+      const targets = await database
+        .select()
+        .from(qpcrExperimentTarget)
+        .where(eq(qpcrExperimentTarget.qpcrExperimentId, id))
+        .orderBy(asc(qpcrExperimentTarget.sortOrder))
       const wells = await database
         .select()
         .from(qpcrExperimentWell)
@@ -220,7 +297,17 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
           return { ...w, source }
         })
       )
-      return c.json({ experiment: exp, wells: wellsWithSource })
+      const experimentWithTargets = {
+        ...exp,
+        targets: targets.map((t) => ({
+          id: t.id,
+          targetName: t.targetName,
+          fluorophore: t.fluorophore,
+          reporter: t.reporter,
+          sortOrder: t.sortOrder,
+        })),
+      }
+      return c.json({ experiment: experimentWithTargets, wells: wellsWithSource })
     } catch (error) {
       return handleRouteError(error, c)
     }
@@ -262,7 +349,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
     }
   })
 
-  // PATCH /:id - Update experiment
+  // PATCH /:id - Update experiment (targets locked when status is results_uploaded)
   qpcr.patch('/:id', authMiddleware, memberMiddleware, async (c) => {
     try {
       const id = parseInt(c.req.param('id'))
@@ -271,6 +358,12 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       const data = updateSchema.parse(body)
       const exp = await database.select().from(qpcrExperiment).where(eq(qpcrExperiment.id, id)).get()
       if (!exp) return c.json({ error: 'Not found' }, 404)
+      if (data.targets !== undefined && exp.status === 'results_uploaded') {
+        return c.json(
+          { error: 'Targets cannot be changed after results have been imported.', errorCode: 'TARGETS_LOCKED' },
+          409
+        )
+      }
       const user = c.get('user') as { id: number } | undefined
       const updates: Partial<typeof qpcrExperiment.$inferInsert> = {
         lastUpdated: new Date().toISOString(),
@@ -279,16 +372,42 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       if (data.name !== undefined) updates.name = data.name
       if (data.standardLayout !== undefined) updates.standardLayout = data.standardLayout
       if (data.status !== undefined) updates.status = data.status
-      if (data.targetName !== undefined) updates.targetName = data.targetName
-      if (data.fluorophore !== undefined) updates.fluorophore = data.fluorophore
-      if (data.reporter !== undefined) updates.reporter = data.reporter
       if (data.instrumentType !== undefined) updates.instrumentType = data.instrumentType
+      if (data.targets !== undefined && (exp.status === 'setup' || exp.status === 'in_progress')) {
+        await database.delete(qpcrExperimentTarget).where(eq(qpcrExperimentTarget.qpcrExperimentId, id))
+        if (data.targets.length > 0) {
+          await database.insert(qpcrExperimentTarget).values(
+            data.targets.map((t, i) => ({
+              qpcrExperimentId: id,
+              targetName: t.targetName.trim() || 'varATS',
+              fluorophore: t.fluorophore ?? null,
+              reporter: t.reporter ?? null,
+              sortOrder: i,
+            }))
+          )
+        }
+      }
       const [updated] = await database
         .update(qpcrExperiment)
         .set(updates)
         .where(eq(qpcrExperiment.id, id))
         .returning()
-      return c.json(updated ?? exp)
+      const targets = await database
+        .select()
+        .from(qpcrExperimentTarget)
+        .where(eq(qpcrExperimentTarget.qpcrExperimentId, id))
+        .orderBy(asc(qpcrExperimentTarget.sortOrder))
+      const result = updated ?? exp
+      return c.json({
+        ...result,
+        targets: targets.map((t) => ({
+          id: t.id,
+          targetName: t.targetName,
+          fluorophore: t.fluorophore,
+          reporter: t.reporter,
+          sortOrder: t.sortOrder,
+        })),
+      })
     } catch (error) {
       if (error instanceof z.ZodError) {
         return c.json({ error: 'Validation error', details: error.issues, errorCode: 'VALIDATION_ERROR' }, 400)
@@ -316,7 +435,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         return c.json(
           {
             error:
-              'Plate layout cannot be changed after template has been exported or results have been uploaded. Delete the experiment to start over.',
+              'Plate layout cannot be changed after plate has been uploaded (in progress or results imported). Delete the experiment to start over.',
             errorCode: 'PLATE_LOCKED',
           },
           409
@@ -427,6 +546,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       }
 
       const now = new Date().toISOString()
+      const userId = (c.get('user') as { id: number } | undefined)?.id ?? null
       await database.delete(qpcrExperimentWell).where(eq(qpcrExperimentWell.qpcrExperimentId, id))
       if (wellsToInsert.length > 0) {
         await database.insert(qpcrExperimentWell).values(
@@ -441,18 +561,136 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
           }))
         )
       }
-      if (data.plateBarcode !== undefined && data.plateBarcode !== null) {
-        await database
-          .update(qpcrExperiment)
-          .set({ plateBarcode: data.plateBarcode, lastUpdated: now, updatedBy: (c.get('user') as { id: number } | undefined)?.id ?? null })
-          .where(eq(qpcrExperiment.id, id))
+      // After plate upload, set status to in_progress and optionally update plate barcode
+      const experimentUpdates: { status: string; plateBarcode?: string; lastUpdated: string; updatedBy: number | null } = {
+        status: 'in_progress',
+        lastUpdated: now,
+        updatedBy: userId,
       }
+      if (data.plateBarcode !== undefined && data.plateBarcode !== null) {
+        experimentUpdates.plateBarcode = data.plateBarcode
+      }
+      await database.update(qpcrExperiment).set(experimentUpdates).where(eq(qpcrExperiment.id, id))
 
       const inserted = await database
         .select()
         .from(qpcrExperimentWell)
         .where(eq(qpcrExperimentWell.qpcrExperimentId, id))
       return c.json({ wells: inserted, unresolved }, 200)
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return c.json({ error: 'Validation error', details: error.issues, errorCode: 'VALIDATION_ERROR' }, 400)
+      }
+      return handleRouteError(error, c)
+    }
+  })
+
+  const wellsPatchSchema = z
+    .object({
+      wellPosition: z.string().optional(),
+      positions: z.array(z.string()).optional(),
+      contentType: z.enum(['empty', 'negative']),
+    })
+    .refine(
+      (data) => {
+        const hasSingle = data.wellPosition != null && String(data.wellPosition).trim() !== ''
+        const hasBulk = data.positions != null && data.positions.length > 0
+        return hasSingle !== hasBulk
+      },
+      { message: 'Provide exactly one of wellPosition (single) or positions (bulk)' }
+    )
+
+  // PATCH /:id/wells - Set empty wells to NTC or empty (single or bulk)
+  qpcr.patch('/:id/wells', authMiddleware, memberMiddleware, async (c) => {
+    try {
+      const id = parseInt(c.req.param('id'))
+      if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400)
+      const body = await c.req.json()
+      const data = wellsPatchSchema.parse(body)
+      const exp = await database.select().from(qpcrExperiment).where(eq(qpcrExperiment.id, id)).get()
+      if (!exp) return c.json({ error: 'Not found' }, 404)
+      if (exp.status !== 'setup' && exp.status !== 'in_progress') {
+        return c.json(
+          {
+            error: 'Well type cannot be changed after results have been imported.',
+            errorCode: 'WELLS_LOCKED',
+          },
+          409
+        )
+      }
+
+      const rawPositions = data.wellPosition != null ? [data.wellPosition] : data.positions ?? []
+      const positions: string[] = []
+      for (const p of rawPositions) {
+        const normalized = validateWellPosition(p)
+        if (!normalized) {
+          return c.json({ error: `Invalid well position: ${p}. Use row A–H and column 1–12 (e.g. A01).` }, 400)
+        }
+        positions.push(normalized)
+      }
+
+      const currentWells = await database
+        .select()
+        .from(qpcrExperimentWell)
+        .where(eq(qpcrExperimentWell.qpcrExperimentId, id))
+      const wellByPosition = new Map(currentWells.map((w) => [w.wellPosition, w]))
+
+      for (const pos of positions) {
+        const well = wellByPosition.get(pos)
+        if (well != null && well.barcode != null && well.barcode.trim() !== '') {
+          return c.json(
+            { error: `Well ${pos} has a sample or control; only empty wells can be set to NTC or empty.`, errorCode: 'WELL_NOT_EMPTY' },
+            400
+          )
+        }
+      }
+
+      if (data.contentType === 'negative') {
+        for (const pos of positions) {
+          const existing = wellByPosition.get(pos)
+          if (existing) {
+            await database
+              .update(qpcrExperimentWell)
+              .set({
+                barcode: null,
+                storageContainerId: null,
+                specimenId: null,
+                contentType: 'negative',
+                standardDensity: null,
+              })
+              .where(eq(qpcrExperimentWell.id, existing.id))
+          } else {
+            await database.insert(qpcrExperimentWell).values({
+              qpcrExperimentId: id,
+              wellPosition: pos,
+              barcode: null,
+              storageContainerId: null,
+              specimenId: null,
+              contentType: 'negative',
+              standardDensity: null,
+            })
+          }
+        }
+      } else {
+        for (const pos of positions) {
+          const existing = wellByPosition.get(pos)
+          if (existing != null && (existing.barcode == null || existing.barcode.trim() === '')) {
+            await database.delete(qpcrExperimentWell).where(eq(qpcrExperimentWell.id, existing.id))
+          }
+        }
+      }
+
+      const wells = await database
+        .select()
+        .from(qpcrExperimentWell)
+        .where(eq(qpcrExperimentWell.qpcrExperimentId, id))
+      const wellsWithSource = await Promise.all(
+        wells.map(async (w) => {
+          const source = await enrichWellSource(database, w.specimenId)
+          return { ...w, source }
+        })
+      )
+      return c.json({ wells: wellsWithSource }, 200)
     } catch (error) {
       if (error instanceof z.ZodError) {
         return c.json({ error: 'Validation error', details: error.issues, errorCode: 'VALIDATION_ERROR' }, 400)
@@ -611,8 +849,8 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
     return `${match[1].toUpperCase()}${parseInt(match[2], 10)}`
   }
 
-  // GET /:id/template?format=biorad|quant_studio&fluorophore=FAM&targetName=varATS&reporter=FAM&instrumentType=...
-  // Bio-Rad uses Fluorophore only; QuantStudio uses Reporter + Quencher (Quencher inferred from Reporter: SYBR→None, else NFQ-MGB). See design/qpcr-fluorophore-reporter.md.
+  // GET /:id/template?format=biorad|quant_studio - Uses stored targets; one row per well per target (multiplex).
+  // QuantStudio Quencher inferred from Reporter: SYBR→None, else NFQ-MGB. See design/qpcr-fluorophore-reporter.md.
   qpcr.get('/:id/template', authMiddleware, async (c) => {
     try {
       const id = parseInt(c.req.param('id'))
@@ -623,6 +861,14 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       }
       const exp = await database.select().from(qpcrExperiment).where(eq(qpcrExperiment.id, id)).get()
       if (!exp) return c.json({ error: 'Not found' }, 404)
+      const targets = await database
+        .select()
+        .from(qpcrExperimentTarget)
+        .where(eq(qpcrExperimentTarget.qpcrExperimentId, id))
+        .orderBy(asc(qpcrExperimentTarget.sortOrder))
+      if (targets.length === 0) {
+        return c.json({ error: 'Add at least one target to download template.', errorCode: 'NO_TARGETS' }, 400)
+      }
       const wells = await database
         .select()
         .from(qpcrExperimentWell)
@@ -636,16 +882,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       const wellMap = new Map<string, { well: typeof wells[0]; source: WellSource }>()
       wellsWithSource.forEach(({ well, source }) => wellMap.set(well.wellPosition, { well, source }))
 
-      const targetName = (c.req.query('targetName') as string | undefined) ?? exp.targetName ?? 'varATS'
-      const fluorophore = (c.req.query('fluorophore') as string | undefined) ?? exp.fluorophore ?? 'FAM'
-      const reporter = (c.req.query('reporter') as string | undefined) ?? exp.reporter ?? 'FAM'
-      // QuantStudio requires Quencher; infer from Reporter (SYBR → None, others → NFQ-MGB). See design/qpcr-fluorophore-reporter.md.
-      const quencher = (() => {
-        const r = (reporter ?? '').trim()
-        if (r.toLowerCase() === 'sybr') return 'None'
-        return 'NFQ-MGB'
-      })()
-      const instrumentType = (c.req.query('instrumentType') as string | undefined) ?? exp.instrumentType ?? 'QuantStudio 5 Real-Time PCR System'
+      const instrumentType = exp.instrumentType ?? 'QuantStudio 5 Real-Time PCR System'
 
       if (format === 'biorad') {
         const header = 'Well,Fluorophore,Target Name,Content,Sample Name,Quantity'
@@ -661,7 +898,10 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
             const content = bioradContentForWell(well)
             const quantity = well.contentType === 'standard' && well.standardDensity != null ? String(well.standardDensity) : ''
             const wellA1 = wellPositionToA1(pos)
-            lines.push(`${wellA1},${fluorophore},${targetName},${content},${sampleName},${quantity}`)
+            for (const t of targets) {
+              const fluorophore = t.fluorophore ?? 'FAM'
+              lines.push(`${wellA1},${fluorophore},${t.targetName},${content},${sampleName},${quantity}`)
+            }
           }
         }
         const csv = lines.join('\n')
@@ -695,7 +935,15 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
           const quantity = well.contentType === 'standard' && well.standardDensity != null ? String(well.standardDensity) : ''
           const wellIdx = wellPositionToIndex(pos)
           const wellPos = wellPositionToA1(pos)
-          dataLines.push(`${wellIdx}\t${wellPos}\t${sampleName}\t${targetName}\t${task}\t${reporter}\t${quencher}\t${quantity}`)
+          for (const t of targets) {
+            const reporter = t.reporter ?? 'FAM'
+            const quencher = (() => {
+              const r = (reporter ?? '').trim()
+              if (r.toLowerCase() === 'sybr') return 'None'
+              return 'NFQ-MGB'
+            })()
+            dataLines.push(`${wellIdx}\t${wellPos}\t${sampleName}\t${t.targetName}\t${task}\t${reporter}\t${quencher}\t${quantity}`)
+          }
         }
       }
       const tsv = [...meta, '', dataLines.join('\n')].join('\n')
