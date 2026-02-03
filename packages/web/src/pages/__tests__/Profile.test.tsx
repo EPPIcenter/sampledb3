@@ -25,14 +25,18 @@ const mockUser = {
 let mockUserValue = mockUser
 let mockLoadingValue = false
 
-vi.mock('../../contexts/UserContext', () => ({
-  useUser: () => ({
-    user: mockUserValue,
-    refreshUser: mockRefreshUser,
-    loading: mockLoadingValue,
-    error: null,
-  }),
-}))
+vi.mock('../../contexts/UserContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../contexts/UserContext')>()
+  return {
+    ...actual,
+    useUser: () => ({
+      user: mockUserValue,
+      refreshUser: mockRefreshUser,
+      loading: mockLoadingValue,
+      error: null,
+    }),
+  }
+})
 
 import { authApi } from '../../lib/api'
 

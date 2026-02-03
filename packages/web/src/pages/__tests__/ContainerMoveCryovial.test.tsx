@@ -30,8 +30,13 @@ vi.mock('react-router-dom', async () => {
     }
 })
 
-// Mock API
+// Mock API (authApi required for UserProvider in renderWithProviders)
 vi.mock('../../lib/api', () => ({
+    authApi: {
+        getCurrentUser: vi.fn().mockResolvedValue({
+            data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
+        }),
+    },
     collectionsApi: {
         resolveContainers: vi.fn(),
         listCollectionsByType: vi.fn(),

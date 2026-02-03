@@ -12,15 +12,20 @@ const mockUser = {
   role: 'admin' as const,
 }
 
-vi.mock('../../contexts/UserContext', () => ({
-  useUser: () => ({
-    user: mockUser,
-    setUser: vi.fn(),
-    refreshUser: vi.fn(),
-    loading: false,
-    error: null,
-  }),
-}))
+vi.mock('../../contexts/UserContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../contexts/UserContext')>()
+  return {
+    ...actual,
+    useUser: () => ({
+      user: mockUser,
+      setUser: vi.fn(),
+      refreshUser: vi.fn(),
+      loading: false,
+      error: null,
+      canManageReferenceData: true,
+    }),
+  }
+})
 
 interface TestItem {
   id: number

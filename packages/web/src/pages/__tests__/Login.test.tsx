@@ -26,15 +26,19 @@ vi.mock('../../lib/api', () => ({
 const mockSetUser = vi.fn()
 const mockRefreshUser = vi.fn()
 
-vi.mock('../../contexts/UserContext', () => ({
-  useUser: () => ({
-    user: null,
-    setUser: mockSetUser,
-    refreshUser: mockRefreshUser,
-    loading: false,
-    error: null,
-  }),
-}))
+vi.mock('../../contexts/UserContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../contexts/UserContext')>()
+  return {
+    ...actual,
+    useUser: () => ({
+      user: null,
+      setUser: mockSetUser,
+      refreshUser: mockRefreshUser,
+      loading: false,
+      error: null,
+    }),
+  }
+})
 
 // Mock localUserHistory
 vi.mock('../../lib/localUserHistory', () => ({

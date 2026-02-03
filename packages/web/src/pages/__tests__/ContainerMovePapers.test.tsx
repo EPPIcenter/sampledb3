@@ -2,10 +2,15 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import ContainerMovePapers from '../ContainerMovePapers'
 import { collectionsApi, locationsApi } from '../../lib/api'
-import { BrowserRouter } from 'react-router-dom'
+import { renderWithProviders } from '../../__tests__/helpers/render'
 
-// Mock API
+// Mock API (authApi required for UserProvider in renderWithProviders)
 vi.mock('../../lib/api', () => ({
+    authApi: {
+        getCurrentUser: vi.fn().mockResolvedValue({
+            data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
+        }),
+    },
     collectionsApi: {
         listCollectionsByType: vi.fn(),
         getBox: vi.fn(),
@@ -29,11 +34,6 @@ vi.mock('../../components/CollectionTreePicker', () => ({
     )
 }))
 
-// Wrapper to provide router context for Link components
-const Wrapper = ({ children }: { children: React.ReactNode }) => (
-    <BrowserRouter>{children}</BrowserRouter>
-)
-
 describe('ContainerMovePapers', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -52,7 +52,7 @@ describe('ContainerMovePapers', () => {
     })
 
     it('renders initial step successfully', async () => {
-        render(<ContainerMovePapers />, { wrapper: Wrapper })
+        renderWithProviders(<ContainerMovePapers />)
         await waitFor(() => {
             expect(screen.getByText('Move Papers')).toBeInTheDocument()
         })
@@ -66,7 +66,7 @@ describe('ContainerMovePapers', () => {
             return Promise.resolve({ data: { collections: [] } } as any)
         })
 
-        render(<ContainerMovePapers />, { wrapper: Wrapper })
+        renderWithProviders(<ContainerMovePapers />)
 
         await waitFor(() => {
             expect(collectionsApi.listCollectionsByType).toHaveBeenCalledWith('box')
@@ -93,7 +93,7 @@ describe('ContainerMovePapers', () => {
             data: { locations: [{ id: 10, name: 'Freezer', parentId: null, storageTypeId: '1', canContainCollections: true, path: 'Freezer' }] }
         } as any)
 
-        render(<ContainerMovePapers />, { wrapper: Wrapper })
+        renderWithProviders(<ContainerMovePapers />)
 
         // 2. Select Source
         // Need to wait for collection picker to load

@@ -3,6 +3,7 @@ import { render, RenderOptions } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import { ToastProvider } from '../../contexts/ToastContext'
+import { UserProvider } from '../../contexts/UserContext'
 
 // Create a test query client
 function createTestQueryClient() {
@@ -31,9 +32,11 @@ export function renderWithProviders(
     return (
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <ToastProvider>
-            {children}
-          </ToastProvider>
+          <UserProvider>
+            <ToastProvider>
+              {children}
+            </ToastProvider>
+          </UserProvider>
         </BrowserRouter>
       </QueryClientProvider>
     )
