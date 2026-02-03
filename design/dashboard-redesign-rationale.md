@@ -1,8 +1,28 @@
 # Dashboard Redesign Rationale
 
+## Lab workflow goals
+
+The dashboard is the lab command center: find samples/studies/containers fast, see what changed, and jump into the right task. Information architecture is workflow-first: "do this" (search, primary actions, next steps) above "see this" (metrics, recent work, insights).
+
+## Information architecture (sections order)
+
+1. **Above the fold**: Hero (greeting + one-line value), prominent search bar (barcode, study code, subject, ID), primary actions (Register specimen, New study, Bulk import, Browse storage).
+2. **Today / Next steps**: qPCR Experiments card with recent experiments (name, state, link) and "New qPCR experiment" CTA; empty state when none exist.
+3. **Metrics**: Grouped as Inventory (Specimens, Containers), Studies (Studies, Subjects), Storage (Locations). Same five counts and links; section labels clarify mental model.
+4. **Recent work**: Recent Studies and Activity Feed side by side.
+5. **Insights**: System Insights charts, Blood Controls summary if any, optional "Data as of" timestamp for freshness.
+
+## New functionality
+
+- **Hero search bar**: Prominent search input; submit calls existing search API and opens SearchModal with prefilled query (or navigates to first result). Makes find-by-barcode/ID/code a first-class dashboard action.
+- **Browse storage**: "Browse storage" (link to `/locations`) added to primary quick actions so storage is a top-level workflow.
+- **Next steps: qPCR**: Section shows recent qPCR experiments (name, state badge, link) and "New qPCR experiment" link; always visible with empty state "No qPCR experiments yet — create one" when none exist. Uses `qpcrExperimentsApi.list({ limit: 5 })`.
+- **Metrics grouping**: Same five MetricCards with subtle group labels (Inventory | Studies | Storage) and layout (e.g. three columns or labels above groups).
+- **Data as of**: "Data as of &lt;timestamp&gt;" displayed when critical data load completes (e.g. near hero or above insights).
+
 ## Aesthetic: "Modern precision lab"
 
-The dashboard was redesigned to feel like a lab command center: clean, precise, and scientific but approachable. The goal was a clear visual identity without changing any data or behavior.
+The dashboard uses a lab command center feel: clean, precise, and scientific but approachable. The goal is a clear visual identity with workflow-first layout.
 
 ## Design choices
 
@@ -14,9 +34,13 @@ The dashboard was redesigned to feel like a lab command center: clean, precise, 
 
 - **Background**: A very light grid (24×24px) and a soft vertical gradient add depth and a lab/technical feel without distracting from content.
 
-- **Motion**: Staggered reveal on load (header, then metric cards, then Quick Actions section) via `dashboard-reveal` and `animation-delay`. Hover/focus use consistent transitions; focus-visible outlines use the accent for accessibility.
+- **Motion**: Staggered reveal on load (hero, search, actions, next steps, metrics, recent work, insights) via `dashboard-reveal` and `animation-delay`. Hover/focus use consistent transitions; focus-visible outlines use the accent for accessibility.
 
 - **Charts**: System Insights passes a dashboard chart palette (teal + slate) into StatChart so pie/bar/line charts match the dashboard. StatChart accepts an optional `cardClassName` so chart cards use `dashboard-card` when rendered on the dashboard.
+
+- **Search bar**: Full-width on mobile, max-width on desktop; teal focus ring; placeholder e.g. "Search by barcode, study code, subject, or ID". Submit opens SearchModal with query or navigates to first result.
+
+- **Next steps card**: Same card style as Quick Actions; list of recent qPCR experiments with state badge and link; "New qPCR experiment" link; empty state when none.
 
 ## Why scoped styles
 

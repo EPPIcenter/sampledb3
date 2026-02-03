@@ -28,6 +28,7 @@ The containers and collections pages use the same "modern precision lab" directi
   - Stats blocks: metric-card treatment with accent numbers and muted labels.
   - Contents preview on Locations: plain lists replaced with a grid of **clickable collection cards** (type badge, name, barcode, item count) linking to the correct collection detail URL with teal hover border.
   - Collection grid (plate/box layout): optional `theme="storage"` on CollectionGrid for token-based borders and header inside storage pages.
+  - **Container detail page**: Lab-oriented layout with identifier → location → quantity → sample → tags → notes (optional audit). Internal SQL container ID is never shown; primary identifiers are barcode (micronix/cryovial/paper when present) and position. Barcode is shown prominently for micronix tubes using `.storage-barcode` in `storage.css` (monospace, scan-friendly). Derived-container cards use position/barcode/type only, not internal ID.
 
 - **Motion**: Staggered reveal on load via `.storage-reveal` and animation-delay. Focus-visible outlines use the teal accent for accessibility.
 
@@ -41,7 +42,7 @@ The containers and collections pages use the same "modern precision lab" directi
 
 ## Files touched
 
-- `packages/web/src/styles/storage.css` – New; storage theme (vars, grid, cards, typography, reveal, form focus, badges, grid table, skeleton, hierarchy stats).
+- `packages/web/src/styles/storage.css` – Storage theme (vars, grid, cards, typography, reveal, form focus, badges, `.storage-barcode` for scan-friendly barcode, grid table, skeleton, hierarchy stats).
 - `packages/web/src/pages/Locations.tsx` – Wrapper, import CSS, header/metric cards, search, tree (teal selected/hover), location preview, stats, contents as collection cards, loading/empty, modals.
 - `packages/web/src/pages/LocationDetail.tsx` – Wrapper, import CSS, header, summary cards, hierarchy stats, hierarchy tree (teal current), contents sections with storage badges and cards.
 - `packages/web/src/pages/MicronixPlateDetail.tsx` – Wrapper, import CSS, breadcrumbs, title, layout card, CollectionGrid theme="storage".
@@ -49,7 +50,7 @@ The containers and collections pages use the same "modern precision lab" directi
 - `packages/web/src/pages/BoxDetail.tsx` – Wrapper, import CSS, breadcrumbs, stats bar, sheets as storage cards.
 - `packages/web/src/pages/BagDetail.tsx` – Wrapper, import CSS, breadcrumbs, stats bar, sheets as storage cards.
 - `packages/web/src/pages/SheetDetail.tsx` – Wrapper, import CSS, breadcrumbs, DBS spots card.
-- `packages/web/src/pages/ContainerDetail.tsx` – Wrapper, import CSS, breadcrumbs, main card, dashboard-link for collection/location links, storage-btn-primary for Edit.
+- `packages/web/src/pages/ContainerDetail.tsx` – Lab-oriented layout (identifier block, location, quantity with progress, sample, tags, notes, audit); no internal ID; barcode/position as primary identifiers; storage-btn-primary for Edit.
 - `packages/web/src/pages/CollectionMove.tsx` – Wrapper, import CSS.
 - `packages/web/src/pages/ContainerMoveMicronix.tsx` – Wrapper, import CSS.
 - `packages/web/src/pages/ContainerMoveCryovial.tsx` – Wrapper, import CSS.
