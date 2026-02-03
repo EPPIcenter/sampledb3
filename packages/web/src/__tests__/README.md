@@ -27,13 +27,13 @@ bun test:coverage # With coverage
 ## Test Structure
 
 - `__tests__/helpers/` - Test utilities
-  - `render.tsx`: Custom render function with providers (QueryClient, BrowserRouter)
-  - `mocks.ts`: API mocking utilities (placeholder for MSW)
-  - `setup.ts`: Global test setup with extended matchers
+  - `render.tsx`: Custom render function with providers (QueryClient, BrowserRouter, ToastProvider)
+  - `setup.ts`: Global test setup (e.g. IntersectionObserver mock, cleanup)
 - `__tests__/fixtures/` - Test data fixtures
+- `lib/__tests__/` - Lib unit tests (e.g. commands, constants)
 - `components/__tests__/` - Component tests
 - `hooks/__tests__/` - Custom hook tests
-- `pages/__tests__/` - Page component tests
+- `pages/__tests__/` - Page smoke tests
 
 ## Test Utilities
 
@@ -174,6 +174,19 @@ bun test:coverage
 
 Coverage reports are generated in:
 - `coverage/` directory (HTML, JSON, text formats)
+
+## Running Tests From Repo Root
+
+From the repository root you can run all package tests and coverage:
+
+```bash
+bun run test          # Run API and web tests
+bun run test:coverage # Run API and web tests with coverage
+```
+
+## New Tests and Failing Behavior
+
+New tests are allowed to **fail** initially if they correctly express expected behavior. Follow-up work will update the implementation to satisfy the tests. Do not remove or relax assertions solely to make tests pass; fix the code under test instead.
 
 ## Best Practices
 

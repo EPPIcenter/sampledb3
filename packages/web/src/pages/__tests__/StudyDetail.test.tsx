@@ -1,0 +1,117 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '../../__tests__/helpers/render'
+import { DateFilterProvider } from '../../contexts/DateFilterContext'
+import StudyDetail from '../StudyDetail'
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom')
+  return {
+    ...actual,
+    useParams: () => ({ id: '1' }),
+    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  }
+})
+
+vi.mock('../../lib/api', () => ({
+  default: { get: vi.fn() },
+  studiesApi: {
+    get: vi.fn(),
+    getSummary: vi.fn(),
+    getTimeline: vi.fn(),
+    getSubjects: vi.fn(),
+    delete: vi.fn().mockResolvedValue(undefined),
+  },
+}))
+
+vi.mock('../../contexts/UserContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../contexts/UserContext')>()
+  return {
+    ...actual,
+    useUser: () => ({
+      user: { id: 1, name: 'Test', email: 'test@test.com', role: 'member' },
+      loading: false,
+      canWrite: true,
+      isAdmin: false,
+    }),
+  }
+})
+
+import api, { studiesApi } from '../../lib/api'
+
+describe('StudyDetail page', () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: { pagination: { total: 0 } },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: { headers: {} } as import('axios').AxiosResponse['config'],
+    })
+    vi.mocked(studiesApi.get).mockResolvedValue({
+      study: {
+        id: 1,
+        title: 'Test Study',
+        shortCode: 'ST1',
+        description: 'Description',
+        isLongitudinal: false,
+        leadPerson: 'Dr. Lead',
+        created: '2024-01-01',
+        lastUpdated: '2024-01-01',
+      },
+    })
+    vi.mocked(studiesApi.getSummary).mockResolvedValue({
+      study: {
+        id: 1,
+        title: 'Test Study',
+        shortCode: 'ST1',
+        description: 'Description',
+        isLongitudinal: false,
+        leadPerson: 'Dr. Lead',
+        created: '2024-01-01',
+        lastUpdated: '2024-01-01',
+      },
+      summary: {
+        totalSubjects: 0,
+        totalSpecimens: 0,
+        totalContainers: 0,
+        averageSpecimensPerSubject: 0,
+        specimenTypes: [],
+        containerTypes: {},
+        collectionDateRange: null,
+        studyDurationDays: null,
+        collectionTimeline: [],
+        enrollmentTimeline: [],
+      },
+    })
+    vi.mocked(studiesApi.getTimeline).mockResolvedValue({
+      subjects: [],
+      specimenTypes: [],
+      dateRange: null,
+    })
+    vi.mocked(studiesApi.getSubjects).mockResolvedValue({
+      subjects: [],
+      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
+    })
+  })
+
+  it(
+    'renders study header and key sections',
+    { timeout: 12000 },
+    async () => {
+      render(
+        <DateFilterProvider>
+          <StudyDetail />
+        </DateFilterProvider>
+      )
+      await waitFor(
+        () => {
+          const heading = screen.getByRole('heading', { level: 1 })
+          expect(heading).toHaveTextContent('Test Study')
+          expect(screen.getByText('ST1')).toBeInTheDocument()
+        },
+        { timeout: 8000 }
+      )
+      expect(studiesApi.get).toHaveBeenCalled()
+    }
+  )
+})

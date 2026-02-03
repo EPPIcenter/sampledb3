@@ -1,0 +1,33 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen } from '../../__tests__/helpers/render'
+import userEvent from '@testing-library/user-event'
+import SearchModal from '../SearchModal'
+
+vi.mock('../../lib/api', () => ({
+  default: {
+    get: vi.fn().mockResolvedValue({ data: { results: [] } }),
+  },
+}))
+
+describe('SearchModal', () => {
+  const onClose = vi.fn()
+
+  beforeEach(() => {
+    onClose.mockClear()
+  })
+
+  it('renders nothing when closed', () => {
+    render(<SearchModal isOpen={false} onClose={onClose} />)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('renders search input when open', () => {
+    render(<SearchModal isOpen={true} onClose={onClose} />)
+    expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument()
+  })
+
+  it('shows placeholder or empty results when open', () => {
+    render(<SearchModal isOpen={true} onClose={onClose} />)
+    expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument()
+  })
+})

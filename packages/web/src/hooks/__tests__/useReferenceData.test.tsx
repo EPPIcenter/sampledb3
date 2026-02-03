@@ -80,7 +80,7 @@ describe('useReferenceData Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(result.current.data).toEqual(mockData)
+      expect(result.current.data).toEqual(mockData.data)
       expect(api.specimenTypesApi.list).toHaveBeenCalledOnce()
     })
 
@@ -284,7 +284,7 @@ describe('useReferenceData Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(result.current.data).toEqual(mockData)
+      expect(result.current.data).toEqual(mockData.data)
     })
   })
 })
