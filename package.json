@@ -16,7 +16,9 @@
     "build:docs": "bun --filter @sampledb/docs build",
     "start": "bun --filter @sampledb/api start",
     "lint": "bun --filter '*' lint",
-    "typecheck": "bun --filter '*' typecheck"
+    "typecheck": "bun --filter '*' typecheck",
+    "test": "bun run --filter @sampledb/api test && bun run --filter @sampledb/web test",
+    "test:coverage": "bun run --filter @sampledb/api test:coverage && bun run --filter @sampledb/web test:coverage"
   },
   "keywords": [
     "lims",
