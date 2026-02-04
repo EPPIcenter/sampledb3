@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
+import BloodControls from '../BloodControls'
 
 vi.mock('../../lib/api', () => ({
   authApi: {
@@ -24,20 +25,18 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useSearchParams: () => [new URLSearchParams(), vi.fn()] }
 })
 
-describe('Controls', () => {
+describe('BloodControls', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { default: Controls } = await import('../Controls')
-    const { container } = render(<Controls />)
+  it('renders without crashing', () => {
+    const { container } = render(<BloodControls />)
     expect(container).toBeInTheDocument()
   })
 
-  it('shows blood controls content', async () => {
-    const { default: Controls } = await import('../Controls')
-    render(<Controls />)
+  it('shows blood controls content', () => {
+    render(<BloodControls />)
     const heading = screen.getByRole('heading', { name: /blood controls management/i })
     expect(heading).toBeInTheDocument()
   })
