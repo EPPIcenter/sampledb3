@@ -155,6 +155,7 @@ export default function QpcrExperimentDetail() {
   const [plateError, setPlateError] = useState<string | null>(null)
   const [resultsUploading, setResultsUploading] = useState(false)
   const [resultsError, setResultsError] = useState<string | null>(null)
+  const [templateDownloading, setTemplateDownloading] = useState<'biorad' | 'quant_studio' | null>(null)
   const instrumentSelectRef = useRef<HTMLSelectElement>(null)
   const [targets, setTargets] = useState<TargetRow[]>(() => [{ key: '1', targetName: DEFAULT_TARGET_NAME, fluorophore: DEFAULT_FLUOROPHORE, reporter: DEFAULT_REPORTER }])
   const [instrumentType, setInstrumentType] = useState(DEFAULT_INSTRUMENT_TYPE)
@@ -278,12 +279,59 @@ export default function QpcrExperimentDetail() {
   const apiBase = '/api'
   const templateBase = `${apiBase}/qpcr-experiments/${experiment.id}/template`
   const hasTargets = targets.length > 0 && targets.some((t) => (t.targetName ?? '').trim() !== '')
+  const formTargetsSig = JSON.stringify(
+    targets.map((t) => ({
+      targetName: t.targetName.trim() || DEFAULT_TARGET_NAME,
+      fluorophore: t.fluorophore.trim() || null,
+      reporter: t.reporter.trim() || null,
+    }))
+  )
+  const serverTargetsSig = JSON.stringify(
+    (experiment.targets ?? []).map((t) => ({
+      targetName: t.targetName || DEFAULT_TARGET_NAME,
+      fluorophore: t.fluorophore ?? null,
+      reporter: t.reporter ?? null,
+    }))
+  )
+  const formInstrument = instrumentType.trim() || null
+  const serverInstrument = experiment.instrumentType ?? null
+  const templateSettingsDirty = formTargetsSig !== serverTargetsSig || formInstrument !== serverInstrument
+
   const templateUrl = (format: 'biorad' | 'quant_studio') => {
     const params = new URLSearchParams({ format })
     if (format === 'quant_studio') {
       params.set('instrumentType', instrumentType.trim() || DEFAULT_INSTRUMENT_TYPE)
     }
     return `${templateBase}?${params.toString()}`
+  }
+
+  const handleDownloadTemplate = async (inst: (typeof INSTRUMENTS)[number]) => {
+    if (!hasPlate || !hasTargets) return
+    const format = inst.format as 'biorad' | 'quant_studio'
+    setTemplateDownloading(format)
+    try {
+      const url = templateUrl(format)
+      const res = await fetch(url, { credentials: 'include' })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        const message = typeof body?.error === 'string' ? body.error : `Template download failed (${res.status})`
+        showError(message)
+        return
+      }
+      const blob = await res.blob()
+      const disposition = res.headers.get('Content-Disposition')
+      const match = disposition?.match(/filename="?([^";\n]+)"?/)
+      const filename = match?.[1] ?? `qpcr-experiment-${experiment.id}-${inst.id}-template.${inst.ext}`
+      const objectUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objectUrl
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(objectUrl)
+      showSuccess(`${inst.label} template downloaded`)
+    } finally {
+      setTemplateDownloading(null)
+    }
   }
 
   const handleSaveSettings = async () => {
@@ -299,6 +347,12 @@ export default function QpcrExperimentDetail() {
         instrumentType: instrumentType.trim() || null,
       })
       loadData()
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
+          ? (err as { response: { data: { error: string } } }).response.data.error
+          : 'Failed to save template settings'
+      showError(msg)
     } finally {
       setSavingSettings(false)
     }
@@ -814,21 +868,27 @@ export default function QpcrExperimentDetail() {
               </button>
             )}
           </div>
+          {templateSettingsDirty && canWrite && !targetsLocked && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="alert">
+              <strong>Unsaved template settings.</strong> Save your settings before downloading a template.
+            </div>
+          )}
           <div className="mt-4 flex flex-wrap gap-3">
             {!hasTargets ? (
               <span className="text-sm text-slate-500">Add at least one target to download template.</span>
             ) : (
               INSTRUMENTS.map((inst) => (
-                <a
+                <button
                   key={inst.id}
-                  href={hasPlate ? templateUrl(inst.format as 'biorad' | 'quant_studio') : '#'}
-                  download={hasPlate ? `qpcr-experiment-${experiment.id}-${inst.id}-template.${inst.ext}` : undefined}
-                  className={hasPlate ? 'qpcr-btn-primary' : 'qpcr-btn-primary opacity-50 pointer-events-none cursor-not-allowed'}
-                  aria-disabled={!hasPlate}
-                  onClick={(e) => (!hasPlate || !hasTargets) && e.preventDefault()}
+                  type="button"
+                  disabled={!hasPlate || !hasTargets || templateSettingsDirty || templateDownloading !== null}
+                  onClick={() => handleDownloadTemplate(inst)}
+                  className={hasPlate && !templateSettingsDirty && !templateDownloading ? 'qpcr-btn-primary' : 'qpcr-btn-primary opacity-50 cursor-not-allowed'}
+                  aria-disabled={!hasPlate || !hasTargets || templateSettingsDirty || templateDownloading !== null}
+                  title={templateSettingsDirty ? 'Save your settings before downloading' : undefined}
                 >
-                  Download {inst.label} ({inst.ext.toUpperCase()})
-                </a>
+                  {templateDownloading === (inst.format as 'biorad' | 'quant_studio') ? 'Downloading…' : `Download ${inst.label} (${inst.ext.toUpperCase()})`}
+                </button>
               ))
             )}
           </div>
