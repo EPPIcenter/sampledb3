@@ -41,7 +41,7 @@ A control batch is a specific production of a control type. While the definition
 
 When you create a batch, you specify which definition it's based on. This links the batch to the definition and ensures it follows the correct specification. The batch gets a name (like "BATCH-001" or "2024-Q1-Control") that identifies this specific production. You can record a production date that indicates when the batch was actually created, which is useful for tracking batch age and planning when to use controls.
 
-The batch accumulates specimens as you add them, and the system automatically tracks inventory. For paper-based controls, it counts spots. For tube-based controls, it counts tubes. The total inventory gives you a complete picture of how much control material you have available from each batch.
+The batch accumulates specimens as you add them, and the system automatically tracks inventory. Inventory is broken out by container type: spots (paper-based controls), micronix tubes, cryovial tubes, and static wells. The total inventory gives you a complete picture of how much control material you have available from each batch.
 
 ## Creating Control Batches
 
@@ -55,7 +55,7 @@ Once you've created the batch, you can start adding specimens to it. You can add
 
 There are several ways to add specimens to control batches. During batch creation, some workflows allow you to add specimens immediately. From the batch detail page, you can click "Add Specimen" to register individual control specimens. Or you can use the bulk import feature, specifying "Control" as the source type and referencing the control batch name.
 
-When you register a specimen with a control batch as the source, the specimen becomes part of that batch's inventory. The system automatically updates the batch's inventory counts, so you always know how many spots, tubes, or other units are available.
+When you register a specimen with a control batch as the source, the specimen becomes part of that batch's inventory. The system automatically updates the batch's inventory counts, so you always know how many spots, micronix tubes, cryovial tubes, static wells, or other units are available.
 
 ## Using Controls in Your Work
 
@@ -73,7 +73,7 @@ For batches, you can filter by search term (searching batch names and definition
 
 ## Tracking Inventory
 
-Inventory tracking is automatic and comprehensive. The system counts spots (for paper-based controls), tubes (for tube-based controls), and provides a total inventory count for each batch. These counts update automatically as you add or use specimens, so you always have current information.
+Inventory tracking is automatic and comprehensive. The system counts spots (paper-based controls), micronix tubes, cryovial tubes, and static wells separately, and provides a total inventory count for each batch. These counts update automatically as you add or use specimens, so you always have current information.
 
 The batch detail page shows inventory counts prominently, making it easy to see how much control material is available. Definition pages show aggregate inventory across all batches of that definition, giving you a high-level view of total available inventory for each control type.
 

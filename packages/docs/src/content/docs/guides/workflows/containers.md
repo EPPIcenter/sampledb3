@@ -79,6 +79,8 @@ The container's status is automatically determined by its remaining quantity. Co
 
 The quantities section shows both the total quantity (how much material the container originally held) and the remaining quantity (how much is still available). This helps you track material usage and plan when containers might need to be replenished.
 
+You can add optional notes to a container (for example, storage conditions or handling instructions). Those notes appear on the container detail page and are also shown when viewing the specimen (on the specimen detail page) or when viewing the subject's specimen list, so you can see container notes in context without opening each container.
+
 ## Position Formats and Why They Matter
 
 Getting position formats right is important because incorrect positions make it difficult to locate samples later. The system uses specific formats that match common laboratory equipment layouts.

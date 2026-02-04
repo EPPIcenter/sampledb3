@@ -73,7 +73,7 @@ Once you've filled in all the required information, click "Create Specimen" to s
 
 When you navigate to a subject's detail page, you'll see a comprehensive view of everything related to that subject. At the top, you'll see the basic subject information: the name, which study they belong to, and when the subject was created in the system.
 
-Below that, you'll see a table showing all specimens that have been collected from this subject. The table shows the specimen type, collection date, container information if applicable, and provides links to view the full details of each specimen or container. This gives you a complete picture of what samples you have from this subject and when they were collected.
+Below that, you'll see a table showing all specimens that have been collected from this subject. The table shows the specimen type, collection date, container information if applicable, and provides links to view the full details of each specimen or container. When containers have notes, those notes are shown under each specimen in the timeline. This gives you a complete picture of what samples you have from this subject and when they were collected.
 
 The page also shows subject statistics that summarize the data. You'll see the total number of specimens, the date range of collections (earliest and latest dates), and a breakdown showing how many of each specimen type have been collected. These statistics help you understand the subject's sample history at a glance.
 
@@ -83,7 +83,7 @@ From the subject detail page, you can take several actions. You can add another 
 
 When you navigate to a specimen's detail page, you'll see all the information about that specific sample. The specimen information section shows the specimen type, collection date, source (whether it came from a subject or control batch), and the associated study if it came from a subject.
 
-If the specimen has a container associated with it, you'll see container information including the container type, barcode if applicable, position or label, which collection it belongs to, where that collection is stored (the location), and the container's status (whether it's "In Use" or "Exhausted" based on remaining quantity).
+If the specimen has a container associated with it, you'll see container information including the container type, barcode if applicable, position or label, which collection it belongs to, where that collection is stored (the location), and the container's status (whether it's "In Use" or "Exhausted" based on remaining quantity). When a container has notes, those notes are shown on each container card on the specimen detail page.
 
 If the specimen was derived from another container through processing, you'll see derivation information showing the parent container, what type of derivation was performed (like DNA extraction or dilution), when the derivation occurred, and what protocol was used. This helps you track the complete processing history of your samples.
 
