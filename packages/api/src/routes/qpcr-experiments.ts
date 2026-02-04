@@ -18,6 +18,7 @@ import { eq, inArray, sql, asc } from 'drizzle-orm'
 import { parseBioradCsv, parseQuantStudioXls } from '../lib/qpcr-result-parse'
 import { z } from 'zod'
 import { handleRouteError } from '../lib/error-handler'
+import { logError, type ErrorLogContext } from '../lib/error-logger'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { getScannerConfigurationById } from '../lib/settings'
 import type { ScannerConfiguration } from '../lib/settings'
@@ -266,6 +267,13 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         })
         .returning()
       if (!inserted) throw new Error('Insert failed')
+      await database.insert(qpcrExperimentTarget).values({
+        qpcrExperimentId: inserted.id,
+        targetName: 'varATS',
+        fluorophore: 'FAM',
+        reporter: 'FAM',
+        sortOrder: 0,
+      })
       return c.json(inserted, 201)
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -803,13 +811,13 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
     }
   })
 
-  /** Sample name for template: subject name for study samples, label for controls */
+  /** Sample name for template: barcode when present (study or control in micronix tube), otherwise label for controls or empty. */
   function sampleNameForWell(
     well: { contentType: string | null; standardDensity: number | null; barcode: string | null },
-    source: WellSource | null
+    _source: WellSource | null
   ): string {
-    if (source?.type === 'subject') return source.name
-    if (!well.barcode && well.contentType !== 'standard' && well.contentType !== 'negative') return ''
+    if (well.barcode) return well.barcode
+    if (well.contentType !== 'standard' && well.contentType !== 'negative') return ''
     if (well.contentType === 'negative' || (well.standardDensity !== null && well.standardDensity === 0)) return 'Neg ctrl'
     if (well.standardDensity != null) {
       if (well.standardDensity >= 10000) return 'Std-10k'
@@ -818,7 +826,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       if (well.standardDensity >= 10) return 'Std-10'
       if (well.standardDensity >= 1) return 'Std-1'
     }
-    return well.barcode ?? ''
+    return ''
   }
 
   /** Bio-Rad CFX Maestro Content: Unk, Std, NTC, Pos, Neg */
@@ -852,22 +860,52 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
   // GET /:id/template?format=biorad|quant_studio - Uses stored targets; one row per well per target (multiplex).
   // QuantStudio Quencher inferred from Reporter: SYBR→None, else NFQ-MGB. See design/qpcr-fluorophore-reporter.md.
   qpcr.get('/:id/template', authMiddleware, async (c) => {
+    const templateLogContext = (message: string, errorCode?: string): ErrorLogContext => ({
+      userId: (c.get('user') as { id: number } | undefined)?.id,
+      url: c.req.url,
+      userAgent: c.req.header('user-agent'),
+      additionalContext: {
+        method: c.req.method,
+        path: new URL(c.req.url).pathname,
+        ...(errorCode && { errorCode }),
+      },
+    })
+    const logTemplateError = (status: number, errorMessage: string, errorCode?: string) => {
+      console.warn(`[qpcr template] ${status}: ${errorMessage}`)
+      logError(
+        database,
+        'backend',
+        'warning',
+        errorMessage,
+        new Error(errorMessage),
+        templateLogContext(errorMessage, errorCode)
+      ).catch((err) => console.error('[qpcr template] Failed to log error:', err))
+    }
     try {
       const id = parseInt(c.req.param('id'))
-      if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400)
+      if (isNaN(id)) {
+        logTemplateError(400, 'Invalid ID')
+        return c.json({ error: 'Invalid ID' }, 400)
+      }
       const format = c.req.query('format') as 'biorad' | 'quant_studio' | undefined
       if (!format || (format !== 'biorad' && format !== 'quant_studio')) {
+        logTemplateError(400, 'Query parameter format must be biorad or quant_studio')
         return c.json({ error: 'Query parameter format must be biorad or quant_studio' }, 400)
       }
       const exp = await database.select().from(qpcrExperiment).where(eq(qpcrExperiment.id, id)).get()
-      if (!exp) return c.json({ error: 'Not found' }, 404)
+      if (!exp) {
+        logTemplateError(404, 'Not found')
+        return c.json({ error: 'Not found' }, 404)
+      }
       const targets = await database
         .select()
         .from(qpcrExperimentTarget)
         .where(eq(qpcrExperimentTarget.qpcrExperimentId, id))
         .orderBy(asc(qpcrExperimentTarget.sortOrder))
       if (targets.length === 0) {
-        return c.json({ error: 'Add at least one target to download template.', errorCode: 'NO_TARGETS' }, 400)
+        const msg = 'Add at least one target to download template.'
+        logTemplateError(400, msg, 'NO_TARGETS')
+        return c.json({ error: msg, errorCode: 'NO_TARGETS' }, 400)
       }
       const wells = await database
         .select()

@@ -87,7 +87,7 @@ This structure supports “which subject, which specimen, in which container, in
 
 - **Create an experiment** — Optionally name it (e.g. study or run ID).
 - **Plate layout** — Upload a CSV mapping micronix barcodes (and optionally controls) to well positions. Same barcode resolution as elsewhere (e.g. container move).
-- **Instrument templates** — Generate plate templates for **Bio-Rad CFX 96** (CSV) or **Thermo Fisher Quant Studio** (TXT). Configure target name, fluorophore/reporter, and (for Quant Studio) instrument type. Templates use subject names for unknowns and parasite density for standards.
+- **Instrument templates** — Generate plate templates for **Bio-Rad CFX 96** (CSV) or **Thermo Fisher Quant Studio** (TXT). Configure target name, fluorophore/reporter, and (for Quant Studio) instrument type. Templates use **barcodes** for sample names when the well has a barcode (study or control), and parasite density for standards in the Quantity column.
 - **Result import** — After the run, upload the instrument output file (Bio-Rad CSV or Quant Studio XLS). SampleDB stores run data (e.g. amplification) for optional analysis.
 - Experiment states (e.g. setup, template ready, results imported) and plate locking after template export or result import keep layout and results consistent.
 

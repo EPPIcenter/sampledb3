@@ -45,6 +45,31 @@ describe('qPCR Experiments Template', () => {
     }
   })
 
+  describe('POST /', () => {
+    it('creates an experiment with one default target', async () => {
+      const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
+
+      const createRes = await authenticatedRequest(app, '/api/qpcr-experiments', {
+        method: 'POST',
+        cookie,
+        json: { name: 'Default target test', templateFormat: 'biorad' },
+      })
+      expect(createRes.status).toBe(201)
+      const created = (await createRes.json()) as { id: number; name: string; templateFormat: string }
+      expect(created.id).toBeDefined()
+      expect(created.name).toBe('Default target test')
+      expect(created.templateFormat).toBe('biorad')
+
+      const getRes = await authenticatedRequest(app, `/api/qpcr-experiments/${created.id}`, { cookie })
+      expect(getRes.status).toBe(200)
+      const detail = (await getRes.json()) as { experiment: { targets: Array<{ targetName: string; fluorophore: string | null; reporter: string | null }> } }
+      expect(detail.experiment.targets).toHaveLength(1)
+      expect(detail.experiment.targets[0].targetName).toBe('varATS')
+      expect(detail.experiment.targets[0].fluorophore).toBe('FAM')
+      expect(detail.experiment.targets[0].reporter).toBe('FAM')
+    })
+  })
+
   describe('GET /:id/template', () => {
     it('includes only rows for wells that have a tube; skips positions with no tube', async () => {
       const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
@@ -107,6 +132,62 @@ describe('qPCR Experiments Template', () => {
       expect(dataLines.length).toBe(2)
       expect(dataLines[0]).toContain('A1')
       expect(dataLines[1]).toContain('A2')
+    })
+
+    it('uses well barcode as Sample Name in template when barcode is set', async () => {
+      const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
+
+      const [exp] = await testDb
+        .insert(qpcrExperiment)
+        .values({
+          name: 'Barcode template test',
+          templateFormat: 'biorad',
+          status: 'setup',
+          created: new Date().toISOString(),
+          lastUpdated: new Date().toISOString(),
+        })
+        .returning()
+      if (!exp) throw new Error('Insert failed')
+
+      await testDb.insert(qpcrExperimentTarget).values({
+        qpcrExperimentId: exp.id,
+        targetName: 'varATS',
+        fluorophore: 'FAM',
+        reporter: 'FAM',
+        sortOrder: 0,
+      })
+
+      await testDb.insert(qpcrExperimentWell).values({
+        qpcrExperimentId: exp.id,
+        wellPosition: 'A01',
+        barcode: 'MT-001',
+        contentType: 'unknown',
+        standardDensity: null,
+      })
+
+      const bioradRes = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/template?format=biorad`, {
+        cookie,
+      })
+      expect(bioradRes.status).toBe(200)
+      const bioradText = await bioradRes.text()
+      const bioradLines = bioradText.split('\n').filter(Boolean)
+      expect(bioradLines[0]).toBe('Well,Fluorophore,Target Name,Content,Sample Name,Quantity')
+      expect(bioradLines[1]).toContain('MT-001')
+      expect(bioradLines[1]).toBe('A1,FAM,varATS,Unk,MT-001,')
+
+      const quantRes = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/template?format=quant_studio`, {
+        cookie,
+      })
+      expect(quantRes.status).toBe(200)
+      const quantText = await quantRes.text()
+      const quantLines = quantText.split('\n').filter(Boolean)
+      const dataHeaderIdx = quantLines.findIndex((l) => l.startsWith('Well\tWell Position'))
+      expect(dataHeaderIdx).toBeGreaterThanOrEqual(0)
+      const dataLines = quantLines.slice(dataHeaderIdx + 1)
+      expect(dataLines).toHaveLength(1)
+      expect(dataLines[0]).toContain('MT-001')
+      const quantCols = dataLines[0].split('\t')
+      expect(quantCols[2]).toBe('MT-001')
     })
 
     it('returns 400 when experiment has no targets', async () => {

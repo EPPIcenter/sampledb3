@@ -19,14 +19,14 @@ After upload, the 96-well plate view shows the layout: **standard** (control) we
 
 ## Step 2: Template Settings and Download
 
-Set assay options that go into the instrument template. You can define **multiple targets** (multiplex): add one or more targets, each with:
+Set assay options that go into the instrument template. When you create an experiment, a default target (e.g. varATS) is created so you can download a template right away. You can define **multiple targets** (multiplex): add one or more targets, each with:
 
 - **Target name** (e.g. varATS, 18S)
 - **Fluorophore** (Bio-Rad) or **Reporter** (Quant Studio); quencher is set automatically for Quant Studio (SYBR → None, others → NFQ-MGB)
 
 Use **Add target** to add another target; use **Remove** on a row to remove it (at least one target is required). **Instrument type** (Quant Studio only) can be set once for the experiment (e.g. QuantStudio 5 Real-Time PCR System).
 
-Templates use **study subject names** for unknown (study) samples and **parasite density** for standard controls. The downloaded template includes **all** targets: the instrument file will have one row per well per target (multiplex). Save settings, then download the template for your instrument:
+The template **Sample Name** is the **micronix barcode** when the well has one (study or control); otherwise control wells use labels (e.g. Neg ctrl, Std-10k) or the field is empty. Parasite density for standard controls appears in the Quantity column. The downloaded template includes **all** targets: the instrument file will have one row per well per target (multiplex). **Save your settings** after changing targets or instrument type; you must save before downloading a template. If you have unsaved changes, a notice is shown and the download buttons are disabled until you save.
 
 **Note:** After you import results (step 4), the list of targets is **locked** and cannot be changed. Add or remove targets only while the experiment is in setup or in progress.
 

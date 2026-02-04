@@ -3,14 +3,14 @@
 ## Target flow (user journey)
 
 1. **Define plate** – Upload a CSV describing the plate (micronix barcodes + well positions). This fully defines samples and controls. Required first step.
-2. **Download template** – Once the plate is defined, download a template for the chosen machine (Bio-Rad CFX 96 or Quant Studio) based on that arrangement. Templates use **study subject name** for regular samples and **parasite density** for standard controls.
+2. **Download template** – Once the plate is defined, download a template for the chosen machine (Bio-Rad CFX 96 or Quant Studio) based on that arrangement. Templates use **micronix barcode** for the Sample Name whenever a well has one (study or control); controls without barcode use labels (Neg ctrl, Std-10k, etc.). Parasite density remains in the Quantity column for standards.
 3. **Run experiment** – Load the template into the instrument and run the experiment. The instrument fits the standard curve when control densities are set.
 4. **Import results** – Upload the instrument output file. We store amplification data when present for optional custom curve fitting later.
 
 ## Design decisions
 
 - **Plate first, then template**: The experiment is initialized with optional name only. The plate layout (CSV upload) is the first action; template download is enabled only after the plate has wells. This enforces the correct order without locking steps after completion.
-- **Subject name in templates**: For study samples we use the **study subject name** (from resolved specimen → subject). For controls we use **parasite density** (numeric) in the Quantity column and appropriate Content/Task values.
+- **Sample name in templates**: We use the **micronix barcode** for the Sample Name whenever a well has one (study or control in a micronix tube). Controls without barcode use generated labels (Neg ctrl, Std-10k, etc.). Parasite density remains in the Quantity column for standards; Content/Task values are unchanged.
 - **Multiple targets (multiplex)**: Each experiment has a **list of targets**. Each target has a **Target Name** and optional **Fluorophore** (Bio-Rad) or **Reporter** (Quant Studio). Templates emit **one row per well per target** (Bio-Rad: one row per fluorophore per well; Quant Studio: one row per target per well). Add or remove targets in the template settings; at least one target is required to download a template. See [qpcr-fluorophore-reporter.md](qpcr-fluorophore-reporter.md) for platform differences and dye name mapping (e.g. HEX vs VIC).
 - **Targets locked after results**: Once the experiment status is `results_uploaded`, the list of targets cannot be changed (PATCH with `targets` returns 409). This keeps imported results aligned with the template. To change targets after importing results, delete the experiment and create a new one.
 - **Extensibility**: A small **instrument registry** in code lists supported machines (id, displayName, template extension, result parser). Adding a new machine = add parser + template generator branch + one registry entry.
