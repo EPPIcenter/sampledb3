@@ -80,6 +80,9 @@ export interface ControlDefinition {
   batchCount?: number
   specimenCount?: number
   spotCount?: number
+  micronixCount?: number
+  cryovialCount?: number
+  staticWellCount?: number
   tubeCount?: number
   inventoryTotal?: number
   strains?: Array<{ id: number; name: string; percentage?: number }>
@@ -227,6 +230,7 @@ export interface SubjectSummarySpecimen {
     type: string
     remainingQuantity: number
     unit: string
+    comment?: string | null
     collectionName?: string
     position?: string
     collectionId?: number
@@ -630,6 +634,9 @@ export interface ControlBatch {
   lastUpdated: string
   specimenCount?: number
   spotCount?: number
+  micronixCount?: number
+  cryovialCount?: number
+  staticWellCount?: number
   tubeCount?: number
   inventoryTotal?: number
   controlType?: string
@@ -678,6 +685,9 @@ export interface ControlDefinitionSummaryResponse {
   batches: Array<ControlBatch & {
     specimenCount: number
     spotCount?: number
+    micronixCount?: number
+    cryovialCount?: number
+    staticWellCount?: number
     tubeCount?: number
     inventoryTotal?: number
     inventory: Array<{
@@ -689,6 +699,9 @@ export interface ControlDefinitionSummaryResponse {
     totalBatches: number
     totalContainers: number
     totalSpots: number
+    totalMicronix: number
+    totalCryovial: number
+    totalStaticWells: number
     totalTubes: number
     latestBatchDate?: string | null
     totalSpecimens: number

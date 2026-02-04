@@ -150,14 +150,3 @@ export function logErrorFromMessage(
     context,
   })
 }
-
-/**
- * Flush the error queue (useful for testing or before page unload)
- */
-export async function flushErrorQueue(): Promise<void> {
-  if (queueTimeout) {
-    clearTimeout(queueTimeout)
-    queueTimeout = null
-  }
-  await processQueue()
-}

@@ -54,27 +54,3 @@ export function addRecentUser(user: User): void {
     console.error('Failed to save recent user to localStorage:', error)
   }
 }
-
-/**
- * Remove a user from recent users list
- */
-export function removeRecentUser(userId: number): void {
-  try {
-    const users = getRecentUsers()
-    const filtered = users.filter(u => u.id !== userId)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered))
-  } catch (error) {
-    console.error('Failed to remove recent user from localStorage:', error)
-  }
-}
-
-/**
- * Clear all recent users
- */
-export function clearRecentUsers(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY)
-  } catch (error) {
-    console.error('Failed to clear recent users from localStorage:', error)
-  }
-}
