@@ -5,6 +5,7 @@ import { unit, containerTypeUnit } from '../db/schema'
 import { eq, inArray, and } from 'drizzle-orm'
 import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { UnauthorizedError, handleRouteError } from '../lib/error-handler'
+import { clearDefaultsCache } from '../lib/defaults'
 import {
   getContainerDefaults,
   setContainerDefaults,
@@ -252,6 +253,7 @@ const scannerConfigurationsSchema = z.object({
         
         await setContainerDefaults(database, validated as ContainerDefaults)
         clearSettingsCache(database, 'container_defaults')
+        clearDefaultsCache(database)
         return c.json({ key, value: validated })
       }
       case 'pagination_settings': {

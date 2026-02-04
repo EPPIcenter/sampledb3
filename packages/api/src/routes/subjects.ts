@@ -354,6 +354,7 @@ subjects.get('/:id/summary', authMiddleware, async (c) => {
       .select({
         id: storageContainer.id,
         specimenId: storageContainer.specimenId,
+        comment: storageContainer.comment,
         totalQuantity: storageContainer.totalQuantity,
         remainingQuantity: storageContainer.remainingQuantity,
         unitId: storageContainer.unitId,
@@ -366,7 +367,7 @@ subjects.get('/:id/summary', authMiddleware, async (c) => {
     const containerIds = containers.map(c => c.id)
 
     // Count containers per specimen
-    const containersBySpecimen = new Map<number, Array<{ id: number; remainingQuantity: number; unit: string }>>()
+    const containersBySpecimen = new Map<number, Array<{ id: number; remainingQuantity: number; unit: string; comment: string | null }>>()
     containers.forEach(container => {
       if (!containersBySpecimen.has(container.specimenId)) {
         containersBySpecimen.set(container.specimenId, [])
@@ -374,7 +375,8 @@ subjects.get('/:id/summary', authMiddleware, async (c) => {
       containersBySpecimen.get(container.specimenId)!.push({
         id: container.id,
         remainingQuantity: container.remainingQuantity ?? 0,
-        unit: (container.unitSymbol as string | null) || 'Unknown'
+        unit: (container.unitSymbol as string | null) || 'Unknown',
+        comment: container.comment ?? null
       })
     })
 
@@ -514,6 +516,7 @@ subjects.get('/:id/summary', authMiddleware, async (c) => {
           type: info.type,
           remainingQuantity: c.remainingQuantity,
           unit: c.unit,
+          comment: c.comment ?? undefined,
           collectionName: info.collectionName,
           position: info.position,
           collectionId: info.id,
