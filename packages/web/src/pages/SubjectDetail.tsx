@@ -22,12 +22,19 @@ export default function SubjectDetail() {
   const [editSubjectModalOpen, setEditSubjectModalOpen] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const hasProcessedCreateSpecimen = useRef(false)
+  const prevIdRef = useRef(id)
 
   useEffect(() => {
     if (id) {
       loadSummary()
     }
   }, [id])
+
+  // Reset the ref when the subject ID changes (during render so ref is correct before any effect)
+  if (id !== prevIdRef.current) {
+    prevIdRef.current = id
+    hasProcessedCreateSpecimen.current = false
+  }
 
   // Check for createSpecimen query param and open modal (only once per mount)
   useEffect(() => {
@@ -43,11 +50,6 @@ export default function SubjectDetail() {
       })
     }
   }, [searchParams, setSearchParams])
-
-  // Reset the ref when the subject ID changes
-  useEffect(() => {
-    hasProcessedCreateSpecimen.current = false
-  }, [id])
 
   // Close modals on Escape
   useHotkey('escape', () => {

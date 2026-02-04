@@ -7,8 +7,6 @@ export interface StudyDetailHeaderProps {
   summaryData: StudySummary['summary'] | undefined
   canWrite: boolean
   canDelete: boolean
-  descExpanded: boolean
-  setDescExpanded: (value: boolean | ((prev: boolean) => boolean)) => void
   actionsMenuOpen: boolean
   setActionsMenuOpen: (value: boolean | ((prev: boolean) => boolean)) => void
   actionsMenuRef: React.RefObject<HTMLDivElement | null>
@@ -25,8 +23,6 @@ export default function StudyDetailHeader({
   summaryData,
   canWrite,
   canDelete,
-  descExpanded,
-  setDescExpanded,
   actionsMenuOpen,
   setActionsMenuOpen,
   actionsMenuRef,
@@ -36,8 +32,6 @@ export default function StudyDetailHeader({
   onExport,
   onDelete,
 }: StudyDetailHeaderProps) {
-  const showDescClamp = study.description && study.description.length > 120 && !descExpanded
-
   return (
     <header className="study-detail-header">
       <EntityBreadcrumbs
@@ -48,33 +42,21 @@ export default function StudyDetailHeader({
       />
       <div className="study-detail-identity">
         <h1>{study.title}</h1>
-        <span className="study-detail-badge" aria-label={`Short code: ${study.shortCode}`}>
-          {study.shortCode}
-        </span>
-        {study.leadPerson && (
-          <span className="study-detail-badge">Lead: {study.leadPerson}</span>
-        )}
-        {study.isLongitudinal && (
-          <span className="study-detail-badge study-detail-badge--accent">Longitudinal</span>
-        )}
+        <div className="study-detail-badges">
+          <span className="study-detail-badge" aria-label={`Short code: ${study.shortCode}`}>
+            {study.shortCode}
+          </span>
+          {study.leadPerson && (
+            <span className="study-detail-badge">Lead: {study.leadPerson}</span>
+          )}
+          {study.isLongitudinal && (
+            <span className="study-detail-badge study-detail-badge--accent">Longitudinal</span>
+          )}
+        </div>
       </div>
       <div className="study-detail-desc">
         {study.description ? (
-          <>
-            <span className={showDescClamp ? 'study-detail-desc is-clamped' : ''}>
-              {study.description}
-            </span>
-            {study.description.length > 120 && (
-              <button
-                type="button"
-                className="study-detail-desc-toggle"
-                onClick={() => setDescExpanded((e) => !e)}
-                aria-expanded={descExpanded}
-              >
-                {descExpanded ? ' Show less' : ' Show more'}
-              </button>
-            )}
-          </>
+          <span>{study.description}</span>
         ) : (
           <span style={{ fontStyle: 'italic' }}>No description.</span>
         )}

@@ -1,5 +1,6 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { adminApi, type User, type UserSession } from '../lib/api'
+import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import '../styles/admin.css'
 
 interface CreateUserData {
@@ -29,6 +30,8 @@ export default function AdminUsers() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [sessions, setSessions] = useState<UserSession[]>([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  useFocusSearchOnSlash(searchInputRef)
 
   // Form states
   const [createForm, setCreateForm] = useState<CreateUserData>({
@@ -283,6 +286,7 @@ export default function AdminUsers() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
+                ref={searchInputRef}
                 type="text"
                 placeholder="Search users..."
                 value={searchQuery}

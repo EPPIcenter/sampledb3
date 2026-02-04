@@ -14,6 +14,7 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
+  const prevQueryRef = useRef(query)
   const location = useLocation()
 
   // Close on Escape
@@ -38,10 +39,11 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
     return filteredCommands
   }, [filteredCommands])
 
-  // Reset selection when query changes
-  useEffect(() => {
+  // Reset selection when query changes (during render to avoid extra pass)
+  if (query !== prevQueryRef.current) {
+    prevQueryRef.current = query
     setSelectedIndex(0)
-  }, [query])
+  }
 
   // Focus input when modal opens
   useEffect(() => {

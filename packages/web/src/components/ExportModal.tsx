@@ -11,6 +11,7 @@ import {
   type StudySubject,
   type ExportConfiguration,
 } from '../lib/api'
+import { formatLocalDateTime } from '../lib/date-utils'
 import { useModifierHotkey } from '../hooks/useHotkey'
 
 interface ExportModalProps {
@@ -19,20 +20,6 @@ interface ExportModalProps {
   studyCode: string
   studyId: number
   subjects?: StudySubject[]
-}
-
-/**
- * Format a date as a filesystem-safe local datetime string
- * Format: YYYY-MM-DD_HH-MM-SS (e.g., "2026-01-27_14-30-45")
- */
-function formatLocalDateTime(date: Date = new Date()): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  const seconds = String(date.getSeconds()).padStart(2, '0')
-  return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`
 }
 
 const CONTAINER_TYPES = [
@@ -374,24 +361,21 @@ export default function ExportModal({
     }
   }, [filters, uploadMode, csvData, dateTolerance, studyCode])
 
+  // Initialize state and load data when modal opens (avoids reset-on-close effect)
   useEffect(() => {
-    if (isOpen) {
-      loadReferenceData()
-      loadExportConfigurations()
-      // Initial count load
-      updateCount()
-    } else {
-      // Reset state when modal closes
-      setError(null)
-      setFilters({ study: studyCode })
-      setUploadMode('manual')
-      setCsvFile(null)
-      setCsvData([])
-      setCsvError(null)
-      setDateTolerance(0)
-      setExportSummary(null)
-      setSummaryExpanded(false)
-    }
+    if (!isOpen) return
+    setError(null)
+    setFilters({ study: studyCode })
+    setUploadMode('manual')
+    setCsvFile(null)
+    setCsvData([])
+    setCsvError(null)
+    setDateTolerance(0)
+    setExportSummary(null)
+    setSummaryExpanded(false)
+    loadReferenceData()
+    loadExportConfigurations()
+    updateCount()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, studyCode])
 

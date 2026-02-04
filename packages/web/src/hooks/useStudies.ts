@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { studiesApi, type Study, type StudySummary, type StudyTimelineData, type StudySummaryBasic } from '../lib/api'
+import { studiesApi, type Study } from '../lib/api'
 import { useToast } from '../contexts/ToastContext'
 
 export const studyKeys = {
@@ -9,9 +9,6 @@ export const studyKeys = {
     [...studyKeys.lists(), filters] as const,
   details: () => [...studyKeys.all, 'detail'] as const,
   detail: (id: number) => [...studyKeys.details(), id] as const,
-  summary: (id: number) => [...studyKeys.detail(id), 'summary'] as const,
-  timeline: (id: number) => [...studyKeys.detail(id), 'timeline'] as const,
-  summaries: (ids: number[]) => [...studyKeys.all, 'summaries', ids] as const,
 }
 
 export function useStudies(search?: string, params?: { page?: number; limit?: number }) {
@@ -50,39 +47,6 @@ export function useStudySubjects(studyId: number, params?: { page?: number; limi
       return res
     },
     enabled: !!studyId,
-  })
-}
-
-export function useStudySummary(studyId: number) {
-  return useQuery({
-    queryKey: studyKeys.summary(studyId),
-    queryFn: async () => {
-      const res = await studiesApi.getSummary(studyId)
-      return res
-    },
-    enabled: !!studyId,
-  })
-}
-
-export function useStudyTimeline(studyId: number) {
-  return useQuery({
-    queryKey: studyKeys.timeline(studyId),
-    queryFn: async () => {
-      const res = await studiesApi.getTimeline(studyId)
-      return res
-    },
-    enabled: !!studyId,
-  })
-}
-
-export function useStudySummaries(ids: number[]) {
-  return useQuery({
-    queryKey: studyKeys.summaries(ids),
-    queryFn: async () => {
-      const res = await studiesApi.getSummaries(ids)
-      return res.summaries
-    },
-    enabled: ids.length > 0,
   })
 }
 

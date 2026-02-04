@@ -5,9 +5,10 @@ import StudyCard from '../components/StudyCard'
 import StudyCardSkeleton from '../components/StudyCardSkeleton'
 import { getModifierKey } from '../lib/hotkeys'
 import { useUser } from '../contexts/UserContext'
+import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import '../styles/studies.css'
 
-type ViewMode = 'grid' | 'list' | 'compact'
+type ViewMode = 'grid' | 'list'
 type SortOption = 'title' | 'date' | 'subjects' | 'specimens' | 'containers' | 'lead'
 type FilterType = 'all' | 'longitudinal' | 'cross-sectional'
 
@@ -31,7 +32,8 @@ export default function Studies() {
   const [hasMore, setHasMore] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem('studies-view-mode')
-    return (saved as ViewMode) || 'grid'
+    const mode = saved === 'grid' || saved === 'list' ? saved : 'grid'
+    return mode
   })
   const [sortBy, setSortBy] = useState<SortOption>('date')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
@@ -47,6 +49,7 @@ export default function Studies() {
   const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  useFocusSearchOnSlash(searchInputRef)
 
   // Load all unique lead persons on mount
   useEffect(() => {
@@ -500,18 +503,6 @@ export default function Studies() {
               >
                 List
               </button>
-              <button
-                onClick={() => setViewModeAndPersist('compact')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                  viewMode === 'compact'
-                    ? 'shadow-sm text-white'
-                    : 'hover:border-[rgb(var(--dashboard-accent)/0.3)]'
-                }`}
-                style={viewMode === 'compact' ? { backgroundColor: 'rgb(var(--dashboard-accent))' } : { color: 'rgb(var(--dashboard-text-muted))' }}
-                title="Compact view"
-              >
-                Compact
-              </button>
             </div>
 
             {/* Sort */}
@@ -616,11 +607,9 @@ export default function Studies() {
       {/* Content */}
       {loading ? (
         <div className={`grid gap-4 ${
-          viewMode === 'grid' 
-            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-            : viewMode === 'list'
+          viewMode === 'list'
             ? 'grid-cols-1'
-            : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6'
+            : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
         }`}>
           {[...Array(8)].map((_, i) => (
             <StudyCardSkeleton key={i} />
@@ -645,11 +634,9 @@ export default function Studies() {
       ) : (
         <>
           <div className={`grid gap-4 ${
-            viewMode === 'grid' 
-              ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-              : viewMode === 'list'
+            viewMode === 'list'
               ? 'grid-cols-1'
-              : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6'
+              : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
           }`}>
             {displayStudies.map((study) => (
               <div
@@ -662,13 +649,13 @@ export default function Studies() {
                   }
                 }}
                 data-study-id={study.id}
-                className={viewMode === 'compact' ? 'min-h-[200px]' : ''}
               >
                 <StudyCard
                   study={study}
                   summary={study.summary}
                   loading={study.summaryLoading || loadingSummaries.has(study.id)}
                   onLoadSummary={() => handleLoadSummary(study.id)}
+                  variant={viewMode}
                 />
               </div>
             ))}

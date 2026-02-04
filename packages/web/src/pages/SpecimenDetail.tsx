@@ -365,6 +365,12 @@ export default function SpecimenDetail() {
                       )}
                     </div>
                   )}
+                  {container.comment && (
+                    <div className="mt-2 pt-2 border-t border-[rgb(var(--dashboard-border))]">
+                      <span className="text-xs font-medium text-[rgb(var(--dashboard-text-muted))] block mb-0.5">Notes</span>
+                      <p className="text-xs text-[rgb(var(--dashboard-text))] whitespace-pre-wrap break-words mt-0">{container.comment}</p>
+                    </div>
+                  )}
                 </Link>
               ))}
             </div>

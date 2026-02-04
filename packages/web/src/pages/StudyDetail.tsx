@@ -14,6 +14,7 @@ import StudyForm from '../components/forms/StudyForm'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import SubjectMergeModal from '../components/SubjectMergeModal'
 import { useUser } from '../contexts/UserContext'
+import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { TUTORIAL_SHORT_CODE_PREFIX } from '../lib/constants'
 import '../styles/studies.css'
 
@@ -45,7 +46,9 @@ export default function StudyDetail() {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = (searchParams.get('tab') as 'overview' | 'timeline' | 'subjects') || 'overview'
   const hasProcessedCreateSubject = useRef(false)
-  const [descExpanded, setDescExpanded] = useState(false)
+  const prevIdRef = useRef(id)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  useFocusSearchOnSlash(searchInputRef)
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
   const actionsMenuRef = useRef<HTMLDivElement>(null)
 
@@ -55,6 +58,12 @@ export default function StudyDetail() {
       next.set('tab', tab)
       return next
     })
+  }
+
+  // Reset the ref when the study ID changes (during render so ref is correct before any effect)
+  if (id !== prevIdRef.current) {
+    prevIdRef.current = id
+    hasProcessedCreateSubject.current = false
   }
 
   // Check for createSubject query param and open modal (only once per mount)
@@ -71,11 +80,6 @@ export default function StudyDetail() {
       })
     }
   }, [searchParams, setSearchParams])
-
-  // Reset the ref when the study ID changes
-  useEffect(() => {
-    hasProcessedCreateSubject.current = false
-  }, [id])
 
   // Close modals and actions menu on Escape
   useHotkey('escape', () => {
@@ -199,7 +203,7 @@ export default function StudyDetail() {
   if (!study) {
     return (
       <div className="studies-page min-h-screen">
-        <div className="container mx-auto px-4 py-8 relative z-10">
+        <div className="max-w-screen-2xl mx-auto px-4 py-8 relative z-10">
           <div className="text-center py-8 text-red-600">Study not found</div>
         </div>
       </div>
@@ -278,15 +282,13 @@ export default function StudyDetail() {
 
   return (
     <div className="studies-page min-h-screen">
-      <div className="container mx-auto px-4 py-8 relative z-10">
+      <div className="max-w-screen-2xl mx-auto px-4 py-8 relative z-10">
         <StudyDetailHeader
           study={study}
           summaryLoading={summaryLoading}
           summaryData={summary?.summary}
           canWrite={canWrite}
           canDelete={canDelete}
-          descExpanded={descExpanded}
-          setDescExpanded={setDescExpanded}
           actionsMenuOpen={actionsMenuOpen}
           setActionsMenuOpen={setActionsMenuOpen}
           actionsMenuRef={actionsMenuRef}
@@ -396,6 +398,7 @@ export default function StudyDetail() {
               </div>
               <div className="flex items-center gap-2">
                 <input
+                  ref={searchInputRef}
                   type="text"
                   placeholder="Search subjects..."
                   value={searchQuery}

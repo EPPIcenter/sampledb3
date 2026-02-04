@@ -5,6 +5,7 @@ import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import DataTable, { Column } from '../components/DataTable'
 import StatCard from '../components/StatCard'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import { getContainerTypeIcon } from '../lib/icons'
 import '../styles/blood-controls.css'
 
 export default function ControlDefinitionDetail() {
@@ -81,29 +82,29 @@ export default function ControlDefinitionDetail() {
       key: 'inventoryTotal',
       label: 'Inventory',
       sortable: true,
-      render: (_, row) => (
-        <div className="flex gap-3 text-sm">
-          {row.spotCount !== undefined && row.spotCount > 0 && (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-md">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              <span className="font-bold">{row.spotCount}</span>
-              <span className="text-[10px] uppercase font-medium">Spots</span>
-            </div>
-          )}
-          {row.tubeCount !== undefined && row.tubeCount > 0 && (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-md">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-              </svg>
-              <span className="font-bold">{row.tubeCount}</span>
-              <span className="text-[10px] uppercase font-medium">Tubes</span>
-            </div>
-          )}
-          {(!row.spotCount && !row.tubeCount) && <span className="text-gray-400 italic">Empty</span>}
-        </div>
-      )
+      render: (_, row) => {
+        const hasSpots = (row.spotCount ?? 0) > 0
+        const hasMicronix = (row.micronixCount ?? 0) > 0
+        const hasCryovial = (row.cryovialCount ?? 0) > 0
+        const hasStaticWells = (row.staticWellCount ?? 0) > 0
+        const hasAny = hasSpots || hasMicronix || hasCryovial || hasStaticWells
+        const badge = (type: string, count: number, label: string, bg: string, text: string, border: string) => (
+          <div key={type} className={`flex items-center gap-1.5 px-2 py-1 ${bg} ${text} border ${border} rounded-md`}>
+            {getContainerTypeIcon(type)}
+            <span className="font-bold">{count}</span>
+            <span className="text-[10px] uppercase font-medium">{label}</span>
+          </div>
+        )
+        return (
+          <div className="flex flex-wrap gap-2 text-sm">
+            {hasSpots && badge('paper', row.spotCount!, 'Spots', 'bg-amber-50', 'text-amber-700', 'border-amber-100')}
+            {hasMicronix && badge('micronix_tube', row.micronixCount!, 'Micronix', 'bg-teal-50', 'text-teal-700', 'border-teal-100')}
+            {hasCryovial && badge('cryovial_tube', row.cryovialCount!, 'Cryovial', 'bg-blue-50', 'text-blue-700', 'border-blue-100')}
+            {hasStaticWells && badge('static_well', row.staticWellCount!, 'Static wells', 'bg-slate-50', 'text-slate-700', 'border-slate-200')}
+            {!hasAny && <span className="text-gray-400 italic">Empty</span>}
+          </div>
+        )
+      }
     },
     {
       key: 'status',
@@ -146,7 +147,7 @@ export default function ControlDefinitionDetail() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <StatCard title="Production Runs" value={stats.totalBatches} subtitle={`Total specimens: ${stats.totalSpecimens}`} className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-2" />
           <StatCard title="Stock Availability" value={`${stats.inStockBatchesCount} / ${stats.totalBatches}`} subtitle="Batches in stock" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-3" />
-          <StatCard title="Available Containers" value={stats.totalContainers || 0} subtitle={`${stats.totalSpots} spots, ${stats.totalTubes} tubes`} className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-4" />
+          <StatCard title="Available Containers" value={stats.totalContainers || 0} subtitle={`${stats.totalSpots} spots, ${stats.totalMicronix ?? 0} micronix, ${stats.totalCryovial ?? 0} cryovial, ${stats.totalStaticWells ?? 0} static wells`} className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-4" />
           <StatCard title="Storage Spread" value={stats.activeLocationsCount || 0} subtitle="Unique locations" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-5" />
         </div>
 

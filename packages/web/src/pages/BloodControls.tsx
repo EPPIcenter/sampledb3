@@ -1,10 +1,12 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { controlsApi, strainsApi, type ControlDefinition, type ControlBatch, type Strain } from '../lib/api'
 import DataTable, { Column } from '../components/DataTable'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import StatCard from '../components/StatCard'
 import SkeletonCard from '../components/SkeletonCard'
 import { useUser } from '../contexts/UserContext'
+import { useFocusSearchOnSlash } from '../hooks/useHotkey'
+import { getContainerTypeIcon } from '../lib/icons'
 import '../styles/blood-controls.css'
 
 const PAGE_SIZE = 25
@@ -27,7 +29,9 @@ export default function BloodControls() {
   const [searchTerm, setSearchTerm] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  useFocusSearchOnSlash(searchInputRef)
+
   // Blood control specific filters
   const [strainFilters, setStrainFilters] = useState<string[]>([])
   const [strainMatchMode, setStrainMatchMode] = useState<'exact' | 'contains'>('contains')
@@ -65,6 +69,9 @@ export default function BloodControls() {
         specimenCount: Number(d.specimenCount || 0),
         batchCount: Number(d.batchCount || 0),
         spotCount: Number(d.spotCount || 0),
+        micronixCount: Number(d.micronixCount || 0),
+        cryovialCount: Number(d.cryovialCount || 0),
+        staticWellCount: Number(d.staticWellCount || 0),
         tubeCount: Number(d.tubeCount || 0),
         inventoryTotal: Number(d.inventoryTotal || 0)
       })))
@@ -72,6 +79,9 @@ export default function BloodControls() {
         ...b,
         specimenCount: Number(b.specimenCount || 0),
         spotCount: Number(b.spotCount || 0),
+        micronixCount: Number(b.micronixCount || 0),
+        cryovialCount: Number(b.cryovialCount || 0),
+        staticWellCount: Number(b.staticWellCount || 0),
         tubeCount: Number(b.tubeCount || 0),
         inventoryTotal: Number(b.inventoryTotal || 0)
       })))
@@ -88,9 +98,11 @@ export default function BloodControls() {
     const totalDefinitions = definitions.length
     const totalBatches = batches.length
     const totalSpots = batches.reduce((sum, b) => sum + (b.spotCount || 0), 0)
-    const totalTubes = batches.reduce((sum, b) => sum + (b.tubeCount || 0), 0)
+    const totalMicronix = batches.reduce((sum, b) => sum + (b.micronixCount || 0), 0)
+    const totalCryovial = batches.reduce((sum, b) => sum + (b.cryovialCount || 0), 0)
+    const totalStaticWells = batches.reduce((sum, b) => sum + (b.staticWellCount || 0), 0)
 
-    return { totalDefinitions, totalBatches, totalSpots, totalTubes }
+    return { totalDefinitions, totalBatches, totalSpots, totalMicronix, totalCryovial, totalStaticWells }
   }, [definitions, batches])
 
   // Filtered definitions
@@ -197,36 +209,36 @@ export default function BloodControls() {
       key: 'inventoryTotal',
       label: 'Inventory',
       sortable: true,
-      render: (_, row) => (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-tight">
-              {row.batchCount || 0} Batches
-            </span>
+      render: (_, row) => {
+        const hasSpots = (row.spotCount ?? 0) > 0
+        const hasMicronix = (row.micronixCount ?? 0) > 0
+        const hasCryovial = (row.cryovialCount ?? 0) > 0
+        const hasStaticWells = (row.staticWellCount ?? 0) > 0
+        const hasAny = hasSpots || hasMicronix || hasCryovial || hasStaticWells
+        const badge = (type: string, count: number, label: string, bg: string, text: string, border: string) => (
+          <div key={type} className={`flex items-center gap-1.5 px-2 py-1 ${bg} ${text} border ${border} rounded-md`}>
+            {getContainerTypeIcon(type)}
+            <span className="font-bold">{count}</span>
+            <span className="text-[10px] uppercase font-medium">{label}</span>
           </div>
-          <div className="flex gap-3 text-sm">
-            {row.spotCount !== undefined && row.spotCount > 0 && (
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-md">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                <span className="font-bold">{row.spotCount}</span>
-                <span className="text-[10px] uppercase font-medium">Spots</span>
-              </div>
-            )}
-            {row.tubeCount !== undefined && row.tubeCount > 0 && (
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-md">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                </svg>
-                <span className="font-bold">{row.tubeCount}</span>
-                <span className="text-[10px] uppercase font-medium">Tubes</span>
-              </div>
-            )}
-            {(!row.spotCount && !row.tubeCount) && <span className="text-gray-400 italic text-xs">No stock</span>}
+        )
+        return (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-tight">
+                {row.batchCount || 0} Batches
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2 text-sm">
+              {hasSpots && badge('paper', row.spotCount!, 'Spots', 'bg-amber-50', 'text-amber-700', 'border-amber-100')}
+              {hasMicronix && badge('micronix_tube', row.micronixCount!, 'Micronix', 'bg-teal-50', 'text-teal-700', 'border-teal-100')}
+              {hasCryovial && badge('cryovial_tube', row.cryovialCount!, 'Cryovial', 'bg-blue-50', 'text-blue-700', 'border-blue-100')}
+              {hasStaticWells && badge('static_well', row.staticWellCount!, 'Static wells', 'bg-slate-50', 'text-slate-700', 'border-slate-200')}
+              {!hasAny && <span className="text-gray-400 italic text-xs">No stock</span>}
+            </div>
           </div>
-        </div>
-      ),
+        )
+      },
     },
     {
       key: 'targetDensity',
@@ -326,29 +338,29 @@ export default function BloodControls() {
       key: 'inventoryTotal',
       label: 'Inventory',
       sortable: true,
-      render: (_, row) => (
-        <div className="flex gap-3 text-sm">
-          {row.spotCount !== undefined && row.spotCount > 0 && (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-md">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              <span className="font-bold">{row.spotCount}</span>
-              <span className="text-[10px] uppercase font-medium">Spots</span>
-            </div>
-          )}
-          {row.tubeCount !== undefined && row.tubeCount > 0 && (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-md">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-              </svg>
-              <span className="font-bold">{row.tubeCount}</span>
-              <span className="text-[10px] uppercase font-medium">Tubes</span>
-            </div>
-          )}
-          {(!row.spotCount && !row.tubeCount) && <span className="text-gray-400 italic">Empty</span>}
-        </div>
-      )
+      render: (_, row) => {
+        const hasSpots = (row.spotCount ?? 0) > 0
+        const hasMicronix = (row.micronixCount ?? 0) > 0
+        const hasCryovial = (row.cryovialCount ?? 0) > 0
+        const hasStaticWells = (row.staticWellCount ?? 0) > 0
+        const hasAny = hasSpots || hasMicronix || hasCryovial || hasStaticWells
+        const badge = (type: string, count: number, label: string, bg: string, text: string, border: string) => (
+          <div key={type} className={`flex items-center gap-1.5 px-2 py-1 ${bg} ${text} border ${border} rounded-md`}>
+            {getContainerTypeIcon(type)}
+            <span className="font-bold">{count}</span>
+            <span className="text-[10px] uppercase font-medium">{label}</span>
+          </div>
+        )
+        return (
+          <div className="flex flex-wrap gap-2 text-sm">
+            {hasSpots && badge('paper', row.spotCount!, 'Spots', 'bg-amber-50', 'text-amber-700', 'border-amber-100')}
+            {hasMicronix && badge('micronix_tube', row.micronixCount!, 'Micronix', 'bg-teal-50', 'text-teal-700', 'border-teal-100')}
+            {hasCryovial && badge('cryovial_tube', row.cryovialCount!, 'Cryovial', 'bg-blue-50', 'text-blue-700', 'border-blue-100')}
+            {hasStaticWells && badge('static_well', row.staticWellCount!, 'Static wells', 'bg-slate-50', 'text-slate-700', 'border-slate-200')}
+            {!hasAny && <span className="text-gray-400 italic">Empty</span>}
+          </div>
+        )
+      }
     },
     {
       key: 'productionDate',
@@ -396,17 +408,19 @@ export default function BloodControls() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
           {loading ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <SkeletonCard key={i} height="h-24" className={`blood-controls-reveal blood-controls-reveal-${Math.min(i + 2, 5)}`} />
+            Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonCard key={i} height="h-24" className={`blood-controls-reveal blood-controls-reveal-${Math.min(i + 2, 6)}`} />
             ))
           ) : (
             <>
               <StatCard title="Total Definitions" value={stats.totalDefinitions} subtitle="Unique control types" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-2" />
               <StatCard title="Total Batches" value={stats.totalBatches} subtitle="Cumulative production" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-3" />
               <StatCard title="Total Spots" value={stats.totalSpots} subtitle="DBS / Paper spots available" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-4" />
-              <StatCard title="Total Tubes" value={stats.totalTubes} subtitle="Vials and tubes in stock" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-5" />
+              <StatCard title="Total Micronix" value={stats.totalMicronix} subtitle="Micronix tubes in stock" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-5" />
+              <StatCard title="Total Cryovial" value={stats.totalCryovial} subtitle="Cryovial tubes in stock" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-5" />
+              <StatCard title="Total Static Wells" value={stats.totalStaticWells} subtitle="Static wells in stock" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-5" />
             </>
           )}
         </div>
@@ -442,6 +456,7 @@ export default function BloodControls() {
                       </svg>
                     </div>
                     <input
+                      ref={searchInputRef}
                       type="text"
                       placeholder={`Search ${activeTab === 'batches' ? 'batches' : 'definitions'}...`}
                       className="block w-full pl-10 pr-3 py-2 border rounded-lg leading-5 bg-white sm:text-sm transition-shadow"

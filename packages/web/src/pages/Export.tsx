@@ -9,21 +9,8 @@ import {
   type Tag,
   type ExportConfiguration,
 } from '../lib/api'
+import { formatLocalDateTime } from '../lib/date-utils'
 import '../styles/storage.css'
-
-/**
- * Format a date as a filesystem-safe local datetime string
- * Format: YYYY-MM-DD_HH-MM-SS (e.g., "2026-01-27_14-30-45")
- */
-function formatLocalDateTime(date: Date = new Date()): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  const seconds = String(date.getSeconds()).padStart(2, '0')
-  return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`
-}
 
 const CONTAINER_TYPES = [
   { value: 'micronix_tube', label: 'Micronix Tube' },

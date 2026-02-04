@@ -10,6 +10,7 @@ import {
 } from '../config/reference-data-config'
 import { useStorageTypes } from '../hooks/useReferenceData'
 import { locationsApi, specimenTypesApi, type Location, type SpecimenType } from '../lib/api'
+import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import '../styles/reference-data.css'
 
 export default function ReferenceData() {
@@ -67,6 +68,8 @@ export default function ReferenceData() {
   // Reset pagination/search/editing when tab or search changes (adjust during render)
   const prevTabRef = useRef(activeTab)
   const prevSearchRef = useRef(search)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  useFocusSearchOnSlash(searchInputRef)
   if (prevTabRef.current !== activeTab) {
     prevTabRef.current = activeTab
     prevSearchRef.current = ''
@@ -388,6 +391,7 @@ export default function ReferenceData() {
               onPageChange: setPage,
               showPagination: true,
             } : undefined}
+            searchInputRef={searchInputRef}
           />
           </div>
         </div>

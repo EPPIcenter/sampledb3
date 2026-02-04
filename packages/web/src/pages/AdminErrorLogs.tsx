@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { errorLogsApi, type ErrorLog, type ErrorLogsQueryParams } from '../lib/api'
 import Pagination from '../components/Pagination'
+import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import '../styles/admin.css'
 
 export default function AdminErrorLogs() {
@@ -22,6 +23,8 @@ export default function AdminErrorLogs() {
   // Client-side pagination
   const [page, setPage] = useState(1)
   const pageSize = 50
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  useFocusSearchOnSlash(searchInputRef)
 
   // Debounce search
   useEffect(() => {
@@ -169,6 +172,7 @@ export default function AdminErrorLogs() {
                 Search
               </label>
             <input
+              ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

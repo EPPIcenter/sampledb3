@@ -25,6 +25,7 @@ export default function BatchInfoStep({
   const [nameSuggestion, setNameSuggestion] = useState<string | null>(null)
   const [localName, setLocalName] = useState(batchInfo.name)
   const nameInputRef = useRef<HTMLInputElement>(null)
+  const prevBatchNameRef = useRef(batchInfo.name)
 
   useEffect(() => {
     loadDefinitions()
@@ -36,10 +37,11 @@ export default function BatchInfoStep({
     }
   }, [batchInfo.controlDefinitionId])
 
-  // Sync local name with batchInfo when it changes externally
-  useEffect(() => {
+  // Sync local name with batchInfo when it changes externally (during render to avoid extra pass)
+  if (batchInfo.name !== prevBatchNameRef.current) {
+    prevBatchNameRef.current = batchInfo.name
     setLocalName(batchInfo.name)
-  }, [batchInfo.name])
+  }
 
   const loadDefinitions = async () => {
     try {

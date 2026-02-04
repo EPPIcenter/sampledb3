@@ -372,6 +372,19 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                               })}
                             </div>
                           )}
+                          {specimen.containers?.some(c => c.comment) && (
+                            <div className="mt-1.5 text-xs dashboard-stat-muted space-y-0.5">
+                              {specimen.containers.filter(c => c.comment).map((c, i) => {
+                                const label = [c.collectionName, c.position].filter(Boolean).join(' ')
+                                const note = c.comment!.length > 60 ? `${c.comment!.slice(0, 57)}…` : c.comment
+                                return (
+                                  <div key={i} title={c.comment!}>
+                                    <span className="font-medium">Notes</span>{label ? ` (${label}): ` : ': '}{note}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

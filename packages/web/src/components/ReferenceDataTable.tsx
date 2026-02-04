@@ -1,3 +1,4 @@
+import type { RefObject } from 'react'
 import { useState } from 'react'
 import { useUser } from '../contexts/UserContext'
 import SkeletonTable from './SkeletonTable'
@@ -27,6 +28,7 @@ interface ReferenceDataTableProps<T extends { id: number }> {
     onPageChange: (page: number) => void
     showPagination?: boolean
   }
+  searchInputRef?: RefObject<HTMLInputElement | null>
 }
 
 export default function ReferenceDataTable<T extends { id: number }>({
@@ -42,6 +44,7 @@ export default function ReferenceDataTable<T extends { id: number }>({
   loading = false,
   readOnly = false,
   pagination,
+  searchInputRef,
 }: ReferenceDataTableProps<T>) {
   const { canManageReferenceData } = useUser()
   const canEdit = !readOnly && canManageReferenceData
@@ -103,6 +106,7 @@ export default function ReferenceDataTable<T extends { id: number }>({
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <input
+          ref={searchInputRef}
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}

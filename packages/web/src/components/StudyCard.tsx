@@ -13,6 +13,8 @@ interface StudyCardProps {
   summary?: StudySummaryData | null
   loading?: boolean
   onLoadSummary?: () => void
+  /** When 'list', description is always visible; when 'grid', description is in a collapsible. */
+  variant?: 'grid' | 'list'
 }
 
 // Calculate study duration from date range
@@ -55,7 +57,7 @@ const ChevronDownIcon = () => (
   </svg>
 )
 
-export default function StudyCard({ study, summary, loading, onLoadSummary }: StudyCardProps) {
+export default function StudyCard({ study, summary, loading, onLoadSummary, variant = 'grid' }: StudyCardProps) {
   const [expanded, setExpanded] = useState(false)
 
   const formatDate = (dateString: string) => {
@@ -218,18 +220,27 @@ export default function StudyCard({ study, summary, loading, onLoadSummary }: St
           
           {study.description && (
             <div className="mt-2">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setExpanded(!expanded)
-                }}
-                className="flex items-center gap-1 text-xs studies-link"
-              >
-                <span>Description</span>
-                <ChevronDownIcon />
-              </button>
-              {expanded && (
-                <p className="text-xs mt-1 line-clamp-3" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{study.description}</p>
+              {variant === 'list' ? (
+                <>
+                  <div className="text-xs mb-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Description</div>
+                  <p className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{study.description}</p>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setExpanded(!expanded)
+                    }}
+                    className="flex items-center gap-1 text-xs studies-link"
+                  >
+                    <span>Description</span>
+                    <ChevronDownIcon />
+                  </button>
+                  {expanded && (
+                    <p className="text-xs mt-1 line-clamp-3" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{study.description}</p>
+                  )}
+                </>
               )}
             </div>
           )}

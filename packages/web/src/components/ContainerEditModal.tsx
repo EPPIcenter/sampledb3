@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { tagsApi, settingsApi, type Tag, type Unit } from '../lib/api'
-import { useModifierHotkey } from '../hooks/useHotkey'
+import { useHotkey, useModifierHotkey } from '../hooks/useHotkey'
 
 interface ContainerEditModalProps {
   isOpen: boolean
@@ -162,17 +162,12 @@ function ContainerEditModalForm({
     }
   }, { preventDefault: true, enableOnFormTags: true })
 
-  // Escape to close
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !loading) {
-        onClose()
-      }
+  // Escape to close (only when not loading)
+  useHotkey('escape', () => {
+    if (!loading) {
+      onClose()
     }
-
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [loading, onClose])
+  }, { enableOnFormTags: true })
 
   return (
         <div

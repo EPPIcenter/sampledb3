@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import '../styles/dashboard.css'
 import api, {
@@ -20,6 +20,7 @@ import SkeletonCard from '../components/SkeletonCard'
 import SearchModal from '../components/SearchModal'
 import { calculateTrend } from '../utils/trends'
 import { useUser } from '../contexts/UserContext'
+import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 
 interface ActivityItem {
   id: number
@@ -65,6 +66,8 @@ export default function Dashboard() {
   // Hero search: open SearchModal with prefilled query
   const [searchModalOpen, setSearchModalOpen] = useState(false)
   const [searchInitialQuery, setSearchInitialQuery] = useState('')
+  const heroSearchRef = useRef<HTMLInputElement>(null)
+  useFocusSearchOnSlash(heroSearchRef)
 
   // Data freshness (set when critical load completes)
   const [dataAsOf, setDataAsOf] = useState<Date | null>(null)
@@ -246,6 +249,7 @@ export default function Dashboard() {
           <form onSubmit={handleSearchSubmit} className="dashboard-search-form max-w-2xl">
             <div className="flex gap-2">
               <input
+                ref={heroSearchRef}
                 type="search"
                 name="dashboard-search"
                 placeholder="Search by barcode, study code, subject, or ID"

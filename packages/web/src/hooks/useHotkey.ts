@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import type { RefObject } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { getModifierKey } from '../lib/hotkeys'
 
@@ -120,5 +120,24 @@ export function useModifierShiftHotkey(
   const modifier = getModifierKey()
   const hotkey = `${modifier}+shift+${key}`
   useHotkey(hotkey, callback, options)
+}
+
+/**
+ * Vim-style "/" key: focus the given search input when "/" is pressed.
+ * When focus is already on that input, do nothing so "/" can be typed in the search field.
+ * Uses key name "slash" because react-hotkeys-hook v5 listens to key code by default.
+ */
+export function useFocusSearchOnSlash(
+  ref: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
+) {
+  useHotkey(
+    'slash',
+    (e) => {
+      if (ref.current && document.activeElement === ref.current) return
+      e.preventDefault()
+      ref.current?.focus()
+    },
+    { enableOnFormTags: true, stopPropagation: true }
+  )
 }
 

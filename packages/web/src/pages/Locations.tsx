@@ -8,6 +8,7 @@ import LocationForm from '../components/LocationForm'
 import LocationHierarchyStatsDisplay from '../components/LocationHierarchyStats'
 import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
 import { useUser } from '../contexts/UserContext'
+import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import '../styles/storage.css'
 
 interface Location {
@@ -44,6 +45,7 @@ export default function Locations() {
   const inputRef = useRef<HTMLInputElement>(null)
   const treeRef = useRef<HTMLDivElement>(null)
   const selectedNodeRef = useRef<HTMLButtonElement>(null)
+  useFocusSearchOnSlash(inputRef)
 
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)

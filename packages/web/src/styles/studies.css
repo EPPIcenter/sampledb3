@@ -232,9 +232,8 @@
 
 .study-detail-identity {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.5rem 1rem;
+  flex-direction: column;
+  gap: 0.5rem;
   margin-top: 0.25rem;
 }
 
@@ -242,6 +241,13 @@
   margin: 0;
   font-size: 1.875rem;
   line-height: 1.2;
+}
+
+.study-detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .study-detail-badge {
@@ -267,7 +273,6 @@
   font-size: 0.875rem;
   color: rgb(var(--dashboard-text-muted));
   line-height: 1.4;
-  max-width: 60ch;
 }
 
 .study-detail-desc.is-clamped {
