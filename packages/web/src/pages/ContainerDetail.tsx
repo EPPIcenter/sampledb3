@@ -726,6 +726,10 @@ export default function ContainerDetail() {
             remainingQuantity: container.remainingQuantity,
             unit: container.unit,
             containerType: effectiveContainerType,
+            barcode: effectiveCollection?.barcode,
+            position: effectiveCollection?.position,
+            label: effectiveCollection?.label,
+            specimenTypeName: specimen?.specimenType?.name ?? specimen?.specimen_type?.name,
           }}
           onSuccess={handleDerivationCreated}
           openKey={derivationModalKey}

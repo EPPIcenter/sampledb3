@@ -196,11 +196,10 @@ export default function ContainerMovePapers() {
     }
   }
 
-  const handleDestinationSelect = (type: 'box' | 'bag', id: number) => {
-    const destination = availableBoxes.concat(availableBags).find(c => c.id === id)
+  const handleDestinationSelect = (type: 'box' | 'bag', id: number, name?: string) => {
     setDestinationCollectionType(type)
     setDestinationCollectionId(id)
-    setDestinationCollectionName(destination?.name || '')
+    setDestinationCollectionName(name ?? '')
     setCurrentStep('confirm')
   }
 
@@ -528,7 +527,7 @@ export default function ContainerMovePapers() {
               <CollectionTreePicker
                 locations={locations}
                 collections={availableBoxes.concat(availableBags)}
-                onSelect={(type, id) => handleDestinationSelect(type, id)}
+                onSelect={(type, id, name) => handleDestinationSelect(type, id, name)}
                 disabledId={sourceCollectionId!}
                 disabledType={sourceCollectionType!}
                 loading={loading}

@@ -51,6 +51,8 @@ const INSTRUMENTS = [
   { id: 'quant_studio' as const, label: 'Quant Studio', ext: 'txt', format: 'quant_studio' },
 ]
 
+const QPCR_RESULTS_UPLOAD_ENABLED = false
+
 const DEFAULT_TARGET_NAME = 'varATS'
 const DEFAULT_FLUOROPHORE = 'FAM'
 const DEFAULT_REPORTER = 'FAM'
@@ -908,7 +910,7 @@ export default function QpcrExperimentDetail() {
           <p className="text-sm text-slate-600 mb-4">
             Upload the result file from your instrument (Bio-Rad CSV or Quant Studio XLS).
           </p>
-          {canWrite && (
+          {QPCR_RESULTS_UPLOAD_ENABLED && canWrite && (
             <div className="space-y-3">
               {resultsError && (
                 <p className="text-sm text-red-600 rounded-lg bg-red-50 px-3 py-2" role="alert">
@@ -959,6 +961,11 @@ export default function QpcrExperimentDetail() {
                 </label>
               </div>
             </div>
+          )}
+          {!QPCR_RESULTS_UPLOAD_ENABLED && (
+            <p className="text-sm text-slate-500 rounded-lg bg-slate-50 px-3 py-2">
+              Result import is temporarily unavailable.
+            </p>
           )}
         </section>
       </div>

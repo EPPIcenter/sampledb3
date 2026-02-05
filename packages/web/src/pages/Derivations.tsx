@@ -52,7 +52,11 @@ export default function Derivations() {
                 </li>
                 <li className="flex items-start">
                   <span className="mr-2">•</span>
-                  <span>Use "Import CSV" to create multiple derivations at once</span>
+                  <span>Use &quot;Import CSV&quot; to create multiple derivations at once</span>
+                </li>
+                <li className="flex items-start">
+                  <span className="mr-2">•</span>
+                  <span>Create one derivation from a container&apos;s detail page</span>
                 </li>
               </ul>
             </div>
