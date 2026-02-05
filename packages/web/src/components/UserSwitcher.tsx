@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
 import { getRecentUsers, type LocalUser } from '../lib/localUserHistory'
@@ -192,65 +193,68 @@ export default function UserSwitcher() {
         )}
       </div>
 
-      {showPasswordDialog && selectedUser && (
-        <div className="palette-dialog-overlay">
-          <div
-            className="palette-dialog-panel"
-            role="dialog"
-            aria-labelledby="switch-user-dialog-title"
-            aria-modal="true"
-          >
-            <h3 id="switch-user-dialog-title">Switch User</h3>
-            <p className="text-sm mb-4 opacity-80">
-              Enter password for <strong>{selectedUser.name}</strong> ({selectedUser.email}) to switch accounts.
-            </p>
-            {error && (
-              <div className="palette-dialog-error mb-4">{error}</div>
-            )}
-            <div className="mb-4">
-              <label htmlFor="user-switcher-password" className="block mb-2">
-                Password
-              </label>
-              <input
-                id="user-switcher-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && password) {
-                    handleSwitch()
-                  }
-                }}
-                className="palette-dialog-input"
-                autoFocus
-              />
+      {showPasswordDialog &&
+        selectedUser &&
+        createPortal(
+          <div className="palette-dialog-overlay">
+            <div
+              className="palette-dialog-panel"
+              role="dialog"
+              aria-labelledby="switch-user-dialog-title"
+              aria-modal="true"
+            >
+              <h3 id="switch-user-dialog-title">Switch User</h3>
+              <p className="text-sm mb-4 opacity-80">
+                Enter password for <strong>{selectedUser.name}</strong> ({selectedUser.email}) to switch accounts.
+              </p>
+              {error && (
+                <div className="palette-dialog-error mb-4">{error}</div>
+              )}
+              <div className="mb-4">
+                <label htmlFor="user-switcher-password" className="block mb-2">
+                  Password
+                </label>
+                <input
+                  id="user-switcher-password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && password) {
+                      handleSwitch()
+                    }
+                  }}
+                  className="palette-dialog-input"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordDialog(false)
+                    setPassword('')
+                    setSelectedUserId(null)
+                    setError(null)
+                  }}
+                  className="palette-dialog-btn-secondary"
+                  disabled={switching}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSwitch}
+                  disabled={!password || switching}
+                  className="palette-dialog-btn-primary"
+                >
+                  {switching ? 'Switching...' : 'Switch User'}
+                </button>
+              </div>
             </div>
-            <div className="flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowPasswordDialog(false)
-                  setPassword('')
-                  setSelectedUserId(null)
-                  setError(null)
-                }}
-                className="palette-dialog-btn-secondary"
-                disabled={switching}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSwitch}
-                disabled={!password || switching}
-                className="palette-dialog-btn-primary"
-              >
-                {switching ? 'Switching...' : 'Switch User'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </>
   )
 }

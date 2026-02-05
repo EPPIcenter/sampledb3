@@ -107,6 +107,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
           errorMessage = (err as { message: string }).message
         }
       }
+      // Map session/auth middleware messages to user-friendly text (wrong password shows "Invalid password" from API)
+      if (errorMessage === 'No session ID provided' || errorMessage === 'Invalid or expired session') {
+        errorMessage = 'Your session may have expired. Please refresh the page and sign in again.'
+      }
       setError(errorMessage)
       setLoading(false)
       // Don't call refreshUser() here - if switch failed, we want to keep the current user
