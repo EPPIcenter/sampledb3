@@ -33,6 +33,7 @@ import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } 
 import { resolveCollection } from '../lib/collection-resolution'
 import { resolveCollectionByName } from '../lib/collection-resolution'
 import type { ContainerData } from '../lib/container-creation'
+import { findExistingStudySpecimen } from '../lib/specimen-helpers'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 
 // Extended container data type for this endpoint (includes collectionLocationId)
@@ -960,10 +961,22 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
               specimenIndex: i,
             }, 400)
           }
+          if (!spec.container.position || String(spec.container.position).trim() === '') {
+            return c.json({
+              error: 'Position (well) is required for micronix tubes.',
+              specimenIndex: i,
+            }, 400)
+          }
         } else if (spec.container.containerType === 'cryovial_tube') {
           if (!spec.container.collectionName && !spec.container.collectionBarcode) {
             return c.json({
               error: 'Collection name or barcode is required for cryovial tubes',
+              specimenIndex: i,
+            }, 400)
+          }
+          if (!spec.container.position || String(spec.container.position).trim() === '') {
+            return c.json({
+              error: 'Position (well) is required for cryovial tubes.',
               specimenIndex: i,
             }, 400)
           }
@@ -984,6 +997,12 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
           if (!spec.container.collectionName && !spec.container.collectionBarcode) {
             return c.json({
               error: 'Collection name or barcode is required for static wells',
+              specimenIndex: i,
+            }, 400)
+          }
+          if (!spec.container.position || String(spec.container.position).trim() === '') {
+            return c.json({
+              error: 'Position (well) is required for static wells.',
               specimenIndex: i,
             }, 400)
           }
@@ -1139,32 +1158,48 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
         subjectId = newSubject.id
       }
       
-      // Create specimens and containers
+      // Create specimens and containers (get-or-create specimen, then create container if provided)
       const insertedSpecimens: Array<{
         specimen: typeof specimen.$inferSelect
         containerCreated: boolean
         containerId?: number
+        specimenCreated: boolean
       }> = []
       
       for (let i = 0; i < resolvedSpecimens.length; i++) {
         const spec = resolvedSpecimens[i]
         const prepared = preparedContainers[i]
         
-        // Create specimen
-        const newSpecimenResult = tx
-          .insert(specimen)
-          .values({
-            studySubjectId: subjectId,
-            specimenTypeId: spec.specimenTypeId,
-            collectionDate: spec.collectionDate,
-            created: now,
-            lastUpdated: now,
-            createdBy: user?.id,
-            updatedBy: user?.id,
-          })
-          .returning()
-          .get()
-        const newSpecimen = Array.isArray(newSpecimenResult) ? newSpecimenResult[0] : newSpecimenResult
+        // Get existing specimen or create new one (same subject + type + collection date = one specimen)
+        const existingSpecimen = findExistingStudySpecimen(
+          tx as unknown as Database,
+          subjectId,
+          spec.specimenTypeId,
+          spec.collectionDate
+        )
+        let specimenRecord: typeof specimen.$inferSelect
+        let specimenCreated: boolean
+        if (existingSpecimen) {
+          specimenRecord = existingSpecimen
+          specimenCreated = false
+        } else {
+          const newSpecimenResult = tx
+            .insert(specimen)
+            .values({
+              studySubjectId: subjectId,
+              specimenTypeId: spec.specimenTypeId,
+              collectionDate: spec.collectionDate,
+              created: now,
+              lastUpdated: now,
+              createdBy: user?.id,
+              updatedBy: user?.id,
+            })
+            .returning()
+            .get()
+          specimenRecord = Array.isArray(newSpecimenResult) ? newSpecimenResult[0] : newSpecimenResult
+          specimenCreated = true
+        }
+        const specimenId = specimenRecord.id
         
         let containerCreated = false
         let containerId: number | undefined
@@ -1178,7 +1213,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
           const storageContainerResult = tx
             .insert(storageContainer)
             .values({
-              specimenId: newSpecimen.id,
+              specimenId,
               unitId: prepared.unitId,
               totalQuantity: prepared.totalQuantity,
               remainingQuantity: prepared.remainingQuantity,
@@ -1386,9 +1421,10 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
         }
         
         insertedSpecimens.push({
-          specimen: newSpecimen,
+          specimen: specimenRecord,
           containerCreated,
           containerId,
+          specimenCreated,
         })
       }
       
@@ -1407,11 +1443,11 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
       throw transactionError
     }
     
-    // Calculate summary
+    // Calculate summary (specimensCreated = newly inserted only)
     const summary = {
       subjectsCreated: result.subjectCreated ? 1 : 0,
       subjectsUpdated: result.subjectCreated ? 0 : 1,
-      specimensCreated: result.specimens.length,
+      specimensCreated: result.specimens.filter(s => s.specimenCreated).length,
       containersCreated: result.specimens.filter(s => s.containerCreated).length,
     }
     

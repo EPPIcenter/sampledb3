@@ -232,6 +232,7 @@ function createSchema(sqlite: Database) {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS specimen_control_batch_id_idx ON specimen(control_batch_id)`)
   sqlite.exec(`CREATE INDEX IF NOT EXISTS specimen_collection_date_idx ON specimen(collection_date)`)
   sqlite.exec(`CREATE INDEX IF NOT EXISTS specimen_specimen_type_id_idx ON specimen(specimen_type_id)`)
+  sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_specimen_study_subject_type_date ON specimen(study_subject_id, specimen_type_id, collection_date) WHERE study_subject_id IS NOT NULL`)
 
   // Storage containers
   sqlite.exec(`

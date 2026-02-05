@@ -63,6 +63,9 @@ export async function validateContainerData(
     if (!data.collectionName && !data.collectionBarcode) {
       return { valid: false, error: 'Collection name or barcode is required' }
     }
+    if (!data.position || String(data.position).trim() === '') {
+      return { valid: false, error: 'Position (well) is required for micronix tubes.' }
+    }
     // Validate barcode uniqueness
     const existing = await database
       .select({ id: micronixTube.id })
@@ -75,6 +78,9 @@ export async function validateContainerData(
   } else if (containerType === 'cryovial_tube') {
     if (!data.collectionName && !data.collectionBarcode) {
       return { valid: false, error: 'Collection name or barcode is required' }
+    }
+    if (!data.position || String(data.position).trim() === '') {
+      return { valid: false, error: 'Position (well) is required for cryovial tubes.' }
     }
     // Validate barcode uniqueness if provided
     if (data.barcode) {
@@ -97,6 +103,9 @@ export async function validateContainerData(
   } else if (containerType === 'static_well') {
     if (!data.collectionName && !data.collectionBarcode) {
       return { valid: false, error: 'Collection name or barcode is required' }
+    }
+    if (!data.position || String(data.position).trim() === '') {
+      return { valid: false, error: 'Position (well) is required for static wells.' }
     }
   }
 

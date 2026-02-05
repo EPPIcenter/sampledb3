@@ -178,6 +178,7 @@ describe('Specimen Creation Integration Tests', () => {
           containerType: 'micronix_tube',
           collectionName: plate.name,
           barcode: 'TEST001',
+          position: 'A01',
         },
       },
     })

@@ -22,6 +22,13 @@
       "when": 1767200000000,
       "tag": "0008_qpcr_status_in_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1767300000000,
+      "tag": "0009_specimen_unique_study_subject_type_date",
+      "breakpoints": true
     }
   ]
 }

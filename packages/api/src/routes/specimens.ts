@@ -6,7 +6,10 @@ import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import { resolveContainerByBarcode } from '../lib/identifier-resolution'
 import { validateSpecimenData, checkDuplicateSpecimens } from '../lib/validation'
-import { createContainerForSpecimen, type ContainerData } from '../lib/container-creation'
+import { createContainerForSpecimen, validateContainerData, type ContainerData } from '../lib/container-creation'
+import { findExistingStudySpecimen } from '../lib/specimen-helpers'
+import { validateContainerTypeForSpecimenType } from '../lib/validation'
+import { resolveCollection } from '../lib/collection-resolution'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 
@@ -323,6 +326,21 @@ specimens.post('/', memberMiddleware, async (c) => {
   }
   })
 
+  // Optional container schema (same shape as subjects with-specimens)
+  const containerSchema = z.object({
+    containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', 'static_well']).optional(),
+    collectionName: z.string().optional(),
+    collectionBarcode: z.string().optional(),
+    barcode: z.string().optional(),
+    position: z.string().optional(),
+    label: z.string().optional(),
+    unitId: z.number().int().optional(),
+    totalQuantity: z.number().optional(),
+    remainingQuantity: z.number().optional(),
+    comment: z.string().optional(),
+    collectionLocationId: z.number().int().optional(),
+  }).optional()
+
 // Create multiple specimens (bulk)
 specimens.post('/bulk', memberMiddleware, async (c) => {
   try {
@@ -336,6 +354,7 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
         specimenTypeName: z.string().min(1),
         collectionDate: z.string().optional(),
         containerBarcode: z.string().optional(),
+        container: containerSchema,
       })),
     })
     
@@ -346,11 +365,13 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
     }
     
     const errors: Array<{ index: number; error: string }> = []
-    const createdSpecimens: any[] = []
+    const createdSpecimens: Array<typeof specimen.$inferSelect> = []
+    let newSpecimensCount = 0
+    let containersCreated = 0
     const now = new Date().toISOString()
     const user = c.get('user')
     
-    // Process each specimen
+    // Process each specimen (get-or-create for subject source, then create container if provided)
     for (let i = 0; i < data.specimens.length; i++) {
       const spec = data.specimens[i]
       
@@ -373,38 +394,124 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
           continue
         }
         
-        // Create specimen
-        const insertData: any = {
-          studySubjectId: validation.resolved.studySubjectId,
-          controlBatchId: validation.resolved.controlBatchId,
-          specimenTypeId: validation.resolved.specimenTypeId,
-          created: now,
-          lastUpdated: now,
-          createdBy: user?.id,
-          updatedBy: user?.id,
+        // Validate container if provided
+        if (spec.container?.containerType) {
+          const containerType = spec.container.containerType
+          const containerTypeValidation = await validateContainerTypeForSpecimenType(dbInstance, validation.resolved.specimenTypeId, containerType)
+          if (!containerTypeValidation.valid) {
+            errors.push({ index: i, error: containerTypeValidation.error || 'Invalid container type for specimen type' })
+            continue
+          }
+          const containerDataForValidation: ContainerData = {
+            containerType,
+            collectionName: spec.container.collectionName,
+            collectionBarcode: spec.container.collectionBarcode,
+            barcode: spec.container.barcode,
+            position: spec.container.position,
+            label: spec.container.label,
+          }
+          const containerValidation = await validateContainerData(dbInstance, containerType, containerDataForValidation)
+          if (!containerValidation.valid) {
+            errors.push({ index: i, error: containerValidation.error || 'Invalid container data' })
+            continue
+          }
+          const collectionType = containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
+          const identifier = spec.container.collectionName || spec.container.collectionBarcode
+          if (containerType !== 'paper' && identifier) {
+            const existingId = await resolveCollection(identifier, collectionType, dbInstance)
+            if (!existingId && !spec.container.collectionLocationId) {
+              errors.push({
+                index: i,
+                error: `Collection '${identifier}' not found. Create it first or use Combined import with a location.`,
+              })
+              continue
+            }
+          }
+          if (containerType === 'paper' && spec.container.collectionName) {
+            const existingBox = await resolveCollection(spec.container.collectionName, 'box', dbInstance)
+            if (!existingBox && !spec.container.collectionLocationId) {
+              errors.push({
+                index: i,
+                error: `Box '${spec.container.collectionName}' not found. Create it first or use Combined import with a location.`,
+              })
+              continue
+            }
+          }
         }
         
-        if (spec.collectionDate) {
-          insertData.collectionDate = spec.collectionDate
+        // Get existing study specimen or create new one (subject source only)
+        const studySubjectId = validation.resolved.studySubjectId
+        const existingSpecimen =
+          spec.sourceType === 'subject' && studySubjectId != null
+            ? findExistingStudySpecimen(dbInstance, studySubjectId, validation.resolved.specimenTypeId, spec.collectionDate)
+            : null
+        
+        let specimenRecord: typeof specimen.$inferSelect
+        if (existingSpecimen) {
+          specimenRecord = existingSpecimen
+        } else {
+          const insertData = {
+            studySubjectId: validation.resolved.studySubjectId,
+            controlBatchId: validation.resolved.controlBatchId,
+            specimenTypeId: validation.resolved.specimenTypeId,
+            collectionDate: spec.collectionDate ?? null,
+            created: now,
+            lastUpdated: now,
+            createdBy: user?.id,
+            updatedBy: user?.id,
+          }
+          const [newSpecimen] = await dbInstance
+            .insert(specimen)
+            .values(insertData)
+            .returning()
+          specimenRecord = newSpecimen
+          newSpecimensCount += 1
         }
         
-        const [newSpecimen] = await dbInstance
-          .insert(specimen)
-          .values(insertData)
-          .returning()
+        createdSpecimens.push(specimenRecord)
         
-        createdSpecimens.push(newSpecimen)
-      } catch (error: any) {
+        // Create container if provided (collection must already exist from pre-validation)
+        if (spec.container?.containerType) {
+          const containerData: ContainerData = {
+            containerType: spec.container.containerType,
+            collectionName: spec.container.collectionName,
+            collectionBarcode: spec.container.collectionBarcode,
+            barcode: spec.container.barcode,
+            position: spec.container.position,
+            label: spec.container.label,
+            unitId: spec.container.unitId,
+            totalQuantity: spec.container.totalQuantity,
+            remainingQuantity: spec.container.remainingQuantity,
+            comment: spec.container.comment,
+          }
+          const containerResult = await createContainerForSpecimen(
+            specimenRecord.id,
+            containerData,
+            dbInstance,
+            user?.id
+          )
+          if (containerResult.success && containerResult.containerId) {
+            containersCreated += 1
+          } else {
+            errors.push({
+              index: i,
+              error: containerResult.error || 'Failed to create container',
+            })
+          }
+        }
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Failed to create specimen'
         errors.push({
           index: i,
-          error: error.message || 'Failed to create specimen',
+          error: message,
         })
       }
     }
     
     return c.json({
       specimens: createdSpecimens,
-      created: createdSpecimens.length,
+      created: newSpecimensCount,
+      containersCreated,
       errors: errors.length > 0 ? errors : undefined,
     }, 201)
   } catch (error) {

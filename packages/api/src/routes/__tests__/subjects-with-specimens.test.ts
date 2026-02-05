@@ -531,8 +531,8 @@ describe('Subjects with Specimens API', () => {
       expect(data.specimens[0].containerCreated).toBe(true)
     })
 
-    it('should add multiple specimens to existing subject', async () => {
-      // Create existing subject with 2 specimens
+    it('should add multiple specimens to existing subject (get-or-create: one specimen, three containers)', async () => {
+      // Create existing subject with one specimen (Whole Blood, no collection date)
       const existingSubject = await createTestStudySubject(testDb, {
         studyId: testStudy.id,
         name: 'SUBJ-WITH-SPECS',
@@ -545,25 +545,16 @@ describe('Subjects with Specimens API', () => {
         lastUpdated: new Date().toISOString(),
       })
 
-      await testDb.insert(specimen).values({
-        studySubjectId: existingSubject.id,
-        specimenTypeId: testSpecimenType.id,
-        created: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
-      })
-
       // Create collection
       const now = new Date().toISOString()
-      const [boxRecord] = await testDb
-        .insert(cryovialBox)
-        .values({
-          name: 'BOX-005',
-          locationId: testLocation.id,
-          created: now,
-          lastUpdated: now,
-        })
-        .returning()
+      await testDb.insert(cryovialBox).values({
+        name: 'BOX-005',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
 
+      // Same subject + type + no date: all three rows reuse the existing specimen, only containers are created
       const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
         method: 'POST',
         cookie: cookieHeader,
@@ -601,15 +592,15 @@ describe('Subjects with Specimens API', () => {
 
       expect(res.status).toBe(201)
       const data = await res.json() as SubjectWithSpecimensResponse
-      expect(data.summary.specimensCreated).toBe(3)
+      expect(data.summary.specimensCreated).toBe(0)
       expect(data.summary.containersCreated).toBe(3)
 
-      // Verify all specimens exist
+      // One specimen total (existing one reused for all three container rows)
       const allSpecimens = await testDb
         .select()
         .from(specimen)
         .where(eq(specimen.studySubjectId, existingSubject.id))
-      expect(allSpecimens.length).toBe(5) // 2 existing + 3 new
+      expect(allSpecimens.length).toBe(1)
     })
   })
 
@@ -639,6 +630,33 @@ describe('Subjects with Specimens API', () => {
       expect(subjects.length).toBe(0)
     })
 
+    it('rejects micronix tube without position', async () => {
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-NO-POS',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube',
+                collectionName: 'PLATE-001',
+                barcode: 'MTX-NOPOS',
+                // position omitted - should fail
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const body = await res.json() as ErrorResponse
+      expect(body.error).toContain('Position')
+      const subjects = await testDb.select().from(studySubject).where(eq(studySubject.name, 'SUBJ-NO-POS'))
+      expect(subjects.length).toBe(0)
+    })
+
     it('should rollback on container creation failure', async () => {
       const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
         method: 'POST',
@@ -652,6 +670,7 @@ describe('Subjects with Specimens API', () => {
               container: {
                 containerType: 'cryovial_tube',
                 collectionName: 'NON-EXISTENT-BOX',
+                position: 'A01',
                 // No collectionLocationId - should fail
               },
             },
@@ -838,6 +857,7 @@ describe('Subjects with Specimens API', () => {
               container: {
                 containerType: 'cryovial_tube',
                 collectionName: 'MISSING-BOX',
+                position: 'A01',
                 // No collectionLocationId
               },
             },
@@ -983,8 +1003,77 @@ describe('Subjects with Specimens API', () => {
       const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.summary.subjectsCreated).toBe(1)
       expect(data.summary.subjectsUpdated).toBe(0)
-      expect(data.summary.specimensCreated).toBe(2)
+      // Same subject + type + no collection date: one specimen, two containers (get-or-create)
+      expect(data.summary.specimensCreated).toBe(1)
       expect(data.summary.containersCreated).toBe(2)
+    })
+
+    it('should reuse existing specimen (get-or-create) and only create container on second call', async () => {
+      const now = new Date().toISOString()
+      await testDb.insert(cryovialBox).values({
+        name: 'BOX-DEDUP',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
+
+      // First call: create subject + specimen with container
+      const res1 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'DEDUP-SUBJ',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              collectionDate: '2024-01-15',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-DEDUP',
+                position: 'A01',
+              },
+            },
+          ],
+        },
+      })
+      expect(res1.status).toBe(201)
+      const data1 = (await res1.json()) as SubjectWithSpecimensResponse
+      expect(data1.summary.specimensCreated).toBe(1)
+      expect(data1.summary.containersCreated).toBe(1)
+      const subjectId = data1.subject.id
+
+      // Second call: same study, subject, type, collection date — reuse specimen, add container only
+      const res2 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'DEDUP-SUBJ',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              collectionDate: '2024-01-15',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-DEDUP',
+                position: 'A02',
+              },
+            },
+          ],
+        },
+      })
+      expect(res2.status).toBe(201)
+      const data2 = (await res2.json()) as SubjectWithSpecimensResponse
+      expect(data2.summary.specimensCreated).toBe(0)
+      expect(data2.summary.containersCreated).toBe(1)
+
+      // Subject should have exactly one specimen (not duplicated)
+      const specimensForSubject = await testDb
+        .select({ id: specimen.id })
+        .from(specimen)
+        .where(eq(specimen.studySubjectId, subjectId))
+      expect(specimensForSubject).toHaveLength(1)
     })
   })
 
