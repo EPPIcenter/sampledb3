@@ -389,7 +389,7 @@ search.get('/', authMiddleware, async (c) => {
           id: batch.id,
           title: batch.name,
           subtitle: `Definition: ${batch.definitionName || 'N/A'}`,
-          url: `/controls/batches/${batch.id}`,
+          url: `/blood-controls/batches/${batch.id}`,
           data: batch,
         })
       }
