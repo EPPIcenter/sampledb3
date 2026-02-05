@@ -3,7 +3,7 @@ title: qPCR Experiments
 description: Define plate layouts, download instrument templates, and import run results
 ---
 
-qPCR (quantitative PCR) experiments in SampleDB let you define a 96-well plate layout, download a template for your instrument (Bio-Rad CFX 96 or Thermo Fisher Quant Studio), run the assay on the instrument, and then import results back into SampleDB. This workflow keeps plate definitions, assay settings, and run data in one place.
+qPCR (quantitative PCR) experiments in SampleDB let you define a 96-well plate layout, download a template for your instrument (Bio-Rad CFX 96 or Thermo Fisher Quant Studio), run the assay on the instrument, and then import results back into SampleDB. Result import is currently disabled and will be enabled in a future release. This workflow keeps plate definitions, assay settings, and run data in one place.
 
 The workflow has four steps: **define the plate**, **download the template**, **run the assay on the instrument**, and **import results**.
 
@@ -41,7 +41,7 @@ Load the downloaded template on your qPCR instrument and run the assay. This ste
 
 ## Step 4: Import Results
 
-After the run, upload the result file from your instrument (Bio-Rad CSV or Quant Studio XLS). Select the correct instrument type, choose the file, and upload. SampleDB stores amplification data when present for optional custom curve fitting later.
+Result import is currently disabled and will be enabled in a future release. When available: after the run, upload the result file from your instrument (Bio-Rad CSV or Quant Studio XLS). Select the correct instrument type, choose the file, and upload. SampleDB stores amplification data when present for optional custom curve fitting later.
 
 ## Managing Experiments
 

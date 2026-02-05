@@ -37,7 +37,7 @@ Navigate to the Collection Move section (if available in your navigation) to acc
 
 You can identify collections in several ways. By ID works if you know the collection IDs, which you can find on collection detail pages. By Name lets you enter collection names, and you can optionally specify a location to help the system find the right collection if names aren't unique. By Barcode works if your collections have barcodes, and again you can optionally specify a location.
 
-Once you've identified the collections you want to move, you'll select a destination location. In bulk operations, all selected collections move to the same destination location, which is efficient when you're moving everything to a new freezer or storage area.
+Once you've identified the collections you want to move, you'll select a destination location. In bulk operations, all selected collections move to the same destination location, which is efficient when you're moving everything to a new freezer or storage area. The move flow shows each location’s **storage type** (e.g. -80°C, room temp) and optional **description** in the tree and on the review step, so you can confirm you’re moving to the right kind of storage before confirming.
 
 The system validates that all collections exist, that the destination location is valid and can contain collections, and that you have permission to perform the moves. Once validation passes, you can execute the moves, and the system will update all location assignments in one operation.
 
