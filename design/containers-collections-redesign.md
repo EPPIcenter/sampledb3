@@ -29,6 +29,7 @@ The containers and collections pages use the same "modern precision lab" directi
   - Contents preview on Locations: plain lists replaced with a grid of **clickable collection cards** (type badge, name, barcode, item count) linking to the correct collection detail URL with teal hover border.
   - Collection grid (plate/box layout): optional `theme="storage"` on CollectionGrid for token-based borders and header inside storage pages.
   - **Container detail page**: Lab-oriented layout with identifier → location → quantity → sample → tags → notes (optional audit). Internal SQL container ID is never shown; primary identifiers are barcode (micronix/cryovial/paper when present) and position. Barcode is shown prominently for micronix tubes using `.storage-barcode` in `storage.css` (monospace, scan-friendly). Derived-container cards use position/barcode/type only, not internal ID.
+  - **Collection move**: Location tree and destination picker show storage type (e.g. -80°C) and description; the review step shows destination path, storage type, and description, and each collection’s current location path and type, so users can verify destinations before confirming.
 
 - **Motion**: Staggered reveal on load via `.storage-reveal` and animation-delay. Focus-visible outlines use the teal accent for accessibility.
 

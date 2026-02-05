@@ -7,6 +7,7 @@ export interface LocationSelection {
   locationId: number
   path: string
   name: string
+  effectiveStorageTypeName?: string | null
 }
 
 interface LocationTreePickerProps {
@@ -33,14 +34,23 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
       setLoading(true)
       // Fetch all locations in a single request (no pagination params)
       const response = await locationsApi.list()
-      let allLocations = response.data.locations || []
-      
-      // Filter to collection-capable locations if requested
+      const allLocations = response.data.locations || []
+
       if (filterCollectionsOnly) {
-        allLocations = allLocations.filter(loc => loc.canContainCollections)
+        // Show collection-capable locations plus all their ancestors so the tree has roots
+        // and users can navigate to selectable targets (roots may have canContainCollections=false)
+        const collectionCapable = allLocations.filter((loc) => loc.canContainCollections)
+        const byId = new Map<number, Location>()
+        for (const loc of collectionCapable) {
+          byId.set(loc.id, loc)
+          for (const ancestor of getLocationAncestors(allLocations, loc.id)) {
+            byId.set(ancestor.id, ancestor)
+          }
+        }
+        setLocations(Array.from(byId.values()))
+      } else {
+        setLocations(allLocations)
       }
-      
-      setLocations(allLocations)
     } catch (error) {
       console.error('Failed to load locations:', error)
     } finally {
@@ -114,6 +124,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
       locationId: loc.id,
       path: loc.path || loc.name,
       name: loc.name,
+      effectiveStorageTypeName: loc.effectiveStorageTypeName ?? null,
     }
     
     if (isSelected(loc.id)) {
@@ -206,6 +217,11 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
                     {search.trim() ? highlightText(loc.path, search) : loc.path}
                   </span>
                 )}
+                {(loc.effectiveStorageTypeName || loc.storageTypeName) && (
+                  <span className={`text-xs font-normal ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                    ({loc.effectiveStorageTypeName || loc.storageTypeName})
+                  </span>
+                )}
                 {!canContainCollections && (
                   <span className="text-xs text-gray-500 italic">(cannot contain collections)</span>
                 )}
@@ -284,6 +300,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
             {selected.map((sel, index) => (
               <div key={index} className="text-sm text-gray-900 truncate">
                 {sel.path}
+                {sel.effectiveStorageTypeName ? ` (${sel.effectiveStorageTypeName})` : ''}
               </div>
             ))}
           </div>
@@ -369,6 +386,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
                       className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 text-xs font-medium"
                     >
                       {sel.path}
+                      {sel.effectiveStorageTypeName ? ` (${sel.effectiveStorageTypeName})` : ''}
                       <button
                         type="button"
                         onClick={() => removeSelection(index)}

@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, memo } from 'react'
 import { type Location } from '../lib/api'
 import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
+import type { CollectionType } from '../pages/CollectionMove'
 
 export interface Collection {
   id: number
@@ -18,8 +19,8 @@ export interface Collection {
 interface CollectionMoveTreePickerProps {
   locations: Location[]
   collections: Collection[]
-  selectedIds: Set<number>
-  onToggle: (id: number) => void
+  selectedKeys: Set<string>
+  onToggle: (id: number, type: CollectionType) => void
   onSelectAll?: () => void
   onDeselectAll?: () => void
   onSelectAllAtLocation?: (locationId: number) => void
@@ -30,7 +31,7 @@ interface CollectionMoveTreePickerProps {
 export default function CollectionMoveTreePicker({
   locations,
   collections,
-  selectedIds,
+  selectedKeys,
   onToggle,
   onSelectAll,
   onDeselectAll,
@@ -227,8 +228,8 @@ export default function CollectionMoveTreePicker({
     const hasCollections = locCollections.length > 0
     const isLeaf = leafLocations.has(loc.id)
     
-    // Check if all collections at this location are selected
-    const allSelectedAtLocation = hasCollections && locCollections.every((col) => selectedIds.has(col.id))
+    // Check if all collections at this location are selected (composite key type:id)
+    const allSelectedAtLocation = hasCollections && locCollections.every((col) => selectedKeys.has(`${col.type}:${col.id}`))
     
     // Fast visibility check using pre-computed sets
     const isVisible = search.trim() 
@@ -236,6 +237,8 @@ export default function CollectionMoveTreePicker({
       : locationsWithCollections.has(loc.id)
 
     if (!isVisible && depth > 0) return null
+
+    const storageTypeLabel = loc.effectiveStorageTypeName || loc.storageTypeName
 
     return (
       <div key={loc.id} className="mb-2">
@@ -256,6 +259,9 @@ export default function CollectionMoveTreePicker({
             <span className="font-medium">{loc.name}</span>
             {loc.path && loc.path !== loc.name && (
               <span className="text-xs dashboard-stat-muted">({loc.path})</span>
+            )}
+            {storageTypeLabel && (
+              <span className="text-xs text-gray-500">({storageTypeLabel})</span>
             )}
             {hasCollections && (
               <span className="text-xs text-gray-400 ml-1">
@@ -280,18 +286,23 @@ export default function CollectionMoveTreePicker({
             </button>
           )}
         </div>
+        {loc.description && (
+          <div className="ml-6 text-xs text-gray-500 truncate max-w-full" title={loc.description}>
+            {loc.description}
+          </div>
+        )}
 
         {hasCollections && isExpanded && (
           <div className="ml-6 mt-1 space-y-1 border-l-2 border-gray-200 pl-3">
             {locCollections.map((col) => (
               <label
-                key={col.id}
+                key={`${col.type}:${col.id}`}
                 className="flex items-start gap-3 py-2 px-3 hover:bg-gray-50 rounded cursor-pointer border border-transparent hover:border-gray-200 transition-colors"
               >
                 <input
                   type="checkbox"
-                  checked={selectedIds.has(col.id)}
-                  onChange={() => onToggle(col.id)}
+                  checked={selectedKeys.has(`${col.type}:${col.id}`)}
+                  onChange={() => onToggle(col.id, col.type)}
                   className="mt-0.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500 flex-shrink-0"
                 />
                 <div className="flex-1 min-w-0">
@@ -328,7 +339,7 @@ export default function CollectionMoveTreePicker({
     locationChildrenMap,
     effectiveExpandedIds,
     collectionsByLocation,
-    selectedIds,
+    selectedKeys,
     leafLocations,
     search,
     visibleLocationIds,
@@ -382,10 +393,10 @@ export default function CollectionMoveTreePicker({
         )}
       </div>
 
-      {selectedIds.size > 0 && (
+      {selectedKeys.size > 0 && (
         <div className="flex items-center justify-between p-3 bg-teal-50 border border-teal-200 rounded-lg">
           <span className="text-sm font-medium text-teal-900">
-            {selectedIds.size} collection{selectedIds.size !== 1 ? 's' : ''} selected
+            {selectedKeys.size} collection{selectedKeys.size !== 1 ? 's' : ''} selected
           </span>
           <div className="flex gap-2">
             {onSelectAll && (

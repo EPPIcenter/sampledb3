@@ -6,8 +6,17 @@ import LocationTreePicker, { type LocationSelection } from '../components/Locati
 import { useUser } from '../contexts/UserContext'
 import '../styles/storage.css'
 
-type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
 type Step = 'select-collections' | 'select-destination' | 'confirm' | 'execute'
+
+function toKey(c: { type: CollectionType; id: number }): string {
+  return `${c.type}:${c.id}`
+}
+
+function fromKey(key: string): { type: CollectionType; id: number } {
+  const [type, idStr] = key.split(':')
+  return { type: type as CollectionType, id: Number(idStr) }
+}
 
 export default function CollectionMove() {
   const navigate = useNavigate()
@@ -27,7 +36,7 @@ export default function CollectionMove() {
   const [loading, setLoading] = useState(false)
   const [locations, setLocations] = useState<Location[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
-  const [selectedCollectionIds, setSelectedCollectionIds] = useState<Set<number>>(new Set())
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState<Set<string>>(new Set())
   const [targetLocationId, setTargetLocationId] = useState<number | null>(null)
   const [targetLocationPath, setTargetLocationPath] = useState<string>('')
   const [moveResult, setMoveResult] = useState<{
@@ -86,18 +95,19 @@ export default function CollectionMove() {
     }
   }
 
-  const handleCollectionToggle = (id: number) => {
+  const handleCollectionToggle = (id: number, type: CollectionType) => {
+    const key = toKey({ type, id })
     const newSelected = new Set(selectedCollectionIds)
-    if (newSelected.has(id)) {
-      newSelected.delete(id)
+    if (newSelected.has(key)) {
+      newSelected.delete(key)
     } else {
-      newSelected.add(id)
+      newSelected.add(key)
     }
     setSelectedCollectionIds(newSelected)
   }
 
   const handleSelectAll = () => {
-    setSelectedCollectionIds(new Set(collections.map((c) => c.id)))
+    setSelectedCollectionIds(new Set(collections.map((c) => toKey(c))))
   }
 
   const handleDeselectAll = () => {
@@ -106,15 +116,13 @@ export default function CollectionMove() {
 
   const handleSelectAllAtLocation = (locationId: number) => {
     const collectionsAtLocation = collections.filter((c) => c.locationId === locationId)
-    const allSelected = collectionsAtLocation.every((c) => selectedCollectionIds.has(c.id))
+    const allSelected = collectionsAtLocation.every((c) => selectedCollectionIds.has(toKey(c)))
     
     const newSelected = new Set(selectedCollectionIds)
     if (allSelected) {
-      // Deselect all at this location
-      collectionsAtLocation.forEach((c) => newSelected.delete(c.id))
+      collectionsAtLocation.forEach((c) => newSelected.delete(toKey(c)))
     } else {
-      // Select all at this location
-      collectionsAtLocation.forEach((c) => newSelected.add(c.id))
+      collectionsAtLocation.forEach((c) => newSelected.add(toKey(c)))
     }
     setSelectedCollectionIds(newSelected)
   }
@@ -148,16 +156,17 @@ export default function CollectionMove() {
     setMoveResult(null)
 
     try {
-      // Group selected collections by type
+      // Group selected collections by type (each key is "type:id")
       const collectionsByType = new Map<CollectionType, Array<{ id: number; collection: Collection }>>()
       
-      Array.from(selectedCollectionIds).forEach((id) => {
-        const collection = collections.find((c) => c.id === id)
+      Array.from(selectedCollectionIds).forEach((key) => {
+        const { type, id } = fromKey(key)
+        const collection = collections.find((c) => c.type === type && c.id === id)
         if (collection) {
-          if (!collectionsByType.has(collection.type)) {
-            collectionsByType.set(collection.type, [])
+          if (!collectionsByType.has(type)) {
+            collectionsByType.set(type, [])
           }
-          collectionsByType.get(collection.type)!.push({ id, collection })
+          collectionsByType.get(type)!.push({ id, collection })
         }
       })
 
@@ -199,10 +208,18 @@ export default function CollectionMove() {
           }
         } catch (error: any) {
           allSuccess = false
-          allErrors.push({
-            row: allErrors.length,
-            error: error.response?.data?.error || error.message || `Failed to move ${collectionType} collections`,
-          })
+          const apiErrors = error.response?.data?.errors
+          if (Array.isArray(apiErrors) && apiErrors.length > 0) {
+            const baseRow = allErrors.length
+            apiErrors.forEach((e: { row: number; error: string }) => {
+              allErrors.push({ row: baseRow + e.row, error: e.error })
+            })
+          } else {
+            allErrors.push({
+              row: allErrors.length,
+              error: error.response?.data?.error || error.message || `Failed to move ${collectionType} collections`,
+            })
+          }
         }
       }
 
@@ -213,15 +230,19 @@ export default function CollectionMove() {
       })
       setCurrentStep('execute')
     } catch (error: any) {
+      const apiErrors = error.response?.data?.errors
       setMoveResult({
         success: false,
         moved: 0,
-        errors: [
-          {
-            row: 0,
-            error: error.response?.data?.error || error.message || 'Failed to move collections',
-          },
-        ],
+        errors:
+          Array.isArray(apiErrors) && apiErrors.length > 0
+            ? apiErrors.map((e: { row: number; error: string }) => ({ row: e.row, error: e.error }))
+            : [
+                {
+                  row: 0,
+                  error: error.response?.data?.error || error.message || 'Failed to move collections',
+                },
+              ],
       })
     } finally {
       setLoading(false)
@@ -230,7 +251,7 @@ export default function CollectionMove() {
 
   const handleStartOver = () => {
     setCurrentStep('select-collections')
-    setSelectedCollectionIds(new Set())
+    setSelectedCollectionIds(new Set<string>())
     setTargetLocationId(null)
     setTargetLocationPath('')
     setMoveResult(null)
@@ -300,7 +321,7 @@ export default function CollectionMove() {
               <CollectionMoveTreePicker
                 locations={locations}
                 collections={collections}
-                selectedIds={selectedCollectionIds}
+                selectedKeys={selectedCollectionIds}
                 onToggle={handleCollectionToggle}
                 onSelectAll={handleSelectAll}
                 onDeselectAll={handleDeselectAll}
@@ -335,13 +356,17 @@ export default function CollectionMove() {
             <LocationTreePicker
               selected={
                 targetLocationId
-                  ? [
-                      {
-                        locationId: targetLocationId,
-                        path: targetLocationPath,
-                        name: locations.find(l => l.id === targetLocationId)?.name || '',
-                      },
-                    ]
+                  ? (() => {
+                      const loc = locations.find(l => l.id === targetLocationId)
+                      return [
+                        {
+                          locationId: targetLocationId,
+                          path: targetLocationPath,
+                          name: loc?.name || '',
+                          effectiveStorageTypeName: loc?.effectiveStorageTypeName ?? loc?.storageTypeName ?? null,
+                        },
+                      ]
+                    })()
                   : []
               }
               onChange={handleDestinationSelect}
@@ -359,15 +384,19 @@ export default function CollectionMove() {
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">Collections to Move:</h3>
                 <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                  {Array.from(selectedCollectionIds).map((id) => {
-                    const collection = collections.find((c) => c.id === id)
+                  {Array.from(selectedCollectionIds).map((key) => {
+                    const { type, id } = fromKey(key)
+                    const collection = collections.find((c) => c.type === type && c.id === id)
                     if (!collection) return null
+                    const collectionLoc = collection.locationId ? locations.find(l => l.id === collection.locationId) : null
+                    const storageTypeLabel = collectionLoc?.effectiveStorageTypeName || collectionLoc?.storageTypeName
+                    const locationDisplay = collection.location?.path
+                      ? (storageTypeLabel ? ` - ${collection.location.path} (${storageTypeLabel})` : ` - ${collection.location.path}`)
+                      : ''
                     return (
-                      <li key={id}>
+                      <li key={key}>
                         {collection.name} <span className="text-gray-500">({getCollectionTypeLabel(collection.type)})</span>
-                        {collection.location?.path && (
-                          <span className="text-gray-400"> - {collection.location.path}</span>
-                        )}
+                        {locationDisplay && <span className="text-gray-400">{locationDisplay}</span>}
                       </li>
                     )
                   })}
@@ -380,7 +409,24 @@ export default function CollectionMove() {
 
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">Destination Location:</h3>
-                <p className="text-sm text-gray-600">{targetLocationPath || `Location ID: ${targetLocationId}`}</p>
+                {(() => {
+                  const destLoc = targetLocationId ? locations.find(l => l.id === targetLocationId) : null
+                  if (!destLoc) {
+                    return <p className="text-sm text-gray-600">{targetLocationPath || `Location ID: ${targetLocationId}`}</p>
+                  }
+                  const storageTypeLabel = destLoc.effectiveStorageTypeName || destLoc.storageTypeName
+                  return (
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <p className="font-medium">{destLoc.path || destLoc.name}</p>
+                      {storageTypeLabel && (
+                        <p className="text-gray-500">Storage type: {storageTypeLabel}</p>
+                      )}
+                      {destLoc.description && (
+                        <p className="text-gray-500 truncate max-w-xl" title={destLoc.description}>{destLoc.description}</p>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             </div>
 
