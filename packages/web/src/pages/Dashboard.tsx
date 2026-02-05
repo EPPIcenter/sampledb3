@@ -76,10 +76,24 @@ export default function Dashboard() {
     critical: true,
     secondary: true,
   })
+  const [qpcrLoading, setQpcrLoading] = useState(true)
 
-  // Load critical data on mount; secondary data is triggered from loadCriticalData's finally (single flow)
+  // Load critical and qPCR on mount; qPCR fetches immediately so the card can render as soon as the fast qpcr-experiments API returns. Secondary (statistics, studies, activity, controls) runs after critical.
   useEffect(() => {
     loadCriticalData()
+
+    // qPCR list is fast; fetch in parallel so the card doesn't wait for critical or other secondary requests
+    qpcrExperimentsApi
+      .list({ limit: 5 })
+      .then((res) => {
+        const all = (res.data?.experiments ?? []) as QpcrExperiment[]
+        const sorted = [...all].sort(
+          (a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
+        )
+        setRecentQpcrExperiments(sorted.slice(0, 5))
+      })
+      .catch(() => setRecentQpcrExperiments([]))
+      .finally(() => setQpcrLoading(false))
   }, [])
 
   const loadCriticalData = async () => {
@@ -145,28 +159,46 @@ export default function Dashboard() {
     try {
       setLoading((prev) => ({ ...prev, secondary: true }))
 
-      // Load all secondary data in parallel
+      // Load secondary data in parallel (qPCR is fetched separately on mount so its card can render as soon as that fast API returns)
       const [
         statisticsRes,
         studiesListRes,
         activityRes,
         controlsRes,
-        qpcrRes,
       ] = await Promise.all([
         statisticsApi.get().catch(() => ({ data: null })),
         studiesApi.list(undefined, { limit: 15 }).catch(() => ({ studies: [] })),
         activityApi.recent(20).catch(() => ({ data: { activity: [] } })),
         controlsApi.list().catch(() => ({ data: { controls: [] } })),
-        qpcrExperimentsApi.list().catch(() => ({ data: { experiments: [] } })),
       ])
 
-      // Set statistics data
+      // Set all state that doesn't depend on study summaries so qPCR, activity, etc. can render immediately
       if (statisticsRes.data) {
         setStatisticsData(statisticsRes.data)
       }
 
-      // Load study summaries
+      const activities = (activityRes.data.activity || []) as any[]
+      setRecentActivity(
+        activities.map((item) => ({
+          id: item.id,
+          type: item.type as ActivityItem['type'],
+          timestamp: item.timestamp,
+          label: item.label,
+          context: item.context,
+        }))
+      )
+
+      setHasControls((controlsRes.data.controls || []).length > 0)
+
       const studies = studiesListRes.studies || []
+      setRecentStudies(
+        studies.map((study: Study) => ({ ...study, summary: null }))
+      )
+
+      // Unblock secondary UI so qPCR, activity, statistics, and controls render immediately
+      setLoading((prev) => ({ ...prev, secondary: false }))
+
+      // Load study summaries in background; Recent Studies section updates when done
       if (studies.length > 0) {
         const studyIds = studies.map((s: Study) => s.id)
         try {
@@ -182,35 +214,11 @@ export default function Dashboard() {
           )
         } catch (error) {
           console.error('Failed to load study summaries:', error)
-          setRecentStudies(studies)
         }
-      } else {
-        setRecentStudies([])
       }
-
-      // Set activity
-      const activities = (activityRes.data.activity || []) as any[]
-      setRecentActivity(
-        activities.map((item) => ({
-          id: item.id,
-          type: item.type as ActivityItem['type'],
-          timestamp: item.timestamp,
-          label: item.label,
-          context: item.context,
-        }))
-      )
-
-      // Check if controls exist
-      setHasControls((controlsRes.data.controls || []).length > 0)
-
-      // Recent qPCR experiments (most recently updated first, limit 5)
-      const allExperiments = (qpcrRes.data?.experiments ?? []) as QpcrExperiment[]
-      const sorted = [...allExperiments].sort(
-        (a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
-      )
-      setRecentQpcrExperiments(sorted.slice(0, 5))
     } catch (error) {
       console.error('Failed to load secondary dashboard data:', error)
+      setLoading((prev) => ({ ...prev, secondary: false }))
     } finally {
       setLoading((prev) => ({ ...prev, secondary: false }))
     }
@@ -373,8 +381,8 @@ export default function Dashboard() {
           )}
         </section>
 
-        {/* Next steps: qPCR Experiments */}
-        <section className="dashboard-card p-6 mb-8 dashboard-reveal dashboard-reveal-3" aria-labelledby="qpcr-experiments-title">
+        {/* Next steps: qPCR Experiments — own loading so card appears as soon as the fast qpcr-experiments API returns; no stagger delay */}
+        <section className="dashboard-card p-6 mb-8 dashboard-reveal dashboard-reveal-qpcr" aria-labelledby="qpcr-experiments-title">
           <div className="flex items-center justify-between mb-4">
             <h2 id="qpcr-experiments-title" className="dashboard-section-title">qPCR Experiments</h2>
             {canWrite && (
@@ -383,7 +391,7 @@ export default function Dashboard() {
               </Link>
             )}
           </div>
-          {loading.secondary ? (
+          {qpcrLoading ? (
             <SkeletonCard height="h-24" className="mb-2" />
           ) : recentQpcrExperiments.length === 0 ? (
             <p className="text-[rgb(var(--dashboard-text-muted))] py-2">

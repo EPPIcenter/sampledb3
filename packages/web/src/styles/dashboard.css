@@ -158,6 +158,8 @@
 .dashboard-page .dashboard-reveal-1 { animation-delay: 0.05s; }
 .dashboard-page .dashboard-reveal-2 { animation-delay: 0.1s; }
 .dashboard-page .dashboard-reveal-3 { animation-delay: 0.15s; }
+/* qPCR card: no delay so it appears as soon as the fast API returns */
+.dashboard-page .dashboard-reveal-qpcr { animation-delay: 0s; animation-duration: 0.2s; }
 .dashboard-page .dashboard-reveal-4 { animation-delay: 0.2s; }
 .dashboard-page .dashboard-reveal-5 { animation-delay: 0.25s; }
 .dashboard-page .dashboard-reveal-6 { animation-delay: 0.3s; }

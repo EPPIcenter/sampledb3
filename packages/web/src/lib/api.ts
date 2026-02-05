@@ -1875,7 +1875,7 @@ export interface QpcrExperimentDetailResponse {
 }
 
 export const qpcrExperimentsApi = {
-  list: (params?: { status?: string }) =>
+  list: (params?: { status?: string; limit?: number }) =>
     api.get<{ experiments: QpcrExperiment[] }>('/qpcr-experiments', { params }),
   get: (id: number) =>
     api.get<QpcrExperimentDetailResponse>(`/qpcr-experiments/${id}`),

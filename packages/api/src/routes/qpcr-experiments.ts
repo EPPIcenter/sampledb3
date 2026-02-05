@@ -14,12 +14,13 @@ import {
   controlDefinition,
   storageContainer,
 } from '../db/schema'
-import { eq, inArray, sql, asc } from 'drizzle-orm'
+import { eq, inArray, sql, asc, desc } from 'drizzle-orm'
 import { parseBioradCsv, parseQuantStudioXls } from '../lib/qpcr-result-parse'
 import { z } from 'zod'
 import { handleRouteError } from '../lib/error-handler'
 import { logError, type ErrorLogContext } from '../lib/error-logger'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { validateLimit } from '../lib/constants'
 import { getScannerConfigurationById } from '../lib/settings'
 import type { ScannerConfiguration } from '../lib/settings'
 import { resolveMicronixBarcodesToContainers } from '../lib/export-helpers'
@@ -170,17 +171,25 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
     instrumentType: z.string().optional().nullable(),
   })
 
-  // GET / - List experiments (with well count, run count, last run date per experiment)
+  // GET / - List experiments (with well count, run count, last run date per experiment). Optional limit, ordered by lastUpdated desc.
   qpcr.get('/', authMiddleware, async (c) => {
     try {
       const statusFilter = c.req.query('status')
-      const rows = statusFilter
-        ? await database
+      const limitParam = c.req.query('limit')
+      const limit =
+        limitParam !== undefined && limitParam !== ''
+          ? await validateLimit(database, limitParam)
+          : undefined
+
+      const baseQuery = statusFilter
+        ? database
             .select()
             .from(qpcrExperiment)
             .where(eq(qpcrExperiment.status, statusFilter))
-            .orderBy(qpcrExperiment.id)
-        : await database.select().from(qpcrExperiment).orderBy(qpcrExperiment.id)
+        : database.select().from(qpcrExperiment)
+      const orderedQuery = baseQuery.orderBy(desc(qpcrExperiment.lastUpdated))
+      const rows =
+        limit !== undefined ? await orderedQuery.limit(limit) : await orderedQuery
 
       const experimentIds = rows.map((r) => r.id)
       if (experimentIds.length === 0) {
