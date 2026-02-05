@@ -442,7 +442,7 @@ export default function AdminUsers() {
         {/* Create User Modal */}
         {showCreateModal && (
           <ModalPortal>
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
             <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--dashboard-border))]">
               <h2 className="text-xl font-bold mb-4">Create New User</h2>
               <div className="space-y-4">
@@ -539,7 +539,7 @@ export default function AdminUsers() {
         {/* Edit User Modal */}
         {showEditModal && selectedUser && (
           <ModalPortal>
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
             <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--dashboard-border))]">
               <h2 className="text-xl font-bold mb-4">Edit User</h2>
               <div className="space-y-4">
@@ -608,7 +608,7 @@ export default function AdminUsers() {
         {/* Delete Confirmation Modal */}
         {showDeleteModal && selectedUser && (
           <ModalPortal>
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
             <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--dashboard-border))]">
               <h2 className="text-xl font-bold mb-4">Delete User</h2>
               <p className="text-[rgb(var(--dashboard-text-muted))] mb-4">
@@ -640,7 +640,7 @@ export default function AdminUsers() {
         {/* Password Reset Modal */}
         {showPasswordModal && selectedUser && (
           <ModalPortal>
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
             <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--dashboard-border))]">
               <h2 className="text-xl font-bold mb-4">Reset Password</h2>
               <p className="text-[rgb(var(--dashboard-text-muted))] mb-4">Reset password for {selectedUser.name}</p>
@@ -713,7 +713,7 @@ export default function AdminUsers() {
         {/* Sessions Modal */}
         {showSessionsModal && selectedUser && (
           <ModalPortal>
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
             <div className="admin-card p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto border border-[rgb(var(--dashboard-border))]">
               <h2 className="text-xl font-bold mb-4">Active Sessions for {selectedUser.name}</h2>
               {sessionsLoading ? (

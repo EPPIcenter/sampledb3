@@ -673,6 +673,42 @@ describe('Auth API', () => {
       expect(remainingSessions[0].id).toBe(currentSessionId)
     })
   })
+
+  describe('PUT /api/auth/users/:id - Admin Update User (role)', () => {
+    it('should return 400 when demoting the only admin to member', async () => {
+      const admins = await testDb
+        .select()
+        .from(users)
+        .where(eq(users.role, 'admin'))
+      const admin = admins[0]
+      if (!admin) throw new Error('No admin user')
+      const res = await authenticatedRequest(app, `/api/auth/users/${admin.id}`, {
+        method: 'PUT',
+        cookie: adminCookieHeader,
+        json: { role: 'member' },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toBe('Cannot remove the last admin')
+    })
+
+    it('should return 200 when demoting one of two admins to member', async () => {
+      const secondAdmin = await createTestUser(testDb, {
+        email: 'admin2@test.com',
+        name: 'Second Admin',
+        password: 'password123',
+        role: 'admin',
+      })
+      const res = await authenticatedRequest(app, `/api/auth/users/${secondAdmin.id}`, {
+        method: 'PUT',
+        cookie: adminCookieHeader,
+        json: { role: 'member' },
+      })
+      expect(res.status).toBe(200)
+      const data = await res.json() as UserResponse
+      expect(data.user.role).toBe('member')
+    })
+  })
 })
 
 

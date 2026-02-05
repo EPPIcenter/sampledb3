@@ -18,6 +18,8 @@ Same as Dashboard, Statistics, Settings, and Storage: clean, precise, scientific
 
 - **Components**: `.admin-card` for surfaces (cards, filter bars, table wrappers, modal panels); `.admin-section-title` for section headings; `.admin-btn-primary` (teal) and `.admin-btn-secondary` (neutral) for actions; `.admin-table` for thead/tbody borders and header background; `.admin-reveal` and `.admin-reveal-1` … `-8` for staggered reveal; `.admin-skeleton` for loading pulse. Form controls inside `.admin-page` get teal focus ring via descendant rules.
 
+- **Modals**: Admin modals (Users: Create, Edit, Delete, Password, Sessions; Error Logs: Detail, Cleanup) are rendered via `ModalPortal` into `document.body`, so they sit outside `.admin-page`. The overlay div uses the `admin-modal-overlay` class so the same design tokens and `.admin-card` / `.admin-btn-*` styles apply there; the modal panel is opaque and matches the admin theme.
+
 - **Per-page**: Admin Dashboard uses quick-action cards and stat cards with teal icon containers (no dynamic Tailwind color classes); loading/error states use theme. Admin Users uses themed filters, table, and modals (Create, Edit, Delete, Password, Sessions) with primary/secondary buttons. Admin Statistics uses section cards with explicit teal icon style and “Users by Role” block. Admin Error Logs uses themed filters, table, detail modal (stack/context blocks use `--dashboard-surface`), and cleanup modal; level/source/status badges keep semantic colors (error/warning/info, frontend/backend, resolved/unresolved).
 
 ## Why scoped styles

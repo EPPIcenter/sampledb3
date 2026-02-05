@@ -605,15 +605,14 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
 
     // Prevent removing the last admin
     if (data.role && data.role !== 'admin' && existing.role === 'admin') {
-      const adminCount = await database
+      const countResult = await database
         .select({ count: sql<number>`count(*)` })
         .from(users)
         .where(and(
           eq(users.role, 'admin'),
           isNull(users.deletedAt)
         ))
-        .then(rows => rows.length)
-
+      const adminCount = Number(countResult[0]?.count ?? 0)
       if (adminCount <= 1) {
         return c.json({ error: 'Cannot remove the last admin' }, 400)
       }

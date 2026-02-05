@@ -59,6 +59,66 @@
   border-color: rgb(var(--dashboard-accent) / 0.3);
 }
 
+/* Modal overlay: re-apply theme when portaled to body (outside .admin-page) */
+.admin-modal-overlay {
+  --dashboard-bg: 248 250 252;
+  --dashboard-surface: 241 245 249;
+  --dashboard-card: 255 255 255;
+  --dashboard-accent: 20 184 166;
+  --dashboard-accent-hover: 13 148 136;
+  --dashboard-accent-muted: 204 251 241;
+  --dashboard-text: 30 41 59;
+  --dashboard-text-muted: 100 116 139;
+  --dashboard-border: 226 232 240;
+  --dashboard-trend-up: 34 197 94;
+  --dashboard-trend-down: 239 68 68;
+}
+
+.admin-modal-overlay .admin-card {
+  background: rgb(var(--dashboard-card));
+  border: 1px solid rgb(var(--dashboard-border));
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.admin-modal-overlay .admin-btn-primary {
+  background: rgb(var(--dashboard-accent));
+  color: white;
+  font-weight: 500;
+  transition: background-color 0.15s ease;
+  border: none;
+  border-radius: 0.5rem;
+}
+
+.admin-modal-overlay .admin-btn-primary:hover:not(:disabled) {
+  background: rgb(var(--dashboard-accent-hover));
+}
+
+.admin-modal-overlay .admin-btn-primary:focus-visible {
+  outline: 2px solid rgb(var(--dashboard-accent));
+  outline-offset: 2px;
+}
+
+.admin-modal-overlay .admin-btn-secondary {
+  background: rgb(var(--dashboard-surface));
+  color: rgb(var(--dashboard-text));
+  border: 1px solid rgb(var(--dashboard-border));
+  font-weight: 500;
+  border-radius: 0.5rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-modal-overlay .admin-btn-secondary:hover:not(:disabled) {
+  background: rgb(var(--dashboard-border) / 0.5);
+  border-color: rgb(var(--dashboard-border));
+}
+
+.admin-modal-overlay .admin-btn-secondary:focus-visible {
+  outline: 2px solid rgb(var(--dashboard-accent));
+  outline-offset: 2px;
+}
+
 /* Section title */
 .admin-page .admin-section-title {
   font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
