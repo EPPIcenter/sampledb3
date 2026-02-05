@@ -804,39 +804,43 @@ export default function ContainerMoveMicronix() {
                         )}
                       </div>
 
-                      {/* Preview */}
-                      {fileData.preview.length > 0 && (
-                        <div className="mt-3">
-                          <h4 className="text-sm font-medium text-gray-700 mb-2">Preview (first 5 rows):</h4>
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200 text-xs">
-                              <thead className="bg-gray-50">
-                                <tr>
-                                  {Object.keys(fileData.preview[0]).map((header) => (
-                                    <th
-                                      key={header}
-                                      className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase"
-                                    >
-                                      {header}
-                                    </th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody className="bg-white divide-y divide-gray-200">
-                                {fileData.preview.map((row, i) => (
-                                  <tr key={i}>
-                                    {Object.keys(row).map((header) => (
-                                      <td key={header} className="px-2 py-1 whitespace-nowrap text-gray-900">
-                                        {row[header]}
-                                      </td>
+                      {/* Preview — show only CSV columns, not internal normalized keys */}
+                      {fileData.preview.length > 0 && (() => {
+                        const internalKeys = new Set(['container_barcode', 'target_position'])
+                        const previewHeaders = Object.keys(fileData.preview[0]).filter((h) => !internalKeys.has(h))
+                        return (
+                          <div className="mt-3">
+                            <h4 className="text-sm font-medium text-gray-700 mb-2">Preview (first 5 rows):</h4>
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full divide-y divide-gray-200 text-xs">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    {previewHeaders.map((header) => (
+                                      <th
+                                        key={header}
+                                        className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase"
+                                      >
+                                        {header}
+                                      </th>
                                     ))}
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                  {fileData.preview.map((row, i) => (
+                                    <tr key={i}>
+                                      {previewHeaders.map((header) => (
+                                        <td key={header} className="px-2 py-1 whitespace-nowrap text-gray-900">
+                                          {row[header]}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )
+                      })()}
 
                       {/* Validation Errors */}
                       {fileData.validationErrors.length > 0 && (
