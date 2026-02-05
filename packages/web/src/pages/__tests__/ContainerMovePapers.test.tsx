@@ -52,7 +52,7 @@ describe('ContainerMovePapers', () => {
     })
 
     it('renders initial step successfully', async () => {
-        renderWithProviders(<ContainerMovePapers />)
+        await renderWithProviders(<ContainerMovePapers />)
         await waitFor(() => {
             expect(screen.getByText('Move Papers')).toBeInTheDocument()
         })
@@ -66,7 +66,7 @@ describe('ContainerMovePapers', () => {
             return Promise.resolve({ data: { collections: [] } } as any)
         })
 
-        renderWithProviders(<ContainerMovePapers />)
+        await renderWithProviders(<ContainerMovePapers />)
 
         await waitFor(() => {
             expect(collectionsApi.listCollectionsByType).toHaveBeenCalledWith('box')
@@ -93,7 +93,7 @@ describe('ContainerMovePapers', () => {
             data: { locations: [{ id: 10, name: 'Freezer', parentId: null, storageTypeId: '1', canContainCollections: true, path: 'Freezer' }] }
         } as any)
 
-        renderWithProviders(<ContainerMovePapers />)
+        await renderWithProviders(<ContainerMovePapers />)
 
         // 2. Select Source
         // Need to wait for collection picker to load

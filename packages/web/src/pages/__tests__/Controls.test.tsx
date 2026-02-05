@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '../../__tests__/helpers/render'
+import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import BloodControls from '../BloodControls'
 
 vi.mock('../../lib/api', () => ({
@@ -12,7 +12,7 @@ vi.mock('../../lib/api', () => ({
     list: vi.fn().mockResolvedValue({ data: { controls: [] } }),
     listAllBatches: vi.fn().mockResolvedValue({ data: { batches: [] } }),
   },
-  strainsApi: { list: vi.fn().mockResolvedValue({ data: { strains: [] } }) },
+  strainsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
 }))
 
 vi.mock('../../contexts/UserContext', async (importOriginal) => {
@@ -30,14 +30,20 @@ describe('BloodControls', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', () => {
-    const { container } = render(<BloodControls />)
+  it('renders without crashing', async () => {
+    const { container } = await render(<BloodControls />)
+    await waitFor(() => {
+      expect(screen.getByText('Total Definitions')).toBeInTheDocument()
+    })
     expect(container).toBeInTheDocument()
   })
 
-  it('shows blood controls content', () => {
-    render(<BloodControls />)
-    const heading = screen.getByRole('heading', { name: /blood controls management/i })
+  it('shows blood controls content', async () => {
+    await render(<BloodControls />)
+    const heading = await screen.findByRole('heading', { name: /blood controls management/i })
     expect(heading).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Total Definitions')).toBeInTheDocument()
+    })
   })
 })

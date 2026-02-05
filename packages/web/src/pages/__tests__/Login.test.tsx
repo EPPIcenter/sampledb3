@@ -54,16 +54,16 @@ describe('Login Page', () => {
   })
 
   describe('Username/Email Login', () => {
-    it('input field accepts email or username', () => {
-      render(<Login />)
+    it('input field accepts email or username', async () => {
+      await render(<Login />)
 
       const input = screen.getByLabelText(/email or username/i)
       expect(input).toBeInTheDocument()
       expect(input).toHaveAttribute('type', 'text')
     })
 
-    it('placeholder text shows "Email or Username"', () => {
-      render(<Login />)
+    it('placeholder text shows "Email or Username"', async () => {
+      await render(<Login />)
 
       const input = screen.getByPlaceholderText(/email or username/i)
       expect(input).toBeInTheDocument()
@@ -83,7 +83,7 @@ describe('Login Page', () => {
         data: { user: mockUser },
       } as any)
 
-      render(<Login />)
+      await render(<Login />)
 
       const emailInput = screen.getByLabelText(/email or username/i)
       const passwordInput = screen.getByLabelText(/password/i)
@@ -121,7 +121,7 @@ describe('Login Page', () => {
         data: { user: mockUser },
       } as any)
 
-      render(<Login />)
+      await render(<Login />)
 
       const usernameInput = screen.getByLabelText(/email or username/i)
       const passwordInput = screen.getByLabelText(/password/i)
@@ -151,7 +151,7 @@ describe('Login Page', () => {
         },
       })
 
-      render(<Login />)
+      await render(<Login />)
 
       const emailInput = screen.getByLabelText(/email or username/i)
       const passwordInput = screen.getByLabelText(/password/i)
@@ -182,7 +182,7 @@ describe('Login Page', () => {
         data: { user: mockUser },
       } as any)
 
-      render(<Login />)
+      await render(<Login />)
 
       const emailInput = screen.getByLabelText(/email or username/i)
       const passwordInput = screen.getByLabelText(/password/i)
@@ -206,7 +206,7 @@ describe('Login Page', () => {
       })
       vi.mocked(authApi.login).mockReturnValueOnce(loginPromise as any)
 
-      render(<Login />)
+      await render(<Login />)
 
       const emailInput = screen.getByLabelText(/email or username/i)
       const passwordInput = screen.getByLabelText(/password/i)
@@ -262,7 +262,7 @@ describe('Login Page', () => {
         data: { user: mockUser },
       } as any)
 
-      render(<Login />)
+      await render(<Login />)
 
       const emailInput = screen.getByLabelText(/email or username/i)
       const passwordInput = screen.getByLabelText(/password/i)

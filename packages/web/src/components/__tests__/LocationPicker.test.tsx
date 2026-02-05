@@ -21,9 +21,9 @@ describe('LocationPicker', () => {
     })
   })
 
-  it('renders without crashing', () => {
+  it('renders without crashing', async () => {
     const onChange = vi.fn()
-    render(<LocationPicker value={null} onChange={onChange} />)
+    await render(<LocationPicker value={null} onChange={onChange} />)
     expect(locationsApi.list).toHaveBeenCalled()
   })
 
@@ -49,7 +49,7 @@ describe('LocationPicker', () => {
       config: {} as import('axios').InternalAxiosRequestConfig,
     })
     const onChange = vi.fn()
-    render(<LocationPicker value={null} onChange={onChange} />)
+    await render(<LocationPicker value={null} onChange={onChange} />)
     expect(locationsApi.list).toHaveBeenCalled()
   })
 })

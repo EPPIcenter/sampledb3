@@ -5,12 +5,14 @@ import type { Database as DrizzleDatabase } from '../../db/client'
 
 /**
  * Creates an in-memory SQLite database for testing
+ * Assigns a unique _id so defaults/settings cache keys are distinct across test DBs (avoids cross-test contamination when running full suite).
  */
 export function createTestDatabase(): { db: DrizzleDatabase; sqlite: Database } {
   const sqlite = new Database(':memory:')
   sqlite.exec('PRAGMA journal_mode = WAL')
 
-  const db = drizzle(sqlite, { schema })
+  const db = drizzle(sqlite, { schema }) as DrizzleDatabase & { _id?: string }
+  db._id = `test-db-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
   return { db, sqlite }
 }

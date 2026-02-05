@@ -15,20 +15,20 @@ const mockStudy: Study = {
 }
 
 describe('StudyCard', () => {
-  it('renders study title and shortCode', () => {
-    render(<StudyCard study={mockStudy} />)
+  it('renders study title and shortCode', async () => {
+    await render(<StudyCard study={mockStudy} />)
     expect(screen.getByText('Test Study')).toBeInTheDocument()
     expect(screen.getByText('ST1')).toBeInTheDocument()
   })
 
-  it('renders link to study detail', () => {
-    render(<StudyCard study={mockStudy} />)
+  it('renders link to study detail', async () => {
+    await render(<StudyCard study={mockStudy} />)
     const link = screen.getByRole('link', { name: /test study/i })
     expect(link).toHaveAttribute('href', '/studies/1')
   })
 
-  it('renders when summary with totalSubjects/totalSpecimens/totalContainers is provided', () => {
-    render(
+  it('renders when summary with totalSubjects/totalSpecimens/totalContainers is provided', async () => {
+    await render(
       <StudyCard
         study={mockStudy}
         summary={{

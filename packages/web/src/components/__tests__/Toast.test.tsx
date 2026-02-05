@@ -25,21 +25,21 @@ describe('Toast', () => {
     mockRemoveToast.mockClear()
   })
 
-  it('renders nothing when toasts array is empty', () => {
+  it('renders nothing when toasts array is empty', async () => {
     mockToasts = []
-    const { container } = render(<ToastContainer />)
+    const { container } = await render(<ToastContainer />)
     expect(container.firstChild).toBeNull()
   })
 
-  it('renders toast message when toasts exist', () => {
+  it('renders toast message when toasts exist', async () => {
     mockToasts = [{ id: 'toast-1', message: 'Test toast message', type: 'success' }]
-    render(<ToastContainer />)
+    await render(<ToastContainer />)
     expect(screen.getByText('Test toast message')).toBeInTheDocument()
   })
 
   it('calls removeToast when close button is clicked', async () => {
     mockToasts = [{ id: 'toast-1', message: 'Close me', type: 'info' }]
-    render(<ToastContainer />)
+    await render(<ToastContainer />)
     expect(screen.getByText('Close me')).toBeInTheDocument()
     const closeButton = screen.getByRole('button', { name: /close/i })
     const user = userEvent.setup()

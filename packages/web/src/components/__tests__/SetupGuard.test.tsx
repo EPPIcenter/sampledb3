@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '../../__tests__/helpers/render'
+import { render, screen, act } from '../../__tests__/helpers/render'
 import { waitFor } from '@testing-library/react'
 import type { AxiosResponse } from 'axios'
 import SetupGuard from '../SetupGuard'
@@ -32,17 +32,28 @@ describe('SetupGuard', () => {
     vi.mocked(setupApi.status).mockResolvedValue(createStatusResponse(true))
   })
 
-  it('shows loading state initially', () => {
-    render(
+  it('shows loading state initially', async () => {
+    // Deferred promise so loading state is still visible after render's microtask flush
+    let resolveStatus: (v: AxiosResponse<{ initialized: boolean }>) => void
+    const statusPromise = new Promise<AxiosResponse<{ initialized: boolean }>>((r) => {
+      resolveStatus = r
+    })
+    vi.mocked(setupApi.status).mockReturnValueOnce(statusPromise)
+
+    await render(
       <SetupGuard>
         <div>Protected content</div>
       </SetupGuard>
     )
     expect(screen.getByText(/checking setup status/i)).toBeInTheDocument()
+    await act(async () => {
+      resolveStatus!(createStatusResponse(true))
+      await Promise.resolve()
+    })
   })
 
   it('renders children after setup is initialized', async () => {
-    render(
+    await render(
       <SetupGuard>
         <div>Protected content</div>
       </SetupGuard>

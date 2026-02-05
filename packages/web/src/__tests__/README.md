@@ -28,7 +28,7 @@ bun test:coverage # With coverage
 
 - `__tests__/helpers/` - Test utilities
   - `render.tsx`: Custom render function with providers (QueryClient, BrowserRouter, ToastProvider)
-  - `setup.ts`: Global test setup (e.g. IntersectionObserver mock, cleanup)
+  - `setup.ts`: Global test setup (e.g. IntersectionObserver mock, in-memory localStorage, auth mock). The default `authApi.getCurrentUser` mock resolves synchronously (thenable) so UserProvider state updates run inside React’s act and avoid act() warnings.
 - `__tests__/fixtures/` - Test data fixtures
 - `lib/__tests__/` - Lib unit tests (e.g. commands, constants)
 - `components/__tests__/` - Component tests

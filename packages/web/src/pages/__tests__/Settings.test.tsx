@@ -14,6 +14,8 @@ vi.mock('../../lib/api', () => ({
         scanner_configurations: { configurations: [] },
       },
     }),
+    getUnits: vi.fn().mockResolvedValue({ data: [] }),
+    getContainerTypeUnits: vi.fn().mockResolvedValue({ data: { units: [] } }),
   },
 }))
 
@@ -36,14 +38,14 @@ describe('Settings page', () => {
   })
 
   it('renders main settings sections', async () => {
-    render(<Settings />)
+    await render(<Settings />)
     const appSettings = await screen.findAllByText(/Application Settings/i)
     expect(appSettings.length).toBeGreaterThan(0)
     expect(screen.getByText(/Security Settings/i)).toBeInTheDocument()
   })
 
   it('renders container defaults and pagination labels', async () => {
-    render(<Settings />)
+    await render(<Settings />)
     await screen.findByText(/Configure application/i, {}, { timeout: 3000 })
     const containerDefaults = screen.getAllByText(/Container Defaults/i)
     expect(containerDefaults.length).toBeGreaterThan(0)

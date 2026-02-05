@@ -7,6 +7,9 @@ vi.mock('../../lib/api', () => ({
     get: vi.fn(),
   },
   getModifierKey: () => 'Ctrl',
+  specimenTypesApi: {
+    list: vi.fn().mockResolvedValue({ data: [] }),
+  },
 }))
 
 vi.mock('../../contexts/UserContext', async (importOriginal) => {
@@ -35,7 +38,7 @@ describe('Specimens page', () => {
   })
 
   it('renders filters and table area', async () => {
-    render(<Specimens />)
+    await render(<Specimens />)
     const specimensHeadings = await screen.findAllByText(/Specimens/i)
     expect(specimensHeadings.length).toBeGreaterThan(0)
   })
@@ -59,7 +62,7 @@ describe('Specimens page', () => {
       headers: {},
       config: {} as import('axios').InternalAxiosRequestConfig,
     })
-    render(<Specimens />)
+    await render(<Specimens />)
     await screen.findByText(/Whole Blood/i)
     expect(screen.getAllByText(/Whole Blood/i).length).toBeGreaterThan(0)
   })

@@ -98,7 +98,7 @@ describe('StudyDetail page', () => {
     'renders study header and key sections',
     { timeout: 12000 },
     async () => {
-      render(
+      await render(
         <DateFilterProvider>
           <StudyDetail />
         </DateFilterProvider>

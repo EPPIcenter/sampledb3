@@ -113,7 +113,7 @@ describe('ReferenceData Page', () => {
 
   describe('Tab Switching', () => {
     it('should render with default tab (specimen-types)', async () => {
-      render(<ReferenceData />)
+      await render(<ReferenceData />)
 
       await waitFor(() => {
         expect(screen.getByText('Reference Data Management')).toBeInTheDocument()
@@ -124,7 +124,7 @@ describe('ReferenceData Page', () => {
     it('should switch tabs when tab button is clicked', async () => {
       const user = userEvent.setup()
       
-      render(<ReferenceData />)
+      await render(<ReferenceData />)
 
       const statesTab = screen.getByText('States')
       await user.click(statesTab)
@@ -139,7 +139,7 @@ describe('ReferenceData Page', () => {
       // This test is simplified - the actual data loading is complex
       // and would require mocking the entire config system
       // For now, we'll just verify the page renders
-      render(<ReferenceData />)
+      await render(<ReferenceData />)
 
       // Just verify the page renders - data loading is tested in integration
       await waitFor(() => {
@@ -152,7 +152,7 @@ describe('ReferenceData Page', () => {
     it('should open form when Add New button is clicked', async () => {
       const user = userEvent.setup()
       
-      render(<ReferenceData />)
+      await render(<ReferenceData />)
 
       const addButton = screen.getByText('Add New')
       await user.click(addButton)
@@ -167,7 +167,7 @@ describe('ReferenceData Page', () => {
     it('should close form when cancel is clicked', async () => {
       const user = userEvent.setup()
       
-      render(<ReferenceData />)
+      await render(<ReferenceData />)
 
       const addButton = screen.getByText('Add New')
       await user.click(addButton)
@@ -188,7 +188,7 @@ describe('ReferenceData Page', () => {
   describe('Locations Tab (with pagination and search)', () => {
     it('should show pagination for locations tab', async () => {
       const user = userEvent.setup()
-      render(<ReferenceData />)
+      await render(<ReferenceData />)
 
       // Switch to locations tab
       const locationsTab = screen.getByText('Locations')
@@ -201,7 +201,7 @@ describe('ReferenceData Page', () => {
     it('should handle search for locations', async () => {
       const user = userEvent.setup()
       
-      render(<ReferenceData />)
+      await render(<ReferenceData />)
 
       // Switch to locations tab
       const locationsTab = screen.getByText('Locations')

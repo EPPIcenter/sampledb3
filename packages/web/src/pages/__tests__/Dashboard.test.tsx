@@ -11,7 +11,7 @@ vi.mock('../../lib/api', () => ({
   },
   studiesApi: { list: vi.fn().mockResolvedValue({ studies: [], pagination: { total: 0, totalPages: 0 } }) },
   activityApi: { recent: vi.fn().mockResolvedValue({ data: { activity: [] } }) },
-  statisticsApi: { get: vi.fn().mockResolvedValue({ data: {} }) },
+  statisticsApi: { get: vi.fn().mockResolvedValue({ data: null }) },
   controlsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
   qpcrExperimentsApi: { list: vi.fn().mockResolvedValue({ data: { experiments: [] } }) },
 }))
@@ -26,13 +26,13 @@ describe('Dashboard', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', () => {
-    const { container } = render(<Dashboard />)
+  it('renders without crashing', async () => {
+    const { container } = await render(<Dashboard />)
     expect(container).toBeInTheDocument()
   })
 
   it('eventually shows dashboard content or metrics', async () => {
-    render(<Dashboard />)
+    await render(<Dashboard />)
     await vi.waitFor(() => {
       const el = screen.queryByRole('main') ?? document.querySelector('[class*="dashboard"]') ?? document.body
       expect(el).toBeTruthy()

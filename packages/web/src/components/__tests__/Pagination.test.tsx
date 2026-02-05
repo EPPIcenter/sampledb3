@@ -4,15 +4,15 @@ import userEvent from '@testing-library/user-event'
 import Pagination from '../Pagination'
 
 describe('Pagination', () => {
-  it('returns null when totalPages <= 1', () => {
-    const { container } = render(
+  it('returns null when totalPages <= 1', async () => {
+    const { container } = await render(
       <Pagination currentPage={1} totalPages={1} onPageChange={vi.fn()} />
     )
     expect(container.firstChild).toBeNull()
   })
 
-  it('renders Previous and Next buttons and page info', () => {
-    render(
+  it('renders Previous and Next buttons and page info', async () => {
+    await render(
       <Pagination
         currentPage={2}
         totalPages={5}
@@ -27,16 +27,16 @@ describe('Pagination', () => {
     expect(screen.getByText('Next')).toBeInTheDocument()
   })
 
-  it('disables Previous on first page', () => {
-    render(
+  it('disables Previous on first page', async () => {
+    await render(
       <Pagination currentPage={1} totalPages={3} onPageChange={vi.fn()} />
     )
     const prev = screen.getByRole('button', { name: /previous/i })
     expect(prev).toBeDisabled()
   })
 
-  it('disables Next on last page', () => {
-    render(
+  it('disables Next on last page', async () => {
+    await render(
       <Pagination currentPage={3} totalPages={3} onPageChange={vi.fn()} />
     )
     const next = screen.getByRole('button', { name: /next/i })
@@ -45,7 +45,7 @@ describe('Pagination', () => {
 
   it('calls onPageChange with previous page when Previous clicked', async () => {
     const onPageChange = vi.fn()
-    render(
+    await render(
       <Pagination currentPage={2} totalPages={3} onPageChange={onPageChange} />
     )
     const prev = screen.getByRole('button', { name: /previous/i })
@@ -55,7 +55,7 @@ describe('Pagination', () => {
 
   it('calls onPageChange with next page when Next clicked', async () => {
     const onPageChange = vi.fn()
-    render(
+    await render(
       <Pagination currentPage={2} totalPages={3} onPageChange={onPageChange} />
     )
     const next = screen.getByRole('button', { name: /next/i })

@@ -1,5 +1,5 @@
 import { ReactElement } from 'react'
-import { render, RenderOptions } from '@testing-library/react'
+import { act, render, RenderOptions } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import { ToastProvider } from '../../contexts/ToastContext'
@@ -24,7 +24,7 @@ interface CustomRenderOptions extends Omit<RenderOptions, 'wrapper'> {
   queryClient?: QueryClient
 }
 
-export function renderWithProviders(
+export async function renderWithProviders(
   ui: ReactElement,
   { queryClient = createTestQueryClient(), ...renderOptions }: CustomRenderOptions = {}
 ) {
@@ -42,10 +42,15 @@ export function renderWithProviders(
     )
   }
 
-  return {
+  const result = {
     ...render(ui, { wrapper: Wrapper, ...renderOptions }),
     queryClient,
   }
+  // Flush microtasks so UserProvider's getCurrentUser().then(...) runs inside act
+  await act(async () => {
+    await Promise.resolve()
+  })
+  return result
 }
 
 // Re-export everything

@@ -16,18 +16,18 @@ describe('SearchModal', () => {
     onClose.mockClear()
   })
 
-  it('renders nothing when closed', () => {
-    render(<SearchModal isOpen={false} onClose={onClose} />)
+  it('renders nothing when closed', async () => {
+    await render(<SearchModal isOpen={false} onClose={onClose} />)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('renders search input when open', () => {
-    render(<SearchModal isOpen={true} onClose={onClose} />)
+  it('renders search input when open', async () => {
+    await render(<SearchModal isOpen={true} onClose={onClose} />)
     expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument()
   })
 
-  it('shows placeholder or empty results when open', () => {
-    render(<SearchModal isOpen={true} onClose={onClose} />)
+  it('shows placeholder or empty results when open', async () => {
+    await render(<SearchModal isOpen={true} onClose={onClose} />)
     expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument()
   })
 })

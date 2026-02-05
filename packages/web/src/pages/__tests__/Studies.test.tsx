@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '../../__tests__/helpers/render'
+import { render, screen, waitFor } from '../../__tests__/helpers/render'
 
 vi.mock('../../lib/api', () => ({
   studiesApi: {
@@ -41,14 +41,20 @@ describe('Studies', () => {
 
   it('renders without crashing', async () => {
     const { default: Studies } = await import('../Studies')
-    const { container } = render(<Studies />)
+    const { container } = await render(<Studies />)
+    await waitFor(() => {
+      expect(screen.getByText('No studies found')).toBeInTheDocument()
+    })
     expect(container).toBeInTheDocument()
   })
 
   it('shows studies page content', async () => {
     const { default: Studies } = await import('../Studies')
-    render(<Studies />)
-    const heading = screen.getByRole('heading', { name: /^studies$/i })
+    await render(<Studies />)
+    const heading = await screen.findByRole('heading', { name: /^studies$/i })
     expect(heading).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('No studies found')).toBeInTheDocument()
+    })
   })
 })

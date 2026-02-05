@@ -15,15 +15,15 @@ vi.mock('../../lib/api', () => ({
 }))
 
 describe('StudyPicker', () => {
-  it('renders trigger with placeholder when no value', () => {
+  it('renders trigger with placeholder when no value', async () => {
     const onChange = vi.fn()
-    render(<StudyPicker onChange={onChange} />)
+    await render(<StudyPicker onChange={onChange} />)
     expect(screen.getByText('Select a study…')).toBeInTheDocument()
   })
 
   it('opens dropdown when trigger clicked', async () => {
     const onChange = vi.fn()
-    render(<StudyPicker onChange={onChange} />)
+    await render(<StudyPicker onChange={onChange} />)
     await userEvent.click(screen.getByRole('button', { name: /select a study/i }))
     expect(screen.getByText('Study A')).toBeInTheDocument()
     expect(screen.getByText('Study B')).toBeInTheDocument()
@@ -31,7 +31,7 @@ describe('StudyPicker', () => {
 
   it('calls onChange when study selected', async () => {
     const onChange = vi.fn()
-    render(<StudyPicker onChange={onChange} />)
+    await render(<StudyPicker onChange={onChange} />)
     await userEvent.click(screen.getByRole('button', { name: /select a study/i }))
     await userEvent.click(screen.getByText('Study A'))
     expect(onChange).toHaveBeenCalledWith(1)

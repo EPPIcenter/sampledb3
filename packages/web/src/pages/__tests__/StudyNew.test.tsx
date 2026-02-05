@@ -29,13 +29,13 @@ describe('StudyNew', () => {
 
   it('renders without crashing', async () => {
     const { default: StudyNew } = await import('../StudyNew')
-    const { container } = render(<StudyNew />)
+    const { container } = await render(<StudyNew />)
     expect(container).toBeInTheDocument()
   })
 
   it('shows Create Study heading when user can write', async () => {
     const { default: StudyNew } = await import('../StudyNew')
-    render(<StudyNew />)
+    await render(<StudyNew />)
     const heading = screen.getByRole('heading', { name: /create study/i })
     expect(heading).toBeInTheDocument()
   })

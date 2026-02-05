@@ -18,17 +18,17 @@ describe('QpcrExperiments', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', () => {
-    render(<QpcrExperiments />)
+  it('renders without crashing', async () => {
+    await render(<QpcrExperiments />)
     expect(document.body).toBeInTheDocument()
   })
 
   it('shows qPCR experiments content', async () => {
-    render(<QpcrExperiments />)
+    await render(<QpcrExperiments />)
     await vi.waitFor(() => {
-      const heading = screen.queryByRole('heading', { name: /qPCR|experiments/i })
-      const newLink = screen.queryByRole('link', { name: /new experiment/i })
-      expect(heading ?? newLink ?? document.body).toBeTruthy()
+      const headings = screen.queryAllByRole('heading', { name: /qPCR|experiments/i })
+      const newLinks = screen.queryAllByRole('link', { name: /new experiment/i })
+      expect(headings[0] ?? newLinks[0] ?? document.body).toBeTruthy()
     }, { timeout: 3000 })
   })
 })

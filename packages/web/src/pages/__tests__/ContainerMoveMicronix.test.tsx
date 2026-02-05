@@ -74,7 +74,7 @@ describe('ContainerMoveMicronix', () => {
     })
 
     it('renders upload step initially', async () => {
-        renderWithProviders(<ContainerMoveMicronix />)
+        await renderWithProviders(<ContainerMoveMicronix />)
         
         await waitFor(() => {
             expect(screen.getByText('Move Micronix Tubes')).toBeInTheDocument()
@@ -83,7 +83,7 @@ describe('ContainerMoveMicronix', () => {
     })
 
     it('validates empty CSV file', async () => {
-        const { container } = renderWithProviders(<ContainerMoveMicronix />)
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         
         // Wait for scanner config to load and be selected
         await waitFor(() => {
@@ -113,7 +113,7 @@ describe('ContainerMoveMicronix', () => {
     })
 
     it('validates CSV columns specific to micronix (barcode required)', async () => {
-        const { container } = renderWithProviders(<ContainerMoveMicronix />)
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         
         // Wait for scanner config to load and be selected
         await waitFor(() => {
@@ -180,7 +180,7 @@ describe('ContainerMoveMicronix', () => {
             }
         } as any)
 
-        const { container } = renderWithProviders(<ContainerMoveMicronix />)
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         
         // Wait for scanner config to load and be selected
         await waitFor(() => {
@@ -256,7 +256,7 @@ describe('ContainerMoveMicronix', () => {
             }
         } as any)
 
-        const { container } = renderWithProviders(<ContainerMoveMicronix />)
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         
         // Wait for scanner config to load and be selected
         await waitFor(() => {

@@ -23,12 +23,12 @@ describe('AuthGuard', () => {
     mockNavigate.mockClear()
   })
 
-  it('renders children when user is present', () => {
+  it('renders children when user is present', async () => {
     mockUseUser.mockReturnValue({
       user: { id: 1, name: 'Test', email: 'test@test.com', role: 'member' },
       loading: false,
     })
-    render(
+    await render(
       <AuthGuard>
         <span>Protected content</span>
       </AuthGuard>
@@ -36,9 +36,9 @@ describe('AuthGuard', () => {
     expect(screen.getByText('Protected content')).toBeInTheDocument()
   })
 
-  it('shows loading state when loading is true', () => {
+  it('shows loading state when loading is true', async () => {
     mockUseUser.mockReturnValue({ user: null, loading: true })
-    render(
+    await render(
       <AuthGuard>
         <span>Protected content</span>
       </AuthGuard>
@@ -47,9 +47,9 @@ describe('AuthGuard', () => {
     expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
   })
 
-  it('renders nothing when user is null and not loading', () => {
+  it('renders nothing when user is null and not loading', async () => {
     mockUseUser.mockReturnValue({ user: null, loading: false })
-    const { container } = render(
+    const { container } = await render(
       <AuthGuard>
         <span>Protected content</span>
       </AuthGuard>

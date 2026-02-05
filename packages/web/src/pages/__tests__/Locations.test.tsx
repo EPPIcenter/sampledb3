@@ -5,6 +5,13 @@ import Locations from '../Locations'
 vi.mock('../../lib/api', () => ({
   locationsApi: {
     list: vi.fn(),
+    get: vi.fn().mockResolvedValue({
+      data: {
+        location: { id: 1, name: 'Root', path: 'Root', parentId: null, storageTypeId: null, canContainCollections: true, created: '', lastUpdated: '' },
+        contents: { plates: [], boxes: [], bags: [], cryovialBoxes: [] },
+        hierarchyStats: undefined,
+      },
+    }),
   },
   searchApi: {
     searchCollections: vi.fn().mockResolvedValue({ data: [] }),
@@ -37,7 +44,7 @@ describe('Locations page', () => {
   })
 
   it('renders location list or tree', async () => {
-    render(<Locations />)
+    await render(<Locations />)
     const headings = await screen.findAllByText(/Locations|Storage/i)
     expect(headings.length).toBeGreaterThan(0)
   })
@@ -63,7 +70,7 @@ describe('Locations page', () => {
       headers: {},
       config: {} as import('axios').InternalAxiosRequestConfig,
     })
-    render(<Locations />)
+    await render(<Locations />)
     const freezerElements = await screen.findAllByText('Freezer A', {}, { timeout: 3000 })
     expect(freezerElements.length).toBeGreaterThan(0)
   })

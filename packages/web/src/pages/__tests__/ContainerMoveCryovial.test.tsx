@@ -59,7 +59,7 @@ describe('ContainerMoveCryovial', () => {
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
         vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
         
-        renderWithProviders(<ContainerMoveCryovial />)
+        await renderWithProviders(<ContainerMoveCryovial />)
         
         await waitFor(() => {
             expect(screen.getByText('Move Cryovial Tubes')).toBeInTheDocument()
@@ -74,7 +74,7 @@ describe('ContainerMoveCryovial', () => {
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
         vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
         
-        const { container } = renderWithProviders(<ContainerMoveCryovial />)
+        const { container } = await renderWithProviders(<ContainerMoveCryovial />)
 
         await waitFor(() => {
             const input = container.querySelector('input[type="file"]') as HTMLInputElement
@@ -106,7 +106,7 @@ describe('ContainerMoveCryovial', () => {
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
         vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
         
-        const { container } = renderWithProviders(<ContainerMoveCryovial />)
+        const { container } = await renderWithProviders(<ContainerMoveCryovial />)
         
         await waitFor(() => {
             const input = container.querySelector('input[type="file"]') as HTMLInputElement
@@ -172,7 +172,7 @@ describe('ContainerMoveCryovial', () => {
             }
         } as any)
 
-        const { container } = renderWithProviders(<ContainerMoveCryovial />)
+        const { container } = await renderWithProviders(<ContainerMoveCryovial />)
 
         await waitFor(() => {
             const input = container.querySelector('input[type="file"]') as HTMLInputElement
@@ -238,7 +238,7 @@ describe('ContainerMoveCryovial', () => {
             }
         } as any)
 
-        const { container } = renderWithProviders(<ContainerMoveCryovial />)
+        const { container } = await renderWithProviders(<ContainerMoveCryovial />)
         
         await waitFor(() => {
             const input = container.querySelector('input[type="file"]') as HTMLInputElement

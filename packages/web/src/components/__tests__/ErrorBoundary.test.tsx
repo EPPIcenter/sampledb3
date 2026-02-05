@@ -17,8 +17,8 @@ describe('ErrorBoundary', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })
 
-  it('renders children when no error', () => {
-    render(
+  it('renders children when no error', async () => {
+    await render(
       <ErrorBoundary>
         <div>Child content</div>
       </ErrorBoundary>
@@ -26,8 +26,8 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText('Child content')).toBeInTheDocument()
   })
 
-  it('renders fallback UI when child throws', () => {
-    render(
+  it('renders fallback UI when child throws', async () => {
+    await render(
       <ErrorBoundary>
         <ThrowError message="Something broke" />
       </ErrorBoundary>
@@ -37,8 +37,8 @@ describe('ErrorBoundary', () => {
     expect(screen.getByRole('button', { name: /reload page/i })).toBeInTheDocument()
   })
 
-  it('renders custom fallback when provided', () => {
-    render(
+  it('renders custom fallback when provided', async () => {
+    await render(
       <ErrorBoundary fallback={<div>Custom fallback</div>}>
         <ThrowError />
       </ErrorBoundary>

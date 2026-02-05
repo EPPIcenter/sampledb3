@@ -2,16 +2,42 @@ import '@testing-library/jest-dom'
 import { cleanup } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
 
+// In-memory localStorage so addRecentUser in UserContext never throws and console stays clean.
+const storage: Record<string, string> = {}
+const localStorageMock = {
+  getItem: (key: string) => storage[key] ?? null,
+  setItem: (key: string, value: string) => {
+    storage[key] = value
+  },
+  removeItem: (key: string) => {
+    delete storage[key]
+  },
+}
+if (typeof globalThis !== 'undefined') {
+  (globalThis as { localStorage?: typeof localStorageMock }).localStorage = localStorageMock
+}
+if (typeof window !== 'undefined') {
+  (window as { localStorage?: typeof localStorageMock }).localStorage = localStorageMock
+}
+
 // Default mock for authApi.getCurrentUser so UserProvider (in renderWithProviders) resolves without real API.
+// Returns a thenable that resolves synchronously so the state update runs in the same tick as the effect (inside act).
 // Test files that mock ../../lib/api replace the module and must include authApi in their mock.
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>()
   const defaultUser = { id: 1, email: 'test@test.com', name: 'Test User', role: 'admin' as const }
+  const syncThenable = (value: { data: { user: typeof defaultUser } }) => ({
+    then: (onFulfilled: (v: typeof value) => void) => {
+      onFulfilled(value)
+      return { catch: () => ({ then: (f: () => void) => f() }) }
+    },
+    catch: () => ({ then: (f: () => void) => f() }),
+  })
   return {
     ...actual,
     authApi: {
       ...actual.authApi,
-      getCurrentUser: vi.fn().mockResolvedValue({ data: { user: defaultUser } }),
+      getCurrentUser: vi.fn().mockImplementation(() => syncThenable({ data: { user: defaultUser } })),
     },
   }
 })
