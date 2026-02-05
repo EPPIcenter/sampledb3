@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { type Location } from '../lib/api'
 import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
+import ModalPortal from './ModalPortal'
 
 export interface CryovialBox {
   id: number
@@ -323,11 +324,12 @@ export default function CryovialBoxPicker({
       </button>
 
       {open && !disabled && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
-          <div
-            className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-            onClick={() => setOpen(false)}
-          />
+        <ModalPortal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center">
+            <div
+              className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+              onClick={() => setOpen(false)}
+            />
           <div className="relative z-10 w-full max-w-2xl mx-4 bg-white rounded-lg shadow-xl p-6 max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Select Cryovial Box</h3>
@@ -375,6 +377,7 @@ export default function CryovialBoxPicker({
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   )

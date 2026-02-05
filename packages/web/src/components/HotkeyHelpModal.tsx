@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useHotkeyContext } from '../contexts/HotkeyContext'
 import { HOTKEY_DEFINITIONS, formatHotkey } from '../lib/hotkeys'
 import { useHotkey } from '../hooks/useHotkey'
+import ModalPortal from './ModalPortal'
 
 interface HotkeyHelpModalProps {
   isOpen: boolean
@@ -40,13 +41,14 @@ export default function HotkeyHelpModal({ isOpen, onClose }: HotkeyHelpModalProp
   }, {} as Record<string, typeof HOTKEY_DEFINITIONS>)
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
-        <div
-          className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-          onClick={onClose}
-        />
+    <ModalPortal>
+      <div className="fixed inset-0 z-[100] overflow-y-auto">
+        <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+          {/* Background overlay */}
+          <div
+            className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+            onClick={onClose}
+          />
 
         {/* Modal panel */}
         <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
@@ -103,6 +105,7 @@ export default function HotkeyHelpModal({ isOpen, onClose }: HotkeyHelpModalProp
         </div>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 

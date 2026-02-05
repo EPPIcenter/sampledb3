@@ -3,6 +3,7 @@ import { studiesApi, type Study } from '../lib/api'
 import { specimenTypesApi, type SpecimenType } from '../lib/api'
 import { tagsApi, type Tag } from '../lib/api'
 import LocationTreePicker, { type LocationSelection } from './LocationTreePicker'
+import ModalPortal from './ModalPortal'
 
 export interface StatisticsFilters {
   study?: string
@@ -265,11 +266,12 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
               </div>
 
               {studyPickerOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center">
-                  <div
-                    className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-                    onClick={() => setStudyPickerOpen(false)}
-                  />
+                <ModalPortal>
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center">
+                    <div
+                      className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+                      onClick={() => setStudyPickerOpen(false)}
+                    />
                   <div className="relative z-10 w-full max-w-3xl mx-4 bg-white rounded-lg shadow-xl p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-lg font-semibold text-gray-900">Select Study</h2>
@@ -355,6 +357,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                     </div>
                   </div>
                 </div>
+                </ModalPortal>
               )}
             </div>
 

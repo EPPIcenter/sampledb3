@@ -6,6 +6,7 @@ import SkeletonCard from '../components/SkeletonCard'
 import LocationDetailsSkeleton from '../components/LocationDetailsSkeleton'
 import LocationForm from '../components/LocationForm'
 import LocationHierarchyStatsDisplay from '../components/LocationHierarchyStats'
+import ModalPortal from '../components/ModalPortal'
 import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
 import { useUser } from '../contexts/UserContext'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
@@ -821,8 +822,9 @@ export default function Locations() {
       </div>
 
       {/* Collection Search Bar */}
-      <div className="mb-6 storage-reveal storage-reveal-2">
-        <div className="storage-card p-4">
+      <div className="relative z-20">
+        <div className="mb-6 storage-reveal storage-reveal-2">
+          <div className="storage-card p-4">
           <label htmlFor="locations-search" className="block text-sm font-medium mb-2" style={{ color: 'rgb(var(--dashboard-text))' }}>
             Search Collections
           </label>
@@ -921,6 +923,7 @@ export default function Locations() {
             </div>
           </div>
         </div>
+        </div>
       </div>
 
       {loading ? (
@@ -1010,13 +1013,14 @@ export default function Locations() {
           : false
 
         return (
-          <div className="fixed inset-0 z-[100] overflow-y-auto">
-            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-              {/* Background overlay */}
-              <div
-                className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-                onClick={handleDeleteCancel}
-              />
+          <ModalPortal>
+            <div className="fixed inset-0 z-[100] overflow-y-auto">
+              <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                {/* Background overlay */}
+                <div
+                  className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+                  onClick={handleDeleteCancel}
+                />
               
               {/* Modal panel */}
               <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full" onClick={(e) => e.stopPropagation()}>
@@ -1062,6 +1066,7 @@ export default function Locations() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )
       })()}
       </div>

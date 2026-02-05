@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useHotkey } from '../hooks/useHotkey'
 import { Command, filterCommands, groupCommandsByCategory } from '../lib/commands'
+import ModalPortal from './ModalPortal'
 
 interface CommandPaletteProps {
   isOpen: boolean
@@ -15,6 +16,7 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
   const prevQueryRef = useRef(query)
+  const ignoreMouseEnterRef = useRef(false)
   const location = useLocation()
 
   // Close on Escape
@@ -34,10 +36,10 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
     return groupCommandsByCategory(filteredCommands)
   }, [filteredCommands])
 
-  // Flatten commands for keyboard navigation
+  // Flatten commands for keyboard navigation (DOM order = grouped order)
   const flatCommands = useMemo(() => {
-    return filteredCommands
-  }, [filteredCommands])
+    return Object.values(groupedCommands).flat()
+  }, [groupedCommands])
 
   // Reset selection when query changes (during render to avoid extra pass)
   if (query !== prevQueryRef.current) {
@@ -81,9 +83,11 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
+      ignoreMouseEnterRef.current = true
       setSelectedIndex(prev => (prev < flatCommands.length - 1 ? prev + 1 : prev))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
+      ignoreMouseEnterRef.current = true
       setSelectedIndex(prev => (prev > 0 ? prev - 1 : 0))
     } else if (e.key === 'Enter') {
       e.preventDefault()
@@ -127,12 +131,13 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
   if (!isOpen) return null
 
   return (
-    <div className="palette-overlay">
-      <div
-        className="palette-overlay__backdrop"
-        onClick={onClose}
-        aria-hidden
-      />
+    <ModalPortal>
+      <div className="palette-overlay">
+        <div
+          className="palette-overlay__backdrop"
+          onClick={onClose}
+          aria-hidden
+        />
       <div className="palette-panel sm:my-8 sm:max-w-2xl">
         <div className="palette-panel__inner">
           <div className="palette-input-wrap">
@@ -152,7 +157,11 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
             />
           </div>
 
-          <div ref={resultsRef} className="palette-results">
+          <div
+            ref={resultsRef}
+            className="palette-results"
+            onMouseMove={() => { ignoreMouseEnterRef.current = false }}
+          >
             {Object.keys(groupedCommands).length === 0 ? (
               <div className="palette-empty">
                 <p>No commands found</p>
@@ -174,7 +183,10 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
                             type="button"
                             data-command-index={flatIndex}
                             onClick={() => executeCommand(command)}
-                            onMouseEnter={() => setSelectedIndex(flatIndex)}
+                            onMouseEnter={() => {
+                          if (ignoreMouseEnterRef.current) return
+                          setSelectedIndex(flatIndex)
+                        }}
                             className={`palette-item ${isSelected ? 'palette-item--selected' : ''}`}
                           >
                             <div className="flex items-center justify-between gap-2">
@@ -224,6 +236,7 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
         </div>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 

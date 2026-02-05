@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api, { type SearchResult } from '../lib/api'
 import { useHotkey } from '../hooks/useHotkey'
+import ModalPortal from './ModalPortal'
 
 interface SearchModalProps {
   isOpen: boolean
@@ -19,6 +20,7 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
   const prevResultsRef = useRef<SearchResult[]>(results)
+  const ignoreMouseEnterRef = useRef(false)
 
   // Reset selection when results change (during render to avoid extra pass)
   if (results !== prevResultsRef.current) {
@@ -112,9 +114,11 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
+      ignoreMouseEnterRef.current = true
       setSelectedIndex(prev => (prev < results.length - 1 ? prev + 1 : prev))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
+      ignoreMouseEnterRef.current = true
       setSelectedIndex(prev => (prev > 0 ? prev - 1 : 0))
     } else if (e.key === 'Enter' && results.length > 0) {
       e.preventDefault()
@@ -161,12 +165,13 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
   if (!isOpen) return null
 
   return (
-    <div className="palette-overlay">
-      <div
-        className="palette-overlay__backdrop"
-        onClick={onClose}
-        aria-hidden
-      />
+    <ModalPortal>
+      <div className="palette-overlay">
+        <div
+          className="palette-overlay__backdrop"
+          onClick={onClose}
+          aria-hidden
+        />
       <div className="palette-panel sm:my-8 sm:max-w-3xl">
         <div className="palette-panel__inner">
           <div className="palette-input-wrap">
@@ -187,7 +192,11 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
             {loading && <div className="palette-input-spinner" aria-hidden />}
           </div>
 
-          <div ref={resultsRef} className="palette-results">
+          <div
+            ref={resultsRef}
+            className="palette-results"
+            onMouseMove={() => { ignoreMouseEnterRef.current = false }}
+          >
             {query.length >= 1 && !loading && results.length === 0 && (
               <div className="palette-empty">
                 <p>No results found</p>
@@ -227,7 +236,10 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
                             type="button"
                             data-result-index={flatIndex}
                             onClick={() => handleSelect(result)}
-                            onMouseEnter={() => setSelectedIndex(flatIndex)}
+                            onMouseEnter={() => {
+                              if (ignoreMouseEnterRef.current) return
+                              setSelectedIndex(flatIndex)
+                            }}
                             className={`palette-item ${isSelected ? 'palette-item--selected' : ''}`}
                           >
                             <div className="flex items-center justify-between gap-2">
@@ -278,6 +290,7 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
         </div>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 

@@ -13,6 +13,7 @@ import SubjectForm from '../components/forms/SubjectForm'
 import StudyForm from '../components/forms/StudyForm'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import SubjectMergeModal from '../components/SubjectMergeModal'
+import ModalPortal from '../components/ModalPortal'
 import { useUser } from '../contexts/UserContext'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { TUTORIAL_SHORT_CODE_PREFIX } from '../lib/constants'
@@ -299,6 +300,7 @@ export default function StudyDetail() {
           }}
           onCreateSubject={() => setCreateSubjectModalOpen(true)}
           onExport={() => setExportModalOpen(true)}
+          onBulkImport={() => navigate(`/studies/${study.id}/import`)}
           onDelete={openDeleteModal}
         />
 
@@ -454,12 +456,13 @@ export default function StudyDetail() {
       />
 
       {createSubjectModalOpen && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-              onClick={() => setCreateSubjectModalOpen(false)}
-            />
+        <ModalPortal>
+          <div className="fixed inset-0 z-[100] overflow-y-auto">
+            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+              <div
+                className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+                onClick={() => setCreateSubjectModalOpen(false)}
+              />
             <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
@@ -487,15 +490,17 @@ export default function StudyDetail() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {editStudyModalOpen && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-              onClick={() => setEditStudyModalOpen(false)}
-            />
+        <ModalPortal>
+          <div className="fixed inset-0 z-[100] overflow-y-auto">
+            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+              <div
+                className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+                onClick={() => setEditStudyModalOpen(false)}
+              />
             <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
@@ -520,15 +525,17 @@ export default function StudyDetail() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {deleteModalOpen && study && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-              onClick={() => !deleteInProgress && (setDeleteModalOpen(false), setDeleteConfirmInput(''), setDeleteError(null))}
-            />
+        <ModalPortal>
+          <div className="fixed inset-0 z-[100] overflow-y-auto">
+            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+              <div
+                className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+                onClick={() => !deleteInProgress && (setDeleteModalOpen(false), setDeleteConfirmInput(''), setDeleteError(null))}
+              />
             <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div className="flex items-center justify-between mb-4">
@@ -594,6 +601,7 @@ export default function StudyDetail() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
       </div>
     </div>

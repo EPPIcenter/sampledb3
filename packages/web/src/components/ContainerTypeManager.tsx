@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { specimenTypesApi } from '../lib/api'
 import { getContainerTypeName } from '../lib/icons'
 import { useHotkey } from '../hooks/useHotkey'
+import ModalPortal from './ModalPortal'
 
 const CONTAINER_TYPES = ['paper', 'cryovial_tube', 'micronix_tube', 'static_well'] as const
 
@@ -116,13 +117,14 @@ export default function ContainerTypeManager({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
-        <div
-          className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-          onClick={onClose}
-        />
+    <ModalPortal>
+      <div className="fixed inset-0 z-[100] overflow-y-auto">
+        <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+          {/* Background overlay */}
+          <div
+            className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+            onClick={onClose}
+          />
 
         {/* Modal panel */}
         <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
@@ -198,6 +200,7 @@ export default function ContainerTypeManager({
         </div>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 

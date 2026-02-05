@@ -328,7 +328,6 @@
   inset: 0;
   background: rgb(15 23 42 / 0.4);
   backdrop-filter: blur(4px);
-  transition: opacity 0.2s ease;
 }
 
 .palette-overlay__backdrop:active {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import CollectionPicker, { type CollectionType } from './CollectionPicker'
 import LocationPicker from './LocationPicker'
+import ModalPortal from './ModalPortal'
 import api, { settingsApi, type Unit, type ContainerDefaults } from '../lib/api'
 
 export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
@@ -250,11 +251,12 @@ export default function ContainerRegistration({
 
               {/* Create Collection Modal */}
               {showCreateCollection && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center">
-                  <div
-                    className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-                    onClick={() => setShowCreateCollection(false)}
-                  />
+                <ModalPortal>
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center">
+                    <div
+                      className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+                      onClick={() => setShowCreateCollection(false)}
+                    />
                   <div className="relative z-10 w-full max-w-2xl mx-4 bg-white rounded-lg shadow-xl p-6 max-h-[90vh] overflow-y-auto">
                     <h3 className="text-lg font-semibold mb-4 text-gray-900">
                       Create {getCollectionType() === 'micronix_plate' ? 'Micronix Plate' : 'Cryovial Box'}
@@ -321,6 +323,7 @@ export default function ContainerRegistration({
                     </div>
                   </div>
                 </div>
+                </ModalPortal>
               )}
 
               {/* Container-specific fields */}

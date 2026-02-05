@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { tagsApi, settingsApi, type Tag, type Unit } from '../lib/api'
 import { useHotkey, useModifierHotkey } from '../hooks/useHotkey'
+import ModalPortal from './ModalPortal'
 
 interface ContainerEditModalProps {
   isOpen: boolean
@@ -349,21 +350,23 @@ export default function ContainerEditModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <div
-          className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-          onClick={onClose}
-          aria-hidden
-        />
-        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-        <ContainerEditModalForm
-          key={container.id}
-          container={container}
-          onClose={onClose}
-          onSuccess={onSuccess}
-        />
+    <ModalPortal>
+      <div className="fixed inset-0 z-[100] overflow-y-auto">
+        <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+          <div
+            className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+            onClick={onClose}
+            aria-hidden
+          />
+          <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+          <ContainerEditModalForm
+            key={container.id}
+            container={container}
+            onClose={onClose}
+            onSuccess={onSuccess}
+          />
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   )
 }
