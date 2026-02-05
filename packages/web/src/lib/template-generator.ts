@@ -38,32 +38,41 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
     parentColumns.push('parent_position')
   }
 
-  // Add optional override columns if defaults are set
-  if (settings.quantity !== undefined) {
-    parentColumns.push('quantity')
-  }
-  if (settings.unitSymbol) {
-    parentColumns.push('unit_symbol')
-  }
-  if (settings.quantityUsed !== undefined) {
-    parentColumns.push('quantity_used')
-  }
-  if (settings.reduceParentQuantity !== undefined) {
-    parentColumns.push('reduce_parent_quantity')
-  }
+  // When a setting is empty, include it as a CSV column so user can supply per row (makes Import settings optional)
+  if (!settings.derivationType) parentColumns.push('derivation_type')
+  if (!settings.specimenTypeName) parentColumns.push('specimen_type_name')
+  if (!settings.containerType) parentColumns.push('container_type')
+  if (!settings.protocol) parentColumns.push('protocol')
+  if (!settings.derivationDate) parentColumns.push('derivation_date')
 
   // Always include per-row fields
   parentColumns.push('collection_name')
   parentColumns.push('position')
   parentColumns.push('container_barcode')
   parentColumns.push('notes')
+  // Quantity fields: include only when not set in Import settings (so same-for-all can be set in form)
+  if (settings.quantity === undefined && !parentColumns.includes('quantity')) parentColumns.push('quantity')
+  if (!settings.unitSymbol && !parentColumns.includes('unit_symbol')) parentColumns.push('unit_symbol')
+  if (settings.quantityUsed === undefined && !parentColumns.includes('quantity_used')) parentColumns.push('quantity_used')
+  if (settings.reduceParentQuantity === undefined && !parentColumns.includes('reduce_parent_quantity')) parentColumns.push('reduce_parent_quantity')
 
   // Header row
   lines.push(parentColumns.join(','))
 
+  // Default values for per-row columns when they're in the template (user didn't set "Apply to all rows")
+  const defaultDerivationPerRow: Record<string, string> = {}
+  if (parentColumns.includes('derivation_type')) defaultDerivationPerRow.derivation_type = 'dna_extraction'
+  if (parentColumns.includes('specimen_type_name')) defaultDerivationPerRow.specimen_type_name = 'DNA (DBS)'
+  if (parentColumns.includes('container_type')) defaultDerivationPerRow.container_type = settings.containerType || 'micronix_tube'
+  if (parentColumns.includes('protocol')) defaultDerivationPerRow.protocol = 'Extraction v1'
+  if (parentColumns.includes('derivation_date')) defaultDerivationPerRow.derivation_date = new Date().toISOString().split('T')[0]
+  if (parentColumns.includes('quantity')) defaultDerivationPerRow.quantity = '1'
+  if (parentColumns.includes('quantity_used')) defaultDerivationPerRow.quantity_used = '1'
+  if (parentColumns.includes('reduce_parent_quantity')) defaultDerivationPerRow.reduce_parent_quantity = 'true'
+
   // Helper to build example row matching column order
   const buildRow = (values: Record<string, string>): string => {
-    return parentColumns.map(col => values[col] || '').join(',')
+    return parentColumns.map(col => (defaultDerivationPerRow[col] ?? values[col] ?? '')).join(',')
   }
 
   // Example rows based on parent type and container types
@@ -168,48 +177,6 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
     }))
   }
 
-  // Add comments explaining the template
-  const comments: string[] = []
-  comments.push('# Bulk Derivation Import Template')
-  comments.push('#')
-  comments.push('# Required fields (set in Step 1, not in CSV):')
-  comments.push(`#   - derivation_type: ${settings.derivationType}`)
-  comments.push(`#   - specimen_type_name: ${settings.specimenTypeName}`)
-  comments.push(`#   - container_type: ${settings.containerType}`)
-  comments.push(`#   - protocol: ${settings.protocol}`)
-  comments.push(`#   - derivation_date: ${settings.derivationDate}`)
-  comments.push('#')
-  if (settings.quantity !== undefined || settings.unitSymbol || settings.quantityUsed !== undefined || settings.reduceParentQuantity !== undefined) {
-    comments.push('# Default fields (can override in CSV):')
-    if (settings.quantity !== undefined) {
-      comments.push(`#   - quantity: ${settings.quantity} (leave empty to use default)`)
-    }
-    if (settings.unitSymbol) {
-      comments.push(`#   - unit_symbol: ${settings.unitSymbol} (leave empty to use default)`)
-    }
-    if (settings.quantityUsed !== undefined) {
-      comments.push(`#   - quantity_used: ${settings.quantityUsed} (leave empty to use default)`)
-    }
-    if (settings.reduceParentQuantity !== undefined) {
-      comments.push(`#   - reduce_parent_quantity: ${settings.reduceParentQuantity} (leave empty to use default)`)
-    }
-  }
-  comments.push('#')
-  comments.push('# Per-row fields (can vary per row):')
-  if (parentType === 'study_subject' && parentContainerType === 'paper') {
-    comments.push('#   - parent_collection_date: Optional - only needed if subject has multiple specimens of same type')
-  }
-  comments.push('#   - collection_name: Collection name (will be created if doesn\'t exist)')
-  comments.push('#   - position: Position in collection')
-  comments.push('#   - container_barcode: Barcode for derived container')
-  comments.push('#   - notes: Per-row notes')
-  comments.push('#')
-  if (parentType === 'control_batch' || parentType === 'study_subject') {
-    comments.push('# Note: parent_specimen_type_name should be the SPECIMEN TYPE OF THE PARENT, not the derived specimen type.')
-    comments.push('#       The derived specimen type is set in Step 1 settings.')
-  }
-  comments.push('#')
-  comments.push('# Replace example data below with your actual data')
-
-  return comments.join('\n') + '\n\n' + lines.join('\n')
+  // Template is header + data only; guidance is shown in the app UI
+  return lines.join('\n')
 }

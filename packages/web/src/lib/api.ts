@@ -1349,12 +1349,19 @@ export interface DerivationCsvImportResultRow {
   parentContainerId?: number
   childContainerId?: number
   collectionStatus?: 'existing' | 'will_be_created'
+  /** User-facing: derivation type name */
+  derivationTypeName?: string
+  /** User-facing: parent container/source (e.g. barcode, box · position) */
+  parentSummary?: string
+  /** User-facing: child placement (e.g. collection · position) */
+  childSummary?: string
 }
 
 export interface BulkDerivationSettings {
   derivationType: string
   specimenTypeName: string
-  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper'
+  /** Empty string means "provide this column in the CSV (per row)" */
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | ''
   protocol: string
   derivationDate: string
   quantity?: number
