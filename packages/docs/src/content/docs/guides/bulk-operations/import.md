@@ -13,9 +13,13 @@ SampleDB supports three different import types, each designed for different scen
 
 **Subjects Only** import is the simplest option. It creates subjects for existing studies without adding any specimens. This is useful when you want to set up your subject list first, perhaps to verify enrollment or prepare for specimen collection. The CSV file needs just two columns: the study short code and the subject name. This import type assumes the studies already exist in your system, so make sure your study codes are correct before importing.
 
-**Specimens Only** import adds specimens to subjects that already exist in the system. This is useful when you've already created subjects (either individually or through a previous import) and now want to add their specimens. The system requires that subjects exist before you can add specimens to them, so this import type will fail if it encounters subject names that don't exist. This is actually a safety feature—it prevents accidentally creating duplicate subjects with slightly different names.
+**Specimens Only** import adds specimens to subjects that already exist in the system. This is useful when you've already created subjects (either individually or through a previous import) and now want to add their specimens. You can optionally select a container type (e.g. Micronix tubes); when you do, the same container columns are required as for Combined import (e.g. `position` for micronix/cryovial/static wells, `label` for papers). The system requires that subjects exist before you can add specimens to them, so this import type will fail if it encounters subject names that don't exist. This is actually a safety feature—it prevents accidentally creating duplicate subjects with slightly different names.
 
 **Combined import** (Subjects with Specimens) is the most flexible option and is often the best choice for new data. It creates both subjects and their specimens in one operation, and it automatically creates subjects if they don't already exist. This means you don't need to worry about whether subjects are already in the system—the import handles it for you. This is perfect for importing data from external sources, setting up new studies, or any situation where you're not sure about the current state of your subjects.
+
+### Bulk import from a study page
+
+If you are on a study detail page, you can open **Bulk import** from the "More actions" menu. The flow is the same (Subjects only, Specimens only, or Combined; same validation and collection steps), but **you do not need a `study_short_code` column** in your CSV—the study is already set from the page you're on. For **Subjects only**, your CSV needs only `subject_name`. For **Specimens only** or **Combined**, you need `subject_name`, `specimen_type_name`, and any container columns as described below. All other CSV requirements (specimen type names, dates, positions, collection names, etc.) are the same. Templates downloaded from the study import page omit the study column.
 
 ## The Import Process
 
@@ -41,7 +45,7 @@ If validation finds any problems, you'll see clear error messages explaining wha
 
 If your CSV file references collections (plates, boxes, or bags) that don't exist in the system yet, you'll see a step where you can create them. This step only appears if collections are needed, so if you're importing subjects only or specimens without containers, you'll skip directly to the import step.
 
-The system shows you a list of all the missing collections it found in your CSV file. For each collection, you'll need to specify where it's stored by selecting a location from the dropdown. Only locations that can contain collections are shown, which prevents you from selecting inappropriate storage locations.
+The system shows you a list of all the missing collections it found in your CSV file. For each collection, you'll need to specify where it's stored by choosing a location using the hierarchical location tree (the same picker used when moving collections or configuring new collections). Only locations that can contain collections are shown, which prevents you from selecting inappropriate storage locations.
 
 For plates and boxes, you can optionally enter a barcode if the collection has one. This is helpful for tracking and makes it easier to find collections later using barcode scanners.
 
@@ -50,6 +54,8 @@ Once you've assigned locations to all the missing collections, click "Create Col
 ### Step 3: Importing Your Data
 
 Once validation passes and collections are created (if needed), the import runs automatically. The system processes each row in your CSV file, creating subjects (if needed), creating specimens, creating containers (if specified), and linking everything together correctly.
+
+When a specimen with the same study, subject, specimen type, and collection date already exists, the import reuses that specimen and only adds containers when container data is provided. No duplicate specimen rows are created; the summary reflects how many specimens were newly created versus how many containers were added.
 
 The import process shows you progress, and when it completes, you'll see a summary of what was created. The summary tells you how many items were successfully imported, and if there were any errors, it lists them with specific information about what went wrong and which rows had problems.
 
@@ -61,9 +67,11 @@ The columns required in your CSV file depend on what you're importing and what c
 
 For a Subjects Only import, you need just two columns: `study_short_code` and `subject_name`. The study short code must match an existing study in your system, and subject names must be unique within each study.
 
-For Specimens Only or Combined imports without containers, you need `study_short_code`, `subject_name`, and `specimen_type_name`. The `collection_date` is optional but recommended. The specimen type name must match exactly what's in your Reference Data, including capitalization.
+For Specimens Only or Combined imports without containers, you need `study_short_code`, `subject_name`, and `specimen_type_name`. You can include an optional `collection_date` column (YYYY-MM-DD); it is not required but is recommended for tracking. The specimen type name must match exactly what's in your Reference Data, including capitalization.
 
-When you're importing specimens with containers, the requirements become more specific. For Micronix tubes, you need the collection name (plate name), a unique barcode for each tube, and a position in the plate. The position must be in the correct format: a letter (A-H) followed by two digits (01-12), like "A01" or "B12". For Cryovial tubes, you need the collection name (box name) and a position. Barcodes are optional for cryovial tubes. For Papers, you need the collection name (box or bag name) and a label identifier. For Static Wells, you need the collection name and a position, using the same A01-H12 format as Micronix tubes.
+When you're importing specimens with containers, the requirements become more specific. You can include an optional `comment` column; values are stored on each container and are useful for notes (e.g. quality, handling). For Micronix tubes, you need the collection name (plate name), a unique barcode for each tube, and a position in the plate. The position must be in the correct format: a letter (A-H) followed by two digits (01-12), like "A01" or "B12". For Cryovial tubes, you need the collection name (box name) and a position. Barcodes are optional for cryovial tubes. For Papers, you need the collection name (box or bag name) and a label identifier. For Static Wells, you need the collection name and a position, using the same A01-H12 format as Micronix tubes.
+
+Column headers are treated **case-insensitively**, so "Position" and "position" both satisfy the required `position` column. The column may also be named `well_position` or `well` and will be accepted. If required container data is missing (e.g. well position for micronix tubes), validation will fail with a clear message before any data is imported.
 
 The system provides templates for each scenario, which include the correct column headers and example data showing the expected format. These templates are invaluable for ensuring your CSV file is formatted correctly.
 

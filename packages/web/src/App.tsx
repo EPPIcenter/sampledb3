@@ -5,6 +5,7 @@ import Setup from './pages/Setup'
 import Login from './pages/Login'
 import Studies from './pages/Studies'
 import StudyDetail from './pages/StudyDetail'
+import StudyImport from './pages/StudyImport'
 import SubjectDetail from './pages/SubjectDetail'
 import Specimens from './pages/Specimens'
 import Statistics from './pages/Statistics'
@@ -484,6 +485,7 @@ function AppContent() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/studies" element={<Studies />} />
           <Route path="/studies/new" element={<StudyNew />} />
+          <Route path="/studies/:id/import" element={<StudyImport />} />
           <Route path="/studies/:id" element={<StudyDetail />} />
           <Route path="/subjects/:id" element={<SubjectDetail />} />
           <Route path="/specimens" element={<Specimens />} />

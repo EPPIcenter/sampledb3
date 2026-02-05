@@ -346,6 +346,7 @@ type SpecimenResponse = { specimen: Specimen }
 type SpecimensBulkResponse = {
   specimens: Specimen[]
   created: number
+  containersCreated?: number
   errors?: Array<{ index: number; error: string }>
 }
 
@@ -369,6 +370,15 @@ type CreateSpecimensBulkData = {
     specimenTypeName: string
     collectionDate?: string
     containerBarcode?: string
+    container?: {
+      containerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+      collectionName?: string
+      collectionBarcode?: string
+      barcode?: string
+      position?: string
+      label?: string
+      collectionLocationId?: number
+    }
   }>
 }
 

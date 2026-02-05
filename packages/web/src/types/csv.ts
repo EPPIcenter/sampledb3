@@ -33,6 +33,7 @@ export interface SpecimenCSVRow {
   barcode?: string
   position?: string
   label?: string
+  comment?: string
   [key: string]: string | undefined
 }
 
@@ -60,6 +61,7 @@ export interface ValidatedSpecimenData {
     barcode?: string
     position?: string
     label?: string
+    comment?: string
   }
 }
 

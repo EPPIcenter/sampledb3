@@ -14,6 +14,7 @@ export interface StudyDetailHeaderProps {
   onMergeSubjects: () => void
   onCreateSubject: () => void
   onExport: () => void
+  onBulkImport: () => void
   onDelete: () => void
 }
 
@@ -30,6 +31,7 @@ export default function StudyDetailHeader({
   onMergeSubjects,
   onCreateSubject,
   onExport,
+  onBulkImport,
   onDelete,
 }: StudyDetailHeaderProps) {
   return (
@@ -136,6 +138,18 @@ export default function StudyDetailHeader({
                   }}
                 >
                   Edit study
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 rounded-none"
+                  style={{ color: 'rgb(var(--dashboard-text))' }}
+                  onClick={() => {
+                    setActionsMenuOpen(false)
+                    onBulkImport()
+                  }}
+                >
+                  Bulk import
                 </button>
                 <button
                   type="button"
