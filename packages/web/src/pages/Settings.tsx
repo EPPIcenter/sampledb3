@@ -209,16 +209,20 @@ export default function Settings() {
     loadSettings()
   }, [])
 
-  const loadSettings = async () => {
-    setLoading(true)
-    setError(null)
+  const loadSettings = async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const res = await settingsApi.getAll()
       setSettings(res.data)
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load settings')
     } finally {
-      setLoading(false)
+      if (showLoading) {
+        setLoading(false)
+      }
     }
   }
 
@@ -326,7 +330,7 @@ export default function Settings() {
             onSuccess={() => {
               setSuccess('Scanner configurations saved successfully')
               setTimeout(() => setSuccess(null), 3000)
-              loadSettings()
+              loadSettings(false)
             }}
           />
         )

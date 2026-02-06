@@ -72,25 +72,6 @@ export default function ScannerConfigurationsManager({
     setError(null)
   }
 
-  const handleSave = async () => {
-    setSaving(true)
-    setError(null)
-    try {
-      if (activeTab === 'shared' && isAdmin) {
-        await scannerConfigurationsApi.update({ configurations: sharedConfigurations }, null)
-      } else {
-        await scannerConfigurationsApi.updatePersonal({ configurations: personalConfigurations })
-      }
-      onSuccess?.()
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.error || 'Failed to save scanner configurations'
-      setError(errorMsg)
-      onError?.(errorMsg)
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const handleAdd = async () => {
     if (!formName.trim()) {
       setError('Configuration name is required')
@@ -129,6 +110,8 @@ export default function ScannerConfigurationsManager({
 
     if (activeTab === 'personal') {
       // Save personal config immediately
+      setSaving(true)
+      setError(null)
       try {
         let updated = [...currentConfigs]
         if (newConfig.isDefault) {
@@ -138,18 +121,35 @@ export default function ScannerConfigurationsManager({
         await scannerConfigurationsApi.updatePersonal({ configurations: updated })
         setPersonalConfigurations(updated)
         onSuccess?.()
-      } catch (err: any) {
-        setError(err.response?.data?.error || 'Failed to create configuration')
+      } catch (err: unknown) {
+        setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to create configuration')
+        onError?.((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to create configuration')
         return
+      } finally {
+        setSaving(false)
       }
     } else {
-      // For shared, just update local state
+      // For shared, persist immediately
       let updated = [...currentConfigs]
       if (newConfig.isDefault) {
         updated = updated.map(c => ({ ...c, isDefault: false }))
       }
       updated.push(newConfig)
-      setSharedConfigurations(updated)
+      setSaving(true)
+      setError(null)
+      try {
+        await scannerConfigurationsApi.update({ configurations: updated }, null)
+        setSharedConfigurations(updated)
+        onSuccess?.()
+        resetForm()
+      } catch (err: unknown) {
+        const errorMsg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to create configuration'
+        setError(errorMsg)
+        onError?.(errorMsg)
+      } finally {
+        setSaving(false)
+      }
+      return
     }
 
     resetForm()
@@ -223,16 +223,36 @@ export default function ScannerConfigurationsManager({
 
     if (editingType === 'personal') {
       // Save personal config immediately
+      setSaving(true)
+      setError(null)
       try {
         await scannerConfigurationsApi.updatePersonal({ configurations: updated })
         setPersonalConfigurations(updated)
         onSuccess?.()
-      } catch (err: any) {
-        setError(err.response?.data?.error || 'Failed to update configuration')
+      } catch (err: unknown) {
+        setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to update configuration')
+        onError?.((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to update configuration')
         return
+      } finally {
+        setSaving(false)
       }
     } else {
-      setSharedConfigurations(updated)
+      setSaving(true)
+      setError(null)
+      try {
+        await scannerConfigurationsApi.update({ configurations: updated }, null)
+        setSharedConfigurations(updated)
+        onSuccess?.()
+        resetForm()
+      } catch (err: unknown) {
+        const errorMsg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to update configuration'
+        setError(errorMsg)
+        onError?.(errorMsg)
+        return
+      } finally {
+        setSaving(false)
+      }
+      return
     }
 
     resetForm()
@@ -247,6 +267,8 @@ export default function ScannerConfigurationsManager({
     }
 
     if (type === 'personal') {
+      setSaving(true)
+      setError(null)
       try {
         const updated = configs.filter((_, i) => i !== index)
         if (configs[index].isDefault && updated.length > 0) {
@@ -255,29 +277,57 @@ export default function ScannerConfigurationsManager({
         await scannerConfigurationsApi.updatePersonal({ configurations: updated })
         setPersonalConfigurations(updated)
         onSuccess?.()
-      } catch (err: any) {
-        setError(err.response?.data?.error || 'Failed to delete configuration')
+      } catch (err: unknown) {
+        setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to delete configuration')
+        onError?.((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to delete configuration')
+      } finally {
+        setSaving(false)
       }
     } else {
       const updated = configs.filter((_, i) => i !== index)
       if (configs[index].isDefault && updated.length > 0) {
         updated[0].isDefault = true
       }
-      setSharedConfigurations(updated)
+      setSaving(true)
+      setError(null)
+      try {
+        await scannerConfigurationsApi.update({ configurations: updated }, null)
+        setSharedConfigurations(updated)
+        onSuccess?.()
+      } catch (err: unknown) {
+        const errorMsg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to delete configuration'
+        setError(errorMsg)
+        onError?.(errorMsg)
+      } finally {
+        setSaving(false)
+      }
     }
   }
 
-  const handleSetDefault = (index: number, type: 'shared' | 'personal') => {
+  const handleSetDefault = async (index: number, type: 'shared' | 'personal') => {
     const configs = type === 'shared' ? sharedConfigurations : personalConfigurations
     const updated = configs.map((c, i) => ({
       ...c,
       isDefault: i === index,
     }))
-    
-    if (type === 'shared') {
-      setSharedConfigurations(updated)
-    } else {
-      setPersonalConfigurations(updated)
+
+    setSaving(true)
+    setError(null)
+    try {
+      if (type === 'shared') {
+        await scannerConfigurationsApi.update({ configurations: updated }, null)
+        setSharedConfigurations(updated)
+      } else {
+        await scannerConfigurationsApi.updatePersonal({ configurations: updated })
+        setPersonalConfigurations(updated)
+      }
+      onSuccess?.()
+    } catch (err: unknown) {
+      const errorMsg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to set default'
+      setError(errorMsg)
+      onError?.(errorMsg)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -305,7 +355,8 @@ export default function ScannerConfigurationsManager({
               resetForm()
               setShowNewForm(true)
             }}
-            className="text-sm text-blue-600 hover:text-blue-800"
+            disabled={saving}
+            className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             + Add Personal Configuration
           </button>
@@ -317,7 +368,8 @@ export default function ScannerConfigurationsManager({
               resetForm()
               setShowNewForm(true)
             }}
-            className="text-sm text-blue-600 hover:text-blue-800"
+            disabled={saving}
+            className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             + Add Shared Configuration
           </button>
@@ -405,7 +457,8 @@ export default function ScannerConfigurationsManager({
                       <button
                         type="button"
                         onClick={() => handleSetDefault(index, activeTab)}
-                        className="text-xs text-blue-600 hover:text-blue-800"
+                        disabled={saving}
+                        className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Set as Default
                       </button>
@@ -415,14 +468,16 @@ export default function ScannerConfigurationsManager({
                         <button
                           type="button"
                           onClick={() => handleEdit(index, 'shared')}
-                          className="text-xs text-gray-600 hover:text-gray-800"
+                          disabled={saving}
+                          className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Edit
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDelete(index, 'shared')}
-                          className="text-xs text-red-600 hover:text-red-800"
+                          disabled={saving}
+                          className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Delete
                         </button>
@@ -433,14 +488,16 @@ export default function ScannerConfigurationsManager({
                         <button
                           type="button"
                           onClick={() => handleEdit(index, 'personal')}
-                          className="text-xs text-gray-600 hover:text-gray-800"
+                          disabled={saving}
+                          className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Edit
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDelete(index, 'personal')}
-                          className="text-xs text-red-600 hover:text-red-800"
+                          disabled={saving}
+                          className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Delete
                         </button>
@@ -604,34 +661,23 @@ export default function ScannerConfigurationsManager({
             <button
               type="button"
               onClick={resetForm}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              disabled={saving}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={editingIndex !== null ? handleUpdate : handleAdd}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+              disabled={saving}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              {editingIndex !== null ? 'Update' : activeTab === 'personal' ? 'Create' : 'Add'}
+              {saving ? 'Saving...' : editingIndex !== null ? 'Update' : activeTab === 'personal' ? 'Create' : 'Add'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Save Button - Only for shared configs (admin) */}
-      {activeTab === 'shared' && isAdmin && sharedConfigurations.length > 0 && (
-        <div className="flex justify-end pt-2">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            {saving ? 'Saving...' : 'Save Shared Configurations'}
-          </button>
-        </div>
-      )}
     </div>
   )
 }
