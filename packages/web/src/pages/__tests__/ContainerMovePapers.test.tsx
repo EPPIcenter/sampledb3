@@ -22,18 +22,6 @@ vi.mock('../../lib/api', () => ({
     }
 }))
 
-vi.mock('../../components/CollectionTreePicker', () => ({
-    default: ({ collections, onSelect }: any) => (
-        <div data-testid="collection-tree-picker">
-            {collections.map((c: any) => (
-                <button key={c.id} onClick={() => onSelect(c.type, c.id, c.name)}>
-                    {c.name}
-                </button>
-            ))}
-        </div>
-    )
-}))
-
 describe('ContainerMovePapers', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -57,6 +45,30 @@ describe('ContainerMovePapers', () => {
             expect(screen.getByText('Move Papers')).toBeInTheDocument()
         })
         expect(screen.getByText('Choose Source Collection')).toBeInTheDocument()
+    })
+
+    it('expanding location row reveals child locations and collections', async () => {
+        vi.mocked(collectionsApi.listCollectionsByType).mockImplementation((type) => {
+            if (type === 'box') return Promise.resolve({ data: { collections: [{ id: 1, name: 'Box A', itemCount: 2, locationId: 10 }] } } as any)
+            if (type === 'bag') return Promise.resolve({ data: { collections: [] } } as any)
+            return Promise.resolve({ data: { collections: [] } } as any)
+        })
+        vi.mocked(locationsApi.list).mockResolvedValue({
+            data: {
+                locations: [
+                    { id: 1, name: 'Building', parentId: null, storageTypeId: '1', canContainCollections: true, path: 'Building' },
+                    { id: 10, name: 'Freezer', parentId: 1, storageTypeId: '1', canContainCollections: true, path: 'Building / Freezer' }
+                ]
+            }
+        } as any)
+
+        await renderWithProviders(<ContainerMovePapers />)
+
+        await waitFor(() => expect(screen.getByRole('button', { name: /expand building/i })).toBeInTheDocument())
+        // Click the location row to expand (full row is the expand target)
+        fireEvent.click(screen.getByRole('button', { name: /expand building/i }))
+        await waitFor(() => expect(screen.getByText('Freezer')).toBeInTheDocument())
+        await waitFor(() => expect(screen.getByText('Box A')).toBeInTheDocument())
     })
 
     it('loads available collections on mount', async () => {
@@ -90,15 +102,21 @@ describe('ContainerMovePapers', () => {
             return Promise.resolve({ data: { collections: [{ id: 2, name: 'Source Bag', itemCount: 5, locationId: 10 }] } } as any)
         })
         vi.mocked(locationsApi.list).mockResolvedValue({
-            data: { locations: [{ id: 10, name: 'Freezer', parentId: null, storageTypeId: '1', canContainCollections: true, path: 'Freezer' }] }
+            data: {
+                locations: [
+                    { id: 1, name: 'Building', parentId: null, storageTypeId: '1', canContainCollections: true, path: 'Building' },
+                    { id: 10, name: 'Freezer', parentId: 1, storageTypeId: '1', canContainCollections: true, path: 'Building / Freezer' }
+                ]
+            }
         } as any)
 
         await renderWithProviders(<ContainerMovePapers />)
 
-        // 2. Select Source
-        // Need to wait for collection picker to load
+        // 2. Select Source: expand location row then select collection
+        await waitFor(() => expect(screen.getByRole('button', { name: /expand building/i })).toBeInTheDocument())
+        fireEvent.click(screen.getByRole('button', { name: /expand building/i }))
         await waitFor(() => expect(screen.getByText('Source Box')).toBeInTheDocument())
-        fireEvent.click(screen.getByText('Source Box')) // Assuming clicking the name selects it
+        fireEvent.click(screen.getByText('Source Box'))
 
         // 3. Select Sheets
 
@@ -112,22 +130,11 @@ describe('ContainerMovePapers', () => {
         // Click Next
         fireEvent.click(screen.getByText('Next: Select Destination'))
 
-        // 4. Select Destination
+        // 4. Select Destination: expand location row then select destination collection
         await waitFor(() => expect(screen.getByText('Choose Destination Collection')).toBeInTheDocument())
-        // Reuse the same collection list for simplicity, but we need to select one
-        // Select destination
-        fireEvent.click(screen.getByText('Source Bag')) // Select bag as destination
-
-        // Actually, let's mock two boxes
-        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
-                collections: [
-                    { id: 1, name: 'Source Box', itemCount: 5 },
-                    { id: 2, name: 'Dest Box', itemCount: 0 }
-                ]
-            }
-        } as any)
-        // We need re-render to pick up new mock? No, effect runs on mount. 
-        // We should have mocked it correctly initially.
+        await waitFor(() => expect(screen.getByRole('button', { name: /expand building/i })).toBeInTheDocument())
+        fireEvent.click(screen.getByRole('button', { name: /expand building/i }))
+        await waitFor(() => expect(screen.getByText('Source Bag')).toBeInTheDocument())
+        fireEvent.click(screen.getByText('Source Bag'))
     })
 })

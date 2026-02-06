@@ -218,6 +218,11 @@ export default function CollectionTreePicker({
     // Show expand/collapse button if location has any children (even if not all are visible)
     const hasAnyChildren = allChildren.length > 0
 
+    const locationLabel = getLocationLabel(loc)
+    const expandAriaLabel = isExpanded
+      ? `Collapse ${locationLabel}`
+      : `Expand ${locationLabel}`
+
     return (
       <div key={loc.id} className={depth > 0 ? 'ml-4 border-l border-gray-100 pl-2 mb-1' : 'mb-2'}>
         {hasAnyChildren ? (
@@ -232,53 +237,61 @@ export default function CollectionTreePicker({
               e.stopPropagation()
               toggleExpanded(loc.id)
             }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                toggleExpanded(loc.id)
+              }
+            }}
             onTouchStart={(e) => {
               e.stopPropagation()
             }}
-            className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 transition-colors text-left group relative cursor-pointer"
+            aria-expanded={isExpanded}
+            aria-label={expandAriaLabel}
+            className="storage-tree-picker-row w-full flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border border-transparent hover:bg-gray-50 hover:border-gray-200 transition-colors text-left group relative cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1"
             style={{ zIndex: 100, position: 'relative' }}
           >
-            <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-500 group-hover:text-gray-700">
+            <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-500 group-hover:text-gray-700" aria-hidden>
               {isExpanded ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm text-gray-800 font-medium group-hover:text-gray-900">
-                {getLocationLabel(loc)}
+                {locationLabel}
               </div>
               {loc.path && (
-                <div className="text-[10px] text-gray-400 font-mono truncate">
+                <div className="text-[10px] text-gray-400 font-mono truncate mt-0.5">
                   {loc.path}
                 </div>
               )}
               {loc.description && (
-                <div className="text-[10px] text-gray-500 italic truncate">
+                <div className="text-[10px] text-gray-500 italic truncate mt-0.5">
                   {loc.description}
                 </div>
               )}
             </div>
           </button>
         ) : (
-          <div className="flex items-center px-2 py-1.5">
-            <div className="w-5 flex-shrink-0"></div>
+          <div className="storage-tree-picker-row flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg">
+            <div className="w-5 flex-shrink-0" aria-hidden />
             <div className="flex-1 min-w-0">
               <div className="text-sm text-gray-800 font-medium">
                 {getLocationLabel(loc)}
               </div>
               {loc.path && (
-                <div className="text-[10px] text-gray-400 font-mono truncate">
+                <div className="text-[10px] text-gray-400 font-mono truncate mt-0.5">
                   {loc.path}
                 </div>
               )}
               {loc.description && (
-                <div className="text-[10px] text-gray-500 italic truncate">
+                <div className="text-[10px] text-gray-500 italic truncate mt-0.5">
                   {loc.description}
                 </div>
               )}
@@ -307,7 +320,7 @@ export default function CollectionTreePicker({
                   key={`${col.type}-${col.id}`}
                   disabled={isDisabled}
                   onClick={() => onSelect(col.type, col.id, col.name)}
-                  className={`w-full text-left px-3 py-2 border border-gray-100 rounded-lg transition-colors ${
+                  className={`w-full text-left px-3 py-3 min-h-[44px] border border-gray-100 rounded-lg transition-colors ${
                     isDisabled
                       ? 'bg-gray-50 text-gray-400 cursor-not-allowed opacity-60'
                       : 'hover:border-blue-300 hover:bg-blue-50 text-gray-900'
@@ -361,7 +374,7 @@ export default function CollectionTreePicker({
                 key={`${col.type}-${col.id}`}
                 disabled={isDisabled}
                 onClick={() => onSelect(col.type, col.id, col.name)}
-                className={`w-full text-left px-3 py-2 border border-gray-100 rounded-lg transition-colors ${
+                className={`w-full text-left px-3 py-3 min-h-[44px] border border-gray-100 rounded-lg transition-colors ${
                   isDisabled
                     ? 'bg-gray-50 text-gray-400 cursor-not-allowed opacity-60'
                     : 'hover:border-blue-300 hover:bg-blue-50 text-gray-900'

@@ -177,67 +177,111 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
     const isExpanded = expandedIds.has(loc.id)
     const locSelected = isSelected(loc.id)
     const canContainCollections = loc.canContainCollections
+    const locationLabel = getLocationLabel(loc)
+    const expandAriaLabel = isExpanded ? `Collapse ${locationLabel}` : `Expand ${locationLabel}`
 
     return (
       <div key={loc.id} className={depth > 0 ? 'ml-4 border-l-2 border-gray-200 pl-3' : 'mb-1'}>
         <div
-          className={`flex items-center justify-between w-full px-3 py-2 rounded-lg transition-colors ${
+          className={`flex items-center gap-2 w-full rounded-lg transition-colors ${
             locSelected
               ? 'bg-blue-50 border-2 border-blue-500 shadow-sm'
               : canContainCollections
-              ? 'hover:bg-gray-50 border border-transparent hover:border-gray-200'
-              : 'bg-gray-50 border border-gray-200 opacity-75 hover:bg-gray-100'
+              ? 'border border-transparent hover:border-gray-200'
+              : 'bg-gray-50 border border-gray-200 opacity-75'
           }`}
         >
-          <div className="flex items-center flex-1 min-w-0">
-            {hasChildren ? (
-              <button
-                type="button"
-                onClick={() => toggleExpanded(loc.id)}
-                className="w-5 h-5 mr-2 text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded flex-shrink-0 flex items-center justify-center"
-                aria-label={isExpanded ? 'Collapse' : 'Expand'}
-              >
-                <span className="text-sm">{isExpanded ? '▼' : '▶'}</span>
-              </button>
-            ) : (
-              <span className="w-5 mr-2" />
-            )}
+          {hasChildren ? (
             <button
               type="button"
-              onClick={() => toggleSelection(loc)}
-              disabled={!canContainCollections}
-              className="flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded min-w-0 disabled:cursor-not-allowed"
+              onClick={() => toggleExpanded(loc.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toggleExpanded(loc.id)
+                }
+              }}
+              aria-expanded={isExpanded}
+              aria-label={expandAriaLabel}
+              className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border-0 bg-transparent text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1 hover:bg-gray-50"
             >
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`font-medium ${locSelected ? 'text-blue-700' : canContainCollections ? 'text-gray-900' : 'text-gray-600'}`}>
-                  {search.trim() ? highlightText(getLocationLabel(loc), search) : getLocationLabel(loc)}
-                </span>
-                {loc.path && loc.path !== loc.name && (
-                  <span className={`text-xs font-mono truncate ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
-                    {search.trim() ? highlightText(loc.path, search) : loc.path}
-                  </span>
+              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-500" aria-hidden>
+                {isExpanded ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
                 )}
-                {(loc.effectiveStorageTypeName || loc.storageTypeName) && (
-                  <span className={`text-xs font-normal ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
-                    ({loc.effectiveStorageTypeName || loc.storageTypeName})
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`font-medium ${locSelected ? 'text-blue-700' : canContainCollections ? 'text-gray-900' : 'text-gray-600'}`}>
+                    {search.trim() ? highlightText(locationLabel, search) : locationLabel}
                   </span>
-                )}
-                {!canContainCollections && (
-                  <span className="text-xs text-gray-500 italic">(cannot contain collections)</span>
-                )}
-                {locSelected && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600 text-white">
-                    Selected
-                  </span>
+                  {loc.path && loc.path !== loc.name && (
+                    <span className={`text-xs font-mono truncate ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                      {search.trim() ? highlightText(loc.path, search) : loc.path}
+                    </span>
+                  )}
+                  {(loc.effectiveStorageTypeName || loc.storageTypeName) && (
+                    <span className={`text-xs font-normal ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                      ({loc.effectiveStorageTypeName || loc.storageTypeName})
+                    </span>
+                  )}
+                  {!canContainCollections && (
+                    <span className="text-xs text-gray-500 italic">(cannot contain collections)</span>
+                  )}
+                  {locSelected && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600 text-white">
+                      Selected
+                    </span>
+                  )}
+                </div>
+                {loc.description && (
+                  <div className={`text-xs mt-0.5 truncate ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                    {search.trim() ? highlightText(loc.description, search) : loc.description}
+                  </div>
                 )}
               </div>
-              {loc.description && (
-                <div className={`text-xs mt-0.5 truncate ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
-                  {search.trim() ? highlightText(loc.description, search) : loc.description}
-                </div>
-              )}
             </button>
-          </div>
+          ) : (
+            <div className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg">
+              <span className="w-5 flex-shrink-0" aria-hidden />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`font-medium ${locSelected ? 'text-blue-700' : canContainCollections ? 'text-gray-900' : 'text-gray-600'}`}>
+                    {search.trim() ? highlightText(locationLabel, search) : locationLabel}
+                  </span>
+                  {loc.path && loc.path !== loc.name && (
+                    <span className={`text-xs font-mono truncate ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                      {search.trim() ? highlightText(loc.path, search) : loc.path}
+                    </span>
+                  )}
+                  {(loc.effectiveStorageTypeName || loc.storageTypeName) && (
+                    <span className={`text-xs font-normal ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                      ({loc.effectiveStorageTypeName || loc.storageTypeName})
+                    </span>
+                  )}
+                  {!canContainCollections && (
+                    <span className="text-xs text-gray-500 italic">(cannot contain collections)</span>
+                  )}
+                  {locSelected && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600 text-white">
+                      Selected
+                    </span>
+                  )}
+                </div>
+                {loc.description && (
+                  <div className={`text-xs mt-0.5 truncate ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                    {search.trim() ? highlightText(loc.description, search) : loc.description}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           {canContainCollections && (
             <button
               type="button"
@@ -245,7 +289,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
                 e.stopPropagation()
                 toggleSelection(loc)
               }}
-              className={`ml-3 px-3 py-1.5 text-sm font-medium rounded transition-colors flex-shrink-0 ${
+              className={`flex-shrink-0 px-3 py-2 min-h-[44px] text-sm font-medium rounded-lg transition-colors ${
                 locSelected
                   ? 'bg-blue-600 text-white hover:bg-blue-700'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'

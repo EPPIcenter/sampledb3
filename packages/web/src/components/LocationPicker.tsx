@@ -118,26 +118,18 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
 
   const renderLocationNode = (loc: Location, depth: number = 0): React.ReactNode => {
     // When searching, use filtered tree to get children; otherwise use all locations
-    const children = search.trim() 
+    const children = search.trim()
       ? Array.from(filteredTree.get(loc.id) || [])
       : getLocationChildren(locations, loc.id)
     const hasChildren = children.length > 0
     const isExpanded = expandedIds.has(loc.id)
     const isSelected = value === loc.id
-
-    const handleNodeClick = () => {
-      if (isSelected && hasChildren) {
-        // If already selected and has children, toggle expansion
-        toggleExpanded(loc.id)
-      } else {
-        // Otherwise, select the node (but don't close modal - let user click Done)
-        onChange(loc.id)
-      }
-    }
+    const locationLabel = getLocationLabel(loc)
+    const expandAriaLabel = isExpanded ? `Collapse ${locationLabel}` : `Expand ${locationLabel}`
 
     return (
       <div key={loc.id} className={depth > 0 ? 'ml-4 border-l border-gray-100 pl-3 mt-1' : 'mb-2'}>
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
           {hasChildren ? (
             <button
               type="button"
@@ -145,38 +137,63 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
                 e.stopPropagation()
                 toggleExpanded(loc.id)
               }}
-              className="w-3 h-3 mr-2 text-gray-500 flex-shrink-0 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-              aria-label={isExpanded ? 'Collapse' : 'Expand'}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toggleExpanded(loc.id)
+                }
+              }}
+              aria-expanded={isExpanded}
+              aria-label={expandAriaLabel}
+              className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border border-transparent hover:bg-gray-50 hover:border-gray-200 transition-colors text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1"
             >
-              {isExpanded ? '▾' : '▸'}
+              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-500" aria-hidden>
+                {isExpanded ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className={`truncate text-sm ${isSelected ? 'text-blue-900 font-medium' : 'text-gray-900'}`}>
+                  {locationLabel}
+                </p>
+                {loc.path && (
+                  <p className="text-[10px] text-gray-400 font-mono truncate mt-0.5">
+                    {loc.path}
+                  </p>
+                )}
+              </div>
             </button>
           ) : (
-            <span className="w-3 h-3 mr-2"></span>
+            <div className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg">
+              <span className="w-5 flex-shrink-0" aria-hidden />
+              <div className="flex-1 min-w-0">
+                <p className={`truncate text-sm ${isSelected ? 'text-blue-900 font-medium' : 'text-gray-900'}`}>
+                  {getLocationLabel(loc)}
+                </p>
+                {loc.path && (
+                  <p className="text-[10px] text-gray-400 font-mono truncate mt-0.5">
+                    {loc.path}
+                  </p>
+                )}
+              </div>
+            </div>
           )}
           <button
             type="button"
-            onClick={handleNodeClick}
-            className={`flex items-center justify-between flex-1 px-2 py-1 rounded text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors ${
+            onClick={() => onChange(loc.id)}
+            className={`flex-shrink-0 px-3 py-2 min-h-[44px] text-sm font-medium rounded-lg transition-colors ${
               isSelected
-                ? 'bg-blue-50 border border-blue-200 shadow-sm'
-                : 'hover:bg-gray-50 border border-transparent'
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
-            <div className="text-left flex-1 min-w-0">
-              <p className={`truncate ${isSelected ? 'text-blue-900 font-medium' : 'text-gray-900'}`}>
-                {getLocationLabel(loc)}
-              </p>
-              {loc.path && (
-                <p className="text-[10px] text-gray-400 font-mono truncate">
-                  {loc.path}
-                </p>
-              )}
-            </div>
-            {isSelected && (
-              <span className="text-[10px] font-mono text-blue-700 ml-2 flex-shrink-0">
-                selected
-              </span>
-            )}
+            {isSelected ? 'Selected' : 'Select'}
           </button>
         </div>
 

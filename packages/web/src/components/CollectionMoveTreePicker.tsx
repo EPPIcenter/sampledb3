@@ -239,35 +239,57 @@ export default function CollectionMoveTreePicker({
     if (!isVisible && depth > 0) return null
 
     const storageTypeLabel = loc.effectiveStorageTypeName || loc.storageTypeName
+    const canExpand = children.length > 0 || hasCollections
+    const expandAriaLabel = isExpanded
+      ? `Collapse ${loc.name}`
+      : `Expand ${loc.name}`
 
     return (
       <div key={loc.id} className="mb-2">
-        <div className="flex items-center gap-2 py-1.5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => toggleExpanded(loc.id)}
-            className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-gray-900 flex-shrink-0"
-            disabled={children.length === 0 && !hasCollections}
+            disabled={!canExpand}
+            aria-expanded={canExpand ? isExpanded : undefined}
+            aria-label={canExpand ? expandAriaLabel : undefined}
+            onKeyDown={(e) => {
+              if (canExpand && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault()
+                toggleExpanded(loc.id)
+              }
+            }}
+            className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border border-transparent hover:bg-gray-50 hover:border-gray-200 transition-colors text-left group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:border-transparent disabled:opacity-70"
           >
-            {children.length > 0 || hasCollections ? (
-              <span className="text-gray-400 w-4 text-center">
-                {isExpanded ? '▼' : '▶'}
+            {canExpand ? (
+              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-500 group-hover:text-gray-700" aria-hidden>
+                {isExpanded ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
               </span>
             ) : (
-              <span className="w-4" />
+              <span className="w-5 flex-shrink-0" aria-hidden />
             )}
-            <span className="font-medium">{loc.name}</span>
-            {loc.path && loc.path !== loc.name && (
-              <span className="text-xs dashboard-stat-muted">({loc.path})</span>
-            )}
-            {storageTypeLabel && (
-              <span className="text-xs text-gray-500">({storageTypeLabel})</span>
-            )}
-            {hasCollections && (
-              <span className="text-xs text-gray-400 ml-1">
-                ({locCollections.length} collection{locCollections.length !== 1 ? 's' : ''})
-              </span>
-            )}
+            <div className="flex-1 min-w-0">
+              <span className="font-medium text-sm text-gray-800 group-hover:text-gray-900">{loc.name}</span>
+              {loc.path && loc.path !== loc.name && (
+                <span className="text-xs text-gray-500 ml-1">({loc.path})</span>
+              )}
+              {storageTypeLabel && (
+                <span className="text-xs text-gray-500 ml-1">({storageTypeLabel})</span>
+              )}
+              {hasCollections && (
+                <span className="text-xs text-gray-400 ml-1">
+                  ({locCollections.length} collection{locCollections.length !== 1 ? 's' : ''})
+                </span>
+              )}
+            </div>
           </button>
           {isLeaf && hasCollections && onSelectAllAtLocation && (
             <button
@@ -276,18 +298,18 @@ export default function CollectionMoveTreePicker({
                 e.stopPropagation()
                 handleSelectAllAtLocation(loc.id)
               }}
-              className={`ml-auto text-xs px-2 py-1 rounded ${
+              className={`flex-shrink-0 text-xs px-3 py-2 min-h-[44px] rounded-lg font-medium transition-colors ${
                 allSelectedAtLocation
-                  ? 'bg-teal-100 text-teal-900 hover:bg-teal-200 hover:text-teal-900'
+                  ? 'bg-teal-100 text-teal-900 hover:bg-teal-200'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              } transition-colors`}
+              }`}
             >
               {allSelectedAtLocation ? 'Deselect All' : 'Select All'}
             </button>
           )}
         </div>
         {loc.description && (
-          <div className="ml-6 text-xs text-gray-500 truncate max-w-full" title={loc.description}>
+          <div className="ml-8 text-xs text-gray-500 truncate max-w-full mt-0.5" title={loc.description}>
             {loc.description}
           </div>
         )}
@@ -297,7 +319,7 @@ export default function CollectionMoveTreePicker({
             {locCollections.map((col) => (
               <label
                 key={`${col.type}:${col.id}`}
-                className="flex items-start gap-3 py-2 px-3 hover:bg-gray-50 rounded cursor-pointer border border-transparent hover:border-gray-200 transition-colors"
+                className="flex items-start gap-3 py-3 px-3 min-h-[44px] hover:bg-gray-50 rounded-lg cursor-pointer border border-transparent hover:border-gray-200 transition-colors"
               >
                 <input
                   type="checkbox"

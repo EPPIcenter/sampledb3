@@ -157,6 +157,19 @@
   outline-offset: 2px;
 }
 
+/* Collection tree picker: location row (full-row expand target) inside storage-page */
+.storage-page .storage-tree-picker-row {
+  min-height: 44px;
+}
+.storage-page button.storage-tree-picker-row:hover {
+  background: rgb(var(--dashboard-surface));
+  border-color: rgb(var(--dashboard-border));
+}
+.storage-page button.storage-tree-picker-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--dashboard-accent));
+}
+
 .storage-page .form-input:focus,
 .storage-page .form-select:focus {
   border-color: rgb(var(--dashboard-accent) / 0.5);
