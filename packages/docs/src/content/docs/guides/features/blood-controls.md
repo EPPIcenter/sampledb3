@@ -47,7 +47,7 @@ The batch accumulates specimens as you add them, and the system automatically tr
 
 To create a control batch, navigate to the Blood Controls section and switch to the Batches tab. Click "New Batch" or "Create Batch" to start the process.
 
-You'll need to provide a name for the batch, which should be a unique identifier. Many labs use sequential numbering like "BATCH-001", "BATCH-002", or include dates like "2024-Q1-Control". Select the control definition this batch is based on from a dropdown of available definitions. Optionally, you can specify a production date and a storage location.
+You'll need to provide a name for the batch, which should be a unique identifier. Many labs use sequential numbering like "BATCH-001", "BATCH-002", or include dates like "2024-Q1-Control". To choose the control definition this batch is based on, use the **search box** to filter definitions by name, description, or strain name; then click a definition in the list to select it. If the definition you need does not exist yet, click **Create new definition** to add it in a dialog without leaving the batch flow—the new definition is selected automatically when you finish. Optionally, you can specify a production date and a storage location.
 
 Once you've created the batch, you can start adding specimens to it. You can add specimens individually through the batch detail page, or use bulk import to add many specimens at once. Each specimen you add to the batch contributes to the batch's inventory count.
 

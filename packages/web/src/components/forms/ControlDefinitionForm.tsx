@@ -5,7 +5,7 @@ import { useModifierHotkey } from '../../hooks/useHotkey'
 
 interface ControlDefinitionFormProps {
   controlDefinition?: ControlDefinition
-  onSuccess?: () => void
+  onSuccess?: (control?: ControlDefinition) => void
   onCancel?: () => void
 }
 
@@ -296,6 +296,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
         }))
       }
 
+      let savedControl: ControlDefinition | undefined
       if (controlDefinition) {
         // For updates, include strains in the update payload (only for blood controls)
         const updateData: any = { ...submitData }
@@ -310,13 +311,15 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
             updateData.strains = []
           }
         }
-        await controlsApi.update(controlDefinition.id, updateData)
+        const res = await controlsApi.update(controlDefinition.id, updateData)
+        savedControl = res.data.control
       } else {
-        await controlsApi.create(submitData)
+        const res = await controlsApi.create(submitData)
+        savedControl = res.data.control
       }
 
       if (onSuccess) {
-        onSuccess()
+        onSuccess(savedControl)
       } else {
         navigate('/blood-controls')
       }

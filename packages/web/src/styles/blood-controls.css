@@ -396,3 +396,85 @@
 .blood-controls-page .dashboard-stat-muted {
   color: rgb(var(--dashboard-text-muted));
 }
+
+/* Batch wizard: definition listbox options */
+.blood-controls-page .blood-controls-definition-option {
+  background: rgb(var(--dashboard-card));
+  cursor: pointer;
+}
+
+.blood-controls-page .blood-controls-definition-option:hover {
+  background: rgb(var(--dashboard-surface));
+}
+
+.blood-controls-page .blood-controls-definition-option-selected {
+  background: rgb(var(--dashboard-accent-muted) / 0.6);
+  border-left: 3px solid rgb(var(--dashboard-accent));
+}
+
+.blood-controls-page .blood-controls-definition-option-focused {
+  outline: 2px solid rgb(var(--dashboard-accent));
+  outline-offset: -2px;
+}
+
+.blood-controls-page .blood-controls-badge-inline {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  background: rgb(var(--blood-controls-badge-bg));
+  color: rgb(var(--blood-controls-badge));
+}
+
+/* Modal overlay (portaled to body): re-apply theme for Create definition in wizard */
+.blood-controls-modal-overlay {
+  --dashboard-bg: 248 250 252;
+  --dashboard-surface: 241 245 249;
+  --dashboard-card: 255 255 255;
+  --dashboard-accent: 20 184 166;
+  --dashboard-accent-hover: 13 148 136;
+  --dashboard-accent-muted: 204 251 241;
+  --dashboard-text: 30 41 59;
+  --dashboard-text-muted: 100 116 139;
+  --dashboard-border: 226 232 240;
+  --blood-controls-badge: 190 18 60;
+  --blood-controls-badge-bg: 255 228 230;
+}
+
+.blood-controls-modal-overlay .blood-controls-modal-panel {
+  background: rgb(var(--dashboard-card));
+  border: 1px solid rgb(var(--dashboard-border));
+  border-radius: 0.75rem;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+}
+
+.blood-controls-modal-overlay .blood-controls-modal-panel input:focus,
+.blood-controls-modal-overlay .blood-controls-modal-panel select:focus,
+.blood-controls-modal-overlay .blood-controls-modal-panel textarea:focus {
+  border-color: rgb(var(--dashboard-accent) / 0.5);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--dashboard-accent) / 0.2);
+}
+
+.blood-controls-modal-overlay .blood-controls-modal-panel form .flex.justify-end button[type="submit"] {
+  background: rgb(var(--dashboard-accent));
+  color: white;
+  border: none;
+}
+
+.blood-controls-modal-overlay .blood-controls-modal-panel form .flex.justify-end button[type="submit"]:hover:not(:disabled) {
+  background: rgb(var(--dashboard-accent-hover));
+}
+
+.blood-controls-modal-overlay .blood-controls-modal-panel form .flex.justify-end button[type="button"] {
+  background: rgb(var(--dashboard-card));
+  color: rgb(var(--dashboard-text));
+  border: 1px solid rgb(var(--dashboard-border));
+}
+
+.blood-controls-modal-overlay .blood-controls-modal-panel form .flex.justify-end button[type="button"]:hover {
+  background: rgb(var(--dashboard-surface));
+  border-color: rgb(var(--dashboard-accent) / 0.3);
+}

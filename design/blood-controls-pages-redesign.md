@@ -10,7 +10,7 @@ The blood control pages were redesigned to match the existing "modern precision 
 - **Definition detail**: ControlDefinitionDetail (StatCards, composition sidebar, Production History table).
 - **Definition form**: New and edit via BloodControlDefinitionPage wrapper (breadcrumb + card + ControlDefinitionForm).
 - **Batch detail**: ControlBatchDetail (definition sidebar, Stock & Availability, specimens timeline, Add Specimen modal).
-- **Batch wizard**: ControlBatchWizard (multi-step: batch-info → specimen-types → csv-upload → containers → review).
+- **Batch wizard**: ControlBatchWizard (multi-step: batch-info → specimen-types → csv-upload → containers → review). On the Batch Info step, control definition selection uses a **filter-and-select** pattern: a search input narrows the list by name, description, or strain; a scrollable list shows matching definitions with type, density, and strains; and a **Create new definition** button opens a modal so users can add a definition without leaving the wizard.
 
 Six entry points total; all render inside `.blood-controls-page`.
 
