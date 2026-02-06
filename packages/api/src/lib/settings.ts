@@ -105,6 +105,13 @@ export async function getSetting<T>(db: Database, key: string, userId: number | 
  * @param userId - Optional user ID. If provided, saves as user-specific; if null, saves as system-wide
  */
 export async function setSetting<T>(db: Database, key: string, value: T, userId: number | null = null): Promise<void> {
+  // SQLite treats NULL as distinct in unique/primary keys, so ON CONFLICT never matches
+  // an existing (key, NULL) row. For system-wide settings (userId null), delete any existing
+  // row first so we have exactly one, then insert.
+  if (userId === null) {
+    await db.delete(settings).where(and(eq(settings.key, key), isNull(settings.userId)))
+  }
+
   await db
     .insert(settings)
     .values({
