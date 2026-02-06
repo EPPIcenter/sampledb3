@@ -20,6 +20,7 @@ import ContainerMoveMicronix from './pages/ContainerMoveMicronix'
 import ContainerMoveCryovial from './pages/ContainerMoveCryovial'
 import ContainerMovePapers from './pages/ContainerMovePapers'
 import CollectionMove from './pages/CollectionMove'
+import PlateScanValidation from './pages/PlateScanValidation'
 import Sidebar from './components/Sidebar'
 import './styles/sidebar.css'
 import './styles/floating-palettes.css'
@@ -502,6 +503,7 @@ function AppContent() {
           <Route path="/container-move/cryovial" element={<ContainerMoveCryovial />} />
           <Route path="/container-move/papers" element={<ContainerMovePapers />} />
           <Route path="/collection-move" element={<CollectionMove />} />
+          <Route path="/plate-scan-validation" element={<PlateScanValidation />} />
           <Route path="/collections/micronix-plates/:id" element={<MicronixPlateDetail />} />
           <Route path="/collections/cryovial-boxes/:id" element={<CryovialBoxDetail />} />
           <Route path="/collections/boxes/:id" element={<BoxDetail />} />

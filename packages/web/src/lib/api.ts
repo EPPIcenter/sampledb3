@@ -928,6 +928,29 @@ interface PaperEntry {
   container?: unknown
 }
 
+export interface ValidatePlateScanResult {
+  plate: { id: number; name: string }
+  summary: {
+    totalExpected: number
+    matched: number
+    missingInScan: number
+    extraInScan: number
+    mismatch: number
+    exhaustedCount: number
+    taggedCount: number
+  }
+  wells: Array<{
+    position: string
+    scanBarcode: string | null
+    expectedBarcode: string | null
+    status: 'match' | 'mismatch' | 'missing_in_scan' | 'extra_in_scan'
+    exhausted: boolean
+    tags: string[]
+    /** When status is mismatch or extra_in_scan, where the scanned barcode is registered (plate + position). */
+    scanBarcodeOrigin: { plateId: number; plateName: string; position: string } | null
+  }>
+}
+
 export const collectionsApi = {
   getMicronixPlate: (id: number) =>
     api.get<{ plate: MicronixPlateResponse; wells: Record<string, WellEntry> }>(`/collections/plates/micronix/${id}`),
@@ -943,6 +966,8 @@ export const collectionsApi = {
     api.post<{ results: Array<{ identifier: string; type: string; exists: boolean; id: number | null }> }>('/collections/check', data),
   createMicronixPlate: (data: { name: string; locationId: number; barcode?: string }) =>
     api.post<{ plate: MicronixPlateResponse }>('/collections/plates/micronix', data),
+  validatePlateScan: (data: { csvText: string; plateId: number; scannerConfigurationId: string }) =>
+    api.post<ValidatePlateScanResult>('/collections/plates/micronix/validate-scan', data),
   createCryovialBox: (data: { name: string; locationId: number; barcode?: string }) =>
     api.post<{ box: CryovialBoxResponse }>('/collections/boxes/cryovial', data),
   createBox: (data: { name: string; locationId: number }) =>

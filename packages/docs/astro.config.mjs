@@ -84,6 +84,7 @@ export default defineConfig({
 						{ label: 'Blood Controls', link: '/guides/features/blood-controls/' },
 						{ label: 'Derivations', link: '/guides/features/derivations/' },
 						{ label: 'Collection Move', link: '/guides/features/collection-move/' },
+						{ label: 'Validate Plate Scan', link: '/guides/features/plate-scan-validation/' },
 						{ label: 'qPCR Experiments', link: '/guides/features/qpcr-experiments/' },
 					],
 				},

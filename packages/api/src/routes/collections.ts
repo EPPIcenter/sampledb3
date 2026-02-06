@@ -26,6 +26,7 @@ import { resolveCollection } from '../lib/collection-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
+import { validatePlateScan } from '../lib/plate-scan-validation'
 
 /**
  * Create collections routes with database injection
@@ -197,6 +198,32 @@ collections.get('/plates/micronix/:id', authMiddleware, async (c) => {
     },
     wells: wellsByPosition,
   })
+})
+
+// Validate scanned plate CSV against a micronix plate
+collections.post('/plates/micronix/validate-scan', authMiddleware, memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      csvText: z.string(),
+      plateId: z.number().int().positive(),
+      scannerConfigurationId: z.string().min(1),
+    })
+    const data = schema.parse(body)
+    const result = await validatePlateScan(database, {
+      csvText: data.csvText,
+      plateId: data.plateId,
+      scannerConfigurationId: data.scannerConfigurationId,
+    })
+    return c.json(result)
+  } catch (error) {
+    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    if (error instanceof Error) {
+      if (error.message === 'Scanner configuration not found') return c.json({ error: error.message }, 400)
+      if (error.message === 'Plate not found') return c.json({ error: error.message }, 404)
+    }
+    throw error
+  }
 })
 
 // Cryovial box detail
@@ -830,21 +857,42 @@ collections.get('/list/:type', authMiddleware, async (c) => {
 
     switch (type) {
       case 'micronix_plate': {
-        const plates = await database
+        const platesData = await database
           .select({
             plate: micronixPlate,
             location: location,
-            tubeCount: sql<number>`(SELECT COUNT(*) FROM ${micronixTube} WHERE ${micronixTube.collectionId} = ${micronixPlate.id})`,
-            wellCount: sql<number>`(SELECT COUNT(*) FROM ${staticWell} WHERE ${staticWell.collectionId} = ${micronixPlate.id})`,
           })
           .from(micronixPlate)
           .leftJoin(location, eq(micronixPlate.locationId, location.id))
-        result = plates.map((r) => ({
+        const plateIds = platesData.map((p) => p.plate.id)
+        const [tubeCounts, wellCounts] = plateIds.length > 0
+          ? await Promise.all([
+              database
+                .select({
+                  collectionId: micronixTube.collectionId,
+                  count: sql<number>`COUNT(*)`.as('count'),
+                })
+                .from(micronixTube)
+                .where(inArray(micronixTube.collectionId, plateIds))
+                .groupBy(micronixTube.collectionId),
+              database
+                .select({
+                  collectionId: staticWell.collectionId,
+                  count: sql<number>`COUNT(*)`.as('count'),
+                })
+                .from(staticWell)
+                .where(inArray(staticWell.collectionId, plateIds))
+                .groupBy(staticWell.collectionId),
+            ])
+          : [[], []]
+        const tubeCountMap = new Map(tubeCounts.map((t) => [t.collectionId, t.count]))
+        const wellCountMap = new Map(wellCounts.map((w) => [w.collectionId, w.count]))
+        result = platesData.map((r) => ({
           id: r.plate.id,
           name: r.plate.name,
           barcode: r.plate.barcode,
           locationId: r.plate.locationId,
-          itemCount: (r.tubeCount || 0) + (r.wellCount || 0),
+          itemCount: (tubeCountMap.get(r.plate.id) || 0) + (wellCountMap.get(r.plate.id) || 0),
           location: r.location
             ? {
                 id: r.location.id,
