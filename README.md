@@ -60,6 +60,12 @@ sampledb/
 - `PORT` - API server port (default: `3000`)
 - `NODE_ENV` - `production` or `development`
 
+## Testing
+
+- **Run all tests**: `pnpm test` (API + web)
+- **API**: `pnpm --filter @sampledb/api test` (Bun). Coverage: `pnpm --filter @sampledb/api test:coverage` (Bun built-in; report in `packages/api/coverage/`). Target 90% lines; see `packages/api/src/__tests__/README.md`.
+- **Web**: `pnpm --filter @sampledb/web test` (Vitest). Coverage: `pnpm --filter @sampledb/web test:coverage`. Coverage excludes `src/lib/api.ts` and `src/**/*.css` so the 90% target applies to testable code. Thresholds in `packages/web/vitest.config.ts` can be raised in steps toward 90%.
+
 ## Database Configuration
 
 By default, the application uses an empty development database (`sampledb_dev.sqlite`) which is perfect for testing the setup functionality. To use the production database with real data:
