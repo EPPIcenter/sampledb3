@@ -56,6 +56,10 @@ Desktop.ini
 coverage/
 .nyc_output/
 .jest/
+packages/e2e/test-results/
+packages/e2e/playwright-report/
+packages/e2e/blob-report/
+packages/e2e/sampledb_e2e.sqlite
 
 # Temporary Files
 *.tmp
