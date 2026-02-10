@@ -74,4 +74,9 @@ describe('Locations page', () => {
     const freezerElements = await screen.findAllByText('Freezer A', {}, { timeout: 3000 })
     expect(freezerElements.length).toBeGreaterThan(0)
   })
+
+  it('calls locationsApi.list on mount', async () => {
+    await render(<Locations />)
+    expect(locationsApi.list).toHaveBeenCalled()
+  })
 })

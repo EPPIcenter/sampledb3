@@ -30,8 +30,10 @@ bun test:coverage # With coverage
   - `render.tsx`: Custom render function with providers (QueryClient, BrowserRouter, ToastProvider)
   - `setup.ts`: Global test setup (e.g. IntersectionObserver mock, in-memory localStorage, auth mock). The default `authApi.getCurrentUser` mock resolves synchronously (thenable) so UserProvider state updates run inside React’s act and avoid act() warnings.
 - `__tests__/fixtures/` - Test data fixtures
-- `lib/__tests__/` - Lib unit tests (e.g. commands, constants)
-- `components/__tests__/` - Component tests
+- `lib/__tests__/` - Lib unit tests (e.g. commands, constants, plate-filename-match, container-types, localUserHistory, hotkeys, error-logger)
+- `components/__tests__/` - Component tests (e.g. BulkImportFlow, ContainerDerivationModal)
+- `components/forms/__tests__/` - Form tests (SubjectForm, StudyForm, ControlDefinitionForm, SpecimenForm)
+- `components/wizards/__tests__/` - Wizard step tests (e.g. BatchInfoStep)
 - `hooks/__tests__/` - Custom hook tests
 - `pages/__tests__/` - Page smoke tests
 
@@ -160,11 +162,7 @@ describe('useStudies', () => {
 
 ## Coverage
 
-Coverage thresholds are set to 60% for:
-- Statements
-- Branches
-- Functions
-- Lines
+Coverage excludes `src/**/*.css` and `src/lib/api.ts` (api.ts is exercised via hooks and page tests). Thresholds are set to a baseline and can be raised toward 90% as more tests are added.
 
 Run coverage reports:
 

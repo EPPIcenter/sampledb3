@@ -62,4 +62,3 @@ export function formatLocalDateTime(date: Date = new Date()): string {
   const seconds = String(date.getSeconds()).padStart(2, '0')
   return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`
 }
-

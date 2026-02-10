@@ -98,9 +98,10 @@ describe('CollectionMove', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /select locations/i })).toBeInTheDocument()
     })
-    // Wait for locations to load and click F2 (collection-capable location)
-    const f2Button = await screen.findByRole('button', { name: /f2/i })
-    await user.click(f2Button)
+    // Wait for locations to load in the modal; each location row has a "Select" button. First match may be "Select locations..." (trigger); then F1's Select, then F2's Select.
+    const selectButtons = await screen.findAllByRole('button', { name: /select/i })
+    expect(selectButtons.length).toBeGreaterThanOrEqual(3)
+    await user.click(selectButtons[2])
 
     // Review & Confirm step should show both collections (same id, different type)
     expect(screen.getByRole('heading', { name: /review & confirm/i })).toBeInTheDocument()
