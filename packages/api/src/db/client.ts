@@ -1,6 +1,5 @@
 import { Database as SQLiteDatabase } from 'bun:sqlite'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
-import { migrate } from 'drizzle-orm/bun-sqlite/migrator'
 import * as schema from './schema'
 import { join, resolve } from 'path'
 import { fileURLToPath } from 'url'
@@ -122,8 +121,8 @@ export function createDatabase(dbPath?: string): { db: ReturnType<typeof drizzle
   const sqlite = new SQLiteDatabase(resolvedPath)
   sqlite.exec('PRAGMA journal_mode = WAL')
 
-  // Check if database has tables and run migrations if needed
-  let needsMigration = false
+  // Check if database has tables and run initial schema if needed
+  let needsSchema = false
   try {
     const studyTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='study'").get()
     const settingsTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='settings'").get()
@@ -132,89 +131,82 @@ export function createDatabase(dbPath?: string): { db: ReturnType<typeof drizzle
       const allTables = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
       const tableCount = allTables.length
       if (tableCount === 0) {
-        needsMigration = true
-        console.log(`📝 Database is empty - running migrations to initialize schema...`)
+        needsSchema = true
+        console.log(`📝 Database is empty - running initial schema...`)
       } else {
         console.warn(`⚠️  Warning: 'study' table not found in database.`)
         console.warn(`   Tables found: ${allTables.map(t => t.name).join(', ') || 'none'}`)
-        // Still try to run migrations in case schema is incomplete
-        needsMigration = true
-        console.log(`📝 Running migrations to ensure schema is up to date...`)
+        needsSchema = true
+        console.log(`📝 Running initial schema to ensure schema is complete...`)
       }
     } else if (!settingsTable) {
-      // Database has some tables but is missing critical ones like 'settings'
-      // This indicates migrations are incomplete
-      needsMigration = true
-      console.log(`📝 Database schema is incomplete (missing 'settings' table) - running migrations...`)
+      needsSchema = true
+      console.log(`📝 Database schema is incomplete (missing 'settings' table) - running initial schema...`)
     } else {
       console.log(`✅ Database connected successfully`)
     }
-  } catch (error: any) {
-    // Distinguish between expected cases (empty DB, missing tables) and actual errors
-    // If the error is about the database file not existing, that's expected for new setups
-    // If it's a different error (corruption, permissions, etc.), throw it
-    const errorMessage = error?.message || String(error)
-    
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
     if (errorMessage.includes('no such file') || errorMessage.includes('ENOENT')) {
-      // Database file doesn't exist - this is expected for new setups
-      needsMigration = true
-      console.log(`📝 Database file does not exist - will create and run migrations...`)
+      needsSchema = true
+      console.log(`📝 Database file does not exist - will create and run initial schema...`)
     } else {
-      // This is an unexpected error - throw it instead of silently assuming migrations needed
       console.error(`❌ Error checking database: ${errorMessage}`)
       throw new Error(`Failed to check database: ${errorMessage}. This may indicate database corruption or permission issues.`)
     }
   }
 
-  // Create drizzle instance for migrations
   const db = drizzle(sqlite, { schema })
 
-  // Run migrations if needed
-  if (needsMigration) {
-    try {
-      // Find migrations folder
-      // This file is in: packages/api/src/db/client.ts (or dist/db/client.js when compiled)
-      // Migrations are in: packages/api/drizzle
-      // Find the API package root by looking for package.json with name '@sampledb/api'
-      let migrationsFolder: string | null = null
-      let currentDir = __dirname
-      
-      // Search up the directory tree to find the API package root
-      for (let i = 0; i < 5; i++) {
-        const packageJson = join(currentDir, 'package.json')
-        if (existsSync(packageJson)) {
-          try {
-            const pkg = JSON.parse(readFileSync(packageJson, 'utf-8'))
-            if (pkg.name === '@sampledb/api') {
-              migrationsFolder = join(currentDir, 'drizzle')
+  if (needsSchema) {
+    let schemaPath: string | null = null
+    let currentDir = __dirname
+    const pathsTried: string[] = []
+
+    for (let i = 0; i < 5; i++) {
+      const packageJson = join(currentDir, 'package.json')
+      if (existsSync(packageJson)) {
+        try {
+          const pkg = JSON.parse(readFileSync(packageJson, 'utf-8'))
+          if (pkg.name === '@sampledb/api') {
+            const candidate = join(currentDir, 'initial_schema.sql')
+            pathsTried.push(candidate)
+            if (existsSync(candidate)) {
+              schemaPath = candidate
               break
             }
-          } catch (error) {
-            // Expected: package.json may be unreadable or malformed during migrations folder search
-            // Log in development mode for debugging, but don't throw - this is expected behavior
-            if (process.env.NODE_ENV === 'development') {
-              console.debug(`Could not parse ${packageJson} during migrations folder detection:`, error)
-            }
           }
+        } catch {
+          // ignore
         }
-        const parent = dirname(currentDir)
-        if (parent === currentDir) break
-        currentDir = parent
       }
-      
-      // Fallback: try relative path (works when running from source)
-      if (!migrationsFolder || !existsSync(migrationsFolder)) {
-        migrationsFolder = join(__dirname, '../../drizzle')
+      const parent = dirname(currentDir)
+      if (parent === currentDir) break
+      currentDir = parent
+    }
+
+    if (!schemaPath) {
+      const fallback = join(__dirname, '../../initial_schema.sql')
+      pathsTried.push(fallback)
+      if (existsSync(fallback)) schemaPath = fallback
+    }
+
+    if (!schemaPath) {
+      throw new Error(`initial_schema.sql not found. Tried: ${pathsTried.join(', ')}`)
+    }
+
+    try {
+      const sql = readFileSync(schemaPath, 'utf-8')
+      const statements = sql.split('--> statement-breakpoint').map((s) => s.trim()).filter(Boolean)
+      for (const statement of statements) {
+        if (statement.length > 0) {
+          sqlite.exec(statement)
+        }
       }
-      
-      if (!migrationsFolder || !existsSync(migrationsFolder)) {
-        throw new Error(`Migrations folder not found. Tried: ${migrationsFolder}`)
-      }
-      
-      migrate(db, { migrationsFolder })
-      console.log(`✅ Migrations completed successfully`)
-    } catch (error: any) {
-      console.error(`❌ Error running migrations: ${error.message}`)
+      console.log(`✅ Initial schema completed successfully`)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`❌ Error running initial schema: ${message}`)
       throw error
     }
   }
