@@ -13,7 +13,7 @@
     "test": "bun test src",
     "test:watch": "bun test --watch src",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "bun test src --coverage"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.5.3",

@@ -1,28 +1,17 @@
 # Backend Testing Guide
 
-## Important: Known Vitest Issue
-
-**Stack Overflow During Worker Cleanup (Non-Blocking)**
-
-When running tests, you may see a `RangeError: Maximum call stack size exceeded` error after all tests complete. This is a **known non-blocking issue** with Vitest/tinypool when using native modules.
-
-- **Impact**: None - all tests pass successfully before the error occurs
-- **When it happens**: Only during worker cleanup/teardown, after all tests complete
-- **Action required**: None - this can be safely ignored
-- **Status**: All 102 tests pass; this is a cosmetic cleanup issue
-
-**Do not attempt to "fix" this error** - it's a known Vitest/tinypool bug that doesn't affect test results.
-
 ## Setup
 
-Tests use Vitest for the backend API. Run tests with:
+Tests use **Bun's test runner** (not Vitest) so that route and integration tests can use `bun:sqlite` in db-setup. Coverage uses **Bun's built-in coverage** (`bun test --coverage`) so all 431 tests are included in the report. Run tests with:
 
 ```bash
-bun test          # Run once
-bun test:watch    # Watch mode
-bun test:ui       # UI mode
-bun test:coverage # With coverage
+bun test src          # Run once (431 tests)
+bun test --watch src  # Watch mode
+bun test:ui           # Vitest UI (for lib-only tests; route tests require Bun)
+bun test:coverage     # Run tests with coverage (Bun; report in coverage/)
 ```
+
+Coverage is configured in `packages/api/bunfig.toml` (reporters: text, lcov). Baseline has been raised with lib and route tests; the target is 90% lines. Optional `coverageThreshold` in bunfig.toml can be enabled and raised in steps (e.g. 60 → 75 → 90) as coverage improves.
 
 ## Test Structure
 
@@ -32,7 +21,8 @@ bun test:coverage # With coverage
   - `test-client.ts`: Hono test client utilities and assertion helpers
 - `__tests__/fixtures/` - Test data fixtures
 - `routes/__tests__/` - Route handler tests
-- `lib/__tests__/` - Library/utility function tests
+- `lib/__tests__/` - Library/utility function tests (e.g. plate-csv, plate-scan-validation, defaults, container-move, derivations, control-batch-creation, error-utils, logger, cache, openapi)
+- `middleware/__tests__/` - Middleware tests (e.g. auth, rate-limit)
 
 ## Test Database
 

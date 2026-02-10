@@ -1,0 +1,143 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
+import {
+  createTestStorageType,
+  createTestLocation,
+  createTestMicronixPlate,
+  createTestSpecimenType,
+  createTestSpecimen,
+  createTestUnit,
+} from '../../__tests__/helpers/factories'
+import { setContainerDefaults } from '../settings'
+import { createDerivation } from '../derivations'
+import { specimenTypeContainerType } from '../../db/schema'
+import { storageContainer } from '../../db/schema'
+import { micronixTube } from '../../db/schema'
+import type { Database } from '../../db/client'
+
+describe('derivations', () => {
+  let testDb: Database
+  let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
+
+  beforeEach(async () => {
+    const setup = await setupTestDatabase()
+    testDb = setup.db
+    sqlite = setup.sqlite
+  })
+
+  afterEach(() => {
+    if (sqlite) {
+      cleanupTestDatabase(sqlite)
+    }
+  })
+
+  describe('createDerivation', () => {
+    it('throws when parent container not found', async () => {
+      await expect(
+        createDerivation(testDb, {
+          parentContainerId: 99999,
+          derivationType: 'aliquot',
+          specimenTypeName: 'DNA',
+          containerType: 'micronix_tube',
+          collectionId: 1,
+          containerBarcode: 'MT001',
+          position: 'A01',
+        })
+      ).rejects.toThrow('Parent container not found')
+    })
+
+    it('throws when specimen type not found', async () => {
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
+      const specimen = await createTestSpecimen(testDb, specimenType.id)
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(testDb, { name: 'Plate1', locationId: location.id })
+      const now = new Date().toISOString()
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: specimen.id,
+          unitId: unit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+      await testDb.insert(micronixTube).values({
+        id: container!.id,
+        collectionId: plate.id,
+        barcode: 'MT-PARENT',
+        position: 'A01',
+      })
+
+      await expect(
+        createDerivation(testDb, {
+          parentContainerId: container!.id,
+          derivationType: 'aliquot',
+          specimenTypeName: 'NonExistentType',
+          containerType: 'micronix_tube',
+          collectionId: plate.id,
+          containerBarcode: 'MT002',
+          position: 'A02',
+        })
+      ).rejects.toThrow("Specimen type 'NonExistentType' not found")
+    })
+
+    it('creates derivation when parent, specimen type, and collection exist', async () => {
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(testDb, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      const now = new Date().toISOString()
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: specimenType.id,
+        containerType: 'micronix_tube',
+        created: now,
+      })
+      const specimen = await createTestSpecimen(testDb, specimenType.id)
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const sourcePlate = await createTestMicronixPlate(testDb, { name: 'SourcePlate', locationId: location.id })
+      const targetPlate = await createTestMicronixPlate(testDb, { name: 'TargetPlate', locationId: location.id })
+      const [parentContainer] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: specimen.id,
+          unitId: unit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+      await testDb.insert(micronixTube).values({
+        id: parentContainer!.id,
+        collectionId: sourcePlate.id,
+        barcode: 'MT-PARENT',
+        position: 'A01',
+      })
+
+      const result = await createDerivation(testDb, {
+        parentContainerId: parentContainer!.id,
+        derivationType: 'aliquot',
+        specimenTypeName: 'DNA',
+        containerType: 'micronix_tube',
+        collectionId: targetPlate.id,
+        containerBarcode: 'MT-CHILD',
+        position: 'A01',
+      })
+
+      expect(result.derivation).toBeDefined()
+      expect(result.derivation.parentContainerId).toBe(parentContainer!.id)
+      expect(result.childContainer).toBeDefined()
+      expect(result.specimen).toBeDefined()
+      expect(result.warnings).toEqual([])
+    })
+  })
+})

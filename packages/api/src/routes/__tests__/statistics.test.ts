@@ -70,9 +70,39 @@ describe('Statistics API', () => {
       expect(typeof data).toBe('object')
     })
 
+    it('returns 200 with query filters (study, container_type)', async () => {
+      const app = createApp()
+      const res = await authenticatedRequest(app, '/api/statistics?study=NONEXISTENT&container_type=micronix_tube', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as Record<string, unknown>
+      expect(data).toBeDefined()
+    })
+
     it('returns 401 without auth', async () => {
       const app = createApp()
       const res = await authenticatedRequest(app, '/api/statistics', { method: 'GET' })
+      expect(res.status).toBe(401)
+    })
+  })
+
+  describe('GET /api/statistics/admin', () => {
+    it('returns 200 with admin auth', async () => {
+      const app = createApp()
+      const res = await authenticatedRequest(app, '/api/statistics/admin', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as Record<string, unknown>
+      expect(data).toBeDefined()
+    })
+
+    it('returns 401 without auth', async () => {
+      const app = createApp()
+      const res = await authenticatedRequest(app, '/api/statistics/admin', { method: 'GET' })
       expect(res.status).toBe(401)
     })
   })

@@ -1,3 +1,10 @@
 [test]
 # Only run tests from src directory, exclude dist (compiled files)
 exclude = ["dist/**", "node_modules/**"]
+# Coverage: use Bun's built-in so all tests (including route tests using bun:sqlite) run
+coverage = true
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"
+# Optional: set to enforce minimum (e.g. 50). Current baseline ~55% lines; raise toward 60% as tests are added.
+# coverageThreshold = 50
+coveragePathIgnorePatterns = ["node_modules", "src/__tests__", "src/**/*.d.ts", "src/**/*.config.*", "dist"]
