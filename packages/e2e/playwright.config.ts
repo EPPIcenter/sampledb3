@@ -1,45 +1,82 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
-import dotenv from 'dotenv'; // E2E package doesn't have dotenv yet, need to install it? Yes, added to package.json plan.
+/**
+ * Read environment variables from file.
+ * https://github.com/motdotla/dotenv
+ */
+// import dotenv from 'dotenv';
+// import path from 'path';
+// dotenv.config({ path: path.resolve(__dirname, '.env') });
 
-// Load environment variables from .env file if it exists, though largely we rely on direct config
-dotenv.config();
-
-const API_PORT = 3001;
-const WEB_PORT = 5174;
-const DATABASE_PATH = path.resolve(__dirname, 'sampledb_e2e.sqlite');
-
+/**
+ * See https://playwright.dev/docs/test-configuration.
+ */
 export default defineConfig({
-    testDir: './src/tests',
-    fullyParallel: false,
-    forbidOnly: !!process.env.CI,
-    retries: process.env.CI ? 2 : 0,
-    workers: 1,
-    reporter: 'html',
-    use: {
-        baseURL: `http://localhost:${WEB_PORT}`,
-        trace: 'on-first-retry',
+  testDir: './tests',
+  timeout: 15000,
+  /* Run tests in files in parallel */
+  fullyParallel: true,
+  /* Fail the build on CI if you accidentally left test.only in the source code. */
+  forbidOnly: !!process.env.CI,
+  /* Retry on CI only */
+  retries: process.env.CI ? 2 : 0,
+  /* Run browser projects in parallel (e.g. chromium, firefox, webkit at once). */
+  workers: process.env.CI ? 3 : undefined,
+  /* Reporter to use. See https://playwright.dev/docs/test-reporters */
+  reporter: 'html',
+  /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
+  use: {
+    /* Base URL to use in actions like `await page.goto('')`. */
+    baseURL: 'http://localhost:5173',
+
+    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
+    trace: 'on-first-retry',
+  },
+
+  /* Configure projects for major browsers */
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
     },
-    projects: [
-        {
-            name: 'chromium',
-            use: { ...devices['Desktop Chrome'] },
-        },
-    ],
-    webServer: [
-        {
-            command: `cd ../api && PORT=${API_PORT} DATABASE_PATH=${DATABASE_PATH} bun --watch src/index.ts`,
-            url: `http://localhost:${API_PORT}/health`,
-            reuseExistingServer: !process.env.CI,
-            stdout: 'pipe',
-            stderr: 'pipe',
-        },
-        {
-            command: `cd ../web && PORT=${WEB_PORT} API_TARGET=http://localhost:${API_PORT} bun dev --port ${WEB_PORT}`,
-            url: `http://localhost:${WEB_PORT}`,
-            reuseExistingServer: !process.env.CI,
-            stdout: 'pipe',
-            stderr: 'pipe',
-        }
-    ],
+
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
+
+    /* Test against mobile viewports. */
+    // {
+    //   name: 'Mobile Chrome',
+    //   use: { ...devices['Pixel 5'] },
+    // },
+    // {
+    //   name: 'Mobile Safari',
+    //   use: { ...devices['iPhone 12'] },
+    // },
+
+    /* Test against branded browsers. */
+    // {
+    //   name: 'Microsoft Edge',
+    //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
+    // },
+    // {
+    //   name: 'Google Chrome',
+    //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
+    // },
+  ],
+
+  /* Run your local dev server before starting the tests */
+  webServer: {
+    cwd: path.resolve(__dirname, '../..'),
+    command: 'DATABASE_PATH=./sampledb_e2e.sqlite bun run dev:production',
+    url: 'http://localhost:5173',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
 });
