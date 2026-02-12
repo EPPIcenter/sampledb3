@@ -6,6 +6,76 @@ import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 
 describe('error-logger lib', () => {
+  const originalErrorLogEnabled = process.env.ERROR_LOG_ENABLED
+
+  afterEach(() => {
+    if (originalErrorLogEnabled !== undefined) {
+      process.env.ERROR_LOG_ENABLED = originalErrorLogEnabled
+    } else {
+      delete process.env.ERROR_LOG_ENABLED
+    }
+  })
+
+  describe('ERROR_LOG_ENABLED', () => {
+    it('does NOT insert when ERROR_LOG_ENABLED=false', async () => {
+      process.env.ERROR_LOG_ENABLED = 'false'
+      const setup = await setupTestDatabase()
+      const { db, sqlite } = setup
+
+      await logError(
+        db,
+        'backend',
+        'error',
+        'Should not be logged',
+        new Error('Test'),
+        {}
+      )
+
+      const rows = await db.select().from(errorLogs).where(eq(errorLogs.source, 'backend'))
+      expect(rows.length).toBe(0)
+      cleanupTestDatabase(sqlite)
+    })
+
+    it('inserts when ERROR_LOG_ENABLED=true', async () => {
+      process.env.ERROR_LOG_ENABLED = 'true'
+      const setup = await setupTestDatabase()
+      const { db, sqlite } = setup
+
+      await logError(
+        db,
+        'backend',
+        'error',
+        'Should be logged',
+        new Error('Test'),
+        {}
+      )
+
+      const rows = await db.select().from(errorLogs).where(eq(errorLogs.source, 'backend'))
+      expect(rows.length).toBeGreaterThanOrEqual(1)
+      expect(rows[rows.length - 1].message).toBe('Should be logged')
+      cleanupTestDatabase(sqlite)
+    })
+
+    it('inserts when ERROR_LOG_ENABLED is unset (default enabled)', async () => {
+      delete process.env.ERROR_LOG_ENABLED
+      const setup = await setupTestDatabase()
+      const { db, sqlite } = setup
+
+      await logError(
+        db,
+        'backend',
+        'error',
+        'Default enabled',
+        new Error('Test'),
+        {}
+      )
+
+      const rows = await db.select().from(errorLogs).where(eq(errorLogs.source, 'backend'))
+      expect(rows.length).toBeGreaterThanOrEqual(1)
+      cleanupTestDatabase(sqlite)
+    })
+  })
+
   let testDb: Database
   let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
 
@@ -79,6 +149,24 @@ describe('error-logger lib', () => {
       expect(result).toHaveProperty('deleted')
       expect(result).toHaveProperty('retentionDays', 90)
       expect(typeof result.deleted).toBe('number')
+    })
+  })
+
+  describe('graceful degradation when error_logs table missing', () => {
+    it('does not throw when error_logs table does not exist', async () => {
+      const setup = await setupTestDatabase()
+      const { db, sqlite } = setup
+      sqlite.exec('DROP TABLE IF EXISTS error_logs')
+      sqlite.exec('DROP INDEX IF EXISTS error_logs_timestamp_idx')
+      sqlite.exec('DROP INDEX IF EXISTS error_logs_source_idx')
+      sqlite.exec('DROP INDEX IF EXISTS error_logs_level_idx')
+      sqlite.exec('DROP INDEX IF EXISTS error_logs_resolved_idx')
+
+      await expect(
+        logError(db, 'backend', 'error', 'No table', new Error('test'), {})
+      ).resolves.toBeUndefined()
+
+      cleanupTestDatabase(sqlite)
     })
   })
 })
