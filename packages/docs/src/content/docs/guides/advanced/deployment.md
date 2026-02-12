@@ -34,6 +34,19 @@ The database lives at `$HOST_DATA_DIR/sampledb.sqlite` on the host, so your back
 
 For existing databases created before the error-logging feature, the `error_logs` table is created automatically on startup when missing. No manual migration is needed.
 
+### Seeding a demo database (Docker)
+
+To populate the database with demo data before starting the app:
+
+```bash
+docker compose run --rm demo-seed
+docker compose up -d
+```
+
+The seed writes to the main DB file (`/data/sampledb.sqlite`). Admin login: `admin` / `DemoAdmin1!`
+
+See [Generating a Demo Database](/docs/guides/getting-started/demo-database/) for details.
+
 ## fly.io
 
 See `fly.toml` in the repo root for a reference configuration. To deploy:
@@ -46,6 +59,16 @@ See `fly.toml` in the repo root for a reference configuration. To deploy:
 ### fly.io secrets
 
 **App secrets:** None required. All configuration is in `[env]` in `fly.toml`.
+
+### Seeding a demo database (fly.io)
+
+After deploying, run the seed script on the app machine:
+
+```bash
+fly ssh console -C "bun /app/packages/api/dist/lib/demo-seed.js"
+```
+
+The app must be running. Refresh the browser to see the demo data. See [Generating a Demo Database](/docs/guides/getting-started/demo-database/) for details.
 
 **Backup secrets:** Backup runs externally (your machine, GitHub Actions, etc.). Set these in that environment, not as fly.io secrets:
 

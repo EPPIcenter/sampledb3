@@ -1,4 +1,13 @@
 services:
+  demo-seed:
+    build: .
+    container_name: sampledb-demo-seed
+    entrypoint: ["sh", "-c", "cd /app/packages/api && bun run demo:seed"]
+    environment:
+      DATABASE_PATH: ${DATABASE_PATH:-/data/sampledb.sqlite}
+    volumes:
+      - ${HOST_DATA_DIR:-./data}:/data
+
   sampledb:
     build: .
     container_name: sampledb

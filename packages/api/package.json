@@ -13,7 +13,8 @@
     "test": "NODE_ENV=test bun test src",
     "test:watch": "NODE_ENV=test bun test --watch src",
     "test:ui": "vitest --ui",
-    "test:coverage": "NODE_ENV=test bun test src --coverage"
+    "test:coverage": "NODE_ENV=test bun test src --coverage",
+    "demo:seed": "bun dist/lib/demo-seed.js"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.5.3",
