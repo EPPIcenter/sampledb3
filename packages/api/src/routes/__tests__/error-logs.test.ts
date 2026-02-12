@@ -109,4 +109,44 @@ describe('Error Logs API', () => {
       expect(res.status).toBe(401)
     })
   })
+
+  describe('POST /api/error-logs', () => {
+    it('accepts frontend error and inserts into database', async () => {
+      const app = createApp()
+      const res = await app.request('/api/error-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'Test frontend error',
+          level: 'error',
+          context: { page: 'TestPage' },
+        }),
+      })
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as { success?: boolean }
+      expect(data.success).toBe(true)
+
+      const listRes = await authenticatedRequest(app, '/api/error-logs', {
+        method: 'GET',
+        cookie: adminCookieHeader,
+      })
+      const listData = (await listRes.json()) as { logs: Array<{ message: string; source: string }> }
+      expect(listData.logs.length).toBeGreaterThanOrEqual(1)
+      const frontendLog = listData.logs.find((l) => l.source === 'frontend' && l.message.includes('Test frontend error'))
+      expect(frontendLog).toBeDefined()
+    })
+
+    it('accepts error without authentication (optional auth)', async () => {
+      const app = createApp()
+      const res = await app.request('/api/error-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'Unauthenticated user error',
+          level: 'error',
+        }),
+      })
+      expect(res.status).toBe(201)
+    })
+  })
 })

@@ -1,11 +1,19 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { rateLimit } from '../rate-limit'
+import { rateLimit, clearRateLimitStoreForTesting } from '../rate-limit'
 
 describe('rate-limit middleware', () => {
+  const originalNodeEnv = process.env.NODE_ENV
+
   beforeEach(() => {
-    // Rate limit uses module-level Map; we need fresh middleware per test
-    // so use a small window and different IPs or accept that limits are per-process
+    // Run with rate limiting enabled (bypass test-env skip)
+    process.env.NODE_ENV = 'development'
+    // Clear store so prior test runs (e.g. watch mode) don't affect this run
+    clearRateLimitStoreForTesting()
+  })
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv
   })
 
   it('allows requests under the limit', async () => {

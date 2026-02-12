@@ -148,7 +148,7 @@ describe('Auth API', () => {
     })
 
     it('should login with valid email credentials', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
         json: {
           emailOrUsername: 'login@example.com',
@@ -167,7 +167,7 @@ describe('Auth API', () => {
     })
 
     it('should reject invalid email', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
         json: {
           emailOrUsername: 'nonexistent@example.com',
@@ -179,7 +179,7 @@ describe('Auth API', () => {
     })
 
     it('should reject invalid password', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
         json: {
           emailOrUsername: 'login@example.com',
@@ -203,7 +203,7 @@ describe('Auth API', () => {
     })
 
     it('should login with username', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
         json: {
           emailOrUsername: 'testuser',
@@ -212,7 +212,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json() as any
+      const data = await res.json() as UserResponse
       expect(data.user).toBeDefined()
       expect(data.user.email).toBe('user@example.com')
       expect(data.user.username).toBe('testuser')
@@ -223,7 +223,7 @@ describe('Auth API', () => {
     })
 
     it('should reject invalid username', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
         json: {
           emailOrUsername: 'nonexistentuser',
@@ -243,7 +243,7 @@ describe('Auth API', () => {
         password: 'password123',
       })
 
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
         json: {
           emailOrUsername: 'nousername@example.com', // Should use email, not username
@@ -271,7 +271,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json() as any
+      const data = await res.json() as UserResponse
       expect(data.user).toBeDefined()
       expect(data.user.email).toBe('newuser@example.com')
       expect(data.user.username).toBe('newuser')
@@ -290,7 +290,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json() as any
+      const data = await res.json() as UserResponse
       expect(data.user).toBeDefined()
       expect(data.user.username).toBeUndefined()
     })
@@ -321,7 +321,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json() as any
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('Username already in use')
     })
   })
@@ -369,7 +369,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json() as any
+      const data = await res.json() as UserResponse
       expect(data.user.email).toBe('newemail@example.com')
       expect(data.user.name).toBe('Profile User')
     })
@@ -459,7 +459,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json() as any
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('Username already in use')
     })
 
@@ -488,7 +488,7 @@ describe('Auth API', () => {
     })
 
     it('should require authentication (401 without session)', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.me.$patch({
         json: {
           name: 'New Name',
@@ -549,7 +549,7 @@ describe('Auth API', () => {
       expect(data.message).toContain('Password changed successfully')
 
       // Verify we can login with new password
-      const loginClient = createTestClient(app) as any
+      const loginClient = createTestClient(app)
       const loginRes = await loginClient.api.auth.login.$post({
         json: {
           emailOrUsername: 'password@example.com',
@@ -591,7 +591,7 @@ describe('Auth API', () => {
     })
 
     it('should require authentication (401 without session)', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth['me/password'].$patch({
         json: {
           currentPassword: 'oldpassword123',
