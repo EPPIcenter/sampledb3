@@ -49,6 +49,7 @@ interface FileData {
 }
 
 type Step = 'upload' | 'resolve' | 'execute'
+type ContainerMoveAtomicMode = 'all_or_nothing' | 'best_effort'
 
 export default function ContainerMoveMicronix() {
   const navigate = useNavigate()
@@ -70,6 +71,7 @@ export default function ContainerMoveMicronix() {
       errors?: ValidationError[]
     }>
   } | null>(null)
+  const [atomicMode, setAtomicMode] = useState<ContainerMoveAtomicMode>('all_or_nothing')
   const [instructionsExpanded, setInstructionsExpanded] = useState(false)
   const [scannerConfigurations, setScannerConfigurations] = useState<ScannerConfiguration[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
@@ -516,6 +518,7 @@ export default function ContainerMoveMicronix() {
 
       const response = await collectionsApi.moveContainers({
         collectionType: 'micronix_plate',
+        atomicMode,
         mappings: moveMappings,
         moves: allMoves.map(({ identifier, targetPosition }) => ({
           identifier,
@@ -952,6 +955,38 @@ export default function ContainerMoveMicronix() {
                   </div>
                 ))}
               </div>
+
+              <div className="mt-6 border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <h3 className="font-semibold text-gray-900 mb-3">Atomicity Mode</h3>
+                <div className="space-y-2">
+                  <label className="flex items-start gap-2">
+                    <input
+                      type="radio"
+                      name="micronix-atomic-mode"
+                      value="all_or_nothing"
+                      checked={atomicMode === 'all_or_nothing'}
+                      onChange={() => setAtomicMode('all_or_nothing')}
+                      className="mt-1"
+                    />
+                    <span className="text-sm text-gray-700">
+                      <strong>All-or-nothing</strong>: any invalid row blocks all moves.
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2">
+                    <input
+                      type="radio"
+                      name="micronix-atomic-mode"
+                      value="best_effort"
+                      checked={atomicMode === 'best_effort'}
+                      onChange={() => setAtomicMode('best_effort')}
+                      className="mt-1"
+                    />
+                    <span className="text-sm text-gray-700">
+                      <strong>Best effort</strong>: valid rows are moved, invalid rows are returned as errors.
+                    </span>
+                  </label>
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-4">
@@ -993,7 +1028,9 @@ export default function ContainerMoveMicronix() {
                 {moveResult.success
                   ? `Successfully moved ${moveResult.moved} tube(s) across ${files.length} file(s)`
                   : moveResult.moved > 0
-                  ? `Failed to move tubes. ${moveResult.moved} moved before error.`
+                  ? atomicMode === 'best_effort'
+                    ? `Partially completed in best effort mode. ${moveResult.moved} tube(s) moved; some rows failed.`
+                    : `Failed to move tubes. ${moveResult.moved} moved before error.`
                   : 'No tubes were moved due to validation errors.'}
               </p>
 

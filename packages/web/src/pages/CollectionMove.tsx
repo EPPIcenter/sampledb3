@@ -8,6 +8,7 @@ import '../styles/storage.css'
 
 export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
 type Step = 'select-collections' | 'select-destination' | 'confirm' | 'execute'
+type CollectionMoveAtomicMode = 'all_or_nothing' | 'best_effort'
 
 function toKey(c: { type: CollectionType; id: number }): string {
   return `${c.type}:${c.id}`
@@ -39,6 +40,7 @@ export default function CollectionMove() {
   const [selectedCollectionIds, setSelectedCollectionIds] = useState<Set<string>>(new Set())
   const [targetLocationId, setTargetLocationId] = useState<number | null>(null)
   const [targetLocationPath, setTargetLocationPath] = useState<string>('')
+  const [atomicMode, setAtomicMode] = useState<CollectionMoveAtomicMode>('all_or_nothing')
   const [moveResult, setMoveResult] = useState<{
     success: boolean
     moved: number
@@ -187,6 +189,7 @@ export default function CollectionMove() {
         try {
           const response = await collectionsApi.moveCollections({
             collectionType,
+            atomicMode,
             moves,
           })
 
@@ -219,6 +222,10 @@ export default function CollectionMove() {
               row: allErrors.length,
               error: error.response?.data?.error || error.message || `Failed to move ${collectionType} collections`,
             })
+          }
+          // In strict mode, stop after the first failing type-group
+          if (atomicMode === 'all_or_nothing') {
+            break
           }
         }
       }
@@ -381,6 +388,37 @@ export default function CollectionMove() {
             <h2 className="text-xl font-semibold mb-4">Review & Confirm</h2>
 
             <div className="space-y-4">
+              <div>
+                <h3 className="font-medium text-gray-700 mb-2">Atomicity Mode:</h3>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="collection-move-atomicity"
+                      checked={atomicMode === 'all_or_nothing'}
+                      onChange={() => setAtomicMode('all_or_nothing')}
+                      className="form-radio"
+                    />
+                    <span>All-or-nothing (default)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="collection-move-atomicity"
+                      checked={atomicMode === 'best_effort'}
+                      onChange={() => setAtomicMode('best_effort')}
+                      className="form-radio"
+                    />
+                    <span>Best effort</span>
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  {atomicMode === 'all_or_nothing'
+                    ? 'For each collection type request, any validation error blocks moves for that type.'
+                    : 'Valid moves are applied and invalid rows are returned as errors.'}
+                </p>
+              </div>
+
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">Collections to Move:</h3>
                 <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">

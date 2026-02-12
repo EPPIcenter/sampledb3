@@ -184,17 +184,19 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
               </div>
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => onChange(loc.id)}
-            className={`flex-shrink-0 px-3 py-2 min-h-[44px] text-sm font-medium rounded-lg transition-colors ${
-              isSelected
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {isSelected ? 'Selected' : 'Select'}
-          </button>
+          {(!filterCollectionsOnly || loc.canContainCollections) && (
+            <button
+              type="button"
+              onClick={() => onChange(loc.id)}
+              className={`flex-shrink-0 px-3 py-2 min-h-[44px] text-sm font-medium rounded-lg transition-colors ${
+                isSelected
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {isSelected ? 'Selected' : 'Select'}
+            </button>
+          )}
         </div>
 
         {hasChildren && isExpanded && (
