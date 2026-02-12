@@ -33,7 +33,9 @@
     "bun": ">=1.0.0"
   },
   "workspaces": [
-    "packages/*"
+    "packages/api",
+    "packages/web",
+    "packages/docs"
   ],
   "dependencies": {}
 }
