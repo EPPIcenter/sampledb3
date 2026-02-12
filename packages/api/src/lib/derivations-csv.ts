@@ -89,7 +89,9 @@ export interface DerivationCsvRow {
   derivation_date?: string
   protocol?: string
   notes?: string
-  collection_name?: string
+  plate_name?: string
+  box_name?: string
+  bag_name?: string
   collection_barcode?: string
   container_barcode?: string
   position?: string
@@ -171,7 +173,8 @@ function buildParentSummary(row: DerivationCsvRow): string {
 
 /** Build a short user-facing label for the child placement (no internal IDs). */
 function buildChildSummary(row: DerivationCsvRow): string {
-  const name = (row.collection_name ?? '').trim()
+  const containerType = row.container_type || 'micronix_tube'
+  const name = (getCollectionNameForType(row, containerType) ?? '').trim()
   const barcode = (row.collection_barcode ?? '').trim()
   const pos = (row.position ?? '').trim()
   const parts: string[] = []
@@ -182,6 +185,23 @@ function buildChildSummary(row: DerivationCsvRow): string {
   const cb = (row.container_barcode ?? '').trim()
   if (cb) return `Barcode ${cb}`
   return 'Child'
+}
+
+function getCollectionNameForType(
+  row: DerivationCsvRow,
+  containerType: DerivationCsvRow['container_type'] | 'micronix_tube',
+): string | undefined {
+  if (containerType === 'cryovial_tube') return row.box_name
+  if (containerType === 'paper') return row.bag_name
+  return row.plate_name
+}
+
+function getCollectionNameLabelForType(
+  containerType: DerivationCsvRow['container_type'] | 'micronix_tube',
+): string {
+  if (containerType === 'cryovial_tube') return 'box_name'
+  if (containerType === 'paper') return 'bag_name'
+  return 'plate_name'
 }
 
 // Extremely small CSV parser: handles commas and quoted fields
@@ -630,8 +650,15 @@ export async function validateDerivationsCsv(
       }
 
       const containerType = row.container_type || settings?.containerType || 'micronix_tube'
-      if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && !row.collection_name && !row.collection_barcode) {
-        validationRow.error = `collection_name or collection_barcode is required for ${containerType} derivations`
+      const collectionName = getCollectionNameForType(row, containerType)
+      if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && !collectionName && !row.collection_barcode) {
+        validationRow.error = `${getCollectionNameLabelForType(containerType)} or collection_barcode is required for ${containerType} derivations`
+        validationRows.push(validationRow)
+        invalidCount++
+        continue
+      }
+      if (containerType === 'paper' && !collectionName) {
+        validationRow.error = 'bag_name is required for paper derivations'
         validationRows.push(validationRow)
         invalidCount++
         continue
@@ -700,7 +727,7 @@ export async function validateDerivationsCsv(
       const collectionInfo = await resolveCollectionId(
         database,
         containerType,
-        row.collection_name,
+        collectionName,
         row.collection_barcode,
       )
       validationRow.collectionStatus = collectionInfo.status
@@ -714,7 +741,7 @@ export async function validateDerivationsCsv(
           invalidCount++
           continue
         }
-        const collectionKey = `${row.collection_name || ''}_${row.collection_barcode || ''}_${containerType}`
+        const collectionKey = `${collectionName || ''}_${row.collection_barcode || ''}_${containerType}`
         const positionKey = `${collectionKey}\t${position}`
 
         // Check if position is already used in an existing collection
@@ -789,10 +816,10 @@ export async function validateDerivationsCsv(
       }
 
       // Track unique collections
-      const collectionKey = `${row.collection_name || ''}_${row.collection_barcode || ''}_${containerType}`
-      if (!collectionsMap.has(collectionKey) && (row.collection_name || row.collection_barcode)) {
+      const collectionKey = `${collectionName || ''}_${row.collection_barcode || ''}_${containerType}`
+      if (!collectionsMap.has(collectionKey) && (collectionName || row.collection_barcode)) {
         collectionsMap.set(collectionKey, {
-          name: row.collection_name,
+          name: collectionName,
           barcode: row.collection_barcode,
           status: collectionInfo.status,
           containerType: containerType as 'micronix_tube' | 'cryovial_tube' | 'paper',
@@ -869,7 +896,7 @@ export async function importDerivationsFromCsv(
             const collectionInfo = await resolveCollectionId(
               tx,
               row.container_type || settings?.containerType || 'micronix_tube',
-              row.collection_name,
+              getCollectionNameForType(row, row.container_type || settings?.containerType || 'micronix_tube'),
               row.collection_barcode,
             )
 
@@ -954,7 +981,7 @@ export async function importDerivationsFromCsv(
         const collectionInfo = await resolveCollectionId(
           database,
           row.container_type || settings?.containerType || 'micronix_tube',
-          row.collection_name,
+          getCollectionNameForType(row, row.container_type || settings?.containerType || 'micronix_tube'),
           row.collection_barcode,
         )
 
