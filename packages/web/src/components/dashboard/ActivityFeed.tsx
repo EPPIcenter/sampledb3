@@ -93,6 +93,19 @@ function getActivityIcon(type: ActivityItem['type']) {
   }
 }
 
+/** Fallback display label when API provides none - never exposes database IDs */
+function getActivityFallbackLabel(type: ActivityItem['type']): string {
+  const fallbacks: Record<ActivityItem['type'], string> = {
+    specimen: 'Specimen',
+    study: 'Study',
+    container: 'Container',
+    subject: 'Subject',
+    control: 'Control',
+    location: 'Location',
+  }
+  return fallbacks[type] ?? 'Item'
+}
+
 /* Dashboard palette: muted badge colors that fit the lab theme */
 function getActivityBadgeColor(type: ActivityItem['type']): string {
   switch (type) {
@@ -161,7 +174,7 @@ function renderActivityGroup(title: string, activities: ActivityItem[]) {
             key={`${item.type}-${item.id}-${index}`}
             to={getActivityUrl(item)}
             className="block p-3 border border-[rgb(var(--dashboard-border))] rounded-lg hover:border-[rgb(var(--dashboard-accent)/0.4)] hover:bg-[rgb(var(--dashboard-surface))] transition-all duration-200"
-            aria-label={`${item.label || `${item.type} #${item.id}`}`}
+            aria-label={item.label || getActivityFallbackLabel(item.type)}
           >
             <div className="flex items-start gap-3">
               <div className={`flex-shrink-0 p-1.5 rounded-lg ${getActivityBadgeColor(item.type)}`}>
@@ -173,7 +186,7 @@ function renderActivityGroup(title: string, activities: ActivityItem[]) {
                     {item.type}
                   </span>
                   <span className="font-medium text-[rgb(var(--dashboard-text))] truncate">
-                    {item.label || `${item.type.charAt(0).toUpperCase() + item.type.slice(1)} #${item.id}`}
+                    {item.label || getActivityFallbackLabel(item.type)}
                   </span>
                 </div>
                 {item.context && (

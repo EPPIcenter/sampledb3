@@ -37,7 +37,7 @@ export default function SpecimenCard({ specimen }: SpecimenCardProps) {
             </div>
             <div>
               <p className="font-medium text-gray-900">
-                {specimen.specimenTypeName} Specimen #{specimen.id}
+                {specimen.specimenTypeName} Specimen
               </p>
               {specimen.collectionDate && (
                 <p className="text-sm text-gray-500 mt-1">
