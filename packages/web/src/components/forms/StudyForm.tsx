@@ -44,11 +44,11 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
         }
       } else {
         // Create new study
-        await studiesApi.create(formData)
+        const res = await studiesApi.create(formData)
         if (onSuccess) {
           onSuccess()
         } else {
-          navigate('/studies')
+          navigate(`/studies/${res.study.id}`)
         }
       }
     } catch (err: unknown) {
