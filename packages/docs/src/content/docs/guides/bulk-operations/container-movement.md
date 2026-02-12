@@ -122,4 +122,4 @@ Source collection conflicts occur in multi-file operations when the same source 
 
 ## What's Next?
 
-Now that you understand container movement, you might want to learn about [Collection Move](/guides/features/collection-move/) to move entire collections, explore [Container Management](/guides/workflows/containers/) to understand containers better, or review [Location Management](/guides/workflows/locations/) to organize your storage hierarchy.
+Now that you understand container movement, you might want to learn about [Collection Move](/docs/guides/features/collection-move/) to move entire collections, explore [Container Management](/docs/guides/workflows/containers/) to understand containers better, or review [Location Management](/docs/guides/workflows/locations/) to organize your storage hierarchy.

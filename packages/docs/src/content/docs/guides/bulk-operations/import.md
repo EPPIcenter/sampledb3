@@ -79,7 +79,7 @@ The import process shows you progress, and when it completes, you'll see a summa
   - **Full file (all-or-nothing)**: The entire CSV is imported in one transaction. Missing collections can be created in the same transaction if you assign locations and click **Import (creates collections in same transaction)**. If any row or collection creation fails, nothing is committed.
   - **Per subject**: Each subject (and its specimens and containers) is committed in its own transaction. Some subjects can succeed while others fail; you get a summary and per-subject errors. You create missing collections first with **Create Collections & Continue**, then run the import.
 - In **Full file** mode, the server performs a final in-transaction consistency check before writes so stale pre-validation (for example, deleted collections or changed mappings) does not result in partial commits.
-- **Derivation bulk import** (see [Derivations](/guides/features/derivations/)): All derivations in the CSV are created in one transaction, or none if any row fails.
+- **Derivation bulk import** (see [Derivations](/docs/guides/features/derivations/)): All derivations in the CSV are created in one transaction, or none if any row fails.
 
 If a request fails, fix the issues (e.g. in your CSV or missing collections) and try again. For **per subject** combined import, rows that succeeded are already committed; only failed subjects need to be fixed and re-imported if desired.
 
@@ -150,4 +150,4 @@ Check your study codes before importing to make sure they exist in the system. U
 
 ## What's Next?
 
-Now that you understand bulk import, you might want to explore [Bulk Export](/guides/bulk-operations/export/) to learn how to export your data, review the [CSV File Guidelines](/guides/troubleshooting/csv-guidelines/) for detailed formatting requirements, or check [Common Issues](/guides/troubleshooting/common-issues/) if you encounter problems during import.
+Now that you understand bulk import, you might want to explore [Bulk Export](/docs/guides/bulk-operations/export/) to learn how to export your data, review the [CSV File Guidelines](/docs/guides/troubleshooting/csv-guidelines/) for detailed formatting requirements, or check [Common Issues](/docs/guides/troubleshooting/common-issues/) if you encounter problems during import.

@@ -65,4 +65,4 @@ If you can't delete a configuration, it's likely because it's set as the default
 
 ## What's Next?
 
-Now that you understand settings, you might want to explore [Bulk Export](/guides/bulk-operations/export/) to see how export configurations are used, check out [Barcode Export](/guides/advanced/barcode-export/) to see configurations in barcode exports, or review [Reference Data](/guides/reference-data/overview/) to understand other system configuration options.
+Now that you understand settings, you might want to explore [Bulk Export](/docs/guides/bulk-operations/export/) to see how export configurations are used, check out [Barcode Export](/docs/guides/advanced/barcode-export/) to see configurations in barcode exports, or review [Reference Data](/docs/guides/reference-data/overview/) to understand other system configuration options.

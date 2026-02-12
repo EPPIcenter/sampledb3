@@ -107,4 +107,4 @@ While individual entry is perfect for adding a few items or handling special cas
 
 ## What's Next?
 
-Now that you understand how to create subjects and register specimens individually, you might want to learn about [Container Management](/guides/workflows/containers/) to understand how to organize specimens in containers, explore [Bulk Import](/guides/bulk-operations/import/) to learn how to add multiple subjects and specimens efficiently, or return to [Studies Management](/guides/workflows/studies/) to continue organizing your research projects.
+Now that you understand how to create subjects and register specimens individually, you might want to learn about [Container Management](/docs/guides/workflows/containers/) to understand how to organize specimens in containers, explore [Bulk Import](/docs/guides/bulk-operations/import/) to learn how to add multiple subjects and specimens efficiently, or return to [Studies Management](/docs/guides/workflows/studies/) to continue organizing your research projects.

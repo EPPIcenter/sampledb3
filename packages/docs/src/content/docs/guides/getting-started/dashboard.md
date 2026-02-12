@@ -81,4 +81,4 @@ The dashboard updates in real-time as data is added to the system, so you can al
 
 ## What's Next?
 
-Now that you understand the dashboard, you might want to learn about [Studies Management](/guides/workflows/studies/) to create and manage research studies, explore [Subjects & Specimens](/guides/workflows/subjects-specimens/) to start registering individual samples, or dive into [Bulk Import](/guides/bulk-operations/import/) to learn how to import data efficiently using CSV files.
+Now that you understand the dashboard, you might want to learn about [Studies Management](/docs/guides/workflows/studies/) to create and manage research studies, explore [Subjects & Specimens](/docs/guides/workflows/subjects-specimens/) to start registering individual samples, or dive into [Bulk Import](/docs/guides/bulk-operations/import/) to learn how to import data efficiently using CSV files.

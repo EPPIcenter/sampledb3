@@ -97,4 +97,4 @@ If you're having trouble with strain composition (the system won't let you save 
 
 ## What's Next?
 
-Now that you understand blood controls, you might want to explore [Derivations](/guides/features/derivations/) to see how controls can be used in sample processing, learn about [Bulk Import](/guides/bulk-operations/import/) to add control specimens efficiently, or check out [Reference Data](/guides/reference-data/overview/) to manage strains and other biological data.
+Now that you understand blood controls, you might want to explore [Derivations](/docs/guides/features/derivations/) to see how controls can be used in sample processing, learn about [Bulk Import](/docs/guides/bulk-operations/import/) to add control specimens efficiently, or check out [Reference Data](/docs/guides/reference-data/overview/) to manage strains and other biological data.

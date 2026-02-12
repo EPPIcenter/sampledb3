@@ -71,4 +71,4 @@ If a specimen type doesn't appear in dropdowns, verify it exists in Reference Da
 
 ## What's Next?
 
-Now that you understand specimen types, you might want to explore [Units](/guides/reference-data/units/) to configure measurement units, check out [Container Management](/guides/workflows/containers/) to see how specimen types relate to containers, or review [Bulk Import](/guides/bulk-operations/import/) to see how specimen types are used in imports.
+Now that you understand specimen types, you might want to explore [Units](/docs/guides/reference-data/units/) to configure measurement units, check out [Container Management](/docs/guides/workflows/containers/) to see how specimen types relate to containers, or review [Bulk Import](/docs/guides/bulk-operations/import/) to see how specimen types are used in imports.

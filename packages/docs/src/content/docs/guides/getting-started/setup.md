@@ -81,4 +81,4 @@ If everything looks good, you're ready to start using SampleDB! Consider creatin
 
 ## What's Next?
 
-Now that your system is configured, you might want to learn about the [Dashboard Overview](/guides/getting-started/dashboard/) to understand how to navigate the interface, or jump right into [Studies Management](/guides/workflows/studies/) to create your first study. You can also explore [Reference Data](/guides/reference-data/overview/) to learn how to manage the system configuration you just set up.
+Now that your system is configured, you might want to learn about the [Dashboard Overview](/docs/guides/getting-started/dashboard/) to understand how to navigate the interface, or jump right into [Studies Management](/docs/guides/workflows/studies/) to create your first study. You can also explore [Reference Data](/docs/guides/reference-data/overview/) to learn how to manage the system configuration you just set up.

@@ -51,4 +51,4 @@ If you can't delete a storage type, it's because the type is assigned to locatio
 
 ## What's Next?
 
-Now that you understand storage types, you might want to explore [Locations](/guides/reference-data/locations-ref/) to see how storage types are used with locations, check out [Location Management](/guides/workflows/locations/) to understand location hierarchies, or review [Reference Data Overview](/guides/reference-data/overview/) to understand the broader reference data system.
+Now that you understand storage types, you might want to explore [Locations](/docs/guides/reference-data/locations-ref/) to see how storage types are used with locations, check out [Location Management](/docs/guides/workflows/locations/) to understand location hierarchies, or review [Reference Data Overview](/docs/guides/reference-data/overview/) to understand the broader reference data system.

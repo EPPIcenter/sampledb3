@@ -147,4 +147,4 @@ Save your export configurations for common use cases so you don't have to recrea
 
 ## What's Next?
 
-Now that you understand bulk export, you might want to explore [Bulk Import](/guides/bulk-operations/import/) to learn how to bring data into the system, check out [Settings](/guides/advanced/settings/) to configure export settings, or review the [CSV File Guidelines](/guides/troubleshooting/csv-guidelines/) to ensure your subject list CSV is formatted correctly.
+Now that you understand bulk export, you might want to explore [Bulk Import](/docs/guides/bulk-operations/import/) to learn how to bring data into the system, check out [Settings](/docs/guides/advanced/settings/) to configure export settings, or review the [CSV File Guidelines](/docs/guides/troubleshooting/csv-guidelines/) to ensure your subject list CSV is formatted correctly.

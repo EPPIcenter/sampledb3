@@ -111,4 +111,4 @@ If you're having CSV issues, start by downloading a fresh template from the syst
 
 ## What's Next?
 
-Now that you understand CSV file requirements, you might want to explore [Bulk Import](/guides/bulk-operations/import/) to learn about the import process, check [Common Issues](/guides/troubleshooting/common-issues/) for troubleshooting help, or review [Best Practices](/guides/troubleshooting/best-practices/) for recommended workflows.
+Now that you understand CSV file requirements, you might want to explore [Bulk Import](/docs/guides/bulk-operations/import/) to learn about the import process, check [Common Issues](/docs/guides/troubleshooting/common-issues/) for troubleshooting help, or review [Best Practices](/docs/guides/troubleshooting/best-practices/) for recommended workflows.

@@ -111,7 +111,7 @@ Sheet detail pages show information about a specific sheet and list all the pape
 
 ## Moving Containers Between Collections
 
-As your laboratory work progresses, you may need to reorganize containers by moving them from one collection to another. This might happen when you're consolidating samples, reorganizing storage, or moving containers to new locations. The system provides tools for moving containers, which are covered in detail in the [Container Movement Guide](/guides/bulk-operations/container-movement/). These tools support moving individual containers or bulk moves using CSV files, depending on your needs.
+As your laboratory work progresses, you may need to reorganize containers by moving them from one collection to another. This might happen when you're consolidating samples, reorganizing storage, or moving containers to new locations. The system provides tools for moving containers, which are covered in detail in the [Container Movement Guide](/docs/guides/bulk-operations/container-movement/). These tools support moving individual containers or bulk moves using CSV files, depending on your needs.
 
 ## Best Practices for Container Management
 
@@ -125,4 +125,4 @@ Location assignment is crucial for finding samples later. Always assign collecti
 
 ## What's Next?
 
-Now that you understand container management, you might want to learn about [Location Management](/guides/workflows/locations/) to organize your storage infrastructure, explore [Container Movement](/guides/bulk-operations/container-movement/) to learn how to reorganize containers, or dive into [Bulk Import](/guides/bulk-operations/import/) to see how to import specimens with containers efficiently.
+Now that you understand container management, you might want to learn about [Location Management](/docs/guides/workflows/locations/) to organize your storage infrastructure, explore [Container Movement](/docs/guides/bulk-operations/container-movement/) to learn how to reorganize containers, or dive into [Bulk Import](/docs/guides/bulk-operations/import/) to see how to import specimens with containers efficiently.

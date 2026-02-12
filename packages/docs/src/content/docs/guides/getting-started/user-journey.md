@@ -9,9 +9,9 @@ For detailed explanations of each feature, see the linked guides. Here we focus 
 
 ## Prerequisites
 
-- **Initial setup is complete.** Your SampleDB instance has at least one specimen type, units, and storage locations. If you haven't finished setup, complete the [Initial Setup](/guides/getting-started/setup/) wizard first.
+- **Initial setup is complete.** Your SampleDB instance has at least one specimen type, units, and storage locations. If you haven't finished setup, complete the [Initial Setup](/docs/guides/getting-started/setup/) wizard first.
 - **At least one specimen type** (e.g. Whole Blood) so you can import specimens. Add one in Reference Data or during setup if needed.
-- **A location that can hold collections** if you import specimens with containers (e.g. a freezer). See [Location Management](/guides/workflows/locations/) and [Initial Setup](/guides/getting-started/setup/).
+- **A location that can hold collections** if you import specimens with containers (e.g. a freezer). See [Location Management](/docs/guides/workflows/locations/) and [Initial Setup](/docs/guides/getting-started/setup/).
 
 ## Step 1: Create a study
 
@@ -27,7 +27,7 @@ Create the tutorial study that everything else will use.
    - **Longitudinal:** Check if you want multiple collection timepoints per subject; leave unchecked for a simple single-timepoint example.
 4. Click **Create Study**.
 
-You'll be taken to the study detail page. Use your tutorial study's short code in imports and for cleanup. For more on studies, see [Studies Management](/guides/workflows/studies/).
+You'll be taken to the study detail page. Use your tutorial study's short code in imports and for cleanup. For more on studies, see [Studies Management](/docs/guides/workflows/studies/).
 
 ## Step 2: Import subjects
 
@@ -44,12 +44,12 @@ Add a few subjects to the tutorial study using the bulk import.
    TUT01,TUT-SUBJ-003
    ```
 
-   You can type this into a text editor and save as `.csv`, or download the sample: [tutorial-subjects.csv](/tutorial-csvs/tutorial-subjects.csv).
+   You can type this into a text editor and save as `.csv`, or download the sample: [tutorial-subjects.csv](/docs/tutorial-csvs/tutorial-subjects.csv).
 4. Click **Choose File** (or drag and drop) and select your CSV.
 5. Review the preview, then click **Validate & Continue**.
 6. If validation passes, the import runs. Check the result summary.
 
-You now have three subjects in study TUT01. For more on import types and CSV format, see [Bulk Import](/guides/bulk-operations/import/).
+You now have three subjects in study TUT01. For more on import types and CSV format, see [Bulk Import](/docs/guides/bulk-operations/import/).
 
 ## Step 3: Import specimens (and optionally containers)
 
@@ -73,12 +73,12 @@ Add specimens for those subjects. You can register specimens without containers,
    TUT01,TUT-SUBJ-003,Whole Blood,2024-01-16
    ```
 
-   Use a specimen type that exists in your Reference Data (e.g. **Whole Blood**); names are case-sensitive. For the no-containers example you can download: [tutorial-specimens-no-containers.csv](/tutorial-csvs/tutorial-specimens-no-containers.csv). If you use a container type, add the required columns (e.g. for Micronix: `plate_name`, `barcode`, `position`). See [Bulk Import](/guides/bulk-operations/import/) and [Container Management](/guides/workflows/containers/) for exact columns and formats.
+   Use a specimen type that exists in your Reference Data (e.g. **Whole Blood**); names are case-sensitive. For the no-containers example you can download: [tutorial-specimens-no-containers.csv](/docs/tutorial-csvs/tutorial-specimens-no-containers.csv). If you use a container type, add the required columns (e.g. for Micronix: `plate_name`, `barcode`, `position`). See [Bulk Import](/docs/guides/bulk-operations/import/) and [Container Management](/docs/guides/workflows/containers/) for exact columns and formats.
 5. Upload the file, then click **Validate & Continue**.
 6. If the CSV references collections that don't exist yet, you'll see a **Create Collections** step: assign each collection to a location, then continue. The import then runs.
 7. Review the import result summary.
 
-For more on specimen types, containers, and CSV requirements, see [Subjects & Specimens](/guides/workflows/subjects-specimens/) and [Bulk Import](/guides/bulk-operations/import/).
+For more on specimen types, containers, and CSV requirements, see [Subjects & Specimens](/docs/guides/workflows/subjects-specimens/) and [Bulk Import](/docs/guides/bulk-operations/import/).
 
 ## Step 4: Verify
 
@@ -106,5 +106,5 @@ If you prefer to keep the data for practice, you can leave the tutorial study in
 ## What's next?
 
 - Use the same workflow with real studies, subjects, and specimen types.
-- Try [Bulk Export](/guides/bulk-operations/export/) to export data for your studies.
-- Explore [Container Movement](/guides/bulk-operations/container-movement/) and [Collection Move](/guides/features/collection-move/) to reorganize containers and collections.
+- Try [Bulk Export](/docs/guides/bulk-operations/export/) to export data for your studies.
+- Explore [Container Movement](/docs/guides/bulk-operations/container-movement/) and [Collection Move](/docs/guides/features/collection-move/) to reorganize containers and collections.

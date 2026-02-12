@@ -94,4 +94,4 @@ If a movement operation fails, there could be several causes. The collection mig
 
 ## What's Next?
 
-Now that you understand collection movement, you might want to learn about [Location Management](/guides/workflows/locations/) to organize your storage hierarchy, explore [Container Movement](/guides/bulk-operations/container-movement/) to move individual containers, or review [Container Management](/guides/workflows/containers/) to understand how collections work.
+Now that you understand collection movement, you might want to learn about [Location Management](/docs/guides/workflows/locations/) to organize your storage hierarchy, explore [Container Movement](/docs/guides/bulk-operations/container-movement/) to move individual containers, or review [Container Management](/docs/guides/workflows/containers/) to understand how collections work.

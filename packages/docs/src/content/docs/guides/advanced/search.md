@@ -69,4 +69,4 @@ If the command palette isn't working, check if your focus is in an input fieldâ€
 
 ## What's Next?
 
-Now that you understand search and navigation, you might want to explore [Dashboard Overview](/guides/getting-started/dashboard/) to see how search integrates with the dashboard, check out [Studies Management](/guides/workflows/studies/) to practice navigating to studies, or review [Settings](/guides/advanced/settings/) to configure application preferences.
+Now that you understand search and navigation, you might want to explore [Dashboard Overview](/docs/guides/getting-started/dashboard/) to see how search integrates with the dashboard, check out [Studies Management](/docs/guides/workflows/studies/) to practice navigating to studies, or review [Settings](/docs/guides/advanced/settings/) to configure application preferences.

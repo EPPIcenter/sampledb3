@@ -71,4 +71,4 @@ Keep your reference data organized by reviewing it periodically and cleaning up 
 
 ## What's Next?
 
-Now that you understand these additional reference data types, you might want to explore [Reference Data Overview](/guides/reference-data/overview/) to understand the broader reference data system, check out [Blood Controls](/guides/features/blood-controls/) to see how strains are used in control definitions, or review [Bulk Export](/guides/bulk-operations/export/) to see how tags can be used in exports.
+Now that you understand these additional reference data types, you might want to explore [Reference Data Overview](/docs/guides/reference-data/overview/) to understand the broader reference data system, check out [Blood Controls](/docs/guides/features/blood-controls/) to see how strains are used in control definitions, or review [Bulk Export](/docs/guides/bulk-operations/export/) to see how tags can be used in exports.

@@ -62,7 +62,7 @@ When you're processing many samples at once—perhaps extracting DNA from an ent
 
 **Step 3: Import**
 
-- Review the validation summary (valid / invalid / warnings) and the per-row table. Click **Create derivations** to run the import. All derivations are created in one go, or none if any row fails (all-or-nothing). For a comparison of failure semantics across import types, see [Bulk Import — Atomicity and failure behavior](/guides/bulk-operations/import/#atomicity-and-failure-behavior).
+- Review the validation summary (valid / invalid / warnings) and the per-row table. Click **Create derivations** to run the import. All derivations are created in one go, or none if any row fails (all-or-nothing). For a comparison of failure semantics across import types, see [Bulk Import — Atomicity and failure behavior](/docs/guides/bulk-operations/import/#atomicity-and-failure-behavior).
 - After the run, you see success/error counts and a per-row result table, plus a link **Back to Derivations**.
 
 For micronix tube derivations, **plate_name or collection_barcode** is required in each row. For cryovial tube derivations, **box_name or collection_barcode** is required. For paper derivations, **bag_name** is required. These columns tell the system where the derived containers belong. For micronix tube derivations, **container_barcode** is also required in each row; barcodes are scanned and provided by you—the system does not assign them.
@@ -107,4 +107,4 @@ Quantity errors can occur if you're trying to reduce parent quantity but the par
 
 ## What's Next?
 
-Now that you understand derivations, you might want to learn about [Container Management](/guides/workflows/containers/) to understand containers better, explore [Bulk Import](/guides/bulk-operations/import/) for other bulk operations, or check out [Blood Controls](/guides/features/blood-controls/) to see how controls can be used as derivation sources.
+Now that you understand derivations, you might want to learn about [Container Management](/docs/guides/workflows/containers/) to understand containers better, explore [Bulk Import](/docs/guides/bulk-operations/import/) for other bulk operations, or check out [Blood Controls](/docs/guides/features/blood-controls/) to see how controls can be used as derivation sources.

@@ -69,4 +69,4 @@ Share statistics with your team to keep everyone informed about system status an
 
 ## What's Next?
 
-Now that you understand statistics and reporting, you might want to explore [Bulk Export](/guides/bulk-operations/export/) to export data based on statistics, check out [Dashboard Overview](/guides/getting-started/dashboard/) to see how statistics appear on the dashboard, or review [Location Management](/guides/workflows/locations/) to understand how storage statistics relate to your location hierarchy.
+Now that you understand statistics and reporting, you might want to explore [Bulk Export](/docs/guides/bulk-operations/export/) to export data based on statistics, check out [Dashboard Overview](/docs/guides/getting-started/dashboard/) to see how statistics appear on the dashboard, or review [Location Management](/docs/guides/workflows/locations/) to understand how storage statistics relate to your location hierarchy.

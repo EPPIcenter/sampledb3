@@ -85,4 +85,4 @@ This becomes especially helpful as your laboratory accumulates more studies over
 
 ## What's Next?
 
-Now that you understand how studies work, you might want to learn about [Subjects & Specimens](/guides/workflows/subjects-specimens/) to start adding data to your study. If you have many subjects to add, consider using [Bulk Import](/guides/bulk-operations/import/) to add them efficiently. And when you're ready to export data, the [Bulk Export](/guides/bulk-operations/export/) guide shows you how to generate reports for your studies.
+Now that you understand how studies work, you might want to learn about [Subjects & Specimens](/docs/guides/workflows/subjects-specimens/) to start adding data to your study. If you have many subjects to add, consider using [Bulk Import](/docs/guides/bulk-operations/import/) to add them efficiently. And when you're ready to export data, the [Bulk Export](/docs/guides/bulk-operations/export/) guide shows you how to generate reports for your studies.
