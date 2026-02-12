@@ -1804,6 +1804,7 @@ export interface User {
   createdAt?: string
   lastLogin?: string
   deletedAt?: string
+  approvedAt?: string | null
 }
 
 export interface UserSession {
@@ -1855,6 +1856,8 @@ export interface AdminSystemStats {
 export const authApi = {
   login: (emailOrUsername: string, password: string) =>
     api.post<{ user: User }>('/auth/login', { emailOrUsername, password }),
+  selfRegister: (data: { email: string; name: string; password: string; username?: string | null }) =>
+    api.post<{ user: User }>('/auth/self-register', data),
   logout: () => api.post<{ message: string }>('/auth/logout'),
   getCurrentUser: () => api.get<{ user: User }>('/auth/current'),
   switchUser: (userId: number, password: string) =>
@@ -1882,6 +1885,8 @@ export const adminApi = {
     api.get<{ sessions: UserSession[] }>(`/auth/users/${userId}/sessions`),
   revokeSession: (sessionId: string) =>
     api.delete<{ message: string }>(`/auth/sessions/${sessionId}`),
+  approveUser: (id: number) =>
+    api.patch<{ user: User }>(`/auth/users/${id}/approve`),
   getSystemStats: () =>
     api.get<AdminSystemStats>('/statistics/admin'),
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { authApi } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
 import { addRecentUser } from '../lib/localUserHistory'
@@ -42,7 +42,11 @@ export default function Login() {
         typeof err === 'object' && err !== null && 'response' in err
           ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
           : null
-      setError(message || 'Login failed. Please check your credentials.')
+      if (message === 'Account pending approval') {
+        setError('Your account is pending approval. An administrator will approve it before you can sign in.')
+      } else {
+        setError(message || 'Login failed. Please check your credentials.')
+      }
       setLoading(false)
     }
   }
@@ -117,6 +121,12 @@ export default function Login() {
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </div>
+          <p className="text-center text-sm text-gray-600">
+            Don&apos;t have an account?{' '}
+            <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
+              Create account
+            </Link>
+          </p>
         </form>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { formatLocalDateTime } from './lib/date-utils'
 import Dashboard from './pages/Dashboard'
 import Setup from './pages/Setup'
 import Login from './pages/Login'
+import Register from './pages/Register'
 import Studies from './pages/Studies'
 import StudyDetail from './pages/StudyDetail'
 import StudyImport from './pages/StudyImport'
@@ -470,10 +471,11 @@ function AppContent() {
   
   const isLoginPage = location.pathname === '/login'
   const isSetupPage = location.pathname === '/setup'
+  const isRegisterPage = location.pathname === '/register'
 
   return (
     <SetupGuard>
-      {!isLoginPage && !isSetupPage ? (
+      {!isLoginPage && !isSetupPage && !isRegisterPage ? (
         <AuthGuard>
           <div className="min-h-screen bg-gray-50 flex">
             {/* Sidebar */}
@@ -596,12 +598,13 @@ function AppContent() {
       ) : (
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
           <Route path="/setup" element={<Setup />} />
         </Routes>
       )}
 
       {/* Floating action buttons - only show when authenticated */}
-      {!isLoginPage && !isSetupPage && (
+      {!isLoginPage && !isSetupPage && !isRegisterPage && (
         <div 
           data-floating-buttons="true"
           className="floating-actions group fixed right-6 bottom-6 z-50 p-2 -m-2"
@@ -697,7 +700,7 @@ function AppContent() {
       )}
 
       {/* Modals - only show when authenticated */}
-      {!isLoginPage && !isSetupPage && (
+      {!isLoginPage && !isSetupPage && !isRegisterPage && (
         <>
           <HotkeyHelpModal isOpen={isHelpModalOpen} onClose={toggleHelpModal} />
           <SearchModal isOpen={isSearchModalOpen} onClose={closeSearchModal} />

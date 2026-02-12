@@ -134,6 +134,18 @@ export default function AdminUsers() {
     }
   }
 
+  const handleApprove = async (user: User) => {
+    try {
+      await adminApi.approveUser(user.id)
+      await loadUsers()
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to approve user')
+    }
+  }
+
   const handleRestore = async (user: User) => {
     try {
       await adminApi.restoreUser(user.id)
@@ -321,6 +333,9 @@ export default function AdminUsers() {
                   Role
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Created
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -345,6 +360,11 @@ export default function AdminUsers() {
                           Deleted
                         </span>
                       )}
+                      {!user.deletedAt && !user.approvedAt && (
+                        <span className="ml-2 px-2 py-1 text-xs bg-amber-100 text-amber-800 rounded">
+                          Pending
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm dashboard-stat-muted">
@@ -362,6 +382,13 @@ export default function AdminUsers() {
                     >
                       {user.role}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {user.approvedAt ? (
+                      <span className="text-sm text-green-600">Approved</span>
+                    ) : (
+                      <span className="text-sm text-amber-600">Pending</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm dashboard-stat-muted">
                     {user.createdAt
@@ -387,6 +414,17 @@ export default function AdminUsers() {
                         </button>
                       ) : (
                         <>
+                          {!user.approvedAt && (
+                            <button
+                              onClick={() => handleApprove(user)}
+                              className="text-green-600 hover:text-green-900"
+                              title="Approve user"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </button>
+                          )}
                           <button
                             onClick={() => openSessionsModal(user)}
                             className="text-blue-600 hover:text-blue-900"
