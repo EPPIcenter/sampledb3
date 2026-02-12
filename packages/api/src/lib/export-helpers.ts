@@ -124,7 +124,7 @@ export async function buildContainerQuery(database: Database, filters: ExportFil
   }
 
   if (filteredSubjectIds.length === 0) {
-    throw new Error(`No subjects found for study '${filters.study}'${filters.subject_ids && filters.subject_ids.length > 0 ? ' matching the specified subject IDs' : ''}`)
+    return { containers: [], study: studyRecord, specimens: [] }
   }
 
   // Build conditions for specimen query

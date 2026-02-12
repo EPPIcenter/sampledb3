@@ -267,19 +267,18 @@ export_.get('/containers', authMiddleware, async (c) => {
       return c.json({ error: error.message || 'Failed to build export query' }, 404)
     }
 
-    if (!containers || containers.length === 0) {
-      return c.json({ error: 'No containers found' }, 404)
-    }
-
     if (countOnly) {
-      // Apply container type filter if specified
-      let filteredContainers = containers
-      if (filters.container_types && filters.container_types.length > 0) {
-        const containerIds = containers.map(c => c.id)
+      let filteredContainers = containers || []
+      if (filters.container_types && filters.container_types.length > 0 && filteredContainers.length > 0) {
+        const containerIds = filteredContainers.map((c: { id: number }) => c.id)
         const matchingIds = await filterContainersByType(database, containerIds, filters.container_types)
-        filteredContainers = containers.filter(c => matchingIds.includes(c.id))
+        filteredContainers = filteredContainers.filter((c: { id: number }) => matchingIds.includes(c.id))
       }
       return c.json({ count: filteredContainers.length })
+    }
+
+    if (!containers || containers.length === 0) {
+      return c.json({ error: 'No containers found' }, 404)
     }
 
     // Enrich container data (this also applies container type filtering)

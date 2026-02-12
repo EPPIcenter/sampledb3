@@ -605,6 +605,18 @@ describe('buildContainerQuery', () => {
     expect(result.containers).toHaveLength(0)
     expect(result.study.shortCode).toBe('EMPTY2')
   })
+
+  it('returns empty containers when study has no subjects', async () => {
+    const study = await createTestStudy(testDb, {
+      title: 'Empty New Study',
+      shortCode: 'EMPTY_NEW',
+      leadPerson: 'X',
+    })
+    // No subjects created
+    const result = await buildContainerQuery(testDb, { study: 'EMPTY_NEW' })
+    expect(result.containers).toHaveLength(0)
+    expect(result.study.shortCode).toBe('EMPTY_NEW')
+  })
 })
 
 describe('filterContainersByType', () => {

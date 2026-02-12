@@ -203,6 +203,21 @@ describe('Export API', () => {
       expect(buf.byteLength).toBeGreaterThan(0)
     })
 
+    it('returns 200 with count_only when study has no subjects', async () => {
+      const study = await createTestStudy(testDb, { title: 'Brand New Study', shortCode: 'EMPTY' })
+      // No subjects, specimens, or containers
+
+      const app = createApp()
+      const res = await authenticatedRequest(app, '/api/export/containers?study=EMPTY&count_only=true', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { count: number }
+      expect(data).toHaveProperty('count')
+      expect(data.count).toBe(0)
+    })
+
     it('returns 404 when study has no containers', async () => {
       const study = await createTestStudy(testDb, { title: 'Empty Study', shortCode: 'EMPTY' })
       await createTestStudySubject(testDb, { studyId: study.id, name: 'Subj1' })
