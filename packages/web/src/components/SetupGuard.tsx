@@ -11,6 +11,7 @@ let setupPromise: Promise<void> | null = null
 export default function SetupGuard({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
+  const prevPathRef = useRef(location.pathname)
   const [isChecking, setIsChecking] = useState(true)
   const [isInitialized, setIsInitialized] = useState<boolean | null>(null)
   const isMountedRef = useRef(true)
@@ -62,6 +63,33 @@ export default function SetupGuard({ children }: { children: React.ReactNode }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Re-check setup status when navigating away from /setup (e.g. after completing setup → /login).
+  // Otherwise setupCachedInitialized stays false and we'd render null for /login, causing a white page.
+  useEffect(() => {
+    if (prevPathRef.current === '/setup' && location.pathname !== '/setup') {
+      prevPathRef.current = location.pathname
+      setupPromise = (async () => {
+        try {
+          if (isMountedRef.current) setIsChecking(true)
+          const response = await setupApi.status()
+          setupCachedInitialized = response.data.initialized
+          if (isMountedRef.current) {
+            setIsInitialized(setupCachedInitialized)
+          }
+        } catch (error) {
+          console.error('Failed to re-check setup status:', error)
+          setupCachedInitialized = true
+          if (isMountedRef.current) setIsInitialized(true)
+        } finally {
+          if (isMountedRef.current) setIsChecking(false)
+        }
+      })()
+      void setupPromise
+    } else {
+      prevPathRef.current = location.pathname
+    }
+  }, [location.pathname])
+
   // Show loading state while checking
   if (isChecking) {
     return (
@@ -74,7 +102,8 @@ export default function SetupGuard({ children }: { children: React.ReactNode }) 
     )
   }
 
-  // If not initialized and not on /setup, don't render children (redirect will happen)
+  // If not initialized and not on /setup, don't render children (redirect will happen).
+  // When navigating from /setup to /login after completion, we re-fetch status so isInitialized becomes true.
   if (!isInitialized && location.pathname !== '/setup') {
     return null
   }
