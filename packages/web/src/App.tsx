@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { formatLocalDateTime } from './lib/date-utils'
 import Dashboard from './pages/Dashboard'
 import Setup from './pages/Setup'
@@ -47,7 +47,6 @@ import QpcrExperiments from './pages/QpcrExperiments'
 import QpcrExperimentNew from './pages/QpcrExperimentNew'
 import QpcrExperimentDetail from './pages/QpcrExperimentDetail'
 import AdminDashboard from './pages/AdminDashboard'
-import AdminLocations from './pages/AdminLocations'
 import AdminUsers from './pages/AdminUsers'
 import AdminSettings from './pages/AdminSettings'
 import AdminStatistics from './pages/AdminStatistics'
@@ -338,7 +337,7 @@ function AppContent() {
           label: 'Create Location',
           category: 'Create',
           keywords: ['create location', 'add location', 'new location'],
-          action: () => navigate('/admin/locations'),
+          action: () => navigate('/locations'),
         },
       ] : []),
     ]
@@ -528,9 +527,10 @@ function AppContent() {
           <Route path="/collections/sheets/:id" element={<SheetDetail />} />
           <Route path="/blood-controls" element={<BloodControls />} />
           <Route path="/blood-controls/new" element={<BloodControlDefinitionPage />} />
+          <Route path="/blood-controls/:definitionId/batches/new" element={<ControlBatchWizard />} />
           <Route path="/blood-controls/:id" element={<ControlDefinitionDetail />} />
           <Route path="/blood-controls/:id/edit" element={<BloodControlDefinitionPage />} />
-          <Route path="/blood-controls/batches/new" element={<ControlBatchWizard />} />
+          <Route path="/blood-controls/batches/new" element={<Navigate to="/blood-controls?tab=definitions" replace />} />
           <Route path="/blood-controls/batches/:id" element={<ControlBatchDetail />} />
           <Route path="/blood-controls/batches/:id/add-specimens" element={<ControlBatchWizard />} />
               <Route path="/reference-data" element={<ReferenceData />} />
@@ -555,14 +555,6 @@ function AppContent() {
                 element={
                   <AdminGuard>
                     <AdminUsers />
-                  </AdminGuard>
-                }
-              />
-              <Route
-                path="/admin/locations"
-                element={
-                  <AdminGuard>
-                    <AdminLocations />
                   </AdminGuard>
                 }
               />

@@ -76,7 +76,7 @@ export default function AdminDashboard() {
 
   const adminCards = [
     { title: 'User Management', description: 'Manage users, roles, and permissions', icon: 'users', to: '/admin/users' },
-    { title: 'Location Management', description: 'Create and manage storage locations', icon: 'database', to: '/admin/locations' },
+    { title: 'Location Management', description: 'Create and manage storage locations', icon: 'database', to: '/locations' },
     { title: 'System Settings', description: 'Configure application settings', icon: 'settings', to: '/admin/settings' },
     { title: 'System Statistics', description: 'View detailed system analytics', icon: 'barChart', to: '/admin/statistics' },
   ]
