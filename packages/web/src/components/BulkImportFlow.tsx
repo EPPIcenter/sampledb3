@@ -850,7 +850,14 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     <div className="storage-page">
       <div className="container mx-auto px-4 py-8 relative z-10 max-w-4xl">
         {!fixedStudyShortCode && (
-          <h1 className="text-3xl font-bold mb-6">Bulk Import</h1>
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold">Bulk Import</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              <a href="/docs/guides/bulk-operations/import/" className="text-blue-600 hover:text-blue-800 hover:underline">
+                Import guide
+              </a>
+            </p>
+          </div>
         )}
         {(importType === 'specimens' || importType === 'combined') && (
           <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">

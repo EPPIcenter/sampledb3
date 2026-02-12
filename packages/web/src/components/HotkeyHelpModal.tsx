@@ -96,10 +96,16 @@ export default function HotkeyHelpModal({ isOpen, onClose }: HotkeyHelpModalProp
               ))}
             </div>
 
-            <div className="mt-6 pt-4 border-t border-gray-200">
+            <div className="mt-6 pt-4 border-t border-gray-200 space-y-2">
               <p className="text-sm text-gray-500">
                 Press <kbd className="px-1.5 py-0.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-300 rounded">Esc</kbd> to close
               </p>
+              <a
+                href="/docs"
+                className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+              >
+                View full documentation →
+              </a>
             </div>
           </div>
         </div>

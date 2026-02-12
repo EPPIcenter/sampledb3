@@ -46,6 +46,7 @@ import QpcrExperiments from './pages/QpcrExperiments'
 import QpcrExperimentNew from './pages/QpcrExperimentNew'
 import QpcrExperimentDetail from './pages/QpcrExperimentDetail'
 import AdminDashboard from './pages/AdminDashboard'
+import AdminLocations from './pages/AdminLocations'
 import AdminUsers from './pages/AdminUsers'
 import AdminSettings from './pages/AdminSettings'
 import AdminStatistics from './pages/AdminStatistics'
@@ -226,6 +227,13 @@ function AppContent() {
         keywords: ['reference data', 'reference'],
         action: () => navigate('/reference-data'),
       },
+      {
+        id: 'nav-docs',
+        label: 'Open Documentation',
+        category: 'Navigation',
+        keywords: ['documentation', 'docs', 'help', 'guide', 'manual'],
+        action: () => { window.location.href = '/docs' },
+      },
       // Export commands
       {
         id: 'export-barcodes',
@@ -323,6 +331,13 @@ function AppContent() {
           category: 'Navigation',
           keywords: ['admin', 'error logs', 'logs', 'errors'],
           action: () => navigate('/admin/error-logs'),
+        },
+        {
+          id: 'create-location',
+          label: 'Create Location',
+          category: 'Create',
+          keywords: ['create location', 'add location', 'new location'],
+          action: () => navigate('/admin/locations'),
         },
       ] : []),
     ]
@@ -538,6 +553,14 @@ function AppContent() {
                 element={
                   <AdminGuard>
                     <AdminUsers />
+                  </AdminGuard>
+                }
+              />
+              <Route
+                path="/admin/locations"
+                element={
+                  <AdminGuard>
+                    <AdminLocations />
                   </AdminGuard>
                 }
               />

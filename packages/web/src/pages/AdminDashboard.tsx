@@ -76,6 +76,7 @@ export default function AdminDashboard() {
 
   const adminCards = [
     { title: 'User Management', description: 'Manage users, roles, and permissions', icon: 'users', to: '/admin/users' },
+    { title: 'Location Management', description: 'Create and manage storage locations', icon: 'database', to: '/admin/locations' },
     { title: 'System Settings', description: 'Configure application settings', icon: 'settings', to: '/admin/settings' },
     { title: 'System Statistics', description: 'View detailed system analytics', icon: 'barChart', to: '/admin/statistics' },
   ]
@@ -135,7 +136,13 @@ export default function AdminDashboard() {
         <div className="max-w-7xl mx-auto">
           <header className="mb-6 admin-reveal admin-reveal-1">
             <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-            <p className="mt-1 text-[rgb(var(--dashboard-text-muted))]">Manage and monitor your SampleDB system</p>
+            <p className="mt-1 text-[rgb(var(--dashboard-text-muted))]">
+              Manage and monitor your SampleDB system.
+              {' '}
+              <a href="/docs/guides/advanced/deployment/" className="text-blue-600 hover:text-blue-800 hover:underline">
+                Deployment guide
+              </a>
+            </p>
           </header>
 
           {/* Quick Actions */}
