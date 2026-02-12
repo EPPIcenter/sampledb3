@@ -1,41 +1,38 @@
-# fly.toml - SampleDB fly.io deployment (reference)
-# Run: fly launch --no-deploy  (creates app), then: fly volumes create sampledb_data -r <region>
-# Then: fly deploy
+# fly.toml app configuration file generated for demo-sampledb on 2026-02-12T09:06:21-08:00
 #
-# Secrets (fly secrets set): None required for the app. All config is in [env].
-# Backup runs externally; set RESTIC_PASSWORD, AWS_* in your backup environment
-# (e.g. GitHub Actions secrets, backup.env) — see deployment guide.
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "sampledb"
+app = 'demo-sampledb'
+primary_region = 'jnb'
 
 [build]
 
 [env]
-  NODE_ENV = "production"
-  PORT = "3000"
-  DATABASE_PATH = "/data/sampledb.sqlite"
-  # Set to your app URL for CORS, e.g. https://sampledb.fly.dev
-  ALLOWED_ORIGINS = "https://sampledb.fly.dev"
-  ERROR_LOG_ENABLED = "true"
-  ERROR_LOG_LEVEL = "error"
-  # ERROR_LOG_RETENTION_DAYS = "90"  # optional
+  ALLOWED_ORIGINS = 'https://sampledb.fly.dev'
+  DATABASE_PATH = '/data/sampledb.sqlite'
+  ERROR_LOG_ENABLED = 'true'
+  ERROR_LOG_LEVEL = 'error'
+  NODE_ENV = 'production'
+  PORT = '3000'
+
+[[mounts]]
+  source = 'sampledb_data'
+  destination = '/data'
 
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
-  processes = ["app"]
+  processes = ['app']
+
   [http_service.concurrency]
-    type = "requests"
+    type = 'requests'
     hard_limit = 250
     soft_limit = 200
 
 [[vm]]
-  memory = "1gb"
-  cpu_kind = "shared"
+  memory = '1gb'
   cpus = 1
-
-[mounts]
-  source = "sampledb_data"
-  destination = "/data"
+  memory_mb = 1024
