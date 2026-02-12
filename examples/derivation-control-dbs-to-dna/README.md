@@ -32,7 +32,7 @@ If no control DBS (paper) specimens exist, the script exits with a message and d
 
 ## CSV Format
 
-- **Headers:** `parent_control_batch_name`, `parent_specimen_type_name`, `parent_collection_date`, `collection_name`, `position`, `container_barcode`, `notes`
+- **Headers:** `parent_control_batch_name`, `parent_specimen_type_name`, `parent_collection_date`, `plate_name`, `position`, `container_barcode`, `notes`
 - **Rows:** One row per derivation — one control DBS (paper) parent → one micronix tube with the given barcode and position. `parent_collection_date` is used to disambiguate when a batch has multiple specimens of the same type.
 - **Barcodes:** 10-digit, generated so they do not already exist in `micronix_tube`.
 

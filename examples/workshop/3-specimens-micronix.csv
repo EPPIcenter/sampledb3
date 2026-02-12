@@ -1,4 +1,4 @@
-study_short_code,subject_name,specimen_type_name,collection_date,collection_name,barcode,position
+study_short_code,subject_name,specimen_type_name,collection_date,plate_name,barcode,position
 TUT01,TUT-SUBJ-001,DNA (DBS),2024-01-15,PLATE-WS-001,9999000001,A01
 TUT01,TUT-SUBJ-002,DNA (DBS),2024-01-15,PLATE-WS-001,9999000002,A02
 TUT01,TUT-SUBJ-003,DNA (DBS),2024-01-16,PLATE-WS-001,9999000003,A03

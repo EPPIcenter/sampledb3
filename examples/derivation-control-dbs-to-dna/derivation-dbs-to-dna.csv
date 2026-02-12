@@ -1,4 +1,4 @@
-parent_control_batch_name,parent_specimen_type_name,parent_collection_date,collection_name,position,container_barcode,notes
+parent_control_batch_name,parent_specimen_type_name,parent_collection_date,plate_name,position,container_barcode,notes
 0.01_3D7 2015-01-01,DBS,,DNA-Plate-001,C01,9200000001,
 0.01_W2 2015-01-01,DBS,,DNA-Plate-001,C02,9200000002,
 0.05_3D7 2018-01-01,DBS,,DNA-Plate-001,C03,9200000003,
