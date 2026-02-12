@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, useSearchParams, Navigate, Link } from 'react-router-dom'
 import {
   derivationsApi,
@@ -173,7 +173,41 @@ export default function DerivationsBulkImport() {
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
   const [importResults, setImportResults] = useState<DerivationCsvImportResultRow[] | null>(null)
   const importResultsRef = useRef<HTMLDivElement>(null)
-  const [missingCollections, setMissingCollections] = useState<MissingDerivationCollection[]>([])
+
+  // Pure derivation: compute base list from validationResult during render
+  const baseMissingCollections = useMemo(() => {
+    if (!validationResult?.collections?.length) return []
+    const needCreation = validationResult.collections.filter(
+      (c): c is typeof c & { containerType: 'micronix_tube' | 'cryovial_tube' } =>
+        c.status === 'will_be_created' &&
+        (c.containerType === 'micronix_tube' || c.containerType === 'cryovial_tube')
+    )
+    return needCreation.map((c) => ({
+      name: c.name,
+      barcode: c.barcode,
+      containerType: c.containerType,
+      locationId: null as number | null,
+      status: 'pending' as const,
+    }))
+  }, [validationResult])
+
+  // User-driven updates (locationId, status, error) keyed by index
+  const [userUpdates, setUserUpdates] = useState<Record<number, Partial<MissingDerivationCollection>>>({})
+  const prevValidationResultRef = useRef<ValidationResult | null>(null)
+  const validationResultChanged = validationResult !== prevValidationResultRef.current
+  if (validationResultChanged) {
+    prevValidationResultRef.current = validationResult
+    setUserUpdates({})
+  }
+
+  // Display list: merge base with user overrides (skip overrides when validation just changed to avoid stale flash)
+  const missingCollections = useMemo(
+    () =>
+      validationResultChanged
+        ? baseMissingCollections
+        : baseMissingCollections.map((item, i) => ({ ...item, ...userUpdates[i] })),
+    [baseMissingCollections, userUpdates, validationResultChanged]
+  )
 
   useEffect(() => {
     loadReferenceData()
@@ -186,27 +220,6 @@ export default function DerivationsBulkImport() {
       setAllowedContainerTypes([])
     }
   }, [settings.specimenTypeName])
-
-  useEffect(() => {
-    if (!validationResult?.collections?.length) {
-      setMissingCollections([])
-      return
-    }
-    const needCreation = validationResult.collections.filter(
-      (c): c is typeof c & { containerType: 'micronix_tube' | 'cryovial_tube' } =>
-        c.status === 'will_be_created' &&
-        (c.containerType === 'micronix_tube' || c.containerType === 'cryovial_tube')
-    )
-    setMissingCollections(
-      needCreation.map((c) => ({
-        name: c.name,
-        barcode: c.barcode,
-        containerType: c.containerType,
-        locationId: null,
-        status: 'pending' as const,
-      }))
-    )
-  }, [validationResult])
 
   // Synchronize viewport with DOM: scroll to results section after import completes.
   // (Effect is appropriate here: we react to state-driven DOM update, not the click itself.)
@@ -356,15 +369,13 @@ export default function DerivationsBulkImport() {
 
   const handleCreateCollections = async () => {
     if (missingCollections.length === 0) return
-    const updated = [...missingCollections]
     let allSuccess = true
 
-    for (let i = 0; i < updated.length; i++) {
-      const coll = updated[i]
+    for (let i = 0; i < missingCollections.length; i++) {
+      const coll = missingCollections[i]
       if (coll.status === 'success' || !coll.locationId) continue
 
-      updated[i].status = 'creating'
-      setMissingCollections([...updated])
+      setUserUpdates((prev) => ({ ...prev, [i]: { ...prev[i], status: 'creating' } }))
 
       try {
         const name =
@@ -375,34 +386,33 @@ export default function DerivationsBulkImport() {
         if (coll.containerType === 'micronix_tube') {
           await collectionsApi.createMicronixPlate({
             name,
-            locationId: coll.locationId,
+            locationId: coll.locationId!,
             barcode,
           })
         } else if (coll.containerType === 'cryovial_tube') {
           await collectionsApi.createCryovialBox({
             name,
-            locationId: coll.locationId,
+            locationId: coll.locationId!,
             barcode,
           })
         }
 
-        updated[i].status = 'success'
-        updated[i].name = name
+        setUserUpdates((prev) => ({ ...prev, [i]: { ...prev[i], status: 'success', name } }))
       } catch (err: unknown) {
         const errObj = err as { response?: { data?: { error?: string } } }
-        updated[i].status = 'error'
-        updated[i].error =
-          errObj.response?.data?.error ?? 'Failed to create collection'
+        setUserUpdates((prev) => ({
+          ...prev,
+          [i]: {
+            ...prev[i],
+            status: 'error',
+            error: errObj.response?.data?.error ?? 'Failed to create collection',
+          },
+        }))
         allSuccess = false
       }
     }
 
-    setMissingCollections(updated)
-
-    if (
-      allSuccess &&
-      updated.every((c) => c.status === 'success' || c.status === 'pending')
-    ) {
+    if (allSuccess) {
       setError(null)
       await handleImport()
       setCurrentStep('import')
@@ -958,9 +968,10 @@ export default function DerivationsBulkImport() {
                       <LocationPicker
                         value={coll.locationId ?? null}
                         onChange={(locationId) => {
-                          const next = [...missingCollections]
-                          next[index] = { ...next[index], locationId: locationId ?? null }
-                          setMissingCollections(next)
+                          setUserUpdates((prev) => ({
+                            ...prev,
+                            [index]: { ...prev[index], locationId: locationId ?? null },
+                          }))
                         }}
                         filterCollectionsOnly
                         disabled={coll.status === 'creating' || coll.status === 'success'}
