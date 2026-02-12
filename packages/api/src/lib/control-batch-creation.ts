@@ -19,6 +19,7 @@ import {
 import { eq, and, sql } from 'drizzle-orm'
 import { getDefaultUnit } from './defaults'
 import { validateContainerTypeForSpecimenType, validateUnitForContainerType, validateControlBatchName, generateUniqueBatchName } from './validation'
+import { findExistingControlSpecimen } from './specimen-helpers'
 import type { ContainerType } from './container-creation'
 
 export interface CreateBatchWithSpecimensRequest {
@@ -455,14 +456,14 @@ async function prepareContainerData(
         ? `bag-${containerData.collectionName}-${containerData.collectionLocationId}`
         : `box-${containerData.collectionName}-${containerData.collectionLocationId}`
       
-      if (collectionMap.has(key)) {
-        const id = collectionMap.get(key)!
+      const existingId = collectionMap.get(key)
+      if (existingId !== undefined && existingId !== -1) {
         if (isBag) {
-          bagId = id
+          bagId = existingId
         } else {
-          boxId = id
+          boxId = existingId
         }
-      } else {
+      } else if (!collectionMap.has(key)) {
         const existingBox = await database.select().from(box).where(eq(box.name, containerData.collectionName)).get()
         const existingBag = await database.select().from(bag).where(eq(bag.name, containerData.collectionName)).get()
         
@@ -531,9 +532,10 @@ async function prepareContainerData(
       collectionId = containerData.collectionId
     } else if (containerData.collectionName && containerData.collectionLocationId) {
       const key = `cryovial_box-${containerData.collectionName}-${containerData.collectionLocationId}`
-      if (collectionMap.has(key)) {
-        collectionId = collectionMap.get(key)!
-      } else {
+      const existingId = collectionMap.get(key)
+      if (existingId !== undefined && existingId !== -1) {
+        collectionId = existingId
+      } else if (!collectionMap.has(key)) {
         const existing = await database.select().from(cryovialBox).where(eq(cryovialBox.name, containerData.collectionName)).get()
         if (existing) {
           collectionId = existing.id
@@ -550,9 +552,10 @@ async function prepareContainerData(
       collectionId = containerData.collectionId
     } else if (containerData.collectionName && containerData.collectionLocationId) {
       const key = `micronix_plate-${containerData.collectionName}-${containerData.collectionLocationId}`
-      if (collectionMap.has(key)) {
-        collectionId = collectionMap.get(key)!
-      } else {
+      const existingId = collectionMap.get(key)
+      if (existingId !== undefined && existingId !== -1) {
+        collectionId = existingId
+      } else if (!collectionMap.has(key)) {
         const existing = await database.select().from(micronixPlate).where(eq(micronixPlate.name, containerData.collectionName)).get()
         if (existing) {
           collectionId = existing.id
@@ -846,6 +849,21 @@ export async function createBatchWithSpecimens(
     batchName = await generateUniqueBatchName(database, definition.name, data.batch.productionDate)
   }
 
+  // Merge duplicate (specimenTypeName, collectionDate) – specimens are unique per type+date+batch
+  const specKey = (s: { specimenTypeName: string; collectionDate?: string }) =>
+    `${s.specimenTypeName}:${s.collectionDate ?? ''}`
+  const mergedSpecimens = new Map<string, (typeof data.specimens)[0]>()
+  for (const s of data.specimens) {
+    const key = specKey(s)
+    const existing = mergedSpecimens.get(key)
+    if (existing) {
+      existing.containers.push(...s.containers)
+    } else {
+      mergedSpecimens.set(key, { ...s, containers: [...s.containers] })
+    }
+  }
+  const specimensToCreate = Array.from(mergedSpecimens.values())
+
   // Prepare collections
   if (data.createCollections) {
     for (const coll of data.createCollections) {
@@ -889,7 +907,7 @@ export async function createBatchWithSpecimens(
     }>
   }> = []
 
-  for (const specData of data.specimens) {
+  for (const specData of specimensToCreate) {
     const specType = await database
       .select()
       .from(specimenType)
@@ -1112,6 +1130,21 @@ export async function addSpecimensToBatch(
   const collectionMap = new Map<string, number>()
   const createdCollections: CreatedCollection[] = []
 
+  // Merge duplicate (specimenTypeName, collectionDate) – specimens are unique per type+date+batch
+  const addSpecKey = (s: { specimenTypeName: string; collectionDate?: string }) =>
+    `${s.specimenTypeName}:${s.collectionDate ?? ''}`
+  const addMergedSpecimens = new Map<string, (typeof data.specimens)[0]>()
+  for (const s of data.specimens) {
+    const key = addSpecKey(s)
+    const existing = addMergedSpecimens.get(key)
+    if (existing) {
+      existing.containers.push(...s.containers)
+    } else {
+      addMergedSpecimens.set(key, { ...s, containers: [...s.containers] })
+    }
+  }
+  const addSpecimensToCreate = Array.from(addMergedSpecimens.values())
+
   // Prepare collections
   if (data.createCollections) {
     for (const coll of data.createCollections) {
@@ -1155,7 +1188,7 @@ export async function addSpecimensToBatch(
     }>
   }> = []
 
-  for (const specData of data.specimens) {
+  for (const specData of addSpecimensToCreate) {
     const specType = await database
       .select()
       .from(specimenType)
@@ -1243,36 +1276,45 @@ export async function addSpecimensToBatch(
       }
     }
 
-    // Create specimens with containers
+    // Create specimens with containers (find-or-create for addSpecimensToBatch, aligned with study specimens)
     const createdSpecimens: CreatedSpecimen[] = []
 
     for (const { specType, specData, preparedContainers } of preparedSpecimens) {
-      // Create specimen
-      const specimenResult = tx.insert(specimen).values({
-        controlBatchId: batchId,
-        specimenTypeId: specType.id,
-        collectionDate: specData.collectionDate || null,
-      }).returning().get()
-      
-      const specimenRecord = Array.isArray(specimenResult) ? specimenResult[0] : specimenResult
-      
-      if (!specimenRecord) {
-        throw new Error('Failed to create specimen - no record returned')
-      }
-      
-      // Extract plain id value
+      const existingSpecimen = findExistingControlSpecimen(
+        tx as unknown as Database,
+        batchId,
+        specType.id,
+        specData.collectionDate
+      )
+
       let specimenId: number
-      if (typeof specimenRecord.id === 'number') {
-        specimenId = specimenRecord.id
-      } else if (typeof specimenRecord.id === 'object' && specimenRecord.id !== null) {
-        specimenId = (specimenRecord.id as any).value ?? specimenRecord.id
+      if (existingSpecimen) {
+        specimenId = existingSpecimen.id
       } else {
-        specimenId = specimenRecord.id as any
-      }
-      
-      if (typeof specimenId !== 'number' || isNaN(specimenId)) {
-        console.error('Specimen ID extraction failed:', { specimenRecord, specimenId })
-        throw new Error(`Failed to extract specimen ID: got ${typeof specimenId} ${specimenId}`)
+        const specimenResult = tx.insert(specimen).values({
+          controlBatchId: batchId,
+          specimenTypeId: specType.id,
+          collectionDate: specData.collectionDate || null,
+        }).returning().get()
+
+        const specimenRecord = Array.isArray(specimenResult) ? specimenResult[0] : specimenResult
+
+        if (!specimenRecord) {
+          throw new Error('Failed to create specimen - no record returned')
+        }
+
+        if (typeof specimenRecord.id === 'number') {
+          specimenId = specimenRecord.id
+        } else if (typeof specimenRecord.id === 'object' && specimenRecord.id !== null) {
+          specimenId = (specimenRecord.id as any).value ?? specimenRecord.id
+        } else {
+          specimenId = specimenRecord.id as any
+        }
+
+        if (typeof specimenId !== 'number' || isNaN(specimenId)) {
+          console.error('Specimen ID extraction failed:', { specimenRecord, specimenId })
+          throw new Error(`Failed to extract specimen ID: got ${typeof specimenId} ${specimenId}`)
+        }
       }
 
       // Create containers for this specimen

@@ -33,3 +33,34 @@ export function findExistingStudySpecimen(
 
   return row ?? null
 }
+
+/**
+ * Find an existing control specimen by (control_batch_id, specimen_type_id, collection_date).
+ * Uses null-safe date matching: null/empty collectionDate matches specimen.collectionDate IS NULL.
+ * Mirrors findExistingStudySpecimen for control batches.
+ */
+export function findExistingControlSpecimen(
+  db: Database,
+  controlBatchId: number,
+  specimenTypeId: number,
+  collectionDate: string | null | undefined
+): Specimen | null {
+  const dateCondition =
+    collectionDate == null || collectionDate === ''
+      ? isNull(specimen.collectionDate)
+      : eq(specimen.collectionDate, collectionDate)
+
+  const row = db
+    .select()
+    .from(specimen)
+    .where(
+      and(
+        eq(specimen.controlBatchId, controlBatchId),
+        eq(specimen.specimenTypeId, specimenTypeId),
+        dateCondition
+      )
+    )
+    .get()
+
+  return row ?? null
+}

@@ -7,7 +7,8 @@ import {
 } from '../../__tests__/helpers/factories'
 import { specimen } from '../../db/schema'
 import type { Database } from '../../db/client'
-import { findExistingStudySpecimen } from '../specimen-helpers'
+import { findExistingStudySpecimen, findExistingControlSpecimen } from '../specimen-helpers'
+import { createTestControlDefinition, createTestControlBatch } from '../../__tests__/helpers/factories'
 
 describe('specimen-helpers', () => {
   let testDb: Database
@@ -141,6 +142,78 @@ describe('specimen-helpers', () => {
         subject.id,
         specType.id,
         undefined
+      )
+      expect(result!.id).toBe(inserted!.id)
+    })
+  })
+
+  describe('findExistingControlSpecimen', () => {
+    it('returns null when no specimen matches', async () => {
+      const def = await createTestControlDefinition(testDb, { name: 'Neg', controlType: 'negative' })
+      const batch = await createTestControlBatch(testDb, def.id, { name: 'Batch 1' })
+      const specType = await createTestSpecimenType(testDb, { name: 'Plasma' })
+      const result = findExistingControlSpecimen(
+        testDb,
+        batch.id,
+        specType.id,
+        '2024-01-15'
+      )
+      expect(result).toBeNull()
+    })
+
+    it('returns specimen when matching by batch, type, and date', async () => {
+      const def = await createTestControlDefinition(testDb, { name: 'Pos', controlType: 'plasma_positive' })
+      const batch = await createTestControlBatch(testDb, def.id, { name: 'Batch 2' })
+      const specType = await createTestSpecimenType(testDb, { name: 'Plasma' })
+      const now = new Date().toISOString()
+      const [inserted] = await testDb
+        .insert(specimen)
+        .values({
+          controlBatchId: batch.id,
+          specimenTypeId: specType.id,
+          collectionDate: '2024-02-01',
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const result = findExistingControlSpecimen(
+        testDb,
+        batch.id,
+        specType.id,
+        '2024-02-01'
+      )
+      expect(result).not.toBeNull()
+      expect(result!.id).toBe(inserted!.id)
+    })
+
+    it('matches null/empty collectionDate with specimen where collectionDate IS NULL', async () => {
+      const def = await createTestControlDefinition(testDb, { name: 'Blood', controlType: 'blood' })
+      const batch = await createTestControlBatch(testDb, def.id, { name: 'Batch 3' })
+      const specType = await createTestSpecimenType(testDb, { name: 'Whole Blood' })
+      const now = new Date().toISOString()
+      const [inserted] = await testDb
+        .insert(specimen)
+        .values({
+          controlBatchId: batch.id,
+          specimenTypeId: specType.id,
+          collectionDate: null,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      expect(
+        findExistingControlSpecimen(testDb, batch.id, specType.id, null)
+      ).not.toBeNull()
+      expect(
+        findExistingControlSpecimen(testDb, batch.id, specType.id, undefined)
+      ).not.toBeNull()
+      const result = findExistingControlSpecimen(
+        testDb,
+        batch.id,
+        specType.id,
+        ''
       )
       expect(result!.id).toBe(inserted!.id)
     })

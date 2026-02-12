@@ -152,6 +152,7 @@ CREATE INDEX IF NOT EXISTS specimen_control_batch_id_idx ON specimen(control_bat
 CREATE INDEX IF NOT EXISTS specimen_collection_date_idx ON specimen(collection_date);--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS specimen_specimen_type_id_idx ON specimen(specimen_type_id);--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS idx_specimen_study_subject_type_date ON specimen(study_subject_id, specimen_type_id, collection_date) WHERE study_subject_id IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS idx_specimen_control_batch_type_date ON specimen(control_batch_id, specimen_type_id, collection_date) WHERE control_batch_id IS NOT NULL;--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS storage_container (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   specimen_id INTEGER NOT NULL REFERENCES specimen(id),
