@@ -41,6 +41,15 @@ Once you've identified the collections you want to move, you'll select a destina
 
 The system validates that all collections exist, that the destination location is valid and can contain collections, and that you have permission to perform the moves. Once validation passes, you can execute the moves, and the system will update all location assignments in one operation.
 
+### Atomicity Modes for Bulk Moves
+
+Bulk collection move supports two atomicity modes:
+
+- **All-or-nothing** (default): if any row is invalid, no collections are moved.
+- **Best effort**: valid rows are moved in one transaction while invalid rows are returned as errors.
+
+If your workflow requires strict consistency, use the default all-or-nothing mode. Use best effort when you want to move valid rows immediately and fix failed rows afterward.
+
 ## CSV-Based Bulk Movement
 
 Some workflows support CSV files for bulk collection movement, which is useful when you have many collections to move and want to prepare the list in a spreadsheet. Your CSV file would include collection identifiers and target locations, and the system processes all moves together.

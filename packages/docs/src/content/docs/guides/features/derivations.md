@@ -62,10 +62,10 @@ When you're processing many samples at once—perhaps extracting DNA from an ent
 
 **Step 3: Import**
 
-- Review the validation summary (valid / invalid / warnings) and the per-row table. Click **Create derivations** to run the import. All derivations are created in one go, or none if any row fails (all-or-nothing).
+- Review the validation summary (valid / invalid / warnings) and the per-row table. Click **Create derivations** to run the import. All derivations are created in one go, or none if any row fails (all-or-nothing). For a comparison of failure semantics across import types, see [Bulk Import — Atomicity and failure behavior](/guides/bulk-operations/import/#atomicity-and-failure-behavior).
 - After the run, you see success/error counts and a per-row result table, plus a link **Back to Derivations**.
 
-For micronix and cryovial tube derivations, **collection_name or collection_barcode** is required in each row so the system knows which plate or box the derived containers belong to. For micronix tube derivations, **container_barcode** is also required in each row; barcodes are scanned and provided by you—the system does not assign them.
+For micronix tube derivations, **plate_name or collection_barcode** is required in each row. For cryovial tube derivations, **box_name or collection_barcode** is required. For paper derivations, **bag_name** is required. These columns tell the system where the derived containers belong. For micronix tube derivations, **container_barcode** is also required in each row; barcodes are scanned and provided by you—the system does not assign them.
 
 **Example: Derivation from controls (DBS to DNA in micronix tubes)** — See `examples/derivation-control-dbs-to-dna/` in the repo for a sample CSV and README. To generate a CSV from your production database, run `scripts/generate_derivation_control_dbs_to_dna_example.sh`.
 

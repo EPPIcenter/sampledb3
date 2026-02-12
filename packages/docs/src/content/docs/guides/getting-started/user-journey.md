@@ -73,7 +73,7 @@ Add specimens for those subjects. You can register specimens without containers,
    TUT01,TUT-SUBJ-003,Whole Blood,2024-01-16
    ```
 
-   Use a specimen type that exists in your Reference Data (e.g. **Whole Blood**); names are case-sensitive. For the no-containers example you can download: [tutorial-specimens-no-containers.csv](/tutorial-csvs/tutorial-specimens-no-containers.csv). If you use a container type, add the required columns (e.g. for Micronix: `collection_name`, `barcode`, `position`). See [Bulk Import](/guides/bulk-operations/import/) and [Container Management](/guides/workflows/containers/) for exact columns and formats.
+   Use a specimen type that exists in your Reference Data (e.g. **Whole Blood**); names are case-sensitive. For the no-containers example you can download: [tutorial-specimens-no-containers.csv](/tutorial-csvs/tutorial-specimens-no-containers.csv). If you use a container type, add the required columns (e.g. for Micronix: `plate_name`, `barcode`, `position`). See [Bulk Import](/guides/bulk-operations/import/) and [Container Management](/guides/workflows/containers/) for exact columns and formats.
 5. Upload the file, then click **Validate & Continue**.
 6. If the CSV references collections that don't exist yet, you'll see a **Create Collections** step: assign each collection to a location, then continue. The import then runs.
 7. Review the import result summary.

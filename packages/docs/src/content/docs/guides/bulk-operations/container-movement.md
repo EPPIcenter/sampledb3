@@ -85,6 +85,13 @@ Conflict detection is especially important in multi-file operations. The system 
 
 Once validation passes, executing the moves is straightforward. Click the execute button, and the system processes all moves together. It updates container positions, changes collection associations, and maintains all the relationships between containers, specimens, and collections.
 
+Container moves support two atomicity modes:
+
+- **All-or-nothing (default):** if any row is invalid, no moves are committed.
+- **Best effort:** valid rows are moved and invalid rows are returned as errors.
+
+In both modes, writes are still wrapped in a transaction for the set of rows that will execute. That means write-time failures still roll back that execution set.
+
 After execution, you'll see detailed results. For successful moves, you'll see how many containers were moved. For any failures, you'll see specific error messages explaining what went wrong and which containers had problems. In multi-file operations, you'll see results broken down by file, which helps you understand which files succeeded and which might need attention.
 
 ## Undo Operations

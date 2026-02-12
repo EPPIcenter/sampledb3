@@ -59,7 +59,7 @@ Add specimens for those subjects. You can register specimens without containers 
 
 1. Set **Import Type** to **Subjects with Specimens (Combined)**.
 2. Set **Container Type** to **Micronix Tubes**.
-3. Prepare a CSV with the same columns as Option A plus: `collection_name`, `barcode`, `position`. The `position` column (well, e.g. A01) is required for micronix imports; missing or invalid position will cause validation to fail with a clear message. Positions must use letter + two digits (e.g. A01, B12). Download: [3-specimens-micronix.csv](/workshop/3-specimens-micronix.csv).
+3. Prepare a CSV with the same columns as Option A plus: `plate_name`, `barcode`, `position`. The `position` column (well, e.g. A01) is required for micronix imports; missing or invalid position will cause validation to fail with a clear message. Positions must use letter + two digits (e.g. A01, B12). Download: [3-specimens-micronix.csv](/workshop/3-specimens-micronix.csv).
 4. Upload the file, then click **Validate & Continue**.
 5. If the CSV references collections that do not exist yet, you will see a **Create Collections** step: assign each collection to a location, then continue. The import then runs.
 6. Check the result summary.
