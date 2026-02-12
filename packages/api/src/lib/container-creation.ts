@@ -1,4 +1,7 @@
 import type { Database } from '../db/client'
+import type { ExtractTablesWithRelations } from 'drizzle-orm'
+import type { SQLiteTransaction } from 'drizzle-orm/sqlite-core'
+import type * as schema from '../db/schema'
 import {
   storageContainer,
   micronixTube,
@@ -14,6 +17,10 @@ import { validateUnitForContainerType, validateContainerTypeForSpecimenType } fr
 import {
   resolveCollection,
 } from './collection-resolution'
+
+type DatabaseOrTransaction =
+  | Database
+  | SQLiteTransaction<'sync', void, typeof schema, ExtractTablesWithRelations<typeof schema>>
 
 /**
  * Normalize position string to match frontend format (e.g., "B1" -> "B01")
@@ -118,24 +125,25 @@ export async function validateContainerData(
 async function createMicronixTube(
   specimenId: number,
   data: ContainerData,
-  database: Database,
+  database: DatabaseOrTransaction,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
-    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate', database)
+    const dbForValidation = database as unknown as Database
+    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate', dbForValidation)
     if (!collectionId) return { success: false, error: 'Micronix plate not found' }
 
-    const defaultUnitId = await getDefaultUnit(database, 'micronix_tube')
+    const defaultUnitId = await getDefaultUnit(dbForValidation, 'micronix_tube')
     const finalUnitId = data.unitId || defaultUnitId
 
     // Validate unit is allowed for container type
-    const unitValidation = await validateUnitForContainerType(database, 'micronix_tube', finalUnitId)
+    const unitValidation = await validateUnitForContainerType(dbForValidation, 'micronix_tube', finalUnitId)
     if (!unitValidation.valid) {
       return { success: false, error: unitValidation.error }
     }
 
-    const defaultTotalQty = await getDefaultTotalQuantity(database, 'micronix_tube')
-    const defaultRemainingQty = await getDefaultRemainingQuantity(database, 'micronix_tube')
+    const defaultTotalQty = await getDefaultTotalQuantity(dbForValidation, 'micronix_tube')
+    const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'micronix_tube')
 
     const now = new Date().toISOString()
     const [container] = await database.insert(storageContainer).values({
@@ -170,24 +178,25 @@ async function createMicronixTube(
 async function createCryovialTube(
   specimenId: number,
   data: ContainerData,
-  database: Database,
+  database: DatabaseOrTransaction,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
-    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'cryovial_box', database)
+    const dbForValidation = database as unknown as Database
+    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'cryovial_box', dbForValidation)
     if (!collectionId) return { success: false, error: 'Cryovial box not found' }
 
-    const defaultUnitId = await getDefaultUnit(database, 'cryovial_tube')
+    const defaultUnitId = await getDefaultUnit(dbForValidation, 'cryovial_tube')
     const finalUnitId = data.unitId || defaultUnitId
 
     // Validate unit is allowed for container type
-    const unitValidation = await validateUnitForContainerType(database, 'cryovial_tube', finalUnitId)
+    const unitValidation = await validateUnitForContainerType(dbForValidation, 'cryovial_tube', finalUnitId)
     if (!unitValidation.valid) {
       return { success: false, error: unitValidation.error }
     }
 
-    const defaultTotalQty = await getDefaultTotalQuantity(database, 'cryovial_tube')
-    const defaultRemainingQty = await getDefaultRemainingQuantity(database, 'cryovial_tube')
+    const defaultTotalQty = await getDefaultTotalQuantity(dbForValidation, 'cryovial_tube')
+    const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'cryovial_tube')
 
     const now = new Date().toISOString()
     const [container] = await database.insert(storageContainer).values({
@@ -222,25 +231,26 @@ async function createCryovialTube(
 async function createPaper(
   specimenId: number,
   data: ContainerData,
-  database: Database,
+  database: DatabaseOrTransaction,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
+    const dbForValidation = database as unknown as Database
     // Resolve sheet
     const sheetRecord = await database.select({ id: sheet.id }).from(sheet).where(eq(sheet.name, data.collectionName!)).get()
     if (!sheetRecord) return { success: false, error: 'Sheet not found' }
 
-    const defaultUnitId = await getDefaultUnit(database, 'paper')
+    const defaultUnitId = await getDefaultUnit(dbForValidation, 'paper')
     const finalUnitId = data.unitId || defaultUnitId
 
     // Validate unit is allowed for container type
-    const unitValidation = await validateUnitForContainerType(database, 'paper', finalUnitId)
+    const unitValidation = await validateUnitForContainerType(dbForValidation, 'paper', finalUnitId)
     if (!unitValidation.valid) {
       return { success: false, error: unitValidation.error }
     }
 
-    const defaultTotalQty = await getDefaultTotalQuantity(database, 'paper')
-    const defaultRemainingQty = await getDefaultRemainingQuantity(database, 'paper')
+    const defaultTotalQty = await getDefaultTotalQuantity(dbForValidation, 'paper')
+    const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'paper')
 
     const now = new Date().toISOString()
     const [container] = await database.insert(storageContainer).values({
@@ -275,24 +285,25 @@ async function createPaper(
 async function createStaticWell(
   specimenId: number,
   data: ContainerData,
-  database: Database,
+  database: DatabaseOrTransaction,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
-    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate', database)
+    const dbForValidation = database as unknown as Database
+    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate', dbForValidation)
     if (!collectionId) return { success: false, error: 'Micronix plate not found' }
 
-    const defaultUnitId = await getDefaultUnit(database, 'static_well')
+    const defaultUnitId = await getDefaultUnit(dbForValidation, 'static_well')
     const finalUnitId = data.unitId || defaultUnitId
 
     // Validate unit is allowed for container type
-    const unitValidation = await validateUnitForContainerType(database, 'static_well', finalUnitId)
+    const unitValidation = await validateUnitForContainerType(dbForValidation, 'static_well', finalUnitId)
     if (!unitValidation.valid) {
       return { success: false, error: unitValidation.error }
     }
 
-    const defaultTotalQty = await getDefaultTotalQuantity(database, 'static_well')
-    const defaultRemainingQty = await getDefaultRemainingQuantity(database, 'static_well')
+    const defaultTotalQty = await getDefaultTotalQuantity(dbForValidation, 'static_well')
+    const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'static_well')
 
     const now = new Date().toISOString()
     const [container] = await database.insert(storageContainer).values({
@@ -326,10 +337,11 @@ async function createStaticWell(
 export async function createContainerForSpecimen(
   specimenId: number,
   data: ContainerData,
-  database: Database,
+  database: DatabaseOrTransaction,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
-    const validation = await validateContainerData(database, data.containerType, data)
+    const dbForValidation = database as unknown as Database
+    const validation = await validateContainerData(dbForValidation, data.containerType, data)
   if (!validation.valid) return { success: false, error: validation.error }
 
   // Get specimen to find specimen type ID for validation
@@ -340,7 +352,7 @@ export async function createContainerForSpecimen(
 
   // Validate container type is allowed for specimen type
   if (data.containerType) {
-    const containerTypeValidation = await validateContainerTypeForSpecimenType(database, specimenRecord.specimenTypeId, data.containerType)
+    const containerTypeValidation = await validateContainerTypeForSpecimenType(dbForValidation, specimenRecord.specimenTypeId, data.containerType)
     if (!containerTypeValidation.valid) {
       return { success: false, error: containerTypeValidation.error }
     }
