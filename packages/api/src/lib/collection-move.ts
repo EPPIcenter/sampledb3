@@ -38,6 +38,7 @@ export interface CollectionMoveOperation {
 export interface CollectionMoveRequest {
   collectionType: MoveableCollectionType
   moves: CollectionMoveOperation[]
+  atomicMode?: 'all_or_nothing' | 'best_effort'
 }
 
 export interface ValidationError {
@@ -474,7 +475,7 @@ export async function executeCollectionMoves(
   request: CollectionMoveRequest
 ): Promise<CollectionMoveResult> {
   try {
-    const { moves, collectionType } = request
+    const { moves, collectionType, atomicMode = 'all_or_nothing' } = request
     const errors: ValidationError[] = []
     const validMoves: Array<{ collectionInfo: CollectionInfo; targetLocationId: number }> = []
 
@@ -507,7 +508,10 @@ export async function executeCollectionMoves(
       })
     }
 
-    if (errors.length > 0 && validMoves.length === 0) {
+    if (validMoves.length === 0) {
+      return { success: false, moved: 0, errors }
+    }
+    if (atomicMode === 'all_or_nothing' && errors.length > 0) {
       return { success: false, moved: 0, errors }
     }
 

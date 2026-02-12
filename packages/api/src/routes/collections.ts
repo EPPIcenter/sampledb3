@@ -1000,6 +1000,7 @@ collections.post('/containers/move', memberMiddleware, async (c) => {
     const body = await c.req.json()
     const schema = z.object({
       collectionType: z.enum(['micronix_plate', 'cryovial_box', 'box', 'bag', 'sheet']).optional(),
+      atomicMode: z.enum(['all_or_nothing', 'best_effort']).default('all_or_nothing'),
       mappings: z.array(z.object({
         fromCollectionName: z.string().min(1),
         toCollectionName: z.string().min(1),
@@ -1115,6 +1116,7 @@ collections.post('/move', memberMiddleware, async (c) => {
     const body = await c.req.json()
     const schema = z.object({
       collectionType: z.enum(['micronix_plate', 'cryovial_box', 'box', 'bag']),
+      atomicMode: z.enum(['all_or_nothing', 'best_effort']).default('all_or_nothing'),
       moves: z.array(z.object({
         identifier: z.union([
           z.object({ type: z.literal('id'), id: z.number().int().positive() }),
