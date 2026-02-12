@@ -3,6 +3,7 @@ import { users, specimenType, unit, storageType, location, strain, specimenTypeC
 import { sql, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
+import { rateLimit } from '../middleware/rate-limit'
 import {
   setContainerDefaults,
   setPaginationSettings,
@@ -46,7 +47,8 @@ const initSchema = z.object({
     strains: z.array(z.object({ name: z.string(), description: z.string().optional() })).optional()
 })
 
-  setupRoutes.post('/initialize', async (c) => {
+  // Rate limit initialization to prevent abuse (5 attempts per minute per IP)
+  setupRoutes.post('/initialize', rateLimit(5, 60 * 1000), async (c) => {
     try {
       const body = await c.req.json()
       const {

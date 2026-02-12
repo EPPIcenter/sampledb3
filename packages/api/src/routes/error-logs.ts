@@ -6,6 +6,7 @@ import { logFrontendError, cleanupOldErrorLogs, type ErrorLogContext } from '../
 import { handleRouteError } from '../lib/error-handler'
 import { eq, and, desc, sql, like, or } from 'drizzle-orm'
 import { createAdminMiddleware, createAuthMiddleware, createOptionalAuthMiddleware } from '../middleware/auth'
+import { rateLimit } from '../middleware/rate-limit'
 
 // Schema for frontend error submission
 const frontendErrorSchema = z.object({
@@ -60,7 +61,8 @@ export function createErrorLogsRoutes(database: Database): Hono {
 
   // POST /api/error-logs - Accept frontend error reports
   // Use optional auth so errors can be logged even if session expired
-  errorLogsRoutes.post('/', optionalAuthMiddleware, async (c) => {
+  // Rate limited to prevent error-log flooding (60 requests per minute per IP)
+  errorLogsRoutes.post('/', rateLimit(60, 60 * 1000), optionalAuthMiddleware, async (c) => {
     try {
       const body = await c.req.json()
       const errorData = frontendErrorSchema.parse(body)

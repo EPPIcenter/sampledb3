@@ -8,6 +8,7 @@ import { nanoid } from 'nanoid'
 import type { Database } from '../db/client'
 import { getPasswordRequirements, getSessionSettings } from '../lib/settings'
 import { createAuthMiddleware, createAdminMiddleware } from '../middleware/auth'
+import { rateLimit } from '../middleware/rate-limit'
 import { handleRouteError } from '../lib/error-handler'
 
 export function createAuthRoutes(database: Database, settingsDb?: Database) {
@@ -52,8 +53,8 @@ const createRegisterSchema = async () => {
   })
 }
 
-// Login
-auth.post('/login', async (c) => {
+// Login - rate limited for brute force protection (10 attempts per minute per IP)
+auth.post('/login', rateLimit(10, 60 * 1000), async (c) => {
   try {
     const body = await c.req.json()
     const { emailOrUsername, password } = loginSchema.parse(body)
