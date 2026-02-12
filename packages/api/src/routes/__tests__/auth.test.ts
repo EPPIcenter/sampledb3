@@ -136,14 +136,16 @@ describe('Auth API', () => {
 
   describe('POST /api/auth/login', () => {
     beforeEach(async () => {
-      // Create a test user
+      // Create a test user (approved so they can log in)
+      const createdAt = new Date().toISOString()
       const passwordHash = await bcrypt.hash('password123', 10)
       await testDb.insert(users).values({
         email: 'login@example.com',
         name: 'Login Test User',
         passwordHash,
         role: 'member',
-        createdAt: new Date().toISOString(),
+        createdAt,
+        approvedAt: createdAt,
       })
     })
 
@@ -188,6 +190,138 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('POST /api/auth/login rejects unapproved user', () => {
+    it('should reject login when account is pending approval', async () => {
+      await createTestUser(testDb, {
+        email: 'pending@example.com',
+        name: 'Pending User',
+        password: 'password123',
+        approvedAt: null,
+      })
+
+      const client = createTestClient(app)
+      const res = await client.api.auth.login.$post({
+        json: {
+          emailOrUsername: 'pending@example.com',
+          password: 'password123',
+        },
+      })
+
+      expect(res.status).toBe(401)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toBe('Account pending approval')
+    })
+  })
+
+  describe('POST /api/auth/self-register', () => {
+    it('should create user with approvedAt null', async () => {
+      const client = createTestClient(app)
+      const res = await client.api.auth['self-register'].$post({
+        json: {
+          email: 'selfreg@example.com',
+          name: 'Self Reg User',
+          password: 'password123',
+        },
+      })
+
+      expect(res.status).toBe(201)
+      const data = await res.json() as UserResponse
+      expect(data.user).toBeDefined()
+      expect(data.user.email).toBe('selfreg@example.com')
+      expect(data.user.name).toBe('Self Reg User')
+      expect(data.user).not.toHaveProperty('passwordHash')
+
+      const dbUser = await testDb.select().from(users).where(eq(users.email, 'selfreg@example.com')).get()
+      expect(dbUser?.approvedAt).toBeNull()
+    })
+
+    it('should reject duplicate email', async () => {
+      await createTestUser(testDb, {
+        email: 'exists@example.com',
+        name: 'Existing User',
+        password: 'password123',
+      })
+
+      const client = createTestClient(app)
+      const res = await client.api.auth['self-register'].$post({
+        json: {
+          email: 'exists@example.com',
+          name: 'Another User',
+          password: 'password123',
+        },
+      })
+
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('Email already in use')
+    })
+
+    it('should validate password length', async () => {
+      const client = createTestClient(app)
+      const res = await client.api.auth['self-register'].$post({
+        json: {
+          email: 'shortpw@example.com',
+          name: 'Short PW User',
+          password: 'short',
+        },
+      })
+
+      expect(res.status).toBe(400)
+    })
+  })
+
+  describe('PATCH /api/auth/users/:id/approve', () => {
+    it('should approve pending user', async () => {
+      const pendingUser = await createTestUser(testDb, {
+        email: 'pending@example.com',
+        name: 'Pending User',
+        password: 'password123',
+        approvedAt: null,
+      })
+
+      const res = await authenticatedRequest(app, `/api/auth/users/${pendingUser.id}/approve`, {
+        method: 'PATCH',
+        cookie: adminCookieHeader,
+      })
+
+      expect(res.status).toBe(200)
+      const data = await res.json() as UserResponse
+      expect(data.user.approvedAt).toBeDefined()
+
+      const dbUser = await testDb.select().from(users).where(eq(users.id, pendingUser.id)).get()
+      expect(dbUser?.approvedAt).not.toBeNull()
+
+      const loginRes = await createTestClient(app).api.auth.login.$post({
+        json: { emailOrUsername: 'pending@example.com', password: 'password123' },
+      })
+      expect(loginRes.status).toBe(200)
+    })
+
+    it('should reject when not admin', async () => {
+      const member = await createTestUser(testDb, {
+        email: 'member@example.com',
+        name: 'Member User',
+        password: 'password123',
+        role: 'member',
+      })
+      const memberCookie = await loginAndGetCookie(app, 'member@example.com', 'password123')
+
+      const pendingUser = await createTestUser(testDb, {
+        email: 'pending2@example.com',
+        name: 'Pending 2',
+        password: 'password123',
+        approvedAt: null,
+      })
+
+      const res = await authenticatedRequest(app, `/api/auth/users/${pendingUser.id}/approve`, {
+        method: 'PATCH',
+        cookie: memberCookie,
+      })
+
+      expect(res.status).toBe(403)
     })
   })
 

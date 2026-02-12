@@ -28,6 +28,7 @@ export interface UserResponse {
     username?: string
     name: string
     role: 'admin' | 'member' | 'viewer'
+    approvedAt?: string | null
   }
 }
 

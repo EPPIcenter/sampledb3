@@ -12,6 +12,7 @@ export interface CreateTestUserOptions {
   password?: string
   username?: string | null
   role?: 'admin' | 'member' | 'viewer' // Defaults to 'member'
+  approvedAt?: string | null // null = pending approval; non-null = approved. Defaults to createdAt (approved)
 }
 
 /**
@@ -28,13 +29,16 @@ export async function createTestUser(
 ) {
   const passwordHash = await bcrypt.hash(options.password || 'password123', 10)
   
+  const createdAt = new Date().toISOString()
+  const approvedAt = options.approvedAt !== undefined ? options.approvedAt : createdAt
   const [user] = await db.insert(users).values({
     email: options.email,
     name: options.name,
     passwordHash,
     username: options.username || null,
     role: options.role || 'member',
-    createdAt: new Date().toISOString(),
+    createdAt,
+    approvedAt, // null = pending; else approved
   }).returning()
 
   return user

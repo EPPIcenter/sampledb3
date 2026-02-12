@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL,
   created TEXT NOT NULL DEFAULT (datetime('now')),
   last_login TEXT,
-  deleted_at TEXT
+  deleted_at TEXT,
+  approved_at TEXT
 );--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,

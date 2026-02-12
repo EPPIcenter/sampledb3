@@ -53,6 +53,7 @@ export const users = sqliteTable('users', {
   createdAt: text('created').notNull().default(sql`current_timestamp`),
   lastLogin: text('last_login'),
   deletedAt: text('deleted_at'), // Soft delete timestamp
+  approvedAt: text('approved_at'), // null = pending approval; non-null = approved
 })
 
 export const sessions = sqliteTable('sessions', {

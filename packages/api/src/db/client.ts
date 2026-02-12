@@ -180,6 +180,20 @@ export function createDatabase(dbPath?: string): { db: ReturnType<typeof drizzle
     } else {
       console.log(`✅ Database connected`)
     }
+
+    // Migration: add approved_at to users if missing (for self-registration approval flow)
+    const usersTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get()
+    if (usersTable) {
+      const userTableInfo = sqlite.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>
+      const hasApprovedAt = userTableInfo.some((col) => col.name === 'approved_at')
+      if (!hasApprovedAt) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`📝 Adding 'approved_at' column to users table...`)
+        }
+        sqlite.exec('ALTER TABLE users ADD COLUMN approved_at TEXT')
+        sqlite.exec("UPDATE users SET approved_at = created WHERE approved_at IS NULL")
+      }
+    }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     if (errorMessage.includes('no such file') || errorMessage.includes('ENOENT')) {

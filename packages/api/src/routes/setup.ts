@@ -69,6 +69,7 @@ const initSchema = z.object({
       }
 
       // 1. Create Admin User
+      const createdAt = new Date().toISOString()
       const passwordHash = await bcrypt.hash(adminPassword, 10)
       await database.insert(users).values({
         id: 1,
@@ -76,7 +77,8 @@ const initSchema = z.object({
         email: adminEmail,
         passwordHash,
         role: 'admin',
-        createdAt: new Date().toISOString()
+        createdAt,
+        approvedAt: createdAt, // Setup admin is immediately approved
       })
 
       const now = new Date().toISOString()

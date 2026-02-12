@@ -81,6 +81,10 @@ auth.post('/login', rateLimit(10, 60 * 1000), async (c) => {
       return c.json({ error: 'Invalid credentials' }, 401)
     }
 
+    if (!user.approvedAt) {
+      return c.json({ error: 'Account pending approval' }, 401)
+    }
+
     // Get session settings
     const sessionSettings = await getSessionSettingsFromDb()
     if (!sessionSettings) {
@@ -121,6 +125,82 @@ auth.post('/login', rateLimit(10, 60 * 1000), async (c) => {
         role: user.role,
       },
     })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    return handleRouteError(error, c)
+  }
+})
+
+// Self-register (public, rate-limited) - creates user with approvedAt=null
+const createSelfRegisterSchema = async () => {
+  const passwordRequirements = await getPasswordRequirementsFromDb()
+  if (!passwordRequirements) {
+    throw new Error('Password requirements are not configured. Please run database initialization.')
+  }
+  const minLength = passwordRequirements.minLength
+  return z.object({
+    email: z.string().email(),
+    name: z.string().min(1),
+    username: z.string().min(1).optional().nullable(),
+    password: z.string().min(minLength),
+  })
+}
+
+auth.post('/self-register', rateLimit(5, 60 * 1000), async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = await createSelfRegisterSchema()
+    const data = schema.parse(body)
+
+    const existingEmail = await database
+      .select()
+      .from(users)
+      .where(and(eq(users.email, data.email), isNull(users.deletedAt)))
+      .get()
+
+    if (existingEmail) {
+      return c.json({ error: 'Email already in use' }, 400)
+    }
+
+    if (data.username) {
+      const existingUsername = await database
+        .select()
+        .from(users)
+        .where(and(eq(users.username, data.username), isNull(users.deletedAt)))
+        .get()
+
+      if (existingUsername) {
+        return c.json({ error: 'Username already in use' }, 400)
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(data.password, 10)
+    const createdAt = new Date().toISOString()
+
+    const [user] = await database
+      .insert(users)
+      .values({
+        email: data.email,
+        username: data.username || null,
+        name: data.name,
+        passwordHash,
+        role: 'member',
+        createdAt,
+        approvedAt: null, // Pending admin approval
+      })
+      .returning()
+
+    return c.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username || undefined,
+        name: user.name,
+        role: user.role,
+      },
+    }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
@@ -203,8 +283,9 @@ auth.post('/register', adminMiddleware, async (c) => {
 
     // Hash password
     const passwordHash = await bcrypt.hash(data.password, 10)
+    const createdAt = new Date().toISOString()
 
-    // Create user
+    // Create user (admin-created users are immediately approved)
     const [user] = await database
       .insert(users)
       .values({
@@ -213,6 +294,8 @@ auth.post('/register', adminMiddleware, async (c) => {
         name: data.name,
         passwordHash,
         role: data.role,
+        createdAt,
+        approvedAt: createdAt,
       })
       .returning()
 
@@ -437,6 +520,7 @@ auth.get('/users', adminMiddleware, async (c) => {
         createdAt: users.createdAt,
         lastLogin: users.lastLogin,
         deletedAt: users.deletedAt,
+        approvedAt: users.approvedAt,
       })
       .from(users)
     
@@ -477,6 +561,10 @@ auth.post('/switch', authMiddleware, async (c) => {
     
     if (!targetUser) {
       return c.json({ error: 'User not found' }, 404)
+    }
+
+    if (!targetUser.approvedAt) {
+      return c.json({ error: 'Account pending approval' }, 401)
     }
     
     // Verify password for the target user
@@ -635,6 +723,7 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
         createdAt: updated.createdAt,
         lastLogin: updated.lastLogin,
         deletedAt: updated.deletedAt,
+        approvedAt: updated.approvedAt ?? undefined,
       },
     })
   } catch (error) {
@@ -642,6 +731,48 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
     return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// Approve user (admin only) - allows pending self-registered users to log in
+auth.patch('/users/:id/approve', adminMiddleware, async (c) => {
+  try {
+    const id = parseInt(c.req.param('id'))
+    if (isNaN(id)) {
+      return c.json({ error: 'Invalid user ID' }, 400)
+    }
+
+    const existing = await database
+      .select()
+      .from(users)
+      .where(and(
+        eq(users.id, id),
+        isNull(users.deletedAt)
+      ))
+      .get()
+
+    if (!existing) {
+      return c.json({ error: 'User not found' }, 404)
+    }
+
+    const approvedAt = new Date().toISOString()
+    await database
+      .update(users)
+      .set({ approvedAt })
+      .where(eq(users.id, id))
+
+    return c.json({
+      user: {
+        id: existing.id,
+        email: existing.email,
+        username: existing.username || undefined,
+        name: existing.name,
+        role: existing.role,
+        approvedAt,
+      },
+    })
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
