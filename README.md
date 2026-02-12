@@ -81,6 +81,43 @@ pnpm dev:production
 DATABASE_PATH=sampledb_database.sqlite pnpm dev:api
 ```
 
+## Deployment
+
+### Docker
+
+```bash
+cp example.env .env   # optional, edit as needed
+docker compose up -d
+```
+
+The app runs on port 3000. See `packages/docs` for full deployment and backup documentation.
+
+**Deployment configuration** — see `example.env`. Copy to `.env` and edit. Variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HOST_DATA_DIR` | `./data` | Host path for the database (bind mount). Set to e.g. `/var/lib/sampledb` to store data elsewhere. |
+| `PORT` | `3000` | Host port to expose. Use when 3000 is already in use. |
+| `DATABASE_PATH` | `/data/sampledb.sqlite` | Path to the SQLite file inside the container. Must match where the volume is mounted. |
+| `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated CORS origins for production. |
+| `ERROR_LOG_ENABLED` | `true` | Enable error logging to database. |
+| `ERROR_LOG_LEVEL` | `error` | Minimum level: `info`, `warning`, `error`. |
+| `ERROR_LOG_RETENTION_DAYS` | — | Days to retain error logs before cleanup. |
+
+### fly.io
+
+See `fly.toml` for a reference configuration. Run `fly launch --no-deploy`, create a volume, then `fly deploy`. No fly.io secrets required for the app; backup secrets go in your backup environment (see deployment guide).
+
+## Backup
+
+Backup is **external** to the app. Use `scripts/backup-db-restic.sh` with restic; run it from cron, systemd, or GitHub Actions.
+
+- **Bind mount** (default `./data:/data`): Run the script with `DATABASE_PATH=./data/sampledb.sqlite` (or `$HOST_DATA_DIR/sampledb.sqlite` if you overrode `HOST_DATA_DIR`)
+- **Named volume**: Use `docker exec sampledb sqlite3 /data/sampledb.sqlite .backup stdout | restic backup ...`
+- **fly.io**: Use `fly ssh console -C "sqlite3 /data/sampledb.sqlite .backup stdout" | restic backup ...`
+
+See `scripts/backup.env.example` and the Deployment guide in `packages/docs` for details.
+
 ## License
 
 MIT

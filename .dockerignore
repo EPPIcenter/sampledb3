@@ -1,0 +1,12 @@
+node_modules
+packages/*/node_modules
+packages/e2e
+*.sqlite
+.git
+.gitignore
+.env*
+design
+examples
+shareholder-overview
+*.md
+!README.md
