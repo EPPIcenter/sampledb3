@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { subjectsApi, specimensApi, collectionsApi } from '../lib/api'
+import { subjectsApi, specimensApi, collectionsApi, importsApi, type BulkCombinedAtomicMode } from '../lib/api'
 import { type ContainerType } from './ContainerRegistration'
 import LocationPicker from './LocationPicker'
 import '../styles/storage.css'
@@ -60,6 +60,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
   const [csvRows, setCsvRows] = useState<CSVRow[]>([])
   const [missingCollections, setMissingCollections] = useState<MissingCollection[]>([])
   const [validatedData, setValidatedData] = useState<Record<string, unknown>[]>([])
+  const [atomicMode, setAtomicMode] = useState<BulkCombinedAtomicMode>('full_file')
 
   const getCollectionType = (): 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | null => {
     switch (containerType) {
@@ -88,10 +89,10 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     }
 
     const containerFields: Record<ContainerType, string[]> = {
-      micronix_tube: ['collection_name', 'barcode', 'position'],
-      cryovial_tube: ['collection_name', 'position'],
-      paper: ['collection_name', 'label'],
-      static_well: ['collection_name', 'position'],
+      micronix_tube: ['plate_name', 'barcode', 'position'],
+      cryovial_tube: ['box_name', 'position'],
+      paper: ['bag_name', 'label'],
+      static_well: ['plate_name', 'position'],
     }
 
     return [...base, ...(containerFields[containerType] || [])]
@@ -166,13 +167,13 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
   const getContainerColumns = (type: ContainerType): string => {
     switch (type) {
       case 'micronix_tube':
-        return 'collection_name,barcode,position,comment'
+        return 'plate_name,barcode,position,comment'
       case 'cryovial_tube':
-        return 'collection_name,barcode,position,comment'
+        return 'box_name,barcode,position,comment'
       case 'paper':
-        return 'collection_name,label,comment'
+        return 'bag_name,label,comment'
       case 'static_well':
-        return 'collection_name,position,comment'
+        return 'plate_name,position,comment'
       default:
         return ''
     }
@@ -203,6 +204,28 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     return fixedStudyShortCode
       ? `${subjectExample},Whole Blood,2024-01-15`
       : `NAM15,${subjectExample},Whole Blood,2024-01-15`
+  }
+
+  const getCollectionNameColumn = (type: ContainerType | 'none' | ''): string | null => {
+    switch (type) {
+      case 'micronix_tube':
+      case 'static_well':
+        return 'plate_name'
+      case 'cryovial_tube':
+        return 'box_name'
+      case 'paper':
+        return 'bag_name'
+      default:
+        return null
+    }
+  }
+
+  const getRowCollectionName = (row: CSVRow): string | undefined => {
+    const column = getCollectionNameColumn(containerType)
+    const value = column ? row[column] : undefined
+    const collectionNameValue = row.collection_name
+    const resolved = (value && value.trim() !== '' ? value : undefined) ?? (collectionNameValue && collectionNameValue.trim() !== '' ? collectionNameValue : undefined)
+    return resolved ?? undefined
   }
 
   const downloadTemplate = () => {
@@ -279,7 +302,12 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     }
 
     const headers = Object.keys(rows[0])
-    const missingColumns = requiredFields.filter(col => !headers.includes(col))
+    const collectionNameColumn = containerType && containerType !== 'none' ? getCollectionNameColumn(containerType) : null
+    const missingColumns = requiredFields.filter((col) => {
+      if (headers.includes(col)) return false
+      if (collectionNameColumn && col === collectionNameColumn && headers.includes('collection_name')) return false
+      return true
+    })
 
     if (missingColumns.length > 0) {
       return {
@@ -304,7 +332,9 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       const rowErrors: string[] = []
 
       for (const field of requiredFields) {
-        if (!row[field] || row[field].trim() === '') {
+        const value = row[field]
+        const hasCollectionName = collectionNameColumn && field === collectionNameColumn && (row.collection_name?.trim() ?? '') !== ''
+        if (!hasCollectionName && (!value || (typeof value === 'string' && value.trim() === ''))) {
           rowErrors.push(`Missing required field: ${field}`)
         }
       }
@@ -352,7 +382,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           if (containerType !== 'none') {
             spec.container = {
               containerType,
-              collectionName: row.collection_name,
+              collectionName: getRowCollectionName(row),
               collectionBarcode: row.collection_barcode || undefined,
               barcode: row.barcode || undefined,
               position: row.position || undefined,
@@ -379,8 +409,9 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
     const uniqueCollections = new Set<string>()
     rows.forEach(row => {
-      if (row.collection_name) {
-        uniqueCollections.add(row.collection_name)
+      const collectionName = getRowCollectionName(row)
+      if (collectionName) {
+        uniqueCollections.add(collectionName)
       }
       if (row.collection_barcode) {
         uniqueCollections.add(row.collection_barcode)
@@ -548,9 +579,17 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
   const handleImport = async (data: Record<string, unknown>[]) => {
     setLoading(true)
     setImportResult(null)
+    setValidationErrors([])
 
     try {
       if (importType === 'subjects') {
+        const validateRes = await subjectsApi.validateBulk({ subjects: data as Array<{ studyShortCode: string; name: string }> })
+        if (!validateRes.data.valid && validateRes.data.errors?.length) {
+          setValidationErrors(validateRes.data.errors.map((e) => ({ row: e.index + 1, error: e.message })))
+          setCurrentStep('import')
+          setLoading(false)
+          return
+        }
         const response = await subjectsApi.createBulk({ subjects: data as Array<{ studyShortCode: string; name: string }> })
         setImportResult({
           success: true,
@@ -578,6 +617,13 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           }
         })
         type SpecimenBulkItem = Parameters<typeof specimensApi.createBulk>[0]['specimens'][number]
+        const validateRes = await specimensApi.validateBulk({ specimens: specimensWithLocations as SpecimenBulkItem[] })
+        if (!validateRes.valid && validateRes.errors?.length) {
+          setValidationErrors(validateRes.errors.map((e) => ({ row: e.index + 1, error: e.message })))
+          setCurrentStep('import')
+          setLoading(false)
+          return
+        }
         const response = await specimensApi.createBulk({ specimens: specimensWithLocations as SpecimenBulkItem[] })
         setImportResult({
           success: true,
@@ -597,7 +643,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           }
         }
 
-        for (const spec of data) {
+        for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
+          const spec = data[rowIndex]
           const studyShortCode = (spec.studyShortCode as string) ?? fixedStudyShortCode ?? ''
           const subjectName = spec.subjectName as string
           const key = `${studyShortCode}:${subjectName}`
@@ -628,41 +675,81 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
             specimenTypeName: spec.specimenTypeName,
             collectionDate: spec.collectionDate,
             container: containerData,
+            rowIndex: rowIndex + 1,
           })
         }
 
-        let totalCreated = 0
-        let totalContainersCreated = 0
-        const allErrors: Array<{ index: number; error: string }> = []
-        let rowIndex = 0
-
-        type WithSpecimensSpecimen = Parameters<typeof subjectsApi.createWithSpecimens>[0]['specimens'][number]
-        for (const [key, specimens] of subjectMap.entries()) {
-          const [studyShortCode, subjectName] = key.split(':')
-          try {
-            const response = await subjectsApi.createWithSpecimens({
-              studyShortCode,
-              subjectName,
-              specimens: specimens as WithSpecimensSpecimen[],
-            })
-
-            totalCreated += response.data.summary.subjectsCreated + response.data.summary.specimensCreated
-            totalContainersCreated += response.data.summary.containersCreated
-          } catch (error: unknown) {
-            const err = error as { response?: { data?: { error?: string } } }
-            allErrors.push({
-              index: rowIndex,
-              error: err.response?.data?.error || 'Failed to create subject with specimens',
-            })
+        const studyShortCode = fixedStudyShortCode ?? (data[0]?.studyShortCode as string) ?? ''
+        const subjects = Array.from(subjectMap.entries()).map(([key, specimens]) => {
+          const [, subjectName] = key.split(':')
+          return {
+            subjectName,
+            specimens: specimens.map((s) => ({
+              specimenTypeName: s.specimenTypeName as string,
+              collectionDate: s.collectionDate as string | undefined,
+              container: s.container as Parameters<typeof importsApi.bulkCombined>[0]['subjects'][0]['specimens'][0]['container'] | undefined,
+              rowIndex: (s as { rowIndex?: number }).rowIndex,
+            })),
           }
-          rowIndex++
+        })
+
+        const createCollections =
+          atomicMode === 'full_file' && missingCollections.some((c) => c.locationId)
+            ? missingCollections
+                .filter((c) => c.locationId != null)
+                .map((c) => {
+                  const name = c.name || (c.barcode ? `Collection-${c.barcode}` : `Collection-${Date.now()}`)
+                  const colType = getCollectionType()
+                  return {
+                    type: colType! as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box',
+                    name,
+                    locationId: c.locationId!,
+                    barcode: c.barcode ?? c.collectionBarcode,
+                  }
+                })
+            : undefined
+
+        const validateRes = await importsApi.bulkCombinedValidate({
+          studyShortCode,
+          atomicMode,
+          createCollections,
+          subjects,
+        })
+        if (!validateRes.data.valid && validateRes.data.errors?.length) {
+          setValidationErrors(
+            validateRes.data.errors.map((e) => ({
+              row: e.rowIndex ?? e.subjectIndex + 1,
+              error: e.message,
+            }))
+          )
+          setCurrentStep('import')
+          setLoading(false)
+          return
         }
 
-        setImportResult({
-          success: allErrors.length === 0,
-          created: totalCreated + totalContainersCreated,
-          errors: allErrors.length > 0 ? allErrors : undefined,
-        })
+        try {
+          const response = await importsApi.bulkCombined({
+            studyShortCode,
+            atomicMode,
+            createCollections,
+            subjects,
+          })
+          const summary = response.data.summary
+          setImportResult({
+            success: !response.data.errors?.length,
+            created: summary.subjectsCreated + summary.specimensCreated + summary.containersCreated,
+            errors: response.data.errors,
+          })
+          setCurrentStep('import')
+        } catch (err: unknown) {
+          const error = err as { response?: { data?: { error?: string } } }
+          setImportResult({
+            success: false,
+            created: 0,
+            errors: [{ index: 0, error: error.response?.data?.error ?? 'Import failed' }],
+          })
+          setCurrentStep('import')
+        }
       }
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string; errors?: Array<{ index: number; error: string }> }; message?: string } }
@@ -754,9 +841,9 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
   const uploadHelperText = () => {
     if (fixedStudyShortCode) {
-      return `This import is for study ${fixedStudyShortCode}. You do not need a study column. Upload a CSV with subject names, specimen type names, and collection names/barcodes as needed.`
+      return `This import is for study ${fixedStudyShortCode}. You do not need a study column. Upload a CSV with subject names, specimen type names, and container names/barcodes as needed.`
     }
-    return `Upload a CSV file. Use study short codes, specimen type names, subject names, and collection names/barcodes as identifiers.`
+    return `Upload a CSV file. Use study short codes, specimen type names, subject names, and container names/barcodes as identifiers.`
   }
 
   return (
@@ -847,6 +934,39 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                 </div>
               )}
 
+              {importType === 'combined' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Atomicity</label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="atomicity"
+                        checked={atomicMode === 'full_file'}
+                        onChange={() => setAtomicMode('full_file')}
+                        className="form-radio"
+                      />
+                      <span>Full file (all-or-nothing)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="atomicity"
+                        checked={atomicMode === 'per_subject'}
+                        onChange={() => setAtomicMode('per_subject')}
+                        className="form-radio"
+                      />
+                      <span>Per subject</span>
+                    </label>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {atomicMode === 'full_file'
+                      ? 'The entire file is imported in one transaction. If anything fails, nothing is committed.'
+                      : 'Each subject is imported in its own transaction. Some subjects can succeed while others fail.'}
+                  </p>
+                </div>
+              )}
+
               {(importType === 'subjects' || ((importType === 'specimens' || importType === 'combined') && containerType)) && (
                 <div>
                   {getRequiredColumnsDisplay()}
@@ -931,7 +1051,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                   <ul className="list-disc list-inside text-red-700 space-y-1">
                     {validationErrors.map((error, i) => (
                       <li key={i}>
-                        {error.row > 0 ? `Row ${error.row + 1}: ` : ''}{error.error}
+                        {error.row > 0 ? `Row ${error.row}: ` : ''}{error.error}
                       </li>
                     ))}
                   </ul>
@@ -1016,24 +1136,55 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                 ))}
               </div>
 
-              <div className="flex space-x-4">
+              <div className="flex flex-wrap gap-3">
                 <button type="button" onClick={() => setCurrentStep('upload')} className="storage-btn-secondary">
                   Back
                 </button>
-                <button
-                  type="button"
-                  onClick={handleCreateCollections}
-                  disabled={loading || missingCollections.some(c => !c.locationId && c.status !== 'success')}
-                  className="storage-btn-primary flex-1 py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                >
-                  {loading ? 'Creating Collections...' : 'Create Collections & Continue'}
-                </button>
+                {importType === 'combined' && atomicMode === 'full_file' ? (
+                  <button
+                    type="button"
+                    onClick={() => handleImport(validatedData)}
+                    disabled={loading || missingCollections.some((c) => !c.locationId)}
+                    className="storage-btn-primary py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    {loading ? 'Importing...' : 'Import (creates collections in same transaction)'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleCreateCollections}
+                    disabled={loading || missingCollections.some((c) => !c.locationId && c.status !== 'success')}
+                    className="storage-btn-primary flex-1 py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    {loading ? 'Creating Collections...' : 'Create Collections & Continue'}
+                  </button>
+                )}
               </div>
             </div>
           )}
 
           {currentStep === 'import' && (
             <div className="space-y-6">
+              {validationErrors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded p-4">
+                  <h3 className="font-semibold text-red-800 mb-2">Validation Errors (fix before importing):</h3>
+                  <p className="text-sm text-red-700 mb-2">The following issues were found. Update your CSV and run Validate & Continue again.</p>
+                  <ul className="list-disc list-inside text-red-700 space-y-1">
+                    {validationErrors.map((error, i) => (
+                      <li key={i}>
+                        {error.row > 0 ? `Row ${error.row}: ` : ''}{error.error}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep('upload')}
+                    className="mt-3 storage-btn-secondary"
+                  >
+                    Back to Upload
+                  </button>
+                </div>
+              )}
               {importResult && (
                 <div className={`border rounded p-4 ${importResult.success ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
                   <h3 className={`font-semibold mb-2 ${importResult.success ? 'text-green-800' : 'text-yellow-800'}`}>
@@ -1061,7 +1212,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                 </div>
               )}
 
-              {!importResult && (
+              {!importResult && loading && (
                 <div className="text-center py-4">
                   <p className="text-gray-600">Import in progress...</p>
                 </div>

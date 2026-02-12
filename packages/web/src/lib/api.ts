@@ -291,6 +291,8 @@ export const subjectsApi = {
   },
   createBulk: (data: { subjects: Array<{ studyShortCode: string; name: string }> }) =>
     api.post<{ subjects: StudySubject[]; created: number; errors?: Array<{ index: number; error: string }> }>('/subjects/bulk', data),
+  validateBulk: (data: { subjects: Array<{ studyShortCode: string; name: string }> }) =>
+    api.post<{ valid: boolean; errors: Array<{ index: number; message: string }> }>('/subjects/bulk/validate', data),
   createWithSpecimens: (data: {
     studyShortCode: string
     subjectName: string
@@ -397,6 +399,10 @@ export const specimensApi = {
   },
   createBulk: async (data: CreateSpecimensBulkData): Promise<SpecimensBulkResponse> => {
     const response = await api.post<SpecimensBulkResponse>('/specimens/bulk', data)
+    return response.data
+  },
+  validateBulk: async (data: CreateSpecimensBulkData): Promise<{ valid: boolean; errors: Array<{ index: number; message: string }> }> => {
+    const response = await api.post<{ valid: boolean; errors: Array<{ index: number; message: string }> }>('/specimens/bulk/validate', data)
     return response.data
   },
 }
@@ -987,6 +993,7 @@ export const collectionsApi = {
     api.get<{ collections: Array<{ id: number; name: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'; barcode: string | null; locationId: number | null; itemCount: number; location: { id: number; path: string | null } | null }> }>('/collections/list-all'),
   moveContainers: (data: {
     collectionType?: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet'
+    atomicMode?: 'all_or_nothing' | 'best_effort'
     mappings: Array<{
       fromCollectionName: string
       toCollectionName: string
@@ -1010,6 +1017,7 @@ export const collectionsApi = {
   }) => api.post<{ success: boolean; moved: number }>('/collections/sheets/move', data),
   moveCollections: (data: {
     collectionType: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+    atomicMode?: 'all_or_nothing' | 'best_effort'
     moves: Array<{
       identifier:
         | { type: 'id'; id: number }
@@ -1456,6 +1464,85 @@ export const derivationsApi = {
       csv,
       settings,
     }),
+}
+
+export type BulkCombinedAtomicMode = 'full_file' | 'per_subject'
+
+export const importsApi = {
+  bulkCombined: (data: {
+    studyShortCode: string
+    atomicMode: BulkCombinedAtomicMode
+    createCollections?: Array<{
+      type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+      name: string
+      locationId: number
+      barcode?: string
+    }>
+    subjects: Array<{
+      subjectName: string
+      specimens: Array<{
+        specimenTypeName: string
+        collectionDate?: string
+        container?: {
+          containerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+          collectionName?: string
+          collectionBarcode?: string
+          barcode?: string
+          position?: string
+          label?: string
+          unitId?: number
+          totalQuantity?: number
+          remainingQuantity?: number
+          comment?: string
+          collectionLocationId?: number
+        }
+      }>
+    }>
+  }) =>
+    api.post<{
+      summary: { subjectsCreated: number; subjectsUpdated: number; specimensCreated: number; containersCreated: number }
+      results: Array<{
+        subject: StudySubject
+        subjectCreated: boolean
+        specimens: Array<{ specimen: Specimen; containerCreated: boolean; containerId?: number }>
+      }>
+      errors?: Array<{ index: number; error: string }>
+    }>('/imports/bulk-combined', data),
+  bulkCombinedValidate: (data: {
+    studyShortCode: string
+    atomicMode: BulkCombinedAtomicMode
+    createCollections?: Array<{
+      type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+      name: string
+      locationId: number
+      barcode?: string
+    }>
+    subjects: Array<{
+      subjectName: string
+      specimens: Array<{
+        specimenTypeName: string
+        collectionDate?: string
+        container?: {
+          containerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+          collectionName?: string
+          collectionBarcode?: string
+          barcode?: string
+          position?: string
+          label?: string
+          unitId?: number
+          totalQuantity?: number
+          remainingQuantity?: number
+          comment?: string
+          collectionLocationId?: number
+        }
+        rowIndex?: number
+      }>
+    }>
+  }) =>
+    api.post<{
+      valid: boolean
+      errors: Array<{ subjectIndex: number; specimenIndex?: number; rowIndex?: number; message: string }>
+    }>('/imports/bulk-combined/validate', data),
 }
 
 /**

@@ -10,6 +10,21 @@ export interface TemplateOptions {
 export function generateDerivationsTemplate(options: TemplateOptions): string {
   const { parentType, settings, sourceType, parentContainerType } = options
   const lines: string[] = []
+  const derivedContainerType = settings.containerType || 'micronix_tube'
+
+  const getCollectionNameColumn = (containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | ''): string => {
+    if (containerType === 'cryovial_tube') return 'box_name'
+    if (containerType === 'paper') return 'bag_name'
+    return 'plate_name'
+  }
+
+  const collectionNameColumn = getCollectionNameColumn(derivedContainerType)
+  const defaultCollectionName =
+    derivedContainerType === 'cryovial_tube'
+      ? 'BOX-001'
+      : derivedContainerType === 'paper'
+        ? 'BAG-001'
+        : 'PLATE-001'
 
   // Determine parent identification columns based on source type and parent container type
   const parentColumns: string[] = []
@@ -46,7 +61,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
   if (!settings.derivationDate) parentColumns.push('derivation_date')
 
   // Always include per-row fields
-  parentColumns.push('collection_name')
+  parentColumns.push(collectionNameColumn)
   parentColumns.push('position')
   parentColumns.push('container_barcode')
   parentColumns.push('notes')
@@ -83,7 +98,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
       lines.push(buildRow({
         parent_control_batch_name: 'Batch-2024-001',
         parent_specimen_type_name: 'Whole Blood', // Example - user should use actual parent specimen type
-        collection_name: settings.containerType === 'paper' ? 'Sheet-001' : 'Plate-001',
+        [collectionNameColumn]: defaultCollectionName,
         position: 'A01',
         container_barcode: 'CHILD001',
         notes: 'First extraction',
@@ -91,7 +106,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
       lines.push(buildRow({
         parent_control_batch_name: 'Batch-2024-001',
         parent_specimen_type_name: 'Whole Blood',
-        collection_name: settings.containerType === 'paper' ? 'Sheet-001' : 'Plate-001',
+        [collectionNameColumn]: defaultCollectionName,
         position: 'A02',
         container_barcode: 'CHILD002',
         notes: 'Second extraction',
@@ -103,7 +118,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
         parent_specimen_type_name: 'Whole Blood',
         parent_box_barcode: 'BOX-001',
         parent_position: 'A01',
-        collection_name: settings.containerType === 'paper' ? 'Sheet-001' : 'Plate-001',
+        [collectionNameColumn]: defaultCollectionName,
         position: settings.containerType === 'cryovial_tube' ? 'B01' : 'A01',
         container_barcode: 'CHILD001',
         notes: 'First extraction',
@@ -113,7 +128,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
         parent_specimen_type_name: 'Whole Blood',
         parent_box_barcode: 'BOX-001',
         parent_position: 'A02',
-        collection_name: settings.containerType === 'paper' ? 'Sheet-001' : 'Plate-001',
+        [collectionNameColumn]: defaultCollectionName,
         position: settings.containerType === 'cryovial_tube' ? 'B02' : 'A02',
         container_barcode: 'CHILD002',
         notes: 'Second extraction',
@@ -123,14 +138,14 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
     // Study subject with micronix/cryovial parent (identified by barcode)
     lines.push(buildRow({
       parent_container_barcode: 'MT001',
-      collection_name: settings.containerType === 'paper' ? 'Sheet-001' : 'Plate-001',
+      [collectionNameColumn]: defaultCollectionName,
       position: 'A01',
       container_barcode: 'CHILD001',
       notes: 'First extraction',
     }))
     lines.push(buildRow({
       parent_container_barcode: 'MT002',
-      collection_name: settings.containerType === 'paper' ? 'Sheet-001' : 'Plate-001',
+      [collectionNameColumn]: defaultCollectionName,
       position: 'A02',
       container_barcode: 'CHILD002',
       notes: 'Second extraction',
@@ -142,7 +157,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
       parent_subject_name: 'SUBJ-001',
       parent_specimen_type_name: 'Whole Blood', // Example - user should use actual parent specimen type
       parent_collection_date: '2024-01-15', // Optional: only needed if subject has multiple specimens of same type
-      collection_name: settings.containerType === 'paper' ? 'Sheet-001' : 'Plate-001',
+      [collectionNameColumn]: defaultCollectionName,
       position: 'A01',
       container_barcode: 'CHILD001',
       notes: 'First extraction',
@@ -152,7 +167,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
       parent_subject_name: 'SUBJ-002',
       parent_specimen_type_name: 'Whole Blood',
       parent_collection_date: '', // Can be empty if not needed
-      collection_name: settings.containerType === 'paper' ? 'Sheet-001' : 'Plate-001',
+      [collectionNameColumn]: defaultCollectionName,
       position: 'A02',
       container_barcode: 'CHILD002',
       notes: 'Second extraction',
@@ -162,7 +177,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
     lines.push(buildRow({
       parent_box_barcode: 'BOX-001',
       parent_position: 'A01',
-      collection_name: settings.containerType === 'paper' ? 'Sheet-001' : 'Plate-001',
+      [collectionNameColumn]: defaultCollectionName,
       position: settings.containerType === 'cryovial_tube' ? 'B01' : 'A01',
       container_barcode: 'CHILD001',
       notes: 'First extraction',
@@ -170,7 +185,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
     lines.push(buildRow({
       parent_box_barcode: 'BOX-001',
       parent_position: 'A02',
-      collection_name: settings.containerType === 'paper' ? 'Sheet-001' : 'Plate-001',
+      [collectionNameColumn]: defaultCollectionName,
       position: settings.containerType === 'cryovial_tube' ? 'B02' : 'A02',
       container_barcode: 'CHILD002',
       notes: 'Second extraction',

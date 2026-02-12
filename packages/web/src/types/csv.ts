@@ -27,7 +27,9 @@ export interface SpecimenCSVRow {
   subject_name: string
   specimen_type_name: string
   collection_date?: string
-  collection_name?: string
+  plate_name?: string
+  box_name?: string
+  bag_name?: string
   collection_barcode?: string
   container_type?: string
   barcode?: string

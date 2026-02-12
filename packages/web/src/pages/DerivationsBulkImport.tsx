@@ -47,6 +47,12 @@ type UrlStep = 'upload' | 'collections' | 'import'
 type SourceType = 'control_batch' | 'study_subject'
 type ParentContainerType = 'paper' | 'cryovial_tube' | 'micronix_tube'
 
+function getCollectionNameColumnByContainerType(containerType: BulkDerivationSettings['containerType'] | ParentContainerType): 'plate_name' | 'box_name' | 'bag_name' {
+  if (containerType === 'cryovial_tube') return 'box_name'
+  if (containerType === 'paper') return 'bag_name'
+  return 'plate_name'
+}
+
 function parseCsvPreview(csv: string): Record<string, string>[] {
   const lines = csv.trim().split(/\r?\n/).filter((l) => l.trim())
   if (lines.length < 2) return []
@@ -96,8 +102,18 @@ function getRequiredAndOptionalColumns(
   if (!settings.protocol) required.push('protocol')
   if (!settings.derivationDate) required.push('derivation_date')
 
-  // Derived container placement (at least one of collection_name / collection_barcode for tube types)
-  required.push('collection_name or collection_barcode')
+  // Derived container placement
+  const fixedContainerType = settings.containerType
+  if (fixedContainerType === 'micronix_tube') {
+    required.push('plate_name or collection_barcode')
+  } else if (fixedContainerType === 'cryovial_tube') {
+    required.push('box_name or collection_barcode')
+  } else if (fixedContainerType === 'paper') {
+    required.push('bag_name')
+  } else {
+    required.push('plate_name / box_name / bag_name (depends on container_type)')
+    optional.push('collection_barcode')
+  }
   required.push('position')
   optional.push('container_barcode')
   optional.push('notes')
@@ -768,7 +784,15 @@ export default function DerivationsBulkImport() {
                       </div>
                     )}
                     <div className="border-t border-gray-200 pt-3 mt-1 space-y-1.5 text-gray-600">
-                      <p><span className="font-medium text-gray-700">collection_name or collection_barcode</span> — At least one required for tube types. Collections are created if they don&apos;t exist.</p>
+                      <p>
+                        <span className="font-medium text-gray-700">
+                          {settings.containerType
+                            ? `${getCollectionNameColumnByContainerType(settings.containerType)}${settings.containerType === 'paper' ? '' : ' or collection_barcode'}`
+                            : 'plate_name / box_name / bag_name (based on container_type)'}
+                        </span>
+                        {' '}
+                        — Required collection identifier. For tube types, collection barcode can also be used. Collections are created if they don&apos;t exist.
+                      </p>
                       <p><span className="font-medium text-gray-700">position</span> — Position in the collection (e.g. A01, B02).</p>
                       <p><span className="font-medium text-gray-700">quantity, unit_symbol, quantity_used, reduce_parent_quantity</span> — Optional. You can set these in Import settings (same for all rows) or provide columns in the CSV (per row). Use <code className="bg-gray-200 px-1 rounded text-xs">quantity_used</code> and <code className="bg-gray-200 px-1 rounded text-xs">reduce_parent_quantity</code> to reduce the parent&apos;s remaining quantity (e.g. DBS spot count). Not a blocker if missing or if data is imperfect.</p>
                       {(sourceType === 'control_batch' || sourceType === 'study_subject') && (
