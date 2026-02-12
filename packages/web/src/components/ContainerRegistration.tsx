@@ -280,6 +280,7 @@ export default function ContainerRegistration({
                         <LocationPicker
                           value={newCollectionLocationId}
                           onChange={setNewCollectionLocationId}
+                          filterCollectionsOnly
                         />
                       </div>
                       <div className="flex justify-end space-x-3">
