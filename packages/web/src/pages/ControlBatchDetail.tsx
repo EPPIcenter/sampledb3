@@ -288,10 +288,10 @@ export default function ControlBatchDetail() {
 
         {createSpecimenModalOpen && (
           <ModalPortal>
-            <div className="fixed inset-0 z-[100] overflow-y-auto">
+            <div className="fixed inset-0 z-[100] overflow-y-auto blood-controls-modal-overlay">
               <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-                <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-md" onClick={() => setCreateSpecimenModalOpen(false)} />
-              <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full max-h-[90vh] overflow-y-auto" style={{ background: 'rgb(var(--dashboard-card))' }}>
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setCreateSpecimenModalOpen(false)} />
+              <div className="relative z-10 inline-block align-bottom blood-controls-modal-panel text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full max-h-[90vh] overflow-y-auto">
                 <div className="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>Add Specimen</h2>
