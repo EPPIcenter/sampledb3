@@ -25,6 +25,11 @@ FROM oven/bun:1-alpine AS runtime
 RUN apk add --no-cache sqlite
 
 WORKDIR /app
+# Production deps for module resolution at runtime
+COPY --from=build /app/package.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/packages/api/node_modules ./packages/api/node_modules
+
 COPY --from=build /app/packages/api/dist ./packages/api/dist
 COPY --from=build /app/packages/api/package.json ./packages/api/
 COPY --from=build /app/packages/api/initial_schema.sql ./packages/api/
