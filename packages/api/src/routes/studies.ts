@@ -889,7 +889,7 @@ studies.delete('/:id', authMiddleware, async (c) => {
       }
     }
 
-    database.transaction((tx) => {
+    await database.transaction((tx) => {
       if (containerIds.length > 0) {
         runBatch(containerIds, (batch) => {
           tx.delete(storageContainerTag)

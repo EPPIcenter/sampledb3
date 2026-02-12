@@ -805,31 +805,79 @@ subjects.post('/bulk', memberMiddleware, async (c) => {
       }, 400)
     }
     
-    // Insert all subjects in a transaction
+    // Insert all subjects in a single transaction (all-or-nothing)
     const now = new Date().toISOString()
     const user = c.get('user')
-    const insertedSubjects = []
-    
-    for (const subject of validSubjects) {
-      const [newSubject] = await dbInstance
-        .insert(studySubject)
-        .values({
-          studyId: subject.studyId,
-          name: subject.name,
-          created: now,
-          lastUpdated: now,
-          createdBy: user?.id,
-          updatedBy: user?.id,
-        })
-        .returning()
-      
-      insertedSubjects.push(newSubject)
-    }
-    
+    const insertedSubjects = await dbInstance.transaction((tx) => {
+      const out: typeof studySubject.$inferSelect[] = []
+      for (const subject of validSubjects) {
+        const result = tx
+          .insert(studySubject)
+          .values({
+            studyId: subject.studyId,
+            name: subject.name,
+            created: now,
+            lastUpdated: now,
+            createdBy: user?.id,
+            updatedBy: user?.id,
+          })
+          .returning()
+          .get()
+        const newSubject = Array.isArray(result) ? result[0] : result
+        out.push(newSubject as typeof studySubject.$inferSelect)
+      }
+      return out
+    })
+
     return c.json({
       subjects: insertedSubjects,
       created: insertedSubjects.length,
     }, 201)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
+// Validate bulk subjects without creating (same body as POST /subjects/bulk)
+subjects.post('/bulk/validate', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      subjects: z.array(z.object({
+        studyShortCode: z.string().min(1),
+        name: z.string().min(1),
+      })),
+    })
+    const data = schema.parse(body)
+    if (data.subjects.length === 0) {
+      return c.json({ error: 'No subjects provided' }, 400)
+    }
+    const errors: Array<{ index: number; message: string }> = []
+    const validSubjects: Array<{ studyId: number; name: string }> = []
+    for (let i = 0; i < data.subjects.length; i++) {
+      const subject = data.subjects[i]
+      const trimmedName = subject.name.trim()
+      const studyValidation = await validateStudyShortCodeLocal(subject.studyShortCode)
+      if (!studyValidation.valid || !studyValidation.studyId) {
+        errors.push({ index: i, message: studyValidation.error || 'Invalid study' })
+        continue
+      }
+      const nameValidation = await validateSubjectNameLocal(studyValidation.studyId, trimmedName)
+      if (!nameValidation.valid) {
+        errors.push({ index: i, message: nameValidation.error || 'Invalid subject name' })
+        continue
+      }
+      validSubjects.push({ studyId: studyValidation.studyId, name: trimmedName })
+    }
+    const seen = new Set<string>()
+    for (let i = 0; i < validSubjects.length; i++) {
+      const key = `${validSubjects[i].studyId}:${validSubjects[i].name}`
+      if (seen.has(key)) {
+        errors.push({ index: i, message: `Duplicate subject name '${validSubjects[i].name}' in study` })
+      }
+      seen.add(key)
+    }
+    return c.json({ valid: errors.length === 0, errors })
   } catch (error) {
     return handleRouteError(error, c)
   }
@@ -1120,7 +1168,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
     const user = c.get('user')
     let result
     try {
-      result = dbInstance.transaction((tx) => {
+      result = await dbInstance.transaction((tx) => {
       const now = new Date().toISOString()
       
       // Get or create subject
@@ -1574,7 +1622,7 @@ subjects.post('/:targetId/merge', memberMiddleware, async (c) => {
 
     // Process merge in a transaction
     const user = c.get('user')
-    const result = dbInstance.transaction((tx) => {
+    const result = await dbInstance.transaction((tx) => {
       const now = new Date().toISOString()
 
       // Statistics (declared inside transaction)

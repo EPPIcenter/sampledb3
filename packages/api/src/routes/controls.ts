@@ -272,7 +272,7 @@ controls.delete('/batches/:id', memberMiddleware, async (c) => {
     }
 
     // Delete in transaction to ensure atomicity
-    dbInstance.transaction((tx) => {
+    await dbInstance.transaction((tx) => {
       // 1. Delete storageContainerTag records for all containers
       if (containerIds.length > 0) {
         tx.delete(storageContainerTag)
