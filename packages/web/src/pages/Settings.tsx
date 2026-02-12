@@ -391,7 +391,13 @@ export default function Settings() {
       <div className="container mx-auto px-4 py-4 relative z-10">
         <div className="mb-3 settings-reveal settings-reveal-1">
           <h1 className="text-2xl font-bold">Application Settings</h1>
-          <p className="settings-description mt-0.5">Configure application, security, and data preferences.</p>
+          <p className="settings-description mt-0.5">
+            Configure application, security, and data preferences.
+            {' '}
+            <a href="/docs/guides/advanced/settings/" className="text-blue-600 hover:text-blue-800 hover:underline">
+              Settings guide
+            </a>
+          </p>
         </div>
 
         {error && (

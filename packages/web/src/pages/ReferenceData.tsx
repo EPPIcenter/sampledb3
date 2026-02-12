@@ -326,7 +326,11 @@ export default function ReferenceData() {
         <div className="mb-6 ref-data-reveal ref-data-reveal-1">
           <h1 className="text-3xl font-bold">Reference Data Management</h1>
           <p className="text-sm text-gray-600 mt-1 ref-data-description">
-            Manage static lookup tables and reference data used throughout the system
+            Manage static lookup tables and reference data used throughout the system.
+            {' '}
+            <a href="/docs/guides/reference-data/overview/" className="text-blue-600 hover:text-blue-800 hover:underline">
+              Reference data guide
+            </a>
           </p>
         </div>
 

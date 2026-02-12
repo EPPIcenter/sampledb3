@@ -44,11 +44,6 @@ describe('ContainerDetail', () => {
     })
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<ContainerDetail />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows container content after load', async () => {
     await render(<ContainerDetail />)
     await waitFor(() => {

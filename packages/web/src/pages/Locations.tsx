@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+
+export interface LocationsProps {
+  variant?: 'default' | 'admin'
+}
 import { locationsApi, searchApi, type LocationHierarchyStats, type CollectionSearchResult } from '../lib/api'
 import { getRootLocations, getLocationChildren, getLocationDescendants, getLocationAncestors, getLocationLabel } from '../lib/location-tree'
 import SkeletonCard from '../components/SkeletonCard'
@@ -11,6 +15,7 @@ import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
 import { useUser } from '../contexts/UserContext'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import '../styles/storage.css'
+import '../styles/admin.css'
 
 interface Location {
   id: number
@@ -39,9 +44,10 @@ interface SelectedNode {
 }
 
 
-export default function Locations() {
+export default function Locations({ variant = 'default' }: LocationsProps) {
   const navigate = useNavigate()
   const { canManageReferenceData } = useUser()
+  const canEdit = variant === 'admin' ? true : canManageReferenceData
   const searchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const treeRef = useRef<HTMLDivElement>(null)
@@ -511,7 +517,7 @@ export default function Locations() {
               </div>
             </div>
           </button>
-          {canManageReferenceData && (
+          {canEdit && (
             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
               <button
                 type="button"
@@ -794,15 +800,31 @@ export default function Locations() {
     )
   }
 
+  const pageClass = variant === 'admin' ? 'admin-page' : 'storage-page'
+  const containerClass = variant === 'admin' ? 'max-w-7xl mx-auto p-6' : 'container mx-auto px-4 py-8'
+
   return (
-    <div className="storage-page">
-      <div className="container mx-auto px-4 py-8 relative z-10">
+    <div className={pageClass}>
+      <div className={containerClass + ' relative z-10'}>
+      {variant === 'admin' && (
+        <Link
+          to="/admin"
+          className="inline-flex items-center text-sm mb-4"
+          style={{ color: 'rgb(var(--dashboard-text-muted))' }}
+        >
+          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to Admin Dashboard
+        </Link>
+      )}
       <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 storage-reveal storage-reveal-1">
         <div>
-          <h1 className="text-3xl font-bold">Storage Locations</h1>
+          <h1 className="text-3xl font-bold">{variant === 'admin' ? 'Location Management' : 'Storage Locations'}</h1>
           <p className="text-sm mt-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
-            Browse all storage roots, levels, and locations. Select a node to see an
-            information-dense preview of its contents.
+            {variant === 'admin'
+              ? 'Create and manage storage locations. Root locations require a storage type; child locations inherit from their parent.'
+              : 'Browse all storage roots, levels, and locations. Select a node to see an information-dense preview of its contents.'}
           </p>
         </div>
         <div className="flex gap-3">
@@ -942,8 +964,24 @@ export default function Locations() {
           </div>
         </div>
       ) : locations.length === 0 ? (
-        <div className="storage-card p-8 text-center" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
-          No locations have been configured yet.
+        <div className="storage-card p-8 text-center">
+          <p className="mb-6" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            No locations have been configured yet.
+          </p>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleAddRoot}
+              disabled={mutationLoading}
+              className="storage-btn-primary inline-flex items-center px-6 py-3 text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Create first location"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create first location
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 storage-reveal storage-reveal-3">
@@ -952,7 +990,7 @@ export default function Locations() {
               <h2 className="text-sm font-semibold storage-section-title">
                 Storage tree
               </h2>
-              {canManageReferenceData && (
+              {canEdit && (
                 <button
                   type="button"
                   onClick={handleAddRoot}

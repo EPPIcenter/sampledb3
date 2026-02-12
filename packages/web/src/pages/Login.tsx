@@ -14,7 +14,8 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null)
 
   // Get redirect path from location state, or default to dashboard
-  const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || '/'
+  const from = (location.state as { from?: { pathname?: string }; fromSetup?: boolean })?.from?.pathname || '/'
+  const fromSetup = (location.state as { fromSetup?: boolean })?.fromSetup ?? false
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -59,6 +60,11 @@ export default function Login() {
           <p className="mt-2 text-center text-sm text-gray-600">
             Enter your credentials to access the application
           </p>
+          {fromSetup && (
+            <p className="mt-3 text-center text-sm text-green-600 font-medium">
+              Setup complete! Please sign in with your admin credentials.
+            </p>
+          )}
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
@@ -110,14 +116,6 @@ export default function Login() {
             >
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
-          </div>
-
-          <div className="text-center text-sm text-gray-600">
-            <p>Test users available:</p>
-            <p className="mt-1 text-xs text-gray-500">
-              test@test.com, alice@test.com, bob@test.com, carol@test.com
-            </p>
-            <p className="mt-1 text-xs text-gray-500">Password: password123</p>
           </div>
         </form>
       </div>

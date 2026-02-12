@@ -37,11 +37,6 @@ describe('AdminSettings', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<AdminSettings />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('renders Settings content', async () => {
     await render(<AdminSettings />)
     await waitFor(() => {

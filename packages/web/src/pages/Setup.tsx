@@ -90,7 +90,7 @@ export default function Setup() {
             }
 
             await setupApi.initialize(payload)
-            navigate('/')
+            navigate('/login', { state: { fromSetup: true } })
         } catch (err: any) {
             setError(err.response?.data?.error || err.message || 'Setup failed')
             setLoading(false)
@@ -127,6 +127,11 @@ export default function Setup() {
                                 step === 3 ? 'Lab Infrastructure' :
                                     'Biology (Optional)'
                     }
+                </p>
+                <p className="mt-1 text-center text-sm">
+                  <a href="/docs/guides/getting-started/setup/" className="text-blue-600 hover:text-blue-800 hover:underline">
+                    Setup guide
+                  </a>
                 </p>
             </div>
 

@@ -23,11 +23,6 @@ describe('AdminStatistics', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<AdminStatistics />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows System Statistics heading', async () => {
     await render(<AdminStatistics />)
     const heading = await screen.findByRole('heading', { name: /system statistics/i })

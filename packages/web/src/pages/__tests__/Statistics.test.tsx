@@ -20,6 +20,7 @@ vi.mock('../../lib/api', () => ({
           total: 0,
           byType: {},
           byTags: {},
+          byState: {},
           averagePerSpecimen: 0,
         },
         storage: {
@@ -41,20 +42,62 @@ describe('Statistics', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<Statistics />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows Statistics heading or filter content', async () => {
     await render(<Statistics />)
-    await waitFor(
-      () => {
-        const heading = screen.queryByRole('heading', { name: /statistics/i })
-        const filter = screen.queryByText(/last 30 days/i)
-        expect(heading ?? filter ?? document.body).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /statistics/i })).toBeInTheDocument()
+    }, { timeout: 3000 })
+  })
+
+  it('renders without crashing with completely empty new-app data (minimal valid structure)', async () => {
+    // Simulate API response from a freshly set up app with no specimens, containers, or locations
+    const { statisticsApi } = await import('../../lib/api')
+    vi.mocked(statisticsApi.get).mockResolvedValue({
+      data: {
+        specimens: {
+          total: 0,
+          bySourceType: {},
+          bySpecimenType: {},
+          byStudy: {},
+          collectionTimeline: [],
+          creationTimeline: [],
+        },
+        containers: {
+          total: 0,
+          byType: {},
+          byTags: {},
+          byState: {},
+          averagePerSpecimen: 0,
+        },
+        storage: {
+          byLocation: [],
+          byRootLocation: {},
+        },
       },
-      { timeout: 3000 }
-    )
+    } as unknown as Awaited<ReturnType<typeof statisticsApi.get>>)
+    const { container } = await render(<Statistics />)
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /statistics/i })).toBeInTheDocument()
+    })
+    expect(container).toBeInTheDocument()
+    // Should show zero values without crashing (multiple stat cards show "0")
+    expect(screen.getAllByText('0').length).toBeGreaterThan(0)
+  })
+
+  it('does not crash when API returns incomplete or malformed structure', async () => {
+    // Simulate edge case: API returns partial/empty structure (e.g. new app, error recovery)
+    const { statisticsApi } = await import('../../lib/api')
+    vi.mocked(statisticsApi.get).mockResolvedValue({
+      data: {
+        specimens: { total: 0 },
+        containers: { total: 0, byState: {} },
+        storage: {},
+      },
+    } as unknown as Awaited<ReturnType<typeof statisticsApi.get>>)
+    const { container } = await render(<Statistics />)
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /statistics/i })).toBeInTheDocument()
+    })
+    expect(container).toBeInTheDocument()
   })
 })

@@ -22,11 +22,6 @@ describe('BloodControls', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<BloodControls />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows Definitions or Batches tab content', async () => {
     await render(<BloodControls />)
     await waitFor(

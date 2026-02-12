@@ -28,11 +28,6 @@ describe('Setup', () => {
     vi.mocked(api.setupApi.status).mockResolvedValue({ data: { initialized: false } } as never)
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<Setup />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows setup-related content', async () => {
     await render(<Setup />)
     const welcome = screen.getByRole('heading', { name: /welcome to sampledb/i })
@@ -123,7 +118,7 @@ describe('Setup', () => {
     await user.click(finishButton)
     await waitFor(() => {
       expect(api.setupApi.initialize).toHaveBeenCalled()
-      expect(mockNavigate).toHaveBeenCalledWith('/')
+      expect(mockNavigate).toHaveBeenCalledWith('/login', { state: { fromSetup: true } })
     })
   })
 

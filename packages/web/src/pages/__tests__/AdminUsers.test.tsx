@@ -21,11 +21,6 @@ describe('AdminUsers', () => {
     vi.mocked(api.adminApi.getUsers).mockResolvedValue({ data: { users: [] } } as never)
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<AdminUsers />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows User Management heading', async () => {
     await render(<AdminUsers />)
     const heading = await screen.findByRole('heading', { name: /user management/i })

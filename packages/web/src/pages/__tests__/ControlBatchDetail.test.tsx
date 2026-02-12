@@ -49,11 +49,6 @@ describe('ControlBatchDetail', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<ControlBatchDetail />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows batch content after load', async () => {
     await render(<ControlBatchDetail />)
     await waitFor(() => {

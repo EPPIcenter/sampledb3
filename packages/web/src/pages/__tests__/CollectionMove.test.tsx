@@ -31,15 +31,6 @@ describe('CollectionMove', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { default: CollectionMove } = await import('../CollectionMove')
-    const { container } = await render(<CollectionMove />)
-    await waitFor(() => {
-      expect(screen.queryByText(/loading collections/i)).not.toBeInTheDocument()
-    })
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows collection move content', async () => {
     const { default: CollectionMove } = await import('../CollectionMove')
     await render(<CollectionMove />)

@@ -31,15 +31,13 @@ describe('BulkImportFlow', () => {
 
   it('renders upload step content', async () => {
     await render(<BulkImportFlow />)
-    const stepText = screen.queryByText(/Upload.*Validate/i)
-    const validateBtn = screen.queryByRole('button', { name: /validate & continue/i })
-    expect(stepText ?? validateBtn).toBeTruthy()
+    expect(screen.getByRole('button', { name: /validate.*continue/i })).toBeInTheDocument()
   })
 
   it('shows Validate & Continue or Download template on upload step', async () => {
     await render(<BulkImportFlow />)
-    const validateBtn = screen.queryByRole('button', { name: /validate & continue/i })
+    const validateBtn = screen.queryByRole('button', { name: /validate.*continue/i })
     const downloadLink = screen.queryByText(/download template|template/i)
-    expect(validateBtn ?? downloadLink ?? document.body).toBeTruthy()
+    expect(validateBtn ?? downloadLink).toBeTruthy()
   })
 })

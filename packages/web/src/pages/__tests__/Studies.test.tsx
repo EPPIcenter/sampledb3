@@ -39,15 +39,6 @@ describe('Studies', () => {
     })
   })
 
-  it('renders without crashing', async () => {
-    const { default: Studies } = await import('../Studies')
-    const { container } = await render(<Studies />)
-    await waitFor(() => {
-      expect(screen.getByText('No studies found')).toBeInTheDocument()
-    })
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows studies page content', async () => {
     const { default: Studies } = await import('../Studies')
     await render(<Studies />)

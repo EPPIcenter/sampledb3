@@ -23,13 +23,6 @@ describe('ControlDefinitionForm', () => {
     vi.clearAllMocks()
   })
 
-  it('renders with cancel and create flow', async () => {
-    const onCancel = vi.fn()
-    await render(<ControlDefinitionForm onCancel={onCancel} />)
-    const cancelBtn = screen.queryByRole('button', { name: /cancel/i })
-    expect(cancelBtn ?? screen.getByRole('button', { name: /save|create|submit/i }) ?? document.body).toBeTruthy()
-  })
-
   it('shows Create and Cancel buttons', async () => {
     await render(<ControlDefinitionForm />)
     expect(screen.getByRole('button', { name: /create/i })).toBeInTheDocument()

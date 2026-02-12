@@ -135,13 +135,8 @@ describe('ReferenceData Page', () => {
   })
 
   describe('Data Loading', () => {
-    it('should load data for specimen-types tab', async () => {
-      // This test is simplified - the actual data loading is complex
-      // and would require mocking the entire config system
-      // For now, we'll just verify the page renders
+    it('renders specimen-types tab with Reference Data Management heading', async () => {
       await render(<ReferenceData />)
-
-      // Just verify the page renders - data loading is tested in integration
       await waitFor(() => {
         expect(screen.getByText('Reference Data Management')).toBeInTheDocument()
       })
@@ -185,29 +180,12 @@ describe('ReferenceData Page', () => {
     })
   })
 
-  describe('Locations Tab (with pagination and search)', () => {
-    it('should show pagination for locations tab', async () => {
+  describe('Locations Tab', () => {
+    it('renders locations tab when clicked', async () => {
       const user = userEvent.setup()
       await render(<ReferenceData />)
-
-      // Switch to locations tab
       const locationsTab = screen.getByText('Locations')
       await user.click(locationsTab)
-
-      // Just verify tab switching works - pagination rendering is complex
-      expect(locationsTab).toBeInTheDocument()
-    })
-
-    it('should handle search for locations', async () => {
-      const user = userEvent.setup()
-      
-      await render(<ReferenceData />)
-
-      // Switch to locations tab
-      const locationsTab = screen.getByText('Locations')
-      await user.click(locationsTab)
-
-      // Verify tab switched - search input rendering is tested in component tests
       expect(locationsTab).toBeInTheDocument()
     })
   })

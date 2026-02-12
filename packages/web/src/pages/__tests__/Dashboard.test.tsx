@@ -26,15 +26,10 @@ describe('Dashboard', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<Dashboard />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('eventually shows dashboard content or metrics', async () => {
     await render(<Dashboard />)
     await vi.waitFor(() => {
-      const el = screen.queryByRole('main') ?? document.querySelector('[class*="dashboard"]') ?? document.body
+      const el = screen.queryByRole('main') ?? document.querySelector('[class*="dashboard"]')
       expect(el).toBeTruthy()
     }, { timeout: 3000 })
   })

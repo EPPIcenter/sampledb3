@@ -35,6 +35,6 @@ describe('SubjectForm', () => {
     )
     const nameInput = screen.queryByLabelText(/name/i)
     const submit = screen.queryByRole('button', { name: /save|create|submit/i })
-    expect(nameInput ?? submit ?? document.body).toBeTruthy()
+    expect(nameInput ?? submit).toBeTruthy()
   })
 })

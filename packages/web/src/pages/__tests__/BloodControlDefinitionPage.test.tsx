@@ -30,11 +30,6 @@ describe('BloodControlDefinitionPage', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<BloodControlDefinitionPage />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows New Blood Control Definition heading when id is undefined', async () => {
     await render(<BloodControlDefinitionPage />)
     const headings = screen.getAllByRole('heading', { name: /new blood control definition/i })

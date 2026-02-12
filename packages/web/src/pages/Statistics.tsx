@@ -100,7 +100,32 @@ export default function Statistics() {
       if (filtersToApply.locationId) apiFilters.location_id = filtersToApply.locationId
 
       const response = await statisticsApi.get(apiFilters)
-      setData(response.data)
+      const raw = response.data
+      // Defensive: ensure we have the expected structure (handles new/empty app, malformed responses)
+      const specimens = raw?.specimens ?? {}
+      const containers = raw?.containers ?? {}
+      const storage = raw?.storage ?? {}
+      setData({
+        specimens: {
+          total: specimens.total ?? 0,
+          bySourceType: specimens.bySourceType ?? {},
+          bySpecimenType: specimens.bySpecimenType ?? {},
+          byStudy: specimens.byStudy ?? {},
+          collectionTimeline: Array.isArray(specimens.collectionTimeline) ? specimens.collectionTimeline : [],
+          creationTimeline: Array.isArray(specimens.creationTimeline) ? specimens.creationTimeline : [],
+        },
+        containers: {
+          total: containers.total ?? 0,
+          byType: containers.byType ?? {},
+          byTags: containers.byTags ?? {},
+          byState: containers.byState ?? (containers as Record<string, unknown>).byStatus ?? {},
+          averagePerSpecimen: typeof containers.averagePerSpecimen === 'number' ? containers.averagePerSpecimen : 0,
+        },
+        storage: {
+          byLocation: Array.isArray(storage.byLocation) ? storage.byLocation : [],
+          byRootLocation: storage.byRootLocation ?? {},
+        },
+      })
       setAppliedFilters(filtersToApply)
     } catch (error) {
       console.error('Failed to load statistics:', error)

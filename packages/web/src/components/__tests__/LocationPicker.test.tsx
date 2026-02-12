@@ -23,7 +23,7 @@ describe('LocationPicker', () => {
     })
   })
 
-  it('renders without crashing', async () => {
+  it('calls locations API on mount', async () => {
     const onChange = vi.fn()
     await render(<LocationPicker value={null} onChange={onChange} />)
     expect(mockList).toHaveBeenCalled()

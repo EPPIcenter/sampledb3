@@ -12,11 +12,6 @@ describe('Derivations', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<Derivations />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows Derivations heading', async () => {
     await render(<Derivations />)
     const heading = screen.getByRole('heading', { name: /derivations/i })

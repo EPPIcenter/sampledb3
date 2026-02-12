@@ -28,11 +28,6 @@ describe('AdminDashboard', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<AdminDashboard />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows Admin Dashboard heading', async () => {
     await render(<AdminDashboard />)
     const heading = await screen.findByRole('heading', { name: /admin dashboard/i })

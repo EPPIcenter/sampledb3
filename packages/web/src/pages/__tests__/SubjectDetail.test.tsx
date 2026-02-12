@@ -40,11 +40,6 @@ describe('SubjectDetail', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<SubjectDetail />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows subject name after load', async () => {
     await render(<SubjectDetail />)
     await waitFor(() => {

@@ -13,7 +13,7 @@ vi.mock('../../../lib/api', () => ({
 }))
 
 vi.mock('../../ModalPortal', () => ({ default: ({ children }: { children: React.ReactNode }) => children }))
-vi.mock('../../forms/ControlDefinitionForm', () => ({ default: () => <div data-testid="control-definition-form">Form</div> }))
+vi.mock('../../forms/ControlDefinitionForm', () => ({ default: () => <div>Form</div> }))
 
 const defaultBatchInfo = {
   controlDefinitionId: 0,
@@ -41,7 +41,6 @@ describe('BatchInfoStep', () => {
       />
     )
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument()
-    const nextBtn = screen.queryByRole('button', { name: /next/i })
-    expect(nextBtn ?? screen.getByRole('button', { name: /continue/i }) ?? document.body).toBeTruthy()
+    expect(screen.getByRole('button', { name: /next|continue/i })).toBeInTheDocument()
   })
 })

@@ -29,11 +29,6 @@ describe('DerivationsBulkImport', () => {
     ;(api.unitsApi.list as unknown as { mockResolvedValue: (value: unknown) => unknown }).mockResolvedValue({ data: [] })
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<DerivationsBulkImport />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows derivation import content', async () => {
     await render(<DerivationsBulkImport />)
     await waitFor(() => {

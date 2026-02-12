@@ -27,12 +27,6 @@ describe('StudyNew', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { default: StudyNew } = await import('../StudyNew')
-    const { container } = await render(<StudyNew />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows Create Study heading when user can write', async () => {
     const { default: StudyNew } = await import('../StudyNew')
     await render(<StudyNew />)

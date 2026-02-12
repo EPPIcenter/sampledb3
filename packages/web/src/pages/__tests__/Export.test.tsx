@@ -20,11 +20,6 @@ describe('Export', () => {
     vi.mocked(api.exportConfigurationsApi.getPersonal).mockResolvedValue({ data: { configurations: [] } } as never)
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<Export />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows export-related content', async () => {
     await render(<Export />)
     await waitFor(() => {

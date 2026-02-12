@@ -18,11 +18,6 @@ describe('BarcodeExport', () => {
     vi.mocked(api.exportConfigurationsApi.getPersonal).mockResolvedValue({ data: { configurations: [] } } as never)
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<BarcodeExport />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows barcode export content', async () => {
     await render(<BarcodeExport />)
     await waitFor(() => {

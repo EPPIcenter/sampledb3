@@ -14,11 +14,6 @@ describe('AdminErrorLogs', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<AdminErrorLogs />)
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows Error Logs heading', async () => {
     await render(<AdminErrorLogs />)
     const heading = await screen.findByRole('heading', { name: /error logs/i })

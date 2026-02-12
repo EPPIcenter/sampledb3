@@ -30,14 +30,6 @@ describe('BloodControls', () => {
     vi.clearAllMocks()
   })
 
-  it('renders without crashing', async () => {
-    const { container } = await render(<BloodControls />)
-    await waitFor(() => {
-      expect(screen.getByText('Total Definitions')).toBeInTheDocument()
-    })
-    expect(container).toBeInTheDocument()
-  })
-
   it('shows blood controls content', async () => {
     await render(<BloodControls />)
     const heading = await screen.findByRole('heading', { name: /blood controls management/i })

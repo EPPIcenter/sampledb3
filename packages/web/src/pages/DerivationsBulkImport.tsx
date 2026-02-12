@@ -772,6 +772,10 @@ export default function DerivationsBulkImport() {
                   <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 space-y-3">
                     <p className="font-medium text-gray-900">
                       CSV template guide
+                      {' — '}
+                      <a href="/docs/guides/features/derivations/" className="text-blue-600 hover:text-blue-800 hover:underline">
+                        full guide
+                      </a>
                     </p>
                     <div>
                       <p className="font-medium text-gray-800 mb-0.5">Required columns</p>
