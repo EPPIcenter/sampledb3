@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import { parseCsv, validateDerivationsCsv, importDerivationsFromCsv } from '../derivations-csv'
 import type { Database } from '../../db/client'
+import { containerDerivation } from '../../db/schema'
 
 describe('derivations-csv', () => {
   describe('parseCsv', () => {
@@ -65,17 +66,17 @@ describe('derivations-csv', () => {
       if (sqlite) cleanupTestDatabase(sqlite)
     })
 
-    it('returns invalid when collection_name and collection_barcode missing for micronix_tube', async () => {
+    it('returns invalid when plate_name and collection_barcode missing for micronix_tube', async () => {
       const text = 'parent_container_id,derivation_type,specimen_type_name,container_type\n1,Extraction,Blood,micronix_tube'
       const result = await validateDerivationsCsv(testDb, text)
       expect(result.rows.length).toBe(1)
       expect(result.rows[0].valid).toBe(false)
-      expect(result.rows[0].error).toMatch(/collection_name or collection_barcode is required/)
+      expect(result.rows[0].error).toMatch(/plate_name or collection_barcode is required/)
       expect(result.summary.invalid).toBeGreaterThanOrEqual(1)
     })
 
     it('returns invalid when parent container does not exist', async () => {
-      const text = 'parent_container_id,derivation_type,specimen_type_name,container_type,collection_name,position\n99999,Extraction,Blood,micronix_tube,Plate1,A01'
+      const text = 'parent_container_id,derivation_type,specimen_type_name,container_type,plate_name,position\n99999,Extraction,Blood,micronix_tube,PLATE-001,A01'
       const result = await validateDerivationsCsv(testDb, text)
       expect(result.rows.length).toBe(1)
       expect(result.rows[0].valid).toBe(false)
@@ -108,7 +109,15 @@ describe('derivations-csv', () => {
       const result = await validateDerivationsCsv(testDb, text)
       expect(result.rows.length).toBe(1)
       expect(result.rows[0].valid).toBe(false)
-      expect(result.rows[0].error).toMatch(/collection_name or collection_barcode is required.*cryovial_tube/)
+      expect(result.rows[0].error).toMatch(/box_name or collection_barcode is required.*cryovial_tube/)
+    })
+
+    it('rejects legacy collection_name column for micronix_tube rows', async () => {
+      const text = 'parent_container_id,derivation_type,specimen_type_name,container_type,collection_name,position\n1,Extraction,Blood,micronix_tube,PLATE-001,A01'
+      const result = await validateDerivationsCsv(testDb, text)
+      expect(result.rows.length).toBe(1)
+      expect(result.rows[0].valid).toBe(false)
+      expect(result.rows[0].error).toMatch(/plate_name or collection_barcode is required/)
     })
 
     it('returns invalid when protocol in CSV conflicts with settings', async () => {
@@ -158,6 +167,18 @@ describe('derivations-csv', () => {
           },
         })
       ).rejects.toThrow(/derivation_type in CSV conflicts with shared settings/)
+    })
+
+    it('does not persist derivations when transaction mode import fails', async () => {
+      const before = await testDb.select().from(containerDerivation)
+      const text = 'parent_container_id,derivation_type,specimen_type_name,container_type,plate_name,position\n999999,Extraction,Blood,micronix_tube,PLATE-001,A01'
+
+      const result = await importDerivationsFromCsv(testDb, text, { dryRun: false })
+
+      expect(result.rows).toHaveLength(1)
+      expect(result.rows[0].success).toBe(false)
+      const after = await testDb.select().from(containerDerivation)
+      expect(after.length).toBe(before.length)
     })
   })
 })

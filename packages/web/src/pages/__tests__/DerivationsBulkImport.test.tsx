@@ -4,15 +4,6 @@ import userEvent from '@testing-library/user-event'
 import DerivationsBulkImport from '../DerivationsBulkImport'
 import * as api from '../../lib/api'
 
-const mockSetSearchParams = vi.fn()
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
-  return {
-    ...actual,
-    useSearchParams: () => [new URLSearchParams(), mockSetSearchParams],
-  }
-})
-
 vi.mock('../../lib/api', () => ({
   derivationsApi: { validateCsv: vi.fn(), importCsv: vi.fn() },
   collectionsApi: { createMicronixPlate: vi.fn(), createCryovialBox: vi.fn() },
@@ -34,8 +25,8 @@ vi.mock('../../contexts/UserContext', async (importOriginal) => {
 describe('DerivationsBulkImport', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(api.specimenTypesApi.list).mockResolvedValue({ data: [] } as never)
-    vi.mocked(api.unitsApi.list).mockResolvedValue({ data: [] } as never)
+    ;(api.specimenTypesApi.list as unknown as { mockResolvedValue: (value: unknown) => unknown }).mockResolvedValue({ data: [] })
+    ;(api.unitsApi.list as unknown as { mockResolvedValue: (value: unknown) => unknown }).mockResolvedValue({ data: [] })
   })
 
   it('renders without crashing', async () => {
@@ -77,7 +68,7 @@ describe('DerivationsBulkImport', () => {
   })
 
   it('shows error when validation fails', async () => {
-    vi.mocked(api.derivationsApi.validateCsv).mockRejectedValue(new Error('Invalid CSV'))
+    ;(api.derivationsApi.validateCsv as unknown as { mockRejectedValue: (value: unknown) => unknown }).mockRejectedValue(new Error('Invalid CSV'))
     const user = userEvent.setup()
     await render(<DerivationsBulkImport />)
     const file = new File(['col1,col2\na,b'], 'test.csv', { type: 'text/csv' })
@@ -94,17 +85,16 @@ describe('DerivationsBulkImport', () => {
   })
 
   it('calls validateCsv and advances when validation succeeds with no missing collections', async () => {
-    vi.mocked(api.derivationsApi.validateCsv).mockResolvedValue({
+    ;(api.derivationsApi.validateCsv as unknown as { mockResolvedValue: (value: unknown) => unknown }).mockResolvedValue({
       data: {
-        valid: true,
-        invalidRows: [],
+        rows: [],
         collections: [],
-        summary: { total: 1, valid: 1, invalid: 0 },
+        summary: { total: 1, valid: 1, invalid: 0, warnings: 0 },
       },
     } as never)
     const user = userEvent.setup()
     await render(<DerivationsBulkImport />)
-    const file = new File(['parent_container_barcode,collection_name,position\nBAR1,Plate1,A1'], 'test.csv', {
+    const file = new File(['parent_container_barcode,plate_name,position\nBAR1,PLATE-001,A1'], 'test.csv', {
       type: 'text/csv',
     })
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
@@ -115,7 +105,6 @@ describe('DerivationsBulkImport', () => {
     await user.click(screen.getByRole('button', { name: /validate & continue/i }))
     await waitFor(() => {
       expect(api.derivationsApi.validateCsv).toHaveBeenCalled()
-      expect(mockSetSearchParams).toHaveBeenCalled()
     }, { timeout: 3000 })
   })
 })

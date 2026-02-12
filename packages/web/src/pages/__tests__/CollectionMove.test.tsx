@@ -110,4 +110,105 @@ describe('CollectionMove', () => {
     expect(screen.getByText(/micronix plates/i)).toBeInTheDocument()
     expect(screen.getByText(/cryovial boxes/i)).toBeInTheDocument()
   })
+
+  it('uses all_or_nothing by default when executing collection move', async () => {
+    const locations = [
+      { id: 1, name: 'F1', path: 'F1', parentId: null, canContainCollections: true, description: undefined, storageTypeId: null, effectiveStorageTypeName: '-80°C', created: '', lastUpdated: '' },
+      { id: 2, name: 'F2', path: 'F2', parentId: null, canContainCollections: true, description: undefined, storageTypeId: null, effectiveStorageTypeName: '-80°C', created: '', lastUpdated: '' },
+    ]
+    const collections = [
+      { id: 11, name: 'Plate Default', type: 'micronix_plate' as const, itemCount: 0, locationId: 1, location: { id: 1, path: 'F1' }, barcode: null },
+    ]
+    vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations } } as Awaited<ReturnType<typeof locationsApi.list>>)
+    vi.mocked(collectionsApi.listAllCollections).mockResolvedValue({ data: { collections } } as Awaited<ReturnType<typeof collectionsApi.listAllCollections>>)
+    vi.mocked(collectionsApi.moveCollections).mockResolvedValue({
+      data: { success: true, moved: 1 },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {} as import('axios').InternalAxiosRequestConfig,
+    } as Awaited<ReturnType<typeof collectionsApi.moveCollections>>)
+
+    const { default: CollectionMove } = await import('../CollectionMove')
+    const user = userEvent.setup()
+    render(<CollectionMove />)
+
+    await waitFor(() => {
+      expect(screen.queryByText(/loading collections/i)).not.toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /f1/i }))
+    await user.click(screen.getAllByRole('checkbox')[0])
+    await user.click(screen.getByRole('button', { name: /continue with 1 collection/i }))
+
+    await user.click(screen.getByRole('button', { name: /select locations/i }))
+    const selectButtons = await screen.findAllByRole('button', { name: /select/i })
+    await user.click(selectButtons[2])
+
+    const strictRadio = screen.getByRole('radio', { name: /all-or-nothing/i }) as HTMLInputElement
+    expect(strictRadio.checked).toBe(true)
+
+    await user.click(screen.getByRole('button', { name: /confirm & move/i }))
+    await waitFor(() => {
+      expect(collectionsApi.moveCollections).toHaveBeenCalled()
+    })
+
+    expect(collectionsApi.moveCollections).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionType: 'micronix_plate',
+        atomicMode: 'all_or_nothing',
+      })
+    )
+  })
+
+  it('sends best_effort when selected in collection move controls', async () => {
+    const locations = [
+      { id: 1, name: 'F1', path: 'F1', parentId: null, canContainCollections: true, description: undefined, storageTypeId: null, effectiveStorageTypeName: '-80°C', created: '', lastUpdated: '' },
+      { id: 2, name: 'F2', path: 'F2', parentId: null, canContainCollections: true, description: undefined, storageTypeId: null, effectiveStorageTypeName: '-80°C', created: '', lastUpdated: '' },
+    ]
+    const collections = [
+      { id: 21, name: 'Plate BestEffort', type: 'micronix_plate' as const, itemCount: 0, locationId: 1, location: { id: 1, path: 'F1' }, barcode: null },
+    ]
+    vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations } } as Awaited<ReturnType<typeof locationsApi.list>>)
+    vi.mocked(collectionsApi.listAllCollections).mockResolvedValue({ data: { collections } } as Awaited<ReturnType<typeof collectionsApi.listAllCollections>>)
+    vi.mocked(collectionsApi.moveCollections).mockResolvedValue({
+      data: { success: true, moved: 1 },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {} as import('axios').InternalAxiosRequestConfig,
+    } as Awaited<ReturnType<typeof collectionsApi.moveCollections>>)
+
+    const { default: CollectionMove } = await import('../CollectionMove')
+    const user = userEvent.setup()
+    render(<CollectionMove />)
+
+    await waitFor(() => {
+      expect(screen.queryByText(/loading collections/i)).not.toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /f1/i }))
+    await user.click(screen.getAllByRole('checkbox')[0])
+    await user.click(screen.getByRole('button', { name: /continue with 1 collection/i }))
+
+    await user.click(screen.getByRole('button', { name: /select locations/i }))
+    const selectButtons = await screen.findAllByRole('button', { name: /select/i })
+    await user.click(selectButtons[2])
+
+    const bestEffortRadio = screen.getByRole('radio', { name: /best effort/i }) as HTMLInputElement
+    await user.click(bestEffortRadio)
+    expect(bestEffortRadio.checked).toBe(true)
+
+    await user.click(screen.getByRole('button', { name: /confirm & move/i }))
+    await waitFor(() => {
+      expect(collectionsApi.moveCollections).toHaveBeenCalled()
+    })
+
+    expect(collectionsApi.moveCollections).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionType: 'micronix_plate',
+        atomicMode: 'best_effort',
+      })
+    )
+  })
 })

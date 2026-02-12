@@ -247,5 +247,159 @@ describe('container-move', () => {
       expect(after!.currentPosition).toBe('A02')
       expect(after!.barcode).toBe('MT-MOVE-001')
     })
+
+    it('rejects conflicting target positions and does not move any containers', async () => {
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'LocConflict', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(testDb, { name: 'ConflictPlate', locationId: location.id })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
+      const specimenA = await createTestSpecimen(testDb, specimenType.id)
+      const specimenB = await createTestSpecimen(testDb, specimenType.id)
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const now = new Date().toISOString()
+
+      const [containerA] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: specimenA.id,
+          unitId: unit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+      const [containerB] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: specimenB.id,
+          unitId: unit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      await testDb.insert(micronixTube).values({
+        id: containerA!.id,
+        collectionId: plate.id,
+        barcode: 'MT-COLLIDE-001',
+        position: 'A01',
+      })
+      await testDb.insert(micronixTube).values({
+        id: containerB!.id,
+        collectionId: plate.id,
+        barcode: 'MT-COLLIDE-002',
+        position: 'A02',
+      })
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: 'ConflictPlate', toCollectionName: 'ConflictPlate' }],
+        moves: [
+          { identifier: { type: 'barcode', barcode: 'MT-COLLIDE-001' }, targetPosition: 'A03' },
+          { identifier: { type: 'barcode', barcode: 'MT-COLLIDE-002' }, targetPosition: 'A03' },
+        ],
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.moved).toBe(0)
+      expect(result.errors?.length).toBeGreaterThan(0)
+
+      const afterA01 = await resolveContainerByPosition(testDb, 'ConflictPlate', 'micronix_plate', 'A01')
+      const afterA02 = await resolveContainerByPosition(testDb, 'ConflictPlate', 'micronix_plate', 'A02')
+      expect(afterA01?.barcode).toBe('MT-COLLIDE-001')
+      expect(afterA02?.barcode).toBe('MT-COLLIDE-002')
+    })
+
+    it('all_or_nothing mode blocks all moves when any row is invalid', async () => {
+      const storageType = await createTestStorageType(testDb, { name: 'FreezerAtomic' })
+      const location = await createTestLocation(testDb, { name: 'LocAtomic', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(testDb, { name: 'AtomicPlate', locationId: location.id })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'BloodAtomic' })
+      const specimen = await createTestSpecimen(testDb, specimenType.id)
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const now = new Date().toISOString()
+
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: specimen.id,
+          unitId: unit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+      await testDb.insert(micronixTube).values({
+        id: container!.id,
+        collectionId: plate.id,
+        barcode: 'MT-ATOMIC-001',
+        position: 'A01',
+      })
+
+      const result = await executeMoves(testDb, {
+        atomicMode: 'all_or_nothing',
+        mappings: [{ fromCollectionName: 'AtomicPlate', toCollectionName: 'AtomicPlate' }],
+        moves: [
+          { identifier: { type: 'barcode', barcode: 'MT-ATOMIC-001' }, targetPosition: 'A02' },
+          { identifier: { type: 'barcode', barcode: 'MISSING-BARCODE' }, targetPosition: 'B01' },
+        ],
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.moved).toBe(0)
+      expect(result.errors?.length).toBeGreaterThan(0)
+
+      const stillAtA01 = await resolveContainerByPosition(testDb, 'AtomicPlate', 'micronix_plate', 'A01')
+      const movedToA02 = await resolveContainerByPosition(testDb, 'AtomicPlate', 'micronix_plate', 'A02')
+      expect(stillAtA01?.barcode).toBe('MT-ATOMIC-001')
+      expect(movedToA02).toBeNull()
+    })
+
+    it('best_effort mode moves valid rows and reports invalid rows', async () => {
+      const storageType = await createTestStorageType(testDb, { name: 'FreezerBestEffort' })
+      const location = await createTestLocation(testDb, { name: 'LocBestEffort', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(testDb, { name: 'BestEffortPlate', locationId: location.id })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'BloodBestEffort' })
+      const specimen = await createTestSpecimen(testDb, specimenType.id)
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const now = new Date().toISOString()
+
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: specimen.id,
+          unitId: unit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+      await testDb.insert(micronixTube).values({
+        id: container!.id,
+        collectionId: plate.id,
+        barcode: 'MT-BESTEFFORT-001',
+        position: 'A01',
+      })
+
+      const result = await executeMoves(testDb, {
+        atomicMode: 'best_effort',
+        mappings: [{ fromCollectionName: 'BestEffortPlate', toCollectionName: 'BestEffortPlate' }],
+        moves: [
+          { identifier: { type: 'barcode', barcode: 'MT-BESTEFFORT-001' }, targetPosition: 'A02' },
+          { identifier: { type: 'barcode', barcode: 'MISSING-BARCODE' }, targetPosition: 'B01' },
+        ],
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.moved).toBe(1)
+      expect(result.errors?.some((e) => e.error.includes('Container not found'))).toBe(true)
+
+      const movedToA02 = await resolveContainerByPosition(testDb, 'BestEffortPlate', 'micronix_plate', 'A02')
+      expect(movedToA02?.barcode).toBe('MT-BESTEFFORT-001')
+    })
   })
 })

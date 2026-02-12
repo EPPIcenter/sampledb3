@@ -285,4 +285,31 @@ describe('ContainerMoveMicronix', () => {
             expect(screen.getByText(/Some containers are not from micronix plates/i)).toBeInTheDocument()
         }, { timeout: 5000 })
     })
+
+    it('sends selected atomic mode in move payload', async () => {
+        mockGetSearchParams.mockImplementation((key: string) => (key === 'step' ? 'resolve' : null))
+        vi.mocked(collectionsApi.moveContainers).mockResolvedValue({
+            data: { success: true, moved: 0 }
+        } as any)
+
+        await renderWithProviders(<ContainerMoveMicronix />)
+
+        await waitFor(() => {
+            expect(screen.getByText('Resolved Micronix Tubes')).toBeInTheDocument()
+        })
+
+        const bestEffort = screen.getByRole('radio', { name: /best effort/i })
+        fireEvent.click(bestEffort)
+
+        fireEvent.click(screen.getByRole('button', { name: /execute moves/i }))
+
+        await waitFor(() => {
+            expect(collectionsApi.moveContainers).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    collectionType: 'micronix_plate',
+                    atomicMode: 'best_effort',
+                })
+            )
+        })
+    })
 })

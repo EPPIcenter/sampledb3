@@ -28,7 +28,7 @@ describe('template-generator', () => {
       })
       expect(csv).toContain('parent_control_batch_name')
       expect(csv).toContain('parent_specimen_type_name')
-      expect(csv).toContain('collection_name')
+      expect(csv).toContain('plate_name')
       expect(csv).toContain('position')
     })
 
@@ -49,6 +49,30 @@ describe('template-generator', () => {
       })
       expect(csv).toContain('parent_box_barcode')
       expect(csv).toContain('parent_position')
+    })
+
+    it('uses box_name when derived container type is cryovial_tube', () => {
+      const csv = generateDerivationsTemplate({
+        parentType: 'barcode',
+        settings: {
+          ...baseSettings,
+          containerType: 'cryovial_tube',
+        },
+      })
+      expect(csv).toContain('box_name')
+      expect(csv).not.toContain('plate_name')
+    })
+
+    it('uses bag_name when derived container type is paper', () => {
+      const csv = generateDerivationsTemplate({
+        parentType: 'barcode',
+        settings: {
+          ...baseSettings,
+          containerType: 'paper',
+        },
+      })
+      expect(csv).toContain('bag_name')
+      expect(csv).not.toContain('plate_name')
     })
   })
 })

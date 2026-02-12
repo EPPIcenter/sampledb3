@@ -4,12 +4,19 @@ import BulkImportFlow from '../BulkImportFlow'
 
 vi.mock('../../lib/api', () => ({
   subjectsApi: {
-    validateWithSpecimens: vi.fn().mockResolvedValue({ data: { valid: true, data: [], errors: [] } }),
+    createBulk: vi.fn().mockResolvedValue({ data: { created: 2, subjects: [] } }),
+    validateBulk: vi.fn().mockResolvedValue({ data: { valid: true, errors: [] } }),
   },
   specimensApi: {
-    validateBulk: vi.fn().mockResolvedValue({ data: { valid: true, data: [], errors: [] } }),
+    createBulk: vi.fn().mockResolvedValue({ data: { created: 0, specimens: [] } }),
+    validateBulk: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
+  },
+  importsApi: {
+    bulkCombined: vi.fn().mockResolvedValue({ data: { summary: {}, results: [], errors: [] } }),
+    bulkCombinedValidate: vi.fn().mockResolvedValue({ data: { valid: true, errors: [] } }),
   },
   collectionsApi: {
+    check: vi.fn().mockResolvedValue({ data: { results: [] } }),
     listMicronixPlates: vi.fn().mockResolvedValue({ data: [] }),
     listCryovialBoxes: vi.fn().mockResolvedValue({ data: [] }),
     listBoxes: vi.fn().mockResolvedValue({ data: [] }),

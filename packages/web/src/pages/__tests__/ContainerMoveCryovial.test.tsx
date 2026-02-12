@@ -258,4 +258,31 @@ describe('ContainerMoveCryovial', () => {
             expect(screen.getByText(/Some containers are not from cryovial boxes/i)).toBeInTheDocument()
         }, { timeout: 3000 })
     })
+
+    it('sends selected atomic mode in move payload', async () => {
+        mockGetSearchParams.mockImplementation((key: string) => (key === 'step' ? 'resolve' : null))
+        vi.mocked(collectionsApi.moveContainers).mockResolvedValue({
+            data: { success: true, moved: 0 }
+        } as any)
+
+        await renderWithProviders(<ContainerMoveCryovial />)
+
+        await waitFor(() => {
+            expect(screen.getByText('Resolved Cryovial Tubes')).toBeInTheDocument()
+        })
+
+        const bestEffort = screen.getByRole('radio', { name: /best effort/i })
+        fireEvent.click(bestEffort)
+
+        fireEvent.click(screen.getByRole('button', { name: /execute moves/i }))
+
+        await waitFor(() => {
+            expect(collectionsApi.moveContainers).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    collectionType: 'cryovial_box',
+                    atomicMode: 'best_effort',
+                })
+            )
+        })
+    })
 })
