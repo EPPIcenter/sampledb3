@@ -21,7 +21,7 @@ describe('Derivation Workflow Integration Tests', () => {
     sqlite = setup.sqlite
 
     const app = new (await import('hono')).Hono()
-    app.route('/api', createDerivationsRoutes(testDb))
+    app.route('/api/derivations', createDerivationsRoutes(testDb))
     client = createTestClient(app)
   })
 

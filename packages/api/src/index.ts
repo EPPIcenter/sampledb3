@@ -140,7 +140,7 @@ searchApp.route('/', createSearchRoutes(db))
 app.route('/api/search', searchApp)
 
 app.route('/api/containers', createContainersRoutes(db))
-app.route('/api', createDerivationsRoutes(db))
+app.route('/api/derivations', createDerivationsRoutes(db))
 
 const importsApp = new Hono()
 importsApp.use('*', rateLimit(30, 60 * 1000)) // 30 requests per minute (increased from 5)

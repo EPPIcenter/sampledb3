@@ -12,7 +12,7 @@ import {
   createTestUser,
 } from '../../__tests__/helpers/auth-helpers'
 
-const BASE = '/api'
+const BASE = '/api/derivations'
 
 describe('Derivations API', () => {
   let testDb: Database
@@ -40,7 +40,7 @@ describe('Derivations API', () => {
       return next()
     })
     app.route('/api/auth', createAuthRoutes(testDb, testDb))
-    app.route('/api', createDerivationsRoutes(testDb))
+    app.route('/api/derivations', createDerivationsRoutes(testDb))
 
     cookieHeader = await loginAndGetCookie(app, 'admin@test.com', 'password123')
   })
@@ -58,7 +58,7 @@ describe('Derivations API', () => {
       return next()
     })
     app.onError((err, c) => handleRouteError(err, c))
-    app.route('/api', createDerivationsRoutes(testDb))
+    app.route('/api/derivations', createDerivationsRoutes(testDb))
     return app
   }
 

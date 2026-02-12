@@ -1432,9 +1432,9 @@ export interface ValidationResult {
 
 export const derivationsApi = {
   createFromContainer: (parentContainerId: number, payload: CreateDerivationPayload) =>
-    api.post<CreateDerivationResponse>(`/containers/${parentContainerId}/derive`, payload),
+    api.post<CreateDerivationResponse>(`/derivations/containers/${parentContainerId}/derive`, payload),
   listFromContainer: (containerId: number, params?: { derivation_type?: string }) =>
-    api.get<{ derivations: Derivation[]; count: number }>(`/containers/${containerId}/derivations`, {
+    api.get<{ derivations: Derivation[]; count: number }>(`/derivations/containers/${containerId}/derivations`, {
       params,
     }),
   getSource: (containerId: number) =>
@@ -1442,17 +1442,17 @@ export const derivationsApi = {
       derivation: Derivation
       parentContainer: any
       parentSpecimen: Specimen
-    }>(`/containers/${containerId}/source`),
+    }>(`/derivations/containers/${containerId}/source`),
   getChain: (containerId: number) =>
     api.get<{
       ancestors: Array<{ container: any; derivation: Derivation }>
       descendants: Array<{ container: any; derivation: Derivation }>
       current: any
-    }>(`/containers/${containerId}/derivation-chain`),
+    }>(`/derivations/containers/${containerId}/derivation-chain`),
   update: (id: number, patch: Partial<Pick<Derivation, 'derivationDate' | 'protocol' | 'notes' | 'properties'>>) =>
-    api.patch<{ derivation: Derivation }>(`/derivations/${id}`, patch),
+    api.patch<{ derivation: Derivation }>(`/derivations/derivations/${id}`, patch),
   delete: (id: number) =>
-    api.delete<{ message: string }>(`/derivations/${id}`),
+    api.delete<{ message: string }>(`/derivations/derivations/${id}`),
   importCsv: (csv: string, options?: { dryRun?: boolean; settings?: BulkDerivationSettings }) =>
     api.post<{ rows: DerivationCsvImportResultRow[] }>('/imports/derivations-csv', {
       csv,
