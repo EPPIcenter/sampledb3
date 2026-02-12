@@ -5,8 +5,8 @@ import { importDerivationsFromCsv, validateDerivationsCsv, type BulkDerivationSe
 import { runBulkCombinedImport, type ExtendedContainerData } from '../lib/bulk-combined-import'
 import { validateBulkCombinedPayload } from '../lib/bulk-combined-validate'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
-import { ValidationError } from '../lib/error-handler'
 import { handleRouteError } from '../lib/error-handler'
+import { containerSchemaWithLocation } from '../lib/schemas'
 
 /**
  * Create imports routes with database injection
@@ -43,17 +43,13 @@ imports.post('/derivations-csv', memberMiddleware, async (c) => {
     })
     const data = schema.parse(body)
 
-    const result = await importDerivationsFromCsv(database, data.csv, { 
+    const result = await importDerivationsFromCsv(database, data.csv, {
       dryRun: data.dryRun,
       settings: data.settings,
     })
     return c.json(result)
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error importing derivations CSV:', error)
-    return c.json({ error: 'Failed to import derivations CSV', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -70,28 +66,10 @@ imports.post('/derivations-csv/validate', memberMiddleware, async (c) => {
 
     const result = await validateDerivationsCsv(database, data.csv, data.settings)
     return c.json(result)
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error validating derivations CSV:', error)
-    return c.json({ error: 'Failed to validate derivations CSV', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
-
-const containerSchema = z.object({
-  containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', 'static_well']).optional(),
-  collectionName: z.string().optional(),
-  collectionBarcode: z.string().optional(),
-  barcode: z.string().optional(),
-  position: z.string().optional(),
-  label: z.string().optional(),
-  unitId: z.number().int().optional(),
-  totalQuantity: z.number().optional(),
-  remainingQuantity: z.number().optional(),
-  comment: z.string().optional(),
-  collectionLocationId: z.number().int().optional(),
-}).optional()
 
 // Bulk combined import (subjects + specimens + containers) with configurable atomicity
 // Body: { studyShortCode, atomicMode: 'full_file' | 'per_subject', createCollections?: [...], subjects: [...] }
@@ -112,7 +90,7 @@ imports.post('/bulk-combined', memberMiddleware, async (c) => {
         specimens: z.array(z.object({
           specimenTypeName: z.string().min(1),
           collectionDate: z.string().optional(),
-          container: containerSchema,
+          container: containerSchemaWithLocation,
         })),
       })),
     })
@@ -147,13 +125,7 @@ imports.post('/bulk-combined', memberMiddleware, async (c) => {
       })),
       errors: result.errors,
     }, 201)
-  } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    if (error instanceof ValidationError) {
-      return c.json({ error: error.message }, 400)
-    }
+  } catch (error) {
     return handleRouteError(error, c)
   }
 })
@@ -176,7 +148,7 @@ imports.post('/bulk-combined/validate', memberMiddleware, async (c) => {
         specimens: z.array(z.object({
           specimenTypeName: z.string().min(1),
           collectionDate: z.string().optional(),
-          container: containerSchema,
+          container: containerSchemaWithLocation,
           rowIndex: z.number().int().optional(),
         })),
       })),
@@ -200,10 +172,7 @@ imports.post('/bulk-combined/validate', memberMiddleware, async (c) => {
       })),
     })
     return c.json(result)
-  } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
+  } catch (error) {
     return handleRouteError(error, c)
   }
 })

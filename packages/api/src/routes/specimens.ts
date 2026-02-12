@@ -12,6 +12,7 @@ import { findExistingStudySpecimen } from '../lib/specimen-helpers'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { resolveCollection } from '../lib/collection-resolution'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import { containerSchema, containerSchemaWithLocation } from '../lib/schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 
 /**
@@ -245,20 +246,7 @@ specimens.get('/:id', authMiddleware, async (c) => {
 specimens.post('/', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
-    
-    const containerSchema = z.object({
-      containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', 'static_well']).optional(),
-      collectionName: z.string().optional(),
-      collectionBarcode: z.string().optional(),
-      barcode: z.string().optional(),
-      position: z.string().optional(),
-      label: z.string().optional(),
-      unitId: z.number().int().optional(),
-      totalQuantity: z.number().optional(),
-      remainingQuantity: z.number().optional(),
-      comment: z.string().optional(),
-    }).optional()
-    
+
     const schema = z.object({
       sourceType: z.enum(['subject', 'control']),
       sourceId: z.number().int().optional(),
@@ -327,21 +315,6 @@ specimens.post('/', memberMiddleware, async (c) => {
   }
   })
 
-  // Optional container schema (same shape as subjects with-specimens)
-  const containerSchema = z.object({
-    containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', 'static_well']).optional(),
-    collectionName: z.string().optional(),
-    collectionBarcode: z.string().optional(),
-    barcode: z.string().optional(),
-    position: z.string().optional(),
-    label: z.string().optional(),
-    unitId: z.number().int().optional(),
-    totalQuantity: z.number().optional(),
-    remainingQuantity: z.number().optional(),
-    comment: z.string().optional(),
-    collectionLocationId: z.number().int().optional(),
-  }).optional()
-
 // Create multiple specimens (bulk)
 specimens.post('/bulk', memberMiddleware, async (c) => {
   try {
@@ -355,7 +328,7 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
         specimenTypeName: z.string().min(1),
         collectionDate: z.string().optional(),
         containerBarcode: z.string().optional(),
-        container: containerSchema,
+        container: containerSchemaWithLocation,
       })),
     })
     
@@ -525,7 +498,7 @@ specimens.post('/bulk/validate', memberMiddleware, async (c) => {
         specimenTypeName: z.string().min(1),
         collectionDate: z.string().optional(),
         containerBarcode: z.string().optional(),
-        container: containerSchema,
+        container: containerSchemaWithLocation,
       })),
     })
     const data = schema.parse(body)
