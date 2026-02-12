@@ -19,6 +19,8 @@ interface BatchInfoStepProps {
   onNext: () => void
   onCancel: () => void
   isAddMode: boolean
+  /** When true, definition is pre-selected (e.g. from control definition page); hide the definition selector */
+  definitionPreSelected?: boolean
 }
 
 export default function BatchInfoStep({
@@ -27,6 +29,7 @@ export default function BatchInfoStep({
   onNext,
   onCancel,
   isAddMode,
+  definitionPreSelected = false,
 }: BatchInfoStepProps) {
   const [definitions, setDefinitions] = useState<ControlDefinition[]>([])
   const [loading, setLoading] = useState(false)
@@ -46,11 +49,17 @@ export default function BatchInfoStep({
   const listRef = useRef<HTMLDivElement>(null)
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([])
   const prevBatchNameRef = useRef(batchInfo.name)
+  const batchInfoRef = useRef(batchInfo)
+  const nameSuggestionRef = useRef(nameSuggestion)
+  batchInfoRef.current = batchInfo
+  nameSuggestionRef.current = nameSuggestion
 
   useEffect(() => {
-    loadDefinitions()
-    loadStrains()
-  }, [])
+    if (!definitionPreSelected) {
+      loadDefinitions()
+      loadStrains()
+    }
+  }, [definitionPreSelected])
 
   const loadStrains = async () => {
     try {
@@ -191,26 +200,24 @@ export default function BatchInfoStep({
     await applyDefinitionSelection(control)
   }
 
-  // Update suggested name when production date changes
+  // Update suggested name when production date or definition changes
   useEffect(() => {
-    if (batchInfo.controlDefinitionId && batchInfo.productionDate && !isAddMode && definitions.length > 0) {
-      const definition = definitions.find(d => d.id === batchInfo.controlDefinitionId)
-      if (definition) {
-        controlsApi.suggestBatchName(definition.id, batchInfo.productionDate)
-          .then(response => {
-            // Only update name if it's empty or matches the previous suggestion
-            if (!batchInfo.name || batchInfo.name === nameSuggestion) {
-              onChange({ ...batchInfo, name: response.data.name })
-            }
-            setNameSuggestion(response.data.name)
-          })
-          .catch(err => {
-            console.error('Failed to generate suggested batch name:', err)
-          })
-      }
+    if (batchInfo.controlDefinitionId && batchInfo.productionDate && !isAddMode) {
+      controlsApi.suggestBatchName(batchInfo.controlDefinitionId, batchInfo.productionDate)
+        .then((response) => {
+          const currentBatchInfo = batchInfoRef.current
+          const currentNameSuggestion = nameSuggestionRef.current
+          // Only update name if it's empty or matches the previous suggestion (avoids overwriting user edits)
+          if (!currentBatchInfo.name || currentBatchInfo.name === currentNameSuggestion) {
+            onChange({ ...currentBatchInfo, name: response.data.name })
+          }
+          setNameSuggestion(response.data.name)
+        })
+        .catch((err) => {
+          console.error('Failed to generate suggested batch name:', err)
+        })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchInfo.productionDate, batchInfo.controlDefinitionId])
+  }, [batchInfo.productionDate, batchInfo.controlDefinitionId, isAddMode, onChange])
 
   const handleNameChange = (name: string) => {
     // Update local state immediately (no re-render from parent)
@@ -259,7 +266,7 @@ export default function BatchInfoStep({
   const validate = async (): Promise<boolean> => {
     const newErrors: Record<string, string> = {}
 
-    if (!batchInfo.controlDefinitionId) {
+    if (!definitionPreSelected && !batchInfo.controlDefinitionId) {
       newErrors.controlDefinitionId = 'Control definition is required'
     }
 
@@ -295,23 +302,67 @@ export default function BatchInfoStep({
     }
   }
 
-  const definition = batchInfo.controlDefinition
+  const def = batchInfo.controlDefinition
+  const strainSummary = def?.strains?.length
+    ? def.strains.map((s) => `${s.name} ${s.percentage ?? 0}%`).join(', ')
+    : null
+  const densitySummary =
+    def?.targetDensity != null
+      ? `${def.targetDensity.toLocaleString()} ${def.unitSymbol || ''}`
+      : null
+  const hasDefinition = !!def
+  const showNameAndDate = hasDefinition || isAddMode
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Batch Information</h2>
-        <p className="text-sm text-gray-600 mb-6">
-          {isAddMode
-            ? 'Select the control definition for the batch you want to add specimens to.'
-            : 'Select a control definition and provide batch details.'}
-        </p>
-      </div>
+    <div className="space-y-8">
+      {/* Context: what batch type we're creating */}
+      {def && (
+        <div
+          className="flex flex-col gap-1 px-4 py-3 rounded-lg"
+          style={{
+            backgroundColor: 'rgb(var(--dashboard-accent-muted) / 0.4)',
+            borderLeft: '4px solid rgb(var(--dashboard-accent))',
+          }}
+        >
+          <span
+            className="text-xs font-medium uppercase tracking-wide"
+            style={{ color: 'rgb(var(--dashboard-text-muted))' }}
+          >
+            Creating batch for
+          </span>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="font-semibold text-lg" style={{ color: 'rgb(var(--dashboard-text))' }}>
+              {def.name}
+            </span>
+            {strainSummary && (
+              <span className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                {strainSummary}
+              </span>
+            )}
+            {densitySummary && (
+              <span className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                {densitySummary}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
-      <div className="space-y-4">
-        <div>
-          <label htmlFor="control-definition-search" className="block text-sm font-medium text-gray-700 mb-2">
-            Control Definition *
+      {!definitionPreSelected && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-base font-semibold mb-1" style={{ color: 'rgb(var(--dashboard-text))' }}>
+              Choose control definition
+            </h3>
+            <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              {isAddMode
+                ? 'Select the definition for the batch you\'re adding specimens to.'
+                : 'Pick the control type this batch belongs to.'}
+            </p>
+          </div>
+          <div>
+          <label htmlFor="control-definition-search" className="sr-only">
+            Control definition
           </label>
 
           {!isAddMode && (
@@ -400,7 +451,7 @@ export default function BatchInfoStep({
               placeholder="Search by name, description, or strain..."
               aria-label="Search control definitions"
               className={`block flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] ${
-                errors.controlDefinitionId ? 'border-red-300' : 'border-gray-300'
+                errors.controlDefinitionId ? 'border-red-300' : 'border-[rgb(var(--dashboard-border))]'
               } ${isAddMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
             />
             {!isAddMode && (
@@ -419,7 +470,7 @@ export default function BatchInfoStep({
             aria-label="Control definitions"
             tabIndex={0}
             onKeyDown={handleListKeyDown}
-            className={`border rounded-lg overflow-hidden ${errors.controlDefinitionId ? 'border-red-300' : 'border-gray-300'}`}
+            className={`border rounded-lg overflow-hidden ${errors.controlDefinitionId ? 'border-red-300' : 'border-[rgb(var(--dashboard-border))]'}`}
           >
             {loading ? (
               <div className="px-4 py-8 text-center text-sm text-gray-500">Loading definitions...</div>
@@ -523,80 +574,27 @@ export default function BatchInfoStep({
           {errors.controlDefinitionId && (
             <p className="mt-1 text-sm text-red-600">{errors.controlDefinitionId}</p>
           )}
-        </div>
-
-        {definition && (
-          <div
-            className="rounded-lg p-4 border"
-            style={{
-              backgroundColor: 'rgb(var(--dashboard-accent-muted) / 0.3)',
-              borderColor: 'rgb(var(--dashboard-accent) / 0.3)',
-            }}
-          >
-            <h3 className="text-sm font-semibold mb-2" style={{ color: 'rgb(var(--dashboard-text))' }}>
-              Definition Details
-            </h3>
-            <div className="space-y-1 text-sm" style={{ color: 'rgb(var(--dashboard-text))' }}>
-              <div>
-                <span className="font-medium">Type:</span> {definition.controlType.replace('_', ' ')}
-              </div>
-              {definition.targetDensity !== undefined && (
-                <div>
-                  <span className="font-medium">Target Density:</span>{' '}
-                  {definition.targetDensity.toLocaleString()} {definition.unitSymbol || ''}
-                </div>
-              )}
-              {definition.strains && definition.strains.length > 0 && (
-                <div className="mt-2">
-                  <span className="font-medium block mb-1.5">Strain composition</span>
-                  <div
-                    className="flex h-2 rounded-full overflow-hidden mb-2"
-                    style={{ backgroundColor: 'rgb(var(--dashboard-surface))' }}
-                    role="img"
-                    aria-label={definition.strains.map((s) => `${s.name} ${s.percentage ?? 0}%`).join(', ')}
-                  >
-                    {definition.strains.map((s, idx) => {
-                      const pct = s.percentage ?? 0
-                      return (
-                        <div
-                          key={s.id}
-                          style={{
-                            width: `${pct}%`,
-                            backgroundColor: STRAIN_BAR_COLORS[idx % STRAIN_BAR_COLORS.length],
-                          }}
-                          title={`${s.name}: ${pct}%`}
-                        />
-                      )
-                    })}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {definition.strains.map((s, idx) => (
-                      <span
-                        key={s.id}
-                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border"
-                        style={{
-                          color: 'rgb(var(--dashboard-text))',
-                          backgroundColor: 'rgb(var(--dashboard-card))',
-                          borderColor: 'rgb(var(--dashboard-border))',
-                        }}
-                        title={s.percentage != null ? `${s.percentage}%` : undefined}
-                      >
-                        {s.name}
-                        {s.percentage != null && (
-                          <span className="ml-1 opacity-80">({s.percentage}%)</span>
-                        )}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
-        )}
+        </div>
+      )}
 
+      {/* Step 2: Name and date */}
+      {showNameAndDate && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-base font-semibold mb-1" style={{ color: 'rgb(var(--dashboard-text))' }}>
+              {definitionPreSelected ? 'Name this batch' : 'Batch name and date'}
+            </h3>
+            <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              {definitionPreSelected
+                ? 'Give this production run a unique name and record when it was made.'
+                : 'Name this production run and when it was produced.'}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label htmlFor="batch-name" className="block text-sm font-medium text-gray-700 mb-2">
-            Batch Name {!isAddMode && '*'}
+          <label htmlFor="batch-name" className="block text-sm font-medium mb-2" style={{ color: 'rgb(var(--dashboard-text))' }}>
+            Batch name {!isAddMode && '*'}
           </label>
           <div className="relative">
             <input
@@ -606,10 +604,10 @@ export default function BatchInfoStep({
               value={localName}
               onChange={(e) => handleNameChange(e.target.value)}
               disabled={isAddMode}
-              className={`block w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.name ? 'border-red-300' : 'border-gray-300'
+              className={`block w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] ${
+                errors.name ? 'border-red-300' : 'border-[rgb(var(--dashboard-border))]'
               } ${isAddMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-              placeholder="e.g., Batch-2024-01-15"
+              placeholder="e.g., 0.01_W2 2026-02-12"
             />
             {validating && (
               <div className="absolute right-3 top-2.5">
@@ -619,11 +617,11 @@ export default function BatchInfoStep({
           </div>
           {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
           {nameSuggestion && !errors.name && (
-            <p className="mt-1 text-sm text-blue-600">
-              Suggestion: <button
+            <p className="mt-1 text-sm" style={{ color: 'rgb(var(--dashboard-accent))' }}>
+              Use suggestion: <button
                 type="button"
                 onClick={() => handleNameChange(nameSuggestion)}
-                className="underline hover:text-blue-800"
+                className="underline hover:opacity-80 font-medium"
               >
                 {nameSuggestion}
               </button>
@@ -632,8 +630,8 @@ export default function BatchInfoStep({
         </div>
 
         <div>
-          <label htmlFor="production-date" className="block text-sm font-medium text-gray-700 mb-2">
-            Production Date
+          <label htmlFor="production-date" className="block text-sm font-medium mb-2" style={{ color: 'rgb(var(--dashboard-text))' }}>
+            Production date
           </label>
           <input
             id="production-date"
@@ -641,19 +639,25 @@ export default function BatchInfoStep({
             value={batchInfo.productionDate}
             onChange={(e) => onChange({ ...batchInfo, productionDate: e.target.value })}
             disabled={isAddMode}
-            className={`block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+            className={`block w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] ${
               isAddMode ? 'bg-gray-100 cursor-not-allowed' : ''
             }`}
+            style={{ borderColor: 'rgb(var(--dashboard-border))' }}
           />
         </div>
-      </div>
+          </div>
+        </div>
+      )}
 
-      <div className="flex justify-end gap-3 pt-4 border-t">
+      <div
+        className="flex justify-end gap-3 pt-6 mt-2"
+        style={{ borderTop: '1px solid rgb(var(--dashboard-border))' }}
+      >
         <button type="button" onClick={onCancel} className="blood-controls-btn-secondary">
           Cancel
         </button>
         <button type="button" onClick={handleNext} className="blood-controls-btn-primary">
-          Next: Add Specimen Types
+          Next: Add specimens
         </button>
       </div>
 

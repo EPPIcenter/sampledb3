@@ -63,7 +63,7 @@ export interface CSVFileData {
 export default function ControlBatchWizard() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
-  const { id: batchId } = useParams<{ id?: string }>()
+  const { id: batchId, definitionId } = useParams<{ id?: string; definitionId?: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
 
   if (!canWrite) {
@@ -71,7 +71,8 @@ export default function ControlBatchWizard() {
   }
 
   const isAddMode = !!batchId
-  // In add mode, skip batch-info step and go directly to specimen-types
+  const isCreateFromDefinition = !!definitionId
+  // In add mode, skip batch-info (add specimens to existing batch). When creating from definition, show batch-info so user can set name/date.
   const defaultStep = isAddMode ? 'specimen-types' : 'batch-info'
   const currentStep = (searchParams.get('step') as WizardStep) || defaultStep
 
@@ -92,8 +93,10 @@ export default function ControlBatchWizard() {
     loadSpecimenTypes()
     if (isAddMode && batchId) {
       loadExistingBatch(parseInt(batchId))
+    } else if (isCreateFromDefinition && definitionId) {
+      loadDefinitionAndBatchInfo(parseInt(definitionId))
     }
-  }, [batchId, isAddMode])
+  }, [batchId, isAddMode, definitionId, isCreateFromDefinition])
 
   const loadSpecimenTypes = async () => {
     try {
@@ -125,6 +128,43 @@ export default function ControlBatchWizard() {
     }
   }
 
+  const loadDefinitionAndBatchInfo = async (defId: number) => {
+    try {
+      setLoading(true)
+      setError(null)
+      const today = new Date().toISOString().split('T')[0]
+      const [summaryResponse, nameResponse] = await Promise.all([
+        controlsApi.getDefinitionSummary(defId),
+        controlsApi.suggestBatchName(defId, today),
+      ])
+      const { control, composition } = summaryResponse.data
+      if (!control) {
+        setError('Control definition not found')
+        return
+      }
+      const controlWithComposition = {
+        ...control,
+        strains: composition?.strains,
+      }
+      setBatchInfo({
+        controlDefinitionId: control.id,
+        controlDefinition: controlWithComposition,
+        name: nameResponse.data.name,
+        productionDate: today,
+      })
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to load control definition')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getCancelTarget = () => {
+    if (isAddMode && batchId) return `/blood-controls/batches/${batchId}`
+    if (isCreateFromDefinition && definitionId) return `/blood-controls/${definitionId}`
+    return '/blood-controls'
+  }
+
   const setStep = (step: WizardStep) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
@@ -136,7 +176,7 @@ export default function ControlBatchWizard() {
   const canProceedToStep = (step: WizardStep): boolean => {
     switch (step) {
       case 'batch-info':
-        return !isAddMode // Only accessible when creating new batch
+        return !isAddMode // Creating new batch (from definition or standalone)
       case 'specimen-types':
       case 'csv-upload':
         return isAddMode || !!batchInfo.controlDefinitionId
@@ -171,10 +211,21 @@ export default function ControlBatchWizard() {
   }
 
   if (error) {
+    const backTarget = isCreateFromDefinition && definitionId
+      ? `/blood-controls/${definitionId}`
+      : '/blood-controls'
     return (
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
-          <div className="text-center" style={{ color: 'rgb(var(--dashboard-trend-down))' }}>{error}</div>
+          <div className="text-center space-y-4">
+            <p style={{ color: 'rgb(var(--dashboard-trend-down))' }}>{error}</p>
+            <button
+              onClick={() => navigate(backTarget)}
+              className="blood-controls-btn-secondary"
+            >
+              Back to {isCreateFromDefinition && definitionId ? 'Control Definition' : 'Blood Controls'}
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -236,8 +287,9 @@ export default function ControlBatchWizard() {
             batchInfo={batchInfo}
             onChange={setBatchInfo}
             onNext={() => setStep('specimen-types')}
-            onCancel={() => navigate('/blood-controls')}
+            onCancel={() => navigate(getCancelTarget())}
             isAddMode={isAddMode}
+            definitionPreSelected={isCreateFromDefinition}
           />
         )}
 
@@ -247,8 +299,12 @@ export default function ControlBatchWizard() {
             onChange={setSpecimenTypes}
             availableSpecimenTypes={availableSpecimenTypes}
             onNext={() => setStep('containers')}
-            onBack={isAddMode ? () => navigate(`/blood-controls/batches/${batchId}`) : () => setStep('batch-info')}
-            onCancel={() => navigate(isAddMode ? `/blood-controls/batches/${batchId}` : '/blood-controls')}
+            onBack={
+              isAddMode
+                ? () => navigate(`/blood-controls/batches/${batchId}`)
+                : () => setStep('batch-info')
+            }
+            onCancel={() => navigate(getCancelTarget())}
             onSwitchToCSV={() => setStep('csv-upload')}
           />
         )}
@@ -260,7 +316,7 @@ export default function ControlBatchWizard() {
             availableSpecimenTypes={availableSpecimenTypes}
             onNext={() => setStep('containers')}
             onBack={() => setStep('specimen-types')}
-            onCancel={() => navigate(isAddMode ? `/blood-controls/batches/${batchId}` : '/blood-controls')}
+            onCancel={() => navigate(getCancelTarget())}
           />
         )}
 
@@ -278,7 +334,7 @@ export default function ControlBatchWizard() {
                 setStep('specimen-types')
               }
             }}
-            onCancel={() => navigate(isAddMode ? `/blood-controls/batches/${batchId}` : '/blood-controls')}
+            onCancel={() => navigate(getCancelTarget())}
           />
         )}
 
@@ -288,7 +344,7 @@ export default function ControlBatchWizard() {
             specimenTypes={specimenTypes}
             csvFiles={csvFiles}
             onBack={() => setStep('containers')}
-            onCancel={() => navigate(isAddMode ? `/blood-controls/batches/${batchId}` : '/blood-controls')}
+            onCancel={() => navigate(getCancelTarget())}
             onSuccess={(batchId) => {
               navigate(`/blood-controls/batches/${batchId}`)
             }}

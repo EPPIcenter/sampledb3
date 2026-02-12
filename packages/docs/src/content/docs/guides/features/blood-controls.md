@@ -45,11 +45,13 @@ The batch accumulates specimens as you add them, and the system automatically tr
 
 ## Creating Control Batches
 
-To create a control batch, navigate to the Blood Controls section and switch to the Batches tab. Click "New Batch" or "Create Batch" to start the process.
+To create a control batch, navigate to the Blood Controls section, open the control definition you want (from the Definitions tab), then click **Create Batch** on the definition detail page. This way you select the definition first in a natural way, and the batch wizard starts with the definition already set.
 
-You'll need to provide a name for the batch, which should be a unique identifier. Many labs use sequential numbering like "BATCH-001", "BATCH-002", or include dates like "2024-Q1-Control". To choose the control definition this batch is based on, use the **search box** to filter definitions by name, description, or strain name; then click a definition in the list to select it. If the definition you need does not exist yet, click **Create new definition** to add it in a dialog without leaving the batch flow—the new definition is selected automatically when you finish. Optionally, you can specify a production date and a storage location.
+The wizard will suggest a batch name based on the definition and today's date. You can edit the name if needed—it should be a unique identifier. Many labs use sequential numbering like "BATCH-001", "BATCH-002", or include dates like "2024-Q1-Control". Optionally, you can specify a production date and a storage location.
 
-Once you've created the batch, you can start adding specimens to it. You can add specimens individually through the batch detail page, or use bulk import to add many specimens at once. Each specimen you add to the batch contributes to the batch's inventory count.
+Once you've created the batch, you can start adding specimens to it. The batch creation wizard guides you through selecting specimen types, adding containers (e.g. DBS sheets, cryovial tubes), and assigning each to a collection (box, bag, plate). For DBS sheets, you name each sheet, add papers with barcode and position, then choose whether to place the sheet in a box or bag. The papers list can be collapsed when you have many entries. Each specimen you add to the batch contributes to the batch's inventory count.
+
+You can also add specimens individually through the batch detail page, or use bulk import to add many specimens at once.
 
 ## Adding Specimens to Batches
 

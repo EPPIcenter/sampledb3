@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { controlsApi, type ControlDefinitionSummaryResponse } from '../lib/api'
+import { useUser } from '../contexts/UserContext'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import DataTable, { Column } from '../components/DataTable'
 import StatCard from '../components/StatCard'
@@ -11,6 +12,7 @@ import '../styles/blood-controls.css'
 export default function ControlDefinitionDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [summaryData, setSummaryData] = useState<ControlDefinitionSummaryResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -140,7 +142,17 @@ export default function ControlDefinitionDetail() {
                 <span className="blood-controls-badge">Blood</span>
               </div>
             </div>
-            <div className="flex space-x-3" />
+            {canWrite && (
+              <button
+                onClick={() => navigate(`/blood-controls/${control.id}/batches/new`)}
+                className="blood-controls-btn-primary px-4 py-2 flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Create Batch
+              </button>
+            )}
           </div>
         </div>
 
