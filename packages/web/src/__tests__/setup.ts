@@ -23,8 +23,8 @@ if (typeof window !== 'undefined') {
 // Default mock for authApi.getCurrentUser so UserProvider (in renderWithProviders) resolves without real API.
 // Returns a thenable that resolves synchronously so the state update runs in the same tick as the effect (inside act).
 // Test files that mock ../../lib/api replace the module and must include authApi in their mock.
-vi.mock('../lib/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/api')>()
+vi.mock('../lib/api', async () => {
+  const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api')
   const defaultUser = { id: 1, email: 'test@test.com', name: 'Test User', role: 'admin' as const }
   const syncThenable = (value: { data: { user: typeof defaultUser } }) => ({
     then: (onFulfilled: (v: typeof value) => void) => {

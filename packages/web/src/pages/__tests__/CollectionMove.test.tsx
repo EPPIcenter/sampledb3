@@ -16,13 +16,13 @@ vi.mock('../../lib/api', () => ({
   },
 }))
 
-vi.mock('../../contexts/UserContext', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../contexts/UserContext')>()
+vi.mock('../../contexts/UserContext', async () => {
+  const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')
   return { ...actual, useUser: () => ({ canWrite: true }) }
 })
 
-vi.mock('react-router-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-router-dom')>()
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
   return { ...actual, useNavigate: () => vi.fn() }
 })
 

@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 import Derivations from '../Derivations'
 
-vi.mock('../../contexts/UserContext', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../contexts/UserContext')>()
+vi.mock('../../contexts/UserContext', async () => {
+  const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')
   return { ...actual, useUser: () => ({ canWrite: true }) }
 })
 

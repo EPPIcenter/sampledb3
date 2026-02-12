@@ -9,8 +9,8 @@ vi.mock('../../lib/api', () => ({
   collectionsApi: { createMicronixPlate: vi.fn(), createCryovialBox: vi.fn() },
 }))
 
-vi.mock('../../contexts/UserContext', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../contexts/UserContext')>()
+vi.mock('../../contexts/UserContext', async () => {
+  const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')
   return {
     ...actual,
     useUser: () => ({ canWrite: true }),
