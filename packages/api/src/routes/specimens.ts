@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
-import { specimen, storageContainer, studySubject, study, specimenType, controlBatch } from '../db/schema'
+import { specimen, storageContainer, studySubject, study, specimenType, controlBatch, micronixTube, cryovialTube, staticWell } from '../db/schema'
 import { eq, and, like, or, sql } from 'drizzle-orm'
+import { normalizePosition } from '../lib/bulk-combined-import'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import { resolveContainerByBarcode } from '../lib/identifier-resolution'
@@ -305,13 +306,13 @@ specimens.post('/', memberMiddleware, async (c) => {
       .insert(specimen)
       .values(insertData)
       .returning()
-    
+
     let containerResult: { success: boolean; containerId?: number; error?: string } | null = null
-    
+
     if (data.container) {
-      const user = c.get('user')
       containerResult = await createContainerForSpecimen(newSpecimen.id, data.container as ContainerData, dbInstance, user?.id)
       if (!containerResult.success) {
+        await dbInstance.delete(storageContainer).where(eq(storageContainer.specimenId, newSpecimen.id))
         await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))
         throw new ValidationError(containerResult.error || 'Failed to create container')
       }
@@ -365,9 +366,6 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
     }
     
     const errors: Array<{ index: number; error: string }> = []
-    const createdSpecimens: Array<typeof specimen.$inferSelect> = []
-    let newSpecimensCount = 0
-    let containersCreated = 0
     const now = new Date().toISOString()
     const user = c.get('user')
     
@@ -432,87 +430,224 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
       }
     }
 
-    // Phase 2: get-or-create specimens in one sync transaction so same-request inserts are visible
-    const specimenRecordsByValidIndex: (typeof specimen.$inferSelect | null)[] = []
-    dbInstance.transaction((tx) => {
-      const db = tx as unknown as Database
+    // All-or-nothing: do not insert if any row failed validation
+    if (errors.length > 0) {
+      return c.json({
+        error: 'Validation failed',
+        errors,
+        created: 0,
+      }, 400)
+    }
+
+    // Single transaction: create specimens and containers all-or-nothing (any failure rolls back)
+    const result = await dbInstance.transaction(async (tx) => {
+      const dbTx = tx as unknown as Database
+      let newCount = 0
+      let containersCount = 0
+      const specimensOut: typeof specimen.$inferSelect[] = []
       for (const { index: i, spec, validation } of validRows) {
-        try {
-          const studySubjectId = validation.resolved.studySubjectId
-          const existingSpecimen =
-            spec.sourceType === 'subject' && studySubjectId != null
-              ? findExistingStudySpecimen(db, studySubjectId, validation.resolved.specimenTypeId, spec.collectionDate)
-              : null
-          let specimenRecord: typeof specimen.$inferSelect
-          if (existingSpecimen) {
-            specimenRecord = existingSpecimen
-          } else {
-            const insertResult = tx
-              .insert(specimen)
-              .values({
-                studySubjectId: validation.resolved.studySubjectId,
-                controlBatchId: validation.resolved.controlBatchId,
-                specimenTypeId: validation.resolved.specimenTypeId,
-                collectionDate: spec.collectionDate ?? null,
-                created: now,
-                lastUpdated: now,
-                createdBy: user?.id,
-                updatedBy: user?.id,
-              })
-              .returning()
-              .get()
-            specimenRecord = Array.isArray(insertResult) ? insertResult[0] : insertResult
-            newSpecimensCount += 1
+        const studySubjectId = validation.resolved.studySubjectId
+        const existingSpecimen =
+          spec.sourceType === 'subject' && studySubjectId != null
+            ? findExistingStudySpecimen(dbTx, studySubjectId, validation.resolved.specimenTypeId, spec.collectionDate)
+            : null
+        let specimenRecord: typeof specimen.$inferSelect
+        if (existingSpecimen) {
+          specimenRecord = existingSpecimen
+        } else {
+          const insertResult = tx
+            .insert(specimen)
+            .values({
+              studySubjectId: validation.resolved.studySubjectId,
+              controlBatchId: validation.resolved.controlBatchId,
+              specimenTypeId: validation.resolved.specimenTypeId,
+              collectionDate: spec.collectionDate ?? null,
+              created: now,
+              lastUpdated: now,
+              createdBy: user?.id,
+              updatedBy: user?.id,
+            })
+            .returning()
+            .get()
+          specimenRecord = (Array.isArray(insertResult) ? insertResult[0] : insertResult) as typeof specimen.$inferSelect
+          newCount += 1
+        }
+        specimensOut.push(specimenRecord)
+
+        if (spec.container?.containerType) {
+          const containerData: ContainerData = {
+            containerType: spec.container.containerType,
+            collectionName: spec.container.collectionName,
+            collectionBarcode: spec.container.collectionBarcode,
+            barcode: spec.container.barcode,
+            position: spec.container.position,
+            label: spec.container.label,
+            unitId: spec.container.unitId,
+            totalQuantity: spec.container.totalQuantity,
+            remainingQuantity: spec.container.remainingQuantity,
+            comment: spec.container.comment,
           }
-          specimenRecordsByValidIndex.push(specimenRecord)
-          createdSpecimens.push(specimenRecord)
-        } catch (error: unknown) {
-          specimenRecordsByValidIndex.push(null)
-          errors.push({ index: i, error: error instanceof Error ? error.message : 'Failed to create specimen' })
+          const containerResult = await createContainerForSpecimen(
+            specimenRecord.id,
+            containerData,
+            dbTx,
+            user?.id
+          )
+          if (!containerResult.success || !containerResult.containerId) {
+            throw new Error(containerResult.error ?? `Row ${i}: failed to create container`)
+          }
+          containersCount += 1
         }
       }
+      return { specimens: specimensOut, created: newCount, containersCreated: containersCount }
     })
 
-    // Phase 3: create containers (async, uses committed specimens)
-    for (let j = 0; j < validRows.length; j++) {
-      const { index: i, spec } = validRows[j]
-      const specimenRecord = specimenRecordsByValidIndex[j]
-      if (!specimenRecord || !spec.container?.containerType) continue
+    return c.json({
+      specimens: result.specimens,
+      created: result.created,
+      containersCreated: result.containersCreated,
+    }, 201)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
+// Validate bulk specimens without creating (same body as POST /specimens/bulk)
+specimens.post('/bulk/validate', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      specimens: z.array(z.object({
+        sourceType: z.enum(['subject', 'control']),
+        sourceId: z.number().int().optional(),
+        studyShortCode: z.string().optional(),
+        subjectName: z.string().optional(),
+        specimenTypeName: z.string().min(1),
+        collectionDate: z.string().optional(),
+        containerBarcode: z.string().optional(),
+        container: containerSchema,
+      })),
+    })
+    const data = schema.parse(body)
+    if (data.specimens.length === 0) {
+      return c.json({ error: 'No specimens provided' }, 400)
+    }
+    const errors: Array<{ index: number; message: string }> = []
+    type ValidRow = { index: number; spec: (typeof data.specimens)[number]; validation: Awaited<ReturnType<typeof validateSpecimenData>> & { valid: true; resolved: NonNullable<Awaited<ReturnType<typeof validateSpecimenData>>['resolved']> }; collectionId?: number | null; collectionKey?: string; containerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well' }
+    const validRows: ValidRow[] = []
+    for (let i = 0; i < data.specimens.length; i++) {
+      const spec = data.specimens[i]
       try {
-        const containerData: ContainerData = {
-          containerType: spec.container.containerType,
-          collectionName: spec.container.collectionName,
-          collectionBarcode: spec.container.collectionBarcode,
-          barcode: spec.container.barcode,
-          position: spec.container.position,
-          label: spec.container.label,
-          unitId: spec.container.unitId,
-          totalQuantity: spec.container.totalQuantity,
-          remainingQuantity: spec.container.remainingQuantity,
-          comment: spec.container.comment,
+        const validation = await validateSpecimenData({
+          sourceType: spec.sourceType,
+          sourceId: spec.sourceId,
+          studyShortCode: spec.studyShortCode,
+          subjectName: spec.subjectName,
+          specimenTypeName: spec.specimenTypeName,
+          collectionDate: spec.collectionDate,
+        }, dbInstance)
+        if (!validation.valid || !validation.resolved) {
+          errors.push({ index: i, message: validation.error || 'Invalid specimen data' })
+          continue
         }
-        const containerResult = await createContainerForSpecimen(
-          specimenRecord.id,
-          containerData,
-          dbInstance,
-          user?.id
-        )
-        if (containerResult.success && containerResult.containerId) {
-          containersCreated += 1
+        let collectionId: number | null = null
+        let collectionKey: string | undefined
+        if (spec.container?.containerType) {
+          const containerType = spec.container.containerType
+          const containerTypeValidation = await validateContainerTypeForSpecimenType(dbInstance, validation.resolved.specimenTypeId, containerType)
+          if (!containerTypeValidation.valid) {
+            errors.push({ index: i, message: containerTypeValidation.error || 'Invalid container type for specimen type' })
+            continue
+          }
+          const containerDataForValidation: ContainerData = {
+            containerType,
+            collectionName: spec.container.collectionName,
+            collectionBarcode: spec.container.collectionBarcode,
+            barcode: spec.container.barcode,
+            position: spec.container.position,
+            label: spec.container.label,
+          }
+          const containerValidation = await validateContainerData(dbInstance, containerType, containerDataForValidation)
+          if (!containerValidation.valid) {
+            errors.push({ index: i, message: containerValidation.error || 'Invalid container data' })
+            continue
+          }
+          const collectionType = containerType === 'cryovial_tube' ? 'cryovial_box' : containerType === 'paper' ? 'box' : 'micronix_plate'
+          const identifier = spec.container.collectionName || spec.container.collectionBarcode
+          if (containerType !== 'paper' && identifier) {
+            const existingId = await resolveCollection(identifier, collectionType, dbInstance)
+            if (!existingId && !spec.container.collectionLocationId) {
+              errors.push({ index: i, message: `Collection '${identifier}' not found. Create it first or use Combined import with a location.` })
+              continue
+            }
+            collectionId = existingId
+            collectionKey = `${collectionType}-${identifier}`
+          }
+          if (containerType === 'paper' && spec.container.collectionName) {
+            const existingBox = await resolveCollection(spec.container.collectionName, 'box', dbInstance)
+            if (!existingBox && !spec.container.collectionLocationId) {
+              errors.push({ index: i, message: `Box '${spec.container.collectionName}' not found. Create it first or use Combined import with a location.` })
+              continue
+            }
+            collectionId = existingBox
+            collectionKey = `box-${spec.container.collectionName}`
+          }
+          validRows.push({ index: i, spec, validation: validation as ValidRow['validation'], collectionId: collectionId ?? undefined, collectionKey, containerType })
         } else {
-          errors.push({ index: i, error: containerResult.error || 'Failed to create container' })
+          validRows.push({ index: i, spec, validation: validation as ValidRow['validation'] })
         }
       } catch (error: unknown) {
-        errors.push({ index: i, error: error instanceof Error ? error.message : 'Failed to create container' })
+        errors.push({ index: i, message: error instanceof Error ? error.message : 'Validation failed' })
       }
     }
-    
-    return c.json({
-      specimens: createdSpecimens,
-      created: newSpecimensCount,
-      containersCreated,
-      errors: errors.length > 0 ? errors : undefined,
-    }, 201)
+
+    const seenBarcodes = new Set<string>()
+    const seenPositionByCollection = new Map<string, Set<string>>()
+    for (const row of validRows) {
+      if (!row.containerType || !row.spec.container?.containerType) continue
+      const i = row.index
+      const container = row.spec.container
+      const containerType = row.containerType
+      const collectionId = row.collectionId ?? null
+      const collectionKey = row.collectionKey ?? `unknown-${i}`
+      const normalizedPosition = normalizePosition(container.position)
+      const barcode = container.barcode?.trim() || null
+
+      if (containerType === 'micronix_tube' || containerType === 'cryovial_tube') {
+        if (barcode) {
+          if (seenBarcodes.has(barcode)) {
+            errors.push({ index: i, message: `Barcode '${barcode}' is used more than once in your file. Each barcode must be unique.` })
+          }
+          seenBarcodes.add(barcode)
+        }
+      }
+
+      if (normalizedPosition && (containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'static_well') && collectionId !== null) {
+        if (containerType === 'micronix_tube' || containerType === 'static_well') {
+          const existingTube = await dbInstance.select({ id: micronixTube.id }).from(micronixTube).where(and(eq(micronixTube.collectionId, collectionId), eq(micronixTube.position, normalizedPosition))).get()
+          const existingWell = containerType === 'static_well' ? await dbInstance.select({ id: staticWell.id }).from(staticWell).where(and(eq(staticWell.collectionId, collectionId), eq(staticWell.position, normalizedPosition))).get() : null
+          if (existingTube || existingWell) {
+            errors.push({ index: i, message: `Position ${normalizedPosition} is already used in this plate. Use a different position or plate.` })
+          }
+        } else {
+          const existing = await dbInstance.select({ id: cryovialTube.id }).from(cryovialTube).where(and(eq(cryovialTube.collectionId, collectionId), eq(cryovialTube.position, normalizedPosition))).get()
+          if (existing) {
+            errors.push({ index: i, message: `Position ${normalizedPosition} is already used in this box. Use a different position or box.` })
+          }
+        }
+        let positionSet = seenPositionByCollection.get(collectionKey)
+        if (!positionSet) {
+          positionSet = new Set()
+          seenPositionByCollection.set(collectionKey, positionSet)
+        }
+        if (positionSet.has(normalizedPosition)) {
+          errors.push({ index: i, message: `Position ${normalizedPosition} in this plate/box is used more than once in your file. Each position can only be used once.` })
+        }
+        positionSet.add(normalizedPosition)
+      }
+    }
+
+    return c.json({ valid: errors.length === 0, errors })
   } catch (error) {
     return handleRouteError(error, c)
   }
