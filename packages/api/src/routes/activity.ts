@@ -6,6 +6,8 @@ import {
   storageContainer, 
   studySubject, 
   specimenType,
+  controlBatch,
+  controlDefinition,
   micronixTube,
   cryovialTube,
   paper,
@@ -35,6 +37,7 @@ export function createActivityRoutes(database: Database): Hono {
         created: specimen.created,
         lastUpdated: specimen.lastUpdated,
         specimenTypeName: specimenType.name,
+        collectionDate: specimen.collectionDate,
         studySubjectId: specimen.studySubjectId,
         controlBatchId: specimen.controlBatchId,
       })
@@ -43,17 +46,36 @@ export function createActivityRoutes(database: Database): Hono {
       .orderBy(sql`COALESCE(${specimen.lastUpdated}, ${specimen.created}) DESC`)
       .limit(limit)
     
-    // Enrich specimens with subject and study info
+    // Enrich specimens with subject/study or batch/definition info (never expose DB IDs in labels)
     const enrichedSpecimens = await Promise.all(
       recentSpecimens.map(async (spec) => {
-        let label = `Specimen #${spec.id}`
+        const specimenTypeName = spec.specimenTypeName || 'Specimen'
+        let label: string
         let context: string | undefined = undefined
         
-        if (spec.specimenTypeName) {
-          label = `${spec.specimenTypeName} Specimen #${spec.id}`
-        }
-        
-        if (spec.studySubjectId) {
+        if (spec.controlBatchId) {
+          try {
+            const batchInfo = await database
+              .select({
+                batchName: controlBatch.name,
+                productionDate: controlBatch.productionDate,
+                definitionName: controlDefinition.name,
+              })
+              .from(controlBatch)
+              .innerJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
+              .where(eq(controlBatch.id, spec.controlBatchId))
+              .get()
+            
+            if (batchInfo) {
+              label = `${specimenTypeName} • ${batchInfo.definitionName} (${batchInfo.batchName})`
+              context = spec.collectionDate || batchInfo.productionDate || undefined
+            } else {
+              label = `${specimenTypeName} • Control batch`
+            }
+          } catch (e) {
+            label = `${specimenTypeName} • Control batch`
+          }
+        } else if (spec.studySubjectId) {
           try {
             const subject = await database
               .select({
@@ -75,16 +97,19 @@ export function createActivityRoutes(database: Database): Hono {
                 .get()
               
               if (studyRecord) {
-                context = `${subject.name} • ${studyRecord.title} (${studyRecord.shortCode})`
+                label = `${specimenTypeName} • ${subject.name} (${studyRecord.shortCode})`
+                context = studyRecord.title
               } else {
-                context = subject.name
+                label = `${specimenTypeName} • ${subject.name}`
               }
+            } else {
+              label = specimenTypeName
             }
           } catch (e) {
-            // Silently fail - context is optional
+            label = specimenTypeName
           }
-        } else if (spec.controlBatchId) {
-          context = 'Control batch'
+        } else {
+          label = specimenTypeName
         }
         
         return {
@@ -176,17 +201,19 @@ export function createActivityRoutes(database: Database): Hono {
           position = staticWellInfo.position || null
         }
         
-        // Format container type name
+        // Format container type name (never expose DB IDs)
         const containerTypeName = containerType
           .split('_')
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ')
         
-        let label = `${containerTypeName} #${container.id}`
+        let label: string
         if (barcode) {
           label = `${containerTypeName} (${barcode})`
         } else if (position) {
           label = `${containerTypeName} at ${position}`
+        } else {
+          label = `Unnamed ${containerTypeName.toLowerCase()}`
         }
         
         let context: string | undefined = undefined
