@@ -10,10 +10,10 @@
     "start": "bun dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
-    "test": "bun test src",
-    "test:watch": "bun test --watch src",
+    "test": "NODE_ENV=test bun test src",
+    "test:watch": "NODE_ENV=test bun test --watch src",
     "test:ui": "vitest --ui",
-    "test:coverage": "bun test src --coverage"
+    "test:coverage": "NODE_ENV=test bun test src --coverage"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.5.3",
