@@ -134,7 +134,7 @@ If your import encounters problems, the error messages are designed to help you 
   That well or position (e.g. A01) is already used in that plate or box, or the same position appears more than once in your file for the same collection. Each position in a plate or box can only be used once. Use a different position or a different collection.
 
 - **Barcode already exists / duplicate barcode**  
-  The barcode is already assigned to another container in the system, or the same barcode appears more than once in your file. Each barcode must be unique. Use a different barcode or remove the duplicate row.
+  The barcode is already assigned to another container in the system, or the same barcode appears more than once in your file. Each barcode must be unique. Validation catches these before any import runs, so no data is written. Use a different barcode or remove the duplicate row.
 
 - **Position format errors**  
   For Micronix and Static Wells, use the "A01" format (letter + two digits). For Cryovial tubes, use a format that matches your box layout and is consistent within the file.
