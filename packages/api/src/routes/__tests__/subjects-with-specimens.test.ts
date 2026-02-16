@@ -756,7 +756,10 @@ describe('Subjects with Specimens API', () => {
         },
       })
 
-      expect(res.status).toBe(500) // Transaction error
+      expect(res.status).toBe(400) // Barcode conflict returns validation error
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain("Barcode 'MTX-DUPLICATE' already exists")
+      expect(data.specimenIndex).toBe(0)
       
       // Verify new subject was not created
       const subjects = await testDb
@@ -764,6 +767,569 @@ describe('Subjects with Specimens API', () => {
         .from(studySubject)
         .where(eq(studySubject.name, 'SUBJ-NEW'))
       expect(subjects.length).toBe(0)
+    })
+
+    it('should return 400 for in-payload duplicate barcode', async () => {
+      const now = new Date().toISOString()
+      await testDb.insert(micronixPlate).values({
+        name: 'PLATE-DUP-BARCODE',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-DUP-BARCODE',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube',
+                collectionName: 'PLATE-DUP-BARCODE',
+                barcode: 'MTX-SAME',
+                position: 'A01',
+              },
+            },
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube',
+                collectionName: 'PLATE-DUP-BARCODE',
+                barcode: 'MTX-SAME', // Same barcode again!
+                position: 'A02',
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('used more than once')
+      expect(data.error).toContain('MTX-SAME')
+      expect(data.specimenIndex).toBe(1)
+    })
+
+    it('should return 400 for position already used in plate', async () => {
+      const now = new Date().toISOString()
+      const [plateRecord] = await testDb
+        .insert(micronixPlate)
+        .values({
+          name: 'PLATE-POS',
+          locationId: testLocation.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const subject = await createTestStudySubject(testDb, {
+        studyId: testStudy.id,
+        name: 'SUBJ-POS',
+      })
+      const [spec] = await testDb
+        .insert(specimen)
+        .values({
+          studySubjectId: subject.id,
+          specimenTypeId: testSpecimenType.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: spec.id,
+          unitId: testUnit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      await testDb.insert(micronixTube).values({
+        id: container.id,
+        collectionId: plateRecord.id,
+        barcode: 'MTX-POS-EXISTING',
+        position: 'B01',
+      })
+
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-NEW-POS',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube',
+                collectionName: 'PLATE-POS',
+                barcode: 'MTX-POS-NEW',
+                position: 'B01', // Already used!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('Position B01')
+      expect(data.error).toContain('already used')
+      expect(data.specimenIndex).toBe(0)
+    })
+
+    it('should return 400 for in-payload duplicate position', async () => {
+      const now = new Date().toISOString()
+      await testDb.insert(micronixPlate).values({
+        name: 'PLATE-DUP-POS',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-DUP-POS',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube',
+                collectionName: 'PLATE-DUP-POS',
+                barcode: 'MTX-UNIQ-1',
+                position: 'C01',
+              },
+            },
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube',
+                collectionName: 'PLATE-DUP-POS',
+                barcode: 'MTX-UNIQ-2',
+                position: 'C01', // Same position!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('used more than once')
+      expect(data.error).toContain('C01')
+      expect(data.specimenIndex).toBe(1)
+    })
+
+    it('should return 400 for in-payload duplicate cryovial tube barcode', async () => {
+      const now = new Date().toISOString()
+      await testDb.insert(cryovialBox).values({
+        name: 'BOX-CRYO-DUP-BARCODE',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-CRYO-DUP-BARCODE',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-CRYO-DUP-BARCODE',
+                barcode: 'CRYO-SAME',
+                position: 'A01',
+              },
+            },
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-CRYO-DUP-BARCODE',
+                barcode: 'CRYO-SAME',
+                position: 'A02',
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('used more than once')
+      expect(data.error).toContain('CRYO-SAME')
+      expect(data.specimenIndex).toBe(1)
+    })
+
+    it('should return 400 for cryovial tube barcode already in DB', async () => {
+      const now = new Date().toISOString()
+      const [boxRecord] = await testDb
+        .insert(cryovialBox)
+        .values({
+          name: 'BOX-CRYO-BARCODE',
+          locationId: testLocation.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const subject = await createTestStudySubject(testDb, {
+        studyId: testStudy.id,
+        name: 'SUBJ-CRYO-BARCODE',
+      })
+      const [spec] = await testDb
+        .insert(specimen)
+        .values({
+          studySubjectId: subject.id,
+          specimenTypeId: testSpecimenType.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: spec.id,
+          unitId: testUnit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      await testDb.insert(cryovialTube).values({
+        id: container.id,
+        collectionId: boxRecord.id,
+        barcode: 'CRYO-DUPLICATE',
+        position: 'A01',
+      })
+
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-NEW-CRYO',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-CRYO-BARCODE',
+                barcode: 'CRYO-DUPLICATE',
+                position: 'A02',
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain("Barcode 'CRYO-DUPLICATE' already exists")
+      expect(data.specimenIndex).toBe(0)
+    })
+
+    it('should return 400 for in-payload duplicate cryovial tube position', async () => {
+      const now = new Date().toISOString()
+      await testDb.insert(cryovialBox).values({
+        name: 'BOX-CRYO-DUP-POS',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-CRYO-DUP-POS',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-CRYO-DUP-POS',
+                position: 'G07',
+              },
+            },
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-CRYO-DUP-POS',
+                position: 'G07', // Same position!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('used more than once')
+      expect(data.error).toContain('G07')
+      expect(data.specimenIndex).toBe(1)
+    })
+
+    it('should return 400 for cryovial tube position already used in box', async () => {
+      const now = new Date().toISOString()
+      const [boxRecord] = await testDb
+        .insert(cryovialBox)
+        .values({
+          name: 'BOX-CRYO-POS',
+          locationId: testLocation.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const subject = await createTestStudySubject(testDb, {
+        studyId: testStudy.id,
+        name: 'SUBJ-CRYO-POS',
+      })
+      const [spec] = await testDb
+        .insert(specimen)
+        .values({
+          studySubjectId: subject.id,
+          specimenTypeId: testSpecimenType.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: spec.id,
+          unitId: testUnit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      await testDb.insert(cryovialTube).values({
+        id: container.id,
+        collectionId: boxRecord.id,
+        barcode: null,
+        position: 'D05',
+      })
+
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-NEW-CRYO-POS',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-CRYO-POS',
+                position: 'D05', // Already used!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('Position D05')
+      expect(data.error).toContain('already used')
+      expect(data.error).toContain('box')
+      expect(data.specimenIndex).toBe(0)
+    })
+
+    it('should return 400 for in-payload duplicate static well position', async () => {
+      const now = new Date().toISOString()
+      await testDb.insert(micronixPlate).values({
+        name: 'PLATE-STATIC-DUP',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-STATIC-DUP-POS',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'static_well',
+                collectionName: 'PLATE-STATIC-DUP',
+                position: 'H12',
+              },
+            },
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'static_well',
+                collectionName: 'PLATE-STATIC-DUP',
+                position: 'H12', // Same position!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('used more than once')
+      expect(data.error).toContain('H12')
+      expect(data.specimenIndex).toBe(1)
+    })
+
+    it('should return 400 for static well position already used in plate', async () => {
+      const now = new Date().toISOString()
+      const [plateRecord] = await testDb
+        .insert(micronixPlate)
+        .values({
+          name: 'PLATE-STATIC',
+          locationId: testLocation.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const subject = await createTestStudySubject(testDb, {
+        studyId: testStudy.id,
+        name: 'SUBJ-STATIC',
+      })
+      const [spec] = await testDb
+        .insert(specimen)
+        .values({
+          studySubjectId: subject.id,
+          specimenTypeId: testSpecimenType.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: spec.id,
+          unitId: testUnit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      await testDb.insert(staticWell).values({
+        id: container.id,
+        collectionId: plateRecord.id,
+        position: 'E03',
+      })
+
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-NEW-STATIC',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'static_well',
+                collectionName: 'PLATE-STATIC',
+                position: 'E03', // Already used by static well!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('Position E03')
+      expect(data.error).toContain('already used')
+      expect(data.error).toContain('plate')
+      expect(data.specimenIndex).toBe(0)
+    })
+
+    it('should return 400 for static well conflicting with existing micronix tube position', async () => {
+      const now = new Date().toISOString()
+      const [plateRecord] = await testDb
+        .insert(micronixPlate)
+        .values({
+          name: 'PLATE-MIXED',
+          locationId: testLocation.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const subject = await createTestStudySubject(testDb, {
+        studyId: testStudy.id,
+        name: 'SUBJ-MIXED',
+      })
+      const [spec] = await testDb
+        .insert(specimen)
+        .values({
+          studySubjectId: subject.id,
+          specimenTypeId: testSpecimenType.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: spec.id,
+          unitId: testUnit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      await testDb.insert(micronixTube).values({
+        id: container.id,
+        collectionId: plateRecord.id,
+        barcode: 'MTX-F01',
+        position: 'F01',
+      })
+
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-NEW-MIXED',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'static_well',
+                collectionName: 'PLATE-MIXED',
+                position: 'F01', // Already used by micronix tube!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('Position F01')
+      expect(data.error).toContain('already used')
+      expect(data.specimenIndex).toBe(0)
     })
   })
 
