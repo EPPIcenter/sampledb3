@@ -1164,6 +1164,102 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
       }
     }
     
+    // Validate barcode uniqueness before transaction (DB + in-payload)
+    const seenBarcodes = new Set<string>()
+    for (let i = 0; i < resolvedSpecimens.length; i++) {
+      const spec = resolvedSpecimens[i]
+      if (spec.container && spec.container.containerType) {
+        const container = spec.container as ExtendedContainerData
+        const containerType = container.containerType
+        const barcode = container.barcode?.trim()
+        if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && barcode) {
+          if (seenBarcodes.has(barcode)) {
+            return c.json({
+              error: `Barcode '${barcode}' is used more than once in your request. Each barcode must be unique.`,
+              specimenIndex: i,
+            }, 400)
+          }
+          seenBarcodes.add(barcode)
+          const existing = containerType === 'micronix_tube'
+            ? dbInstance.select({ id: micronixTube.id }).from(micronixTube).where(eq(micronixTube.barcode, barcode)).get()
+            : dbInstance.select({ id: cryovialTube.id }).from(cryovialTube).where(eq(cryovialTube.barcode, barcode)).get()
+          if (existing) {
+            return c.json({
+              error: `Barcode '${barcode}' already exists`,
+              specimenIndex: i,
+            }, 400)
+          }
+        }
+      }
+    }
+    
+    // Validate position uniqueness before transaction (DB + in-payload)
+    const seenPositionByCollection = new Map<string, Set<string>>()
+    for (let i = 0; i < resolvedSpecimens.length; i++) {
+      const spec = resolvedSpecimens[i]
+      if (spec.container && spec.container.containerType) {
+        const container = spec.container as ExtendedContainerData
+        const containerType = container.containerType
+        const normalizedPosition = normalizePosition(container.position)
+        if (!normalizedPosition || (containerType !== 'micronix_tube' && containerType !== 'cryovial_tube' && containerType !== 'static_well')) {
+          continue
+        }
+        const identifier = container.collectionName || container.collectionBarcode
+        if (!identifier) continue
+        const collectionType = containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
+        const collectionKey = `${collectionType}-${identifier}`
+        const collectionId = collectionMap.get(collectionKey) ?? null
+        
+        // Check DB: position already used in this plate/box (only when collection exists)
+        if (collectionId !== undefined && collectionId !== null) {
+          if (containerType === 'micronix_tube' || containerType === 'static_well') {
+            const existingTube = dbInstance
+              .select({ id: micronixTube.id })
+              .from(micronixTube)
+              .where(and(eq(micronixTube.collectionId, collectionId), eq(micronixTube.position, normalizedPosition)))
+              .get()
+            const existingWell = dbInstance
+              .select({ id: staticWell.id })
+              .from(staticWell)
+              .where(and(eq(staticWell.collectionId, collectionId), eq(staticWell.position, normalizedPosition)))
+              .get()
+            if (existingTube || existingWell) {
+              return c.json({
+                error: `Position ${normalizedPosition} is already used in this plate. Use a different position or plate.`,
+                specimenIndex: i,
+              }, 400)
+            }
+          } else {
+            const existing = dbInstance
+              .select({ id: cryovialTube.id })
+              .from(cryovialTube)
+              .where(and(eq(cryovialTube.collectionId, collectionId), eq(cryovialTube.position, normalizedPosition)))
+              .get()
+            if (existing) {
+              return c.json({
+                error: `Position ${normalizedPosition} is already used in this box. Use a different position or box.`,
+                specimenIndex: i,
+              }, 400)
+            }
+          }
+        }
+        
+        // Check in-payload: same position used twice for same collection
+        let positionSet = seenPositionByCollection.get(collectionKey)
+        if (!positionSet) {
+          positionSet = new Set<string>()
+          seenPositionByCollection.set(collectionKey, positionSet)
+        }
+        if (positionSet.has(normalizedPosition)) {
+          return c.json({
+            error: `Position ${normalizedPosition} in this plate/box is used more than once in your request. Each position can only be used once.`,
+            specimenIndex: i,
+          }, 400)
+        }
+        positionSet.add(normalizedPosition)
+      }
+    }
+    
     // Now execute everything in a synchronous transaction
     const user = c.get('user')
     let result
@@ -1183,7 +1279,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
           .where(eq(studySubject.id, existingSubjectId))
           .get()
         if (!existing) {
-          throw new Error('Subject not found')
+          throw new ValidationError('Subject not found')
         }
         subject = existing
         subjectId = existing.id
@@ -1313,7 +1409,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
                 .where(eq(micronixTube.barcode, container.barcode))
                 .get()
               if (existing) {
-                throw new Error(`Barcode '${container.barcode}' already exists`)
+                throw new ValidationError(`Barcode '${container.barcode}' already exists`)
               }
             }
             
@@ -1359,7 +1455,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
                 .where(eq(cryovialTube.barcode, container.barcode))
                 .get()
               if (existing) {
-                throw new Error(`Barcode '${container.barcode}' already exists`)
+                throw new ValidationError(`Barcode '${container.barcode}' already exists`)
               }
             }
             

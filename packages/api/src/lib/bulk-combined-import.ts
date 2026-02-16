@@ -388,7 +388,7 @@ export function createSubjectWithSpecimensInTx(
         } else throw new ValidationError('Collection not found and no location provided')
         if (container.barcode) {
           const existing = tx.select({ id: micronixTube.id }).from(micronixTube).where(eq(micronixTube.barcode, container.barcode)).get()
-          if (existing) throw new Error(`Barcode '${container.barcode}' already exists`)
+          if (existing) throw new ValidationError(`Barcode '${container.barcode}' already exists`)
         }
         tx.insert(micronixTube).values({
           id: containerId,
@@ -420,7 +420,7 @@ export function createSubjectWithSpecimensInTx(
         } else throw new ValidationError('Collection not found and no location provided')
         if (container.barcode) {
           const existing = tx.select({ id: cryovialTube.id }).from(cryovialTube).where(eq(cryovialTube.barcode, container.barcode)).get()
-          if (existing) throw new Error(`Barcode '${container.barcode}' already exists`)
+          if (existing) throw new ValidationError(`Barcode '${container.barcode}' already exists`)
         }
         tx.insert(cryovialTube).values({
           id: containerId,
