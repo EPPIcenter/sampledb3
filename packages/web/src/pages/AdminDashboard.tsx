@@ -79,6 +79,7 @@ export default function AdminDashboard() {
     { title: 'Location Management', description: 'Create and manage storage locations', icon: 'database', to: '/locations' },
     { title: 'System Settings', description: 'Configure application settings', icon: 'settings', to: '/admin/settings' },
     { title: 'System Statistics', description: 'View detailed system analytics', icon: 'barChart', to: '/admin/statistics' },
+    { title: 'Data Integrity', description: 'Audit empty collections and data consistency', icon: 'database', to: '/admin/data-integrity' },
   ]
 
   const statCards = [

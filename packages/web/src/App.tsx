@@ -51,6 +51,10 @@ import AdminUsers from './pages/AdminUsers'
 import AdminSettings from './pages/AdminSettings'
 import AdminStatistics from './pages/AdminStatistics'
 import AdminErrorLogs from './pages/AdminErrorLogs'
+import AdminDataIntegrityLayout from './pages/AdminDataIntegrityLayout'
+import AdminDataIntegrityOverview from './pages/AdminDataIntegrityOverview'
+import AdminDataIntegrityEmptyCollections from './pages/AdminDataIntegrityEmptyCollections'
+import AdminDataIntegrityReport from './pages/AdminDataIntegrityReport'
 import SetupGuard from './components/SetupGuard'
 import AuthGuard from './components/AuthGuard'
 import AdminGuard from './components/AdminGuard'
@@ -582,6 +586,18 @@ function AppContent() {
                   </AdminGuard>
                 }
               />
+              <Route
+                path="/admin/data-integrity"
+                element={
+                  <AdminGuard>
+                    <AdminDataIntegrityLayout />
+                  </AdminGuard>
+                }
+              >
+                <Route index element={<AdminDataIntegrityOverview />} />
+                <Route path="empty-collections" element={<AdminDataIntegrityEmptyCollections />} />
+                <Route path="report" element={<AdminDataIntegrityReport />} />
+              </Route>
                 </Routes>
               </main>
             </div>

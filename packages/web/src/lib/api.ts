@@ -1889,6 +1889,102 @@ export const adminApi = {
     api.patch<{ user: User }>(`/auth/users/${id}/approve`),
   getSystemStats: () =>
     api.get<AdminSystemStats>('/statistics/admin'),
+  getEmptyCollections: () =>
+    api.get<{ collections: EmptyCollectionItem[] }>('/admin/data-audit/empty-collections'),
+  deleteEmptyCollections: (ids: EmptyCollectionsDeleteIds) =>
+    api.post<{ deleted: number; errors?: string[] }>('/admin/data-audit/empty-collections/delete', { ids }),
+  getIntegrityReport: () =>
+    api.get<IntegrityReport>('/admin/data-audit/integrity-report'),
+}
+
+export interface DuplicateBarcodeItem {
+  barcode: string
+  containerType: 'micronix_tube'
+  ids: number[]
+}
+
+export interface LocationPathInconsistencyItem {
+  id: number
+  name: string
+  storedPath: string | null
+  expectedPath: string
+}
+
+export interface IntegrityReport {
+  emptyCollections: EmptyCollectionItem[]
+  collectionsWithMissingLocation: CollectionWithMissingLocationItem[]
+  containersWithMissingSpecimen: ContainerWithMissingSpecimenItem[]
+  subtypeOrphans: SubtypeOrphanItem[]
+  sheetsWithMissingBoxOrBag: SheetWithMissingBoxOrBagItem[]
+  specimensWithMissingSubjectOrBatch: SpecimenWithMissingSubjectOrBatchItem[]
+  studySubjectsWithMissingStudy: StudySubjectWithMissingStudyItem[]
+  derivationBrokenRefs: DerivationBrokenRefItem[]
+  storageContainerTagOrphans: StorageContainerTagOrphanItem[]
+  duplicateBarcodes: DuplicateBarcodeItem[]
+  locationPathInconsistencies: LocationPathInconsistencyItem[]
+}
+
+export interface CollectionWithMissingLocationItem {
+  type: EmptyCollectionItem['type']
+  id: number
+  name: string
+  locationId: number
+}
+
+export interface ContainerWithMissingSpecimenItem {
+  id: number
+  specimenId: number
+}
+
+export interface SubtypeOrphanItem {
+  id: number
+}
+
+export interface SheetWithMissingBoxOrBagItem {
+  id: number
+  name: string
+  boxId: number | null
+  bagId: number | null
+}
+
+export interface SpecimenWithMissingSubjectOrBatchItem {
+  id: number
+  studySubjectId: number | null
+  controlBatchId: number | null
+}
+
+export interface StudySubjectWithMissingStudyItem {
+  id: number
+  studyId: number
+  name: string
+}
+
+export interface DerivationBrokenRefItem {
+  id: number
+  parentContainerId: number
+  childContainerId: number
+}
+
+export interface StorageContainerTagOrphanItem {
+  storageContainerId: number
+  tagId: number
+}
+
+export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+
+export interface EmptyCollectionItem {
+  type: CollectionType
+  id: number
+  name: string
+  locationId?: number
+  locationPath?: string | null
+}
+
+export interface EmptyCollectionsDeleteIds {
+  micronix_plate?: number[]
+  cryovial_box?: number[]
+  box?: number[]
+  bag?: number[]
 }
 
 export interface ErrorLog {
