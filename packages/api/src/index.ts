@@ -36,6 +36,7 @@ import { createCollectionsRoutes } from './routes/collections'
 import { createStatisticsRoutes } from './routes/statistics'
 import { createSettingsRoutes } from './routes/settings'
 import { createErrorLogsRoutes } from './routes/error-logs'
+import { createDataAuditRoutes } from './routes/data-audit'
 import { createQpcrExperimentsRoutes } from './routes/qpcr-experiments'
 import { handleRouteError } from './lib/error-handler'
 
@@ -161,6 +162,7 @@ app.route('/api/tags', createTagsRoutes(db))
 app.route('/api/settings', createSettingsRoutes(db))
 app.route('/api/units', createUnitsRoutes(db))
 app.route('/api/error-logs', createErrorLogsRoutes(db))
+app.route('/api/admin/data-audit', createDataAuditRoutes(db))
 app.route('/api/qpcr-experiments', createQpcrExperimentsRoutes(db))
 
 // Serve static files from web build in production; SPA fallback for client routes
