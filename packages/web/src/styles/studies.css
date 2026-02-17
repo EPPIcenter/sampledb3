@@ -218,6 +218,11 @@
   color: rgb(var(--dashboard-text-muted));
 }
 
+/* Results area: stable min-height to avoid layout jump when result count changes */
+.studies-page .studies-results {
+  min-height: 240px;
+}
+
 /* --- Study Detail page: sticky header, identity, metrics, actions --- */
 
 .study-detail-header {

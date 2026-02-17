@@ -6,6 +6,7 @@ import StudyCardSkeleton from '../components/StudyCardSkeleton'
 import { getModifierKey } from '../lib/hotkeys'
 import { useUser } from '../contexts/UserContext'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import '../styles/studies.css'
 
 type ViewMode = 'grid' | 'list'
@@ -50,6 +51,7 @@ export default function Studies() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   useFocusSearchOnSlash(searchInputRef)
+  const debouncedSearch = useDebouncedValue(search, 350)
 
   // Load all unique lead persons on mount
   useEffect(() => {
@@ -67,15 +69,15 @@ export default function Studies() {
     loadAllLeadPersons()
   }, [])
 
-  // Check if we have active filters (client-side filtering)
+  // Check if we have active filters (debounced search so list/API only react after user pauses typing)
   const hasActiveFilters = useMemo(() => {
-    return search !== '' || filterType !== 'all' || filterLead !== ''
-  }, [search, filterType, filterLead])
+    return debouncedSearch !== '' || filterType !== 'all' || filterLead !== ''
+  }, [debouncedSearch, filterType, filterLead])
 
-  const prevFiltersRef = useRef([search, filterType, filterLead])
+  const prevFiltersRef = useRef([debouncedSearch, filterType, filterLead])
   const prevFilters = prevFiltersRef.current
-  if (prevFilters[0] !== search || prevFilters[1] !== filterType || prevFilters[2] !== filterLead) {
-    prevFiltersRef.current = [search, filterType, filterLead]
+  if (prevFilters[0] !== debouncedSearch || prevFilters[1] !== filterType || prevFilters[2] !== filterLead) {
+    prevFiltersRef.current = [debouncedSearch, filterType, filterLead]
     setPage(1)
     setClientPage(1)
     setStudies([])
@@ -85,16 +87,16 @@ export default function Studies() {
   // Load studies when filters change (state reset is done during render above)
   useEffect(() => {
     if (!hasActiveFilters) {
-      loadStudies(true)
+      loadStudies(true, debouncedSearch)
     } else {
-      loadAllStudies()
+      loadAllStudies(debouncedSearch)
     }
-  }, [search, filterType, filterLead, hasActiveFilters])
+  }, [debouncedSearch, filterType, filterLead, hasActiveFilters])
 
   // Load more studies when page changes (infinite scroll)
   useEffect(() => {
     if (!hasActiveFilters && page > 1 && !loading && hasMore) {
-      loadStudies(false)
+      loadStudies(false, '')
     }
   }, [page, hasActiveFilters, loading, hasMore])
 
@@ -103,7 +105,7 @@ export default function Studies() {
     localStorage.setItem('studies-view-mode', mode)
   }
 
-  const loadStudies = async (reset: boolean = false) => {
+  const loadStudies = async (reset: boolean = false, searchTerm: string = '') => {
     try {
       if (reset) {
       setLoading(true)
@@ -111,7 +113,7 @@ export default function Studies() {
         setLoadingMore(true)
       }
       
-      const response = await studiesApi.list(search || undefined, { page, limit })
+      const response = await studiesApi.list(searchTerm || undefined, { page, limit })
       const studiesList = response.studies || []
       
       if (studiesList.length === 0) {
@@ -156,11 +158,11 @@ export default function Studies() {
     }
   }
 
-  const loadAllStudies = async () => {
+  const loadAllStudies = async (searchTerm: string = '') => {
     try {
       setLoading(true)
       // Load all studies when filters are active (we'll paginate client-side)
-      const response = await studiesApi.list(search || undefined, { page: 1, limit: 10000 })
+      const response = await studiesApi.list(searchTerm || undefined, { page: 1, limit: 10000 })
       const studiesList = response.studies || []
       
       // Merge with cached summaries
@@ -302,13 +304,13 @@ export default function Studies() {
     }
   }, [hasMore, loading, loadingMore, hasActiveFilters])
 
-  // Filter and sort studies
+  // Filter and sort studies (use debounced search so list only updates after user pauses typing)
   const filteredAndSortedStudies = useMemo(() => {
     let filtered = [...studies]
 
     // Apply search filter
-    if (search) {
-      const searchLower = search.toLowerCase()
+    if (debouncedSearch) {
+      const searchLower = debouncedSearch.toLowerCase()
       filtered = filtered.filter(study =>
         study.title.toLowerCase().includes(searchLower) ||
         study.shortCode.toLowerCase().includes(searchLower) ||
@@ -359,7 +361,7 @@ export default function Studies() {
     })
 
     return filtered
-  }, [studies, search, filterType, filterLead, sortBy, sortDirection])
+  }, [studies, debouncedSearch, filterType, filterLead, sortBy, sortDirection])
 
   // For filtered results, show all (no pagination needed with infinite scroll)
   const displayStudies = useMemo(() => {
@@ -604,7 +606,8 @@ export default function Studies() {
         </div>
       </div>
 
-      {/* Content */}
+      {/* Content – min-height container to avoid layout jump when result count changes */}
+      <div className="studies-results">
       {loading ? (
         <div className={`grid gap-4 ${
           viewMode === 'list'
@@ -685,6 +688,7 @@ export default function Studies() {
           )}
         </>
       )}
+      </div>
       </div>
     </div>
   )
