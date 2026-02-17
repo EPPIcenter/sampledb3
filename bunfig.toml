@@ -1,0 +1,4 @@
+# Root workspace test config. Use `bun run test` to run API (bun) + web (vitest). Use `npx playwright test` for E2E.
+# Limit discovery to API src so we don't run: api/dist (missing fixtures), e2e (Playwright), or web (needs Vitest/jsdom).
+[test]
+root = "packages/api/src"
