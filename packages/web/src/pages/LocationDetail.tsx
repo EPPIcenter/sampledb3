@@ -74,12 +74,7 @@ export default function LocationDetail() {
         setContents(detailResponse.data.contents || {})
         setHierarchyStats(detailResponse.data.hierarchyStats || null)
         setAllLocations(listResponse.data.locations || [])
-        if (detailResponse.data.pagination) {
-          // Pagination is a single object, but we need to set it per collection type
-          // For now, we'll handle it differently - the API returns a single pagination object
-          // but we need per-type pagination. This is a known limitation.
-          // We'll skip setting pagination from the detail response for now
-        }
+        setPagination(detailResponse.data.pagination ?? null)
       } catch (error) {
         console.error('Failed to load location details:', error)
       } finally {
