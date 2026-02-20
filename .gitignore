@@ -2,6 +2,9 @@
 node_modules/
 .pnpm-store
 
+design/
+shareholder-overview/
+
 # Build & Compilation
 dist/
 build/
