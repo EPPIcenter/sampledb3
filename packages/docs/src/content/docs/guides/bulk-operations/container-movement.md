@@ -31,13 +31,15 @@ If you're using positions instead of barcodes, your CSV needs the source collect
 
 The target position must be in the correct format for the destination plate. For 96-well plates, use the A01-H12 format with two-digit columns. Make sure the destination position is available or acceptable to overwrite—the system will warn you if you're overwriting an existing container.
 
+Your CSV must list **all 96 well positions** (A01–H12) exactly once, as produced by scanning software. You can leave the barcode cell empty for wells that should be empty. When using multiple CSVs targeting the same plate, they together form the move. If a well is empty in your upload but currently has a tube, that tube must appear elsewhere in the move (in any CSV targeting that plate) so it is relocated and no tube is lost.
+
 ### The Movement Process
 
-Navigate to Container Movement → Micronix to start the process. Upload your CSV file (or multiple files if you're doing a larger reorganization), and the system will immediately begin validating and resolving containers. This validation checks that all source containers exist, that they're in the specified source plates, that destination positions are valid, and that there are no conflicts.
+Navigate to Container Movement → Micronix to start the process. Choose a scanner configuration that matches your CSV format, then upload your CSV file (or multiple files if you're doing a larger reorganization). If you change the scanner configuration after uploading, the system re-validates your files automatically without needing to re-upload. The system will immediately begin validating and resolving containers. This validation checks that all source containers exist, that they're in the specified source plates, that destination positions are valid, and that there are no conflicts.
 
 The system shows you a list of all containers it found and resolved, which lets you verify that it identified the correct containers. You can review this list to make sure everything looks right before proceeding. If the system can't find a container (perhaps because the barcode is wrong or the position doesn't exist), it will show an error for that row.
 
-If you're using multiple CSV files, you'll need to specify the destination plate for each file. This is useful when different files are moving containers to different destination plates. The system validates that each source plate maps to only one destination across all files, which prevents conflicts where the same source plate would need to go to multiple destinations.
+If you're using multiple CSV files, you'll need to specify the destination plate for each file. Use the destination plate picker: you can search by plate name, barcode, or location to see a flat list of matching plates, or browse the location tree. The picker uses large, easy-to-tap options so you can select a plate quickly. This is useful when different files are moving containers to different destination plates. The system validates that each source plate maps to only one destination across all files, which prevents conflicts where the same source plate would need to go to multiple destinations.
 
 Once everything is validated and you've confirmed the destinations, click "Execute Moves" to perform all the movements. The system processes all moves together, updating container positions and collection associations. When complete, you'll see a summary showing how many containers were successfully moved and any errors that occurred.
 
