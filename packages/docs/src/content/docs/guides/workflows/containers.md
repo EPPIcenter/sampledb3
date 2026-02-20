@@ -109,6 +109,8 @@ Box and Bag detail pages show the box or bag information and list the sheets con
 
 Sheet detail pages show information about a specific sheet and list all the papers it contains, along with their associated specimens.
 
+On each of these collection detail pages (plates, cryovial boxes, boxes, bags, and sheets), you can switch to a **Table** view that lists every position or item in a tabular format. Use the **Export CSV** button in the table view to download the current list as a CSV file for use in spreadsheets or other tools.
+
 ## Moving Containers Between Collections
 
 As your laboratory work progresses, you may need to reorganize containers by moving them from one collection to another. This might happen when you're consolidating samples, reorganizing storage, or moving containers to new locations. The system provides tools for moving containers, which are covered in detail in the [Container Movement Guide](/docs/guides/bulk-operations/container-movement/). These tools support moving individual containers or bulk moves using CSV files, depending on your needs.

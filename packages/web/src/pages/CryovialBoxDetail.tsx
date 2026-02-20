@@ -3,7 +3,13 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { collectionsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import CollectionGrid from '../components/CollectionGrid'
+import CollectionTableWithExport from '../components/CollectionTableWithExport'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import {
+  COLLECTION_GRID_TABLE_COLUMNS,
+  buildCollectionTableRow,
+  type CollectionTableEntry,
+} from '../lib/collection-table-columns'
 import '../styles/storage.css'
 
 function statusColor(name: string): string {
@@ -21,7 +27,8 @@ export default function CryovialBoxDetail() {
   const [searchParams] = useSearchParams()
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
-  
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
+
   // Get target position from URL query params
   const targetPosition = searchParams.get('position')
 
@@ -97,6 +104,28 @@ export default function CryovialBoxDetail() {
     return Array.from(labels).sort()
   }, [data])
 
+  const tableRows = useMemo(() => {
+    if (!layout || !data?.positions) return []
+    const positions = data.positions as Record<string, CollectionTableEntry[]>
+    const rows: ReturnType<typeof buildCollectionTableRow>[] = []
+    layout.rows.forEach((row) => {
+      layout.cols.forEach((col) => {
+        const key = `${row}${col.padStart(2, '0')}`
+        const entries = positions[key] || []
+        entries.forEach((entry) => {
+          rows.push(
+            buildCollectionTableRow({
+              position: entry?.position ?? key,
+              barcode: entry?.barcode,
+              container: entry?.container ?? undefined,
+            })
+          )
+        })
+      })
+    })
+    return rows
+  }, [data, layout])
+
   if (loading) {
     return (
       <div className="storage-page">
@@ -145,9 +174,29 @@ export default function CryovialBoxDetail() {
 
       {layout && (
         <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-2">
-          <div className="flex items-start justify-between mb-3 gap-4">
-            <h2 className="text-lg font-semibold storage-section-title">Box Layout</h2>
-            {legend.length > 0 && (
+          <div className="flex items-start justify-between mb-3 gap-4 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-semibold storage-section-title">Box Layout</h2>
+              <div className="flex rounded-md border border-gray-200 overflow-hidden" role="group" aria-label="View mode">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'grid' ? 'bg-gray-100 border-gray-300' : 'bg-white hover:bg-gray-50'} border-r border-gray-200`}
+                  aria-pressed={viewMode === 'grid'}
+                >
+                  Grid
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('table')}
+                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'table' ? 'bg-gray-100 border-gray-300' : 'bg-white hover:bg-gray-50'}`}
+                  aria-pressed={viewMode === 'table'}
+                >
+                  Table
+                </button>
+              </div>
+            </div>
+            {legend.length > 0 && viewMode === 'grid' && (
               <div className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
                 <span className="font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>Legend:</span>
                 {legend.map((name) => (
@@ -163,6 +212,7 @@ export default function CryovialBoxDetail() {
               </div>
             )}
           </div>
+          {viewMode === 'grid' && (
           <CollectionGrid
             theme="storage"
             rows={layout.rows}
@@ -267,6 +317,14 @@ export default function CryovialBoxDetail() {
               )
             }}
           />
+          )}
+          {viewMode === 'table' && (
+            <CollectionTableWithExport
+              columns={COLLECTION_GRID_TABLE_COLUMNS}
+              rows={tableRows}
+              exportFilename={`cryovial-box-${box.name || 'unnamed'}.csv`}
+            />
+          )}
         </div>
       )}
       </div>

@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import api, { collectionsApi } from '../lib/api'
+import { collectionsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
+import CollectionTableWithExport from '../components/CollectionTableWithExport'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import {
+  COLLECTION_GRID_TABLE_COLUMNS,
+  buildCollectionTableRow,
+  type CollectionTableEntry,
+} from '../lib/collection-table-columns'
 import '../styles/storage.css'
 
 export default function SheetDetail() {
@@ -11,7 +17,8 @@ export default function SheetDetail() {
   const [searchParams] = useSearchParams()
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
-  
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
+
   // Get target position and containerId from URL query params
   const targetPosition = searchParams.get('position')
   const targetContainerId = searchParams.get('containerId')
@@ -70,6 +77,16 @@ export default function SheetDetail() {
 
   const { sheet, papers } = data
 
+  const tableRows = useMemo(() => {
+    return papers.map((p: CollectionTableEntry) =>
+      buildCollectionTableRow({
+        position: p.position,
+        barcode: p.barcode,
+        container: p.container ?? undefined,
+      })
+    )
+  }, [papers])
+
   const breadcrumbItems = [
     { label: 'Locations', to: '/locations' },
     sheet.location?.id
@@ -94,15 +111,45 @@ export default function SheetDetail() {
       </div>
 
       <div className="storage-card p-6 storage-reveal storage-reveal-2">
-        <h2 className="text-lg font-semibold storage-section-title mb-4 flex justify-between items-center">
-          DBS Spots
-          <span className="text-sm font-normal" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
-            {papers.reduce((sum: number, p: any) => sum + (p.container?.totalQuantity || 0), 0)} total spots
-          </span>
-        </h2>
-        
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-lg font-semibold storage-section-title">
+              DBS Spots
+            </h2>
+            <span className="text-sm font-normal" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              {papers.reduce((sum: number, p: any) => sum + (p.container?.totalQuantity || 0), 0)} total spots
+            </span>
+            {papers.length > 0 && (
+              <div className="flex rounded-md border border-gray-200 overflow-hidden" role="group" aria-label="View mode">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('cards')}
+                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'cards' ? 'bg-gray-100 border-gray-300' : 'bg-white hover:bg-gray-50'} border-r border-gray-200`}
+                  aria-pressed={viewMode === 'cards'}
+                >
+                  Cards
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('table')}
+                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'table' ? 'bg-gray-100 border-gray-300' : 'bg-white hover:bg-gray-50'}`}
+                  aria-pressed={viewMode === 'table'}
+                >
+                  Table
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         {papers.length === 0 ? (
           <p className="text-sm italic" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No spots recorded on this sheet.</p>
+        ) : viewMode === 'table' ? (
+          <CollectionTableWithExport
+            columns={COLLECTION_GRID_TABLE_COLUMNS}
+            rows={tableRows}
+            exportFilename={`sheet-${sheet.name || 'unnamed'}.csv`}
+          />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {papers.map((p: any) => {

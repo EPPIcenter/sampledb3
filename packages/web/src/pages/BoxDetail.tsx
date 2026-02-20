@@ -1,8 +1,14 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { collectionsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
+import CollectionTableWithExport from '../components/CollectionTableWithExport'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import {
+  COLLECTION_SHEET_TABLE_COLUMNS,
+  buildSheetPaperTableRow,
+  type CollectionTableEntry,
+} from '../lib/collection-table-columns'
 import '../styles/storage.css'
 
 export default function BoxDetail() {
@@ -10,6 +16,7 @@ export default function BoxDetail() {
   const navigate = useNavigate()
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState<'sheets' | 'table'>('sheets')
   const [expandedSheets, setExpandedSheets] = useState<Set<number>>(new Set())
   const initializedSheets = useRef(false)
 
@@ -46,6 +53,21 @@ export default function BoxDetail() {
       }
     }
   }, [sheets.length])
+
+  const tableRows = useMemo(() => {
+    const list: ReturnType<typeof buildSheetPaperTableRow>[] = []
+    sheets.forEach((sheet: { id: number; name?: string; papers?: CollectionTableEntry[] }) => {
+      (sheet.papers || []).forEach((p: CollectionTableEntry) => {
+        list.push(
+          buildSheetPaperTableRow(
+            { position: p.position, barcode: p.barcode, container: p.container ?? undefined },
+            sheet.name ?? String(sheet.id)
+          )
+        )
+      })
+    })
+    return list
+  }, [sheets])
 
   if (loading) {
     return (
@@ -132,11 +154,40 @@ export default function BoxDetail() {
 
       <div className="space-y-4 storage-reveal storage-reveal-3">
         <div className="space-y-3">
-          <h2 className="text-base font-semibold storage-section-title">Sheets in this Box</h2>
-          {sheets.length === 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-base font-semibold storage-section-title">Sheets in this Box</h2>
+            <div className="flex rounded-md border border-gray-200 overflow-hidden" role="group" aria-label="View mode">
+              <button
+                type="button"
+                onClick={() => setViewMode('sheets')}
+                className={`px-2 py-1 text-xs font-medium ${viewMode === 'sheets' ? 'bg-gray-100 border-gray-300' : 'bg-white hover:bg-gray-50'} border-r border-gray-200`}
+                aria-pressed={viewMode === 'sheets'}
+              >
+                Sheets
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-2 py-1 text-xs font-medium ${viewMode === 'table' ? 'bg-gray-100 border-gray-300' : 'bg-white hover:bg-gray-50'}`}
+                aria-pressed={viewMode === 'table'}
+              >
+                Table
+              </button>
+            </div>
+          </div>
+          {viewMode === 'table' && (
+            <div className="storage-card p-4">
+              <CollectionTableWithExport
+                columns={COLLECTION_SHEET_TABLE_COLUMNS}
+                rows={tableRows}
+                exportFilename={`box-${box.name || 'unnamed'}.csv`}
+              />
+            </div>
+          )}
+          {viewMode === 'sheets' && sheets.length === 0 && (
             <p className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No sheets in this box.</p>
           )}
-          {sheets.map((sheet: any) => {
+          {viewMode === 'sheets' && sheets.map((sheet: any) => {
             const isExpanded = expandedSheets.has(sheet.id)
             const sheetSpots = sheet.papers?.reduce((sum: number, p: any) => sum + (p.container?.totalQuantity || 0), 0) || 0
             const activeSheetSpots = sheet.papers?.filter((p: any) => p.container?.remainingQuantity > 0).length || 0
