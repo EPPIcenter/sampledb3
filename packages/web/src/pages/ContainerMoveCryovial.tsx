@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate, Navigate } from 'react-router-dom'
 import { collectionsApi, locationsApi, type Location } from '../lib/api'
 import CryovialBoxPicker, { type CryovialBox } from '../components/CryovialBoxPicker'
@@ -73,6 +73,7 @@ export default function ContainerMoveCryovial() {
   } | null>(null)
   const [atomicMode, setAtomicMode] = useState<ContainerMoveAtomicMode>('all_or_nothing')
   const [instructionsExpanded, setInstructionsExpanded] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Load available boxes and locations on mount
   useEffect(() => {
@@ -251,13 +252,23 @@ export default function ContainerMoveCryovial() {
   }
 
   const updateFileBoxSelection = (fileIndex: number, boxName: string | null) => {
-    setFiles(prev => prev.map((f, i) => 
-      i === fileIndex ? { ...f, selectedBoxName: boxName } : f
-    ))
+    setFiles(prev => prev.map((f, i) => {
+      if (i !== fileIndex) return f
+      return {
+        ...f,
+        selectedBoxName: boxName,
+        resolvedContainers: [],
+        unresolvedContainers: [],
+        isResolved: false,
+      }
+    }))
   }
 
   const removeFile = (fileIndex: number) => {
     setFiles(prev => prev.filter((_, i) => i !== fileIndex))
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
   }
 
   const downloadTemplate = () => {
@@ -682,6 +693,7 @@ BOX-002,A1,B2`
               </div>
 
               <input
+                ref={fileInputRef}
                 type="file"
                 accept=".csv"
                 multiple

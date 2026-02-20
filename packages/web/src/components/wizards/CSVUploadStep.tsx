@@ -79,6 +79,9 @@ export default function CSVUploadStep({
 
   const removeFile = (index: number) => {
     onChange(csvFiles.filter((_, i) => i !== index))
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
   }
 
   const downloadTemplate = async () => {

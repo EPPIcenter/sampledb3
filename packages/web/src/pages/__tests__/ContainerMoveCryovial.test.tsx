@@ -102,6 +102,115 @@ describe('ContainerMoveCryovial', () => {
         })
     })
 
+    it('clears file input value when a file is removed', async () => {
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
+            data: { collections: [{ id: 1, name: 'BOX1', barcode: null, locationId: null, itemCount: 0 }] }
+        } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+
+        const csvContent = 'source_collection_name,source_position,target_position\nBOX1,A1,B1'
+        const file = new File([csvContent], 'BOX1.csv', { type: 'text/csv' })
+        Object.defineProperty(file, 'text', { value: async () => csvContent })
+
+        const { container } = await renderWithProviders(<ContainerMoveCryovial />)
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input).toBeInTheDocument()
+            expect(input.disabled).toBe(false)
+        })
+
+        const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+        fireEvent.change(fileInput, { target: { files: [file] } })
+
+        await waitFor(() => {
+            expect(screen.getByText('BOX1.csv')).toBeInTheDocument()
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: /^Remove$/i }))
+
+        await waitFor(() => {
+            expect(screen.queryByText('BOX1.csv')).not.toBeInTheDocument()
+        })
+
+        const inputAfterRemove = container.querySelector('input[type="file"]') as HTMLInputElement
+        expect(inputAfterRemove.value).toBe('')
+    })
+
+    it('clears resolution state when destination box is changed', async () => {
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
+            data: {
+                collections: [
+                    { id: 1, name: 'BOX1', barcode: null, locationId: 1, itemCount: 0, location: { path: '/Loc1' } },
+                    { id: 2, name: 'BOX2', barcode: null, locationId: 1, itemCount: 0, location: { path: '/Loc1' } },
+                ],
+            }
+        } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({
+            data: { locations: [{ id: 1, name: 'Loc1', path: '/Loc1', parentId: null }] }
+        } as any)
+        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
+            data: {
+                containers: [
+                    {
+                        identifier: { sourceCollectionName: 'BOX1', sourcePosition: 'A1' },
+                        container: {
+                            containerId: 2,
+                            currentCollectionId: 200,
+                            currentCollectionName: 'BOX1',
+                            currentCollectionType: 'cryovial_box',
+                            currentPosition: 'A1',
+                        },
+                    },
+                ],
+            }
+        } as any)
+
+        const csvContent = 'source_collection_name,source_position,target_position\nBOX1,A1,B1'
+        const file = new File([csvContent], 'data.csv', { type: 'text/csv' })
+        Object.defineProperty(file, 'text', { value: async () => csvContent })
+
+        const { container } = await renderWithProviders(<ContainerMoveCryovial />)
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input.disabled).toBe(false)
+        })
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [file] } })
+
+        await waitFor(() => {
+            expect(screen.getByText('data.csv')).toBeInTheDocument()
+        })
+
+        fireEvent.click(screen.getByText('Select target box...'))
+        await waitFor(() => {
+            expect(screen.getByText('Select Cryovial Box')).toBeInTheDocument()
+        })
+        fireEvent.click(screen.getByRole('button', { name: /BOX1 0 items/ }))
+
+        await waitFor(() => {
+            expect(screen.getByText('Next: Resolve Containers')).not.toBeDisabled()
+        }, { timeout: 3000 })
+
+        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+
+        await waitFor(() => {
+            expect(collectionsApi.resolveContainers).toHaveBeenCalledTimes(1)
+        }, { timeout: 5000 })
+
+        // Change destination box (reopen picker and select BOX2)
+        fireEvent.click(screen.getByRole('button', { name: /BOX1/ }))
+        await waitFor(() => {
+            expect(screen.getByText('Select Cryovial Box')).toBeInTheDocument()
+        })
+        fireEvent.click(screen.getByRole('button', { name: /BOX2 0 items/ }))
+
+        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+
+        await waitFor(() => {
+            expect(collectionsApi.resolveContainers).toHaveBeenCalledTimes(2)
+        }, { timeout: 5000 })
+    })
+
     it('validates CSV columns specific to cryovials', async () => {
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
         vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)

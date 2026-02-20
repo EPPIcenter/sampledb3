@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, Link, useNavigate, Navigate } from 'react-router-dom'
 import { collectionsApi, locationsApi, scannerConfigurationsApi, type Location, type ScannerConfiguration } from '../lib/api'
+import { normalizeWellPosition, validateFullPlatePositions } from '../lib/micronix-plate-positions'
 import MicronixPlatePicker, { type MicronixPlate } from '../components/MicronixPlatePicker'
 import { useUser } from '../contexts/UserContext'
 import '../styles/storage.css'
@@ -75,6 +76,7 @@ export default function ContainerMoveMicronix() {
   const [instructionsExpanded, setInstructionsExpanded] = useState(false)
   const [scannerConfigurations, setScannerConfigurations] = useState<ScannerConfiguration[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Load available plates, locations, and scanner configurations on mount
   useEffect(() => {
@@ -115,6 +117,49 @@ export default function ContainerMoveMicronix() {
       console.error('Failed to load collections, locations, or scanner configurations:', error)
     })
   }, [])
+
+  const configRevalidateRequestIdRef = useRef<string | null>(null)
+
+  const handleConfigChange = (newId: string) => {
+    setSelectedConfigId(newId)
+    if (files.length === 0) return
+    const config = scannerConfigurations.find((c) => c.id === newId)
+    if (!config) return
+    const requestId = newId
+    configRevalidateRequestIdRef.current = requestId
+    setLoading(true)
+    const revalidate = async () => {
+      const updated: FileData[] = []
+      for (const fileData of files) {
+        try {
+          const text = await fileData.file.text()
+          const csvRows = parseCSV(text, config)
+          const validation = validateCSV(csvRows, config)
+          const preview = csvRows.slice(0, 5)
+          updated.push({
+            ...fileData,
+            csvRows,
+            validationErrors: validation.errors,
+            preview,
+            resolvedContainers: [],
+            unresolvedContainers: [],
+            isResolved: false,
+          })
+        } catch {
+          updated.push(fileData)
+        }
+      }
+      if (configRevalidateRequestIdRef.current === requestId) {
+        setFiles(updated)
+        setCurrentStep('upload')
+      }
+    }
+    revalidate().finally(() => {
+      if (configRevalidateRequestIdRef.current === requestId) {
+        setLoading(false)
+      }
+    })
+  }
 
   const setCurrentStep = (step: Step) => {
     setSearchParams((prev) => {
@@ -206,21 +251,44 @@ export default function ContainerMoveMicronix() {
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
-      if (!row.container_barcode || row.container_barcode.trim() === '') {
-        errors.push({
-          row: i + 1,
-          error: `Barcode column "${config.barcodeColumn}" is required but missing or empty`,
-        })
-      }
+      // Barcode may be empty (empty well); only position is required
       if (!row.target_position || row.target_position.trim() === '') {
-        const positionDesc = config.positionType === 'single' 
-          ? `Position column "${config.positionColumn}"` 
+        const positionDesc = config.positionType === 'single'
+          ? `Position column "${config.positionColumn}"`
           : `Row column "${config.rowColumn}" and Column column "${config.columnColumn}"`
         errors.push({
           row: i + 1,
           error: `${positionDesc} is required but missing or empty`,
         })
       }
+    }
+
+    // Require all 96 well positions (A01–H12) exactly once, as from scanning software
+    const positionSet = new Set<string>()
+    for (const row of rows) {
+      const pos = row.target_position?.trim() ?? ''
+      if (pos) {
+        const normalized = normalizeWellPosition(pos)
+        if (normalized) positionSet.add(normalized)
+      }
+    }
+    const fullPlate = validateFullPlatePositions(positionSet)
+    if (!fullPlate.valid) {
+      const parts: string[] = [
+        `CSV must list all 96 well positions (A01–H12) exactly once, as produced by scanning software.`,
+        `Found ${positionSet.size} valid position(s).`,
+      ]
+      if (fullPlate.missing && fullPlate.missing.length > 0) {
+        const sample = fullPlate.missing.slice(0, 5).join(', ')
+        const more = fullPlate.missing.length > 5 ? ` and ${fullPlate.missing.length - 5} more` : ''
+        parts.push(`Missing: ${sample}${more}.`)
+      }
+      if (fullPlate.extra && fullPlate.extra.length > 0) {
+        const sample = fullPlate.extra.slice(0, 5).join(', ')
+        const more = fullPlate.extra.length > 5 ? ` and ${fullPlate.extra.length - 5} more` : ''
+        parts.push(`Invalid or duplicate: ${sample}${more}.`)
+      }
+      errors.push({ row: 0, error: parts.join(' ') })
     }
 
     return {
@@ -296,13 +364,24 @@ export default function ContainerMoveMicronix() {
   }
 
   const updateFilePlateSelection = (fileIndex: number, plateName: string | null) => {
-    setFiles(prev => prev.map((f, i) => 
-      i === fileIndex ? { ...f, selectedPlateName: plateName } : f
-    ))
+    setFiles(prev => prev.map((f, i) => {
+      if (i !== fileIndex) return f
+      return {
+        ...f,
+        selectedPlateName: plateName,
+        resolvedContainers: [],
+        unresolvedContainers: [],
+        isResolved: false,
+        validationErrors: f.validationErrors.filter(e => !e.error.includes('not relocated')),
+      }
+    }))
   }
 
   const removeFile = (fileIndex: number) => {
     setFiles(prev => prev.filter((_, i) => i !== fileIndex))
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
   }
 
   const handleValidateAndResolve = async () => {
@@ -335,17 +414,20 @@ export default function ContainerMoveMicronix() {
     setLoading(true)
 
     try {
-      // Resolve containers for all files
+      // Resolve containers for all files (only rows with barcode; empty barcode = empty well)
       const allIdentifiers: Array<{ type: 'barcode'; barcode: string; fileIndex: number; rowIndex: number }> = []
-      
+
       files.forEach((fileData, fileIndex) => {
         fileData.csvRows.forEach((row, rowIndex) => {
-          allIdentifiers.push({
-            type: 'barcode',
-            barcode: row.container_barcode.trim(),
-            fileIndex,
-            rowIndex,
-          })
+          const barcode = row.container_barcode?.trim() ?? ''
+          if (barcode !== '') {
+            allIdentifiers.push({
+              type: 'barcode',
+              barcode,
+              fileIndex,
+              rowIndex,
+            })
+          }
         })
       })
 
@@ -408,14 +490,6 @@ export default function ContainerMoveMicronix() {
         }
       })
 
-      // Update files with resolved and unresolved containers
-      setFiles(prev => prev.map((f, i) => ({
-        ...f,
-        resolvedContainers: resolvedByFile.get(i) || [],
-        unresolvedContainers: unresolvedByFile.get(i) || [],
-        isResolved: true,
-      })))
-
       // Verify all containers are from micronix plates
       const invalidContainers = resolved.filter((r: any) => 
         r.container.currentCollectionType !== 'micronix_plate'
@@ -424,7 +498,7 @@ export default function ContainerMoveMicronix() {
       if (invalidContainers.length > 0) {
         // Add validation errors for invalid containers
         setFiles(prev => prev.map((f, i) => {
-          const fileInvalid = resolvedByFile.get(i)?.some(rc => 
+          const fileInvalid = resolvedByFile.get(i)?.some(rc =>
             invalidContainers.some((ic: any) => ic.container.containerId === rc.container.containerId)
           )
           if (fileInvalid) {
@@ -441,6 +515,75 @@ export default function ContainerMoveMicronix() {
         setLoading(false)
         return
       }
+
+      // Relocation validation (no tube lost): per destination plate, across all files targeting it
+      const relocationErrorsByFile = new Map<number, ValidationError[]>()
+      const uniqueDestinationNames = [...new Set(files.map(f => f.selectedPlateName).filter(Boolean))] as string[]
+
+      for (const plateName of uniqueDestinationNames) {
+        const plateId = availablePlates.find(p => p.name === plateName)?.id
+        if (plateId == null) continue
+
+        const plateResponse = await collectionsApi.getMicronixPlate(plateId)
+        const wells: Record<string, { type: string; barcode?: string | null }> = plateResponse.data.wells ?? {}
+
+        // All rows (from any file) targeting this plate
+        const rowsForPlate: { fileIndex: number; row: CSVRow }[] = []
+        files.forEach((fileData, fileIndex) => {
+          if (fileData.selectedPlateName !== plateName) return
+          fileData.csvRows.forEach(row => rowsForPlate.push({ fileIndex, row }))
+        })
+
+        const positionToBarcode = new Map<string, string>()
+        const positionToEmptyFileIndex = new Map<string, number>()
+        for (const { fileIndex, row } of rowsForPlate) {
+          const pos = row.target_position?.trim() ?? ''
+          const barcode = row.container_barcode?.trim() ?? ''
+          if (pos === '') continue
+          if (barcode !== '') {
+            positionToBarcode.set(pos, barcode)
+          } else {
+            if (!positionToEmptyFileIndex.has(pos)) positionToEmptyFileIndex.set(pos, fileIndex)
+          }
+        }
+        const barcodesRelocatedInMove = new Set(positionToBarcode.values())
+        const emptyPositions = [...positionToEmptyFileIndex.keys()].filter(P => !positionToBarcode.has(P))
+
+        for (const P of emptyPositions) {
+          const well = wells[P]
+          if (well?.type === 'micronix_tube' && well.barcode) {
+            const B = well.barcode
+            if (!barcodesRelocatedInMove.has(B)) {
+              const fileIndex = positionToEmptyFileIndex.get(P) ?? 0
+              const err: ValidationError = {
+                row: 0,
+                error: `Position ${P} on plate "${plateName}" is empty in your upload but tube ${B} is currently there and is not relocated in this move.`,
+              }
+              if (!relocationErrorsByFile.has(fileIndex)) relocationErrorsByFile.set(fileIndex, [])
+              relocationErrorsByFile.get(fileIndex)!.push(err)
+            }
+          }
+        }
+      }
+
+      // Update files with resolved/unresolved and any relocation validation errors
+      setFiles(prev => prev.map((f, i) => {
+        const base = {
+          ...f,
+          resolvedContainers: resolvedByFile.get(i) || [],
+          unresolvedContainers: unresolvedByFile.get(i) || [],
+          isResolved: true,
+        }
+        const relocationErrors = relocationErrorsByFile.get(i) ?? []
+        if (relocationErrors.length === 0) return base
+        const existingWithoutRelocation = f.validationErrors.filter(
+          e => !e.error.includes('not relocated')
+        )
+        return {
+          ...base,
+          validationErrors: [...existingWithoutRelocation, ...relocationErrors],
+        }
+      }))
 
       setCurrentStep('resolve')
     } catch (error: any) {
@@ -471,10 +614,12 @@ export default function ContainerMoveMicronix() {
 
       files.forEach((fileData, fileIndex) => {
         fileData.csvRows.forEach(row => {
+          const barcode = row.container_barcode?.trim() ?? ''
+          if (barcode === '') return // empty well; no move for this row
           allMoves.push({
             identifier: {
               type: 'barcode' as const,
-              barcode: row.container_barcode.trim(),
+              barcode,
             },
             targetPosition: row.target_position.trim(),
             fileIndex,
@@ -668,16 +813,16 @@ export default function ContainerMoveMicronix() {
                     <p className="mb-2">The required columns depend on your selected scanner configuration:</p>
                     <ul className="list-disc list-inside space-y-1 ml-4">
                       <li>
-                        <strong>Barcode column:</strong> Contains the tube barcode/ID (column name varies by scanner)
+                        <strong>Barcode column:</strong> Contains the tube barcode/ID (column name varies by scanner). Leave empty for wells that should be empty.
                       </li>
                       <li>
-                        <strong>Position:</strong> Either a single position column (e.g., &quot;A01&quot;) or separate row and column columns that are automatically combined (e.g., Row=&quot;A&quot;, Column=&quot;1&quot; becomes &quot;A01&quot;)
+                        <strong>Position:</strong> Either a single position column (e.g., &quot;A01&quot;) or separate row and column columns that are automatically combined (e.g., Row=&quot;A&quot;, Column=&quot;1&quot; becomes &quot;A01&quot;). The CSV must list all 96 well positions (A01–H12) exactly once, as produced by scanning software.
                       </li>
                       <li>
                         <strong>Row skipping:</strong> Some configurations skip header/metadata rows at the start of the file
                       </li>
                     </ul>
-                    <p className="mt-2 text-sm">The system automatically maps your CSV columns based on the selected scanner configuration.</p>
+                    <p className="mt-2 text-sm">The system automatically maps your CSV columns based on the selected scanner configuration. If a well is empty in your file but currently has a tube, that tube must appear elsewhere in the move (in any CSV targeting that plate) so it is relocated and no tube is lost.</p>
                   </div>
 
                   <div>
@@ -717,7 +862,7 @@ export default function ContainerMoveMicronix() {
                   <>
                     <select
                       value={selectedConfigId || ''}
-                      onChange={(e) => setSelectedConfigId(e.target.value)}
+                      onChange={(e) => handleConfigChange(e.target.value)}
                       required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                     >
@@ -752,6 +897,7 @@ export default function ContainerMoveMicronix() {
                 </p>
               )}
               <input
+                ref={fileInputRef}
                 type="file"
                 accept=".csv"
                 multiple
