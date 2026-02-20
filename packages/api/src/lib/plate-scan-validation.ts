@@ -47,6 +47,70 @@ export interface ValidateScanResult {
   wells: WellValidationResult[]
 }
 
+export interface InferPlateResult {
+  plate: { id: number; name: string }
+}
+
+/** Infer which plate the scanned barcodes belong to. All non-empty barcodes must exist and belong to the same plate. */
+export async function inferPlateFromScan(
+  database: Database,
+  params: { csvText: string; scannerConfigurationId: string }
+): Promise<InferPlateResult> {
+  const config = await getScannerConfigurationById(database, params.scannerConfigurationId)
+  if (!config) {
+    throw new Error('Scanner configuration not found')
+  }
+
+  const parsed = parsePlateCSV(params.csvText, config)
+  const barcodes = new Set<string>()
+  for (const row of parsed) {
+    const b = (row.barcode ?? '').trim()
+    if (b !== '') barcodes.add(b)
+  }
+
+  if (barcodes.size === 0) {
+    throw new Error('Cannot infer plate: scan has no barcodes')
+  }
+
+  const barcodeList = [...barcodes]
+  const rows = await database
+    .select({
+      barcode: micronixTube.barcode,
+      plateId: micronixPlate.id,
+      plateName: micronixPlate.name,
+    })
+    .from(micronixTube)
+    .innerJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
+    .where(inArray(micronixTube.barcode, barcodeList))
+
+  const foundBarcodes = new Set<string>()
+  const platesByKey = new Map<string, { id: number; name: string }>()
+  for (const row of rows) {
+    if (row.barcode != null) {
+      foundBarcodes.add(row.barcode)
+      platesByKey.set(`${row.plateId}`, { id: row.plateId, name: row.plateName })
+    }
+  }
+
+  const unknown = barcodeList.filter((b) => !foundBarcodes.has(b))
+  if (unknown.length > 0) {
+    throw new Error(`Unknown barcode(s): ${unknown.join(', ')}`)
+  }
+
+  const plates = [...platesByKey.values()]
+  if (plates.length > 1) {
+    const names = plates.map((p) => p.name).join(', ')
+    throw new Error(`Tubes from multiple plates: ${names}`)
+  }
+
+  const plate = plates[0]
+  if (!plate) {
+    throw new Error('Cannot infer plate: scan has no barcodes')
+  }
+
+  return { plate }
+}
+
 interface ExpectedWell {
   barcode: string | null
   remainingQuantity: number | null

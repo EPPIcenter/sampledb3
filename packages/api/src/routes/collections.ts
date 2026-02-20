@@ -26,7 +26,7 @@ import { resolveCollection } from '../lib/collection-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
-import { validatePlateScan } from '../lib/plate-scan-validation'
+import { validatePlateScan, inferPlateFromScan } from '../lib/plate-scan-validation'
 
 /**
  * Create collections routes with database injection
@@ -200,27 +200,45 @@ collections.get('/plates/micronix/:id', authMiddleware, async (c) => {
   })
 })
 
-// Validate scanned plate CSV against a micronix plate
+// Validate scanned plate CSV against a micronix plate (plateId optional: when omitted, plate is inferred from scan barcodes)
 collections.post('/plates/micronix/validate-scan', authMiddleware, memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
       csvText: z.string(),
-      plateId: z.number().int().positive(),
+      plateId: z.number().int().positive().optional(),
       scannerConfigurationId: z.string().min(1),
     })
     const data = schema.parse(body)
+
+    let plateId: number
+    let inferredPlate = false
+
+    if (data.plateId != null) {
+      plateId = data.plateId
+    } else {
+      const inferred = await inferPlateFromScan(database, {
+        csvText: data.csvText,
+        scannerConfigurationId: data.scannerConfigurationId,
+      })
+      plateId = inferred.plate.id
+      inferredPlate = true
+    }
+
     const result = await validatePlateScan(database, {
       csvText: data.csvText,
-      plateId: data.plateId,
+      plateId,
       scannerConfigurationId: data.scannerConfigurationId,
     })
-    return c.json(result)
+    return c.json({ ...result, ...(inferredPlate && { inferredPlate: true }) })
   } catch (error) {
     if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
     if (error instanceof Error) {
       if (error.message === 'Scanner configuration not found') return c.json({ error: error.message }, 400)
       if (error.message === 'Plate not found') return c.json({ error: error.message }, 404)
+      if (error.message.startsWith('Cannot infer plate:') || error.message.startsWith('Unknown barcode') || error.message.startsWith('Tubes from multiple plates:')) {
+        return c.json({ error: error.message }, 400)
+      }
     }
     throw error
   }

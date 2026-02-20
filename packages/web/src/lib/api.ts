@@ -955,6 +955,8 @@ export interface ValidatePlateScanResult {
     /** When status is mismatch or extra_in_scan, where the scanned barcode is registered (plate + position). */
     scanBarcodeOrigin: { plateId: number; plateName: string; position: string } | null
   }>
+  /** True when plate was inferred from scan barcodes (plateId was not sent). */
+  inferredPlate?: boolean
 }
 
 export const collectionsApi = {
@@ -972,7 +974,7 @@ export const collectionsApi = {
     api.post<{ results: Array<{ identifier: string; type: string; exists: boolean; id: number | null }> }>('/collections/check', data),
   createMicronixPlate: (data: { name: string; locationId: number; barcode?: string }) =>
     api.post<{ plate: MicronixPlateResponse }>('/collections/plates/micronix', data),
-  validatePlateScan: (data: { csvText: string; plateId: number; scannerConfigurationId: string }) =>
+  validatePlateScan: (data: { csvText: string; plateId?: number; scannerConfigurationId: string }) =>
     api.post<ValidatePlateScanResult>('/collections/plates/micronix/validate-scan', data),
   createCryovialBox: (data: { name: string; locationId: number; barcode?: string }) =>
     api.post<{ box: CryovialBoxResponse }>('/collections/boxes/cryovial', data),

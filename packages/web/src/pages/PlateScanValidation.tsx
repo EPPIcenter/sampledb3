@@ -57,6 +57,9 @@ function buildValidationReportCsv(result: ValidatePlateScanResult): string {
   lines.push('Plate scan validation report')
   lines.push(`Plate,${csvEscape(plate.name)}`)
   lines.push(`Plate ID,${plate.id}`)
+  if (result.inferredPlate) {
+    lines.push('Inferred plate,Yes')
+  }
   lines.push(`Generated,${new Date().toISOString()}`)
   lines.push('')
   lines.push('Summary')
@@ -101,11 +104,14 @@ function downloadReport(result: ValidatePlateScanResult): void {
   URL.revokeObjectURL(url)
 }
 
+type PlateMode = 'select_plate' | 'infer_plate'
+
 export default function PlateScanValidation() {
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [csvText, setCsvText] = useState<string>('')
   const [scannerConfigurations, setScannerConfigurations] = useState<ScannerConfiguration[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
+  const [plateMode, setPlateMode] = useState<PlateMode>('select_plate')
   const [plates, setPlates] = useState<Array<{ id: number; name: string }>>([])
   const [selectedPlateId, setSelectedPlateId] = useState<number | null>(null)
   const [plateSearch, setPlateSearch] = useState('')
@@ -114,6 +120,7 @@ export default function PlateScanValidation() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Initial data load. Optional refactor: move to route loader when using a data router to avoid useEffect for fetching.
   useEffect(() => {
     Promise.all([
       collectionsApi.listCollectionsByType('micronix_plate'),
@@ -163,8 +170,13 @@ export default function PlateScanValidation() {
   }
 
   const handleValidate = async () => {
-    if (!csvText || selectedPlateId == null || !selectedConfigId) {
-      setError('Please select a CSV file, a plate, and a scanner configuration.')
+    const inferMode = plateMode === 'infer_plate'
+    if (!csvText || !selectedConfigId) {
+      setError('Please select a CSV file and a scanner configuration.')
+      return
+    }
+    if (!inferMode && selectedPlateId == null) {
+      setError('Please select a plate, or use "Infer plate from scan".')
       return
     }
     setLoading(true)
@@ -173,7 +185,7 @@ export default function PlateScanValidation() {
     try {
       const res = await collectionsApi.validatePlateScan({
         csvText,
-        plateId: selectedPlateId,
+        ...(inferMode ? {} : { plateId: selectedPlateId! }),
         scannerConfigurationId: selectedConfigId,
       })
       setResult(res.data)
@@ -207,6 +219,8 @@ export default function PlateScanValidation() {
     [plates, candidates, searchLower]
   )
   const selectedPlate = selectedPlateId != null ? plates.find((p) => p.id === selectedPlateId) ?? candidates.find((c) => c.id === selectedPlateId) : null
+  const inferMode = plateMode === 'infer_plate'
+  const canValidate = Boolean(csvText && selectedConfigId && (inferMode || selectedPlateId != null))
 
   return (
     <div className="storage-page min-h-screen">
@@ -261,7 +275,7 @@ export default function PlateScanValidation() {
               {csvFile && (
                 <p className="text-sm text-gray-500 mt-1">
                   {csvFile.name}
-                  {candidates.length > 0 && (
+                  {candidates.length > 0 && !inferMode && (
                     <span className="ml-2">
                       — {candidates.length} plate{candidates.length !== 1 ? 's' : ''} suggested from filename
                     </span>
@@ -269,8 +283,44 @@ export default function PlateScanValidation() {
                 </p>
               )}
             </div>
+            <fieldset className="space-y-2">
+              <legend className="block text-sm font-medium text-gray-700 mb-1">Plate</legend>
+              <div className="flex flex-wrap gap-4">
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="plateMode"
+                    checked={plateMode === 'select_plate'}
+                    onChange={() => {
+                      setPlateMode('select_plate')
+                      setResult(null)
+                      setError(null)
+                    }}
+                    className="rounded border-gray-300 text-[rgb(var(--dashboard-accent))] focus:ring-[rgb(var(--dashboard-accent))]"
+                    aria-label="I know the plate"
+                  />
+                  <span>I know the plate</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="plateMode"
+                    checked={plateMode === 'infer_plate'}
+                    onChange={() => {
+                      setPlateMode('infer_plate')
+                      setResult(null)
+                      setError(null)
+                    }}
+                    className="rounded border-gray-300 text-[rgb(var(--dashboard-accent))] focus:ring-[rgb(var(--dashboard-accent))]"
+                    aria-label="Infer plate from scan"
+                  />
+                  <span>Infer plate from scan</span>
+                </label>
+              </div>
+            </fieldset>
+            {plateMode === 'select_plate' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Plate</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Select plate</label>
               {selectedPlate ? (
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-sm font-medium text-gray-800">
@@ -364,11 +414,12 @@ export default function PlateScanValidation() {
                 <p className="text-xs text-amber-700 mt-1">Multiple plates match the filename. Search above and choose one.</p>
               )}
             </div>
+            )}
             <div>
               <button
                 type="button"
                 onClick={handleValidate}
-                disabled={loading || !csvText || selectedPlateId == null || !selectedConfigId}
+                disabled={loading || !canValidate}
                 className="storage-btn-primary px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Validating…' : 'Validate scan'}
@@ -381,7 +432,9 @@ export default function PlateScanValidation() {
           <>
             <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-3">
               <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-                <h2 className="storage-section-title m-0">Result: {result.plate.name}</h2>
+                <h2 className="storage-section-title m-0" data-testid="result-heading">
+                Result: {result.plate.name}{result.inferredPlate ? ' (inferred)' : ''}
+              </h2>
                 <button
                   type="button"
                   onClick={() => downloadReport(result)}
@@ -412,6 +465,9 @@ export default function PlateScanValidation() {
                   <div className="text-sm text-gray-600">Extra in scan</div>
                 </div>
               </div>
+              {result.inferredPlate && (
+                <p className="text-sm text-gray-600 mb-2">Plate was inferred from the barcodes on the scan.</p>
+              )}
               <div className="flex flex-wrap gap-4 text-sm">
                 {result.summary.exhaustedCount > 0 && (
                   <span className="text-amber-700 font-medium">{result.summary.exhaustedCount} exhausted</span>

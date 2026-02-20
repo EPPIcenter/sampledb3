@@ -28,10 +28,12 @@ Validation is read-only: it does not change any data.
    Upload the scanned plate CSV. The file should have a barcode column and a position column (or separate row and column columns), as defined by the selected scanner configuration.
 
 3. **Plate**  
-   Select the micronix plate in the database to compare against. If the filename (without `.csv`) looks like a plate name, the system suggests one or more matching plates. Filenames often include dates or times (e.g. `PLATE1_2024-01-15.csv`); the system strips common date/time suffixes and uses the remaining stem to suggest plates. You can confirm the suggested plate or pick another from the list.
+   Choose how to identify the plate:
+   - **I know the plate**: Select the micronix plate in the database to compare against. If the filename (without `.csv`) looks like a plate name, the system suggests one or more matching plates. Filenames often include dates or times (e.g. `PLATE1_2024-01-15.csv`); the system strips common date/time suffixes and uses the remaining stem to suggest plates. You can confirm the suggested plate or pick another from the list.
+   - **Infer plate from scan**: Use this when you do not know the plate name. The system infers the plate from the barcodes in the scan: all scanned tubes must belong to the same plate in the database. If the scan has no barcodes, unknown barcodes, or tubes from more than one plate, validation fails with a clear error. When inference succeeds, the result shows the inferred plate name and the same comparison (match/mismatch/missing/extra) as when you select a plate.
 
 4. **Validate**  
-   Click **Validate scan**. The app sends the CSV and plate choice to the server and displays the comparison result.
+   Click **Validate scan**. The app sends the CSV (and plate ID if you selected one) to the server and displays the comparison result.
 
 ## Reading the result
 
