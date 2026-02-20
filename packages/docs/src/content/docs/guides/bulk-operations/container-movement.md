@@ -31,7 +31,7 @@ If you're using positions instead of barcodes, your CSV needs the source collect
 
 The target position must be in the correct format for the destination plate. For 96-well plates, use the A01-H12 format with two-digit columns. Make sure the destination position is available or acceptable to overwrite—the system will warn you if you're overwriting an existing container.
 
-Your CSV must list **all 96 well positions** (A01–H12) exactly once, as produced by scanning software. You can leave the barcode cell empty for wells that should be empty. When using multiple CSVs targeting the same plate, they together form the move. If a well is empty in your upload but currently has a tube, that tube must appear elsewhere in the move (in any CSV targeting that plate) so it is relocated and no tube is lost.
+Your CSV must list **all 96 well positions** (A01–H12) exactly once, as produced by scanning software. You can leave the barcode cell empty for wells that should be empty. When using multiple CSVs targeting the same plate, they together form the move. If a well is empty in your upload but currently has a tube, that tube must appear elsewhere in the move (in any CSV targeting that plate) so it is relocated and no tube is lost. If you don't relocate those tubes, the system shows validation errors on the upload step and you must fix the CSV or destination before continuing.
 
 ### The Movement Process
 

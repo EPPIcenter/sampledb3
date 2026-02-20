@@ -522,7 +522,20 @@ export default function ContainerMoveMicronix() {
 
       for (const plateName of uniqueDestinationNames) {
         const plateId = availablePlates.find(p => p.name === plateName)?.id
-        if (plateId == null) continue
+        if (plateId == null) {
+          const fileIndicesTargetingPlate = files
+            .map((f, i) => (f.selectedPlateName === plateName ? i : -1))
+            .filter((i) => i >= 0)
+          const err: ValidationError = {
+            row: 0,
+            error: `Destination plate "${plateName}" could not be found. Please select a valid plate from the list.`,
+          }
+          fileIndicesTargetingPlate.forEach((fileIndex) => {
+            if (!relocationErrorsByFile.has(fileIndex)) relocationErrorsByFile.set(fileIndex, [])
+            relocationErrorsByFile.get(fileIndex)!.push(err)
+          })
+          continue
+        }
 
         const plateResponse = await collectionsApi.getMicronixPlate(plateId)
         const wells: Record<string, { type: string; barcode?: string | null }> = plateResponse.data.wells ?? {}
@@ -585,7 +598,10 @@ export default function ContainerMoveMicronix() {
         }
       }))
 
-      setCurrentStep('resolve')
+      const hasRelocationErrors = [...relocationErrorsByFile.values()].some((arr) => arr.length > 0)
+      if (!hasRelocationErrors) {
+        setCurrentStep('resolve')
+      }
     } catch (error: any) {
       console.error('Error resolving containers:', error)
       setFiles(prev => prev.map(f => ({
@@ -841,7 +857,7 @@ export default function ContainerMoveMicronix() {
                     <h3 className="font-semibold text-gray-900 mb-2">Workflow</h3>
                     <p className="mb-2">This process has 3 steps:</p>
                     <ol className="list-decimal list-inside space-y-1 ml-4">
-                      <li><strong>Upload & Configure:</strong> Upload CSV files and assign destination plates</li>
+                      <li><strong>Upload & Configure:</strong> Upload CSV files and assign destination plates. Click <strong>Next: Resolve Containers</strong> to validate (e.g. tubes removed with no destination) and resolve barcodes.</li>
                       <li><strong>Resolve:</strong> System finds each tube by barcode and identifies source plates</li>
                       <li><strong>Execute:</strong> System performs all moves in a single transaction</li>
                     </ol>

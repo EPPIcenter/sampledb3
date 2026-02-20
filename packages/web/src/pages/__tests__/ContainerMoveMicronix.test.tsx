@@ -758,6 +758,63 @@ describe('ContainerMoveMicronix', () => {
         }, { timeout: 5000 })
     })
 
+    it('relocation validation: when tubes removed with no destination, user stays on upload and sees errors', async () => {
+        // CSV has empty wells; plate has tube at A01 not in upload -> relocation error.
+        // User must stay on upload step, see the error, and Next must be disabled.
+        const csvContent = fullPlateCSV()
+        const file = new File([csvContent], 'PLATE1.csv', { type: 'text/csv' })
+
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
+            data: {
+                collections: [
+                    { id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }
+                ]
+            }
+        } as any)
+        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
+            data: { containers: [] }
+        } as any)
+        vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
+            data: {
+                plate: { id: 1, name: 'PLATE1' },
+                wells: {
+                    A01: {
+                        type: 'micronix_tube',
+                        id: 99,
+                        barcode: 'TUBE_AT_A01',
+                        position: 'A01'
+                    }
+                }
+            }
+        } as any)
+
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input).toBeInTheDocument()
+            expect(input.disabled).toBe(false)
+        })
+
+        const input = container.querySelector('input[type="file"]') as HTMLInputElement
+        fireEvent.change(input, { target: { files: [file] } })
+
+        await waitFor(() => {
+            expect(screen.getByText('PLATE1.csv')).toBeInTheDocument()
+        })
+        await waitFor(() => {
+            const nextButton = screen.getByText('Next: Resolve Containers')
+            expect(nextButton).not.toBeDisabled()
+        }, { timeout: 3000 })
+
+        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+
+        await waitFor(() => {
+            expect(screen.getByText(/Position A01 on plate "PLATE1" is empty.*tube TUBE_AT_A01.*not relocated/i)).toBeInTheDocument()
+        }, { timeout: 5000 })
+        expect(screen.getByText('Next: Resolve Containers')).toBeInTheDocument()
+        expect(screen.getByText('Next: Resolve Containers')).toBeDisabled()
+    })
+
     it('relocation validation: no error when tube at empty position is relocated in same file', async () => {
         // CSV: A01 empty, A02 has TUBE_AT_A01; plate has TUBE_AT_A01 at A01 → relocated
         const csvContent = fullPlateCSV({ A01: '', A02: 'TUBE_AT_A01' })
