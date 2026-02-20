@@ -18,12 +18,14 @@ export function isTypingInInput(): boolean {
   const activeElement = document.activeElement
   if (!activeElement) return false
 
-  const tagName = activeElement.tagName.toLowerCase()
+  // activeElement can be document or other non-Element nodes in edge cases; they have no tagName/getAttribute
+  const el = activeElement as Element
+  const tagName = el.tagName?.toLowerCase() ?? ''
   const isInput = tagName === 'input' || tagName === 'textarea'
-  const isContentEditable = activeElement.getAttribute('contenteditable') === 'true'
+  const isContentEditable = el.getAttribute?.('contenteditable') === 'true'
   
   // Check if it's a search input (we might want to allow browser find in some cases)
-  const isSearchInput = activeElement.getAttribute('type') === 'search'
+  const isSearchInput = el.getAttribute?.('type') === 'search'
   
   // Don't block if user is actively typing in an input/textarea
   // But do block if it's just focused (not actively typing)

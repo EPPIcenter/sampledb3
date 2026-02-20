@@ -18,6 +18,16 @@ describe('useHotkey', () => {
       expect(isTypingInInput()).toBe(false)
     })
 
+    it('returns false when activeElement is document (no tagName, e.g. nothing focused)', () => {
+      const orig = Object.getOwnPropertyDescriptor(document, 'activeElement')
+      Object.defineProperty(document, 'activeElement', {
+        value: document,
+        configurable: true,
+      })
+      expect(isTypingInInput()).toBe(false)
+      if (orig) Object.defineProperty(document, 'activeElement', orig)
+    })
+
     it('returns true when activeElement is input (mocked)', () => {
       const input = document.createElement('input')
       const orig = Object.getOwnPropertyDescriptor(document, 'activeElement')
