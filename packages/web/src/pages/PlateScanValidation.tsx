@@ -236,7 +236,11 @@ export default function PlateScanValidation() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Scanner configuration</label>
               <select
                 value={selectedConfigId ?? ''}
-                onChange={(e) => setSelectedConfigId(e.target.value || null)}
+                onChange={(e) => {
+                  setSelectedConfigId(e.target.value || null)
+                  setResult(null)
+                  setError(null)
+                }}
                 className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] focus:border-[rgb(var(--dashboard-accent))]"
               >
                 {scannerConfigurations.map((c) => (
@@ -274,7 +278,11 @@ export default function PlateScanValidation() {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setSelectedPlateId(null)}
+                    onClick={() => {
+                      setSelectedPlateId(null)
+                      setResult(null)
+                      setError(null)
+                    }}
                     className="text-sm text-[rgb(var(--dashboard-accent))] hover:underline focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] rounded"
                   >
                     Change
@@ -311,7 +319,11 @@ export default function PlateScanValidation() {
                         type="button"
                         role="option"
                         aria-selected={selectedPlateId === p.id}
-                        onClick={() => setSelectedPlateId(p.id)}
+                        onClick={() => {
+                          setSelectedPlateId(p.id)
+                          setResult(null)
+                          setError(null)
+                        }}
                         className={`w-full px-4 py-2.5 text-left text-sm border-b border-gray-100 last:border-b-0 hover:bg-[rgb(var(--dashboard-accent-muted))] focus:outline-none focus:bg-[rgb(var(--dashboard-accent-muted))] ${
                           selectedPlateId === p.id ? 'bg-[rgb(var(--dashboard-accent-muted))] font-medium' : ''
                         }`}
@@ -333,7 +345,11 @@ export default function PlateScanValidation() {
                         type="button"
                         role="option"
                         aria-selected={selectedPlateId === p.id}
-                        onClick={() => setSelectedPlateId(p.id)}
+                        onClick={() => {
+                          setSelectedPlateId(p.id)
+                          setResult(null)
+                          setError(null)
+                        }}
                         className={`w-full px-4 py-2.5 text-left text-sm border-b border-gray-100 last:border-b-0 hover:bg-[rgb(var(--dashboard-accent-muted))] focus:outline-none focus:bg-[rgb(var(--dashboard-accent-muted))] ${
                           selectedPlateId === p.id ? 'bg-[rgb(var(--dashboard-accent-muted))] font-medium' : ''
                         }`}

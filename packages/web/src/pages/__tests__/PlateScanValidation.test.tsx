@@ -1,0 +1,128 @@
+import { screen, fireEvent, waitFor } from '@testing-library/react'
+import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { renderWithProviders } from '../../__tests__/helpers/render'
+import PlateScanValidation from '../PlateScanValidation'
+import { collectionsApi, scannerConfigurationsApi } from '../../lib/api'
+
+vi.mock('../../lib/api', () => ({
+  collectionsApi: {
+    listCollectionsByType: vi.fn(),
+    validatePlateScan: vi.fn(),
+  },
+  scannerConfigurationsApi: {
+    getAll: vi.fn(),
+  },
+}))
+
+const mockPlateList = [
+  { id: 1, name: 'PLATE1' },
+  { id: 2, name: 'PLATE2' },
+]
+
+const mockConfigs = [
+  { id: 'config-1', name: 'Config 1', isDefault: true, barcodeColumn: 'barcode', positionType: 'single' as const, positionColumn: 'pos', skipRows: 0 },
+  { id: 'config-2', name: 'Config 2', isDefault: false, barcodeColumn: 'Barcode', positionType: 'single' as const, positionColumn: 'Pos', skipRows: 0 },
+]
+
+const mockValidateResult = {
+  plate: { id: 1, name: 'PLATE1' },
+  summary: {
+    totalExpected: 96,
+    matched: 96,
+    missingInScan: 0,
+    extraInScan: 0,
+    mismatch: 0,
+    exhaustedCount: 0,
+    taggedCount: 0,
+  },
+  wells: [],
+}
+
+describe('PlateScanValidation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
+      data: { collections: mockPlateList },
+    } as ReturnType<typeof collectionsApi.listCollectionsByType> extends Promise<infer R> ? R : never)
+    vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
+      data: { value: { configurations: mockConfigs } },
+    } as any)
+    vi.mocked(collectionsApi.validatePlateScan).mockResolvedValue({
+      data: mockValidateResult,
+    } as any)
+  })
+
+  it('clears validation result when scanner configuration is changed', async () => {
+    const csvContent = 'barcode,pos\nT1,A01\nT2,A02'
+    const file = new File([csvContent], 'PLATE1.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: async () => csvContent })
+
+    const { container } = await renderWithProviders(<PlateScanValidation />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Validate Plate Scan' })).toBeInTheDocument()
+    })
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByText('PLATE1.csv')).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      const validateBtn = screen.getByRole('button', { name: /Validate scan/i })
+      expect(validateBtn).not.toBeDisabled()
+    }, { timeout: 3000 })
+
+    fireEvent.click(screen.getByRole('button', { name: /Validate scan/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Download report')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'config-2' } })
+
+    await waitFor(() => {
+      expect(screen.queryByText('Download report')).not.toBeInTheDocument()
+    })
+  })
+
+  it('clears validation result when plate is changed', async () => {
+    const csvContent = 'barcode,pos\nT1,A01\nT2,A02'
+    const file = new File([csvContent], 'plate.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: async () => csvContent })
+
+    const { container } = await renderWithProviders(<PlateScanValidation />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Validate Plate Scan' })).toBeInTheDocument()
+    })
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByText('plate.csv')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('option', { name: /PLATE1/ }))
+
+    await waitFor(() => {
+      const validateBtn = screen.getByRole('button', { name: /Validate scan/i })
+      expect(validateBtn).not.toBeDisabled()
+    }, { timeout: 3000 })
+
+    fireEvent.click(screen.getByRole('button', { name: /Validate scan/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Download report')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    fireEvent.click(screen.getByRole('option', { name: /PLATE2/ }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('Download report')).not.toBeInTheDocument()
+    })
+  })
+})
