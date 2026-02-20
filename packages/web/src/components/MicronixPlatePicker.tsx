@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { type Location } from '../lib/api'
 import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
 import ModalPortal from './ModalPortal'
@@ -95,11 +95,10 @@ export default function MicronixPlatePicker({
   }, [locations, plates, platesByLocation, search])
 
   // Automatically expand all nodes when searching
-  useMemo(() => {
+  useEffect(() => {
     if (search.trim()) {
       const all = new Set<number>()
       filteredLocations.forEach((loc) => {
-        // Expand all ancestors to show matching locations
         let current: Location | undefined = loc
         while (current) {
           all.add(current.id)
@@ -113,6 +112,26 @@ export default function MicronixPlatePicker({
       setExpandedIds(all)
     }
   }, [search, filteredLocations, locations])
+
+  // Flat list of plates matching search (for Option B: show above tree when searching)
+  const matchingPlates = useMemo(() => {
+    if (!search.trim()) return []
+    const searchLower = search.toLowerCase()
+    return plates.filter((plate) => {
+      const nameMatch = plate.name.toLowerCase().includes(searchLower)
+      const barcodeMatch = plate.barcode?.toLowerCase().includes(searchLower)
+      const locationMatch = plate.locationId != null && (() => {
+        const loc = locations.find((l) => l.id === plate.locationId)
+        if (!loc) return false
+        return (
+          loc.name.toLowerCase().includes(searchLower) ||
+          (loc.path || '').toLowerCase().includes(searchLower) ||
+          (loc.description || '').toLowerCase().includes(searchLower)
+        )
+      })()
+      return nameMatch || barcodeMatch || locationMatch
+    })
+  }, [plates, locations, search])
 
   const selectedPlate = plates.find((p) => p.name === value)
 
@@ -141,30 +160,72 @@ export default function MicronixPlatePicker({
 
     if (!isVisible && depth > 0) return null
 
+    const locationLabel = getLocationLabel(loc)
+    const expandAriaLabel = isExpanded
+      ? `Collapse ${locationLabel}`
+      : `Expand ${locationLabel}`
+
     return (
       <div key={loc.id} className={depth > 0 ? 'ml-4 border-l border-gray-100 pl-2 mb-1' : 'mb-2'}>
-        <div className="flex items-center">
-          {children.length > 0 && (
-            <button
-              type="button"
-              onClick={() => toggleExpanded(loc.id)}
-              className="w-4 text-gray-400 text-xs flex-shrink-0"
-            >
-              {isExpanded ? '▾' : '▸'}
-            </button>
-          )}
-          {children.length === 0 && <span className="w-4"></span>}
-          <div className="flex-1 min-w-0">
-            <div className="text-sm text-gray-800 font-medium">
-              {getLocationLabel(loc)}
+        {children.length > 0 ? (
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              toggleExpanded(loc.id)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                toggleExpanded(loc.id)
+              }
+            }}
+            aria-expanded={isExpanded}
+            aria-label={expandAriaLabel}
+            className="storage-tree-picker-row w-full flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border border-transparent hover:bg-gray-50 hover:border-gray-200 transition-colors text-left group relative cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1"
+          >
+            <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-500 group-hover:text-gray-700" aria-hidden>
+              {isExpanded ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              )}
             </div>
-            {loc.path && (
-              <div className="text-[10px] text-gray-400 font-mono truncate">
-                {loc.path}
+            <div className="flex-1 min-w-0">
+              <div className="text-sm text-gray-800 font-medium">
+                {locationLabel}
               </div>
-            )}
+              {loc.path && (
+                <div className="text-[10px] text-gray-400 font-mono truncate">
+                  {loc.path}
+                </div>
+              )}
+            </div>
+          </button>
+        ) : (
+          <div className="storage-tree-picker-row flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg">
+            <div className="w-5 flex-shrink-0" aria-hidden />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm text-gray-800 font-medium">
+                {locationLabel}
+              </div>
+              {loc.path && (
+                <div className="text-[10px] text-gray-400 font-mono truncate">
+                  {loc.path}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {children.length > 0 && isExpanded && (
           <div className="mt-1">
@@ -173,7 +234,7 @@ export default function MicronixPlatePicker({
         )}
 
         {hasPlates && (
-          <div className="ml-4 space-y-1 mt-1">
+          <div className="ml-4 space-y-1 mt-1" role="listbox" aria-label="Plates in location">
             {locPlates
               .filter((plate) => {
                 if (!search.trim()) return true
@@ -192,8 +253,10 @@ export default function MicronixPlatePicker({
                   <button
                     key={plate.id}
                     type="button"
+                    role="option"
+                    aria-selected={isSelected}
                     onClick={() => handleSelect(plate.name)}
-                    className={`w-full text-left px-3 py-2 border rounded-lg transition-colors ${
+                    className={`w-full text-left px-3 py-3 min-h-[44px] border rounded-lg transition-colors ${
                       isSelected
                         ? 'border-blue-500 bg-blue-50 text-blue-900'
                         : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-900'
@@ -250,7 +313,7 @@ export default function MicronixPlatePicker({
         
         {/* Show unlocated plates if any */}
         {platesByLocation[0] && platesByLocation[0].length > 0 && (
-          <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="mt-4 pt-4 border-t border-gray-200" role="listbox" aria-label="Unlocated plates">
             <div className="font-medium text-sm text-gray-700 mb-2">Unlocated Plates</div>
             <div className="space-y-1">
               {platesByLocation[0]
@@ -271,8 +334,10 @@ export default function MicronixPlatePicker({
                     <button
                       key={plate.id}
                       type="button"
+                      role="option"
+                      aria-selected={isSelected}
                       onClick={() => handleSelect(plate.name)}
-                      className={`w-full text-left px-3 py-2 border rounded-lg transition-colors ${
+                      className={`w-full text-left px-3 py-3 min-h-[44px] border rounded-lg transition-colors ${
                         isSelected
                           ? 'border-blue-500 bg-blue-50 text-blue-900'
                           : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-900'
@@ -330,7 +395,10 @@ export default function MicronixPlatePicker({
               className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
               onClick={() => setOpen(false)}
             />
-          <div className="relative z-10 w-full max-w-2xl mx-4 bg-white rounded-lg shadow-xl p-6 max-h-[80vh] flex flex-col">
+          <div
+            className="relative z-10 w-full max-w-2xl mx-4 bg-white rounded-lg shadow-xl p-6 max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Select Micronix Plate</h3>
               <button
@@ -361,6 +429,54 @@ export default function MicronixPlatePicker({
                 <div className="p-4 text-sm text-gray-500">Loading plates...</div>
               ) : (
                 <div className="p-2">
+                  {search.trim() && matchingPlates.length > 0 && (
+                    <div className="mb-4">
+                      <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-600 sticky top-0 rounded-t-lg">
+                        Matching plates
+                      </div>
+                      <div
+                        role="listbox"
+                        aria-label="Plate list"
+                        className="border border-gray-200 rounded-b-lg overflow-hidden"
+                      >
+                        {matchingPlates.map((plate) => {
+                          const isSelected = plate.name === value
+                          const searchLower = search.trim().toLowerCase()
+                          const highlightName = searchLower && plate.name.toLowerCase().includes(searchLower)
+                          const highlightBarcode = searchLower && plate.barcode?.toLowerCase().includes(searchLower)
+                          return (
+                            <button
+                              key={plate.id}
+                              type="button"
+                              role="option"
+                              aria-selected={isSelected}
+                              onClick={() => handleSelect(plate.name)}
+                              className={`w-full text-left px-3 py-3 min-h-[44px] border-b border-gray-100 last:border-b-0 transition-colors ${
+                                isSelected
+                                  ? 'bg-blue-50 text-blue-900'
+                                  : 'hover:bg-gray-50 text-gray-900'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className={`font-medium text-sm ${highlightName ? 'bg-yellow-200' : ''}`}>
+                                  {plate.name}
+                                </span>
+                                {plate.barcode && (
+                                  <span className={`text-[10px] ml-2 ${highlightBarcode ? 'bg-yellow-200 font-semibold' : 'text-gray-500'}`}>
+                                    {plate.barcode}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-gray-500 mt-0.5">
+                                {plate.itemCount} item{plate.itemCount !== 1 ? 's' : ''}
+                                {plate.locationPath && ` · ${plate.locationPath}`}
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                   {renderLocationTree()}
                 </div>
               )}
