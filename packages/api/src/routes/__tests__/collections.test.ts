@@ -15,7 +15,12 @@ import {
   createTestLocation,
   createTestStorageType,
   createTestMicronixPlate,
+  createTestSpecimenType,
+  createTestSpecimen,
+  createTestUnit,
 } from '../../__tests__/helpers/factories'
+import { setScannerConfigurations } from '../../lib/settings'
+import { storageContainer, micronixTube } from '../../db/schema'
 
 describe('Collections API', () => {
   let testDb: Database
@@ -181,6 +186,80 @@ describe('Collections API', () => {
         json: { mappings: [], moves: [] },
       })
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('POST /api/collections/plates/micronix/validate-scan', () => {
+    it('returns 200 with inferenceReport when infer would fail (multiple plates)', async () => {
+      await setScannerConfigurations(testDb, {
+        configurations: [
+          {
+            id: 'scan-config',
+            name: 'Test',
+            barcodeColumn: 'Barcode',
+            positionType: 'single',
+            positionColumn: 'Well',
+            skipRows: 0,
+          },
+        ],
+      }, null)
+
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, {
+        name: 'Loc',
+        storageTypeId: String(storageType.id),
+      })
+      const plate1 = await createTestMicronixPlate(testDb, { name: 'Plate1', locationId: location.id })
+      const plate2 = await createTestMicronixPlate(testDb, { name: 'Plate2', locationId: location.id })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
+      const specimen = await createTestSpecimen(testDb, specimenType.id)
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const now = new Date().toISOString()
+
+      const [c1] = await testDb.insert(storageContainer).values({
+        specimenId: specimen.id,
+        unitId: unit.id,
+        totalQuantity: 1.0,
+        remainingQuantity: 1.0,
+        created: now,
+        lastUpdated: now,
+      }).returning()
+      await testDb.insert(micronixTube).values({
+        id: c1!.id,
+        collectionId: plate1.id,
+        barcode: 'MT001',
+        position: 'A01',
+      })
+
+      const [c2] = await testDb.insert(storageContainer).values({
+        specimenId: specimen.id,
+        unitId: unit.id,
+        totalQuantity: 1.0,
+        remainingQuantity: 1.0,
+        created: now,
+        lastUpdated: now,
+      }).returning()
+      await testDb.insert(micronixTube).values({
+        id: c2!.id,
+        collectionId: plate2.id,
+        barcode: 'MT002',
+        position: 'A02',
+      })
+
+      const app = createApp()
+      const res = await authenticatedRequest(app, '/api/collections/plates/micronix/validate-scan', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          csvText: 'Well,Barcode\nA01,MT001\nA02,MT002',
+          scannerConfigurationId: 'scan-config',
+        },
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { inferenceReport?: { unknownBarcodes: string[]; plateBreakdown: unknown[] } }
+      expect(data.inferenceReport).toBeDefined()
+      expect(data.inferenceReport!.unknownBarcodes).toEqual([])
+      expect(data.inferenceReport!.plateBreakdown).toHaveLength(2)
     })
   })
 

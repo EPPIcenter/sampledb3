@@ -26,7 +26,7 @@ import { resolveCollection } from '../lib/collection-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
-import { validatePlateScan, inferPlateFromScan } from '../lib/plate-scan-validation'
+import { validatePlateScan, inferPlateOrGetReport } from '../lib/plate-scan-validation'
 
 /**
  * Create collections routes with database injection
@@ -217,11 +217,14 @@ collections.post('/plates/micronix/validate-scan', authMiddleware, memberMiddlew
     if (data.plateId != null) {
       plateId = data.plateId
     } else {
-      const inferred = await inferPlateFromScan(database, {
+      const inferResult = await inferPlateOrGetReport(database, {
         csvText: data.csvText,
         scannerConfigurationId: data.scannerConfigurationId,
       })
-      plateId = inferred.plate.id
+      if ('inferenceReport' in inferResult) {
+        return c.json({ inferenceReport: inferResult.inferenceReport })
+      }
+      plateId = inferResult.plate.id
       inferredPlate = true
     }
 
@@ -236,7 +239,7 @@ collections.post('/plates/micronix/validate-scan', authMiddleware, memberMiddlew
     if (error instanceof Error) {
       if (error.message === 'Scanner configuration not found') return c.json({ error: error.message }, 400)
       if (error.message === 'Plate not found') return c.json({ error: error.message }, 404)
-      if (error.message.startsWith('Cannot infer plate:') || error.message.startsWith('Unknown barcode') || error.message.startsWith('Tubes from multiple plates:')) {
+      if (error.message.startsWith('Cannot infer plate:')) {
         return c.json({ error: error.message }, 400)
       }
     }
