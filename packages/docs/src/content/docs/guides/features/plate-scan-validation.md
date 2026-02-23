@@ -30,7 +30,7 @@ Validation is read-only: it does not change any data.
 3. **Plate**  
    Choose how to identify the plate:
    - **I know the plate**: Select the micronix plate in the database to compare against. If the filename (without `.csv`) looks like a plate name, the system suggests one or more matching plates. Filenames often include dates or times (e.g. `PLATE1_2024-01-15.csv`); the system strips common date/time suffixes and uses the remaining stem to suggest plates. You can confirm the suggested plate or pick another from the list.
-   - **Infer plate from scan**: Use this when you do not know the plate name. The system infers the plate from the barcodes in the scan: all scanned tubes must belong to the same plate in the database. If the scan has no barcodes, unknown barcodes, or tubes from more than one plate, validation fails with a clear error. When inference succeeds, the result shows the inferred plate name and the same comparison (match/mismatch/missing/extra) as when you select a plate.
+   - **Infer plate from scan**: Use this when you do not know the plate name. The system infers the plate from the barcodes in the scan: all scanned tubes must belong to the same plate in the database. When inference succeeds, the result shows the inferred plate name and the same comparison (match/mismatch/missing/extra) as when you select a plate. When the system **cannot** infer a single plate—for example the scan has no barcodes (you get an error message), or it has unknown barcodes (not in the database), or tubes from more than one plate—you see a **detailed inference report** instead of a single error. The report lists unknown barcodes (if any) and a per-plate breakdown: for each plate that appears in the scan, how many tubes are from that plate and how many of those are in their expected position on that plate. You can download this report as CSV.
 
 4. **Validate**  
    Click **Validate scan**. The app sends the CSV (and plate ID if you selected one) to the server and displays the comparison result.
@@ -50,6 +50,15 @@ The result shows:
   - **Notes**: Badges for "Exhausted" and any tag names on the container
 
 Use the table to track down specific wells that don’t match or are missing so you can correct the physical plate or the database as needed.
+
+## When inference cannot determine a single plate
+
+If you use **Infer plate from scan** and the scan contains unknown barcodes (not in the database) and/or tubes from more than one plate, the app shows an **Inference report** instead of a validation result. The report includes:
+
+- **Unknown barcodes**: Count and list of barcodes in the scan that are not in the database. Use this to add missing tubes or correct typos.
+- **Plate breakdown**: A table with one row per plate that appears in the scan. For each plate you see how many tubes from that plate are on the scan and how many of those are in their expected well position (i.e. scanned at the position where that tube is registered on that plate). This helps you see whether the scan might be a mix of plates or tubes in the wrong wells.
+
+You can download the inference report as CSV from the same page.
 
 ## Filename matching
 
