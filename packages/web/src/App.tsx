@@ -14,6 +14,7 @@ import SpecimenDetail from './pages/SpecimenDetail'
 import ContainerDetail from './pages/ContainerDetail'
 import Locations from './pages/Locations'
 import LocationDetail from './pages/LocationDetail'
+import Collections from './pages/Collections'
 import Import from './pages/Import'
 import Export from './pages/Export'
 import BarcodeExport from './pages/BarcodeExport'
@@ -188,6 +189,13 @@ function AppContent() {
         category: 'Navigation',
         keywords: ['locations', 'location'],
         action: () => navigate('/locations'),
+      },
+      {
+        id: 'nav-collections',
+        label: 'Go to Collections',
+        category: 'Navigation',
+        keywords: ['collections', 'collection', 'plates', 'boxes', 'bags'],
+        action: () => navigate('/collections'),
       },
       ...(canWrite ? [{
         id: 'nav-import',
@@ -516,6 +524,7 @@ function AppContent() {
           <Route path="/containers/:id" element={<ContainerDetail />} />
           <Route path="/locations" element={<Locations />} />
           <Route path="/locations/:id" element={<LocationDetail />} />
+          <Route path="/collections" element={<Collections />} />
           <Route path="/import" element={<Import />} />
           <Route path="/export" element={<Export />} />
           <Route path="/barcode-export" element={<BarcodeExport />} />
