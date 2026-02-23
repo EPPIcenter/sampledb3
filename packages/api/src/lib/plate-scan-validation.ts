@@ -51,6 +51,24 @@ export interface InferPlateResult {
   plate: { id: number; name: string }
 }
 
+/** Per-plate summary when inference cannot determine a single plate. */
+export interface InferenceReportPlateBreakdownEntry {
+  plateId: number
+  plateName: string
+  tubeCount: number
+  inExpectedPositionCount: number
+}
+
+/** Detailed report when plate cannot be inferred (unknown barcodes and/or multiple plates). */
+export interface InferenceReport {
+  unknownBarcodes: string[]
+  plateBreakdown: InferenceReportPlateBreakdownEntry[]
+}
+
+export type InferPlateOrReportResult =
+  | { plate: { id: number; name: string } }
+  | { inferenceReport: InferenceReport }
+
 /** Infer which plate the scanned barcodes belong to. All non-empty barcodes must exist and belong to the same plate. */
 export async function inferPlateFromScan(
   database: Database,
@@ -109,6 +127,96 @@ export async function inferPlateFromScan(
   }
 
   return { plate }
+}
+
+/**
+ * Infer plate from scan or return a detailed inference report when that is not possible
+ * (no barcodes → throws; unknown barcodes and/or multiple plates → returns inferenceReport).
+ */
+export async function inferPlateOrGetReport(
+  database: Database,
+  params: { csvText: string; scannerConfigurationId: string }
+): Promise<InferPlateOrReportResult> {
+  const config = await getScannerConfigurationById(database, params.scannerConfigurationId)
+  if (!config) {
+    throw new Error('Scanner configuration not found')
+  }
+
+  const parsed = parsePlateCSV(params.csvText, config)
+  const barcodes = new Set<string>()
+  const scannedByPosition = new Map<string, string>()
+  for (const row of parsed) {
+    const pos = normalizeWellPosition(row.wellPosition)
+    if (pos) scannedByPosition.set(pos, row.barcode)
+    const b = (row.barcode ?? '').trim()
+    if (b !== '') barcodes.add(b)
+  }
+
+  if (barcodes.size === 0) {
+    throw new Error('Cannot infer plate: scan has no barcodes')
+  }
+
+  const barcodeList = [...barcodes]
+  const rows = await database
+    .select({
+      barcode: micronixTube.barcode,
+      position: micronixTube.position,
+      plateId: micronixPlate.id,
+      plateName: micronixPlate.name,
+    })
+    .from(micronixTube)
+    .innerJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
+    .where(inArray(micronixTube.barcode, barcodeList))
+
+  const foundBarcodes = new Set<string>()
+  const byPlateId = new Map<
+    number,
+    { plateName: string; entries: { barcode: string; position: string }[] }
+  >()
+  for (const row of rows) {
+    if (row.barcode == null) continue
+    foundBarcodes.add(row.barcode)
+    const pos = (row.position ?? '').trim()
+    const existing = byPlateId.get(row.plateId)
+    if (existing) {
+      existing.entries.push({ barcode: row.barcode, position: pos })
+    } else {
+      byPlateId.set(row.plateId, {
+        plateName: row.plateName,
+        entries: [{ barcode: row.barcode, position: pos }],
+      })
+    }
+  }
+
+  const unknownBarcodes = barcodeList.filter((b) => !foundBarcodes.has(b))
+  const plateBreakdown: InferenceReportPlateBreakdownEntry[] = []
+  for (const [plateId, { plateName, entries }] of byPlateId) {
+    const tubeCount = entries.length
+    const inExpectedPositionCount = entries.filter((e) => {
+      const norm = normalizeWellPosition(e.position)
+      return norm && (scannedByPosition.get(norm) ?? '').trim() === e.barcode
+    }).length
+    plateBreakdown.push({
+      plateId,
+      plateName,
+      tubeCount,
+      inExpectedPositionCount,
+    })
+  }
+
+  const singlePlateNoUnknown =
+    unknownBarcodes.length === 0 && plateBreakdown.length === 1
+  if (singlePlateNoUnknown) {
+    const plate = plateBreakdown[0]!
+    return { plate: { id: plate.plateId, name: plate.plateName } }
+  }
+
+  return {
+    inferenceReport: {
+      unknownBarcodes,
+      plateBreakdown,
+    },
+  }
 }
 
 interface ExpectedWell {
