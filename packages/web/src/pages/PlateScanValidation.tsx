@@ -5,6 +5,7 @@ import {
   scannerConfigurationsApi,
   type ScannerConfiguration,
   type ValidatePlateScanResult,
+  type InferenceReport,
 } from '../lib/api'
 import { extractPlateStemFromFilename, findPlateCandidatesFromStem } from '../lib/plate-filename-match'
 import '../styles/storage.css'
@@ -104,6 +105,38 @@ function downloadReport(result: ValidatePlateScanResult): void {
   URL.revokeObjectURL(url)
 }
 
+/** Build CSV from inference report (unknown barcodes + plate breakdown). */
+function buildInferenceReportCsv(report: InferenceReport): string {
+  const lines: string[] = []
+  lines.push('Plate scan inference report')
+  lines.push('No single plate could be inferred from the scan.')
+  lines.push(`Generated,${new Date().toISOString()}`)
+  lines.push('')
+  lines.push('Unknown barcodes (not in database)')
+  lines.push(`Count,${report.unknownBarcodes.length}`)
+  if (report.unknownBarcodes.length > 0) {
+    lines.push(report.unknownBarcodes.map(csvEscape).join(','))
+  }
+  lines.push('')
+  lines.push('Plate breakdown')
+  lines.push(['Plate ID', 'Plate name', 'Tubes on scan', 'In expected position'].map(csvEscape).join(','))
+  for (const row of report.plateBreakdown) {
+    lines.push([row.plateId, row.plateName, row.tubeCount, row.inExpectedPositionCount].map((c) => csvEscape(String(c))).join(','))
+  }
+  return lines.join('\r\n')
+}
+
+function downloadInferenceReport(report: InferenceReport): void {
+  const csv = buildInferenceReportCsv(report)
+  const blob = new Blob([csv], { type: 'text/csv; charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `plate-scan-inference-report_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 type PlateMode = 'select_plate' | 'infer_plate'
 
 export default function PlateScanValidation() {
@@ -117,6 +150,7 @@ export default function PlateScanValidation() {
   const [plateSearch, setPlateSearch] = useState('')
   const [candidates, setCandidates] = useState<Array<{ id: number; name: string; matchType: string }>>([])
   const [result, setResult] = useState<ValidatePlateScanResult | null>(null)
+  const [inferenceReport, setInferenceReport] = useState<InferenceReport | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -147,6 +181,7 @@ export default function PlateScanValidation() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     setResult(null)
+    setInferenceReport(null)
     setError(null)
     if (!file) {
       setCsvFile(null)
@@ -182,13 +217,21 @@ export default function PlateScanValidation() {
     setLoading(true)
     setError(null)
     setResult(null)
+    setInferenceReport(null)
     try {
       const res = await collectionsApi.validatePlateScan({
         csvText,
         ...(inferMode ? {} : { plateId: selectedPlateId! }),
         scannerConfigurationId: selectedConfigId,
       })
-      setResult(res.data)
+      const data = res.data
+      if ('inferenceReport' in data && data.inferenceReport) {
+        setInferenceReport(data.inferenceReport)
+        setResult(null)
+      } else {
+        setResult(data as ValidatePlateScanResult)
+        setInferenceReport(null)
+      }
     } catch (err: unknown) {
       const message = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
@@ -253,6 +296,7 @@ export default function PlateScanValidation() {
                 onChange={(e) => {
                   setSelectedConfigId(e.target.value || null)
                   setResult(null)
+                  setInferenceReport(null)
                   setError(null)
                 }}
                 className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] focus:border-[rgb(var(--dashboard-accent))]"
@@ -294,6 +338,7 @@ export default function PlateScanValidation() {
                     onChange={() => {
                       setPlateMode('select_plate')
                       setResult(null)
+                      setInferenceReport(null)
                       setError(null)
                     }}
                     className="rounded border-gray-300 text-[rgb(var(--dashboard-accent))] focus:ring-[rgb(var(--dashboard-accent))]"
@@ -309,6 +354,7 @@ export default function PlateScanValidation() {
                     onChange={() => {
                       setPlateMode('infer_plate')
                       setResult(null)
+                      setInferenceReport(null)
                       setError(null)
                     }}
                     className="rounded border-gray-300 text-[rgb(var(--dashboard-accent))] focus:ring-[rgb(var(--dashboard-accent))]"
@@ -331,6 +377,7 @@ export default function PlateScanValidation() {
                     onClick={() => {
                       setSelectedPlateId(null)
                       setResult(null)
+                      setInferenceReport(null)
                       setError(null)
                     }}
                     className="text-sm text-[rgb(var(--dashboard-accent))] hover:underline focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] rounded"
@@ -372,6 +419,7 @@ export default function PlateScanValidation() {
                         onClick={() => {
                           setSelectedPlateId(p.id)
                           setResult(null)
+                          setInferenceReport(null)
                           setError(null)
                         }}
                         className={`w-full px-4 py-2.5 text-left text-sm border-b border-gray-100 last:border-b-0 hover:bg-[rgb(var(--dashboard-accent-muted))] focus:outline-none focus:bg-[rgb(var(--dashboard-accent-muted))] ${
@@ -398,6 +446,7 @@ export default function PlateScanValidation() {
                         onClick={() => {
                           setSelectedPlateId(p.id)
                           setResult(null)
+                          setInferenceReport(null)
                           setError(null)
                         }}
                         className={`w-full px-4 py-2.5 text-left text-sm border-b border-gray-100 last:border-b-0 hover:bg-[rgb(var(--dashboard-accent-muted))] focus:outline-none focus:bg-[rgb(var(--dashboard-accent-muted))] ${
@@ -537,6 +586,63 @@ export default function PlateScanValidation() {
               </div>
             </div>
           </>
+        )}
+
+        {inferenceReport && (
+          <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-3" data-testid="inference-report">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+              <h2 className="storage-section-title m-0">Inference report – no single plate could be inferred</h2>
+              <button
+                type="button"
+                onClick={() => downloadInferenceReport(inferenceReport)}
+                className="storage-btn-secondary inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium hover:border-[rgb(var(--dashboard-accent))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] focus:ring-offset-2"
+                aria-label="Download inference report as CSV"
+              >
+                <svg className="w-4 h-4 shrink-0 text-[rgb(var(--dashboard-accent))]" aria-hidden fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download report
+              </button>
+            </div>
+            {inferenceReport.unknownBarcodes.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                  Unknown barcodes (not in database): {inferenceReport.unknownBarcodes.length}
+                </h3>
+                <p className="text-sm text-gray-600 font-mono">
+                  {inferenceReport.unknownBarcodes.join(', ')}
+                </p>
+              </div>
+            )}
+            {inferenceReport.plateBreakdown.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Plate breakdown</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr>
+                        <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium">Plate name</th>
+                        <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium">Tubes on scan</th>
+                        <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium">In expected position</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inferenceReport.plateBreakdown.map((row) => (
+                        <tr key={row.plateId} className="border-b border-gray-100 hover:bg-gray-50/50">
+                          <td className="border border-gray-100 px-2 py-1 text-gray-800">{row.plateName}</td>
+                          <td className="border border-gray-100 px-2 py-1 font-mono">{row.tubeCount}</td>
+                          <td className="border border-gray-100 px-2 py-1 font-mono">{row.inExpectedPositionCount}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {inferenceReport.unknownBarcodes.length === 0 && inferenceReport.plateBreakdown.length === 0 && (
+              <p className="text-sm text-gray-600">No known barcodes or plates found in the scan.</p>
+            )}
+          </div>
         )}
       </div>
     </div>

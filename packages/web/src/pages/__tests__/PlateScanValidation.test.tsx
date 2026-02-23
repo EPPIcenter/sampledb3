@@ -190,13 +190,56 @@ describe('PlateScanValidation', () => {
     expect(validateBtn).toBeDisabled()
   })
 
+  it('when infer mode and API returns inferenceReport, shows inference report card not validation result', async () => {
+    const csvContent = 'Well,Barcode\nA01,UNKNOWN1'
+    const file = new File([csvContent], 'scan.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: async () => csvContent })
+
+    vi.mocked(collectionsApi.validatePlateScan).mockResolvedValue({
+      data: {
+        inferenceReport: {
+          unknownBarcodes: ['UNKNOWN1'],
+          plateBreakdown: [],
+        },
+      },
+    } as unknown as Awaited<ReturnType<typeof collectionsApi.validatePlateScan>>)
+
+    const { container } = await renderWithProviders(<PlateScanValidation />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Validate Plate Scan' })).toBeInTheDocument()
+    })
+
+    const inferRadio = screen.getByRole('radio', { name: /infer plate from scan/i })
+    fireEvent.click(inferRadio)
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByText('scan.csv')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Validate scan/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('inference-report')).toBeInTheDocument()
+      expect(screen.getByText(/Inference report – no single plate could be inferred/i)).toBeInTheDocument()
+      expect(screen.getByText(/Unknown barcodes.*1/)).toBeInTheDocument()
+      expect(screen.getByText('UNKNOWN1')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    expect(screen.queryByTestId('result-heading')).not.toBeInTheDocument()
+    expect(screen.queryByText('Well grid')).not.toBeInTheDocument()
+  })
+
   it('when infer mode and API returns 400, error message is shown', async () => {
-    const csvContent = 'Well,Barcode\nA01,X\nA02,Y'
+    const csvContent = 'Well,Barcode\nA01,\nA02,'
     const file = new File([csvContent], 'scan.csv', { type: 'text/csv' })
     Object.defineProperty(file, 'text', { value: async () => csvContent })
 
     vi.mocked(collectionsApi.validatePlateScan).mockRejectedValue({
-      response: { data: { error: 'Tubes from multiple plates: Plate1, Plate2' } },
+      response: { data: { error: 'Cannot infer plate: scan has no barcodes' } },
     })
 
     const { container } = await renderWithProviders(<PlateScanValidation />)
@@ -218,7 +261,7 @@ describe('PlateScanValidation', () => {
     fireEvent.click(screen.getByRole('button', { name: /Validate scan/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(/Tubes from multiple plates/i)).toBeInTheDocument()
+      expect(screen.getByText(/Cannot infer plate/i)).toBeInTheDocument()
     }, { timeout: 5000 })
   })
 })

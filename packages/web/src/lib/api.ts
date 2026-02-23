@@ -959,6 +959,25 @@ export interface ValidatePlateScanResult {
   inferredPlate?: boolean
 }
 
+/** Per-plate summary in inference report when a single plate cannot be inferred. */
+export interface InferenceReportPlateBreakdownEntry {
+  plateId: number
+  plateName: string
+  tubeCount: number
+  inExpectedPositionCount: number
+}
+
+/** Detailed report when plate cannot be inferred (unknown barcodes and/or multiple plates). */
+export interface InferenceReport {
+  unknownBarcodes: string[]
+  plateBreakdown: InferenceReportPlateBreakdownEntry[]
+}
+
+/** Response from validate-scan: either validation result or inference report. */
+export type ValidatePlateScanResponse =
+  | ValidatePlateScanResult
+  | { inferenceReport: InferenceReport }
+
 export const collectionsApi = {
   getMicronixPlate: (id: number) =>
     api.get<{ plate: MicronixPlateResponse; wells: Record<string, WellEntry> }>(`/collections/plates/micronix/${id}`),
@@ -975,7 +994,7 @@ export const collectionsApi = {
   createMicronixPlate: (data: { name: string; locationId: number; barcode?: string }) =>
     api.post<{ plate: MicronixPlateResponse }>('/collections/plates/micronix', data),
   validatePlateScan: (data: { csvText: string; plateId?: number; scannerConfigurationId: string }) =>
-    api.post<ValidatePlateScanResult>('/collections/plates/micronix/validate-scan', data),
+    api.post<ValidatePlateScanResponse>('/collections/plates/micronix/validate-scan', data),
   createCryovialBox: (data: { name: string; locationId: number; barcode?: string }) =>
     api.post<{ box: CryovialBoxResponse }>('/collections/boxes/cryovial', data),
   createBox: (data: { name: string; locationId: number }) =>
