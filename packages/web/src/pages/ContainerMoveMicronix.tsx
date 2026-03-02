@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, Link, useNavigate, Navigate } from 'react-router-dom'
 import { collectionsApi, locationsApi, scannerConfigurationsApi, type Location, type ScannerConfiguration } from '../lib/api'
+import { extractPlateStemFromFilename, findPlateCandidatesFromStem, type PlateCandidate } from '../lib/plate-filename-match'
 import { normalizeWellPosition, validateFullPlatePositions } from '../lib/micronix-plate-positions'
 import MicronixPlatePicker, { type MicronixPlate } from '../components/MicronixPlatePicker'
 import { useUser } from '../contexts/UserContext'
@@ -39,7 +40,7 @@ interface UnresolvedContainer {
 interface FileData {
   file: File
   inferredPlateName: string | null
-  inferredMatches: MicronixPlate[]
+  inferredMatches: PlateCandidate[]
   selectedPlateName: string | null
   csvRows: CSVRow[]
   resolvedContainers: ResolvedContainer[]
@@ -173,32 +174,6 @@ export default function ContainerMoveMicronix() {
     return <Navigate to="/" replace />
   }
 
-  // Parse filename to infer plate name - requires exact match
-  const parseFilename = (filename: string): string => {
-    // Remove .csv extension and trim
-    const baseName = filename.replace(/\.csv$/i, '').trim()
-    if (!baseName) return ''
-    
-    // Find exact match (case-insensitive)
-    const exactMatch = availablePlates.find(p => 
-      p.name.toLowerCase() === baseName.toLowerCase()
-    )
-    
-    return exactMatch ? exactMatch.name : ''
-  }
-
-  // Find matching plates for a given inferred name (for exact matches, should only return 0 or 1)
-  const findMatchingPlates = (inferredName: string): MicronixPlate[] => {
-    if (!inferredName) return []
-    
-    // With exact matching, we should only get 0 or 1 match
-    // But handle case where there might be duplicate names (case-insensitive)
-    const inferredLower = inferredName.toLowerCase()
-    return availablePlates.filter(p => 
-      p.name.toLowerCase() === inferredLower
-    )
-  }
-
   const buildPosition = (config: ScannerConfiguration, row: CSVRow): string => {
     if (config.positionType === 'single') {
       return row[config.positionColumn!]?.trim() || ''
@@ -321,29 +296,24 @@ export default function ContainerMoveMicronix() {
         // Get preview (first 5 rows)
         const preview = csvRows.slice(0, 5)
         
-        // Infer plate name from filename
-        const inferredName = parseFilename(file.name)
-        const matches = findMatchingPlates(inferredName)
+        // Infer destination plate from filename (same rules as Plate Scan Validation: stem + exact/contains/reverse_contains)
+        const stem = extractPlateStemFromFilename(file.name)
+        const candidates = findPlateCandidatesFromStem(stem, availablePlates)
         
         let inferredPlateName: string | null = null
         let selectedPlateName: string | null = null
         
-        if (matches.length === 1) {
-          // Single match - auto-select
-          inferredPlateName = matches[0].name
-          selectedPlateName = matches[0].name
-        } else if (matches.length > 1) {
-          // Multiple matches - require user selection
-          inferredPlateName = inferredName
-        } else if (inferredName) {
-          // No matches but we have an inferred name - require user selection
-          inferredPlateName = inferredName
+        if (candidates.length === 1) {
+          inferredPlateName = candidates[0].name
+          selectedPlateName = candidates[0].name
+        } else if (candidates.length > 1 || stem) {
+          inferredPlateName = stem || null
         }
 
         newFiles.push({
           file,
           inferredPlateName,
-          inferredMatches: matches,
+          inferredMatches: candidates,
           selectedPlateName,
           csvRows,
           resolvedContainers: [],
@@ -843,13 +813,10 @@ export default function ContainerMoveMicronix() {
 
                   <div>
                     <h3 className="font-semibold text-gray-900 mb-2">Filename Convention</h3>
-                    <p className="mb-2">Name your CSV files to exactly match the destination plate name:</p>
+                    <p className="mb-2">Name your CSV files after the destination plate. The system derives a stem from the filename (path and .csv are removed; date/time suffixes like <code className="bg-gray-100 px-1 rounded">_2024-01-15</code> are stripped) and suggests plates by exact, then partial, match. If exactly one plate is suggested, it is auto-selected.</p>
                     <ul className="list-disc list-inside space-y-1 ml-4">
-                      <li>The filename (without .csv extension) must exactly match a plate name in the database</li>
-                      <li>Example: If plate is named &quot;PLATE-001&quot;, name your file <code className="bg-gray-100 px-1 rounded">PLATE-001.csv</code></li>
-                      <li>Example: If plate is named &quot;1022&quot;, name your file <code className="bg-gray-100 px-1 rounded">1022.csv</code></li>
-                      <li>Matching is case-insensitive, but the filename must match exactly (no extra characters)</li>
-                      <li>If the plate name cannot be inferred, you'll be prompted to select it manually</li>
+                      <li>Example: <code className="bg-gray-100 px-1 rounded">PLATE-001.csv</code> or <code className="bg-gray-100 px-1 rounded">PLATE-001_2024-01-15.csv</code> → stem &quot;PLATE-001&quot;</li>
+                      <li>If no single plate is suggested, choose the destination from the list</li>
                     </ul>
                   </div>
 
@@ -947,21 +914,19 @@ export default function ContainerMoveMicronix() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Destination Plate:
                         </label>
-                        {fileData.inferredPlateName && fileData.selectedPlateName && fileData.inferredMatches.length === 1 ? (
-                          <div className="text-sm text-gray-700 bg-green-50 border border-green-200 rounded p-2">
-                            ✓ Inferred: <span className="font-semibold">{fileData.selectedPlateName}</span>
-                          </div>
-                        ) : (
-                          <MicronixPlatePicker
-                            locations={locations}
-                            plates={availablePlates}
-                            value={fileData.selectedPlateName || undefined}
-                            onChange={(plateName) => updateFilePlateSelection(index, plateName)}
-                          />
+                        {fileData.inferredMatches.length === 1 &&
+                          fileData.selectedPlateName === fileData.inferredMatches[0].name && (
+                          <p className="text-xs text-green-700 mb-1">✓ Inferred from filename — you can change it below if needed.</p>
                         )}
+                        <MicronixPlatePicker
+                          locations={locations}
+                          plates={availablePlates}
+                          value={fileData.selectedPlateName || undefined}
+                          onChange={(plateName) => updateFilePlateSelection(index, plateName)}
+                        />
                         {fileData.inferredPlateName && !fileData.selectedPlateName && (
                           <p className="text-xs text-gray-500 mt-1">
-                            No exact match found for &quot;{fileData.inferredPlateName}&quot;. Please select a destination plate.
+                            No single plate suggested for &quot;{fileData.inferredPlateName}&quot;. Please select a destination plate.
                             {fileData.inferredMatches.length > 0 && (
                               <span className="ml-1">({fileData.inferredMatches.length} similar plate{fileData.inferredMatches.length !== 1 ? 's' : ''} found)</span>
                             )}

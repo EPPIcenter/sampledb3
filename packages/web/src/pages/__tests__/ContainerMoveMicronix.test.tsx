@@ -1120,6 +1120,81 @@ describe('ContainerMoveMicronix', () => {
         })
     })
 
+    it('infers destination plate from filename with date suffix', async () => {
+        const file = new File([fullPlateCSV()], 'PLATE1_2024-01-15.csv', { type: 'text/csv' })
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
+            data: {
+                collections: [{
+                    id: 1,
+                    name: 'PLATE1',
+                    barcode: null,
+                    locationId: null,
+                    itemCount: 0
+                }]
+            }
+        } as any)
+
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
+        await waitFor(() => {
+            expect(collectionsApi.listCollectionsByType).toHaveBeenCalled()
+        })
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input).toBeInTheDocument()
+            expect(input.disabled).toBe(false)
+        })
+        // Allow useEffect promise to resolve and state to commit before uploading
+        const input = container.querySelector('input[type="file"]') as HTMLInputElement
+        fireEvent.change(input, { target: { files: [file] } })
+
+        await waitFor(() => {
+            expect(screen.getByText('PLATE1_2024-01-15.csv')).toBeInTheDocument()
+        })
+        await waitFor(() => {
+            const nextButton = screen.getByText('Next: Resolve Containers')
+            expect(nextButton).toBeInTheDocument()
+            expect(nextButton).not.toBeDisabled()
+        }, { timeout: 3000 })
+        // Destination plate was auto-selected from stem (date suffix stripped); green "Inferred" box may also be shown
+    })
+
+    it('infers destination plate from filename stem with contains match', async () => {
+        const file = new File([fullPlateCSV()], 'MyPlate.csv', { type: 'text/csv' })
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
+            data: {
+                collections: [{
+                    id: 1,
+                    name: 'MyPlate-001',
+                    barcode: null,
+                    locationId: null,
+                    itemCount: 0
+                }]
+            }
+        } as any)
+
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
+        await waitFor(() => {
+            expect(collectionsApi.listCollectionsByType).toHaveBeenCalled()
+        })
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input).toBeInTheDocument()
+            expect(input.disabled).toBe(false)
+        })
+        const input = container.querySelector('input[type="file"]') as HTMLInputElement
+        fireEvent.change(input, { target: { files: [file] } })
+
+        await waitFor(() => {
+            expect(screen.getByText('MyPlate.csv')).toBeInTheDocument()
+        })
+        await waitFor(() => {
+            const nextButton = screen.getByText('Next: Resolve Containers')
+            expect(nextButton).toBeInTheDocument()
+            expect(nextButton).not.toBeDisabled()
+        }, { timeout: 3000 })
+        // Destination plate was auto-selected from stem via contains match (MyPlate-001); green "Inferred" box may also be shown
+    })
+
     it('errors on incorrect collection types', async () => {
         const csvContent = fullPlateCSV({ A01: 'MTX123' })
         const file = new File([csvContent], 'PLATE1.csv', { type: 'text/csv' })
