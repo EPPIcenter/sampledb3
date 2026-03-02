@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { exportConfigurationsApi, type ExportConfigurations, type ExportConfiguration } from '../lib/api'
+import {
+  EXPORT_ENTRY_COLUMNS,
+  DEFAULT_EXPORT_COLUMN_KEYS,
+  getExportColumnLabel,
+} from '../lib/export-columns'
 import { useUser } from '../contexts/UserContext'
 import InfoTooltip from './InfoTooltip'
 
@@ -9,40 +14,6 @@ interface ExportConfigurationsManagerProps {
   onError?: (error: string) => void
   onSuccess?: () => void
 }
-
-// All available export columns with their display names
-const AVAILABLE_COLUMNS = [
-  { key: 'container_id', label: 'Container ID' },
-  { key: 'container_type', label: 'Container Type' },
-  { key: 'barcode', label: 'Barcode' },
-  { key: 'position', label: 'Position' },
-  { key: 'label', label: 'Container Name' },
-  { key: 'collection_name', label: 'Collection Name' },
-  { key: 'status', label: 'Status' },
-  { key: 'comment', label: 'Comment' },
-  { key: 'specimen_id', label: 'Specimen ID' },
-  { key: 'specimen_type', label: 'Specimen Type' },
-  { key: 'collection_date', label: 'Collection Date' },
-  { key: 'subject_id', label: 'Subject ID' },
-  { key: 'subject_name', label: 'Subject Name' },
-  { key: 'control_batch_id', label: 'Control Batch ID' },
-  { key: 'control_batch_name', label: 'Control Batch Name' },
-  { key: 'control_definition_name', label: 'Control Definition Name' },
-  { key: 'control_type', label: 'Control Type' },
-  { key: 'target_density', label: 'Target Density' },
-  { key: 'target_density_unit', label: 'Target Density Unit' },
-  { key: 'strain_composition', label: 'Strain Composition' },
-  { key: 'study_id', label: 'Study ID' },
-  { key: 'study_code', label: 'Study Code' },
-  { key: 'study_title', label: 'Study Title' },
-  { key: 'study_lead_person', label: 'Study Lead Person' },
-  { key: 'location_path', label: 'Location Path' },
-  { key: 'created', label: 'Created' },
-  { key: 'last_updated', label: 'Last Updated' },
-]
-
-// Default column order (all columns)
-const DEFAULT_COLUMNS = AVAILABLE_COLUMNS.map(col => col.key)
 
 export default function ExportConfigurationsManager({
   data,
@@ -55,13 +26,12 @@ export default function ExportConfigurationsManager({
   const [sharedConfigurations, setSharedConfigurations] = useState<ExportConfiguration[]>([])
   const [personalConfigurations, setPersonalConfigurations] = useState<ExportConfiguration[]>([])
   const [activeTab, setActiveTab] = useState<'shared' | 'personal'>('shared')
-  const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingType, setEditingType] = useState<'shared' | 'personal' | null>(null)
   const [newConfigName, setNewConfigName] = useState('')
-  const [newConfigColumns, setNewConfigColumns] = useState<string[]>(DEFAULT_COLUMNS)
+  const [newConfigColumns, setNewConfigColumns] = useState<string[]>(DEFAULT_EXPORT_COLUMN_KEYS)
   const [showNewForm, setShowNewForm] = useState(false)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
@@ -88,27 +58,6 @@ export default function ExportConfigurationsManager({
     }
     loadConfigs()
   }, [])
-
-  const handleSave = async () => {
-    setSaving(true)
-    setError(null)
-    try {
-      if (activeTab === 'shared' && isAdmin) {
-        // Save shared configs (system-wide)
-        await exportConfigurationsApi.update({ configurations: sharedConfigurations }, null)
-      } else {
-        // Save personal configs
-        await exportConfigurationsApi.updatePersonal({ configurations: personalConfigurations })
-      }
-      onSuccess?.()
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.error || 'Failed to save export configurations'
-      setError(errorMsg)
-      onError?.(errorMsg)
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const handleAdd = async () => {
     if (!newConfigName.trim()) {
@@ -146,17 +95,22 @@ export default function ExportConfigurationsManager({
         return
       }
     } else {
-      // For shared, just update local state (admin will save)
-      if (newConfig.isDefault) {
-        const updated = currentConfigs.map(c => ({ ...c, isDefault: false }))
-        setSharedConfigurations([...updated, newConfig])
-      } else {
-        setSharedConfigurations([...currentConfigs, newConfig])
+      // For shared, persist immediately (same as personal)
+      try {
+        const updated = newConfig.isDefault 
+          ? [...currentConfigs.map(c => ({ ...c, isDefault: false })), newConfig]
+          : [...currentConfigs, newConfig]
+        await exportConfigurationsApi.update({ configurations: updated }, null)
+        setSharedConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to create configuration')
+        return
       }
     }
 
     setNewConfigName('')
-    setNewConfigColumns(DEFAULT_COLUMNS)
+    setNewConfigColumns(DEFAULT_EXPORT_COLUMN_KEYS)
     setShowNewForm(false)
     setError(null)
   }
@@ -198,7 +152,6 @@ export default function ExportConfigurationsManager({
     }
 
     if (editingType === 'personal') {
-      // Save personal config immediately
       try {
         await exportConfigurationsApi.updatePersonal({ configurations: updated })
         setPersonalConfigurations(updated)
@@ -208,14 +161,20 @@ export default function ExportConfigurationsManager({
         return
       }
     } else {
-      // For shared, just update local state (admin will save)
-      setSharedConfigurations(updated)
+      try {
+        await exportConfigurationsApi.update({ configurations: updated }, null)
+        setSharedConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to update configuration')
+        return
+      }
     }
 
     setEditingIndex(null)
     setEditingType(null)
     setNewConfigName('')
-    setNewConfigColumns(DEFAULT_COLUMNS)
+    setNewConfigColumns(DEFAULT_EXPORT_COLUMN_KEYS)
     setShowNewForm(false)
     setError(null)
   }
@@ -228,14 +187,13 @@ export default function ExportConfigurationsManager({
       return
     }
 
+    const updated = configs.filter((_, i) => i !== index)
+    if (configs[index].isDefault && updated.length > 0) {
+      updated[0].isDefault = true
+    }
+
     if (type === 'personal') {
-      // Delete personal config immediately
       try {
-        const updated = configs.filter((_, i) => i !== index)
-        // If we deleted the default, make the first one default
-        if (configs[index].isDefault && updated.length > 0) {
-          updated[0].isDefault = true
-        }
         await exportConfigurationsApi.updatePersonal({ configurations: updated })
         setPersonalConfigurations(updated)
         onSuccess?.()
@@ -243,12 +201,13 @@ export default function ExportConfigurationsManager({
         setError(err.response?.data?.error || 'Failed to delete configuration')
       }
     } else {
-      // For shared, just update local state (admin will save)
-      const updated = configs.filter((_, i) => i !== index)
-      if (configs[index].isDefault && updated.length > 0) {
-        updated[0].isDefault = true
+      try {
+        await exportConfigurationsApi.update({ configurations: updated }, null)
+        setSharedConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to delete configuration')
       }
-      setSharedConfigurations(updated)
     }
   }
 
@@ -258,19 +217,22 @@ export default function ExportConfigurationsManager({
       ...c,
       isDefault: i === index,
     }))
-    
+
     if (type === 'shared') {
-      setSharedConfigurations(updated)
+      try {
+        await exportConfigurationsApi.update({ configurations: updated }, null)
+        setSharedConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to set default configuration')
+      }
     } else {
-      // Save personal config immediately when setting default
       try {
         await exportConfigurationsApi.updatePersonal({ configurations: updated })
         setPersonalConfigurations(updated)
         onSuccess?.()
       } catch (err: any) {
         setError(err.response?.data?.error || 'Failed to set default configuration')
-        // Revert optimistic update on error
-        // The state will remain as it was before the failed update
       }
     }
   }
@@ -395,16 +357,7 @@ export default function ExportConfigurationsManager({
   }, [])
 
   const getColumnLabel = (key: string) => {
-    return AVAILABLE_COLUMNS.find(col => col.key === key)?.label || key
-  }
-
-  const hasUnsavedChanges = () => {
-    if (activeTab === 'shared' && isAdmin) {
-      // For shared configs, check if there are unsaved changes
-      // This is a simplified check - in production you'd want to compare with original loaded state
-      return false // Will be handled by save button visibility
-    }
-    return false // Personal configs are saved immediately
+    return getExportColumnLabel(key)
   }
 
   const currentConfigurations = activeTab === 'shared' ? sharedConfigurations : personalConfigurations
@@ -414,19 +367,6 @@ export default function ExportConfigurationsManager({
       {error && (
         <div className="rounded-md bg-red-50 p-2">
           <p className="text-xs font-medium text-red-800">{error}</p>
-        </div>
-      )}
-
-      {hasUnsavedChanges() && (
-        <div className="rounded-md bg-yellow-50 border border-yellow-200 p-3">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <p className="text-sm font-medium text-yellow-800">
-              You have unsaved changes. Don't forget to click "Save Changes" to apply your configuration.
-            </p>
-          </div>
         </div>
       )}
 
@@ -445,7 +385,7 @@ export default function ExportConfigurationsManager({
               setEditingIndex(null)
               setEditingType(null)
               setNewConfigName('')
-              setNewConfigColumns(DEFAULT_COLUMNS)
+              setNewConfigColumns(DEFAULT_EXPORT_COLUMN_KEYS)
               setError(null)
             }}
             className="text-sm text-blue-600 hover:text-blue-800"
@@ -461,7 +401,7 @@ export default function ExportConfigurationsManager({
               setEditingIndex(null)
               setEditingType(null)
               setNewConfigName('')
-              setNewConfigColumns(DEFAULT_COLUMNS)
+              setNewConfigColumns(DEFAULT_EXPORT_COLUMN_KEYS)
               setError(null)
             }}
             className="text-sm text-blue-600 hover:text-blue-800"
@@ -717,7 +657,7 @@ export default function ExportConfigurationsManager({
               Available Columns (not selected)
             </label>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto border border-gray-200 rounded p-2 bg-white">
-              {AVAILABLE_COLUMNS.filter(col => !newConfigColumns.includes(col.key)).map(column => (
+              {EXPORT_ENTRY_COLUMNS.filter(col => !newConfigColumns.includes(col.key)).map(column => (
                 <button
                   key={column.key}
                   type="button"
@@ -728,7 +668,7 @@ export default function ExportConfigurationsManager({
                   <div className="text-xs text-gray-400">{column.key}</div>
                 </button>
               ))}
-              {AVAILABLE_COLUMNS.filter(col => !newConfigColumns.includes(col.key)).length === 0 && (
+              {EXPORT_ENTRY_COLUMNS.filter(col => !newConfigColumns.includes(col.key)).length === 0 && (
                 <div className="text-xs text-gray-500 italic">All columns are selected</div>
               )}
             </div>
@@ -741,7 +681,7 @@ export default function ExportConfigurationsManager({
                 setShowNewForm(false)
                 setEditingIndex(null)
                 setNewConfigName('')
-                setNewConfigColumns(DEFAULT_COLUMNS)
+                setNewConfigColumns(DEFAULT_EXPORT_COLUMN_KEYS)
                 setError(null)
               }}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
@@ -753,23 +693,9 @@ export default function ExportConfigurationsManager({
               onClick={editingIndex !== null ? handleUpdate : handleAdd}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
             >
-              {editingIndex !== null ? 'Update' : activeTab === 'personal' ? 'Create' : 'Add'}
+              {editingIndex !== null ? 'Save' : activeTab === 'personal' ? 'Create' : 'Add'}
             </button>
           </div>
-        </div>
-      )}
-
-      {/* Save Button - Only for shared configs (admin) */}
-      {activeTab === 'shared' && isAdmin && sharedConfigurations.length > 0 && (
-        <div className="flex justify-end pt-2">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            {saving ? 'Saving...' : 'Save Shared Configurations'}
-          </button>
         </div>
       )}
     </div>

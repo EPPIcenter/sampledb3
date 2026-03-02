@@ -1,16 +1,15 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   exportApi,
-  exportConfigurationsApi,
   type ExportFilters,
   specimenTypesApi,
   tagsApi,
   type SpecimenType,
   type Tag,
   type StudySubject,
-  type ExportConfiguration,
 } from '../lib/api'
+import { useExportConfigurations } from '../hooks/useExportConfigurations'
 import { formatLocalDateTime } from '../lib/date-utils'
 import { useModifierHotkey } from '../hooks/useHotkey'
 import ModalPortal from './ModalPortal'
@@ -76,10 +75,16 @@ export default function ExportModal({
   const [tags, setTags] = useState<Tag[]>([])
   const [availableContainerTypes, setAvailableContainerTypes] = useState<string[]>([])
   const [loadingRefData, setLoadingRefData] = useState(true)
-  const [exportConfigurations, setExportConfigurations] = useState<Array<ExportConfiguration & { source?: 'shared' | 'personal' }>>([])
-  const [selectedConfigId, setSelectedConfigId] = useState<string>('') // Format: "source:name" to ensure uniqueness
-  const [loadingConfigs, setLoadingConfigs] = useState(false)
   const [focusedConfigIndex, setFocusedConfigIndex] = useState<number | null>(null)
+  const countDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const updateCountRef = useRef<() => Promise<void>>(() => Promise.resolve())
+  const {
+    configurations: exportConfigurations,
+    selectedConfigId,
+    setSelectedConfigId,
+    loading: loadingConfigs,
+    loadConfigurations: loadExportConfigurations,
+  } = useExportConfigurations()
 
   const loadReferenceData = useCallback(async () => {
     try {
@@ -132,56 +137,6 @@ export default function ExportModal({
       setLoadingRefData(false)
     }
   }, [studyCode])
-
-  const loadExportConfigurations = useCallback(async () => {
-    try {
-      setLoadingConfigs(true)
-      // Load shared and personal configs separately to track source
-      const [sharedRes, personalRes] = await Promise.all([
-        exportConfigurationsApi.getShared(),
-        exportConfigurationsApi.getPersonal().catch(() => ({ data: { configurations: [] } })),
-      ])
-      
-      const sharedConfigs = sharedRes.data?.configurations || []
-      const personalConfigs = personalRes.data?.configurations || []
-      
-      // Check if user has a personal default
-      const hasPersonalDefault = personalConfigs.some(c => c.isDefault === true)
-      
-      // Merge: personal first, then shared (with default flag removed from shared if personal default exists)
-      const mergedConfigs = [
-        ...personalConfigs.map(c => ({
-          ...c,
-          source: 'personal' as const,
-        })),
-        ...sharedConfigs.map(c => ({
-          ...c,
-          isDefault: hasPersonalDefault ? false : c.isDefault,
-          source: 'shared' as const,
-        })),
-      ]
-      
-      // Always update state, even if empty (fixes Bug 1: stale data when all configs deleted)
-      setExportConfigurations(mergedConfigs)
-      
-      if (mergedConfigs.length > 0) {
-        // Set default config if available - backend ensures only one default exists (personal preferred)
-        const defaultConfig = mergedConfigs.find(c => c.isDefault)
-        if (defaultConfig) {
-          setSelectedConfigId(`${defaultConfig.source}:${defaultConfig.name}`)
-        } else {
-          setSelectedConfigId(`${mergedConfigs[0].source}:${mergedConfigs[0].name}`)
-        }
-      } else {
-        // Clear selection when no configs available
-        setSelectedConfigId('')
-      }
-    } catch (err: any) {
-      console.error('Failed to load export configurations:', err)
-    } finally {
-      setLoadingConfigs(false)
-    }
-  }, [])
 
   const parseCSV = useCallback((file: File) => {
     return new Promise<Array<{
@@ -302,9 +257,9 @@ export default function ExportModal({
       const data = await parseCSV(file)
       setCsvData(data)
       setCsvFile(file)
-      // Clear summary when CSV is replaced
       setExportSummary(null)
       setSummaryExpanded(false)
+      scheduleUpdateCount()
     } catch (err: any) {
       setCsvError(err.message)
       setCsvData([])
@@ -362,9 +317,28 @@ export default function ExportModal({
     }
   }, [filters, uploadMode, csvData, dateTolerance, studyCode])
 
+  updateCountRef.current = updateCount
+
+  const scheduleUpdateCount = useCallback(() => {
+    if (countDebounceTimerRef.current) {
+      clearTimeout(countDebounceTimerRef.current)
+      countDebounceTimerRef.current = null
+    }
+    countDebounceTimerRef.current = setTimeout(() => {
+      updateCountRef.current()
+      countDebounceTimerRef.current = null
+    }, 500)
+  }, [])
+
   // Initialize state and load data when modal opens (avoids reset-on-close effect)
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) {
+      if (countDebounceTimerRef.current) {
+        clearTimeout(countDebounceTimerRef.current)
+        countDebounceTimerRef.current = null
+      }
+      return
+    }
     setError(null)
     setFilters({ study: studyCode })
     setUploadMode('manual')
@@ -379,17 +353,6 @@ export default function ExportModal({
     updateCount()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, studyCode])
-
-  useEffect(() => {
-    if (isOpen) {
-      // Debounce count updates when filters change
-      const timer = setTimeout(() => {
-        updateCount()
-      }, 500)
-      return () => clearTimeout(timer)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, isOpen, uploadMode, csvData, dateTolerance])
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -542,6 +505,7 @@ export default function ExportModal({
     value: ExportFilters[K]
   ) => {
     setFilters(prev => ({ ...prev, [key]: value }))
+    scheduleUpdateCount()
   }
 
   const toggleArrayFilter = <K extends keyof ExportFilters>(
@@ -557,10 +521,12 @@ export default function ExportModal({
         return { ...prev, [key]: [...current, value] }
       }
     })
+    scheduleUpdateCount()
   }
 
   const clearFilters = () => {
     setFilters({ study: studyCode })
+    scheduleUpdateCount()
   }
 
   const hasActiveFilters = () => {
@@ -614,7 +580,10 @@ export default function ExportModal({
             <div className="mb-6 border-b border-gray-200">
               <nav className="-mb-px flex space-x-8">
                 <button
-                  onClick={() => setUploadMode('manual')}
+                  onClick={() => {
+                    setUploadMode('manual')
+                    scheduleUpdateCount()
+                  }}
                   className={`py-4 px-1 border-b-2 font-medium text-sm ${
                     uploadMode === 'manual'
                       ? 'border-teal-500 text-teal-600'
@@ -624,7 +593,10 @@ export default function ExportModal({
                   Manual Selection
                 </button>
                 <button
-                  onClick={() => setUploadMode('csv')}
+                  onClick={() => {
+                    setUploadMode('csv')
+                    scheduleUpdateCount()
+                  }}
                   className={`py-4 px-1 border-b-2 font-medium text-sm ${
                     uploadMode === 'csv'
                       ? 'border-teal-500 text-teal-600'
@@ -677,7 +649,10 @@ export default function ExportModal({
                     type="number"
                     min="0"
                     value={dateTolerance}
-                    onChange={(e) => setDateTolerance(Math.max(0, parseInt(e.target.value) || 0))}
+                    onChange={(e) => {
+                      setDateTolerance(Math.max(0, parseInt(e.target.value) || 0))
+                      scheduleUpdateCount()
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                     placeholder="0 (exact match)"
                   />

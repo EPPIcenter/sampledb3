@@ -2,13 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import {
   exportApi,
-  exportConfigurationsApi,
   specimenTypesApi,
   tagsApi,
   type SpecimenType,
   type Tag,
-  type ExportConfiguration,
 } from '../lib/api'
+import { useExportConfigurations } from '../hooks/useExportConfigurations'
 import { formatLocalDateTime } from '../lib/date-utils'
 import '../styles/storage.css'
 
@@ -86,10 +85,14 @@ export default function Export() {
   const [tags, setTags] = useState<Tag[]>([])
   const [availableContainerTypes, setAvailableContainerTypes] = useState<string[]>([])
   const [loadingRefData, setLoadingRefData] = useState(false)
-  const [exportConfigurations, setExportConfigurations] = useState<Array<ExportConfiguration & { source?: 'shared' | 'personal' }>>([])
-  const [selectedConfigId, setSelectedConfigId] = useState<string>('') // Format: "source:name" to ensure uniqueness
-  const [loadingConfigs, setLoadingConfigs] = useState(false)
   const [focusedConfigIndex, setFocusedConfigIndex] = useState<number | null>(null)
+  const {
+    configurations: exportConfigurations,
+    selectedConfigId,
+    setSelectedConfigId,
+    loading: loadingConfigs,
+    loadConfigurations: loadExportConfigurations,
+  } = useExportConfigurations()
 
   const loadReferenceData = useCallback(async () => {
     try {
@@ -126,60 +129,9 @@ export default function Export() {
     }
   }, [])
 
-  const loadExportConfigurations = useCallback(async () => {
-    try {
-      setLoadingConfigs(true)
-      // Load shared and personal configs separately to track source
-      const [sharedRes, personalRes] = await Promise.all([
-        exportConfigurationsApi.getShared(),
-        exportConfigurationsApi.getPersonal().catch(() => ({ data: { configurations: [] } })),
-      ])
-      
-      const sharedConfigs = sharedRes.data?.configurations || []
-      const personalConfigs = personalRes.data?.configurations || []
-      
-      // Check if user has a personal default
-      const hasPersonalDefault = personalConfigs.some(c => c.isDefault === true)
-      
-      // Merge: personal first, then shared (with default flag removed from shared if personal default exists)
-      const mergedConfigs = [
-        ...personalConfigs.map(c => ({
-          ...c,
-          source: 'personal' as const,
-        })),
-        ...sharedConfigs.map(c => ({
-          ...c,
-          isDefault: hasPersonalDefault ? false : c.isDefault,
-          source: 'shared' as const,
-        })),
-      ]
-      
-      // Always update state, even if empty (fixes Bug 1: stale data when all configs deleted)
-      setExportConfigurations(mergedConfigs)
-      
-      if (mergedConfigs.length > 0) {
-        // Set default config if available - backend ensures only one default exists (personal preferred)
-        const defaultConfig = mergedConfigs.find(c => c.isDefault)
-        if (defaultConfig) {
-          setSelectedConfigId(`${defaultConfig.source}:${defaultConfig.name}`)
-        } else {
-          setSelectedConfigId(`${mergedConfigs[0].source}:${mergedConfigs[0].name}`)
-        }
-      } else {
-        // Clear selection when no configs available
-        setSelectedConfigId('')
-      }
-    } catch (err: any) {
-      console.error('Failed to load export configurations:', err)
-    } finally {
-      setLoadingConfigs(false)
-    }
-  }, [])
-
-  // Single mount effect: load reference data and export configurations once when page is shown
+  // Single mount effect: load reference data once when page is shown (configs loaded by useExportConfigurations)
   useEffect(() => {
     loadReferenceData()
-    loadExportConfigurations()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
