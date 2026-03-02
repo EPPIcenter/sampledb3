@@ -12,12 +12,14 @@ import {
   sheet,
   storageContainer,
   specimen,
+  specimenType,
   location,
   studySubject,
   study,
   controlBatch,
   controlDefinition,
   unit,
+  strain,
 } from '../db/schema'
 import { eq, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
@@ -53,6 +55,7 @@ type ContainerSource =
         id: number
         title: string
         code: string
+        leadPerson: string
       }
     }
   | {
@@ -61,6 +64,9 @@ type ContainerSource =
       name: string
       definitionName: string | null
       controlType: string
+      targetDensity: number | null
+      targetDensityUnit: string | null
+      strainComposition: string | null
     }
   | null
 
@@ -79,6 +85,16 @@ async function enrichContainer(containerId: number) {
     database.select().from(specimen).where(eq(specimen.id, container.specimenId)).get(),
   ])
 
+  let specimenTypeName: string | null = null
+  if (spec?.specimenTypeId) {
+    const st = await database
+      .select({ name: specimenType.name })
+      .from(specimenType)
+      .where(eq(specimenType.id, spec.specimenTypeId))
+      .get()
+    specimenTypeName = st?.name ?? null
+  }
+
   let source: ContainerSource = null
   if (spec?.studySubjectId) {
     const subject = await database
@@ -88,6 +104,7 @@ async function enrichContainer(containerId: number) {
         studyId: studySubject.studyId,
         studyTitle: study.title,
         studyCode: study.shortCode,
+        studyLeadPerson: study.leadPerson,
       })
       .from(studySubject)
       .leftJoin(study, eq(studySubject.studyId, study.id))
@@ -103,6 +120,7 @@ async function enrichContainer(containerId: number) {
           id: subject.studyId,
           title: subject.studyTitle,
           code: subject.studyCode,
+          leadPerson: subject.studyLeadPerson ?? '',
         },
       }
     }
@@ -114,6 +132,8 @@ async function enrichContainer(containerId: number) {
         productionDate: controlBatch.productionDate,
         definitionName: controlDefinition.name,
         controlType: controlDefinition.controlType,
+        definitionId: controlDefinition.id,
+        definitionProperties: controlDefinition.properties,
       })
       .from(controlBatch)
       .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
@@ -121,12 +141,43 @@ async function enrichContainer(containerId: number) {
       .get()
 
     if (batch && batch.definitionName && batch.controlType) {
+      let targetDensity: number | null = null
+      let targetDensityUnitId: number | null = null
+      let strainComposition: string | null = null
+      const props = batch.definitionProperties as { targetDensity?: number; targetDensityUnitId?: number; strains?: Array<{ id?: number; name?: string; percentage?: number }> } | null
+      if (props) {
+        targetDensity = props.targetDensity ?? null
+        targetDensityUnitId = props.targetDensityUnitId ?? null
+        if (props.strains && Array.isArray(props.strains) && props.strains.length > 0) {
+          const strainIds = props.strains.map((s) => (typeof s === 'number' ? s : s.id)).filter((id): id is number => id != null)
+          const strainRows = strainIds.length > 0 ? await database.select().from(strain).where(inArray(strain.id, strainIds)) : []
+          const strainNameMap = new Map(strainRows.map((s) => [s.id, s.name]))
+          strainComposition = props.strains
+            .map((s) => {
+              if (typeof s === 'number') {
+                return `${strainNameMap.get(s) ?? `Strain ${s}`} (0%)`
+              }
+              const name = s.name ?? strainNameMap.get(s.id!) ?? `Strain ${s.id}`
+              const pct = s.percentage ?? 0
+              return `${name} (${pct}%)`
+            })
+            .join('; ')
+        }
+      }
+      let targetDensityUnit: string | null = null
+      if (targetDensityUnitId) {
+        const u = await database.select({ symbol: unit.symbol }).from(unit).where(eq(unit.id, targetDensityUnitId)).get()
+        targetDensityUnit = u?.symbol ?? null
+      }
       source = {
         type: 'control',
         id: batch.id,
         name: batch.name,
         definitionName: batch.definitionName,
         controlType: batch.controlType,
+        targetDensity,
+        targetDensityUnit,
+        strainComposition,
       }
     }
   }
@@ -138,7 +189,10 @@ async function enrichContainer(containerId: number) {
     totalQuantity: container.totalQuantity,
     remainingQuantity: container.remainingQuantity,
     comment: container.comment,
+    created: container.created,
+    lastUpdated: container.lastUpdated,
     specimen: spec || null,
+    specimenTypeName,
     source,
   }
 }

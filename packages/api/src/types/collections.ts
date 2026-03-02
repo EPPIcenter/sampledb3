@@ -16,6 +16,7 @@ export type ContainerSource =
         id: number
         title: string
         code: string
+        leadPerson: string
       }
     }
   | {
@@ -24,6 +25,9 @@ export type ContainerSource =
       name: string
       definitionName: string | null
       controlType: string
+      targetDensity: number | null
+      targetDensityUnit: string | null
+      strainComposition: string | null
     }
   | null
 
@@ -37,7 +41,10 @@ export interface EnrichedContainer {
   totalQuantity: number | null
   remainingQuantity: number | null
   comment: string | null
+  created: string
+  lastUpdated: string
   specimen: Specimen | null
+  specimenTypeName: string | null
   source: ContainerSource
 }
 
