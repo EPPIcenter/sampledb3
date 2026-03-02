@@ -1723,6 +1723,16 @@ export interface ScannerConfigurations {
   configurations: ScannerConfiguration[]
 }
 
+export interface TableViewConfiguration {
+  name: string
+  columns: string[]
+  isDefault?: boolean
+}
+
+export interface TableViewConfigurations {
+  configurations: TableViewConfiguration[]
+}
+
 export interface AllSettings {
   container_defaults: ContainerDefaults | null
   pagination_settings: PaginationSettings | null
@@ -1730,6 +1740,7 @@ export interface AllSettings {
   session_settings: SessionSettings | null
   export_configurations: ExportConfigurations | null
   scanner_configurations: ScannerConfigurations | null
+  table_view_configurations: TableViewConfigurations | null
 }
 
 export interface Unit {
@@ -1747,6 +1758,7 @@ export type SettingValue =
   | { type: 'session_settings'; value: SessionSettings }
   | { type: 'export_configurations'; value: ExportConfigurations }
   | { type: 'scanner_configurations'; value: ScannerConfigurations }
+  | { type: 'table_view_configurations'; value: TableViewConfigurations }
 
 // Helper type to extract setting value by key
 export type SettingValueByKey<T extends string> =
@@ -1756,6 +1768,7 @@ export type SettingValueByKey<T extends string> =
   T extends 'session_settings' ? SessionSettings :
   T extends 'export_configurations' ? ExportConfigurations :
   T extends 'scanner_configurations' ? ScannerConfigurations :
+  T extends 'table_view_configurations' ? TableViewConfigurations :
   never
 
 export const settingsApi = {
@@ -1787,6 +1800,12 @@ export const exportConfigurationsApi = {
     api.post<{ success: boolean; config: ExportConfiguration }>('/settings/export-configurations/personal', config),
   updatePersonal: (configs: ExportConfigurations) => 
     api.put<{ success: boolean; configurations: ExportConfiguration[] }>('/settings/export-configurations/personal', configs),
+}
+
+export const tableViewConfigurationsApi = {
+  get: () => api.get<{ key: string; value: TableViewConfigurations }>('/settings/table_view_configurations'),
+  update: (configs: TableViewConfigurations) =>
+    api.put<TableViewConfigurations>('/settings/table_view_configurations', configs),
 }
 
 export const scannerConfigurationsApi = {
