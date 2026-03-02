@@ -39,6 +39,23 @@ vi.mock('../lib/api', async () => {
       ...actual.authApi,
       getCurrentUser: vi.fn().mockImplementation(() => syncThenable({ data: { user: defaultUser } })),
     },
+    tableViewConfigurationsApi: {
+      get: vi.fn().mockResolvedValue({
+        data: {
+          key: 'table_view_configurations',
+          value: {
+            configurations: [
+              {
+                name: 'Default',
+                columns: ['position', 'barcode', 'subject_name', 'study_code', 'specimen_type', 'collection_date', 'comment', 'status', 'created', 'last_updated'],
+                isDefault: true,
+              },
+            ],
+          },
+        },
+      }),
+      update: vi.fn().mockResolvedValue({ data: {} }),
+    },
   }
 })
 

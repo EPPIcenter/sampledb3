@@ -9,12 +9,13 @@ import PaginationSettingsForm from '../components/PaginationSettingsForm'
 import PasswordRequirementsForm from '../components/PasswordRequirementsForm'
 import SessionSettingsForm from '../components/SessionSettingsForm'
 import ExportConfigurationsManager from '../components/ExportConfigurationsManager'
+import TableViewConfigurationsManager from '../components/TableViewConfigurationsManager'
 import ScannerConfigurationsManager from '../components/ScannerConfigurationsManager'
 import SkeletonCard from '../components/SkeletonCard'
 import '../styles/settings.css'
 
 type SettingsCategory = 'application' | 'security' | 'data-management'
-type SettingsSection = 'container-defaults' | 'container-type-units' | 'pagination' | 'password' | 'session' | 'export-configurations' | 'scanner-configurations'
+type SettingsSection = 'container-defaults' | 'container-type-units' | 'pagination' | 'password' | 'session' | 'export-configurations' | 'table-view-configurations' | 'scanner-configurations'
 
 interface SettingsStructure {
   id: SettingsCategory
@@ -94,6 +95,12 @@ const settingsStructure: SettingsStructure[] = [
         id: 'export-configurations',
         label: 'Export Configurations',
         tooltip: 'Create and manage multiple named export configurations for different export scenarios',
+      },
+      {
+        id: 'table-view-configurations',
+        label: 'Table View Configurations',
+        tooltip: 'Presets for which columns appear in collection table views (plates, boxes, bags, sheets). Table CSV download exports the current view.',
+        adminOnly: true,
       },
       {
         id: 'scanner-configurations',
@@ -318,6 +325,19 @@ export default function Settings() {
               setSuccess('Export configurations saved successfully')
               setTimeout(() => setSuccess(null), 3000)
               loadSettings()
+            }}
+          />
+        )
+      case 'table-view-configurations':
+        return (
+          <TableViewConfigurationsManager
+            data={settings.table_view_configurations}
+            onSave={handleSave}
+            onError={(err) => setError(err)}
+            onSuccess={() => {
+              setSuccess('Table view configurations saved successfully')
+              setTimeout(() => setSuccess(null), 3000)
+              loadSettings(false)
             }}
           />
         )

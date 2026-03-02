@@ -7,9 +7,13 @@ import CollectionTableWithExport from '../components/CollectionTableWithExport'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import {
   COLLECTION_GRID_TABLE_COLUMNS,
+  COLLECTION_GRID_TABLE_ROW_KEYS,
   buildCollectionTableRow,
+  getTableColumnsFromExportConfig,
   type CollectionTableEntry,
 } from '../lib/collection-table-columns'
+import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
+import { Link } from 'react-router-dom'
 import '../styles/storage.css'
 
 function statusColor(name: string): string {
@@ -28,6 +32,12 @@ export default function MicronixPlateDetail() {
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
+  const {
+    configurations: viewConfigurations,
+    selectedConfigId,
+    setSelectedConfigId,
+    loading: loadingConfigs,
+  } = useTableViewConfigurations()
 
   // Get target position from URL query params
   const targetPosition = searchParams.get('position')
@@ -87,7 +97,11 @@ export default function MicronixPlateDetail() {
 
   const tableRows = useMemo(() => {
     if (!layout || !data?.wells) return []
-    const wells = data.wells as Record<string, CollectionTableEntry>
+    const wells = data.wells as Record<string, CollectionTableEntry & { type?: string }>
+    const plate = data?.plate
+    const context = plate
+      ? { collectionName: plate.name ?? undefined, locationPath: plate.locationPath ?? undefined }
+      : undefined
     const rows: ReturnType<typeof buildCollectionTableRow>[] = []
     layout.rows.forEach((row) => {
       layout.cols.forEach((col) => {
@@ -97,13 +111,25 @@ export default function MicronixPlateDetail() {
           buildCollectionTableRow({
             position: key,
             barcode: entry?.barcode,
+            containerType: entry?.type ?? undefined,
             container: entry?.container ?? undefined,
+            context,
           })
         )
       })
     })
     return rows
   }, [data, layout])
+
+  const tableColumns = useMemo(() => {
+    if (viewMode !== 'table' || loadingConfigs || viewConfigurations.length === 0) {
+      return COLLECTION_GRID_TABLE_COLUMNS
+    }
+    const config = viewConfigurations.find((c) => c.name === selectedConfigId)
+    const configKeys = config?.columns ?? []
+    const resolved = getTableColumnsFromExportConfig(configKeys, COLLECTION_GRID_TABLE_ROW_KEYS)
+    return resolved.length > 0 ? resolved : COLLECTION_GRID_TABLE_COLUMNS
+  }, [viewMode, loadingConfigs, viewConfigurations, selectedConfigId])
 
   if (loading) {
     return (
@@ -174,6 +200,37 @@ export default function MicronixPlateDetail() {
                   Table
                 </button>
               </div>
+              {viewMode === 'table' && (
+                <div className="flex items-center gap-2">
+                  <label htmlFor="plate-table-column-config" className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                    Columns:
+                  </label>
+                  {loadingConfigs ? (
+                    <span className="text-xs text-gray-500">Loading…</span>
+                  ) : viewConfigurations.length === 0 ? (
+                    <span className="text-xs text-gray-500">
+                      <Link to="/settings?category=data-management&section=table-view-configurations" className="underline">
+                        Add in Settings
+                      </Link>
+                    </span>
+                  ) : (
+                    <select
+                      id="plate-table-column-config"
+                      value={selectedConfigId}
+                      onChange={(e) => setSelectedConfigId(e.target.value)}
+                      className="text-xs border border-gray-200 rounded px-2 py-1 bg-white min-w-[140px]"
+                      style={{ color: 'rgb(var(--dashboard-text))' }}
+                      aria-label="Column configuration for table view"
+                    >
+                      {viewConfigurations.map((config) => (
+                        <option key={config.name} value={config.name}>
+                          {config.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
             </div>
             {legend.length > 0 && viewMode === 'grid' && (
               <div className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
@@ -294,7 +351,7 @@ export default function MicronixPlateDetail() {
           )}
           {viewMode === 'table' && (
             <CollectionTableWithExport
-              columns={COLLECTION_GRID_TABLE_COLUMNS}
+              columns={tableColumns}
               rows={tableRows}
               exportFilename={`micronix-plate-${plate.name || 'unnamed'}.csv`}
             />

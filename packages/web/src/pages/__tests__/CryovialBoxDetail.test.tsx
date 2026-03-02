@@ -38,6 +38,19 @@ vi.mock('../../lib/api', () => ({
   },
 }))
 
+vi.mock('../../hooks/useTableViewConfigurations', () => ({
+  useTableViewConfigurations: () => ({
+    configurations: [
+      { name: 'Default', columns: ['position', 'barcode', 'status', 'subject_name'], isDefault: true },
+    ],
+    selectedConfigId: 'Default',
+    setSelectedConfigId: vi.fn(),
+    loading: false,
+    error: null,
+    loadConfigurations: vi.fn(),
+  }),
+}))
+
 import { collectionsApi } from '../../lib/api'
 
 describe('CryovialBoxDetail', () => {

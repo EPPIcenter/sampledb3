@@ -36,6 +36,20 @@ vi.mock('../../lib/api', () => ({
   },
 }))
 
+vi.mock('../../hooks/useTableViewConfigurations', () => ({
+  useTableViewConfigurations: () => ({
+    configurations: [
+      { name: 'Minimal', columns: ['status', 'position', 'barcode'], isDefault: true },
+      { name: 'Full', columns: ['position', 'barcode', 'subject_name', 'study_code', 'status'], isDefault: false },
+    ],
+    selectedConfigId: 'Minimal',
+    setSelectedConfigId: vi.fn(),
+    loading: false,
+    error: null,
+    loadConfigurations: vi.fn(),
+  }),
+}))
+
 import { collectionsApi } from '../../lib/api'
 
 describe('MicronixPlateDetail', () => {
@@ -67,9 +81,9 @@ describe('MicronixPlateDetail', () => {
     await waitFor(() => {
       expect(screen.getByRole('columnheader', { name: /Position/i })).toBeInTheDocument()
     })
-    expect(screen.getByRole('columnheader', { name: /Barcode/i })).toBeInTheDocument()
+    // Mocked default config "Minimal" has columns status, position, barcode
     expect(screen.getByRole('columnheader', { name: /Status/i })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: /Subject Name/i })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /Barcode/i })).toBeInTheDocument()
     // No internal IDs in table
     expect(screen.queryByRole('columnheader', { name: /Container ID/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: /Specimen ID/i })).not.toBeInTheDocument()
@@ -96,10 +110,31 @@ describe('MicronixPlateDetail', () => {
     expect(csvContent).toContain('Barcode')
     expect(csvContent).toContain('A01')
     expect(csvContent).toContain('MTX-001')
-    expect(csvContent).toContain('Subject-1')
+    // Mocked config "Minimal" has columns status, position, barcode only (no subject_name)
+    expect(csvContent).toContain('Status')
+    expect(csvContent).toContain('Position')
+    expect(csvContent).toContain('Barcode')
     // No internal IDs in export
     expect(csvContent).not.toMatch(/\bContainer ID\b/)
     expect(csvContent).not.toMatch(/\bSpecimen ID\b/)
     downloadSpy.mockRestore()
+  })
+
+  it('table view uses selected view config for columns when configs are available', async () => {
+    await render(<MicronixPlateDetail />)
+    await waitFor(() => {
+      expect(screen.getByText('Plate Layout')).toBeInTheDocument()
+    })
+    await userEvent.click(screen.getByRole('button', { name: /Table/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('columnheader', { name: /Status/i })).toBeInTheDocument()
+    })
+    // Mocked config "Minimal" has columns ['status', 'position', 'barcode']
+    expect(screen.getByRole('columnheader', { name: /Status/i })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /Position/i })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /Barcode/i })).toBeInTheDocument()
+    // Columns not in Minimal config should not appear
+    expect(screen.queryByRole('columnheader', { name: /Subject Name/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: /Study Code/i })).not.toBeInTheDocument()
   })
 })

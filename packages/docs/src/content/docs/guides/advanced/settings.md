@@ -1,9 +1,9 @@
 ---
 title: Settings
-description: Configure application settings and export configurations
+description: Configure application settings, export configurations, and table view configurations
 ---
 
-The Settings page allows you to configure various aspects of SampleDB, including export configurations, default settings, and system preferences. The Settings UI uses a consistent "modern precision lab" visual theme aligned with the rest of the app; behavior is unchanged. Understanding how to configure these settings helps you customize the system to match your laboratory's workflows and ensures exports and other operations work the way you need them to.
+The Settings page allows you to configure various aspects of SampleDB, including export configurations, table view configurations (for collection table columns), default settings, and system preferences. The Settings UI uses a consistent "modern precision lab" visual theme aligned with the rest of the app; behavior is unchanged. Understanding how to configure these settings helps you customize the system to match your laboratory's workflows and ensures exports and other operations work the way you need them to.
 
 Export configurations are particularly important, as they determine which columns appear in exported data files. Creating and managing these configurations ensures your exports include the right information and are formatted appropriately for your needs.
 
@@ -13,9 +13,9 @@ Navigate to Settings in the sidebar to access the configuration interface. You c
 
 ## Understanding Export Configurations
 
-Export configurations define which columns appear in exported data files. When you export data—whether through bulk export, barcode export, or other export methods—you can select a configuration that determines what information is included. This gives you control over export content without having to manually select columns each time.
+Export configurations define which columns appear in exported data files. When you export data—whether through bulk export, barcode export, or other export methods—you can select a configuration that determines what information is included. Export configurations are used only for the Export page, Barcode Export, and Export modal. Collection table view (plates, boxes, bags, sheets) uses **table view configurations** instead; see "Other Settings" below.
 
-The Settings page shows a list of all export configurations in your system, displays which configuration is set as the default (if any), and shows configuration details that help you understand what each configuration includes.
+The Settings page shows a list of all export configurations in your system, displays which configuration is set as the default (if any), and shows configuration details that help you understand what each configuration includes. Changes to export configurations—including shared configurations—are saved as soon as you add, edit, delete, or set a default; there is no separate "save" step.
 
 ## Creating Export Configurations
 
@@ -45,7 +45,9 @@ An analysis-ready configuration might include all relevant data columns, formatt
 
 ## Other Settings
 
-Depending on your system configuration, you may see additional settings beyond export configurations. System preferences might include default date formats, display options, or notification settings. User preferences might include interface preferences, display options, or personal settings that customize your experience.
+**Table view configurations** (Data Management, admin only) define presets for which columns appear in the collection table view on plate, box, bag, and sheet detail pages. One preset can be set as the default. Table CSV download exports the current view columns. This is separate from export configurations, which apply only to the Export page and barcode export. New installations get a default "Default" preset at setup. For existing databases upgraded before this feature, run the seed script once (from repo root: `DATABASE_PATH=/path/to/sampledb.sqlite pnpm --filter @sampledb/api run seed-table-view-config`) to add the default table view configuration; the script is idempotent and does nothing if configs already exist.
+
+Depending on your system configuration, you may see additional settings beyond export and table view configurations. System preferences might include default date formats, display options, or notification settings. User preferences might include interface preferences, display options, or personal settings that customize your experience.
 
 These additional settings vary by system configuration, so check what's available in your instance and configure them according to your preferences and needs.
 

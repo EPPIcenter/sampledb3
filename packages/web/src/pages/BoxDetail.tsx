@@ -6,9 +6,12 @@ import CollectionTableWithExport from '../components/CollectionTableWithExport'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import {
   COLLECTION_SHEET_TABLE_COLUMNS,
+  COLLECTION_SHEET_TABLE_ROW_KEYS,
   buildSheetPaperTableRow,
+  getTableColumnsFromExportConfig,
   type CollectionTableEntry,
 } from '../lib/collection-table-columns'
+import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
 import '../styles/storage.css'
 
 export default function BoxDetail() {
@@ -19,6 +22,12 @@ export default function BoxDetail() {
   const [viewMode, setViewMode] = useState<'sheets' | 'table'>('sheets')
   const [expandedSheets, setExpandedSheets] = useState<Set<number>>(new Set())
   const initializedSheets = useRef(false)
+  const {
+    configurations: viewConfigurations,
+    selectedConfigId,
+    setSelectedConfigId,
+    loading: loadingConfigs,
+  } = useTableViewConfigurations()
 
   useEffect(() => {
     if (!id) return
@@ -55,19 +64,39 @@ export default function BoxDetail() {
   }, [sheets.length])
 
   const tableRows = useMemo(() => {
+    const box = data?.box
+    const context = box
+      ? { collectionName: box.name ?? undefined, locationPath: box.locationPath ?? undefined }
+      : undefined
     const list: ReturnType<typeof buildSheetPaperTableRow>[] = []
     sheets.forEach((sheet: { id: number; name?: string; papers?: CollectionTableEntry[] }) => {
       (sheet.papers || []).forEach((p: CollectionTableEntry) => {
         list.push(
           buildSheetPaperTableRow(
-            { position: p.position, barcode: p.barcode, container: p.container ?? undefined },
+            {
+              position: p.position,
+              barcode: p.barcode,
+              containerType: 'paper',
+              container: p.container ?? undefined,
+              context,
+            },
             sheet.name ?? String(sheet.id)
           )
         )
       })
     })
     return list
-  }, [sheets])
+  }, [sheets, data?.box])
+
+  const tableColumns = useMemo(() => {
+    if (viewMode !== 'table' || loadingConfigs || viewConfigurations.length === 0) {
+      return COLLECTION_SHEET_TABLE_COLUMNS
+    }
+    const config = viewConfigurations.find((c) => c.name === selectedConfigId)
+    const configKeys = config?.columns ?? []
+    const resolved = getTableColumnsFromExportConfig(configKeys, COLLECTION_SHEET_TABLE_ROW_KEYS)
+    return resolved.length > 0 ? resolved : COLLECTION_SHEET_TABLE_COLUMNS
+  }, [viewMode, loadingConfigs, viewConfigurations, selectedConfigId])
 
   if (loading) {
     return (
@@ -174,11 +203,42 @@ export default function BoxDetail() {
                 Table
               </button>
             </div>
+            {viewMode === 'table' && (
+              <div className="flex items-center gap-2">
+                <label htmlFor="box-table-column-config" className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                  Columns:
+                </label>
+                {loadingConfigs ? (
+                  <span className="text-xs text-gray-500">Loading…</span>
+                ) : viewConfigurations.length === 0 ? (
+                  <span className="text-xs text-gray-500">
+                    <Link to="/settings?category=data-management&section=table-view-configurations" className="underline">
+                      Add in Settings
+                    </Link>
+                  </span>
+                ) : (
+                  <select
+                    id="box-table-column-config"
+                    value={selectedConfigId}
+                    onChange={(e) => setSelectedConfigId(e.target.value)}
+                    className="text-xs border border-gray-200 rounded px-2 py-1 bg-white min-w-[140px]"
+                    style={{ color: 'rgb(var(--dashboard-text))' }}
+                    aria-label="Column configuration for table view"
+                  >
+                    {viewConfigurations.map((config) => (
+                      <option key={config.name} value={config.name}>
+                        {config.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
           </div>
           {viewMode === 'table' && (
             <div className="storage-card p-4">
               <CollectionTableWithExport
-                columns={COLLECTION_SHEET_TABLE_COLUMNS}
+                columns={tableColumns}
                 rows={tableRows}
                 exportFilename={`box-${box.name || 'unnamed'}.csv`}
               />

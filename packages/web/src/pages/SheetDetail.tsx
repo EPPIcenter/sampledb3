@@ -6,9 +6,13 @@ import CollectionTableWithExport from '../components/CollectionTableWithExport'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import {
   COLLECTION_GRID_TABLE_COLUMNS,
+  COLLECTION_GRID_TABLE_ROW_KEYS,
   buildCollectionTableRow,
+  getTableColumnsFromExportConfig,
   type CollectionTableEntry,
 } from '../lib/collection-table-columns'
+import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
+import { Link } from 'react-router-dom'
 import '../styles/storage.css'
 
 export default function SheetDetail() {
@@ -18,6 +22,12 @@ export default function SheetDetail() {
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
+  const {
+    configurations: viewConfigurations,
+    selectedConfigId,
+    setSelectedConfigId,
+    loading: loadingConfigs,
+  } = useTableViewConfigurations()
 
   // Get target position and containerId from URL query params
   const targetPosition = searchParams.get('position')
@@ -78,14 +88,29 @@ export default function SheetDetail() {
   const { sheet, papers } = data
 
   const tableRows = useMemo(() => {
+    const context = sheet
+      ? { collectionName: sheet.name ?? undefined, locationPath: sheet.locationPath ?? undefined }
+      : undefined
     return papers.map((p: CollectionTableEntry) =>
       buildCollectionTableRow({
         position: p.position,
         barcode: p.barcode,
+        containerType: 'paper',
         container: p.container ?? undefined,
+        context,
       })
     )
-  }, [papers])
+  }, [papers, sheet])
+
+  const tableColumns = useMemo(() => {
+    if (viewMode !== 'table' || loadingConfigs || viewConfigurations.length === 0) {
+      return COLLECTION_GRID_TABLE_COLUMNS
+    }
+    const config = viewConfigurations.find((c) => c.name === selectedConfigId)
+    const configKeys = config?.columns ?? []
+    const resolved = getTableColumnsFromExportConfig(configKeys, COLLECTION_GRID_TABLE_ROW_KEYS)
+    return resolved.length > 0 ? resolved : COLLECTION_GRID_TABLE_COLUMNS
+  }, [viewMode, loadingConfigs, viewConfigurations, selectedConfigId])
 
   const breadcrumbItems = [
     { label: 'Locations', to: '/locations' },
@@ -139,6 +164,37 @@ export default function SheetDetail() {
                 </button>
               </div>
             )}
+            {viewMode === 'table' && papers.length > 0 && (
+              <div className="flex items-center gap-2">
+                <label htmlFor="sheet-table-column-config" className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                  Columns:
+                </label>
+                {loadingConfigs ? (
+                  <span className="text-xs text-gray-500">Loading…</span>
+) : viewConfigurations.length === 0 ? (
+                    <span className="text-xs text-gray-500">
+                      <Link to="/settings?category=data-management&section=table-view-configurations" className="underline">
+                        Add in Settings
+                      </Link>
+                    </span>
+                  ) : (
+                    <select
+                      id="sheet-table-column-config"
+                      value={selectedConfigId}
+                      onChange={(e) => setSelectedConfigId(e.target.value)}
+                      className="text-xs border border-gray-200 rounded px-2 py-1 bg-white min-w-[140px]"
+                      style={{ color: 'rgb(var(--dashboard-text))' }}
+                      aria-label="Column configuration for table view"
+                    >
+                      {viewConfigurations.map((config) => (
+                        <option key={config.name} value={config.name}>
+                          {config.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -146,7 +202,7 @@ export default function SheetDetail() {
           <p className="text-sm italic" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No spots recorded on this sheet.</p>
         ) : viewMode === 'table' ? (
           <CollectionTableWithExport
-            columns={COLLECTION_GRID_TABLE_COLUMNS}
+            columns={tableColumns}
             rows={tableRows}
             exportFilename={`sheet-${sheet.name || 'unnamed'}.csv`}
           />
