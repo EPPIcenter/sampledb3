@@ -49,6 +49,38 @@ export interface ScannerConfigurations {
   configurations: ScannerConfiguration[]
 }
 
+export interface TableViewConfiguration {
+  name: string
+  columns: string[]
+  isDefault?: boolean
+}
+
+export interface TableViewConfigurations {
+  configurations: TableViewConfiguration[]
+}
+
+/** Default table view configuration seeded at setup and by seed script. */
+export const DEFAULT_TABLE_VIEW_CONFIGURATIONS: TableViewConfigurations = {
+  configurations: [
+    {
+      name: 'Default',
+      columns: [
+        'position',
+        'barcode',
+        'subject_name',
+        'study_code',
+        'specimen_type',
+        'collection_date',
+        'comment',
+        'status',
+        'created',
+        'last_updated',
+      ],
+      isDefault: true,
+    },
+  ],
+}
+
 // Cache for settings to avoid repeated queries
 // Cache key format: "dbId:key" for system settings, "dbId:key:userId" for user settings
 // Using WeakMap to allow garbage collection when database instances are no longer referenced
@@ -467,6 +499,26 @@ export async function getPersonalScannerConfigurations(db: Database, userId: num
  */
 export async function setScannerConfigurations(db: Database, configs: ScannerConfigurations, userId?: number | null): Promise<void> {
   return setSetting(db, 'scanner_configurations', configs, userId ?? null)
+}
+
+/**
+ * Get table view configurations (system-wide only).
+ * Lazy-initializes with default when none exist.
+ */
+export async function getTableViewConfigurations(db: Database): Promise<TableViewConfigurations | null> {
+  const configs = await getSetting<TableViewConfigurations>(db, 'table_view_configurations', null)
+  if (!configs || !configs.configurations || configs.configurations.length === 0) {
+    await setTableViewConfigurations(db, DEFAULT_TABLE_VIEW_CONFIGURATIONS)
+    return getSetting<TableViewConfigurations>(db, 'table_view_configurations', null)
+  }
+  return configs
+}
+
+/**
+ * Set table view configurations (system-wide only).
+ */
+export async function setTableViewConfigurations(db: Database, configs: TableViewConfigurations): Promise<void> {
+  return setSetting(db, 'table_view_configurations', configs, null)
 }
 
 /**

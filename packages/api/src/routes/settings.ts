@@ -24,6 +24,8 @@ import {
   getSharedScannerConfigurations,
   getPersonalScannerConfigurations,
   setScannerConfigurations,
+  getTableViewConfigurations,
+  setTableViewConfigurations,
   clearSettingsCache,
   type ContainerDefaults,
   type PaginationSettings,
@@ -31,6 +33,7 @@ import {
   type SessionSettings,
   type ExportConfigurations,
   type ScannerConfigurations,
+  type TableViewConfigurations,
 } from '../lib/settings'
 
 export function createSettingsRoutes(database: Database) {
@@ -45,13 +48,14 @@ export function createSettingsRoutes(database: Database) {
       const user = c.get('user')
       const userId = user?.id
 
-      const [containerDefaults, paginationSettings, passwordRequirements, sessionSettings, exportConfigurations, scannerConfigurations] = await Promise.all([
+      const [containerDefaults, paginationSettings, passwordRequirements, sessionSettings, exportConfigurations, scannerConfigurations, tableViewConfigurations] = await Promise.all([
         getContainerDefaults(database),
         getPaginationSettings(database, userId),
         getPasswordRequirements(database),
         getSessionSettings(database),
         getExportConfigurations(database, userId),
         getScannerConfigurations(database, userId),
+        getTableViewConfigurations(database),
       ])
 
     return c.json({
@@ -61,6 +65,7 @@ export function createSettingsRoutes(database: Database) {
       session_settings: sessionSettings,
       export_configurations: exportConfigurations,
       scanner_configurations: scannerConfigurations,
+      table_view_configurations: tableViewConfigurations,
     })
   } catch (error: unknown) {
     return c.json({ error: 'Internal server error' }, 500)
@@ -112,6 +117,9 @@ export function createSettingsRoutes(database: Database) {
           break
         case 'scanner_configurations':
           value = await getScannerConfigurations(database, userId)
+          break
+        case 'table_view_configurations':
+          value = await getTableViewConfigurations(database)
           break
         default:
           return c.json({ error: 'Invalid setting key' }, 400)
@@ -196,6 +204,14 @@ const scannerConfigurationsSchema = z.object({
   })),
 })
 
+const tableViewConfigurationsSchema = z.object({
+  configurations: z.array(z.object({
+    name: z.string().min(1),
+    columns: z.array(z.string()).min(1),
+    isDefault: z.boolean().optional(),
+  })),
+})
+
   // PUT /api/settings/:key - Update a specific setting
   // Admin users can set system-wide (userId = null) or user-specific settings
   // Non-admin users can only set their own user-specific settings (for allowed keys)
@@ -215,7 +231,7 @@ const scannerConfigurationsSchema = z.object({
     delete actualBody.userId // Remove userId from body before validation
 
     // Admin-only settings
-    const adminOnlyKeys = ['container_defaults', 'password_requirements', 'session_settings']
+    const adminOnlyKeys = ['container_defaults', 'password_requirements', 'session_settings', 'table_view_configurations']
     if (adminOnlyKeys.includes(key) && !isAdmin) {
       return c.json({ error: 'Forbidden: Admin access required' }, 403)
     }
@@ -285,6 +301,12 @@ const scannerConfigurationsSchema = z.object({
         await setScannerConfigurations(database, validated as ScannerConfigurations, targetUserId ?? null)
         clearSettingsCache(database, 'scanner_configurations', targetUserId)
         return c.json({ key, value: validated, userId: targetUserId })
+      }
+      case 'table_view_configurations': {
+        const validated = tableViewConfigurationsSchema.parse(actualBody)
+        await setTableViewConfigurations(database, validated as TableViewConfigurations)
+        clearSettingsCache(database, 'table_view_configurations')
+        return c.json({ key, value: validated })
       }
       default:
         return c.json({ error: 'Invalid setting key' }, 400)

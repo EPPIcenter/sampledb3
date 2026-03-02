@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
-import { getSetting, setSetting } from '../settings'
+import {
+  getSetting,
+  setSetting,
+  getTableViewConfigurations,
+  setTableViewConfigurations,
+  DEFAULT_TABLE_VIEW_CONFIGURATIONS,
+} from '../settings'
 import type { Database } from '../../db/client'
 
 describe('settings lib', () => {
@@ -51,6 +57,28 @@ describe('settings lib', () => {
       const userVal = await getSetting<string>(testDb, 'same_key', 1)
       expect(systemVal).toBe('system')
       expect(userVal).toBe('user1')
+    })
+  })
+
+  describe('table view configurations', () => {
+    it('getTableViewConfigurations lazy-initializes default when empty', async () => {
+      const configs = await getTableViewConfigurations(testDb)
+      expect(configs).not.toBeNull()
+      expect(configs?.configurations).toHaveLength(1)
+      expect(configs?.configurations[0].name).toBe('Default')
+      expect(configs?.configurations[0].columns).toEqual(DEFAULT_TABLE_VIEW_CONFIGURATIONS.configurations[0].columns)
+      expect(configs?.configurations[0].isDefault).toBe(true)
+    })
+
+    it('setTableViewConfigurations persists and get returns it', async () => {
+      const custom = {
+        configurations: [
+          { name: 'Browse', columns: ['position', 'barcode', 'status'], isDefault: true },
+        ],
+      }
+      await setTableViewConfigurations(testDb, custom)
+      const configs = await getTableViewConfigurations(testDb)
+      expect(configs).toEqual(custom)
     })
   })
 })

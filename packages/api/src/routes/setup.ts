@@ -11,6 +11,8 @@ import {
   setSessionSettings,
   setExportConfigurations,
   setScannerConfigurations,
+  setTableViewConfigurations,
+  DEFAULT_TABLE_VIEW_CONFIGURATIONS,
 } from '../lib/settings'
 import type { Database } from '../db/client'
 // Note: Defaults are only used in the frontend Setup.tsx
@@ -350,6 +352,8 @@ const initSchema = z.object({
           },
         ],
       })
+
+      await setTableViewConfigurations(database, DEFAULT_TABLE_VIEW_CONFIGURATIONS)
 
       // Comprehensive validation - ensure all critical data was created
       const specimenTypeCount = await database.select({ count: sql<number>`count(*)` }).from(specimenType).get()

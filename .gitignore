@@ -71,5 +71,7 @@ packages/e2e/sampledb_e2e.sqlite
 .temp/
 
 scripts/
+!packages/api/scripts/
+!packages/api/scripts/seed-table-view-config.ts
 
 test-csvs/
