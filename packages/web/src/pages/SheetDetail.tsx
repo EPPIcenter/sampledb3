@@ -65,27 +65,9 @@ export default function SheetDetail() {
     }
   }, [targetPosition, data])
 
-  if (loading) {
-    return (
-      <div className="storage-page">
-        <div className="container mx-auto px-4 py-8 relative z-10">
-          <SkeletonDetailPage sections={1} />
-        </div>
-      </div>
-    )
-  }
-
-  if (!data?.sheet) {
-    return (
-      <div className="storage-page">
-        <div className="container mx-auto px-4 py-8 relative z-10">
-          <div className="text-center py-8 text-red-600">Sheet not found</div>
-        </div>
-      </div>
-    )
-  }
-
-  const { sheet, papers } = data
+  // Derive once so hooks below can run unconditionally (Rules of Hooks)
+  const sheet = data?.sheet ?? null
+  const papers = data?.papers ?? []
 
   const tableRows = useMemo(() => {
     const context = sheet
@@ -111,6 +93,26 @@ export default function SheetDetail() {
     const resolved = getTableColumnsFromExportConfig(configKeys, COLLECTION_GRID_TABLE_ROW_KEYS)
     return resolved.length > 0 ? resolved : COLLECTION_GRID_TABLE_COLUMNS
   }, [viewMode, loadingConfigs, viewConfigurations, selectedConfigId])
+
+  if (loading) {
+    return (
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <SkeletonDetailPage sections={1} />
+        </div>
+      </div>
+    )
+  }
+
+  if (!sheet) {
+    return (
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <div className="text-center py-8 text-red-600">Sheet not found</div>
+        </div>
+      </div>
+    )
+  }
 
   const breadcrumbItems = [
     { label: 'Locations', to: '/locations' },
