@@ -6,6 +6,11 @@ import {
   validateCSVRows,
   generateCSVTemplate,
   groupRowsBySpecimenType,
+  groupRowsByDensity,
+  inferSheetName,
+  inferContainerTypeFromHeader,
+  inferContainerCategoryFromHeader,
+  uniqueSheetNamesFromRows,
 } from '../control-batch-csv'
 
 describe('control-batch-csv', () => {
@@ -92,6 +97,14 @@ describe('control-batch-csv', () => {
       })
     })
 
+    it('parses sheet_name column for paper CSV', () => {
+      const csv = 'specimen_type_name,barcode,quantity,unit_symbol,density,sheet_name\nWhole Blood,,5,spots,100,Sheet1\nPlasma,,5,spots,200,Sheet2'
+      const result = parseContainerCSV(csv, 'paper.csv')
+      expect(result.rows).toHaveLength(2)
+      expect(result.rows[0]).toMatchObject({ specimen_type_name: 'Whole Blood', sheet_name: 'Sheet1' })
+      expect(result.rows[1]).toMatchObject({ specimen_type_name: 'Plasma', sheet_name: 'Sheet2' })
+    })
+
     it('skips empty rows and collects validation errors for missing specimen type', () => {
       const csv = 'specimen_type_name,position\n  \n,A01\nWhole Blood,A01'
       const result = parseContainerCSV(csv, 'test.csv')
@@ -110,6 +123,61 @@ describe('control-batch-csv', () => {
       const result = parseContainerCSV(csv, 'test.csv')
       expect(result.rows[0].quantity).toBe(5)
       expect(result.rows[0].unit_symbol).toBe('µL')
+    })
+
+    it('parses optional density column as number', () => {
+      const csv = 'specimen_type_name,position,density\nWhole Blood,A01,100\nPlasma,A02,200'
+      const result = parseContainerCSV(csv, 'test.csv')
+      expect(result.rows).toHaveLength(2)
+      expect(result.rows[0].density).toBe(100)
+      expect(result.rows[1].density).toBe(200)
+    })
+
+    it('leaves density undefined when column missing', () => {
+      const csv = 'specimen_type_name,position\nWhole Blood,A01'
+      const result = parseContainerCSV(csv, 'test.csv')
+      expect(result.rows[0].density).toBeUndefined()
+    })
+
+    it('parses empty density as undefined', () => {
+      const csv = 'specimen_type_name,position,density\nWhole Blood,A01,\nPlasma,A02,50'
+      const result = parseContainerCSV(csv, 'test.csv')
+      expect(result.rows[0].density).toBeUndefined()
+      expect(result.rows[1].density).toBe(50)
+    })
+
+    it('adds error when density is non-numeric', () => {
+      const csv = 'specimen_type_name,position,density\nWhole Blood,A01,abc'
+      const result = parseContainerCSV(csv, 'test.csv')
+      expect(result.errors.some((e) => e.field === 'density' && e.error.toLowerCase().includes('number'))).toBe(true)
+    })
+  })
+
+  describe('groupRowsByDensity', () => {
+    it('groups rows by density when present', () => {
+      const rows = [
+        { specimen_type_name: 'A', density: 100 },
+        { specimen_type_name: 'B', density: 200 },
+        { specimen_type_name: 'C', density: 100 },
+      ]
+      const grouped = groupRowsByDensity(rows)
+      expect(grouped.get(100)).toHaveLength(2)
+      expect(grouped.get(200)).toHaveLength(1)
+    })
+
+    it('puts rows without density under undefined key', () => {
+      const rows = [
+        { specimen_type_name: 'A' },
+        { specimen_type_name: 'B', density: 50 },
+      ]
+      const grouped = groupRowsByDensity(rows)
+      expect(grouped.get(undefined)).toHaveLength(1)
+      expect(grouped.get(50)).toHaveLength(1)
+    })
+
+    it('returns empty map for empty rows', () => {
+      const grouped = groupRowsByDensity([])
+      expect(grouped.size).toBe(0)
     })
   })
 
@@ -159,11 +227,13 @@ describe('control-batch-csv', () => {
       { id: 2, name: 'Plasma' },
     ]
 
-    it('generates paper template with specimen_type_name,barcode,quantity,unit_symbol', () => {
+    it('generates paper template with specimen_type_name,barcode,quantity,unit_symbol,density,sheet_name', () => {
       const out = generateCSVTemplate('paper', types)
-      expect(out).toContain('specimen_type_name,barcode,quantity,unit_symbol')
+      expect(out).toContain('specimen_type_name,barcode,quantity,unit_symbol,density,sheet_name')
       expect(out).toContain('Whole Blood')
       expect(out).toContain('spots')
+      expect(out).toContain('Sheet1')
+      expect(out).toContain('Sheet2')
     })
 
     it('generates cryovial_tube template with position and barcode', () => {
@@ -201,6 +271,113 @@ describe('control-batch-csv', () => {
     it('returns empty map for empty rows', () => {
       const grouped = groupRowsBySpecimenType([])
       expect(grouped.size).toBe(0)
+    })
+  })
+
+  describe('inferSheetName', () => {
+    it('returns the sheet name when all rows have the same non-empty sheet_name', () => {
+      const rows = [
+        { specimen_type_name: 'A', sheet_name: 'Sheet1' },
+        { specimen_type_name: 'B', sheet_name: 'Sheet1' },
+      ]
+      expect(inferSheetName(rows)).toBe('Sheet1')
+    })
+
+    it('returns undefined when rows have no sheet_name', () => {
+      const rows = [
+        { specimen_type_name: 'A' },
+        { specimen_type_name: 'B' },
+      ] as unknown as { sheet_name?: string }[]
+      expect(inferSheetName(rows)).toBeUndefined()
+    })
+
+    it('returns undefined when rows have mixed sheet_name values', () => {
+      const rows = [
+        { specimen_type_name: 'A', sheet_name: 'Sheet1' },
+        { specimen_type_name: 'B', sheet_name: 'Sheet2' },
+      ]
+      expect(inferSheetName(rows)).toBeUndefined()
+    })
+
+    it('returns undefined when all sheet_name values are empty or whitespace', () => {
+      const rows = [
+        { specimen_type_name: 'A', sheet_name: '' },
+        { specimen_type_name: 'B', sheet_name: '   ' },
+      ]
+      expect(inferSheetName(rows)).toBeUndefined()
+    })
+
+    it('trims whitespace and returns single value when all match after trim', () => {
+      const rows = [
+        { specimen_type_name: 'A', sheet_name: '  Sheet1  ' },
+        { specimen_type_name: 'B', sheet_name: 'Sheet1' },
+      ]
+      expect(inferSheetName(rows)).toBe('Sheet1')
+    })
+
+    it('returns undefined for empty rows array', () => {
+      expect(inferSheetName([])).toBeUndefined()
+    })
+  })
+
+  describe('uniqueSheetNamesFromRows', () => {
+    it('returns unique non-empty sheet names in order of first appearance', () => {
+      const rows = [
+        { specimen_type_name: 'A', sheet_name: 'Sheet1' },
+        { specimen_type_name: 'B', sheet_name: 'Sheet2' },
+        { specimen_type_name: 'C', sheet_name: 'Sheet1' },
+      ] as unknown as { sheet_name?: string }[]
+      expect(uniqueSheetNamesFromRows(rows)).toEqual(['Sheet1', 'Sheet2'])
+    })
+
+    it('trims and filters empty values', () => {
+      const rows = [
+        { specimen_type_name: 'A', sheet_name: '  X  ' },
+        { specimen_type_name: 'B', sheet_name: '' },
+      ] as unknown as { sheet_name?: string }[]
+      expect(uniqueSheetNamesFromRows(rows)).toEqual(['X'])
+    })
+
+    it('returns empty array when no sheet names', () => {
+      expect(uniqueSheetNamesFromRows([])).toEqual([])
+      expect(uniqueSheetNamesFromRows([{ specimen_type_name: 'A' }] as unknown as { sheet_name?: string }[])).toEqual([])
+    })
+  })
+
+  describe('inferContainerTypeFromHeader', () => {
+    it('returns paper when header includes sheet_name', () => {
+      expect(inferContainerTypeFromHeader(['specimen_type_name', 'barcode', 'sheet_name'])).toBe('paper')
+      expect(inferContainerTypeFromHeader(['Sheet_Name', 'specimen_type_name'])).toBe('paper')
+    })
+
+    it('returns cryovial_tube when header has position but no sheet_name', () => {
+      expect(inferContainerTypeFromHeader(['specimen_type_name', 'position', 'barcode'])).toBe('cryovial_tube')
+    })
+
+    it('returns undefined when header has neither sheet_name nor position', () => {
+      expect(inferContainerTypeFromHeader(['specimen_type_name', 'barcode'])).toBeUndefined()
+    })
+
+    it('tube (position) wins when both position and sheet_name present', () => {
+      expect(inferContainerTypeFromHeader(['specimen_type_name', 'position', 'sheet_name'])).toBe('cryovial_tube')
+    })
+  })
+
+  describe('inferContainerCategoryFromHeader', () => {
+    it('returns paper when header includes sheet_name but not position', () => {
+      expect(inferContainerCategoryFromHeader(['specimen_type_name', 'sheet_name'])).toBe('paper')
+    })
+
+    it('returns tube when header has position', () => {
+      expect(inferContainerCategoryFromHeader(['specimen_type_name', 'position', 'barcode'])).toBe('tube')
+    })
+
+    it('returns undefined when header has neither sheet_name nor position', () => {
+      expect(inferContainerCategoryFromHeader(['specimen_type_name', 'barcode'])).toBeUndefined()
+    })
+
+    it('tube (position) wins when both position and sheet_name present', () => {
+      expect(inferContainerCategoryFromHeader(['specimen_type_name', 'position', 'sheet_name'])).toBe('tube')
     })
   })
 })

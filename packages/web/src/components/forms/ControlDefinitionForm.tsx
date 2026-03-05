@@ -5,7 +5,7 @@ import { useModifierHotkey } from '../../hooks/useHotkey'
 
 interface ControlDefinitionFormProps {
   controlDefinition?: ControlDefinition
-  onSuccess?: (control?: ControlDefinition) => void
+  onSuccess?: (control?: ControlDefinition | ControlDefinition[]) => void
   onCancel?: () => void
 }
 
@@ -14,6 +14,8 @@ interface StrainInput {
   percentage: number
   strainName?: string
 }
+
+const concentrationUnits = (units: Unit[]) => units.filter((u) => u.category === 'concentration')
 
 export default function ControlDefinitionForm({ controlDefinition: propControlDefinition, onSuccess, onCancel }: ControlDefinitionFormProps) {
   const navigate = useNavigate()
@@ -24,22 +26,31 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
   const [strains, setStrains] = useState<Strain[]>([])
   const [units, setUnits] = useState<Unit[]>([])
   const [controlDefinition, setControlDefinition] = useState<ControlDefinition | undefined>(propControlDefinition)
+  const isEdit = !!(controlDefinition || id)
+
+  // Shared: name (single-def create/edit), unit (all), and for edit mode single targetDensity
   const [formData, setFormData] = useState({
     name: propControlDefinition?.name || '',
     controlType: 'blood' as ControlDefinition['controlType'],
     targetDensity: propControlDefinition?.targetDensity?.toString() || '',
     targetDensityUnitId: propControlDefinition?.targetDensityUnitId?.toString() || '',
   })
+  // Create mode only: list of density values (one row = one definition). Single density = one row.
+  const [densityValues, setDensityValues] = useState<string[]>([''])
+
   const [strainInputs, setStrainInputs] = useState<StrainInput[]>([])
   const [showStrains, setShowStrains] = useState(false)
-  const [autoGenerateName, setAutoGenerateName] = useState(!propControlDefinition) // Auto-generate for new definitions
+  const [autoGenerateName, setAutoGenerateName] = useState(!propControlDefinition)
   const [suggestedName, setSuggestedName] = useState<string>('')
   const [isGeneratingName, setIsGeneratingName] = useState(false)
+  const [definitionNames, setDefinitionNames] = useState<string[]>([])
   const formDataRef = useRef(formData)
   const strainInputsRef = useRef(strainInputs)
+  const densityValuesRef = useRef(densityValues)
   const generateNameTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   formDataRef.current = formData
   strainInputsRef.current = strainInputs
+  densityValuesRef.current = densityValues
 
   useEffect(() => {
     loadStrains()
@@ -57,59 +68,42 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
     }
   }, [])
 
-  // Initial strain input for new definitions when strains have loaded (adjust during render)
-  if (!id && !propControlDefinition && strains.length > 0 && strainInputs.length === 0) {
-    setStrainInputs([{
-      strainId: strains[0].id,
-      percentage: 100,
-      strainName: strains[0].name,
-    }])
+  // Initial strain for new definitions when strains have loaded (no setState during render)
+  useEffect(() => {
+    if (id || propControlDefinition || strains.length === 0 || strainInputs.length > 0) return
+    setStrainInputs([
+      { strainId: strains[0].id, percentage: 100, strainName: strains[0].name },
+    ])
     setShowStrains(true)
-  }
+  }, [id, propControlDefinition, strains, strainInputs.length])
 
-  // Sync form and strain inputs when controlDefinition is set from fetch (adjust during render)
-  const prevControlDefinitionRef = useRef<ControlDefinition | undefined>(undefined)
-  if (controlDefinition && controlDefinition !== prevControlDefinitionRef.current) {
-    prevControlDefinitionRef.current = controlDefinition
-    const props = controlDefinition.properties || {}
-    const defStrains = controlDefinition.strains || (Array.isArray(props.strains) ? props.strains : [])
-    const targetDensity = controlDefinition.targetDensity ?? props.targetDensity
-    const targetDensityUnitId = controlDefinition.targetDensityUnitId ?? props.targetDensityUnitId
-    if (defStrains.length > 0) {
-      setStrainInputs(
-        defStrains.map((s: unknown) => ({
-          strainId: typeof s === 'number' ? s : (s as { id?: number }).id ?? 0,
-          percentage: typeof s === 'number' ? 0 : (s as { percentage?: number }).percentage ?? 0,
-          strainName: typeof s === 'number' ? undefined : (s as { name?: string }).name,
-        }))
-      )
-      setShowStrains(true)
-    }
-    setFormData({
-      name: controlDefinition.name || '',
-      controlType: 'blood',
-      targetDensity: targetDensity?.toString() || '',
-      targetDensityUnitId: targetDensityUnitId?.toString() || '',
-    })
-  }
-
+  // Sync form when controlDefinition is set from fetch (in loadControlDefinition)
   const loadControlDefinition = async () => {
     if (!id) return
     try {
       const res = await controlsApi.getDefinitionSummary(parseInt(id))
-      setControlDefinition(res.data.control)
-      // Strains are now in composition or parsed from properties
-      const strains = res.data.composition?.strains || res.data.control.strains || []
-      if (strains.length > 0) {
+      const control = res.data.control
+      setControlDefinition(control)
+      const compositionStrains = res.data.composition?.strains || control.strains || []
+      if (compositionStrains.length > 0) {
         setStrainInputs(
-          strains.map((s: any) => ({
+          compositionStrains.map((s: { id: number; name?: string; percentage?: number }) => ({
             strainId: s.id,
-            percentage: s.percentage || 0,
+            percentage: s.percentage ?? 0,
             strainName: s.name,
           }))
         )
         setShowStrains(true)
       }
+      const props = control.properties || {}
+      const targetDensity = control.targetDensity ?? (props as { targetDensity?: number }).targetDensity
+      const targetDensityUnitId = control.targetDensityUnitId ?? (props as { targetDensityUnitId?: number }).targetDensityUnitId
+      setFormData({
+        name: control.name || '',
+        controlType: 'blood',
+        targetDensity: targetDensity?.toString() ?? '',
+        targetDensityUnitId: targetDensityUnitId?.toString() ?? '',
+      })
     } catch (err) {
       console.error('Failed to load control definition:', err)
       setError('Failed to load control definition')
@@ -122,7 +116,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
       setStrains(res.data)
     } catch (err) {
       console.error('Failed to load strains:', err)
-      setStrains([]) // Clear on error
+      setStrains([])
     }
   }
 
@@ -135,16 +129,64 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
     }
   }
 
+  // Derived: valid densities for create mode (from densityValues) or edit (single from formData)
+  const targetDensitiesForNames = isEdit
+    ? (formData.targetDensity?.trim() ? (() => {
+        const n = parseFloat(formData.targetDensity)
+        return Number.isNaN(n) || n < 0 ? [] : [n]
+      })() : [])
+    : densityValues
+        .map((s) => parseFloat(String(s).trim()))
+        .filter((n) => !Number.isNaN(n) && n >= 0)
+  const hasMultipleDensities = targetDensitiesForNames.length >= 2
+  const canSuggestNames =
+    !isEdit &&
+    targetDensitiesForNames.length >= 1 &&
+    strainInputs.length > 0 &&
+    Math.abs(strainInputs.reduce((sum, s) => sum + s.percentage, 0) - 100) < 0.01
+
+  useEffect(() => {
+    if (!canSuggestNames) {
+      setDefinitionNames([])
+      return
+    }
+    let cancelled = false
+    const unitId = formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined
+    const strainsPayload = strainInputs.map((s) => ({ strainId: s.strainId, percentage: s.percentage }))
+    Promise.all(
+      targetDensitiesForNames.map((d) =>
+        controlsApi
+          .suggestName({
+            controlType: 'blood',
+            targetDensity: d,
+            targetDensityUnitId: unitId,
+            strains: strainsPayload,
+          })
+          .then((r) => r.data.suggestedName)
+      )
+    ).then((names) => {
+      if (!cancelled) setDefinitionNames(names)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    canSuggestNames,
+    formData.targetDensityUnitId,
+    targetDensitiesForNames.join(','),
+    strainInputs
+      .map((s) => `${s.strainId}:${s.percentage}`)
+      .sort()
+      .join(','),
+  ])
+
   const handleAddStrain = () => {
-    const availableStrains = strains.filter(s => 
-      !strainInputs.some(si => si.strainId === s.id)
-    )
+    const availableStrains = strains.filter((s) => !strainInputs.some((si) => si.strainId === s.id))
     if (availableStrains.length > 0) {
-      setStrainInputs([...strainInputs, {
-        strainId: availableStrains[0].id,
-        percentage: 0,
-        strainName: availableStrains[0].name,
-      }])
+      setStrainInputs([
+        ...strainInputs,
+        { strainId: availableStrains[0].id, percentage: 0, strainName: availableStrains[0].name },
+      ])
     }
   }
 
@@ -155,51 +197,54 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
   const handleStrainChange = (index: number, field: 'strainId' | 'percentage', value: string | number) => {
     const newInputs = [...strainInputs]
     if (field === 'strainId') {
-      const strain = strains.find(s => s.id === Number(value))
+      const strain = strains.find((s) => s.id === Number(value))
       newInputs[index] = {
         ...newInputs[index],
         strainId: Number(value),
         strainName: strain?.name,
       }
     } else {
-      newInputs[index] = {
-        ...newInputs[index],
-        percentage: Number(value),
-      }
+      newInputs[index] = { ...newInputs[index], percentage: Number(value) }
     }
     setStrainInputs(newInputs)
-    if (autoGenerateName) {
-      scheduleGenerateName()
-    }
+    if (autoGenerateName) scheduleGenerateName()
   }
 
   const scheduleGenerateName = () => {
-    if (generateNameTimeoutRef.current) {
-      clearTimeout(generateNameTimeoutRef.current)
-    }
+    if (generateNameTimeoutRef.current) clearTimeout(generateNameTimeoutRef.current)
     generateNameTimeoutRef.current = setTimeout(() => {
       generateNameTimeoutRef.current = null
       generateNameFromRefs()
     }, 300)
   }
 
+  const getFirstDensityForName = (): number | null => {
+    if (isEdit) {
+      const n = formData.targetDensity?.trim() ? parseFloat(formData.targetDensity) : NaN
+      return !Number.isNaN(n) && n >= 0 ? n : null
+    }
+    const first = densityValues[0]?.trim()
+    if (!first) return null
+    const n = parseFloat(first)
+    return !Number.isNaN(n) && n >= 0 ? n : null
+  }
+
   const generateNameFromRefs = async () => {
     const fd = formDataRef.current
     const inputs = strainInputsRef.current
-    if (!autoGenerateName || !fd.targetDensity || inputs.length === 0) {
-      return
-    }
+    const density = isEdit ? fd.targetDensity?.trim() : densityValuesRef.current[0]?.trim()
+    if (!autoGenerateName || !density || inputs.length === 0) return
     const total = inputs.reduce((sum, s) => sum + s.percentage, 0)
-    if (Math.abs(total - 100) >= 0.01) {
-      return
-    }
+    if (Math.abs(total - 100) >= 0.01) return
+    const num = parseFloat(density)
+    if (Number.isNaN(num) || num < 0) return
     setIsGeneratingName(true)
     try {
       const response = await controlsApi.suggestName({
         controlType: 'blood',
-        targetDensity: parseFloat(fd.targetDensity),
+        targetDensity: num,
         targetDensityUnitId: fd.targetDensityUnitId ? parseInt(fd.targetDensityUnitId) : undefined,
-        strains: inputs.map(s => ({ strainId: s.strainId, percentage: s.percentage })),
+        strains: inputs.map((s) => ({ strainId: s.strainId, percentage: s.percentage })),
       })
       setSuggestedName(response.data.suggestedName)
       setFormData((prev) => ({ ...prev, name: response.data.suggestedName }))
@@ -214,16 +259,17 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
   }
 
   const generateName = async (currentStrainInputs: StrainInput[] = strainInputs) => {
-    if (!formData.targetDensity || currentStrainInputs.length === 0) return
+    const density = getFirstDensityForName()
+    if (density == null || currentStrainInputs.length === 0) return
     const total = currentStrainInputs.reduce((sum, s) => sum + s.percentage, 0)
     if (Math.abs(total - 100) >= 0.01) return
     setIsGeneratingName(true)
     try {
       const response = await controlsApi.suggestName({
         controlType: 'blood',
-        targetDensity: parseFloat(formData.targetDensity),
+        targetDensity: density,
         targetDensityUnitId: formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined,
-        strains: currentStrainInputs.map(s => ({ strainId: s.strainId, percentage: s.percentage })),
+        strains: currentStrainInputs.map((s) => ({ strainId: s.strainId, percentage: s.percentage })),
       })
       setSuggestedName(response.data.suggestedName)
       if (autoGenerateName) {
@@ -242,19 +288,31 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
   const totalPercentage = strainInputs.reduce((sum, s) => sum + s.percentage, 0)
   const isTotalValid = strainInputs.length === 0 || Math.abs(totalPercentage - 100) < 0.01
 
+  const setDensityAt = (index: number, value: string) => {
+    const next = [...densityValues]
+    next[index] = value
+    setDensityValues(next)
+    if (autoGenerateName && index === 0 && value && strainInputs.length > 0) scheduleGenerateName()
+  }
+
+  const addDensity = () => setDensityValues([...densityValues, ''])
+  const removeDensity = (index: number) => {
+    if (densityValues.length <= 1) return
+    setDensityValues(densityValues.filter((_, i) => i !== index))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
-    // Validate strains if shown
     if (showStrains && strainInputs.length > 0) {
       if (!isTotalValid) {
         setError(`Strain percentages must total exactly 100% (currently ${totalPercentage.toFixed(2)}%)`)
         setLoading(false)
         return
       }
-      if (strainInputs.some(s => s.percentage <= 0 || s.percentage > 100)) {
+      if (strainInputs.some((s) => s.percentage <= 0 || s.percentage > 100)) {
         setError('Each strain percentage must be between 0 and 100')
         setLoading(false)
         return
@@ -262,87 +320,98 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
     }
 
     try {
-      // Validate required fields for blood controls
-      if (formData.controlType === 'blood') {
-        if (!formData.targetDensity) {
-          setError('Target density is required')
-          setLoading(false)
-          return
-        }
-        if (strainInputs.length === 0) {
-          setError('At least one strain is required')
-          setLoading(false)
-          return
-        }
-      }
-      
-      const submitData: any = {
-        controlType: formData.controlType,
-      }
-      
-      // Include name only if provided (will be auto-generated if not)
-      if (formData.name && formData.name.trim()) {
-        submitData.name = formData.name.trim()
+      if (formData.controlType === 'blood' && strainInputs.length === 0) {
+        setError('At least one strain is required')
+        setLoading(false)
+        return
       }
 
-      // Only include density and strains for blood controls
-      if (formData.controlType === 'blood') {
-        submitData.targetDensity = parseFloat(formData.targetDensity)
-        submitData.targetDensityUnitId = formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined
-        
-        submitData.strains = strainInputs.map(s => ({
-          strainId: s.strainId,
-          percentage: s.percentage,
-        }))
-      }
+      const strainsPayload = strainInputs.map((s) => ({ strainId: s.strainId, percentage: s.percentage }))
 
-      let savedControl: ControlDefinition | undefined
       if (controlDefinition) {
-        // For updates, include strains in the update payload (only for blood controls)
-        const updateData: any = { ...submitData }
-        if (formData.controlType === 'blood') {
-          if (showStrains && strainInputs.length > 0) {
-            updateData.strains = strainInputs.map(s => ({
-              strainId: s.strainId,
-              percentage: s.percentage,
-            }))
-          } else if (showStrains && strainInputs.length === 0) {
-            // Explicitly set empty array to remove all strains
-            updateData.strains = []
-          }
+        const updatePayload = {
+          controlType: 'blood' as const,
+          strains: strainsPayload,
+          targetDensity: parseFloat(formData.targetDensity),
+          targetDensityUnitId: formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined,
+          ...(formData.name?.trim() && { name: formData.name.trim() }),
         }
-        const res = await controlsApi.update(controlDefinition.id, updateData)
-        savedControl = res.data.control
+        const res = await controlsApi.update(controlDefinition.id, updatePayload as Parameters<typeof controlsApi.update>[1])
+        if (onSuccess) onSuccess(res.data.control)
+        else navigate('/blood-controls')
       } else {
-        const res = await controlsApi.create(submitData)
-        savedControl = res.data.control
+        const densityStrings = densityValues.filter((s) => s != null && String(s).trim() !== '')
+        const targetDensities = densityStrings.map((s) => parseFloat(String(s).trim()))
+        const hasInvalid = targetDensities.some((n) => Number.isNaN(n) || n < 0)
+        const unique = new Set(targetDensities)
+        if (targetDensities.length === 0) {
+          setError('At least one target density is required')
+          setLoading(false)
+          return
+        }
+        if (hasInvalid) {
+          setError('All densities must be valid positive numbers')
+          setLoading(false)
+          return
+        }
+        if (unique.size !== targetDensities.length) {
+          setError('Duplicate densities are not allowed')
+          setLoading(false)
+          return
+        }
+        if (definitionNames.length !== targetDensities.length) {
+          setError('Definition names are still loading. Please wait a moment and try again.')
+          setLoading(false)
+          return
+        }
+        const targetDensityUnitId = formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined
+        if (targetDensities.length === 1) {
+          const createPayload: Parameters<typeof controlsApi.create>[0] = {
+            controlType: 'blood',
+            name: (definitionNames[0] ?? '').trim() || 'Control',
+            targetDensity: targetDensities[0],
+            targetDensityUnitId,
+            strains: strainsPayload,
+          }
+          const res = await controlsApi.create(createPayload)
+          if (onSuccess) onSuccess(res.data.control)
+          else navigate('/blood-controls')
+        } else {
+          const res = await controlsApi.createDefinitionsBulk({
+            strains: strainsPayload,
+            targetDensities,
+            targetDensityUnitId,
+            names: definitionNames,
+          })
+          if (onSuccess) onSuccess(res.data.controls)
+          else navigate('/blood-controls')
+        }
       }
-
-      if (onSuccess) {
-        onSuccess(savedControl)
-      } else {
-        navigate('/blood-controls')
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save control definition')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err && err.response && typeof (err.response as { data?: { error?: string } }).data?.error === 'string'
+        ? (err.response as { data: { error: string } }).data.error
+        : 'Failed to save control definition'
+      setError(message)
     } finally {
       setLoading(false)
     }
   }
 
-  // Cmd/Ctrl+Enter to submit
-  useModifierHotkey('enter', (e) => {
-    if (!loading && formRef.current) {
-      e.preventDefault()
-      formRef.current.requestSubmit()
-    }
-  }, { preventDefault: true, enableOnFormTags: true })
+  useModifierHotkey(
+    'enter',
+    (e) => {
+      if (!loading && formRef.current) {
+        e.preventDefault()
+        formRef.current.requestSubmit()
+      }
+    },
+    { preventDefault: true, enableOnFormTags: true }
+  )
 
-  const availableStrainsForIndex = (index: number) => {
-    return strains.filter(s => 
-      !strainInputs.some((si, i) => i !== index && si.strainId === s.id)
-    )
-  }
+  const availableStrainsForIndex = (index: number) =>
+    strains.filter((s) => !strainInputs.some((si, i) => i !== index && si.strainId === s.id))
+
+  const unitOptions = concentrationUnits(units)
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -351,123 +420,26 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
           {controlDefinition ? 'Edit Blood Control Definition' : 'New Blood Control Definition'}
         </h1>
         <p className="text-gray-500 mt-1">
-          {controlDefinition ? 'Update blood control definition details and strain composition' : 'Create a new blood control definition with density and strain composition'}
+          {controlDefinition
+            ? 'Update blood control definition details and strain composition'
+            : 'Create a new blood control definition with density and strain composition'}
         </p>
       </div>
       <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
-
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <label htmlFor="control-name" className="block text-sm font-medium text-gray-700">
-            Name {!autoGenerateName && '*'}
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="auto-generate-name"
-              checked={autoGenerateName}
-              onChange={(e) => {
-                setAutoGenerateName(e.target.checked)
-                if (e.target.checked && formData.targetDensity && strainInputs.length > 0) {
-                  generateName()
-                } else if (!e.target.checked) {
-                  setFormData({ ...formData, name: '' })
-                }
-              }}
-              className="rounded"
-            />
-            <label htmlFor="auto-generate-name" className="text-sm text-gray-600 cursor-pointer">
-              Auto-generate name
-            </label>
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            {error}
           </div>
-        </div>
-        <div className="relative">
-          <input
-            id="control-name"
-            type="text"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            required={!autoGenerateName}
-            disabled={autoGenerateName && isGeneratingName}
-            className="form-input"
-            placeholder={autoGenerateName ? (isGeneratingName ? 'Generating...' : 'Name will be auto-generated') : 'Enter name'}
-          />
-          {autoGenerateName && suggestedName && !isGeneratingName && (
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">
-              Suggested: {suggestedName}
-            </div>
-          )}
-        </div>
-        {autoGenerateName && formData.targetDensity && strainInputs.length > 0 && (
-          <p className="mt-1 text-xs text-gray-500">
-            Name will be automatically generated from density and strain composition
-          </p>
         )}
-      </div>
 
-      {/* Blood Control Fields */}
-      <>
-          <div>
-            <label htmlFor="target-density" className="block text-sm font-medium text-gray-700 mb-2">
-              Target Density
-            </label>
-            <div className="flex gap-2">
-              <input
-                id="target-density"
-                type="number"
-                step="any"
-                value={formData.targetDensity}
-                onChange={(e) => {
-                  setFormData({ ...formData, targetDensity: e.target.value })
-                  if (autoGenerateName && e.target.value && strainInputs.length > 0) {
-                    scheduleGenerateName()
-                  }
-                }}
-                className="form-input flex-1"
-                placeholder="e.g. 10000"
-                required
-              />
-              <select
-                value={formData.targetDensityUnitId}
-                onChange={(e) => {
-                  setFormData({ ...formData, targetDensityUnitId: e.target.value })
-                  if (autoGenerateName && formData.targetDensity && strainInputs.length > 0) {
-                    scheduleGenerateName()
-                  }
-                }}
-                className="form-input w-48"
-              >
-                <option value="">Select unit</option>
-                {units
-                  .filter(u => u.category === 'concentration')
-                  .map(u => (
-                    <option key={u.id} value={u.id.toString()}>
-                      {u.symbol} ({u.name})
-                    </option>
-                  ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Strain Composition Section - Only for Blood Controls */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-medium text-gray-700">
-                Strain Composition (Parasite Strains) *
-              </label>
-            </div>
-
-            {(
+        {/* Section 1: Strain composition (first) */}
+        <div className="space-y-3">
+          <h2 className="blood-controls-section-title text-lg font-semibold text-gray-900">Strain composition</h2>
+          <p className="text-sm text-gray-500">Parasite strains and percentages; total must equal 100%.</p>
           <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 space-y-4">
             {strainInputs.length === 0 && (
-              <p className="text-sm text-gray-500 italic">No strains added yet. Click "Add Strain" to begin.</p>
+              <p className="text-sm text-gray-500 italic">No strains added yet. Click &quot;Add strain&quot; to begin.</p>
             )}
-
             {strainInputs.map((strainInput, index) => {
               const availableStrains = availableStrainsForIndex(index)
               return (
@@ -477,9 +449,10 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
                     onChange={(e) => handleStrainChange(index, 'strainId', e.target.value)}
                     className="form-input flex-1"
                     required
+                    aria-label="Strain"
                   >
                     <option value="">Select strain</option>
-                    {availableStrains.map(s => (
+                    {availableStrains.map((s) => (
                       <option key={s.id} value={s.id.toString()}>
                         {s.name}
                       </option>
@@ -495,62 +468,233 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
                     className="form-input w-24"
                     placeholder="%"
                     required
+                    aria-label="Percentage"
                   />
                   <button
                     type="button"
                     onClick={() => handleRemoveStrain(index)}
                     className="text-red-600 hover:text-red-800 font-bold px-3 py-2"
                     title="Remove strain"
+                    aria-label="Remove strain"
                   >
                     ×
                   </button>
                 </div>
               )
             })}
-
             {strainInputs.length > 0 && (
-              <div className={`text-sm font-medium ${isTotalValid ? 'text-green-600' : 'text-red-600'} bg-white p-2 rounded border`}>
+              <div
+                className={`text-sm font-medium ${isTotalValid ? 'text-green-600' : 'text-red-600'} bg-white p-2 rounded border`}
+              >
                 Total: {totalPercentage.toFixed(2)}% {isTotalValid ? '✓' : `(need ${(100 - totalPercentage).toFixed(2)}% more)`}
               </div>
             )}
-
             <button
               type="button"
               onClick={handleAddStrain}
               className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-              disabled={strains.filter(s => !strainInputs.some(si => si.strainId === s.id)).length === 0}
+              disabled={strains.filter((s) => !strainInputs.some((si) => si.strainId === s.id)).length === 0}
+              aria-label="Add strain"
             >
-              + Add Strain
+              + Add strain
             </button>
           </div>
-          )}
-          </div>
-      </>
+        </div>
 
-      <div className="flex justify-end space-x-4">
-        <button
-          type="button"
-          onClick={() => {
-            if (onCancel) {
-              onCancel()
-            } else {
-              navigate(-1)
+        {/* Section 2: Target density / densities */}
+        <div className="space-y-3">
+          <h2 className="blood-controls-section-title text-lg font-semibold text-gray-900">
+            {isEdit ? 'Target density' : 'Target densities'}
+          </h2>
+          {isEdit ? (
+            <p className="text-sm text-gray-500">Concentration for this definition.</p>
+          ) : (
+            <p className="text-sm text-gray-500">Same composition, one or more target concentrations.</p>
+          )}
+          {isEdit ? (
+            <div className="flex gap-2">
+              <label htmlFor="target-density" className="sr-only">
+                Target density
+              </label>
+              <input
+                id="target-density"
+                type="number"
+                step="any"
+                value={formData.targetDensity}
+                onChange={(e) => setFormData({ ...formData, targetDensity: e.target.value })}
+                className="form-input flex-1"
+                placeholder="e.g. 10000"
+                required
+              />
+              <select
+                value={formData.targetDensityUnitId}
+                onChange={(e) => setFormData({ ...formData, targetDensityUnitId: e.target.value })}
+                className="form-input w-48"
+                aria-label="Concentration unit"
+              >
+                <option value="">Select unit</option>
+                {unitOptions.map((u) => (
+                  <option key={u.id} value={u.id.toString()}>
+                    {u.symbol} ({u.name})
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <label htmlFor="density-unit" className="text-sm font-medium text-gray-700">
+                  Concentration unit
+                </label>
+                <select
+                  id="density-unit"
+                  value={formData.targetDensityUnitId}
+                  onChange={(e) => setFormData({ ...formData, targetDensityUnitId: e.target.value })}
+                  className="form-input w-48"
+                  aria-label="Concentration unit"
+                >
+                  <option value="">Select unit</option>
+                  {unitOptions.map((u) => (
+                    <option key={u.id} value={u.id.toString()}>
+                      {u.symbol} ({u.name})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <div className="grid grid-cols-[minmax(0,10rem)_1fr_auto] gap-2 items-center text-sm font-medium text-gray-600 border-b border-gray-200 pb-1">
+                  <span>Density</span>
+                  <span>Definition name</span>
+                  <span className="w-8" aria-hidden="true" />
+                </div>
+                {densityValues.map((val, index) => (
+                  <div key={index} className="grid grid-cols-[minmax(0,10rem)_1fr_auto] gap-2 items-center">
+                    <label htmlFor={index === 0 ? 'target-density' : `density-${index}`} className="sr-only">
+                      {index === 0 ? 'Target density' : `Density ${index + 1}`}
+                    </label>
+                    <input
+                      id={index === 0 ? 'target-density' : `density-${index}`}
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={val}
+                      onChange={(e) => setDensityAt(index, e.target.value)}
+                      className="form-input w-full max-w-[10rem] min-w-0"
+                      placeholder="e.g. 1000"
+                      aria-label={index === 0 ? 'Target density' : `Density ${index + 1}`}
+                    />
+                    <label htmlFor={`definition-name-${index}`} className="sr-only">
+                      Name (density {targetDensitiesForNames[index] != null ? (targetDensitiesForNames[index] >= 1000 ? `${targetDensitiesForNames[index] / 1000}K` : targetDensitiesForNames[index]) : index + 1})
+                    </label>
+                    <input
+                      id={`definition-name-${index}`}
+                      type="text"
+                      value={definitionNames[index] ?? ''}
+                      onChange={(e) => {
+                        const next = [...definitionNames]
+                        next[index] = e.target.value
+                        setDefinitionNames(next)
+                      }}
+                      className="form-input min-w-0 w-full"
+                      placeholder="Name for this definition"
+                      aria-label={`Name (density ${targetDensitiesForNames[index] != null ? (targetDensitiesForNames[index] >= 1000 ? `${targetDensitiesForNames[index] / 1000}K` : targetDensitiesForNames[index]) : index + 1})`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeDensity(index)}
+                      disabled={densityValues.length <= 1}
+                      className="text-red-600 hover:text-red-800 font-bold px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Remove density"
+                      aria-label={`Remove density ${index + 1}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addDensity}
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  aria-label="Add density"
+                >
+                  + Add density
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Definition name: only for edit mode */}
+        {isEdit && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="control-name" className="block text-sm font-medium text-gray-700">
+                Definition name {!autoGenerateName && '*'}
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="auto-generate-name"
+                  checked={autoGenerateName}
+                  onChange={(e) => {
+                    setAutoGenerateName(e.target.checked)
+                    if (e.target.checked) {
+                      const d = getFirstDensityForName()
+                      if (d != null && strainInputs.length > 0) generateName()
+                    } else {
+                      setFormData((prev) => ({ ...prev, name: '' }))
+                    }
+                  }}
+                  className="rounded"
+                  aria-label="Auto-generate name"
+                />
+                <label htmlFor="auto-generate-name" className="text-sm text-gray-600 cursor-pointer">
+                  Auto-generate name
+                </label>
+              </div>
+            </div>
+            <div className="relative">
+              <input
+                id="control-name"
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required={!autoGenerateName}
+                disabled={autoGenerateName && isGeneratingName}
+                className="form-input w-full"
+                placeholder={autoGenerateName ? (isGeneratingName ? 'Generating...' : 'Name will be auto-generated') : 'Enter name'}
+                aria-label="Definition name"
+              />
+              {autoGenerateName && suggestedName && !isGeneratingName && (
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">Suggested: {suggestedName}</div>
+              )}
+            </div>
+            {autoGenerateName && getFirstDensityForName() != null && strainInputs.length > 0 && (
+              <p className="text-xs text-gray-500">Name will be generated from density and strain composition.</p>
+            )}
+          </div>
+        )}
+
+        <div className="flex justify-end space-x-4">
+          <button
+            type="button"
+            onClick={() => (onCancel ? onCancel() : navigate(-1))}
+            className="px-4 py-2 border border-gray-100 rounded-lg text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={
+              loading ||
+              (formData.controlType === 'blood' && showStrains && strainInputs.length > 0 && !isTotalValid)
             }
-          }}
-          className="px-4 py-2 border border-gray-100 rounded-lg text-gray-700 hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={loading || (formData.controlType === 'blood' && showStrains && strainInputs.length > 0 && !isTotalValid)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? 'Saving...' : controlDefinition ? 'Update' : 'Create'}
-        </button>
-      </div>
-    </form>
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? 'Saving...' : controlDefinition ? 'Update' : 'Create'}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }
-

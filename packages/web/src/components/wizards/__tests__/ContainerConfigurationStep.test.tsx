@@ -45,6 +45,7 @@ const csvFileWithCollectionConfig: CSVFileData[] = [
     filename: 'test.csv',
     rows: [{ specimen_type_name: 'DBS' }],
     containerType: 'cryovial_tube',
+    containerCategoryInferred: 'tube',
     collectionName: 'New Box',
     errors: [],
   },

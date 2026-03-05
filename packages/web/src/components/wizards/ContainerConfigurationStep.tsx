@@ -2,8 +2,10 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import LocationPicker from '../LocationPicker'
 import SheetCard from './SheetCard'
 import CollectionAssignment from './CollectionAssignment'
+import CollectionNameSearch from './CollectionNameSearch'
 import type { CollectionAssignmentChange } from './CollectionAssignment'
 import { collectionsApi } from '../../lib/api'
+import { uniqueSheetNamesFromRows } from '../../lib/control-batch-csv'
 import type { SpecimenTypeConfig, CSVFileData, ContainerConfig } from '../../pages/ControlBatchWizard'
 
 /** Group paper containers by sheetId */
@@ -53,48 +55,86 @@ export default function ContainerConfigurationStep({
   const [existingCollections, setExistingCollections] = useState<{
     boxes: Map<string, { id: number; locationId: number }>
     bags: Map<string, { id: number; locationId: number }>
-  }>({ boxes: new Map(), bags: new Map() })
+    micronix_plate: Map<string, { id: number; locationId: number }>
+    cryovial_box: Map<string, { id: number; locationId: number }>
+  }>({ boxes: new Map(), bags: new Map(), micronix_plate: new Map(), cryovial_box: new Map() })
+  /** Collection names by type for in-memory search (combobox). */
+  const [collectionNamesByType, setCollectionNamesByType] = useState<{
+    box: string[]
+    bag: string[]
+    micronix_plate: string[]
+    cryovial_box: string[]
+  }>({ box: [], bag: [], micronix_plate: [], cryovial_box: [] })
   const [loadingCollections, setLoadingCollections] = useState(false)
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const existingCollectionsRef = useRef(existingCollections)
-  
+
   // Keep ref in sync with state
   useEffect(() => {
     existingCollectionsRef.current = existingCollections
   }, [existingCollections])
 
-  // Load existing boxes and bags on mount
+  // Load all collection types on mount (for id lookup and for name search)
   useEffect(() => {
     const loadCollections = async () => {
       try {
         setLoadingCollections(true)
-        const [boxesRes, bagsRes] = await Promise.all([
+        const [boxesRes, bagsRes, platesRes, cryovialRes] = await Promise.all([
           collectionsApi.listCollectionsByType('box'),
           collectionsApi.listCollectionsByType('bag'),
+          collectionsApi.listCollectionsByType('micronix_plate'),
+          collectionsApi.listCollectionsByType('cryovial_box'),
         ])
-        
+
         const boxesMap = new Map<string, { id: number; locationId: number }>()
-        boxesRes.data.collections?.forEach((box: any) => {
-          if (box.name && box.locationId) {
+        const boxNames: string[] = []
+        boxesRes.data.collections?.forEach((box: { id: number; name?: string; locationId?: number | null }) => {
+          if (box.name && box.locationId != null) {
             boxesMap.set(box.name, { id: box.id, locationId: box.locationId })
+            boxNames.push(box.name)
           }
         })
-        
+
         const bagsMap = new Map<string, { id: number; locationId: number }>()
-        bagsRes.data.collections?.forEach((bag: any) => {
-          if (bag.name && bag.locationId) {
+        const bagNames: string[] = []
+        bagsRes.data.collections?.forEach((bag: { id: number; name?: string; locationId?: number | null }) => {
+          if (bag.name && bag.locationId != null) {
             bagsMap.set(bag.name, { id: bag.id, locationId: bag.locationId })
+            bagNames.push(bag.name)
           }
         })
-        
-        setExistingCollections({ boxes: boxesMap, bags: bagsMap })
+
+        const platesMap = new Map<string, { id: number; locationId: number }>()
+        const plateNames: string[] = []
+        platesRes.data.collections?.forEach((p: { id: number; name?: string; locationId?: number | null }) => {
+          if (p.name && p.locationId != null) {
+            platesMap.set(p.name, { id: p.id, locationId: p.locationId })
+            plateNames.push(p.name)
+          }
+        })
+        const cryovialMap = new Map<string, { id: number; locationId: number }>()
+        const cryovialNames: string[] = []
+        cryovialRes.data.collections?.forEach((c: { id: number; name?: string; locationId?: number | null }) => {
+          if (c.name && c.locationId != null) {
+            cryovialMap.set(c.name, { id: c.id, locationId: c.locationId })
+            cryovialNames.push(c.name)
+          }
+        })
+
+        setExistingCollections({ boxes: boxesMap, bags: bagsMap, micronix_plate: platesMap, cryovial_box: cryovialMap })
+        setCollectionNamesByType({
+          box: boxNames.sort((a, b) => a.localeCompare(b)),
+          bag: bagNames.sort((a, b) => a.localeCompare(b)),
+          micronix_plate: plateNames.sort((a, b) => a.localeCompare(b)),
+          cryovial_box: cryovialNames.sort((a, b) => a.localeCompare(b)),
+        })
       } catch (error) {
         console.error('Failed to load collections:', error)
       } finally {
         setLoadingCollections(false)
       }
     }
-    
+
     loadCollections()
   }, [])
 
@@ -107,11 +147,28 @@ export default function ContainerConfigurationStep({
     }
   }, [])
 
+  const getCollectionFromMaps = (
+    name: string,
+    collectionType: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+  ): { id: number; locationId: number } | undefined => {
+    const current = existingCollectionsRef.current
+    switch (collectionType) {
+      case 'box':
+        return current.boxes.get(name)
+      case 'bag':
+        return current.bags.get(name)
+      case 'micronix_plate':
+        return current.micronix_plate.get(name)
+      case 'cryovial_box':
+        return current.cryovial_box.get(name)
+    }
+  }
+
   const handleCollectionNameChange = (
     specimenTypeId: string,
     containerIds: string[],
     newName: string,
-    collectionType: 'box' | 'bag'
+    collectionType: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
   ) => {
     // Clear existing debounce timer
     if (debounceTimerRef.current) {
@@ -140,30 +197,23 @@ export default function ContainerConfigurationStep({
     const nameToLookup = newName.trim()
     const originalName = newName // Preserve original (may have whitespace)
     debounceTimerRef.current = setTimeout(() => {
-      // Use the latest existingCollections from ref to avoid stale closure
-      const currentCollections = existingCollectionsRef.current
-      const collection = collectionType === 'box' 
-        ? currentCollections.boxes.get(nameToLookup)
-        : currentCollections.bags.get(nameToLookup)
-      
+      const collection = getCollectionFromMaps(nameToLookup, collectionType)
+
       if (collection) {
         // Collection exists - auto-populate location and set collectionId
-        // Preserve the original collectionName (as user typed it)
         containerIds.forEach(containerId => {
           updateContainer(specimenTypeId, containerId, {
-            collectionName: originalName, // Preserve the original name (may have whitespace)
+            collectionName: originalName,
             collectionLocationId: collection.locationId,
             collectionId: collection.id,
           })
         })
       } else {
         // Collection doesn't exist - clear collectionId, allow location to be edited
-        // Preserve the original collectionName (as user typed it)
         containerIds.forEach(containerId => {
           updateContainer(specimenTypeId, containerId, {
-            collectionName: originalName, // Preserve the original name
+            collectionName: originalName,
             collectionId: undefined,
-            // Don't clear locationId - user might have set it manually
           })
         })
       }
@@ -189,7 +239,8 @@ export default function ContainerConfigurationStep({
     collectionName: string | null,
     collectionLocationId: number | null,
     collectionType: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box',
-    sheetName?: string | null
+    sheetName?: string | null,
+    containerTypeInferred?: boolean
   ) => {
     const updatedFiles = [...csvFiles]
     updatedFiles[fileIndex] = {
@@ -200,94 +251,9 @@ export default function ContainerConfigurationStep({
       collectionLocationId: collectionLocationId || undefined,
       collectionType,
       sheetName: sheetName || undefined,
+      ...(containerTypeInferred !== undefined && { containerTypeInferred }),
     }
     onChangeCsvFiles(updatedFiles)
-  }
-
-  const handleCreateCollection = async (
-    fileIndex: number,
-    name: string,
-    locationId: number,
-    collectionType: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-  ) => {
-    try {
-      let response
-      if (collectionType === 'box') {
-        response = await collectionsApi.createBox({ name, locationId })
-      } else if (collectionType === 'bag') {
-        response = await collectionsApi.createBag({ name, locationId })
-      } else if (collectionType === 'micronix_plate') {
-        response = await collectionsApi.createMicronixPlate({ name, locationId })
-      } else {
-        response = await collectionsApi.createCryovialBox({ name, locationId })
-      }
-
-      const collectionId = ('plate' in response.data && response.data.plate?.id) || 
-                          ('box' in response.data && response.data.box?.id) || 
-                          ('bag' in response.data && response.data.bag?.id) || undefined
-      
-      const updatedFiles = [...csvFiles]
-      updatedFiles[fileIndex] = {
-        ...updatedFiles[fileIndex],
-        collectionId: typeof collectionId === 'number' ? collectionId : undefined,
-        collectionName: name,
-        collectionLocationId: locationId,
-      }
-      onChangeCsvFiles(updatedFiles)
-    } catch (error: unknown) {
-      console.error('Failed to create collection:', error)
-      const errorMessage = typeof error === 'object' && error !== null && 'response' in error
-        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to create collection'
-        : 'Failed to create collection'
-      alert(errorMessage)
-    }
-  }
-
-  const handleCreateCollectionForSpecimenType = async (
-    specimenTypeId: string,
-    name: string,
-    locationId: number,
-    collectionType: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-  ) => {
-    try {
-      let response
-      if (collectionType === 'box') {
-        response = await collectionsApi.createBox({ name, locationId })
-      } else if (collectionType === 'bag') {
-        response = await collectionsApi.createBag({ name, locationId })
-      } else if (collectionType === 'micronix_plate') {
-        response = await collectionsApi.createMicronixPlate({ name, locationId })
-      } else {
-        response = await collectionsApi.createCryovialBox({ name, locationId })
-      }
-
-      const collectionId = ('plate' in response.data && response.data.plate?.id) || 
-                          ('box' in response.data && response.data.box?.id) || 
-                          ('bag' in response.data && response.data.bag?.id) || undefined
-      
-      // Update all containers for this specimen type with the collection ID
-      const updated = specimenTypes.map(st => {
-        if (st.id === specimenTypeId) {
-          return {
-            ...st,
-            containers: st.containers.map(c => ({
-              ...c,
-              collectionId: typeof collectionId === 'number' ? collectionId : undefined,
-              collectionName: name,
-              collectionLocationId: locationId,
-            })),
-          }
-        }
-        return st
-      })
-      onChangeSpecimenTypes(updated)
-    } catch (error: unknown) {
-      console.error('Failed to create collection:', error)
-      const errorMessage = typeof error === 'object' && error !== null && 'response' in error
-        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to create collection'
-        : 'Failed to create collection'
-      alert(errorMessage)
-    }
   }
 
   const addContainerToSpecimenType = (specimenTypeId: string) => {
@@ -400,11 +366,19 @@ export default function ContainerConfigurationStep({
     // Check manual specimen types have containers
     const manualValid = specimenTypes.every(st => st.containers.length > 0)
     
-    // Check CSV files have collection assigned and sheet name if paper
+    // CSV files with rows must have category inferred (paper or tube) and type set (tube = user picks cryovial/micronix)
+    const csvContainerTypeValid = csvFiles.every(f =>
+      f.rows.length === 0 ||
+      (f.containerTypeInferred === true && f.containerType != null) ||
+      (f.containerCategoryInferred === 'tube' && (f.containerType === 'cryovial_tube' || f.containerType === 'micronix_tube'))
+    )
+    
+    // Check CSV files have collection assigned and sheet name(s) if paper (per-row sheet_name or per-file sheetName)
     const csvValid = csvFiles.every(f => {
       const hasCollection = f.collectionId || (f.collectionName && f.collectionLocationId)
       if (f.containerType === 'paper') {
-        return hasCollection && !!f.sheetName
+        const hasSheetNames = !!f.sheetName?.trim() || (f.rows?.length > 0 && f.rows.every(r => !!(r.sheet_name?.trim())))
+        return hasCollection && hasSheetNames
       }
       return hasCollection
     })
@@ -415,7 +389,7 @@ export default function ContainerConfigurationStep({
       return st.containers.every(c => !!c.sheetName)
     })
     
-    return (specimenTypes.length === 0 || (manualValid && manualPaperValid)) && (csvFiles.length === 0 || csvValid)
+    return (specimenTypes.length === 0 || (manualValid && manualPaperValid)) && (csvFiles.length === 0 || (csvContainerTypeValid && csvValid))
   }
 
   return (
@@ -547,25 +521,11 @@ export default function ContainerConfigurationStep({
                               )
                             }
                           }}
-                          onCreateCollection={() => {
-                            const first = containers[0]
-                            if (
-                              first?.collectionName &&
-                              first?.collectionLocationId
-                            ) {
-                              handleCreateCollectionForSpecimenType(
-                                st.id,
-                                first.collectionName,
-                                first.collectionLocationId,
-                                (first.collectionType ?? 'box') as
-                                  | 'box'
-                                  | 'bag'
-                                  | 'micronix_plate'
-                                  | 'cryovial_box'
-                              )
-                            }
-                          }}
                           existingCollections={existingCollections}
+                          collectionNames={{
+                            box: collectionNamesByType.box,
+                            bag: collectionNamesByType.bag,
+                          }}
                         />
                       ))
                     })()}
@@ -662,20 +622,12 @@ export default function ContainerConfigurationStep({
                                 | 'bag'
                                 | 'micronix_plate'
                                 | 'cryovial_box'
-                            if (ct === 'box' || ct === 'bag') {
-                              handleCollectionNameChange(
-                                st.id,
-                                st.containers.map((c) => c.id),
-                                updates.collectionName,
-                                ct
-                              )
-                            } else {
-                              st.containers.forEach((c) =>
-                                updateContainer(st.id, c.id, {
-                                  collectionName: updates.collectionName,
-                                })
-                              )
-                            }
+                            handleCollectionNameChange(
+                              st.id,
+                              st.containers.map((c) => c.id),
+                              updates.collectionName,
+                              ct
+                            )
                           }
                           if (updates.collectionType !== undefined) {
                             st.containers.forEach((c) =>
@@ -693,27 +645,18 @@ export default function ContainerConfigurationStep({
                             )
                           }
                         }}
-                        onCreate={() => {
-                          const first = st.containers[0]
-                          if (
-                            first?.collectionName &&
-                            first?.collectionLocationId
-                          ) {
-                            handleCreateCollectionForSpecimenType(
-                              st.id,
-                              first.collectionName,
-                              first.collectionLocationId,
-                              (first.collectionType ||
-                                getCollectionType(st.containerType)) as
-                                | 'box'
-                                | 'bag'
-                                | 'micronix_plate'
-                                | 'cryovial_box'
-                            )
-                          }
-                        }}
                         showCollectionTypeSelector={false}
                         successMessageVariant="collection"
+                        collectionNames={
+                          collectionNamesByType[
+                            (st.containers[0]?.collectionType ||
+                              getCollectionType(st.containerType)) as
+                              | 'box'
+                              | 'bag'
+                              | 'micronix_plate'
+                              | 'cryovial_box'
+                          ]
+                        }
                       />
                     </div>
                   </div>
@@ -735,9 +678,11 @@ export default function ContainerConfigurationStep({
       {(activeTab === 'csv' || specimenTypes.length === 0) && csvFiles.length > 0 && (
         <div className="space-y-6">
           {csvFiles.map((file, fileIndex) => {
-            const selectedContainerType = file.containerType || 'paper'
+            const selectedContainerType = file.containerType || (file.containerCategoryInferred === 'tube' ? 'cryovial_tube' : 'paper')
             const collectionType = getCollectionType(selectedContainerType)
             const needsBoxOrBag = selectedContainerType === 'paper'
+            const cannotInferContainerType = file.rows.length > 0 && !file.containerTypeInferred && file.containerCategoryInferred !== 'tube'
+            const isTubeTemplate = file.containerCategoryInferred === 'tube'
 
             return (
               <div
@@ -752,58 +697,109 @@ export default function ContainerConfigurationStep({
                   </p>
                 </div>
 
-                {/* Container type selection */}
+                {cannotInferContainerType ? (
+                  <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200" role="alert">
+                    <p className="text-sm text-red-800 font-medium">Container type could not be inferred from this CSV.</p>
+                    <p className="text-sm text-red-700 mt-1">
+                      Re-upload using a template with <code className="px-1 py-0.5 rounded bg-red-100">sheet_name</code> (DBS) or <code className="px-1 py-0.5 rounded bg-red-100">position</code> (tubes). Remove this file and upload again from the previous step.
+                    </p>
+                  </div>
+                ) : (
+                <>
+                {/* Container type: read-only when paper inferred; dropdown (Cryovial/Micronix only) when tube template */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Container Type *
                   </label>
-                  <select
-                    value={selectedContainerType}
-                    onChange={(e) => {
-                      const type = e.target.value as 'paper' | 'cryovial_tube' | 'micronix_tube'
-                      handleCSVCollectionConfig(
-                        fileIndex,
-                        type,
-                        null,
-                        null,
-                        null,
-                        getCollectionType(type),
-                        type === 'paper' ? file.sheetName || null : null
-                      )
-                    }}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    <option value="paper">DBS Sheet (Paper)</option>
-                    <option value="cryovial_tube">Cryovial</option>
-                    <option value="micronix_tube">Micronix Tube</option>
-                  </select>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {file.containerTypeInferred ? (
+                      <>
+                        <span className="block px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+                          DBS Sheet (Paper)
+                        </span>
+                        <span className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                          (inferred from CSV)
+                        </span>
+                      </>
+                    ) : isTubeTemplate ? (
+                      <>
+                        <select
+                          value={selectedContainerType}
+                          onChange={(e) => {
+                            const type = e.target.value as 'cryovial_tube' | 'micronix_tube'
+                            handleCSVCollectionConfig(
+                              fileIndex,
+                              type,
+                              file.collectionId ?? null,
+                              file.collectionName ?? null,
+                              file.collectionLocationId ?? null,
+                              getCollectionType(type),
+                              file.sheetName || null,
+                              false
+                            )
+                          }}
+                          className="block px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        >
+                          <option value="cryovial_tube">Cryovial</option>
+                          <option value="micronix_tube">Micronix Tube</option>
+                        </select>
+                        <span className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                          (tube template – choose type)
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
 
-                {/* Sheet name for paper containers */}
-                {selectedContainerType === 'paper' && (
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Sheet Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={file.sheetName || ''}
-                      onChange={(e) => {
-                        handleCSVCollectionConfig(
-                          fileIndex,
-                          selectedContainerType,
-                          file.collectionId || null,
-                          file.collectionName || null,
-                          file.collectionLocationId || null,
-                          file.collectionType || collectionType,
-                          e.target.value
-                        )
-                      }}
-                      placeholder="Enter sheet name"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    />
-                  </div>
-                )}
+                {/* Sheet name for paper containers: show inferred from CSV (read-only) or editable field when no sheet_name column */}
+                {selectedContainerType === 'paper' && (() => {
+                  const names = uniqueSheetNamesFromRows(file.rows)
+                  if (names.length === 1) {
+                    return (
+                      <div className="mb-4">
+                        <p className="text-sm text-gray-700">
+                          Sheet name: <strong>{file.sheetName || names[0]}</strong> <span className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>(from CSV)</span>
+                        </p>
+                      </div>
+                    )
+                  }
+                  if (names.length > 1) {
+                    return (
+                      <div className="mb-4">
+                        <p className="text-sm text-gray-700">
+                          Sheet names from CSV: <strong>{names.join(', ')}</strong>
+                        </p>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Sheet name (if one sheet for whole file)
+                      </label>
+                      <p className="text-xs mb-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                        Add a <code className="px-1 py-0.5 rounded bg-gray-100">sheet_name</code> column to your CSV to put papers on multiple sheets, or enter one name below. All sheets go into the collection (box/bag) below.
+                      </p>
+                      <input
+                        type="text"
+                        value={file.sheetName || ''}
+                        onChange={(e) => {
+                          handleCSVCollectionConfig(
+                            fileIndex,
+                            selectedContainerType,
+                            file.collectionId || null,
+                            file.collectionName || null,
+                            file.collectionLocationId || null,
+                            file.collectionType || collectionType,
+                            e.target.value
+                          )
+                        }}
+                        placeholder="e.g. Sheet1"
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      />
+                    </div>
+                  )
+                })()}
 
                 {/* Collection assignment */}
                 {needsBoxOrBag && (
@@ -833,26 +829,37 @@ export default function ContainerConfigurationStep({
                   </div>
                 )}
 
-                {file.collectionId ? (
-                  <div className="bg-green-50 border border-green-200 rounded p-3">
+                {file.collectionId && file.collectionName && (
+                  <div className="flex items-center justify-between gap-2 bg-green-50 border border-green-200 rounded p-3 mb-2">
                     <p className="text-sm text-green-800">
                       ✓ Assigned to collection: {file.collectionName}
                     </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCSVCollectionConfig(
+                          fileIndex,
+                          selectedContainerType,
+                          null,
+                          '',
+                          null,
+                          file.collectionType || collectionType,
+                          file.sheetName || null
+                        )
+                      }
+                      className="text-sm text-green-700 underline hover:no-underline shrink-0"
+                    >
+                      Clear
+                    </button>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Collection Name *
-                      </label>
-                      <input
-                        type="text"
+                )}
+                <div className="space-y-4">
+                  <div>
+                    <CollectionNameSearch
+                        id={`csv-collection-name-${fileIndex}`}
+                        label="Collection Name *"
                         value={file.collectionName || ''}
-                        onChange={(e) => {
-                          const name = e.target.value
-                          const collectionTypeValue: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box' = (file.collectionType || collectionType) as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-                          
-                          // Update name immediately
+                        onChange={(name) => {
                           handleCSVCollectionConfig(
                             fileIndex,
                             selectedContainerType,
@@ -862,63 +869,85 @@ export default function ContainerConfigurationStep({
                             file.collectionType || collectionType,
                             file.sheetName || null
                           )
-                          
-                          // Handle empty name - clear collectionId
-                          if (!name.trim() && (collectionType === 'box' || collectionType === 'bag')) {
-                            if (debounceTimerRef.current) {
-                              clearTimeout(debounceTimerRef.current)
-                            }
+                          if (!name.trim()) {
+                            if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
                             handleCSVCollectionConfig(
                               fileIndex,
                               selectedContainerType,
                               null,
-                              name, // Preserve empty string
-                              null, // Clear location
+                              name,
+                              null,
                               collectionType,
                               file.sheetName || null
                             )
                             return
                           }
-                          
-                          // Auto-populate location if collection exists
-                          if ((collectionType === 'box' || collectionType === 'bag') && name.trim()) {
-                            if (debounceTimerRef.current) {
-                              clearTimeout(debounceTimerRef.current)
+                          if (
+                            (collectionType === 'box' ||
+                              collectionType === 'bag' ||
+                              collectionType === 'micronix_plate' ||
+                              collectionType === 'cryovial_box') &&
+                            name.trim()
+                          ) {
+                            if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+                            const nameToLookup = name.trim()
+                            const currentCollections = existingCollectionsRef.current
+                            const collection = getCollectionFromMaps(nameToLookup, collectionType)
+                            const optionsForType =
+                              collectionNamesByType[
+                                collectionType as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+                              ] ?? []
+                            const isExactMatch = optionsForType.some((opt) => opt.trim() === nameToLookup)
+                            if (isExactMatch && collection) {
+                              // User selected from dropdown: resolve immediately
+                              handleCSVCollectionConfig(
+                                fileIndex,
+                                selectedContainerType,
+                                collection.id,
+                                name,
+                                collection.locationId,
+                                collectionType,
+                                file.sheetName || null
+                              )
+                            } else {
+                              // Typing: debounce to avoid lookup on every keystroke
+                              debounceTimerRef.current = setTimeout(() => {
+                                const c = getCollectionFromMaps(nameToLookup, collectionType)
+                                if (c) {
+                                  handleCSVCollectionConfig(
+                                    fileIndex,
+                                    selectedContainerType,
+                                    c.id,
+                                    name,
+                                    c.locationId,
+                                    collectionType,
+                                    file.sheetName || null
+                                  )
+                                } else {
+                                  handleCSVCollectionConfig(
+                                    fileIndex,
+                                    selectedContainerType,
+                                    null,
+                                    name,
+                                    file.collectionLocationId || null,
+                                    collectionType,
+                                    file.sheetName || null
+                                  )
+                                }
+                              }, 500)
                             }
-                            
-                            debounceTimerRef.current = setTimeout(() => {
-                              const nameToLookup = name.trim()
-                              const currentCollections = existingCollectionsRef.current
-                              const collection = collectionType === 'box'
-                                ? currentCollections.boxes.get(nameToLookup)
-                                : currentCollections.bags.get(nameToLookup)
-                              
-                              if (collection) {
-                                handleCSVCollectionConfig(
-                                  fileIndex,
-                                  selectedContainerType,
-                                  collection.id,
-                                  name, // Preserve the name (may have whitespace)
-                                  collection.locationId,
-                                  collectionType,
-                                  file.sheetName || null
-                                )
-                              } else {
-                                handleCSVCollectionConfig(
-                                  fileIndex,
-                                  selectedContainerType,
-                                  null,
-                                  name, // Preserve the name
-                                  file.collectionLocationId || null,
-                                  collectionType,
-                                  file.sheetName || null
-                                )
-                              }
-                            }, 500)
                           }
                         }}
-                        placeholder="Enter collection name"
-                        className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        options={
+                          collectionNamesByType[
+                            (file.collectionType || collectionType) as
+                              | 'box'
+                              | 'bag'
+                              | 'micronix_plate'
+                              | 'cryovial_box'
+                          ]
+                        }
+                        placeholder="Type to search or enter name"
                       />
                     </div>
 
@@ -940,34 +969,24 @@ export default function ContainerConfigurationStep({
                           )
                         }}
                         filterCollectionsOnly
-                        disabled={!!file.collectionId && (file.collectionType === 'box' || file.collectionType === 'bag')}
+                        disabled={!!file.collectionId}
                       />
-                      {file.collectionId && (file.collectionType === 'box' || file.collectionType === 'bag') && (
+                      {file.collectionId && (
                         <p className="text-xs text-gray-500 mt-1">
-                          Location from existing {file.collectionType === 'bag' ? 'bag' : 'box'}
+                          Location from existing{' '}
+                          {file.collectionType === 'bag'
+                            ? 'bag'
+                            : file.collectionType === 'box'
+                              ? 'box'
+                              : file.collectionType === 'micronix_plate'
+                                ? 'plate'
+                                : 'cryovial box'}
                         </p>
                       )}
                     </div>
 
-                    {file.collectionName && file.collectionLocationId && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (file.collectionName && file.collectionLocationId) {
-                            handleCreateCollection(
-                              fileIndex,
-                              file.collectionName,
-                              file.collectionLocationId,
-                              file.collectionType || collectionType
-                            )
-                          }
-                        }}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                      >
-                        Create Collection
-                      </button>
-                    )}
                   </div>
+                </>
                 )}
               </div>
             )

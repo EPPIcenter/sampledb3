@@ -13,11 +13,12 @@ interface SheetCardProps {
   onAddPaper: () => void
   onRemoveContainer: (specimenTypeId: string, containerId: string) => void
   onCollectionChange: (updates: CollectionAssignmentChange) => void
-  onCreateCollection: () => void
   existingCollections: {
     boxes: Map<string, { id: number; locationId: number }>
     bags: Map<string, { id: number; locationId: number }>
   }
+  /** Names for box and bag (for collection name search). */
+  collectionNames?: { box: string[]; bag: string[] }
 }
 
 export default function SheetCard({
@@ -30,10 +31,12 @@ export default function SheetCard({
   onAddPaper,
   onRemoveContainer,
   onCollectionChange,
-  onCreateCollection,
+  collectionNames,
 }: SheetCardProps) {
   const first = containers[0]
   const sheetName = first?.sheetName ?? ''
+  const currentCollectionType = (first?.collectionType as 'box' | 'bag') ?? 'box'
+  const namesForType = collectionNames ? collectionNames[currentCollectionType] : undefined
 
   return (
     <div className="space-y-4 pt-4 border-t border-gray-200 first:pt-0 first:border-t-0">
@@ -76,14 +79,14 @@ export default function SheetCard({
         <h5 className="blood-controls-filter-label block mb-2">Place Sheet in:</h5>
         <CollectionAssignment
           containerType="paper"
-          collectionType={(first?.collectionType as 'box' | 'bag') ?? 'box'}
+          collectionType={currentCollectionType}
           collectionName={first?.collectionName ?? ''}
           collectionLocationId={first?.collectionLocationId ?? null}
           collectionId={first?.collectionId}
           onChange={onCollectionChange}
-          onCreate={onCreateCollection}
           showCollectionTypeSelector={true}
           successMessageVariant="sheet"
+          collectionNames={namesForType}
         />
       </div>
     </div>

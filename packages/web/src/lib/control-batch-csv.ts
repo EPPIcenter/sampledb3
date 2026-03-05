@@ -4,6 +4,26 @@ export interface CSVContainerRow {
   barcode?: string
   quantity?: number
   unit_symbol?: string
+  /** Optional density (numeric); when present, rows are grouped by density for batch creation */
+  density?: number
+  /** For paper (DBS): sheet name for this row. Multiple rows can share a sheet; sheets go into the file's collection (box/bag). */
+  sheet_name?: string
+}
+
+/**
+ * Unique non-empty sheet_name values from rows (trimmed). Use to show "Sheet names from CSV: A, B" when multiple.
+ */
+export function uniqueSheetNamesFromRows(rows: { sheet_name?: string }[]): string[] {
+  return [...new Set(rows.map((r) => r.sheet_name?.trim()).filter((s): s is string => Boolean(s)))]
+}
+
+/**
+ * Infer a single file-level sheet name from rows when all rows share the same non-empty sheet_name.
+ * Returns undefined when there are zero or multiple distinct sheet names (or all empty).
+ */
+export function inferSheetName(rows: { sheet_name?: string }[]): string | undefined {
+  const names = uniqueSheetNamesFromRows(rows)
+  return names.length === 1 ? names[0]! : undefined
 }
 
 /**
@@ -28,6 +48,32 @@ export interface ParsedCSVFile {
   filename: string
   rows: CSVContainerRow[]
   errors: ValidationError[]
+  /** Inferred from header: sheet_name → paper; position → tube (user picks cryovial vs micronix). */
+  inferredContainerCategory?: 'paper' | 'tube'
+  /** When category is paper, type is paper. When category is tube, type is default for UI only (user must pick). */
+  inferredContainerType?: 'paper' | 'cryovial_tube' | 'micronix_tube'
+}
+
+/**
+ * Infer container category from CSV header.
+ * Tube templates have position (cryovial and micronix); paper has sheet_name.
+ * When both exist (e.g. merged columns), prefer position so tube CSVs are not mis-inferred as paper.
+ */
+export function inferContainerCategoryFromHeader(header: string[]): 'paper' | 'tube' | undefined {
+  const lower = header.map((h) => h.toLowerCase().trim())
+  if (lower.includes('position')) return 'tube'
+  if (lower.includes('sheet_name')) return 'paper'
+  return undefined
+}
+
+/**
+ * Infer container type from CSV header. Tube → cryovial_tube as default (user may choose micronix); paper → paper.
+ */
+export function inferContainerTypeFromHeader(header: string[]): 'paper' | 'cryovial_tube' | 'micronix_tube' | undefined {
+  const lower = header.map((h) => h.toLowerCase().trim())
+  if (lower.includes('position')) return 'cryovial_tube'
+  if (lower.includes('sheet_name')) return 'paper'
+  return undefined
 }
 
 export interface ValidationError {
@@ -120,8 +166,8 @@ export function parseContainerCSV(csvText: string, filename: string): ParsedCSVF
   // Parse header
   const header = rows[0].map(h => h.toLowerCase().trim())
   const requiredColumns = ['specimen_type_name']
-  const optionalColumns = ['position', 'barcode', 'quantity', 'unit_symbol']
-  
+  const optionalColumns = ['position', 'barcode', 'quantity', 'unit_symbol', 'density', 'sheet_name']
+
   // Check for required columns
   const missingRequired = requiredColumns.filter(col => !header.includes(col))
   if (missingRequired.length > 0) {
@@ -138,6 +184,8 @@ export function parseContainerCSV(csvText: string, filename: string): ParsedCSVF
   const barcodeIdx = header.indexOf('barcode')
   const quantityIdx = header.indexOf('quantity')
   const unitSymbolIdx = header.indexOf('unit_symbol')
+  const densityIdx = header.indexOf('density')
+  const sheetNameIdx = header.indexOf('sheet_name')
 
   if (specimenTypeIdx === -1) {
     return {
@@ -190,13 +238,36 @@ export function parseContainerCSV(csvText: string, filename: string): ParsedCSVF
       parsedRow.unit_symbol = row[unitSymbolIdx].trim()
     }
 
+    if (densityIdx >= 0 && row[densityIdx] !== undefined) {
+      const densityVal = row[densityIdx].trim()
+      if (densityVal === '') {
+        parsedRow.density = undefined
+      } else {
+        const densityNum = parseFloat(densityVal)
+        if (Number.isNaN(densityNum)) {
+          errors.push({ row: i + 1, field: 'density', error: 'Density must be a number' })
+          continue
+        }
+        parsedRow.density = densityNum
+      }
+    }
+
+    if (sheetNameIdx >= 0 && row[sheetNameIdx] !== undefined) {
+      const val = row[sheetNameIdx].trim()
+      if (val) parsedRow.sheet_name = val
+    }
+
     parsedRows.push(parsedRow)
   }
 
+  const inferredCategory = inferContainerCategoryFromHeader(header)
+  const inferredType = inferContainerTypeFromHeader(header)
   return {
     filename,
     rows: parsedRows,
     errors,
+    inferredContainerCategory: inferredCategory,
+    inferredContainerType: inferredType,
   }
 }
 
@@ -234,6 +305,9 @@ export function validateCSVRows(
       }
     }
 
+    // For paper (DBS), each row must have sheet_name OR the file can have a single sheet name (validated in wizard).
+    // We don't require sheet_name here so one-sheet-per-file (wizard field) still works.
+
     // Validate quantity if provided
     if (row.quantity !== undefined && (isNaN(row.quantity) || row.quantity < 0)) {
       errors.push({
@@ -257,38 +331,35 @@ export function generateCSVTemplate(
   const examples: string[] = []
   
   if (containerType === 'paper') {
-    // Paper examples - no position (paper goes in sheets/bags/boxes, not plates), no barcode, spots unit
+    // Paper: each row has sheet_name (required). Multiple rows can share a sheet; all sheets go into the file's collection (box/bag).
     const firstType = allowedSpecimenTypes[0]
-    examples.push(`${firstType.name},,5,spots`)
+    examples.push(`${firstType.name},,5,spots,100,Sheet1`)
     if (allowedSpecimenTypes.length > 1) {
-      examples.push(`${allowedSpecimenTypes[1].name},,5,spots`)
+      examples.push(`${allowedSpecimenTypes[1].name},,5,spots,200,Sheet2`)
     } else {
-      examples.push(`${firstType.name},,5,spots`)
+      examples.push(`${firstType.name},,5,spots,200,Sheet2`)
     }
-    // Paper template: specimen_type_name,barcode,quantity,unit_symbol (no position)
-    return `specimen_type_name,barcode,quantity,unit_symbol
+    return `specimen_type_name,barcode,quantity,unit_symbol,density,sheet_name
 ${examples.join('\n')}`
   } else if (containerType === 'cryovial_tube') {
-    // Cryovial tube examples - with position and barcode, items or volume units
     const firstType = allowedSpecimenTypes[0]
-    examples.push(`${firstType.name},B1,CV-001,1,items`)
+    examples.push(`${firstType.name},B1,CV-001,1,items,100`)
     if (allowedSpecimenTypes.length > 1) {
-      examples.push(`${allowedSpecimenTypes[1].name},B2,CV-002,500,µL`)
+      examples.push(`${allowedSpecimenTypes[1].name},B2,CV-002,500,µL,200`)
     } else {
-      examples.push(`${firstType.name},B2,CV-002,500,µL`)
+      examples.push(`${firstType.name},B2,CV-002,500,µL,200`)
     }
-    return `specimen_type_name,position,barcode,quantity,unit_symbol
+    return `specimen_type_name,position,barcode,quantity,unit_symbol,density
 ${examples.join('\n')}`
   } else if (containerType === 'micronix_tube') {
-    // Micronix tube examples - with position and barcode, items or volume units
     const firstType = allowedSpecimenTypes[0]
-    examples.push(`${firstType.name},A1,MT-001,1,items`)
+    examples.push(`${firstType.name},A1,MT-001,1,items,100`)
     if (allowedSpecimenTypes.length > 1) {
-      examples.push(`${allowedSpecimenTypes[1].name},A2,MT-002,100,µL`)
+      examples.push(`${allowedSpecimenTypes[1].name},A2,MT-002,100,µL,200`)
     } else {
-      examples.push(`${firstType.name},A2,MT-002,100,µL`)
+      examples.push(`${firstType.name},A2,MT-002,100,µL,200`)
     }
-    return `specimen_type_name,position,barcode,quantity,unit_symbol
+    return `specimen_type_name,position,barcode,quantity,unit_symbol,density
 ${examples.join('\n')}`
   }
 
@@ -310,6 +381,22 @@ export function groupRowsBySpecimenType(rows: CSVContainerRow[]): Map<string, CS
     grouped.get(type)!.push(row)
   })
 
+  return grouped
+}
+
+/**
+ * Group rows by density. Rows without density (or with undefined density) are grouped under undefined.
+ * Used when creating multiple batches from one CSV (one batch per density).
+ */
+export function groupRowsByDensity(rows: CSVContainerRow[]): Map<number | undefined, CSVContainerRow[]> {
+  const grouped = new Map<number | undefined, CSVContainerRow[]>()
+  for (const row of rows) {
+    const key = row.density !== undefined ? row.density : undefined
+    if (!grouped.has(key)) {
+      grouped.set(key, [])
+    }
+    grouped.get(key)!.push(row)
+  }
   return grouped
 }
 

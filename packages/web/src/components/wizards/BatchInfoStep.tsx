@@ -193,11 +193,19 @@ export default function BatchInfoStep({
     }
   }
 
-  const handleCreateSuccess = async (control: ControlDefinition | undefined) => {
-    if (!control) return
+  const handleCreateSuccess = async (controlOrControls: ControlDefinition | ControlDefinition[] | undefined) => {
+    if (!controlOrControls) return
     setShowCreateModal(false)
-    setDefinitions((prev) => (prev.some((d) => d.id === control.id) ? prev : [...prev, control]))
-    await applyDefinitionSelection(control)
+    const controls = Array.isArray(controlOrControls) ? controlOrControls : [controlOrControls]
+    if (controls.length === 0) return
+    setDefinitions((prev) => {
+      const byId = new Map(prev.map((d) => [d.id, d]))
+      for (const c of controls) {
+        byId.set(c.id, c)
+      }
+      return Array.from(byId.values())
+    })
+    await applyDefinitionSelection(controls[0])
   }
 
   // Update suggested name when production date or definition changes

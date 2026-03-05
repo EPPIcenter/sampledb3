@@ -12,6 +12,7 @@ vi.mock('../../../lib/control-batch-csv', () => ({
   })),
   validateCSVRows: vi.fn(() => []),
   generateCSVTemplate: vi.fn(),
+  inferSheetName: vi.fn(() => undefined),
 }))
 
 vi.mock('../../../lib/api', () => ({
@@ -65,5 +66,81 @@ describe('CSVUploadStep', () => {
     })
 
     expect(fileInput.value).toBe('')
+  })
+
+  it('enables Next when at least one CSV file has no errors (collection is configured in Containers step)', async () => {
+    const onNext = vi.fn()
+    function Wrapper() {
+      const [csvFiles, setCsvFiles] = useState<CSVFileData[]>([])
+      return (
+        <CSVUploadStep
+          csvFiles={csvFiles}
+          onChange={setCsvFiles}
+          availableSpecimenTypes={defaultSpecimenTypes}
+          onNext={onNext}
+          onBack={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      )
+    }
+    const { container } = await render(<Wrapper />)
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    const csvContent = 'position,barcode\nA01,BAR1'
+    const file = new File([csvContent], 'test.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(csvContent) })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByText('test.csv')).toBeInTheDocument()
+    })
+
+    const nextButton = screen.getByRole('button', { name: /Next: Configure Containers/i })
+    expect(nextButton).not.toBeDisabled()
+    fireEvent.click(nextButton)
+    expect(onNext).toHaveBeenCalled()
+  })
+
+  it('shows production date input when showProductionDate and batchInfo/onBatchInfoChange are provided', async () => {
+    const onBatchInfoChange = vi.fn()
+    await render(
+      <CSVUploadStep
+        csvFiles={[]}
+        onChange={vi.fn()}
+        availableSpecimenTypes={defaultSpecimenTypes}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+        onCancel={vi.fn()}
+        showProductionDate
+        batchInfo={{ productionDate: '2026-03-01' }}
+        onBatchInfoChange={onBatchInfoChange}
+      />
+    )
+
+    const productionDateInput = screen.getByLabelText(/Production date/i)
+    expect(productionDateInput).toBeInTheDocument()
+    expect(productionDateInput).toHaveValue('2026-03-01')
+
+    fireEvent.change(productionDateInput, { target: { value: '2026-03-15' } })
+    expect(onBatchInfoChange).toHaveBeenCalledWith({ productionDate: '2026-03-15' })
+  })
+
+  it('does not show production date input when showProductionDate is false', async () => {
+    await render(<CSVUploadStepWrapper />)
+    expect(screen.queryByLabelText(/Production date/i)).not.toBeInTheDocument()
+  })
+
+  it('does not show production date input when showProductionDate and batchInfo are omitted', async () => {
+    await render(
+      <CSVUploadStep
+        csvFiles={[]}
+        onChange={vi.fn()}
+        availableSpecimenTypes={defaultSpecimenTypes}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+    expect(screen.queryByLabelText(/Production date/i)).not.toBeInTheDocument()
   })
 })

@@ -7,7 +7,15 @@ import SkeletonCard from '../components/SkeletonCard'
 import { useUser } from '../contexts/UserContext'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { getContainerTypeIcon } from '../lib/icons'
+import { getCompositionKey } from '../lib/composition-key'
 import '../styles/blood-controls.css'
+
+export interface CompositionGroup {
+  id: number
+  compositionKey: string
+  strains: Array<{ id: number; name: string; percentage?: number }>
+  definitions: ControlDefinition[]
+}
 
 const PAGE_SIZE = 25
 
@@ -143,6 +151,22 @@ export default function BloodControls() {
     })
   }, [batches, searchTerm, dateFrom, dateTo, strainFilters, strainMatchMode, minDensity, maxDensity])
 
+  // Group definitions by composition (strain signature) for composition-centric view
+  const compositionGroups = useMemo((): CompositionGroup[] => {
+    const map = new Map<string, ControlDefinition[]>()
+    for (const def of filteredDefinitions) {
+      const key = getCompositionKey((def.strains ?? []).map(s => ({ id: s.id, percentage: s.percentage })))
+      if (!key) continue
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(def)
+    }
+    return Array.from(map.entries()).map(([compositionKey, defs], index) => ({
+      id: index + 1,
+      compositionKey,
+      strains: defs[0].strains ?? [],
+      definitions: defs.sort((a, b) => (a.targetDensity ?? 0) - (b.targetDensity ?? 0)),
+    }))
+  }, [filteredDefinitions])
 
   const definitionColumns: Column<ControlDefinition>[] = [
     {
@@ -257,6 +281,98 @@ export default function BloodControls() {
       key: 'description',
       label: 'Description',
       render: (value) => <span className="text-gray-600 line-clamp-1 max-w-xs">{value || '-'}</span>
+    },
+  ]
+
+  const compositionColumns: Column<CompositionGroup>[] = [
+    {
+      key: 'strains',
+      label: 'Composition (parasite strains)',
+      render: (_, row) => {
+        if (!row.strains || row.strains.length === 0) return <span className="text-gray-400 italic text-xs">No strains</span>
+        return (
+          <div className="space-y-2 max-w-sm">
+            <div className="flex h-2 bg-gray-100 rounded-full overflow-hidden">
+              {row.strains.map((s, idx) => {
+                const pct = s.percentage ?? 0
+                const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-purple-500', 'bg-rose-500', 'bg-cyan-500']
+                return <div key={s.id} className={colors[idx % colors.length]} style={{ width: `${pct}%` }} title={`${s.name}: ${pct}%`} />
+              })}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {row.strains.map((s) => (
+                <span key={s.id} className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                  {s.name}
+                  {s.percentage !== undefined && <span className="ml-1 text-blue-600 font-semibold">({s.percentage}%)</span>}
+                </span>
+              ))}
+            </div>
+          </div>
+        )
+      },
+    },
+    {
+      key: 'definitions',
+      label: 'Densities',
+      render: (_, row) => (
+        <span className="dashboard-stat-value font-medium">{row.definitions.length} density variant{row.definitions.length !== 1 ? 's' : ''}</span>
+      ),
+    },
+    {
+      key: 'batches',
+      label: 'Total batches',
+      render: (_, row) => {
+        const total = row.definitions.reduce((sum, d) => sum + (d.batchCount ?? 0), 0)
+        return <span className="font-medium">{total}</span>
+      },
+    },
+    {
+      key: 'inventory',
+      label: 'Inventory',
+      render: (_, row) => {
+        const totalSpots = row.definitions.reduce((s, d) => s + (d.spotCount ?? 0), 0)
+        const totalMicronix = row.definitions.reduce((s, d) => s + (d.micronixCount ?? 0), 0)
+        const totalCryovial = row.definitions.reduce((s, d) => s + (d.cryovialCount ?? 0), 0)
+        const hasAny = totalSpots > 0 || totalMicronix > 0 || totalCryovial > 0
+        if (!hasAny) return <span className="text-gray-400 italic text-xs">No stock</span>
+        return (
+          <div className="flex flex-wrap gap-2 text-sm">
+            {totalSpots > 0 && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-md">
+                {getContainerTypeIcon('paper')}
+                <span className="font-bold">{totalSpots}</span>
+                <span className="text-[10px] uppercase font-medium">Spots</span>
+              </div>
+            )}
+            {totalMicronix > 0 && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-teal-50 text-teal-700 border border-teal-100 rounded-md">
+                {getContainerTypeIcon('micronix_tube')}
+                <span className="font-bold">{totalMicronix}</span>
+                <span className="text-[10px] uppercase font-medium">Micronix</span>
+              </div>
+            )}
+            {totalCryovial > 0 && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-md">
+                {getContainerTypeIcon('cryovial_tube')}
+                <span className="font-bold">{totalCryovial}</span>
+                <span className="text-[10px] uppercase font-medium">Cryovial</span>
+              </div>
+            )}
+          </div>
+        )
+      },
+    },
+    {
+      key: 'action',
+      label: '',
+      render: (_, row) => (
+        <Link
+          to={`/blood-controls/compositions/${encodeURIComponent(row.compositionKey)}`}
+          className="blood-controls-btn-secondary px-3 py-1.5 text-sm inline-flex items-center gap-1"
+        >
+          View
+        </Link>
+      ),
     },
   ]
 
@@ -417,7 +533,7 @@ export default function BloodControls() {
                 onClick={() => setActiveTab('definitions')}
                 className={`px-6 py-4 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'definitions' ? 'blood-controls-tab-active' : ''}`}
               >
-                Control Definitions
+                Compositions
               </button>
               <button
                 onClick={() => setActiveTab('batches')}
@@ -579,31 +695,31 @@ export default function BloodControls() {
                 initialSortColumn="productionDate"
                 initialSortDirection="desc"
                 onRowClick={(batch) => navigate(`/blood-controls/batches/${batch.id}`)}
-                emptyMessage={searchTerm || dateFrom || dateTo ? "No batches matching your filters" : "No blood control batches found"}
+                emptyMessage="No control batches match the current filters."
                 pagination={{
                   page: batchesPage,
                   pageSize: PAGE_SIZE,
                   onPageChange: setBatchesPage,
                   showPagination: true,
                 }}
-                className="dashboard-card overflow-hidden"
+                className="border-0"
               />
             ) : (
               <DataTable
-                data={filteredDefinitions}
-                columns={definitionColumns}
+                data={compositionGroups}
+                columns={compositionColumns}
                 loading={loading}
-                initialSortColumn="name"
+                initialSortColumn="strains"
                 initialSortDirection="asc"
-                onRowClick={(def) => navigate(`/blood-controls/${def.id}`)}
-                emptyMessage={searchTerm || minDensity || maxDensity ? "No definitions matching your filters" : "No blood control definitions found"}
+                onRowClick={(row) => navigate(`/blood-controls/compositions/${encodeURIComponent(row.compositionKey)}`)}
+                emptyMessage="No compositions match the current filters. Create a control definition to get started."
                 pagination={{
                   page: definitionsPage,
                   pageSize: PAGE_SIZE,
                   onPageChange: setDefinitionsPage,
                   showPagination: true,
                 }}
-                className="dashboard-card overflow-hidden"
+                className="border-0"
               />
             )}
           </div>
@@ -612,5 +728,3 @@ export default function BloodControls() {
     </div>
   )
 }
-
-

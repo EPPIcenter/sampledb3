@@ -8,7 +8,11 @@ import ReviewStep from '../components/wizards/ReviewStep'
 import { controlsApi, specimenTypesApi } from '../lib/api'
 import type { ControlDefinition, SpecimenType } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
+import { getCompositionKey } from '../lib/composition-key'
 import '../styles/blood-controls.css'
+
+/** Strains for composition (used for multi-batch CSV flow). */
+export type CompositionStrains = Array<{ id: number; percentage?: number }>
 
 export type WizardStep = 'batch-info' | 'specimen-types' | 'csv-upload' | 'containers' | 'review'
 
@@ -50,8 +54,16 @@ export interface CSVFileData {
     barcode?: string
     quantity?: number
     unit_symbol?: string
+    /** Optional density; when present, rows are grouped by density for batch creation */
+    density?: number
+    /** For paper (DBS): sheet name for this row. Multiple rows can share a sheet; sheets go into the file's collection (box/bag). */
+    sheet_name?: string
   }>
   containerType?: 'paper' | 'cryovial_tube' | 'micronix_tube'
+  /** True when container type was fully inferred (sheet_name → paper). When false but containerCategoryInferred === 'tube', user picks cryovial vs micronix. */
+  containerTypeInferred?: boolean
+  /** When 'tube', template had position column; user must choose cryovial or micronix. */
+  containerCategoryInferred?: 'paper' | 'tube'
   collectionId?: number
   collectionName?: string
   collectionLocationId?: number
@@ -63,17 +75,29 @@ export interface CSVFileData {
 export default function ControlBatchWizard() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
-  const { id: batchId, definitionId } = useParams<{ id?: string; definitionId?: string }>()
+  const { id: batchId, definitionId, compositionKey: compositionKeyParam } = useParams<{
+    id?: string
+    definitionId?: string
+    compositionKey?: string
+  }>()
   const [searchParams, setSearchParams] = useSearchParams()
 
   if (!canWrite) {
     return <Navigate to="/blood-controls" replace />
   }
 
+  const compositionKey = compositionKeyParam ? decodeURIComponent(compositionKeyParam) : null
+  // Composition route is only used for "add batches from CSV"; path alone defines the short flow.
+  const isCompositionCsvFlow = !!compositionKey
+
   const isAddMode = !!batchId
-  const isCreateFromDefinition = !!definitionId
-  // In add mode, skip batch-info (add specimens to existing batch). When creating from definition, show batch-info so user can set name/date.
-  const defaultStep = isAddMode ? 'specimen-types' : 'batch-info'
+  const isCreateFromDefinition = !!definitionId && !isCompositionCsvFlow
+  // Composition CSV flow: start at csv-upload. Add mode: specimen-types. From definition: batch-info.
+  const defaultStep = isCompositionCsvFlow
+    ? 'csv-upload'
+    : isAddMode
+      ? 'specimen-types'
+      : 'batch-info'
   const currentStep = (searchParams.get('step') as WizardStep) || defaultStep
 
   const [batchInfo, setBatchInfo] = useState<BatchInfo>({
@@ -83,6 +107,8 @@ export default function ControlBatchWizard() {
     productionDate: new Date().toISOString().split('T')[0],
   })
   
+  const [compositionStrains, setCompositionStrains] = useState<CompositionStrains | null>(null)
+  const [compositionDefinitions, setCompositionDefinitions] = useState<ControlDefinition[] | null>(null)
   const [specimenTypes, setSpecimenTypes] = useState<SpecimenTypeConfig[]>([])
   const [csvFiles, setCsvFiles] = useState<CSVFileData[]>([])
   const [availableSpecimenTypes, setAvailableSpecimenTypes] = useState<SpecimenType[]>([])
@@ -93,10 +119,12 @@ export default function ControlBatchWizard() {
     loadSpecimenTypes()
     if (isAddMode && batchId) {
       loadExistingBatch(parseInt(batchId))
+    } else if (isCompositionCsvFlow && compositionKey) {
+      loadCompositionStrains(compositionKey)
     } else if (isCreateFromDefinition && definitionId) {
       loadDefinitionAndBatchInfo(parseInt(definitionId))
     }
-  }, [batchId, isAddMode, definitionId, isCreateFromDefinition])
+  }, [batchId, isAddMode, definitionId, isCreateFromDefinition, isCompositionCsvFlow, compositionKey])
 
   const loadSpecimenTypes = async () => {
     try {
@@ -123,6 +151,31 @@ export default function ControlBatchWizard() {
       })
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load batch')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadCompositionStrains = async (key: string) => {
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await controlsApi.list()
+      const all = (res.data.controls ?? []) as ControlDefinition[]
+      const defs = all.filter((def) => {
+        const defKey = getCompositionKey((def.strains ?? []).map((s) => ({ id: s.id, percentage: s.percentage })))
+        return defKey === key
+      })
+      setCompositionDefinitions(defs.length > 0 ? defs.sort((a, b) => (a.targetDensity ?? 0) - (b.targetDensity ?? 0)) : null)
+      if (defs.length > 0 && defs[0].strains?.length) {
+        setCompositionStrains(
+          defs[0].strains.map((s) => ({ id: s.id, percentage: s.percentage }))
+        )
+      } else {
+        setError('Composition not found or has no strain data')
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to load composition')
     } finally {
       setLoading(false)
     }
@@ -161,6 +214,7 @@ export default function ControlBatchWizard() {
 
   const getCancelTarget = () => {
     if (isAddMode && batchId) return `/blood-controls/batches/${batchId}`
+    if (isCompositionCsvFlow && compositionKey) return `/blood-controls/compositions/${encodeURIComponent(compositionKey)}`
     if (isCreateFromDefinition && definitionId) return `/blood-controls/${definitionId}`
     return '/blood-controls'
   }
@@ -179,26 +233,64 @@ export default function ControlBatchWizard() {
         return !isAddMode // Creating new batch (from definition or standalone)
       case 'specimen-types':
       case 'csv-upload':
-        return isAddMode || !!batchInfo.controlDefinitionId
+        return isAddMode || !!batchInfo.controlDefinitionId || isCompositionCsvFlow
       case 'containers':
         return specimenTypes.length > 0 || csvFiles.length > 0
       case 'review':
         return (specimenTypes.length > 0 || csvFiles.length > 0) &&
                (specimenTypes.every(st => st.containers.length > 0) || 
-                csvFiles.every(f => f.collectionId || f.collectionName))
+                csvFiles.every(f => {
+                  const collectionOk =
+                    f.collectionId != null ||
+                    (!!f.collectionName && f.collectionLocationId != null && !!f.collectionType)
+                  const paperNeedsSheet = f.containerType === 'paper'
+                    ? (!!f.sheetName?.trim() || (f.rows?.length > 0 && f.rows.every(r => !!(r.sheet_name?.trim()))))
+                    : true
+                  return collectionOk && paperNeedsSheet
+                }))
       default:
         return false
     }
   }
 
-  const steps: Array<{ id: WizardStep; label: string; number: number }> = [
-    { id: 'batch-info', label: 'Batch Info', number: 1 },
-    { id: 'specimen-types', label: 'Specimen Types', number: 2 },
-    { id: 'containers', label: 'Containers', number: 3 },
-    { id: 'review', label: 'Review', number: 4 },
-  ]
+  // Flow-specific steps so the indicator only shows relevant steps with correct numbers
+  const steps: Array<{ id: WizardStep; label: string; number: number }> = (() => {
+    if (isCompositionCsvFlow) {
+      return [
+        { id: 'csv-upload', label: 'Upload CSV', number: 1 },
+        { id: 'containers', label: 'Containers', number: 2 },
+        { id: 'review', label: 'Review', number: 3 },
+      ]
+    }
+    if (isAddMode) {
+      return [
+        { id: 'specimen-types', label: 'Specimen Types', number: 1 },
+        { id: 'csv-upload', label: 'CSV Upload', number: 2 },
+        { id: 'containers', label: 'Containers', number: 3 },
+        { id: 'review', label: 'Review', number: 4 },
+      ]
+    }
+    return [
+      { id: 'batch-info', label: 'Batch Info', number: 1 },
+      { id: 'specimen-types', label: 'Specimen Types', number: 2 },
+      { id: 'csv-upload', label: 'CSV Upload', number: 3 },
+      { id: 'containers', label: 'Containers', number: 4 },
+      { id: 'review', label: 'Review', number: 5 },
+    ]
+  })()
 
   const currentStepIndex = steps.findIndex(s => s.id === currentStep)
+  const effectiveStep: WizardStep =
+    currentStepIndex >= 0 ? currentStep : defaultStep
+
+  useEffect(() => {
+    if (currentStepIndex >= 0) return
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('step', defaultStep)
+      return next
+    })
+  }, [currentStepIndex, defaultStep, setSearchParams])
 
   if (loading) {
     return (
@@ -211,9 +303,11 @@ export default function ControlBatchWizard() {
   }
 
   if (error) {
-    const backTarget = isCreateFromDefinition && definitionId
-      ? `/blood-controls/${definitionId}`
-      : '/blood-controls'
+    const backTarget = isCompositionCsvFlow && compositionKey
+      ? `/blood-controls/compositions/${encodeURIComponent(compositionKey)}`
+      : isCreateFromDefinition && definitionId
+        ? `/blood-controls/${definitionId}`
+        : '/blood-controls'
     return (
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
@@ -251,9 +345,9 @@ export default function ControlBatchWizard() {
             {steps.map((step, index) => (
               <div key={step.id} className="flex items-center flex-1">
                 <div
-                  className={`flex items-center cursor-pointer ${currentStep === step.id ? 'font-semibold' : ''}`}
+                  className={`flex items-center cursor-pointer ${effectiveStep === step.id ? 'font-semibold' : ''}`}
                   style={{
-                    color: currentStep === step.id ? 'rgb(var(--dashboard-accent))' : canProceedToStep(step.id) ? 'rgb(var(--dashboard-text-muted))' : 'rgb(var(--dashboard-border))',
+                    color: effectiveStep === step.id ? 'rgb(var(--dashboard-accent))' : canProceedToStep(step.id) ? 'rgb(var(--dashboard-text-muted))' : 'rgb(var(--dashboard-border))',
                   }}
                   onClick={() => {
                     if (canProceedToStep(step.id)) {
@@ -264,8 +358,8 @@ export default function ControlBatchWizard() {
                   <div
                     className="w-8 h-8 rounded-full flex items-center justify-center"
                     style={{
-                      background: currentStep === step.id ? 'rgb(var(--dashboard-accent))' : canProceedToStep(step.id) ? 'rgb(var(--dashboard-border))' : 'rgb(var(--dashboard-surface))',
-                      color: currentStep === step.id ? 'white' : 'rgb(var(--dashboard-text-muted))',
+                      background: effectiveStep === step.id ? 'rgb(var(--dashboard-accent))' : canProceedToStep(step.id) ? 'rgb(var(--dashboard-border))' : 'rgb(var(--dashboard-surface))',
+                      color: effectiveStep === step.id ? 'white' : 'rgb(var(--dashboard-text-muted))',
                     }}
                   >
                     {step.number}
@@ -282,7 +376,7 @@ export default function ControlBatchWizard() {
 
         {/* Step content */}
         <div className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-3">
-        {currentStep === 'batch-info' && !isAddMode && (
+        {effectiveStep === 'batch-info' && !isAddMode && (
           <BatchInfoStep
             batchInfo={batchInfo}
             onChange={setBatchInfo}
@@ -293,7 +387,7 @@ export default function ControlBatchWizard() {
           />
         )}
 
-        {currentStep === 'specimen-types' && (
+        {effectiveStep === 'specimen-types' && (
           <SpecimenTypesStep
             specimenTypes={specimenTypes}
             onChange={setSpecimenTypes}
@@ -309,18 +403,30 @@ export default function ControlBatchWizard() {
           />
         )}
 
-        {currentStep === 'csv-upload' && (
+        {effectiveStep === 'csv-upload' && (
           <CSVUploadStep
             csvFiles={csvFiles}
             onChange={setCsvFiles}
             availableSpecimenTypes={availableSpecimenTypes}
             onNext={() => setStep('containers')}
-            onBack={() => setStep('specimen-types')}
+            onBack={
+              isCompositionCsvFlow
+                ? () => navigate(getCancelTarget())
+                : () => setStep('specimen-types')
+            }
+            backLabel={isCompositionCsvFlow ? 'Cancel' : undefined}
             onCancel={() => navigate(getCancelTarget())}
+            showProductionDate={isCompositionCsvFlow}
+            batchInfo={isCompositionCsvFlow ? { productionDate: batchInfo.productionDate } : undefined}
+            onBatchInfoChange={
+              isCompositionCsvFlow
+                ? (info) => setBatchInfo((prev) => ({ ...prev, ...info }))
+                : undefined
+            }
           />
         )}
 
-        {currentStep === 'containers' && (
+        {effectiveStep === 'containers' && (
           <ContainerConfigurationStep
             specimenTypes={specimenTypes}
             csvFiles={csvFiles}
@@ -338,9 +444,11 @@ export default function ControlBatchWizard() {
           />
         )}
 
-        {currentStep === 'review' && (
+        {effectiveStep === 'review' && (
           <ReviewStep
             batchInfo={batchInfo}
+            compositionStrains={compositionStrains}
+            compositionDefinitions={compositionDefinitions}
             specimenTypes={specimenTypes}
             csvFiles={csvFiles}
             onBack={() => setStep('containers')}
@@ -350,6 +458,7 @@ export default function ControlBatchWizard() {
             }}
             isAddMode={isAddMode}
             existingBatchId={batchId ? parseInt(batchId) : undefined}
+            onBatchInfoChange={isCompositionCsvFlow ? (info) => setBatchInfo((prev) => ({ ...prev, ...info })) : undefined}
           />
         )}
         </div>

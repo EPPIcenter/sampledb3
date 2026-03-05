@@ -1,8 +1,13 @@
 import { useState, useRef } from 'react'
-import { parseContainerCSV, validateCSVRows, type ParsedCSVFile, generateCSVTemplate } from '../../lib/control-batch-csv'
+import { parseContainerCSV, validateCSVRows, generateCSVTemplate, inferSheetName } from '../../lib/control-batch-csv'
 import { specimenTypesApi } from '../../lib/api'
 import type { SpecimenType } from '../../lib/api'
 import type { CSVFileData } from '../../pages/ControlBatchWizard'
+
+/** Minimal batch info for production date in composition CSV flow. */
+export interface BatchInfoProductionDate {
+  productionDate: string
+}
 
 interface CSVUploadStepProps {
   csvFiles: CSVFileData[]
@@ -10,7 +15,13 @@ interface CSVUploadStepProps {
   availableSpecimenTypes: SpecimenType[]
   onNext: () => void
   onBack: () => void
+  /** When set (e.g. composition flow), Back button shows this label instead of "Back" */
+  backLabel?: string
   onCancel: () => void
+  /** When true (e.g. composition flow), show production date field; requires batchInfo and onBatchInfoChange */
+  showProductionDate?: boolean
+  batchInfo?: BatchInfoProductionDate
+  onBatchInfoChange?: (info: BatchInfoProductionDate) => void
 }
 
 export default function CSVUploadStep({
@@ -19,8 +30,14 @@ export default function CSVUploadStep({
   availableSpecimenTypes,
   onNext,
   onBack,
+  backLabel,
   onCancel,
+  showProductionDate,
+  batchInfo,
+  onBatchInfoChange,
 }: CSVUploadStepProps) {
+  const showProductionDateField =
+    showProductionDate && batchInfo != null && onBatchInfoChange != null
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [dragActive, setDragActive] = useState(false)
   const [selectedContainerType, setSelectedContainerType] = useState<'paper' | 'cryovial_tube' | 'micronix_tube'>('paper')
@@ -36,16 +53,34 @@ export default function CSVUploadStep({
         const text = await file.text()
         const parsed = parseContainerCSV(text, file.name)
         
-        // Validate rows
+        // Validate rows (use inferred container type so tube formats require position)
         const validationErrors = validateCSVRows(
           parsed.rows,
-          availableSpecimenTypes
+          availableSpecimenTypes,
+          parsed.inferredContainerType
         )
 
+        // Container category must be inferrable from CSV header (sheet_name → paper, position → tube; user picks cryovial vs micronix for tube)
+        const containerTypeErrors =
+          parsed.rows.length > 0 && parsed.inferredContainerCategory == null
+            ? [{ row: 0, error: 'Container type could not be inferred from CSV header. Use a template with sheet_name (DBS) or position (tubes).' }]
+            : []
+
+        const defaultCollectionName = (parsed.filename || file.name).replace(/\.csv$/i, '')
+        const inferredSheetName = inferSheetName(parsed.rows)
+        const isPaper = parsed.inferredContainerCategory === 'paper'
+        const isTube = parsed.inferredContainerCategory === 'tube'
         newFiles.push({
           filename: parsed.filename,
           rows: parsed.rows,
-          errors: [...parsed.errors, ...validationErrors],
+          errors: [...parsed.errors, ...validationErrors, ...containerTypeErrors],
+          collectionName: defaultCollectionName,
+          ...(parsed.inferredContainerCategory != null && {
+            containerCategoryInferred: parsed.inferredContainerCategory,
+            containerType: parsed.inferredContainerType ?? (isTube ? 'cryovial_tube' : 'paper'),
+            containerTypeInferred: isPaper,
+          }),
+          ...(inferredSheetName != null && { sheetName: inferredSheetName }),
         })
       } catch (error) {
         console.error('Error parsing CSV:', error)
@@ -114,6 +149,21 @@ export default function CSVUploadStep({
 
   return (
     <div className="space-y-6">
+      {showProductionDateField && (
+        <div>
+          <label htmlFor="production-date" className="block text-sm font-medium mb-2 text-gray-900">
+            Production date
+          </label>
+          <input
+            id="production-date"
+            type="date"
+            value={batchInfo.productionDate}
+            onChange={(e) => onBatchInfoChange({ productionDate: e.target.value })}
+            className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+        </div>
+      )}
+
       <div>
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Upload CSV Files</h2>
         <p className="text-sm text-gray-600 mb-6">
@@ -290,6 +340,10 @@ export default function CSVUploadStep({
                     Specimen types: {Array.from(new Set(file.rows.map(r => r.specimen_type_name))).join(', ')}
                   </div>
                 )}
+
+                <p className="mt-2 text-xs text-gray-500">
+                  Assign container type and collection in the next step (Containers).
+                </p>
               </div>
             ))}
           </div>
@@ -297,24 +351,30 @@ export default function CSVUploadStep({
       )}
 
       <div className="flex justify-end gap-3 pt-4 border-t">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-        >
-          Cancel
-        </button>
+        {/* When backLabel is "Cancel", Back is the only cancel action; avoid duplicate Cancel button */}
+        {backLabel !== 'Cancel' && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+        )}
         <button
           type="button"
           onClick={onBack}
           className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
         >
-          Back
+          {backLabel ?? 'Back'}
         </button>
         <button
           type="button"
           onClick={onNext}
-          disabled={csvFiles.length === 0 || csvFiles.some(f => f.errors.length > 0)}
+          disabled={
+            csvFiles.length === 0 ||
+            csvFiles.some(f => f.errors.length > 0)
+          }
           className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Next: Configure Containers

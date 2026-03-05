@@ -733,6 +733,9 @@ export const controlsApi = {
   checkUnique: (data: { controlType: ControlDefinition['controlType']; targetDensity?: number; targetDensityUnitId?: number; strains?: Array<{ strainId: number; percentage: number }> }) => api.post<{ exists: boolean; controlDefinition?: ControlDefinition }>('/blood-controls/check-unique', data),
   suggestName: (data: { controlType?: ControlDefinition['controlType']; targetDensity: number; targetDensityUnitId?: number; strains: Array<{ strainId: number; percentage: number }> }) => api.post<{ suggestedName: string; exists: boolean; existingDefinition?: ControlDefinition }>('/blood-controls/suggest-name', data),
   create: (data: Omit<ControlDefinition, 'id' | 'created' | 'lastUpdated' | 'strains'> & { strains?: Array<{ strainId: number; percentage: number }> }) => api.post<{ control: ControlDefinition }>('/blood-controls', data),
+  /** Create or get multiple definitions for same composition at multiple densities. Returns 201 with controls array. names[] (same length as targetDensities) is required and used when creating new definitions. */
+  createDefinitionsBulk: (data: { strains: Array<{ strainId: number; percentage: number }>; targetDensities: number[]; targetDensityUnitId?: number; names: string[] }) =>
+    api.post<{ controls: ControlDefinition[] }>('/blood-controls/definitions/bulk', data),
   update: (id: number, data: Partial<ControlDefinition> & { strains?: Array<{ strainId: number; percentage: number }> }) => api.patch<{ control: ControlDefinition }>(`/blood-controls/${id}`, data),
   listAllBatches: () => api.get<{ batches: Array<ControlBatch & { definitionName?: string }> }>('/blood-controls/batches'),
   getBatches: (id: number) => api.get<{ batches: ControlBatch[] }>(`/blood-controls/${id}/batches`),

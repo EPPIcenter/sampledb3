@@ -1,0 +1,204 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import ReviewStep from '../ReviewStep'
+import type { BatchInfo, CSVFileData, CompositionStrains } from '../../../pages/ControlBatchWizard'
+import type { ControlDefinition } from '../../../lib/api'
+
+const mockCreateBatchWithSpecimens = vi.fn()
+const mockSuggestBatchName = vi.fn()
+
+vi.mock('../../../lib/api', () => ({
+  controlsApi: {
+    createBatchWithSpecimens: (...args: unknown[]) => mockCreateBatchWithSpecimens(...args),
+    suggestBatchName: (...args: unknown[]) => mockSuggestBatchName(...args),
+  },
+}))
+
+function makeBatchInfo(overrides: Partial<BatchInfo> = {}): BatchInfo {
+  return {
+    controlDefinitionId: null,
+    controlDefinition: null,
+    name: '',
+    productionDate: '2024-06-01',
+    ...overrides,
+  }
+}
+
+function makeCsvFile(overrides: Partial<CSVFileData> = {}): CSVFileData {
+  return {
+    filename: 'test.csv',
+    rows: [],
+    errors: [],
+    collectionId: 1,
+    collectionName: 'Test Collection',
+    ...overrides,
+  }
+}
+
+describe('ReviewStep multi-batch CSV', () => {
+  const compositionStrains: CompositionStrains = [{ id: 1, percentage: 100 }]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSuggestBatchName.mockResolvedValue({ data: { name: 'Suggested Batch' } })
+    mockCreateBatchWithSpecimens.mockResolvedValue({ data: { batch: { id: 101 } } })
+  })
+
+  it('does not call createBatchWithSpecimens when a density has no matching definition', async () => {
+    const def5000: ControlDefinition = {
+      id: 10,
+      name: 'Def 5000',
+      controlType: 'blood',
+      created: '',
+      lastUpdated: '',
+      targetDensity: 5000,
+      unitSymbol: 'µL',
+    }
+    const csvFiles: CSVFileData[] = [
+      makeCsvFile({
+        rows: [
+          { specimen_type_name: 'Whole Blood', density: 5000 },
+          { specimen_type_name: 'Whole Blood', density: 99999 },
+        ],
+      }),
+    ]
+    const compositionDefinitions: ControlDefinition[] = [def5000]
+
+    render(
+      <ReviewStep
+        batchInfo={makeBatchInfo()}
+        compositionStrains={compositionStrains}
+        compositionDefinitions={compositionDefinitions}
+        specimenTypes={[]}
+        csvFiles={csvFiles}
+        onBack={() => {}}
+        onCancel={() => {}}
+        onSuccess={() => {}}
+        isAddMode={false}
+      />
+    )
+
+    expect(screen.getByText(/No definition found/i)).toBeInTheDocument()
+    const submitBtn = screen.getByRole('button', { name: /Create Batch/i })
+    expect(submitBtn).toBeDisabled()
+
+    fireEvent.click(submitBtn)
+    expect(mockCreateBatchWithSpecimens).not.toHaveBeenCalled()
+  })
+
+  it('calls createBatchWithSpecimens with correct definition IDs when all densities match', async () => {
+    const def5000: ControlDefinition = {
+      id: 10,
+      name: 'Def 5000',
+      controlType: 'blood',
+      created: '',
+      lastUpdated: '',
+      targetDensity: 5000,
+      unitSymbol: 'µL',
+    }
+    const def0: ControlDefinition = {
+      id: 11,
+      name: 'Def 0',
+      controlType: 'blood',
+      created: '',
+      lastUpdated: '',
+      targetDensity: 0,
+    }
+    const csvFiles: CSVFileData[] = [
+      makeCsvFile({
+        rows: [
+          { specimen_type_name: 'Whole Blood', density: 5000 },
+          { specimen_type_name: 'Whole Blood', density: 0 },
+        ],
+      }),
+    ]
+    const compositionDefinitions: ControlDefinition[] = [def5000, def0]
+
+    const onSuccess = vi.fn()
+    render(
+      <ReviewStep
+        batchInfo={makeBatchInfo()}
+        compositionStrains={compositionStrains}
+        compositionDefinitions={compositionDefinitions}
+        specimenTypes={[]}
+        csvFiles={csvFiles}
+        onBack={() => {}}
+        onCancel={() => {}}
+        onSuccess={onSuccess}
+        isAddMode={false}
+      />
+    )
+
+    const submitBtn = screen.getByRole('button', { name: /Create Batch/i })
+    expect(submitBtn).not.toBeDisabled()
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(mockCreateBatchWithSpecimens).toHaveBeenCalledTimes(2)
+    })
+    expect(mockSuggestBatchName).toHaveBeenCalled()
+    const createCalls = mockCreateBatchWithSpecimens.mock.calls
+    const definitionIds = createCalls.map((c) => c[0].batch.controlDefinitionId)
+    expect(definitionIds).toContain(10)
+    expect(definitionIds).toContain(11)
+  })
+
+  it('shows definition dropdown when multiple definitions match same density and uses selected definition on submit', async () => {
+    const defA: ControlDefinition = {
+      id: 20,
+      name: 'Def A',
+      controlType: 'blood',
+      created: '',
+      lastUpdated: '',
+      targetDensity: 5000,
+      unitSymbol: 'p/µL',
+    }
+    const defB: ControlDefinition = {
+      id: 21,
+      name: 'Def B',
+      controlType: 'blood',
+      created: '',
+      lastUpdated: '',
+      targetDensity: 5000,
+      unitSymbol: '/mL',
+    }
+    const csvFiles: CSVFileData[] = [
+      makeCsvFile({
+        rows: [{ specimen_type_name: 'Whole Blood', density: 5000 }],
+      }),
+    ]
+    const compositionDefinitions: ControlDefinition[] = [defA, defB]
+
+    render(
+      <ReviewStep
+        batchInfo={makeBatchInfo()}
+        compositionStrains={compositionStrains}
+        compositionDefinitions={compositionDefinitions}
+        specimenTypes={[]}
+        csvFiles={csvFiles}
+        onBack={() => {}}
+        onCancel={() => {}}
+        onSuccess={() => {}}
+        isAddMode={false}
+      />
+    )
+
+    const select = screen.getByRole('combobox', { name: /Definition for density 5000/i })
+    expect(select).toBeInTheDocument()
+    expect(select).toHaveValue('')
+
+    fireEvent.change(select, { target: { value: '21' } })
+
+    const submitBtn = screen.getByRole('button', { name: /Create Batch/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(mockCreateBatchWithSpecimens).toHaveBeenCalledTimes(1)
+    })
+    expect(mockCreateBatchWithSpecimens).toHaveBeenCalledWith(
+      expect.objectContaining({
+        batch: expect.objectContaining({ controlDefinitionId: 21 }),
+      })
+    )
+  })
+})

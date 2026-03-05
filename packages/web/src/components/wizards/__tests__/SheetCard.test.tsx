@@ -43,7 +43,6 @@ describe('SheetCard', () => {
         onAddPaper={vi.fn()}
         onRemoveContainer={vi.fn()}
         onCollectionChange={vi.fn()}
-        onCreateCollection={vi.fn()}
         existingCollections={{ boxes: new Map(), bags: new Map() }}
       />
     )
@@ -65,7 +64,6 @@ describe('SheetCard', () => {
         onAddPaper={vi.fn()}
         onRemoveContainer={vi.fn()}
         onCollectionChange={vi.fn()}
-        onCreateCollection={vi.fn()}
         existingCollections={{ boxes: new Map(), bags: new Map() }}
       />
     )
@@ -90,7 +88,6 @@ describe('SheetCard', () => {
         onAddPaper={vi.fn()}
         onRemoveContainer={vi.fn()}
         onCollectionChange={vi.fn()}
-        onCreateCollection={vi.fn()}
         existingCollections={{ boxes: new Map(), bags: new Map() }}
       />
     )
