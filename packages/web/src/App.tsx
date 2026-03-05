@@ -37,6 +37,7 @@ import SheetDetail from './pages/SheetDetail'
 import ControlBatchDetail from './pages/ControlBatchDetail'
 import ControlBatchWizard from './pages/ControlBatchWizard'
 import ControlDefinitionDetail from './pages/ControlDefinitionDetail'
+import CompositionDetail from './pages/CompositionDetail'
 import BloodControls from './pages/BloodControls'
 import BloodControlDefinitionPage from './pages/BloodControlDefinitionPage'
 import ReferenceData from './pages/ReferenceData'
@@ -540,6 +541,8 @@ function AppContent() {
           <Route path="/collections/sheets/:id" element={<SheetDetail />} />
           <Route path="/blood-controls" element={<BloodControls />} />
           <Route path="/blood-controls/new" element={<BloodControlDefinitionPage />} />
+          <Route path="/blood-controls/compositions/:compositionKey" element={<CompositionDetail />} />
+          <Route path="/blood-controls/compositions/:compositionKey/batches/new" element={<ControlBatchWizard />} />
           <Route path="/blood-controls/:definitionId/batches/new" element={<ControlBatchWizard />} />
           <Route path="/blood-controls/:id" element={<ControlDefinitionDetail />} />
           <Route path="/blood-controls/:id/edit" element={<BloodControlDefinitionPage />} />
