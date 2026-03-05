@@ -88,7 +88,7 @@ export default function ContainerConfigurationStep({
 
         const boxesMap = new Map<string, { id: number; locationId: number }>()
         const boxNames: string[] = []
-        boxesRes.data.collections?.forEach((box: { id: number; name?: string; locationId?: number | null }) => {
+        boxesRes.data.collections.forEach((box: { id: number; name?: string; locationId?: number | null }) => {
           if (box.name && box.locationId != null) {
             boxesMap.set(box.name, { id: box.id, locationId: box.locationId })
             boxNames.push(box.name)
@@ -97,7 +97,7 @@ export default function ContainerConfigurationStep({
 
         const bagsMap = new Map<string, { id: number; locationId: number }>()
         const bagNames: string[] = []
-        bagsRes.data.collections?.forEach((bag: { id: number; name?: string; locationId?: number | null }) => {
+        bagsRes.data.collections.forEach((bag: { id: number; name?: string; locationId?: number | null }) => {
           if (bag.name && bag.locationId != null) {
             bagsMap.set(bag.name, { id: bag.id, locationId: bag.locationId })
             bagNames.push(bag.name)
@@ -106,7 +106,7 @@ export default function ContainerConfigurationStep({
 
         const platesMap = new Map<string, { id: number; locationId: number }>()
         const plateNames: string[] = []
-        platesRes.data.collections?.forEach((p: { id: number; name?: string; locationId?: number | null }) => {
+        platesRes.data.collections.forEach((p: { id: number; name?: string; locationId?: number | null }) => {
           if (p.name && p.locationId != null) {
             platesMap.set(p.name, { id: p.id, locationId: p.locationId })
             plateNames.push(p.name)
@@ -114,7 +114,7 @@ export default function ContainerConfigurationStep({
         })
         const cryovialMap = new Map<string, { id: number; locationId: number }>()
         const cryovialNames: string[] = []
-        cryovialRes.data.collections?.forEach((c: { id: number; name?: string; locationId?: number | null }) => {
+        cryovialRes.data.collections.forEach((c: { id: number; name?: string; locationId?: number | null }) => {
           if (c.name && c.locationId != null) {
             cryovialMap.set(c.name, { id: c.id, locationId: c.locationId })
             cryovialNames.push(c.name)
@@ -377,7 +377,7 @@ export default function ContainerConfigurationStep({
     const csvValid = csvFiles.every(f => {
       const hasCollection = f.collectionId || (f.collectionName && f.collectionLocationId)
       if (f.containerType === 'paper') {
-        const hasSheetNames = !!f.sheetName?.trim() || (f.rows?.length > 0 && f.rows.every(r => !!(r.sheet_name?.trim())))
+        const hasSheetNames = !!f.sheetName?.trim() || (f.rows?.length > 0 && f.rows.every(r => !!(r.sheet_name?.trim()))) // eslint-disable-line @typescript-eslint/no-unnecessary-condition
         return hasCollection && hasSheetNames
       }
       return hasCollection
@@ -564,7 +564,7 @@ export default function ContainerConfigurationStep({
                           <input
                             type="number"
                             placeholder="Quantity"
-                            value={container.quantity ?? ''}
+                            value={container.quantity ?? ''} // eslint-disable-line @typescript-eslint/no-unnecessary-condition
                             onChange={(e) =>
                               updateContainer(st.id, container.id, {
                                 quantity: parseFloat(e.target.value) || 0,
@@ -886,7 +886,7 @@ export default function ContainerConfigurationStep({
                             (collectionType === 'box' ||
                               collectionType === 'bag' ||
                               collectionType === 'micronix_plate' ||
-                              collectionType === 'cryovial_box') &&
+                              collectionType === 'cryovial_box') && // eslint-disable-line @typescript-eslint/no-unnecessary-condition
                             name.trim()
                           ) {
                             if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
@@ -896,7 +896,7 @@ export default function ContainerConfigurationStep({
                             const optionsForType =
                               collectionNamesByType[
                                 collectionType as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-                              ] ?? []
+                              ]
                             const isExactMatch = optionsForType.some((opt) => opt.trim() === nameToLookup)
                             if (isExactMatch && collection) {
                               // User selected from dropdown: resolve immediately

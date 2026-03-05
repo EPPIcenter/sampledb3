@@ -57,8 +57,9 @@ export default function Statistics() {
   const [filters, setFilters] = useState<StatisticsFilters>({})
   const [appliedFilters, setAppliedFilters] = useState<StatisticsFilters>({})
   const [searchParams, setSearchParams] = useSearchParams()
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- URL param may be missing
   const binSize = (searchParams.get('bin') as BinSize) || 'day'
-  const histogramMinDate = searchParams.get('minDate') || '2000-01-01'
+  const histogramMinDate = searchParams.get('minDate') ?? '2000-01-01'
 
   const setBinSize = (size: BinSize) => {
     setSearchParams((prev) => {
@@ -101,29 +102,28 @@ export default function Statistics() {
 
       const response = await statisticsApi.get(apiFilters)
       const raw = response.data
-      // Defensive: ensure we have the expected structure (handles new/empty app, malformed responses)
-      const specimens = raw?.specimens ?? {}
-      const containers = raw?.containers ?? {}
-      const storage = raw?.storage ?? {}
+      const specimens = raw.specimens
+      const containers = raw.containers
+      const storage = raw.storage
       setData({
         specimens: {
-          total: specimens.total ?? 0,
-          bySourceType: specimens.bySourceType ?? {},
-          bySpecimenType: specimens.bySpecimenType ?? {},
-          byStudy: specimens.byStudy ?? {},
+          total: specimens.total,
+          bySourceType: specimens.bySourceType,
+          bySpecimenType: specimens.bySpecimenType,
+          byStudy: specimens.byStudy,
           collectionTimeline: Array.isArray(specimens.collectionTimeline) ? specimens.collectionTimeline : [],
           creationTimeline: Array.isArray(specimens.creationTimeline) ? specimens.creationTimeline : [],
         },
         containers: {
-          total: containers.total ?? 0,
-          byType: containers.byType ?? {},
-          byTags: containers.byTags ?? {},
-          byState: containers.byState ?? (containers as Record<string, unknown>).byStatus ?? {},
+          total: containers.total,
+          byType: containers.byType,
+          byTags: containers.byTags,
+          byState: containers.byState,
           averagePerSpecimen: typeof containers.averagePerSpecimen === 'number' ? containers.averagePerSpecimen : 0,
         },
         storage: {
           byLocation: Array.isArray(storage.byLocation) ? storage.byLocation : [],
-          byRootLocation: storage.byRootLocation ?? {},
+          byRootLocation: storage.byRootLocation,
         },
       })
       setAppliedFilters(filtersToApply)
@@ -160,6 +160,7 @@ export default function Statistics() {
     const n = data.specimens.total
     const studies = Object.keys(data.specimens.byStudy).length
     const top = Object.entries(data.specimens.bySpecimenType).sort((a, b) => b[1] - a[1])[0]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- empty bySpecimenType
     const topType = top ? top[0] : '—'
     return `${n.toLocaleString()} specimens across ${studies} studies; top type: ${topType}`
   }, [data])
@@ -167,6 +168,7 @@ export default function Statistics() {
     if (!data) return ''
     const n = data.containers.total
     const types = Object.keys(data.containers.byType).length
+     
     const avg = data.containers.averagePerSpecimen.toFixed(1)
     return `${n.toLocaleString()} containers across ${types} types; avg ${avg} per specimen`
   }, [data])
@@ -174,6 +176,7 @@ export default function Statistics() {
     if (!data) return ''
     const n = data.storage.byLocation.length
     const top = data.storage.byLocation[0]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- empty byLocation
     const topName = top ? (top.location.length > 25 ? top.location.slice(0, 25) + '…' : top.location) : '—'
     return `${n} locations; top: ${topName}`
   }, [data])
@@ -441,6 +444,7 @@ export default function Statistics() {
         )}
 
         {/* Loading overlay when refreshing with data */}
+        {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- show overlay when refreshing with existing data */}
         {loading && data && (
           <div className="mb-6 p-4 rounded-lg flex items-center gap-3 border" style={{ backgroundColor: 'rgb(var(--dashboard-accent-muted))', borderColor: 'rgb(var(--dashboard-accent) / 0.3)' }}>
             <svg className="animate-spin h-5 w-5 flex-shrink-0" style={{ color: 'rgb(var(--dashboard-accent-hover))' }} fill="none" viewBox="0 0 24 24">

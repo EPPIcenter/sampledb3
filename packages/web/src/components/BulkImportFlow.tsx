@@ -35,7 +35,7 @@ export interface BulkImportFlowProps {
 
 export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkImportFlowProps) {
   const [searchParams, setSearchParams] = useSearchParams()
-  const currentStep = (searchParams.get('step') as Step) || 'upload'
+  const currentStep = (searchParams.get('step') ?? 'upload') as Step
 
   const setCurrentStep = (step: Step) => {
     setSearchParams((prev) => {
@@ -81,11 +81,10 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       ? ['subject_name', 'specimen_type_name']
       : ['study_short_code', 'subject_name', 'specimen_type_name']
     if (!containerType || containerType === 'none' || importType === 'subjects') {
-      return importType === 'subjects'
-        ? fixedStudyShortCode
-          ? ['subject_name']
-          : ['study_short_code', 'subject_name']
-        : base
+      if (importType === 'subjects') {
+        return fixedStudyShortCode ? ['subject_name'] : ['study_short_code', 'subject_name']
+      }
+      return base
     }
 
     const containerFields: Record<ContainerType, string[]> = {
@@ -95,7 +94,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       static_well: ['plate_name', 'position'],
     }
 
-    return [...base, ...(containerFields[containerType] || [])]
+    return [...base, ...containerFields[containerType]]
   }
 
   const getOptionalFields = (): string[] => {
@@ -108,7 +107,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       static_well: ['comment'],
     }
 
-    return optionalFields[containerType] || []
+    return optionalFields[containerType]
   }
 
   const getSpecimenOptionalFields = (): string[] => {
@@ -158,9 +157,9 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     setImportResult(null)
     setCsvRows([])
     setMissingCollections([])
-    const fileInput = document.getElementById('import-csv-file') as HTMLInputElement
+    const fileInput = document.getElementById('import-csv-file')
     if (fileInput) {
-      fileInput.value = ''
+      ;(fileInput as HTMLInputElement).value = ''
     }
   }
 
@@ -196,11 +195,10 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         ? `${subjectExample},Blood Spot,2024-01-15,BOX-003,SPOT-001,`
         : `NAM15,${subjectExample},Blood Spot,2024-01-15,BOX-003,SPOT-001,`
     }
-    if (type === 'static_well') {
-      return fixedStudyShortCode
-        ? `${subjectExample},Whole Blood,2024-01-15,PLATE-002,A01,`
-        : `NAM15,${subjectExample},Whole Blood,2024-01-15,PLATE-002,A01,`
-    }
+    // static_well (only remaining ContainerType after paper)
+    return fixedStudyShortCode
+      ? `${subjectExample},Whole Blood,2024-01-15,PLATE-002,A01,`
+      : `NAM15,${subjectExample},Whole Blood,2024-01-15,PLATE-002,A01,`
     return fixedStudyShortCode
       ? `${subjectExample},Whole Blood,2024-01-15`
       : `NAM15,${subjectExample},Whole Blood,2024-01-15`
@@ -333,7 +331,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
       for (const field of requiredFields) {
         const value = row[field]
-        const hasCollectionName = collectionNameColumn && field === collectionNameColumn && (row.collection_name?.trim() ?? '') !== ''
+        const hasCollectionName = collectionNameColumn && field === collectionNameColumn && row.collection_name.trim() !== ''
         if (!hasCollectionName && (!value || (typeof value === 'string' && value.trim() === ''))) {
           rowErrors.push(`Missing required field: ${field}`)
         }
@@ -549,7 +547,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
             name,
             locationId: collection.locationId,
           })
-        } else if (collectionType === 'bag') {
+        } else {
           await collectionsApi.createBag({
             name,
             locationId: collection.locationId,
@@ -561,7 +559,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       } catch (error: unknown) {
         const err = error as { response?: { data?: { error?: string } } }
         updated[i].status = 'error'
-        updated[i].error = err.response?.data?.error || 'Failed to create collection'
+        updated[i].error = err.response?.data?.error ?? 'Failed to create collection'
         allSuccess = false
       }
     }
@@ -584,7 +582,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     try {
       if (importType === 'subjects') {
         const validateRes = await subjectsApi.validateBulk({ subjects: data as Array<{ studyShortCode: string; name: string }> })
-        if (!validateRes.data.valid && validateRes.data.errors?.length) {
+        if (!validateRes.data.valid && validateRes.data.errors.length) {
           setValidationErrors(validateRes.data.errors.map((e) => ({ row: e.index + 1, error: e.message })))
           setCurrentStep('import')
           setLoading(false)
@@ -618,7 +616,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         })
         type SpecimenBulkItem = Parameters<typeof specimensApi.createBulk>[0]['specimens'][number]
         const validateRes = await specimensApi.validateBulk({ specimens: specimensWithLocations as SpecimenBulkItem[] })
-        if (!validateRes.valid && validateRes.errors?.length) {
+        if (!validateRes.valid && validateRes.errors.length > 0) {
           setValidationErrors(validateRes.errors.map((e) => ({ row: e.index + 1, error: e.message })))
           setCurrentStep('import')
           setLoading(false)
@@ -645,7 +643,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
         for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
           const spec = data[rowIndex]
-          const studyShortCode = (spec.studyShortCode as string) ?? fixedStudyShortCode ?? ''
+          const studyShortCode = (spec.studyShortCode as string | undefined) ?? fixedStudyShortCode ?? ''
           const subjectName = spec.subjectName as string
           const key = `${studyShortCode}:${subjectName}`
           if (!subjectMap.has(key)) {
@@ -679,7 +677,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           })
         }
 
-        const studyShortCode = fixedStudyShortCode ?? (data[0]?.studyShortCode as string) ?? ''
+        const studyShortCode = fixedStudyShortCode ?? (data[0] ? (data[0].studyShortCode as string) : undefined) ?? ''
         const subjects = Array.from(subjectMap.entries()).map(([key, specimens]) => {
           const [, subjectName] = key.split(':')
           return {
@@ -715,7 +713,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           createCollections,
           subjects,
         })
-        if (!validateRes.data.valid && validateRes.data.errors?.length) {
+        if (!validateRes.data.valid && validateRes.data.errors.length > 0) {
           setValidationErrors(
             validateRes.data.errors.map((e) => ({
               row: e.rowIndex ?? e.subjectIndex + 1,
@@ -974,13 +972,13 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                 </div>
               )}
 
-              {(importType === 'subjects' || ((importType === 'specimens' || importType === 'combined') && containerType)) && (
+              {(importType === 'subjects' || !!containerType) && (
                 <div>
                   {getRequiredColumnsDisplay()}
                 </div>
               )}
 
-              {(importType === 'subjects' || ((importType === 'specimens' || importType === 'combined') && containerType)) && (
+              {(importType === 'subjects' || !!containerType) && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label htmlFor="import-csv-file" className="block text-sm font-medium text-gray-700">

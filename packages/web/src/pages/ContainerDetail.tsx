@@ -83,7 +83,7 @@ export default function ContainerDetail() {
     try {
       setLoadingDerivations(true)
       const response = await derivationsApi.listFromContainer(parseInt(id))
-      const derivationsList = response.data.derivations || []
+      const derivationsList = response.data.derivations
       setDerivations(derivationsList)
       
       // Load child container details for each derivation

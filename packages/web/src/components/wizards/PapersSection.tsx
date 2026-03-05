@@ -77,7 +77,7 @@ export default function PapersSection({
               <input
                 type="number"
                 placeholder="Quantity"
-                value={container.quantity ?? ''}
+                value={container.quantity ?? ''} // eslint-disable-line @typescript-eslint/no-unnecessary-condition
                 onChange={(e) =>
                   onUpdate(specimenTypeId, container.id, {
                     quantity: parseFloat(e.target.value) || 0,

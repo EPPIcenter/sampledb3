@@ -39,7 +39,7 @@ export default function CompositionDetail() {
       setLoading(true)
       setError(null)
       const res = await controlsApi.list()
-      const all = (res.data.controls ?? []) as ControlDefinition[]
+      const all = res.data.controls as ControlDefinition[]
       const key = compositionKey
       const matched = all.filter((def) => {
         const defKey = getCompositionKey((def.strains ?? []).map((s) => ({ id: s.id, percentage: s.percentage })))

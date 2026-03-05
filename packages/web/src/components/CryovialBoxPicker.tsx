@@ -35,14 +35,12 @@ export default function CryovialBoxPicker({
 
   // Map boxes by location ID
   const boxesByLocation = useMemo(() => {
-    const map: Record<number, CryovialBox[]> = {}
+    const map: Record<number, CryovialBox[]> = { 0: [] }
     boxes.forEach((b) => {
-      if (b.locationId) {
-        if (!map[b.locationId]) map[b.locationId] = []
-        map[b.locationId].push(b)
+      const lid = b.locationId as number | null | undefined
+      if (lid != null) {
+        (map[lid] ??= []).push(b)
       } else {
-        // Boxes without location go into a special "unlocated" group
-        if (!map[0]) map[0] = []
         map[0].push(b)
       }
     })
@@ -75,17 +73,17 @@ export default function CryovialBoxPicker({
     if (search.trim()) {
       const searchLower = search.toLowerCase()
       filtered = filtered.filter((loc) => {
-        const locBoxes = boxesByLocation[loc.id] || []
+        const locBoxes = boxesByLocation[loc.id] ?? []
         const hasMatchingBoxes = locBoxes.some((box) => {
           const nameMatch = box.name.toLowerCase().includes(searchLower)
-          const barcodeMatch = box.barcode?.toLowerCase().includes(searchLower)
+          const barcodeMatch = (box.barcode ?? '').toLowerCase().includes(searchLower)
           return nameMatch || barcodeMatch
         })
         
         const locationMatch =
           loc.name.toLowerCase().includes(searchLower) ||
-          (loc.path || '').toLowerCase().includes(searchLower) ||
-          (loc.description || '').toLowerCase().includes(searchLower)
+          (loc.path ?? '').toLowerCase().includes(searchLower) ||
+          (loc.description ?? '').toLowerCase().includes(searchLower)
         
         return hasMatchingBoxes || locationMatch
       })
@@ -124,7 +122,7 @@ export default function CryovialBoxPicker({
   const renderLocationNode = (loc: Location, depth: number = 0): React.ReactNode => {
     const children = getLocationChildren(locations, loc.id)
     const isExpanded = expandedIds.has(loc.id)
-    const locBoxes = boxesByLocation[loc.id] || []
+    const locBoxes = boxesByLocation[loc.id] ?? []
     const hasBoxes = locBoxes.length > 0
     const isVisible = filteredLocations.some((f) => {
       if (f.id === loc.id) return true
@@ -139,6 +137,7 @@ export default function CryovialBoxPicker({
       return checkDescendants(loc.id)
     })
 
+     
     if (!isVisible && depth > 0) return null
 
     return (
@@ -179,14 +178,14 @@ export default function CryovialBoxPicker({
                 if (!search.trim()) return true
                 const searchLower = search.toLowerCase()
                 const nameMatch = box.name.toLowerCase().includes(searchLower)
-                const barcodeMatch = box.barcode?.toLowerCase().includes(searchLower)
+                const barcodeMatch = (box.barcode ?? '').toLowerCase().includes(searchLower)
                 return nameMatch || barcodeMatch
               })
               .map((box) => {
                 const isSelected = box.name === value
                 const searchLower = search.trim().toLowerCase()
                 const highlightName = searchLower && box.name.toLowerCase().includes(searchLower)
-                const highlightBarcode = searchLower && box.barcode?.toLowerCase().includes(searchLower)
+                const highlightBarcode = searchLower && (box.barcode ?? '').toLowerCase().includes(searchLower)
                 
                 return (
                   <button
@@ -228,19 +227,18 @@ export default function CryovialBoxPicker({
       const checkDescendants = (parentId: number | null): boolean => {
         const directChildren = locations.filter((l) => l.parentId === parentId)
         return directChildren.some((child) => {
-          if ((boxesByLocation[child.id] || []).length > 0) return true
+          if ((boxesByLocation[child.id] ?? []).length > 0) return true
           return checkDescendants(child.id)
         })
       }
-      if ((boxesByLocation[root.id] || []).length > 0) return true
+      if ((boxesByLocation[root.id] ?? []).length > 0) return true
       return checkDescendants(root.id)
     })
     
-    if (rootsWithBoxes.length === 0 && !search.trim() && (!boxesByLocation[0] || boxesByLocation[0].length === 0)) {
+    if (rootsWithBoxes.length === 0 && !search.trim() && boxesByLocation[0].length === 0) {
       return <p className="text-sm text-gray-500 p-4">No locations with boxes found.</p>
     }
-    
-    if (rootsWithBoxes.length === 0 && search.trim() && (!boxesByLocation[0] || boxesByLocation[0].length === 0)) {
+    if (rootsWithBoxes.length === 0 && search.trim() && boxesByLocation[0].length === 0) {
       return <p className="text-sm text-gray-500 p-4">No locations match this filter.</p>
     }
 
@@ -249,7 +247,7 @@ export default function CryovialBoxPicker({
         {rootsWithBoxes.map((root) => renderLocationNode(root, 0))}
         
         {/* Show unlocated boxes if any */}
-        {boxesByLocation[0] && boxesByLocation[0].length > 0 && (
+        {boxesByLocation[0].length > 0 && (
           <div className="mt-4 pt-4 border-t border-gray-200">
             <div className="font-medium text-sm text-gray-700 mb-2">Unlocated Boxes</div>
             <div className="space-y-1">
@@ -258,14 +256,14 @@ export default function CryovialBoxPicker({
                   if (!search.trim()) return true
                   const searchLower = search.toLowerCase()
                   const nameMatch = box.name.toLowerCase().includes(searchLower)
-                  const barcodeMatch = box.barcode?.toLowerCase().includes(searchLower)
+                  const barcodeMatch = (box.barcode ?? '').toLowerCase().includes(searchLower)
                   return nameMatch || barcodeMatch
                 })
                 .map((box) => {
                   const isSelected = box.name === value
                   const searchLower = search.trim().toLowerCase()
                   const highlightName = searchLower && box.name.toLowerCase().includes(searchLower)
-                  const highlightBarcode = searchLower && box.barcode?.toLowerCase().includes(searchLower)
+                  const highlightBarcode = searchLower && (box.barcode ?? '').toLowerCase().includes(searchLower)
                   
                   return (
                     <button

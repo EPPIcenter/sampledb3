@@ -68,7 +68,7 @@ function ContainerEditModalForm({
     try {
       setLoadingUnits(true)
       const response = await settingsApi.getContainerTypeUnits(containerType)
-      setAvailableUnits(response.data.units || [])
+      setAvailableUnits(response.data.units)
     } catch (err: any) {
       console.error('Failed to load units:', err)
       // Don't block form if units fail to load

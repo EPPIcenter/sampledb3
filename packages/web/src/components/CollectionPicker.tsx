@@ -278,15 +278,15 @@ export default function CollectionPicker({
         </div>
       )}
       
-      {isValid && validatedCollection && (
+      {isValid && (
         <div className="mt-1 text-xs text-green-600 flex items-center gap-1">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
           <span>
-            {validatedCollection.locationPath 
-              ? `Found: ${validatedCollection.name} at ${validatedCollection.locationPath}`
-              : `Found: ${validatedCollection.name}`}
+            {validatedCollection!.locationPath
+              ? `Found: ${validatedCollection!.name} at ${validatedCollection!.locationPath}`
+              : `Found: ${validatedCollection!.name}`}
           </span>
         </div>
       )}

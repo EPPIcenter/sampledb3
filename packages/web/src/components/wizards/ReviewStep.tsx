@@ -50,7 +50,7 @@ export default function ReviewStep({
 
   /** Batch rows for multi-batch CSV: one per (file, density). */
   const multiBatchRows = useMemo(() => {
-    if (!isMultiBatchCsv || !compositionDefinitions) return []
+    if (!isMultiBatchCsv || !compositionDefinitions) return [] // eslint-disable-line @typescript-eslint/no-unnecessary-condition
     const rows: Array<{
       fileIndex: number
       file: CSVFileData
@@ -127,7 +127,7 @@ export default function ReviewStep({
         const definitionId = batchRow.candidates.length === 1
           ? batchRow.candidates[0]!.id
           : batchDefinitionSelections[batchRow.rowKey]
-        if (definitionId == null) continue
+        if (definitionId == null) continue // eslint-disable-line @typescript-eslint/no-unnecessary-condition
         const nameRes = await controlsApi.suggestBatchName(definitionId, productionDate)
         const batchName = (nameRes.data as { name: string }).name
         const specimensMap = new Map<string, Array<{
@@ -176,7 +176,7 @@ export default function ReviewStep({
           specimens,
           createCollections: [],
         })
-        const batchId = (res.data as { batch?: { id?: number } })?.batch?.id
+        const batchId = (res.data as { batch?: { id?: number } }).batch?.id
         if (batchId != null) lastBatchId = batchId
       }
       if (lastBatchId != null) onSuccess(lastBatchId)
@@ -359,7 +359,7 @@ export default function ReviewStep({
         })
         
         // Extract batch ID from response
-        const batchId = response.data?.batch?.id
+        const batchId = response.data.batch?.id // eslint-disable-line @typescript-eslint/no-unnecessary-condition
         if (!batchId || isNaN(batchId)) {
           console.error('Invalid batch ID in response:', response.data)
           throw new Error(`Failed to create batch: invalid batch ID returned (${batchId})`)

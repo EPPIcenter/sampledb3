@@ -75,9 +75,7 @@ export default function StatChart({
     const map = new Map<number, string>()
     data.forEach(entry => {
       const dateValue = entry[dateKey] as number
-      if (dateValue != null) {
-        map.set(dateValue, entry.name)
-      }
+      map.set(dateValue, entry.name)
     })
     return map
   }, [data, dateKey])
@@ -86,7 +84,8 @@ export default function StatChart({
   // Limit to reasonable number of ticks to avoid overcrowding
   const dateTicks = useMemo(() => {
     if (!dateKey) return undefined
-    const allTicks = data.map(entry => entry[dateKey] as number).filter((val): val is number => val != null)
+    // Filter for defined values; entry[dateKey] can be missing at runtime
+    const allTicks = data.map(entry => entry[dateKey] as number | undefined).filter((val): val is number => val != null)  
     if (allTicks.length === 0) return undefined
 
     // Limit to max 8 ticks for better readability
@@ -120,7 +119,7 @@ export default function StatChart({
   // Calculate domain with padding for date-based axes
   const dateDomain = useMemo(() => {
     if (!dateKey) return undefined
-    const dateValues = data.map(entry => entry[dateKey] as number).filter((val): val is number => val != null)
+    const dateValues = data.map(entry => entry[dateKey] as number | undefined).filter((val): val is number => val != null)  
     if (dateValues.length === 0) return undefined
 
     const min = Math.min(...dateValues)

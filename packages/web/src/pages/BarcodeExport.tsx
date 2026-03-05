@@ -187,9 +187,7 @@ export default function BarcodeExport() {
       window.URL.revokeObjectURL(url)
 
       // Show inline summary
-      if (summary) {
-        setSummaryExpanded(true)
-      }
+      setSummaryExpanded(true)
     } catch (error: any) {
       console.error('Export failed:', error)
       setError(error.response?.data?.error || 'Export failed')
@@ -301,7 +299,7 @@ export default function BarcodeExport() {
                   const newConfig = exportConfigurations[newIndex]
                   setSelectedConfigId(`${newConfig.source}:${newConfig.name}`)
                   const button = e.currentTarget.children[newIndex] as HTMLElement
-                  button?.focus()
+                  button.focus()
                 } else if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
                   if (focusedConfigIndex !== null) {

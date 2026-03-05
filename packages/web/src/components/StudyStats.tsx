@@ -160,19 +160,16 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
     // Collection timeline - keep as daily (will be binned later in collectionTimelineData)
     // When we have filteredData, recreate timeline from filtered dates
     // Otherwise, use the original summary timeline
-    const collectionTimeline = filteredData
-      ? collectionDates.reduce((acc, date) => {
-          const dateOnly = date.split('T')[0]
-          const existing = acc.find(x => x.date === dateOnly)
-          if (existing) {
-            existing.count += 1
-          } else {
-            acc.push({ date: dateOnly, count: 1 })
-          }
-          return acc
-        }, [] as Array<{ date: string; count: number }>)
-          .sort((a, b) => a.date.localeCompare(b.date))
-      : (summary.collectionTimeline || [])
+    const collectionTimeline = collectionDates.reduce((acc, date) => {
+      const dateOnly = date.split('T')[0]
+      const idx = acc.findIndex(x => x.date === dateOnly)
+      if (idx >= 0) {
+        acc[idx].count += 1
+      } else {
+        acc.push({ date: dateOnly, count: 1 })
+      }
+      return acc
+    }, [] as Array<{ date: string; count: number }>).sort((a, b) => a.date.localeCompare(b.date))
 
     // Calculate unique subjects with filtered specimens (for display purposes only)
     // Note: totalSubjects should always be the total enrolled subjects, not filtered

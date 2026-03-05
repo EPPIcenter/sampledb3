@@ -71,9 +71,9 @@ export default function LocationDetail() {
         ])
 
         setLocation(detailResponse.data.location)
-        setContents(detailResponse.data.contents || {})
-        setHierarchyStats(detailResponse.data.hierarchyStats || null)
-        setAllLocations(listResponse.data.locations || [])
+        setContents(detailResponse.data.contents)
+        setHierarchyStats(detailResponse.data.hierarchyStats ?? null)
+        setAllLocations(listResponse.data.locations)
         setPagination(detailResponse.data.pagination ?? null)
       } catch (error) {
         console.error('Failed to load location details:', error)

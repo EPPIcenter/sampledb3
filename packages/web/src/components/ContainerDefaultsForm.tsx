@@ -118,24 +118,24 @@ export default function ContainerDefaultsForm({
         }
         const safeData: ContainerDefaults = {
           micronix_tube: {
-            totalQuantity: data.micronix_tube?.totalQuantity ?? 1.0,
-            remainingQuantity: data.micronix_tube?.remainingQuantity ?? 1.0,
-            defaultUnitSymbol: getSafe('items', 'Micronix Tube', data.micronix_tube?.defaultUnitSymbol),
+            totalQuantity: data.micronix_tube.totalQuantity,
+            remainingQuantity: data.micronix_tube.remainingQuantity,
+            defaultUnitSymbol: getSafe('items', 'Micronix Tube', data.micronix_tube.defaultUnitSymbol),
           },
           cryovial_tube: {
-            totalQuantity: data.cryovial_tube?.totalQuantity ?? 1.0,
-            remainingQuantity: data.cryovial_tube?.remainingQuantity ?? 1.0,
-            defaultUnitSymbol: getSafe('items', 'Cryovial Tube', data.cryovial_tube?.defaultUnitSymbol),
+            totalQuantity: data.cryovial_tube.totalQuantity,
+            remainingQuantity: data.cryovial_tube.remainingQuantity,
+            defaultUnitSymbol: getSafe('items', 'Cryovial Tube', data.cryovial_tube.defaultUnitSymbol),
           },
           paper: {
-            totalQuantity: data.paper?.totalQuantity ?? 1.0,
-            remainingQuantity: data.paper?.remainingQuantity ?? 1.0,
-            defaultUnitSymbol: getSafe('spots', 'Paper', data.paper?.defaultUnitSymbol),
+            totalQuantity: data.paper.totalQuantity,
+            remainingQuantity: data.paper.remainingQuantity,
+            defaultUnitSymbol: getSafe('spots', 'Paper', data.paper.defaultUnitSymbol),
           },
           static_well: {
-            totalQuantity: data.static_well?.totalQuantity ?? 1.0,
-            remainingQuantity: data.static_well?.remainingQuantity ?? 1.0,
-            defaultUnitSymbol: getSafe('spots', 'Static Well', data.static_well?.defaultUnitSymbol),
+            totalQuantity: data.static_well.totalQuantity,
+            remainingQuantity: data.static_well.remainingQuantity,
+            defaultUnitSymbol: getSafe('spots', 'Static Well', data.static_well.defaultUnitSymbol),
           },
         }
         setFallbackWarnings(warnings.length > 0 ? warnings : [])
@@ -164,7 +164,7 @@ export default function ContainerDefaultsForm({
         containerTypes.map(async (containerType) => {
           try {
             const response = await settingsApi.getContainerTypeUnits(containerType)
-            allowed[containerType] = response.data.units || []
+            allowed[containerType] = response.data.units
           } catch (err) {
             console.error(`Failed to load allowed units for ${containerType}:`, err)
             allowed[containerType] = []

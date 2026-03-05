@@ -13,7 +13,7 @@ export interface StrainWithPercentage {
  * Sorts by strain id and formats as "id:percentage,id:percentage,...".
  */
 export function getCompositionKey(strains: StrainWithPercentage[]): string {
-  if (!strains || strains.length === 0) return ''
+  if (strains.length === 0) return ''
   const sorted = [...strains].sort((a, b) => a.id - b.id)
   return sorted
     .map((s) => `${s.id}:${s.percentage ?? 0}`)

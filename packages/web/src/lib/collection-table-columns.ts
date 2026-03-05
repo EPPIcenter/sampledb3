@@ -4,7 +4,6 @@
  * (container_id, specimen_id, subject_id, study_id, control_batch_id).
  * Only user-facing and specimen/source details are included.
  */
-
 import { getExportColumnLabel } from './export-columns'
 
 export interface CollectionTableColumn {
@@ -124,9 +123,9 @@ export const COLLECTION_SHEET_TABLE_ROW_KEYS = new Set([
  * Uses empty string for fields not provided by the collection detail API.
  */
 export function buildCollectionTableRow(entry: CollectionTableEntry): CollectionTableRow {
-  const container = entry?.container
+  const container = entry.container
   const source = container?.source
-  const context = entry?.context
+  const context = entry.context
   const status =
     container != null
       ? container.remainingQuantity != null && container.remainingQuantity > 0
@@ -147,17 +146,19 @@ export function buildCollectionTableRow(entry: CollectionTableEntry): Collection
     source?.type === 'control' && source.targetDensity != null ? source.targetDensity : ''
   const targetDensityUnit = source?.type === 'control' ? (source.targetDensityUnit ?? '') : ''
   const strainComposition = source?.type === 'control' ? (source.strainComposition ?? '') : ''
+   
   const collectionDate = container?.specimen?.collectionDate ?? ''
   const state = container?.state?.name ?? ''
   const comment = container?.comment ?? ''
+   
   const specimenTypeName = container?.specimenTypeName ?? ''
   const created = container?.created ?? ''
   const lastUpdated = container?.lastUpdated ?? ''
 
   return {
-    position: entry?.position ?? '',
-    barcode: entry?.barcode ?? '',
-    container_type: entry?.containerType ?? '',
+    position: entry.position ?? '',
+    barcode: entry.barcode ?? '',
+    container_type: entry.containerType ?? '',
     label: '',
     collection_name: context?.collectionName ?? '',
     status,

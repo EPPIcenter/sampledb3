@@ -69,10 +69,10 @@ export default function ContainerTypeUnitsManager({
         
         if (defaults) {
           const defaultUnitSymbols: Record<ContainerType, string | null> = {
-            paper: defaults.paper?.defaultUnitSymbol || null,
-            cryovial_tube: defaults.cryovial_tube?.defaultUnitSymbol || null,
-            micronix_tube: defaults.micronix_tube?.defaultUnitSymbol || null,
-            static_well: defaults.static_well?.defaultUnitSymbol || null,
+            paper: defaults.paper.defaultUnitSymbol || null,
+            cryovial_tube: defaults.cryovial_tube.defaultUnitSymbol || null,
+            micronix_tube: defaults.micronix_tube.defaultUnitSymbol || null,
+            static_well: defaults.static_well.defaultUnitSymbol || null,
           }
           setDefaultUnits(defaultUnitSymbols)
         }
@@ -92,7 +92,7 @@ export default function ContainerTypeUnitsManager({
         CONTAINER_TYPES.map(async (ct) => {
           try {
             const response = await settingsApi.getContainerTypeUnits(ct.value)
-            allowed[ct.value] = (response.data.units || []).map((u: Unit) => u.id)
+            allowed[ct.value] = response.data.units.map((u: Unit) => u.id)
           } catch (err) {
             console.error(`Failed to load units for ${ct.value}:`, err)
           }
@@ -110,7 +110,7 @@ export default function ContainerTypeUnitsManager({
   }
 
   const handleToggleUnit = async (containerType: ContainerType, unitId: number) => {
-    const currentAllowed = allowedUnits[containerType] || []
+    const currentAllowed = allowedUnits[containerType]
     const isAllowed = currentAllowed.includes(unitId)
     const unit = allUnits.find(u => u.id === unitId)
     const currentDefault = defaultUnits[containerType]
@@ -227,7 +227,7 @@ export default function ContainerTypeUnitsManager({
 
       <div className="space-y-6">
         {CONTAINER_TYPES.map((containerType) => {
-          const allowedUnitIds = allowedUnits[containerType.value] || []
+          const allowedUnitIds = allowedUnits[containerType.value]
           
           return (
             <div key={containerType.value} className="border border-gray-200 rounded-lg p-4">

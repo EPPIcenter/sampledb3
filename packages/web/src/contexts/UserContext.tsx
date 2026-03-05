@@ -45,6 +45,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const response = await authApi.getCurrentUser()
       const userData = response.data.user
       setUser(userData)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive check
       if (userData) {
         addRecentUser(userData)
       }
@@ -78,7 +79,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setError(null)
       const response = await authApi.switchUser(userId, password)
       // The response structure is: { data: { user: {...} } }
-      const userData = response.data?.user
+      const userData = response.data.user
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- server may omit user
       if (!userData) {
         throw new Error('Invalid response from server')
       }

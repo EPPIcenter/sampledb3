@@ -167,10 +167,11 @@ export default function PlateScanValidation() {
           name: c.name,
         }))
       )
-      const configsData = (configsRes.data as { configurations?: ScannerConfiguration[] } & { value?: { configurations?: ScannerConfiguration[] } })?.value ?? configsRes.data
-      const configs = (configsData as { configurations?: ScannerConfiguration[] }).configurations ?? []
+      const configsData = (configsRes.data as { configurations?: ScannerConfiguration[] } & { value?: { configurations?: ScannerConfiguration[] } }).value ?? configsRes.data
+      const configs = (configsData as { configurations: ScannerConfiguration[] }).configurations
       setScannerConfigurations(configs)
       const defaultConfig = configs.find((c: ScannerConfiguration) => c.isDefault === true)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- fallback when no default config
       setSelectedConfigId(defaultConfig?.id ?? configs[0]?.id ?? null)
     }).catch((err) => {
       console.error('Failed to load plates or scanner configs:', err)
@@ -225,6 +226,7 @@ export default function PlateScanValidation() {
         scannerConfigurationId: selectedConfigId,
       })
       const data = res.data
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- discriminator check for union
       if ('inferenceReport' in data && data.inferenceReport) {
         setInferenceReport(data.inferenceReport)
         setResult(null)
@@ -234,9 +236,9 @@ export default function PlateScanValidation() {
       }
     } catch (err: unknown) {
       const message = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Validation failed.'
         : 'Validation failed.'
-      setError(message ?? 'Validation failed.')
+      setError(message)
     } finally {
       setLoading(false)
     }

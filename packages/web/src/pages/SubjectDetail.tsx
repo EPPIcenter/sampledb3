@@ -116,7 +116,7 @@ export default function SubjectDetail() {
   }
 
   const formatContainerTypesSummary = () => {
-    const entries = Object.entries(summary?.containerTypes || {})
+    const entries = Object.entries(summary.containerTypes ?? {})
     if (entries.length === 0) return 'No containers'
 
     return entries
@@ -216,7 +216,7 @@ export default function SubjectDetail() {
               </div>
             )}
 
-            {Object.keys(summary?.containerTypes || {}).length > 0 && (
+            {Object.keys(summary.containerTypes ?? {}).length > 0 && (
               <div className="flex items-start space-x-3">
                 <div className="text-[rgb(var(--dashboard-accent))] mt-0.5">
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">

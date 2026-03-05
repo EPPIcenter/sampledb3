@@ -19,7 +19,7 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
 
   useEffect(() => {
     loadLocations()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [filterCollectionsOnly])
 
   // Auto-expand when search or value/locations change (adjust during render)
@@ -51,7 +51,7 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
       // Call without pagination params to get all locations
       // The API returns all locations when page/limit are not provided
       const response = await locationsApi.list()
-      let allLocations = response.data.locations || []
+      let allLocations = response.data.locations
       
       // Filter to collection-capable locations if requested
       // Include locations that can contain collections AND their ancestors (so we can navigate to them)

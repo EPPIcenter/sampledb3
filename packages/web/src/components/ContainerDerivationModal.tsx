@@ -120,10 +120,10 @@ function ContainerDerivationModalContent({
       try {
         const response = await specimenTypesApi.getContainerTypes(selectedSpecimenType.id)
         if (ignore) return
-        const containerTypes = response.data.containerTypes || []
+        const containerTypes = response.data.containerTypes
         setAllowedContainerTypes(containerTypes)
 
-        if (formData.containerType && !containerTypes.includes(formData.containerType)) {
+        if (!containerTypes.includes(formData.containerType)) {
           setFormData(prev => ({
             ...prev,
             containerType: containerTypes.length > 0 ? (containerTypes[0] as CreateDerivationPayload['containerType']) : 'micronix_tube',
@@ -161,11 +161,9 @@ function ContainerDerivationModalContent({
   const collectionSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (collectionSearchTimeoutRef.current) {
-      clearTimeout(collectionSearchTimeoutRef.current)
-    }
+    if (collectionSearchTimeoutRef.current) clearTimeout(collectionSearchTimeoutRef.current)
 
-    if (!formData.containerType || !collectionSearch.trim()) {
+    if (!collectionSearch.trim()) {
       setCollectionSearchResults([])
       setShowCollectionResults(false)
       return
@@ -192,15 +190,15 @@ function ContainerDerivationModalContent({
         
         // Use listCollectionsByType and filter client-side for all collection types
         // This is more reliable than the search API which doesn't support all types
-        const response = await collectionsApi.listCollectionsByType(collectionType as any)
-        const allCollections = response.data.collections || []
+        const response = await collectionsApi.listCollectionsByType(collectionType as 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet')
+        const allCollections = response.data.collections
         const searchLower = collectionSearch.toLowerCase()
         
         // Filter by name, barcode (if available), or location path
         const filtered = allCollections.filter((c: any) => {
-          const nameMatch = c.name?.toLowerCase().includes(searchLower) || false
-          const barcodeMatch = c.barcode?.toLowerCase().includes(searchLower) || false
-          const locationMatch = c.location?.path?.toLowerCase().includes(searchLower) || false
+          const nameMatch = c.name.toLowerCase().includes(searchLower) || false
+          const barcodeMatch = (c.barcode || '').toLowerCase().includes(searchLower) || false
+          const locationMatch = (c.location.path.toLowerCase().includes(searchLower)) || false
           return nameMatch || barcodeMatch || locationMatch
         })
         
@@ -222,9 +220,7 @@ function ContainerDerivationModalContent({
     }, 300)
 
     return () => {
-      if (collectionSearchTimeoutRef.current) {
-        clearTimeout(collectionSearchTimeoutRef.current)
-      }
+      if (collectionSearchTimeoutRef.current) clearTimeout(collectionSearchTimeoutRef.current)
     }
   }, [collectionSearch, formData.containerType])
 
@@ -271,11 +267,6 @@ function ContainerDerivationModalContent({
       setLoading(false)
       return
     }
-    if (!formData.containerType) {
-      setError('Container type is required')
-      setLoading(false)
-      return
-    }
     try {
       const payload: CreateDerivationPayload = {
         derivationType: formData.derivationType,
@@ -291,21 +282,20 @@ function ContainerDerivationModalContent({
         properties: formData.properties,
         collectionId: formData.collectionId,
         collectionName: formData.collectionName,
-        collectionType:
-          formData.containerType === 'micronix_tube'
+        collectionType: (formData.containerType === 'micronix_tube'
             ? 'micronix_plate'
             : formData.containerType === 'cryovial_tube'
               ? 'cryovial_box'
               : formData.containerType === 'paper'
                 ? 'sheet'
-                : undefined,
+                : undefined) as 'micronix_plate' | 'cryovial_box' | 'sheet' | undefined,
         containerBarcode: formData.containerBarcode || undefined,
         position: formData.position || undefined,
       }
 
       const response = await derivationsApi.createFromContainer(parentContainerId, payload)
       
-      if (response.data.warnings && response.data.warnings.length > 0) {
+      if (response.data.warnings.length > 0) {
         setWarnings(response.data.warnings)
         // Still show success but with warnings
         setTimeout(() => {

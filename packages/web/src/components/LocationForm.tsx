@@ -14,8 +14,8 @@ interface LocationFormProps {
 export default function LocationForm({ location, parentId, parentLocation, onSave, onCancel }: LocationFormProps) {
   const isEdit = !!location
   // When editing, check location.parentId; when creating, check parentId prop
-  const isRoot = isEdit 
-    ? (location?.parentId === null || location?.parentId === undefined)
+  const isRoot = isEdit
+    ? location.parentId === null
     : (parentId === null || parentId === undefined)
   const isChild = !isRoot && !isEdit
 
@@ -58,7 +58,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
     try {
       const submitData: any = {
         name: formData.name.trim(),
-        description: formData.description?.trim() || null,
+        description: formData.description.trim() || null,
         canContainCollections: formData.canContainCollections,
       }
 
@@ -189,7 +189,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
             </div>
 
             {/* Storage Type - editable for root locations, read-only for child locations */}
-            {isEdit && location?.parentId && (
+            {isEdit && location.parentId && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Storage Type (inherited)

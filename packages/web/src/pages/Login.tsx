@@ -14,8 +14,8 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null)
 
   // Get redirect path from location state, or default to dashboard
-  const from = (location.state as { from?: { pathname?: string }; fromSetup?: boolean })?.from?.pathname || '/'
-  const fromSetup = (location.state as { fromSetup?: boolean })?.fromSetup ?? false
+  const from = ((location.state as { from?: { pathname?: string }; fromSetup?: boolean }).from?.pathname) || '/'
+  const fromSetup = (location.state as { fromSetup?: boolean }).fromSetup ?? false
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,18 +25,11 @@ export default function Login() {
     try {
       const response = await authApi.login(emailOrUsername, password)
       // The response structure from axios is: { data: { user: {...} } }
-      const userData = response.data?.user
-      if (userData) {
-        setUser(userData)
-        addRecentUser(userData)
-        setLoading(false)
-        navigate(from, { replace: true })
-      } else {
-        // Fallback: refresh user context
-        await refreshUser()
-        setLoading(false)
-        navigate(from, { replace: true })
-      }
+      const userData = response.data.user
+      setUser(userData)
+      addRecentUser(userData)
+      setLoading(false)
+      navigate(from, { replace: true })
     } catch (err: unknown) {
       const message =
         typeof err === 'object' && err !== null && 'response' in err

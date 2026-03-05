@@ -104,7 +104,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
     try {
       setStudyLoading(true)
       const response = await studiesApi.list(studySearch || undefined)
-      setStudies(response.studies || [])
+      setStudies(response.studies)
     } catch (error) {
       console.error('Failed to load studies:', error)
     } finally {
@@ -158,11 +158,8 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
       newFilters.locationSelections = selections
       // For API compatibility, also set the first location selection as the primary filter
       // The API currently only supports single location, so we use the first one
-      const firstSelection = selections[0]
-
-      if (firstSelection && firstSelection.locationId) {
-        newFilters.locationId = firstSelection.locationId.toString()
-      }
+      const firstSelection = selections[0]!
+      newFilters.locationId = firstSelection.locationId.toString()
     } else {
       delete newFilters.locationSelections
     }

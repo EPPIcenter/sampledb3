@@ -132,7 +132,7 @@ export default function Export() {
   // Single mount effect: load reference data once when page is shown (configs loaded by useExportConfigurations)
   useEffect(() => {
     loadReferenceData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   const parseCSV = useCallback((file: File) => {
@@ -407,9 +407,7 @@ export default function Export() {
       window.URL.revokeObjectURL(url)
 
       // Show inline summary
-      if (summary) {
-        setSummaryExpanded(true)
-      }
+      setSummaryExpanded(true)
     } catch (error: any) {
       console.error('Export failed:', error)
       setError(error.response?.data?.error || 'Export failed')
@@ -430,7 +428,7 @@ export default function Export() {
     value: number | string
   ) => {
     setFilters(prev => {
-      const current = (prev[key] as any[]) || []
+      const current = (prev[key] as any[])
       const index = current.indexOf(value)
       if (index >= 0) {
         return { ...prev, [key]: current.filter(v => v !== value) }
@@ -761,7 +759,7 @@ export default function Export() {
                     setSelectedConfigId(`${newConfig.source}:${newConfig.name}`)
                     // Focus the button
                     const button = e.currentTarget.children[newIndex] as HTMLElement
-                    button?.focus()
+                    button.focus()
                   } else if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
                     if (focusedConfigIndex !== null) {

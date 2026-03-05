@@ -130,7 +130,7 @@ function getRequiredAndOptionalColumns(
 export default function DerivationsBulkImport() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const currentStep = (searchParams.get('step') as UrlStep) || 'upload'
+  const currentStep = (searchParams.get('step') as UrlStep | null) ?? 'upload'
   const { canWrite } = useUser()
 
   const setCurrentStep = (step: UrlStep) => {
@@ -176,7 +176,7 @@ export default function DerivationsBulkImport() {
 
   // Pure derivation: compute base list from validationResult during render
   const baseMissingCollections = useMemo(() => {
-    if (!validationResult?.collections?.length) return []
+    if (!validationResult?.collections.length) return []
     const needCreation = validationResult.collections.filter(
       (c): c is typeof c & { containerType: 'micronix_tube' | 'cryovial_tube' } =>
         c.status === 'will_be_created' &&
@@ -255,7 +255,7 @@ export default function DerivationsBulkImport() {
     }
     try {
       const response = await specimenTypesApi.getContainerTypes(selectedSpecimenType.id)
-      const containerTypes = response.data.containerTypes ?? []
+      const containerTypes = response.data.containerTypes
       setAllowedContainerTypes(containerTypes)
       if (
         settings.containerType &&
@@ -280,7 +280,7 @@ export default function DerivationsBulkImport() {
     if (!file) return
     const reader = new FileReader()
     reader.onload = (event) => {
-      const text = (event.target?.result as string) ?? ''
+      const text = (event.target?.result as string) || ''
       setCsvContent(text)
       setError(null)
       setValidationResult(null)
@@ -353,7 +353,7 @@ export default function DerivationsBulkImport() {
         dryRun: false,
         settings,
       })
-      setImportResults(response.data.rows ?? [])
+      setImportResults(response.data.rows)
     } catch (err: unknown) {
       const errObj = err as { response?: { data?: { error?: string; details?: string } } }
       console.error('Failed to import derivations:', err)
@@ -379,7 +379,7 @@ export default function DerivationsBulkImport() {
 
       try {
         const name =
-          coll.name ??
+          coll.name ||
           (coll.barcode ? `Collection-${coll.barcode}` : `Collection-${Date.now()}`)
         const barcode = coll.barcode
 
@@ -389,7 +389,7 @@ export default function DerivationsBulkImport() {
             locationId: coll.locationId!,
             barcode,
           })
-        } else if (coll.containerType === 'cryovial_tube') {
+        } else {
           await collectionsApi.createCryovialBox({
             name,
             locationId: coll.locationId!,
@@ -405,7 +405,7 @@ export default function DerivationsBulkImport() {
           [i]: {
             ...prev[i],
             status: 'error',
-            error: errObj.response?.data?.error ?? 'Failed to create collection',
+            error: errObj.response?.data?.error || 'Failed to create collection',
           },
         }))
         allSuccess = false
@@ -809,9 +809,7 @@ export default function DerivationsBulkImport() {
                       </p>
                       <p><span className="font-medium text-gray-700">position</span> — Position in the collection (e.g. A01, B02).</p>
                       <p><span className="font-medium text-gray-700">quantity, unit_symbol, quantity_used, reduce_parent_quantity</span> — Optional. You can set these in Import settings (same for all rows) or provide columns in the CSV (per row). Use <code className="bg-gray-200 px-1 rounded text-xs">quantity_used</code> and <code className="bg-gray-200 px-1 rounded text-xs">reduce_parent_quantity</code> to reduce the parent&apos;s remaining quantity (e.g. DBS spot count). Not a blocker if missing or if data is imperfect.</p>
-                      {(sourceType === 'control_batch' || sourceType === 'study_subject') && (
-                        <p className="pt-1"><span className="font-medium text-gray-700">parent_specimen_type_name</span> is the <em>parent</em> specimen type (e.g. DBS, Whole Blood). The <em>derived</em> specimen type (e.g. DNA (DBS)) is set in Import settings or in the <code className="bg-gray-200 px-1 rounded text-xs">specimen_type_name</code> column.</p>
-                      )}
+                      <p className="pt-1"><span className="font-medium text-gray-700">parent_specimen_type_name</span> is the <em>parent</em> specimen type (e.g. DBS, Whole Blood). The <em>derived</em> specimen type (e.g. DNA (DBS)) is set in Import settings or in the <code className="bg-gray-200 px-1 rounded text-xs">specimen_type_name</code> column.</p>
                     </div>
                   </div>
                 )
@@ -1179,10 +1177,10 @@ export default function DerivationsBulkImport() {
                   <button
                     type="button"
                     onClick={handleImport}
-                    disabled={loading || (validationResult?.summary.invalid ?? 0) > 0}
+                    disabled={loading || (validationResult.summary.invalid) > 0}
                     className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                     title={
-                      (validationResult?.summary.invalid ?? 0) > 0
+                      (validationResult.summary.invalid) > 0
                         ? 'Fix invalid rows before creating derivations'
                         : undefined
                     }

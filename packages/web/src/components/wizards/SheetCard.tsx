@@ -34,8 +34,8 @@ export default function SheetCard({
   collectionNames,
 }: SheetCardProps) {
   const first = containers[0]
-  const sheetName = first?.sheetName ?? ''
-  const currentCollectionType = (first?.collectionType as 'box' | 'bag') ?? 'box'
+  const sheetName = first.sheetName ?? ''
+  const currentCollectionType = (first.collectionType as 'box' | 'bag')
   const namesForType = collectionNames ? collectionNames[currentCollectionType] : undefined
 
   return (
@@ -80,9 +80,9 @@ export default function SheetCard({
         <CollectionAssignment
           containerType="paper"
           collectionType={currentCollectionType}
-          collectionName={first?.collectionName ?? ''}
-          collectionLocationId={first?.collectionLocationId ?? null}
-          collectionId={first?.collectionId}
+          collectionName={first.collectionName ?? ''}
+          collectionLocationId={first.collectionLocationId ?? null}
+          collectionId={first.collectionId}
           onChange={onCollectionChange}
           showCollectionTypeSelector={true}
           successMessageVariant="sheet"

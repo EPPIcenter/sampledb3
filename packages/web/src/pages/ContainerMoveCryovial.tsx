@@ -55,7 +55,7 @@ export default function ContainerMoveCryovial() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
   const [searchParams, setSearchParams] = useSearchParams()
-  const currentStep = (searchParams.get('step') as Step) || 'upload'
+  const currentStep = (searchParams.get('step') ?? 'upload') as Step
   const [files, setFiles] = useState<FileData[]>([])
   const [loading, setLoading] = useState(false)
   const [availableBoxes, setAvailableBoxes] = useState<CryovialBox[]>([])
@@ -92,7 +92,7 @@ export default function ContainerMoveCryovial() {
           locationPath: c.location?.path || null,
         }))
       )
-      setLocations(locationsResponse.data.locations || [])
+      setLocations(locationsResponse.data.locations)
     }).catch((error) => {
       console.error('Failed to load collections or locations:', error)
     })

@@ -35,14 +35,12 @@ export default function MicronixPlatePicker({
 
   // Map plates by location ID
   const platesByLocation = useMemo(() => {
-    const map: Record<number, MicronixPlate[]> = {}
+    const map: Record<number, MicronixPlate[]> = { 0: [] }
     plates.forEach((p) => {
-      if (p.locationId) {
-        if (!map[p.locationId]) map[p.locationId] = []
-        map[p.locationId].push(p)
+      const lid = p.locationId as number | null | undefined
+      if (lid != null) {
+        (map[lid] ??= []).push(p)
       } else {
-        // Plates without location go into a special "unlocated" group
-        if (!map[0]) map[0] = []
         map[0].push(p)
       }
     })
@@ -75,7 +73,7 @@ export default function MicronixPlatePicker({
     if (search.trim()) {
       const searchLower = search.toLowerCase()
       filtered = filtered.filter((loc) => {
-        const locPlates = platesByLocation[loc.id] || []
+        const locPlates = platesByLocation[loc.id] ?? []
         const hasMatchingPlates = locPlates.some((plate) => {
           const nameMatch = plate.name.toLowerCase().includes(searchLower)
           const barcodeMatch = plate.barcode?.toLowerCase().includes(searchLower)
@@ -84,8 +82,8 @@ export default function MicronixPlatePicker({
         
         const locationMatch =
           loc.name.toLowerCase().includes(searchLower) ||
-          (loc.path || '').toLowerCase().includes(searchLower) ||
-          (loc.description || '').toLowerCase().includes(searchLower)
+          (loc.path ?? '').toLowerCase().includes(searchLower) ||
+          (loc.description ?? '').toLowerCase().includes(searchLower)
         
         return hasMatchingPlates || locationMatch
       })
@@ -143,7 +141,7 @@ export default function MicronixPlatePicker({
   const renderLocationNode = (loc: Location, depth: number = 0): React.ReactNode => {
     const children = getLocationChildren(locations, loc.id)
     const isExpanded = expandedIds.has(loc.id)
-    const locPlates = platesByLocation[loc.id] || []
+    const locPlates = platesByLocation[loc.id] ?? []
     const hasPlates = locPlates.length > 0
     const isVisible = filteredLocations.some((f) => {
       if (f.id === loc.id) return true
@@ -158,6 +156,7 @@ export default function MicronixPlatePicker({
       return checkDescendants(loc.id)
     })
 
+     
     if (!isVisible && depth > 0) return null
 
     const locationLabel = getLocationLabel(loc)
@@ -291,19 +290,19 @@ export default function MicronixPlatePicker({
       const checkDescendants = (parentId: number | null): boolean => {
         const directChildren = locations.filter((l) => l.parentId === parentId)
         return directChildren.some((child) => {
-          if ((platesByLocation[child.id] || []).length > 0) return true
+          if (platesByLocation[child.id].length > 0) return true
           return checkDescendants(child.id)
         })
       }
-      if ((platesByLocation[root.id] || []).length > 0) return true
+      if (platesByLocation[root.id].length > 0) return true
       return checkDescendants(root.id)
     })
     
-    if (rootsWithPlates.length === 0 && !search.trim() && (!platesByLocation[0] || platesByLocation[0].length === 0)) {
+    if (rootsWithPlates.length === 0 && !search.trim()) {
       return <p className="text-sm text-gray-500 p-4">No locations with plates found.</p>
     }
     
-    if (rootsWithPlates.length === 0 && search.trim() && (!platesByLocation[0] || platesByLocation[0].length === 0)) {
+    if (rootsWithPlates.length === 0 && search.trim()) {
       return <p className="text-sm text-gray-500 p-4">No locations match this filter.</p>
     }
 
@@ -312,7 +311,7 @@ export default function MicronixPlatePicker({
         {rootsWithPlates.map((root) => renderLocationNode(root, 0))}
         
         {/* Show unlocated plates if any */}
-        {platesByLocation[0] && platesByLocation[0].length > 0 && (
+        {platesByLocation[0].length > 0 && (
           <div className="mt-4 pt-4 border-t border-gray-200" role="listbox" aria-label="Unlocated plates">
             <div className="font-medium text-sm text-gray-700 mb-2">Unlocated Plates</div>
             <div className="space-y-1">

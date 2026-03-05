@@ -78,9 +78,9 @@ export default function ContainerMovePapers() {
         ])
         
         // Ensure we're accessing the correct response structure
-        const boxes = boxesRes.data?.collections || []
-        const bags = bagsRes.data?.collections || []
-        const locations = locationsRes.data?.locations || []
+        const boxes = boxesRes.data.collections
+        const bags = bagsRes.data.collections
+        const locations = locationsRes.data.locations
         
         console.log('Loaded boxes:', boxes.length, boxes)
         console.log('Loaded bags:', bags.length, bags)
@@ -789,15 +789,6 @@ export default function ContainerMovePapers() {
                 )}
 
                 <div className="flex justify-end gap-4">
-                  {moveResult.success && (
-                    <button
-                      onClick={handleUndo}
-                      disabled={loading}
-                      className="px-6 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                      {loading ? 'Undoing...' : 'Undo Move'}
-                    </button>
-                  )}
                   <button
                     onClick={handleStartOver}
                     className="storage-btn-primary px-6 py-2 font-medium"

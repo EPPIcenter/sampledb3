@@ -73,7 +73,7 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
     if (resultsRef.current && flatCommands.length > 0) {
       const selectedElement = resultsRef.current.querySelector(
         `[data-command-index="${selectedIndex}"]`
-      ) as HTMLElement
+      )
       if (selectedElement) {
         selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
       }

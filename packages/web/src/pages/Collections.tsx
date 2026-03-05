@@ -39,7 +39,7 @@ function getTypeLabel(type: CollectionListItem['type']): string {
 export default function Collections() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const tabFromUrl = (searchParams.get('tab') as CollectionTypeFilter) || 'all'
+  const tabFromUrl = (searchParams.get('tab') as CollectionTypeFilter | null) ?? 'all'
   const [typeTab, setTypeTabState] = useState<CollectionTypeFilter>(tabFromUrl)
   const [page, setPage] = useState(1)
 
@@ -80,7 +80,7 @@ export default function Collections() {
         setLoading(true)
         setError(null)
         const res = await collectionsApi.listAllCollections()
-        const list = (res.data.collections || []) as CollectionListItem[]
+        const list = res.data.collections as CollectionListItem[]
         if (!cancelled) setCollections(list)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load collections')

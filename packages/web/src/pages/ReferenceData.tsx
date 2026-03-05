@@ -16,6 +16,7 @@ import '../styles/reference-data.css'
 export default function ReferenceData() {
   const { canManageReferenceData } = useUser()
   const [searchParams, setSearchParams] = useSearchParams()
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- tab from URL may be missing or invalid
   const activeTab = (searchParams.get('tab') as ReferenceDataType) || 'specimen-types'
   // Keep isAdmin for backward compatibility in this file (used in multiple places)
   const isAdmin = canManageReferenceData
@@ -29,6 +30,7 @@ export default function ReferenceData() {
   }
 
   const config = getReferenceDataConfig(activeTab)
+   
   if (!config) {
     return <div>Invalid tab</div>
   }
@@ -70,6 +72,7 @@ export default function ReferenceData() {
   const prevSearchRef = useRef(search)
   const searchInputRef = useRef<HTMLInputElement>(null)
   useFocusSearchOnSlash(searchInputRef)
+   
   if (prevTabRef.current !== activeTab) {
     prevTabRef.current = activeTab
     prevSearchRef.current = ''
@@ -89,6 +92,7 @@ export default function ReferenceData() {
         const deps: Record<string, any[]> = {}
         for (const depType of config.requiresDependencies) {
           const depConfig = getReferenceDataConfig(depType)
+           
           if (depConfig) {
             try {
               const res = await depConfig.list()
@@ -97,9 +101,12 @@ export default function ReferenceData() {
               if (Array.isArray(data)) {
                 // Direct array: { data: T[] }
                 deps[depConfig.getDataKey()] = data
-              } else if (typeof data === 'object' && data !== null) {
-                // Nested structure: { data: { [key]: T[] } }
-                deps[depConfig.getDataKey()] = (data as any)[depConfig.getDataKey()] || []
+              } else if (
+                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- API can return object shape at runtime
+                typeof data === 'object' && data !== null
+              ) {
+                // Nested structure: { data: { [key]: T[] } }; key may be missing at runtime
+                deps[depConfig.getDataKey()] = ((data as Record<string, unknown>)[depConfig.getDataKey()] as unknown[] | undefined) ?? []
               } else {
                 deps[depConfig.getDataKey()] = []
               }
@@ -121,7 +128,7 @@ export default function ReferenceData() {
         try {
           // Load all locations without pagination
           const res = await locationsApi.list()
-          setAllLocations(res.data.locations || [])
+          setAllLocations(res.data.locations)
         } catch (error) {
           console.error('Failed to load all locations:', error)
         }
@@ -143,6 +150,7 @@ export default function ReferenceData() {
   }, [activeTab, data])
 
   const loadContainerTypeRelationships = async () => {
+     
     if (activeTab !== 'specimen-types' || data.length === 0) return
 
     try {
@@ -154,13 +162,8 @@ export default function ReferenceData() {
       const promises = specimenTypes.map(async (st) => {
         try {
           const response = await specimenTypesApi.getContainerTypes(st.id)
-          relationships[st.id] = response.data.containerTypes || []
-          // Store usage info if provided by API
-          if (response.data.usageInfo) {
-            usageInfo[st.id] = response.data.usageInfo
-          } else {
-            usageInfo[st.id] = {}
-          }
+          relationships[st.id] = response.data.containerTypes
+          usageInfo[st.id] = response.data.usageInfo ?? {}
         } catch (error) {
           console.error(`Failed to load container types for specimen type ${st.id}:`, error)
           relationships[st.id] = []
@@ -185,7 +188,7 @@ export default function ReferenceData() {
     try {
       // Optimistically update state
       setContainerTypeRelationships((prev) => {
-        const current = prev[specimenTypeId] || []
+        const current = prev[specimenTypeId] ?? []
         const updated = isAdding
           ? [...current, containerType]
           : current.filter((ct) => ct !== containerType)
@@ -231,9 +234,10 @@ export default function ReferenceData() {
         if (Array.isArray(data)) {
           // Direct array: { data: T[] }
           setData(data)
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- API can return object shape at runtime
         } else if (typeof data === 'object' && data !== null) {
-          // Nested structure: { data: { [key]: T[] } }
-          setData((data as any)[config.getDataKey()] || [])
+          // Nested structure: { data: { [key]: T[] } }; key may be missing at runtime
+          setData(((data as Record<string, unknown>)[config.getDataKey()] as unknown[] | undefined) ?? [])
         } else {
           setData([])
         }
@@ -280,7 +284,7 @@ export default function ReferenceData() {
       for (const depType of config.requiresDependencies) {
         const depConfig = getReferenceDataConfig(depType)
         if (depConfig) {
-          deps[depConfig.getDataKey()] = dependencies[depConfig.getDataKey()] || []
+          deps[depConfig.getDataKey()] = (dependencies[depConfig.getDataKey()] as unknown[] | undefined) ?? []
         }
       }
     }

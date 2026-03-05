@@ -1,3 +1,4 @@
+ 
 import { useState, useMemo, useCallback, memo } from 'react'
 import { type Location } from '../lib/api'
 import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
@@ -46,10 +47,13 @@ export default function CollectionMoveTreePicker({
   const collectionsByLocation = useMemo(() => {
     const map: Record<number, Collection[]> = {}
     collections.forEach((c) => {
-      if (c.locationId) {
-        if (!map[c.locationId]) map[c.locationId] = []
-        map[c.locationId].push(c)
+      const lid = c.locationId
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- defensive null check */
+      if (lid != null) {
+        if (!map[lid]) map[lid] = []
+        map[lid].push(c)
       }
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
     })
     return map
   }, [collections])
@@ -58,6 +62,7 @@ export default function CollectionMoveTreePicker({
   const locationChildrenMap = useMemo(() => {
     const map = new Map<number, Location[]>()
     locations.forEach((loc) => {
+       
       if (loc.parentId !== null) {
         if (!map.has(loc.parentId)) {
           map.set(loc.parentId, [])
@@ -96,9 +101,7 @@ export default function CollectionMoveTreePicker({
 
     // Filter by collections if needed
     if (filterEmptyLocations) {
-      filtered = filtered.filter((loc) => {
-        return (collectionsByLocation[loc.id] || []).length > 0
-      })
+      filtered = filtered.filter((loc) => collectionsByLocation[loc.id].length > 0)
     }
 
     // Apply search filter
@@ -107,13 +110,13 @@ export default function CollectionMoveTreePicker({
       filtered = filtered.filter((loc) => {
         const locMatch =
           loc.name.toLowerCase().includes(term) ||
-          (loc.path || '').toLowerCase().includes(term) ||
-          (loc.description || '').toLowerCase().includes(term)
+          (loc.path ?? '').toLowerCase().includes(term) ||
+          (loc.description ?? '').toLowerCase().includes(term)
 
-        const collectionsMatch = (collectionsByLocation[loc.id] || []).some(
+        const collectionsMatch = (collectionsByLocation[loc.id] ?? []).some(
           (c) =>
             c.name.toLowerCase().includes(term) ||
-            (c.barcode || '').toLowerCase().includes(term)
+            (c.barcode ?? '').toLowerCase().includes(term)
         )
 
         return locMatch || collectionsMatch
@@ -135,11 +138,13 @@ export default function CollectionMoveTreePicker({
       let current: Location | undefined = loc
       while (current) {
         visible.add(current.id)
+         
         if (current.parentId !== null) {
           current = locationMap.get(current.parentId)
         } else {
           break
         }
+         
       }
     })
     return visible
@@ -154,7 +159,7 @@ export default function CollectionMoveTreePicker({
     
     // First pass: mark locations that directly have collections
     locations.forEach((loc) => {
-      if ((collectionsByLocation[loc.id] || []).length > 0) {
+      if (collectionsByLocation[loc.id].length > 0) {
         visible.add(loc.id)
       }
     })
@@ -224,7 +229,7 @@ export default function CollectionMoveTreePicker({
   const renderLocationNode = useCallback((loc: Location, depth: number = 0): React.ReactNode => {
     const children = locationChildrenMap.get(loc.id) || []
     const isExpanded = effectiveExpandedIds.has(loc.id)
-    const locCollections = collectionsByLocation[loc.id] || []
+    const locCollections = collectionsByLocation[loc.id] ?? []
     const hasCollections = locCollections.length > 0
     const isLeaf = leafLocations.has(loc.id)
     

@@ -29,6 +29,8 @@ export default function CollectionNameSearch({
   const [open, setOpen] = useState(false)
   const [highlightIndex, setHighlightIndex] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
+  const prevValueRef = useRef(value)
+  const prevFilteredLengthRef = useRef(0)
 
   const query = value.trim().toLowerCase()
   const filtered =
@@ -49,9 +51,12 @@ export default function CollectionNameSearch({
 
   const showDropdown = open && filtered.length > 0
 
-  useEffect(() => {
+  // Sync highlight to 0 when value or filter result set changes (during render to avoid extra pass)
+  if (value !== prevValueRef.current || filtered.length !== prevFilteredLengthRef.current) {
+    prevValueRef.current = value
+    prevFilteredLengthRef.current = filtered.length
     setHighlightIndex(0)
-  }, [value, filtered.length])
+  }
 
   useEffect(() => {
     if (!showDropdown) return
@@ -78,7 +83,7 @@ export default function CollectionNameSearch({
       setHighlightIndex((i) => (i > 0 ? i - 1 : filtered.length - 1))
       return
     }
-    if (e.key === 'Enter' && filtered[highlightIndex] != null) {
+    if (e.key === 'Enter' && filtered[highlightIndex] != null) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition
       e.preventDefault()
       onChange(filtered[highlightIndex])
       setOpen(false)

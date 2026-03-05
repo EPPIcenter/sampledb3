@@ -36,7 +36,7 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
       const response = await studiesApi.list()
       const study = response.studies.find((s) => s.id === id)
       if (study) {
-        setStudyName(study?.title || null)
+        setStudyName(study.title || null)
       }
     } catch (error) {
       console.error('Failed to load study:', error)
@@ -95,7 +95,7 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
           onSuccess(response.subject.id)
         } else {
           // Navigate to the newly created subject's detail page
-          if (response.subject?.id) {
+          if (response.subject.id) {
             navigate(`/subjects/${response.subject.id}`)
           } else {
             navigate(-1)

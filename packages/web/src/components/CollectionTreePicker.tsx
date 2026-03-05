@@ -42,9 +42,11 @@ export default function CollectionTreePicker({
   const collectionsByLocation = useMemo(() => {
     const map: Record<number, Collection[]> = {}
     collections.forEach((c) => {
-      if (c.locationId) {
-        if (!map[c.locationId]) map[c.locationId] = []
-        map[c.locationId].push(c)
+      const lid = c.locationId as number | null | undefined
+      if (lid != null) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- map key may be new
+        if (!map[lid]) map[lid] = []
+        map[lid].push(c)
       }
     })
     return map
@@ -54,11 +56,10 @@ export default function CollectionTreePicker({
   const unassignedCollections = useMemo(() => {
     const locationIds = new Set(collectionLocations.map(loc => loc.id))
     return collections.filter((c) => {
-      // Include collections without locationId
-      if (!c.locationId) return true
-      // Include collections whose location doesn't support collections
-      if (c.locationId && !locationIds.has(c.locationId)) return true
-      return false
+       
+      const lid = c.locationId
+      if (lid == null) return true
+      return !locationIds.has(lid)
     })
   }, [collections, collectionLocations])
 
@@ -79,16 +80,10 @@ export default function CollectionTreePicker({
   const filteredLocations = useMemo(() => {
     // Only include locations that are in collectionLocations AND have collections mapped to them
     const locationIdsWithCollections = new Set(Object.keys(collectionsByLocation).map(Number))
-    let filtered = collectionLocations.filter((loc) => {
-      // Only show locations that have collections mapped to them
-      return locationIdsWithCollections.has(loc.id)
-    })
+    let filtered = collectionLocations.filter((loc) => locationIdsWithCollections.has(loc.id))
 
-    // Filter by collections if needed (this is now redundant but kept for clarity)
     if (filterEmptyLocations) {
-      filtered = filtered.filter((loc) => {
-        return (collectionsByLocation[loc.id] || []).length > 0
-      })
+      filtered = filtered.filter((loc) => collectionsByLocation[loc.id].length > 0)
     }
 
     // Apply search filter
@@ -97,10 +92,10 @@ export default function CollectionTreePicker({
       filtered = filtered.filter((loc) => {
         const locMatch =
           loc.name.toLowerCase().includes(term) ||
-          (loc.path || '').toLowerCase().includes(term) ||
-          (loc.description || '').toLowerCase().includes(term)
+          (loc.path ?? '').toLowerCase().includes(term) ||
+          (loc.description ?? '').toLowerCase().includes(term)
 
-        const collectionsMatch = (collectionsByLocation[loc.id] || []).some(
+        const collectionsMatch = collectionsByLocation[loc.id].some(
           (c) => c.name.toLowerCase().includes(term)
         )
 
@@ -116,25 +111,23 @@ export default function CollectionTreePicker({
   // We need to use ALL locations (not just collectionLocations) to find ancestors
   const visibleLocationIds = useMemo(() => {
     const visible = new Set<number>()
-    // Use all locations to build the map, not just collectionLocations
     const allLocationMap = new Map(locations.map(loc => [loc.id, loc]))
-    
-    // Add all filtered locations
+
     filteredLocations.forEach(loc => visible.add(loc.id))
-    
-    // Add all ancestors of filtered locations (walking up the tree)
+
     filteredLocations.forEach(loc => {
       let current: Location | undefined = loc
       while (current) {
         visible.add(current.id)
-        if (current.parentId !== null) {
-          current = allLocationMap.get(current.parentId)
+        const pid = current.parentId
+        if (pid !== null) {
+          current = allLocationMap.get(pid)
         } else {
           break
         }
       }
     })
-    
+
     return visible
   }, [filteredLocations, locations])
   
@@ -147,24 +140,22 @@ export default function CollectionTreePicker({
     // Add filtered locations
     filteredLocations.forEach(loc => visible.add(loc.id))
     
-    // Add all ancestors
     filteredLocations.forEach(loc => {
       let current: Location | undefined = loc
       while (current) {
         visible.add(current.id)
-        if (current.parentId !== null) {
-          current = allLocationMap.get(current.parentId)
+        const pid = current.parentId
+        if (pid != null) {
+          current = allLocationMap.get(pid)
         } else {
           break
         }
       }
     })
-    
-    // Return locations from all locations that are visible
+
     return locations.filter(loc => visible.has(loc.id))
   }, [filteredLocations, locations])
 
-  // Automatically expand all nodes when searching (adjust during render)
   if (search.trim() !== lastSearch.trim()) {
     setLastSearch(search)
     if (search.trim()) {
@@ -174,8 +165,9 @@ export default function CollectionTreePicker({
         let current: Location | undefined = loc
         while (current) {
           all.add(current.id)
-          if (current.parentId !== null) {
-            current = allLocationMap.get(current.parentId)
+          const pid = current.parentId
+          if (pid != null) {
+            current = allLocationMap.get(pid)
           } else {
             break
           }
@@ -186,8 +178,9 @@ export default function CollectionTreePicker({
           let current: Location | undefined = allLocationMap.get(col.locationId)
           while (current) {
             all.add(current.id)
-            if (current.parentId !== null) {
-              current = allLocationMap.get(current.parentId)
+            const pid = current.parentId
+            if (pid != null) {
+              current = allLocationMap.get(pid)
             } else {
               break
             }
@@ -203,19 +196,15 @@ export default function CollectionTreePicker({
   }
 
   const renderLocationNode = (loc: Location, depth: number = 0): React.ReactNode => {
-    // Check for children in ALL locations (to determine if expandable)
-    // But only render children that are in visibleLocations
     const allChildren = getLocationChildren(locations, loc.id)
     const visibleChildren = getLocationChildren(visibleLocations, loc.id)
     const isExpanded = expandedIds.has(loc.id)
-    const locCollections = collectionsByLocation[loc.id] || []
+    const locCollections = collectionsByLocation[loc.id] ?? []
     const hasCollections = locCollections.length > 0
-    // Location is visible if it's in the visibleLocations set
     const isVisible = visibleLocationIds.has(loc.id)
 
     if (!isVisible && depth > 0) return null
-    
-    // Show expand/collapse button if location has any children (even if not all are visible)
+
     const hasAnyChildren = allChildren.length > 0
 
     const locationLabel = getLocationLabel(loc)

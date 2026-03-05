@@ -27,7 +27,7 @@ export default function BloodControls() {
   const [strains, setStrains] = useState<Strain[]>([])
   const [loading, setLoading] = useState(true)
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = (searchParams.get('tab') as 'definitions' | 'batches') || 'definitions'
+  const activeTab = (searchParams.get('tab') as 'definitions' | 'batches')
 
   // Pagination state (per tab)
   const [definitionsPage, setDefinitionsPage] = useState(1)
@@ -72,7 +72,7 @@ export default function BloodControls() {
         controlsApi.listAllBatches(),
         strainsApi.list(),
       ])
-      setDefinitions((defsRes.data.controls || []).map(d => ({
+      setDefinitions((defsRes.data.controls).map(d => ({
         ...d,
         specimenCount: Number(d.specimenCount || 0),
         batchCount: Number(d.batchCount || 0),
@@ -83,7 +83,7 @@ export default function BloodControls() {
         tubeCount: Number(d.tubeCount || 0),
         inventoryTotal: Number(d.inventoryTotal || 0)
       })))
-      setBatches((batchesRes.data.batches || []).map(b => ({
+      setBatches((batchesRes.data.batches).map(b => ({
         ...b,
         specimenCount: Number(b.specimenCount || 0),
         spotCount: Number(b.spotCount || 0),
@@ -288,9 +288,7 @@ export default function BloodControls() {
     {
       key: 'strains',
       label: 'Composition (parasite strains)',
-      render: (_, row) => {
-        if (!row.strains || row.strains.length === 0) return <span className="text-gray-400 italic text-xs">No strains</span>
-        return (
+      render: (_, row) => (
           <div className="space-y-2 max-w-sm">
             <div className="flex h-2 bg-gray-100 rounded-full overflow-hidden">
               {row.strains.map((s, idx) => {
@@ -308,8 +306,7 @@ export default function BloodControls() {
               ))}
             </div>
           </div>
-        )
-      },
+        ),
     },
     {
       key: 'definitions',

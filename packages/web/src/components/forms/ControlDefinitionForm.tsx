@@ -123,7 +123,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
   const loadUnits = async () => {
     try {
       const res = await settingsApi.getUnits()
-      setUnits(res.data || [])
+      setUnits(res.data)
     } catch (err) {
       console.error('Failed to load units:', err)
     }
@@ -131,7 +131,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
 
   // Derived: valid densities for create mode (from densityValues) or edit (single from formData)
   const targetDensitiesForNames = isEdit
-    ? (formData.targetDensity?.trim() ? (() => {
+    ? (formData.targetDensity.trim() ? (() => {
         const n = parseFloat(formData.targetDensity)
         return Number.isNaN(n) || n < 0 ? [] : [n]
       })() : [])
@@ -220,7 +220,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
 
   const getFirstDensityForName = (): number | null => {
     if (isEdit) {
-      const n = formData.targetDensity?.trim() ? parseFloat(formData.targetDensity) : NaN
+      const n = formData.targetDensity.trim() ? parseFloat(formData.targetDensity) : NaN
       return !Number.isNaN(n) && n >= 0 ? n : null
     }
     const first = densityValues[0]?.trim()
@@ -232,7 +232,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
   const generateNameFromRefs = async () => {
     const fd = formDataRef.current
     const inputs = strainInputsRef.current
-    const density = isEdit ? fd.targetDensity?.trim() : densityValuesRef.current[0]?.trim()
+    const density = isEdit ? fd.targetDensity.trim() : densityValuesRef.current[0].trim()
     if (!autoGenerateName || !density || inputs.length === 0) return
     const total = inputs.reduce((sum, s) => sum + s.percentage, 0)
     if (Math.abs(total - 100) >= 0.01) return
@@ -268,7 +268,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
       const response = await controlsApi.suggestName({
         controlType: 'blood',
         targetDensity: density,
-        targetDensityUnitId: formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined,
+        targetDensityUnitId: formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined,  
         strains: currentStrainInputs.map((s) => ({ strainId: s.strainId, percentage: s.percentage })),
       })
       setSuggestedName(response.data.suggestedName)
@@ -320,7 +320,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
     }
 
     try {
-      if (formData.controlType === 'blood' && strainInputs.length === 0) {
+      if (formData.controlType === 'blood' && strainInputs.length === 0) {  
         setError('At least one strain is required')
         setLoading(false)
         return
@@ -333,14 +333,14 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
           controlType: 'blood' as const,
           strains: strainsPayload,
           targetDensity: parseFloat(formData.targetDensity),
-          targetDensityUnitId: formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined,
-          ...(formData.name?.trim() && { name: formData.name.trim() }),
+          targetDensityUnitId: formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined,  
+          ...(formData.name.trim() && { name: formData.name.trim() }),
         }
         const res = await controlsApi.update(controlDefinition.id, updatePayload as Parameters<typeof controlsApi.update>[1])
         if (onSuccess) onSuccess(res.data.control)
         else navigate('/blood-controls')
       } else {
-        const densityStrings = densityValues.filter((s) => s != null && String(s).trim() !== '')
+        const densityStrings = densityValues.filter((s) => s != null && String(s).trim() !== '') // eslint-disable-line @typescript-eslint/no-unnecessary-condition
         const targetDensities = densityStrings.map((s) => parseFloat(String(s).trim()))
         const hasInvalid = targetDensities.some((n) => Number.isNaN(n) || n < 0)
         const unique = new Set(targetDensities)
@@ -584,7 +584,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
                       aria-label={index === 0 ? 'Target density' : `Density ${index + 1}`}
                     />
                     <label htmlFor={`definition-name-${index}`} className="sr-only">
-                      Name (density {targetDensitiesForNames[index] != null ? (targetDensitiesForNames[index] >= 1000 ? `${targetDensitiesForNames[index] / 1000}K` : targetDensitiesForNames[index]) : index + 1})
+                      Name (density {targetDensitiesForNames[index] != null ? (targetDensitiesForNames[index] >= 1000 ? `${targetDensitiesForNames[index] / 1000}K` : targetDensitiesForNames[index]) : index + 1}) {/* eslint-disable-line @typescript-eslint/no-unnecessary-condition */}
                     </label>
                     <input
                       id={`definition-name-${index}`}
@@ -597,7 +597,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
                       }}
                       className="form-input min-w-0 w-full"
                       placeholder="Name for this definition"
-                      aria-label={`Name (density ${targetDensitiesForNames[index] != null ? (targetDensitiesForNames[index] >= 1000 ? `${targetDensitiesForNames[index] / 1000}K` : targetDensitiesForNames[index]) : index + 1})`}
+                      aria-label={`Name (density ${targetDensitiesForNames[index] != null ? (targetDensitiesForNames[index] >= 1000 ? `${targetDensitiesForNames[index] / 1000}K` : targetDensitiesForNames[index]) : index + 1})`} // eslint-disable-line @typescript-eslint/no-unnecessary-condition
                     />
                     <button
                       type="button"

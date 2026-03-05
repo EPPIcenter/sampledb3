@@ -41,15 +41,15 @@ export default function SpecimenTypesStep({
   // Fetch allowed container types when specimen type is selected
   useEffect(() => {
     const fetchContainerTypes = async () => {
-      if (newSpecimenType.specimenTypeId && newSpecimenType.specimenTypeId > 0) {
+      if (newSpecimenType.specimenTypeId && newSpecimenType.specimenTypeId > 0) {  
         setLoadingContainerTypes(true)
         try {
           const response = await specimenTypesApi.getContainerTypes(newSpecimenType.specimenTypeId)
-          const containerTypes = response.data.containerTypes || []
+          const containerTypes = response.data.containerTypes
           setAllowedContainerTypes(containerTypes)
           
           // If current container type is not allowed, reset to first allowed option or 'paper'
-          if (newSpecimenType.containerType && containerTypes.length > 0) {
+          if (newSpecimenType.containerType && containerTypes.length > 0) {  
             if (!containerTypes.includes(newSpecimenType.containerType)) {
               setNewSpecimenType(prev => ({
                 ...prev,
@@ -80,10 +80,11 @@ export default function SpecimenTypesStep({
         setLoadingSpecimenTypes(true)
         try {
           const response = await specimenTypesApi.getByContainerType(newSpecimenType.containerType)
-          const specimenTypes = response.data.specimenTypes || []
+          const specimenTypes = response.data.specimenTypes
           setAllowedSpecimenTypes(specimenTypes)
           
           // If current specimen type is not allowed, reset to empty
+           
           if (newSpecimenType.specimenTypeId && specimenTypes.length > 0) {
             const isAllowed = specimenTypes.some(st => st.id === newSpecimenType.specimenTypeId)
             if (!isAllowed) {
@@ -189,11 +190,11 @@ export default function SpecimenTypesStep({
     if (specimenTypeId > 0) {
       try {
         const response = await specimenTypesApi.getContainerTypes(specimenTypeId)
-        const containerTypes = response.data.containerTypes || []
+        const containerTypes = response.data.containerTypes
         setAllowedContainerTypes(containerTypes)
         
         // Validate current container type selection - if invalid, clear it
-        if (containerTypes.length > 0 && containerType && !containerTypes.includes(containerType)) {
+        if (containerTypes.length > 0 && containerType && !containerTypes.includes(containerType)) {  
           // Clear container type selection if it's not allowed
           setNewSpecimenType({
             ...newSpecimenType,
@@ -249,7 +250,7 @@ export default function SpecimenTypesStep({
     // Fetch allowed specimen types for this container type
     try {
       const response = await specimenTypesApi.getByContainerType(containerType)
-      const specimenTypes = response.data.specimenTypes || []
+      const specimenTypes = response.data.specimenTypes
       setAllowedSpecimenTypes(specimenTypes)
       
       // Validate current specimen type selection

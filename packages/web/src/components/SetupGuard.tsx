@@ -43,6 +43,7 @@ export default function SetupGuard({ children }: { children: React.ReactNode }) 
       void setupPromise
     } else if (setupCachedInitialized !== null) {
       // Already ran and we have a result (e.g. remount in Strict Mode after first completed)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ref may be null before mount
       if (isMountedRef.current) {
         setIsInitialized(setupCachedInitialized)
         setIsChecking(false)
@@ -60,7 +61,7 @@ export default function SetupGuard({ children }: { children: React.ReactNode }) 
     return () => {
       isMountedRef.current = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   // Re-check setup status when navigating away from /setup (e.g. after completing setup → /login).

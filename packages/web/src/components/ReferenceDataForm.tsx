@@ -249,7 +249,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
                       className="form-textarea disabled:bg-gray-100 disabled:cursor-not-allowed"
                       rows={3}
                     />
-                  ) : field.options || fieldOptions[String(field.key)] ? (
+                  ) : field.options || fieldOptions[String(field.key)] ? ( // eslint-disable-line @typescript-eslint/no-unnecessary-condition
                     <select
                       id={fieldId}
                       value={formData[field.key] === null || formData[field.key] === undefined ? '' : String(formData[field.key])}
@@ -267,7 +267,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
                       className="form-select disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="">Select...</option>
-                      {(field.options || fieldOptions[String(field.key)] || []).map((option) => (
+                      {(field.options ?? fieldOptions[String(field.key)] ?? []).map((option) => ( // eslint-disable-line @typescript-eslint/no-unnecessary-condition
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>

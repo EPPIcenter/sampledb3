@@ -32,9 +32,9 @@ export function filterCollections(
       : collections.filter((c) => c.type === typeFilter)
   if (trimmed === '') return byType
   return byType.filter((c) => {
-    const nameMatch = c.name?.toLowerCase().includes(trimmed) ?? false
-    const barcodeMatch = c.barcode?.toLowerCase().includes(trimmed) ?? false
-    const pathMatch = c.location?.path?.toLowerCase().includes(trimmed) ?? false
+    const nameMatch = c.name.toLowerCase().includes(trimmed)
+    const barcodeMatch = (c.barcode?.toLowerCase().includes(trimmed)) ?? false
+    const pathMatch = (c.location?.path?.toLowerCase().includes(trimmed)) ?? false
     return nameMatch || barcodeMatch || pathMatch
   })
 }

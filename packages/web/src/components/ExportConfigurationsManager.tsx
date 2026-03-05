@@ -48,8 +48,8 @@ export default function ExportConfigurationsManager({
           exportConfigurationsApi.getShared(),
           exportConfigurationsApi.getPersonal().catch(() => ({ data: { configurations: [] } })),
         ])
-        setSharedConfigurations(sharedRes.data?.configurations || [])
-        setPersonalConfigurations(personalRes.data?.configurations || [])
+        setSharedConfigurations(sharedRes.data.configurations)
+        setPersonalConfigurations(personalRes.data.configurations)
       } catch (err: any) {
         setError(err.response?.data?.error || 'Failed to load configurations')
       } finally {

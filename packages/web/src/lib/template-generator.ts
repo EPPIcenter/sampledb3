@@ -47,7 +47,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
     parentColumns.push('parent_subject_name')
     parentColumns.push('parent_specimen_type_name')
     parentColumns.push('parent_collection_date') // Optional but included for clarity
-  } else if (parentType === 'cryovial_position') {
+  } else if (parentType === 'cryovial_position') { // eslint-disable-line @typescript-eslint/no-unnecessary-condition
     // Study subject with cryovial parent (identified by box + position)
     parentColumns.push('parent_box_barcode')
     parentColumns.push('parent_position')
@@ -87,7 +87,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
 
   // Helper to build example row matching column order
   const buildRow = (values: Record<string, string>): string => {
-    return parentColumns.map(col => (defaultDerivationPerRow[col] ?? values[col] ?? '')).join(',')
+    return parentColumns.map(col => (defaultDerivationPerRow[col] ?? values[col] ?? '')).join(',') // eslint-disable-line @typescript-eslint/no-unnecessary-condition
   }
 
   // Example rows based on parent type and container types
@@ -172,7 +172,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
       container_barcode: 'CHILD002',
       notes: 'Second extraction',
     }))
-  } else if (parentType === 'cryovial_position') {
+  } else if (parentType === 'cryovial_position') { // eslint-disable-line @typescript-eslint/no-unnecessary-condition
     // Study subject with cryovial parent (identified by box + position)
     lines.push(buildRow({
       parent_box_barcode: 'BOX-001',

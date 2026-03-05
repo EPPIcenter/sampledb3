@@ -33,10 +33,7 @@ export default function HotkeyHelpModal({ isOpen, onClose }: HotkeyHelpModalProp
 
   // Group hotkeys by category
   const groupedHotkeys = HOTKEY_DEFINITIONS.reduce((acc, hotkey) => {
-    if (!acc[hotkey.category]) {
-      acc[hotkey.category] = []
-    }
-    acc[hotkey.category].push(hotkey)
+    (acc[hotkey.category] ??= []).push(hotkey)
     return acc
   }, {} as Record<string, typeof HOTKEY_DEFINITIONS>)
 

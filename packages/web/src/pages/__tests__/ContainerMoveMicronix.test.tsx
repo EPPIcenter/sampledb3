@@ -2,7 +2,8 @@ import { screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { renderWithProviders } from '../../__tests__/helpers/render'
 
-// Polyfill File.prototype.text for JSDOM
+// Polyfill File.prototype.text for JSDOM (may exist in some test envs)
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime check for JSDOM
 if (!File.prototype.text) {
     File.prototype.text = async function () {
         return new Promise((resolve) => {

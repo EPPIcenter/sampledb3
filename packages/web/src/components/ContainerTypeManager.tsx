@@ -58,12 +58,12 @@ export default function ContainerTypeManager({
     setError(null)
     try {
       const response = await specimenTypesApi.getContainerTypes(specimenTypeId)
-      const containerTypes = response.data.containerTypes || []
+      const containerTypes = response.data.containerTypes
       setAllowedContainerTypes(containerTypes)
       setSelectedContainerTypes(new Set(containerTypes))
     } catch (err: any) {
       console.error('Failed to load container types:', err)
-      setError(err.response?.data?.error || 'Failed to load container types')
+      setError(err.response?.data?.error ?? 'Failed to load container types')
     } finally {
       setLoading(false)
     }

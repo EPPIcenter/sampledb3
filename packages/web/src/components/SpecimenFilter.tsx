@@ -69,7 +69,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
         setStudyLoading(true)
         const response = await studiesApi.list(studySearch || undefined)
         if (!ignore) {
-          setStudies(response.studies || [])
+          setStudies(response.studies)
         }
       } catch (error) {
         if (!ignore) {
@@ -91,7 +91,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
     try {
       setStudyLoading(true)
       const response = await studiesApi.list(studySearch || undefined)
-      setStudies(response.studies || [])
+      setStudies(response.studies)
     } catch (error) {
       console.error('Failed to load studies:', error)
     } finally {

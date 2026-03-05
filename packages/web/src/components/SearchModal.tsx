@@ -20,12 +20,26 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
   const prevResultsRef = useRef<SearchResult[]>(results)
+  const prevOpenKeyRef = useRef<string | null>(null)
   const ignoreMouseEnterRef = useRef(false)
 
   // Reset selection when results change (during render to avoid extra pass)
   if (results !== prevResultsRef.current) {
     prevResultsRef.current = results
     setSelectedIndex(0)
+  }
+
+  // Sync query/results/selectedIndex when modal opens or initialQuery changes (during render to avoid extra pass)
+  if (!isOpen) {
+    prevOpenKeyRef.current = null
+  } else {
+    const openKey = initialQuery ?? ''
+    if (prevOpenKeyRef.current !== openKey) {
+      prevOpenKeyRef.current = openKey
+      setQuery(initialQuery ?? '')
+      setResults([])
+      setSelectedIndex(0)
+    }
   }
 
   // Close on Escape
@@ -35,15 +49,12 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
     }
   }, { enabled: isOpen, enableOnFormTags: true })
 
-  // Focus input when modal opens; prefill query when initialQuery provided (e.g. from dashboard hero search)
+  // Focus input when modal opens (DOM-only; state sync is done during render above)
   useEffect(() => {
     if (isOpen) {
       inputRef.current?.focus()
-      setQuery(initialQuery ?? '')
-      setResults([])
-      setSelectedIndex(0)
     }
-  }, [isOpen, initialQuery])
+  }, [isOpen])
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -94,13 +105,9 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
 
   // Scroll selected item into view
   useEffect(() => {
-    if (resultsRef.current && results.length > 0) {
-      const selectedElement = resultsRef.current.querySelector(
-        `[data-result-index="${selectedIndex}"]`
-      ) as HTMLElement
-      if (selectedElement) {
-        selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-      }
+    const el = resultsRef.current?.querySelector(`[data-result-index="${selectedIndex}"]`) as HTMLElement | null
+    if (el) {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     }
   }, [selectedIndex, results.length])
 
@@ -122,7 +129,8 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
       setSelectedIndex(prev => (prev > 0 ? prev - 1 : 0))
     } else if (e.key === 'Enter' && results.length > 0) {
       e.preventDefault()
-      handleSelect(results[selectedIndex])
+      const selected = results[selectedIndex]
+      handleSelect(selected)
     } else if (e.key === 'Escape') {
       e.preventDefault()
       onClose()
@@ -131,10 +139,7 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
 
   // Group results by type
   const groupedResults = results.reduce((acc, result) => {
-    if (!acc[result.type]) {
-      acc[result.type] = []
-    }
-    acc[result.type].push(result)
+    (acc[result.type] ??= []).push(result)
     return acc
   }, {} as Record<string, SearchResult[]>)
 

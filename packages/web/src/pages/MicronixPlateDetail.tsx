@@ -96,9 +96,10 @@ export default function MicronixPlateDetail() {
   }, [data])
 
   const tableRows = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- layout/data.wells may be unset before load
     if (!layout || !data?.wells) return []
     const wells = data.wells as Record<string, CollectionTableEntry & { type?: string }>
-    const plate = data?.plate
+    const plate = data.plate
     const context = plate
       ? { collectionName: plate.name ?? undefined, locationPath: plate.locationPath ?? undefined }
       : undefined
@@ -141,6 +142,7 @@ export default function MicronixPlateDetail() {
     )
   }
 
+   
   if (!data?.plate) {
     return (
       <div className="storage-page">
@@ -155,7 +157,7 @@ export default function MicronixPlateDetail() {
 
   const breadcrumbItems = [
     { label: 'Locations', to: '/locations' },
-    plate.location?.id
+    plate.location?.id != null
       ? { label: plate.locationPath || `Location #${plate.location.id}`, to: `/locations/${plate.location.id}` }
       : undefined,
     { label: `Micronix Plate ${plate.name || `#${plate.id}`}` },
@@ -177,8 +179,7 @@ export default function MicronixPlateDetail() {
         )}
       </div>
 
-      {layout && (
-        <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-2">
+      <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-2">
           <div className="flex items-start justify-between mb-3 gap-4 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-lg font-semibold storage-section-title">Plate Layout</h2>
@@ -357,7 +358,6 @@ export default function MicronixPlateDetail() {
             />
           )}
         </div>
-      )}
       </div>
     </div>
   )

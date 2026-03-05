@@ -76,23 +76,17 @@ export default function SpecimenForm({
   useEffect(() => {
     loadStudies()
     loadSpecimenTypes()
-    // If subjectId is provided, load subjects for the study
-    if (subjectId && studyId && studyId > 0) {
-      loadSubjects(studyId)
-    }
   }, [])
 
+  // Single effect: load subjects when study (prop or form) or source type changes
   useEffect(() => {
-    if (studyId && studyId > 0 && formData.sourceType === 'subject') {
-      loadSubjects(studyId)
+    if (formData.sourceType === 'subject') {
+      const effectiveStudyId = (formData.studyId || studyId) ?? 0
+      if (effectiveStudyId > 0) {
+        loadSubjects(effectiveStudyId)
+      }
     }
-  }, [studyId])
-
-  useEffect(() => {
-    if (formData.studyId > 0 && formData.sourceType === 'subject') {
-      loadSubjects(formData.studyId)
-    }
-  }, [formData.studyId, formData.sourceType])
+  }, [studyId, formData.studyId, formData.sourceType])
 
   useEffect(() => {
     if (formData.sourceType !== 'subject') {
@@ -134,23 +128,23 @@ export default function SpecimenForm({
       switch (sourceType) {
         case 'control':
           const controlsRes = await controlsApi.list()
-          setControls(controlsRes.data.controls || [])
+          setControls(controlsRes.data.controls)
           break
         case 'reagent':
           const reagentsRes = await reagentsApi.list()
-          setReagents(reagentsRes.data.reagents || [])
+          setReagents(reagentsRes.data.reagents)
           break
         case 'cell_line':
           const cellLinesRes = await cellLinesApi.list()
-          setCellLines(cellLinesRes.data.cellLines || [])
+          setCellLines(cellLinesRes.data.cellLines)
           break
         case 'plasmid':
           const plasmidsRes = await plasmidsApi.list()
-          setPlasmids(plasmidsRes.data.plasmids || [])
+          setPlasmids(plasmidsRes.data.plasmids)
           break
         case 'standard':
           const standardsRes = await standardsApi.list()
-          setStandards(standardsRes.data.standards || [])
+          setStandards(standardsRes.data.standards)
           break
       }
     } catch (error) {
@@ -247,7 +241,7 @@ export default function SpecimenForm({
         onSuccess()
       } else {
         // Navigate to the newly created specimen's detail page
-        if (response.specimen?.id) {
+        if (response.specimen.id) {
           navigate(`/specimens/${response.specimen.id}`)
         } else {
           navigate('/statistics')

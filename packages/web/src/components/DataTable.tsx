@@ -145,9 +145,7 @@ export default function DataTable<T extends { id: number }>({
       } else if (e.key === 'Enter' && selectedRowIndex !== null) {
         e.preventDefault()
         const selectedRow = paginatedData[selectedRowIndex]
-        if (selectedRow) {
-          onRowClick(selectedRow)
-        }
+        onRowClick(selectedRow)
       } else if (e.key === 'Home') {
         e.preventDefault()
         setSelectedRowIndex(0)

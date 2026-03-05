@@ -1,3 +1,4 @@
+ 
 import React from 'react'
 import type { Column } from '../components/ReferenceDataTable'
 import type {
@@ -91,8 +92,8 @@ export const referenceDataConfigs: ReferenceDataConfig[] = [
           key: 'containerTypes',
           label: 'Allowed Container Types',
           render: (value: any, item: SpecimenType) => {
-            const allowedTypes = containerTypeRelationships[item.id] || []
-            const usageInfo = containerTypeUsageInfo[item.id] || {}
+            const allowedTypes = containerTypeRelationships[item.id]
+            const usageInfo = containerTypeUsageInfo[item.id]
             return React.createElement(ContainerTypesCell, {
               item,
               allowedTypes,
@@ -122,9 +123,9 @@ export const referenceDataConfigs: ReferenceDataConfig[] = [
 
       // Add container types field if editing an existing specimen type
       if (editingItem?.id && deps?.containerTypeRelationships) {
-        const allowedTypes = deps.containerTypeRelationships[editingItem.id] || []
-        const usageInfo = deps.containerTypeUsageInfo?.[editingItem.id] || {}
-        const containerTypesDisabled = deps?.containerTypesDisabled || false
+        const allowedTypes = deps.containerTypeRelationships[editingItem.id]
+        const usageInfo = deps.containerTypeUsageInfo?.[editingItem.id] ?? {}  
+        const containerTypesDisabled = deps.containerTypesDisabled || false
         fields.push({
           key: 'containerTypes',
           label: 'Allowed Container Types',

@@ -29,13 +29,13 @@ function ProfileFormInner({ user }: { user: NonNullable<ReturnType<typeof useUse
     try {
       const updateData: { name?: string; email?: string; username?: string | null } = {}
       
-      if (profileForm.name !== user?.name) {
+      if (profileForm.name !== user.name) {
         updateData.name = profileForm.name
       }
-      if (profileForm.email !== user?.email) {
+      if (profileForm.email !== user.email) {
         updateData.email = profileForm.email
       }
-      if (profileForm.username !== (user?.username || '')) {
+      if (profileForm.username !== (user.username || '')) {
         updateData.username = profileForm.username || null
       }
 

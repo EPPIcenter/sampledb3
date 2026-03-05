@@ -238,7 +238,7 @@ export function parseContainerCSV(csvText: string, filename: string): ParsedCSVF
       parsedRow.unit_symbol = row[unitSymbolIdx].trim()
     }
 
-    if (densityIdx >= 0 && row[densityIdx] !== undefined) {
+    if (densityIdx >= 0 && row[densityIdx] !== undefined) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition
       const densityVal = row[densityIdx].trim()
       if (densityVal === '') {
         parsedRow.density = undefined
@@ -252,7 +252,7 @@ export function parseContainerCSV(csvText: string, filename: string): ParsedCSVF
       }
     }
 
-    if (sheetNameIdx >= 0 && row[sheetNameIdx] !== undefined) {
+    if (sheetNameIdx >= 0 && row[sheetNameIdx] !== undefined) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition
       const val = row[sheetNameIdx].trim()
       if (val) parsedRow.sheet_name = val
     }
@@ -351,7 +351,7 @@ ${examples.join('\n')}`
     }
     return `specimen_type_name,position,barcode,quantity,unit_symbol,density
 ${examples.join('\n')}`
-  } else if (containerType === 'micronix_tube') {
+  } else if (containerType === 'micronix_tube') { // eslint-disable-line @typescript-eslint/no-unnecessary-condition
     const firstType = allowedSpecimenTypes[0]
     examples.push(`${firstType.name},A1,MT-001,1,items,100`)
     if (allowedSpecimenTypes.length > 1) {

@@ -123,7 +123,7 @@ export default function CSVUploadStep({
     try {
       // Get specimen types allowed for selected container type
       const response = await specimenTypesApi.getByContainerType(selectedContainerType)
-      const allowedSpecimenTypes = response.data.specimenTypes || []
+      const allowedSpecimenTypes = response.data.specimenTypes
       
       if (allowedSpecimenTypes.length === 0) {
         alert(`No specimen types are configured for ${selectedContainerType}. Please configure container type relationships first.`)

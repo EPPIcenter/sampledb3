@@ -59,7 +59,7 @@ export default function Studies() {
       try {
         // Fetch all studies to get all unique lead persons
         const response = await studiesApi.list(undefined, { page: 1, limit: 10000 })
-        const allStudies = response.studies || []
+        const allStudies = response.studies
         const leads = new Set(allStudies.map(s => s.leadPerson).filter(Boolean))
         setAllLeadPersons(Array.from(leads).sort())
       } catch (error) {
@@ -114,7 +114,7 @@ export default function Studies() {
       }
       
       const response = await studiesApi.list(searchTerm || undefined, { page, limit })
-      const studiesList = response.studies || []
+      const studiesList = response.studies
       
       if (studiesList.length === 0) {
         setHasMore(false)
@@ -163,7 +163,7 @@ export default function Studies() {
       setLoading(true)
       // Load all studies when filters are active (we'll paginate client-side)
       const response = await studiesApi.list(searchTerm || undefined, { page: 1, limit: 10000 })
-      const studiesList = response.studies || []
+      const studiesList = response.studies
       
       // Merge with cached summaries
       const studiesWithSummaries = studiesList.map(study => ({
@@ -201,7 +201,7 @@ export default function Studies() {
 
     try {
       const response = await studiesApi.getSummaries(idsToLoad)
-      const summaries = response.summaries || []
+      const summaries = response.summaries
       
       // Update cache
       setSummaryCache(prev => {
@@ -260,8 +260,9 @@ export default function Studies() {
       { rootMargin: '100px' } // Start loading 100px before card enters viewport
     )
 
-    // Observe all card elements
+    // Observe all card elements (refs may be unset before mount)
     cardRefs.current.forEach((element, studyId) => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- refs may be null
       if (element && summaryObserverRef.current) {
         summaryObserverRef.current.observe(element)
       }
@@ -284,6 +285,7 @@ export default function Studies() {
       observerRef.current = new IntersectionObserver(
         (entries) => {
           entries.forEach(entry => {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- guard for load
             if (entry.isIntersecting && hasMore && !loadingMore) {
               setPage(prev => prev + 1)
             }
@@ -412,7 +414,7 @@ export default function Studies() {
                 {hasActiveFilters ? (
                   <>
                     {filteredTotal} of {total} {total === 1 ? 'study' : 'studies'}
-                    {hasActiveFilters && ' (filtered)'}
+                    {' (filtered)'}
                   </>
                 ) : (
                   <>
@@ -422,6 +424,7 @@ export default function Studies() {
               </p>
             )}
           </div>
+          { }
           {canWrite && (
             <Link
               to="/studies/new"

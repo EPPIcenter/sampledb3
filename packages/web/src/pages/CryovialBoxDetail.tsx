@@ -125,14 +125,14 @@ export default function CryovialBoxDetail() {
     layout.rows.forEach((row) => {
       layout.cols.forEach((col) => {
         const key = `${row}${col.padStart(2, '0')}`
-        const entries = positions[key] || []
+        const entries = positions[key] ?? []
         entries.forEach((entry) => {
           rows.push(
             buildCollectionTableRow({
-              position: entry?.position ?? key,
-              barcode: entry?.barcode,
-              containerType: entry?.kind ?? undefined,
-              container: entry?.container ?? undefined,
+              position: entry.position,
+              barcode: entry.barcode,
+              containerType: entry.kind ?? undefined,
+              container: entry.container ?? undefined,
               context,
             })
           )
@@ -143,6 +143,7 @@ export default function CryovialBoxDetail() {
   }, [data, layout])
 
   const tableColumns = useMemo(() => {
+     
     if (viewMode !== 'table' || loadingConfigs || viewConfigurations.length === 0) {
       return COLLECTION_GRID_TABLE_COLUMNS
     }
@@ -325,8 +326,8 @@ export default function CryovialBoxDetail() {
               const tooltipParts: string[] = []
               if (entry.position) tooltipParts.push(`Position: ${entry.position}`)
               if (entry.barcode) tooltipParts.push(`Barcode: ${entry.barcode}`)
-              if (label) tooltipParts.push(`Type: ${label}`)
-              if (subjectName) tooltipParts.push(`${source?.type === 'subject' ? 'Subject' : 'Control'}: ${subjectName}`)
+              tooltipParts.push(`Type: ${label}`)
+              tooltipParts.push(`${source?.type === 'subject' ? 'Subject' : 'Control'}: ${subjectName}`)
               if (specimenId) tooltipParts.push(`Specimen: #${specimenId}`)
               if (stateName) tooltipParts.push(`State: ${stateName}`)
               if (statusName) tooltipParts.push(`Status: ${statusName}`)

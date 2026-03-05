@@ -45,6 +45,7 @@ export default function StudyDetail() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleteInProgress, setDeleteInProgress] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- URL param may be missing
   const activeTab = (searchParams.get('tab') as 'overview' | 'timeline' | 'subjects') || 'overview'
   const hasProcessedCreateSubject = useRef(false)
   const prevIdRef = useRef(id)
@@ -135,7 +136,7 @@ export default function StudyDetail() {
       const response = await studiesApi.get(parseInt(id!))
       if (checkIgnore()) return
       setStudy(response.study)
-      if (response.study?.shortCode) {
+      if (response.study.shortCode) {
         void loadSpecimenCount(response.study.shortCode, checkIgnore)
       }
     } catch (error) {
@@ -150,7 +151,7 @@ export default function StudyDetail() {
     try {
       setLoading(true)
       const response = await studiesApi.getSubjects(parseInt(id!))
-      if (!checkIgnore()) setSubjects(response.subjects || [])
+      if (!checkIgnore()) setSubjects(response.subjects)
     } catch (error) {
       if (!checkIgnore()) console.error('Failed to load subjects:', error)
     } finally {
@@ -222,6 +223,7 @@ export default function StudyDetail() {
   }
 
   const handleDeleteStudy = async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- guard for load race
     if (!study || deleteConfirmInput.trim() !== study.shortCode) return
     setDeleteError(null)
     setDeleteInProgress(true)
@@ -528,6 +530,8 @@ export default function StudyDetail() {
         </ModalPortal>
       )}
 
+      { }
+      {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- guard for modal open with study */}
       {deleteModalOpen && study && (
         <ModalPortal>
           <div className="fixed inset-0 z-[100] overflow-y-auto">
@@ -555,9 +559,9 @@ export default function StudyDetail() {
                 </p>
                 <ul className="list-disc list-inside text-sm text-gray-600 mb-4 space-y-1">
                   <li>The study &quot;{study.title}&quot; (short code: {study.shortCode})</li>
-                  <li>{(summary?.summary?.totalSubjects ?? 0).toLocaleString()} subject(s)</li>
-                  <li>{(summary?.summary?.totalSpecimens ?? 0).toLocaleString()} specimen(s)</li>
-                  <li>{(summary?.summary?.totalContainers ?? 0).toLocaleString()} storage container(s) (and any tags, derivations, and container-type records)</li>
+                  <li>{(summary?.summary.totalSubjects ?? 0).toLocaleString()} subject(s)</li>
+                  <li>{(summary?.summary.totalSpecimens ?? 0).toLocaleString()} specimen(s)</li>
+                  <li>{(summary?.summary.totalContainers ?? 0).toLocaleString()} storage container(s) (and any tags, derivations, and container-type records)</li>
                 </ul>
                 <div className="mb-4">
                   <label htmlFor="delete-confirm" className="block text-sm font-medium text-gray-700 mb-1">

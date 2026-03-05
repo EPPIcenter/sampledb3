@@ -52,7 +52,7 @@ export default function CollectionMove() {
     const loadLocations = async () => {
       try {
         const response = await locationsApi.list()
-        setLocations(response.data.locations || [])
+        setLocations(response.data.locations)
       } catch (error) {
         console.error('Failed to load locations:', error)
       }
@@ -72,7 +72,7 @@ export default function CollectionMove() {
     try {
       // Use optimized endpoint that loads all collections in a single request
       const response = await collectionsApi.listAllCollections()
-      const collectionsData = response.data?.collections || []
+      const collectionsData = response.data.collections
 
       const allCollections: Collection[] = collectionsData.map((c: any) => ({
         id: c.id,

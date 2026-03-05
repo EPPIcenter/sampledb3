@@ -63,7 +63,7 @@ export default function QpcrExperiments() {
     setError(null)
     qpcrExperimentsApi
       .list(statusFilter ? { status: statusFilter } : undefined)
-      .then((res) => setExperiments(res.data.experiments ?? []))
+      .then((res) => setExperiments(res.data.experiments))
       .catch((err: { response?: { data?: { error?: string } } }) => {
         setError(err.response?.data?.error ?? 'Failed to load qPCR experiments')
       })
@@ -108,7 +108,7 @@ export default function QpcrExperiments() {
       sortable: true,
       render: (_, row) => (
         <span className="text-slate-700">
-          {TEMPLATE_LABELS[row.templateFormat] ?? row.templateFormat}
+          {(TEMPLATE_LABELS as Record<string, string>)[row.templateFormat] ?? row.templateFormat}
         </span>
       ),
     },
@@ -117,7 +117,7 @@ export default function QpcrExperiments() {
       label: 'Plate',
       sortable: true,
       render: (val) => (
-        <span className="text-slate-600">{(val as string | null)?.trim() || '—'}</span>
+        <span className="text-slate-600">{typeof val === 'string' ? val.trim() || '—' : '—'}</span>
       ),
     },
     {
@@ -126,7 +126,7 @@ export default function QpcrExperiments() {
       sortable: false,
       render: (_, row) => {
         const targets = row.targets ?? []
-        const names = targets.map((t) => t.targetName?.trim()).filter(Boolean)
+        const names = targets.map((t) => (t.targetName != null ? t.targetName.trim() : '')).filter(Boolean) // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- targetName may be omitted
         return (
           <span className="text-slate-600">{names.length > 0 ? names.join(', ') : '—'}</span>
         )

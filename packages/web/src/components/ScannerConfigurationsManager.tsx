@@ -47,10 +47,10 @@ export default function ScannerConfigurationsManager({
           scannerConfigurationsApi.getShared(),
           scannerConfigurationsApi.getPersonal().catch(() => ({ data: { configurations: [] } })),
         ])
-        setSharedConfigurations(sharedRes.data?.configurations || [])
-        setPersonalConfigurations(personalRes.data?.configurations || [])
+        setSharedConfigurations(sharedRes.data.configurations)
+        setPersonalConfigurations(personalRes.data.configurations)
       } catch (err: any) {
-        setError(err.response?.data?.error || 'Failed to load configurations')
+        setError(err.response?.data.error || 'Failed to load configurations')
       } finally {
         setLoading(false)
       }
@@ -122,8 +122,8 @@ export default function ScannerConfigurationsManager({
         setPersonalConfigurations(updated)
         onSuccess?.()
       } catch (err: unknown) {
-        setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to create configuration')
-        onError?.((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to create configuration')
+        setError((err as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Failed to create configuration')
+        onError?.((err as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Failed to create configuration')
         return
       } finally {
         setSaving(false)
@@ -143,7 +143,7 @@ export default function ScannerConfigurationsManager({
         onSuccess?.()
         resetForm()
       } catch (err: unknown) {
-        const errorMsg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to create configuration'
+        const errorMsg = (err as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Failed to create configuration'
         setError(errorMsg)
         onError?.(errorMsg)
       } finally {
@@ -230,8 +230,8 @@ export default function ScannerConfigurationsManager({
         setPersonalConfigurations(updated)
         onSuccess?.()
       } catch (err: unknown) {
-        setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to update configuration')
-        onError?.((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to update configuration')
+        setError((err as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Failed to update configuration')
+        onError?.((err as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Failed to update configuration')
         return
       } finally {
         setSaving(false)
@@ -245,7 +245,7 @@ export default function ScannerConfigurationsManager({
         onSuccess?.()
         resetForm()
       } catch (err: unknown) {
-        const errorMsg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to update configuration'
+        const errorMsg = (err as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Failed to update configuration'
         setError(errorMsg)
         onError?.(errorMsg)
         return
@@ -278,8 +278,8 @@ export default function ScannerConfigurationsManager({
         setPersonalConfigurations(updated)
         onSuccess?.()
       } catch (err: unknown) {
-        setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to delete configuration')
-        onError?.((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to delete configuration')
+        setError((err as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Failed to delete configuration')
+        onError?.((err as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Failed to delete configuration')
       } finally {
         setSaving(false)
       }
@@ -295,7 +295,7 @@ export default function ScannerConfigurationsManager({
         setSharedConfigurations(updated)
         onSuccess?.()
       } catch (err: unknown) {
-        const errorMsg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to delete configuration'
+        const errorMsg = (err as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Failed to delete configuration'
         setError(errorMsg)
         onError?.(errorMsg)
       } finally {
@@ -323,7 +323,7 @@ export default function ScannerConfigurationsManager({
       }
       onSuccess?.()
     } catch (err: unknown) {
-      const errorMsg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to set default'
+      const errorMsg = (err as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Failed to set default'
       setError(errorMsg)
       onError?.(errorMsg)
     } finally {

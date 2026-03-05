@@ -42,7 +42,7 @@ export default function TableViewConfigurationsManager({
       setLoading(true)
       try {
         const res = await tableViewConfigurationsApi.get()
-        const configs = res.data?.value?.configurations ?? []
+        const configs = res.data.value.configurations ?? [] // eslint-disable-line @typescript-eslint/no-unnecessary-condition
         setConfigurations(configs)
       } catch (err: unknown) {
         const msg =

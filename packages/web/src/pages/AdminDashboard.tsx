@@ -198,7 +198,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Users by Role */}
-          {stats.users.byRole && Object.keys(stats.users.byRole).length > 0 && (
+          {Object.keys(stats.users.byRole).length > 0 && (
             <div className="admin-card p-6">
               <h2 className="admin-section-title mb-4">Users by Role</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

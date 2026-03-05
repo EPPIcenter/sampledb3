@@ -159,7 +159,7 @@ export default function ControlDefinitionDetail() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <StatCard title="Production Runs" value={stats.totalBatches} subtitle={`Total specimens: ${stats.totalSpecimens}`} className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-2" />
           <StatCard title="Stock Availability" value={`${stats.inStockBatchesCount} / ${stats.totalBatches}`} subtitle="Batches in stock" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-3" />
-          <StatCard title="Available Containers" value={stats.totalContainers || 0} subtitle={`${stats.totalSpots} spots, ${stats.totalMicronix ?? 0} micronix, ${stats.totalCryovial ?? 0} cryovial, ${stats.totalStaticWells ?? 0} static wells`} className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-4" />
+          <StatCard title="Available Containers" value={stats.totalContainers || 0} subtitle={`${stats.totalSpots} spots, ${stats.totalMicronix} micronix, ${stats.totalCryovial} cryovial, ${stats.totalStaticWells} static wells`} className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-4" />
           <StatCard title="Storage Spread" value={stats.activeLocationsCount || 0} subtitle="Unique locations" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-5" />
         </div>
 
@@ -171,7 +171,7 @@ export default function ControlDefinitionDetail() {
                 <div>
                   <p className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Target Density</p>
                   <p className="font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>
-                    {control.targetDensity !== undefined && control.targetDensity !== null ? (
+                    {control.targetDensity != null ? (
                       <>
                         {control.targetDensity.toLocaleString()} <span className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{control.unitSymbol || ''}</span>
                       </>

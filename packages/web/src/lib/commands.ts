@@ -96,6 +96,7 @@ export function filterCommands(
  */
 export function groupCommandsByCategory(commands: Command[]): Record<string, Command[]> {
   return commands.reduce((acc, cmd) => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- dynamic key may be missing
     if (!acc[cmd.category]) {
       acc[cmd.category] = []
     }

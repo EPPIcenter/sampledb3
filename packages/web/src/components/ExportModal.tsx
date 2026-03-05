@@ -96,9 +96,10 @@ export default function ExportModal({
       ])
       
       // Safely extract data with null checks
-      const availableTypesData = availableTypesRes?.data
+      const availableTypesData = availableTypesRes.data
       const tagsData = tagsRes.data // tagsApi.list() returns { data: Tag[] }
       
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive check for server response
       if (!availableTypesData) {
         throw new Error('Invalid response from server: missing data')
       }
@@ -351,7 +352,7 @@ export default function ExportModal({
     loadReferenceData()
     loadExportConfigurations()
     updateCount()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [isOpen, studyCode])
 
   // Handle Escape key to close modal
@@ -513,7 +514,7 @@ export default function ExportModal({
     value: number | string
   ) => {
     setFilters(prev => {
-      const current = (prev[key] as any[]) || []
+      const current = (prev[key] as any[])
       const index = current.indexOf(value)
       if (index >= 0) {
         return { ...prev, [key]: current.filter(v => v !== value) }
@@ -887,7 +888,7 @@ export default function ExportModal({
                     const newConfig = exportConfigurations[newIndex]
                     setSelectedConfigId(`${newConfig.source}:${newConfig.name}`)
                     const button = e.currentTarget.children[newIndex] as HTMLElement
-                    button?.focus()
+                    button.focus()
                   } else if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
                     if (focusedConfigIndex !== null) {

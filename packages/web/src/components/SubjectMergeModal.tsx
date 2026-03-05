@@ -52,25 +52,13 @@ function SubjectMergeModalContent({
 
   // Scroll selected item into view
   useEffect(() => {
-    if (sourceResultsRef.current && sourceSelectedIndex >= 0) {
-      const selectedElement = sourceResultsRef.current.querySelector(
-        `[data-index="${sourceSelectedIndex}"]`
-      ) as HTMLElement
-      if (selectedElement) {
-        selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-      }
-    }
+    const el = sourceSelectedIndex >= 0 ? sourceResultsRef.current?.querySelector(`[data-index="${sourceSelectedIndex}"]`) as HTMLElement | null : null
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [sourceSelectedIndex])
 
   useEffect(() => {
-    if (targetResultsRef.current && targetSelectedIndex >= 0) {
-      const selectedElement = targetResultsRef.current.querySelector(
-        `[data-index="${targetSelectedIndex}"]`
-      ) as HTMLElement
-      if (selectedElement) {
-        selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-      }
-    }
+    const el = targetSelectedIndex >= 0 ? targetResultsRef.current?.querySelector(`[data-index="${targetSelectedIndex}"]`) as HTMLElement | null : null
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [targetSelectedIndex])
 
   // Close dropdowns when clicking outside
@@ -120,7 +108,7 @@ function SubjectMergeModalContent({
       setLoading(true)
       setError(null)
       const response = await studiesApi.getSubjects(studyId, { page: 1, limit: 1000 })
-      const subjectsList = response.subjects || []
+      const subjectsList = response.subjects
       setSubjects(subjectsList)
       if (subjectsList.length === 0) {
         setError('No subjects found in this study')
@@ -249,11 +237,9 @@ function SubjectMergeModalContent({
                                 } else if (e.key === 'Enter' && sourceSelectedIndex >= 0) {
                                   e.preventDefault()
                                   const selected = availableSourceSubjects[sourceSelectedIndex]
-                                  if (selected) {
-                                    setSourceSubjectId(selected.id)
-                                    setSourceSearch(selected.name)
-                                    setSourceOpen(false)
-                                  }
+                                  setSourceSubjectId(selected.id)
+                                  setSourceSearch(selected.name)
+                                  setSourceOpen(false)
                                 } else if (e.key === 'Escape') {
                                   setSourceOpen(false)
                                 }
@@ -378,11 +364,9 @@ function SubjectMergeModalContent({
                                 } else if (e.key === 'Enter' && targetSelectedIndex >= 0) {
                                   e.preventDefault()
                                   const selected = availableTargetSubjects[targetSelectedIndex]
-                                  if (selected) {
-                                    setTargetSubjectId(selected.id)
-                                    setTargetSearch(selected.name)
-                                    setTargetOpen(false)
-                                  }
+                                  setTargetSubjectId(selected.id)
+                                  setTargetSearch(selected.name)
+                                  setTargetOpen(false)
                                 } else if (e.key === 'Escape') {
                                   setTargetOpen(false)
                                 }

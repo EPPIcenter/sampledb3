@@ -33,8 +33,8 @@ export function useExportConfigurations(): UseExportConfigurationsResult {
         exportConfigurationsApi.getPersonal().catch(() => ({ data: { configurations: [] } })),
       ])
 
-      const sharedConfigs = sharedRes.data?.configurations ?? []
-      const personalConfigs = personalRes.data?.configurations ?? []
+      const sharedConfigs = sharedRes.data.configurations
+      const personalConfigs = personalRes.data.configurations
       const hasPersonalDefault = personalConfigs.some((c) => c.isDefault === true)
 
       const merged: ExportConfigurationWithSource[] = [

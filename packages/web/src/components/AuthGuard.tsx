@@ -16,10 +16,12 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!user && location.pathname !== '/login' && location.pathname !== '/setup') {
       // Small delay to avoid race condition with login state updates
       const timer = setTimeout(() => {
+        // Re-check user after delay; they may have logged in (closure over user)
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- re-check after 100ms
         if (!user) {
-          navigate('/login', { 
+          navigate('/login', {
             state: { from: location },
-            replace: true 
+            replace: true,
           })
         }
       }, 100)

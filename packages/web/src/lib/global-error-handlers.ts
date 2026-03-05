@@ -67,7 +67,7 @@ export function initializeGlobalErrorHandlers(): void {
     // Check if it's a resource loading error (not a JavaScript error)
     if (event.target && event.target !== window) {
       const target = event.target as HTMLElement
-      const tagName = target.tagName?.toLowerCase()
+      const tagName = target.tagName.toLowerCase()
       
       if (tagName === 'img' || tagName === 'script' || tagName === 'link') {
         const src = (target as HTMLImageElement).src || 

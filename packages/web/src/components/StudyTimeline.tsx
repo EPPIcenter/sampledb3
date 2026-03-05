@@ -418,6 +418,7 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
       }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- nearestPoint may be null
     if (nearestPoint) {
       setTooltip({
         point: nearestPoint,
@@ -489,6 +490,7 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
       }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- nearestPoint may be null
     if (nearestPoint) {
       const point = nearestPoint as ScatterDataPoint
       navigate(`/specimens/${point.specimenId}`)

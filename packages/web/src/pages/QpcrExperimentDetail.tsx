@@ -190,15 +190,16 @@ export default function QpcrExperimentDetail() {
         })
         .finally(() => setLoading(false))
       scannerConfigurationsApi.getShared().then((res) => {
-        const configs = (res.data as { configurations?: ScannerConfiguration[] })?.configurations ?? []
+        const configs = (res.data as { configurations?: ScannerConfiguration[] }).configurations ?? []
         setScannerConfigs(configs)
         const defaultConfig = configs.find((c) => c.isDefault === true) ?? configs[0]
-        if (defaultConfig) setSelectedConfigId(defaultConfig.id)
+        if (defaultConfig) setSelectedConfigId(defaultConfig.id) // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- default or first config
       }).catch(() => {})
     }
   }, [id])
 
   // Sync form state from data.experiment when it changes (during render to avoid extra pass)
+   
   if (data?.experiment) {
     const exp = data.experiment
     const nextTargets = targetsFromExperiment(exp)
@@ -280,7 +281,7 @@ export default function QpcrExperimentDetail() {
 
   const apiBase = '/api'
   const templateBase = `${apiBase}/qpcr-experiments/${experiment.id}/template`
-  const hasTargets = targets.length > 0 && targets.some((t) => (t.targetName ?? '').trim() !== '')
+  const hasTargets = targets.length > 0 && targets.some((t) => t.targetName.trim() !== '')
   const formTargetsSig = JSON.stringify(
     targets.map((t) => ({
       targetName: t.targetName.trim() || DEFAULT_TARGET_NAME,
@@ -288,6 +289,8 @@ export default function QpcrExperimentDetail() {
       reporter: t.reporter.trim() || null,
     }))
   )
+   
+   
   const serverTargetsSig = JSON.stringify(
     (experiment.targets ?? []).map((t) => ({
       targetName: t.targetName || DEFAULT_TARGET_NAME,
@@ -573,7 +576,7 @@ export default function QpcrExperimentDetail() {
                       try {
                         const csvText = await file.text()
                         const res = await qpcrExperimentsApi.uploadPlate(parseInt(id), { csvText, scannerConfigurationId: selectedConfigId })
-                        if (res.data.unresolved?.length) {
+                        if (res.data.unresolved && res.data.unresolved.length > 0) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- show error when unresolved present
                           setPlateError(`${res.data.unresolved.length} unresolved barcode(s): ${res.data.unresolved.map((u) => `${u.wellPosition}:${u.barcode}`).join(', ')}`)
                         }
                         loadData()
@@ -607,6 +610,7 @@ export default function QpcrExperimentDetail() {
                   selectedWellPosition={selectedWellPosition}
                   onWellSelect={handleWellSelect}
                 />
+                {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- show buttons when plate and editable */}
                 {wellsEditable && hasPlate && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
@@ -680,31 +684,31 @@ export default function QpcrExperimentDetail() {
                       <div className="qpcr-reveal flex flex-col gap-4">
                         <div className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
                           <span className="text-slate-500 mt-0.5 shrink-0" aria-hidden>
-                            {wellDetails.container?.containerType != null
+                            {wellDetails.container.containerType != null
                               ? getContainerTypeIcon(wellDetails.container.containerType)
                               : null}
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-medium text-slate-500">Container</p>
                             <p className="text-sm font-medium text-slate-800 truncate">
-                              {wellDetails.container?.containerType != null
+                              {wellDetails.container.containerType != null
                                 ? getContainerTypeName(wellDetails.container.containerType)
                                 : '—'}
-                              {wellDetails.container?.collection?.name != null && (
+                              {wellDetails.container.collection?.name != null && (
                                 <> · {wellDetails.container.collection.name}</>
                               )}
                             </p>
-                            {wellDetails.container?.collection?.position != null && (
+                            {wellDetails.container.collection?.position != null && (
                               <p className="text-xs text-slate-500">Position: {wellDetails.container.collection.position}</p>
                             )}
-                            {wellDetails.container?.id != null && (
+                            {wellDetails.container.id != null ? ( // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- optional container id
                               <Link
                                 to={`/containers/${wellDetails.container.id}`}
                                 className="qpcr-well-panel-link text-sm mt-1 inline-block"
                               >
                                 View container →
                               </Link>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                         <div className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
@@ -716,7 +720,7 @@ export default function QpcrExperimentDetail() {
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-medium text-slate-500">Specimen</p>
                             <p className="text-sm font-medium text-slate-800 truncate">
-                              {wellDetails.specimen?.specimenType?.name ?? '—'}
+                              {wellDetails.specimen?.specimenType?.name != null ? wellDetails.specimen.specimenType.name : '—'}
                             </p>
                             {wellDetails.specimen?.collectionDate != null && (
                               <p className="text-xs text-slate-500">Collected: {wellDetails.specimen.collectionDate}</p>
@@ -739,6 +743,8 @@ export default function QpcrExperimentDetail() {
                             <p className="text-sm font-medium text-slate-800 truncate">
                               {wellDetails.source?.name ?? '—'}
                             </p>
+                            { }
+                            {/* eslint-disable @typescript-eslint/no-unnecessary-condition -- runtime discriminator for source */}
                             {wellDetails.source?.type === 'subject' && wellDetails.source.study != null && (
                               <p className="text-xs text-slate-500">
                                 Study: {wellDetails.source.study.code}
@@ -764,6 +770,7 @@ export default function QpcrExperimentDetail() {
                                 View batch →
                               </Link>
                             )}
+                            {/* eslint-enable @typescript-eslint/no-unnecessary-condition */}
                           </div>
                         </div>
                       </div>
@@ -879,19 +886,23 @@ export default function QpcrExperimentDetail() {
             {!hasTargets ? (
               <span className="text-sm text-slate-500">Add at least one target to download template.</span>
             ) : (
-              INSTRUMENTS.map((inst) => (
-                <button
-                  key={inst.id}
-                  type="button"
-                  disabled={!hasPlate || !hasTargets || templateSettingsDirty || templateDownloading !== null}
-                  onClick={() => handleDownloadTemplate(inst)}
-                  className={hasPlate && !templateSettingsDirty && !templateDownloading ? 'qpcr-btn-primary' : 'qpcr-btn-primary opacity-50 cursor-not-allowed'}
-                  aria-disabled={!hasPlate || !hasTargets || templateSettingsDirty || templateDownloading !== null}
-                  title={templateSettingsDirty ? 'Save your settings before downloading' : undefined}
-                >
-                  {templateDownloading === (inst.format as 'biorad' | 'quant_studio') ? 'Downloading…' : `Download ${inst.label} (${inst.ext.toUpperCase()})`}
-                </button>
-              ))
+              <>
+                {/* eslint-disable @typescript-eslint/no-unnecessary-condition -- template download button state */}
+                {INSTRUMENTS.map((inst) => (
+                  <button
+                    key={inst.id}
+                    type="button"
+                    disabled={!hasPlate || !hasTargets || templateSettingsDirty || templateDownloading !== null}
+                    onClick={() => handleDownloadTemplate(inst)}
+                    className={hasPlate && !templateSettingsDirty && (templateDownloading == null) ? 'qpcr-btn-primary' : 'qpcr-btn-primary opacity-50 cursor-not-allowed'}
+                    aria-disabled={!hasPlate || !hasTargets || templateSettingsDirty || templateDownloading !== null}
+                    title={templateSettingsDirty ? 'Save your settings before downloading' : undefined}
+                  >
+                    {templateDownloading === (inst.format as 'biorad' | 'quant_studio') ? 'Downloading…' : `Download ${inst.label} (${inst.ext.toUpperCase()})`}
+                  </button>
+                ))}
+                {/* eslint-enable @typescript-eslint/no-unnecessary-condition */}
+              </>
             )}
           </div>
           {!hasPlate && hasTargets && (
@@ -910,6 +921,7 @@ export default function QpcrExperimentDetail() {
           <p className="text-sm text-slate-600 mb-4">
             Upload the result file from your instrument (Bio-Rad CSV or Quant Studio XLS).
           </p>
+          {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- feature flag and permission */}
           {QPCR_RESULTS_UPLOAD_ENABLED && canWrite && (
             <div className="space-y-3">
               {resultsError && (
@@ -942,7 +954,7 @@ export default function QpcrExperimentDetail() {
                       try {
                         const buf = await file.arrayBuffer()
                         const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
-                        const resultInstrument = (instrumentSelectRef.current?.value as 'Biorad_CFX' | 'QuantStudio') ?? 'Biorad_CFX'
+                        const resultInstrument = (instrumentSelectRef.current?.value as 'Biorad_CFX' | 'QuantStudio' | undefined) ?? 'Biorad_CFX'
                         await qpcrExperimentsApi.uploadResults(parseInt(id), { fileContent: base64, fileName: file.name, instrumentType: resultInstrument })
                         loadData()
                       } catch (err: unknown) {
@@ -962,6 +974,7 @@ export default function QpcrExperimentDetail() {
               </div>
             </div>
           )}
+          {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- feature flag may be enabled later */}
           {!QPCR_RESULTS_UPLOAD_ENABLED && (
             <p className="text-sm text-slate-500 rounded-lg bg-slate-50 px-3 py-2">
               Result import is temporarily unavailable.

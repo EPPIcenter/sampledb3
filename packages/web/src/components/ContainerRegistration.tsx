@@ -66,9 +66,9 @@ export default function ContainerRegistration({
       setUnitsError(null)
       // Load units filtered by container type
       const res = await settingsApi.getContainerTypeUnits(containerType)
-      setUnits(res.data.units || [])
+      setUnits(res.data.units)
     } catch (err: any) {
-      const errorMessage = err?.response?.data?.error || err?.message || 'Failed to load units for this container type'
+      const errorMessage = err?.response?.data?.error ?? err?.message ?? 'Failed to load units for this container type'
       setUnitsError(errorMessage)
       setUnits([])
       console.error('Failed to load units:', err)
@@ -81,6 +81,7 @@ export default function ContainerRegistration({
       setDefaultUnitError(null)
       const res = await settingsApi.get('container_defaults')
       const defaults = res.data.value as ContainerDefaults | null
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime check for container type in defaults
       if (defaults && defaults[containerType]) {
         const symbol = defaults[containerType].defaultUnitSymbol
         setDefaultUnitSymbol(symbol)

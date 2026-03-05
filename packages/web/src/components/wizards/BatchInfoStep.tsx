@@ -49,6 +49,7 @@ export default function BatchInfoStep({
   const listRef = useRef<HTMLDivElement>(null)
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([])
   const prevBatchNameRef = useRef(batchInfo.name)
+  const prevFilterSigRef = useRef<string>('')
   const batchInfoRef = useRef(batchInfo)
   const nameSuggestionRef = useRef(nameSuggestion)
   batchInfoRef.current = batchInfo
@@ -64,7 +65,7 @@ export default function BatchInfoStep({
   const loadStrains = async () => {
     try {
       const response = await strainsApi.list()
-      setStrains(response.data ?? [])
+      setStrains(response.data)  
     } catch (err) {
       console.error('Failed to load strains:', err)
     }
@@ -101,14 +102,16 @@ export default function BatchInfoStep({
     })
   }, [definitions, searchQuery, strainFilters, strainMatchMode, minDensity, maxDensity])
 
-  useEffect(() => {
+  // Reset list focus when filters or filtered list length change (during render to avoid extra pass)
+  const filterSig = `${searchQuery}|${strainFilters.join(',')}|${strainMatchMode}|${minDensity}|${maxDensity}|${filteredDefinitions.length}`
+  if (filterSig !== prevFilterSigRef.current) {
+    prevFilterSigRef.current = filterSig
     setListFocusedIndex(-1)
-  }, [searchQuery, strainFilters, strainMatchMode, minDensity, maxDensity, filteredDefinitions.length])
+  }
 
   useEffect(() => {
-    if (listFocusedIndex >= 0 && optionRefs.current[listFocusedIndex]) {
-      optionRefs.current[listFocusedIndex]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-    }
+    const el = listFocusedIndex >= 0 ? optionRefs.current[listFocusedIndex] : null
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [listFocusedIndex])
 
   // Sync local name with batchInfo when it changes externally (during render to avoid extra pass)
@@ -121,7 +124,7 @@ export default function BatchInfoStep({
     try {
       setLoading(true)
       const response = await controlsApi.list()
-      setDefinitions(response.data.controls || [])
+      setDefinitions(response.data.controls)
     } catch (err) {
       console.error('Failed to load control definitions:', err)
     } finally {

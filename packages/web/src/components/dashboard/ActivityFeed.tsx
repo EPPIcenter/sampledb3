@@ -103,7 +103,7 @@ function getActivityFallbackLabel(type: ActivityItem['type']): string {
     control: 'Control',
     location: 'Location',
   }
-  return fallbacks[type] ?? 'Item'
+  return fallbacks[type] ?? 'Item' // eslint-disable-line @typescript-eslint/no-unnecessary-condition
 }
 
 /* Dashboard palette: muted badge colors that fit the lab theme */

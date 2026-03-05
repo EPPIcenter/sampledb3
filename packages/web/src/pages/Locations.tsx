@@ -145,7 +145,8 @@ export default function Locations() {
 
   // Define ensureLocationLoaded before useEffects that use it
   const ensureLocationLoaded = useCallback(async (locationId: number) => {
-    // If already cached, don't show loading state
+    // If already cached, don't show loading state (defensive: cache may be populated by race)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime cache check
     if (locationDetailsCache[locationId]) return
     
     // Set loading state immediately to trigger skeleton
@@ -154,9 +155,9 @@ export default function Locations() {
       const response = await locationsApi.get(locationId)
       setLocationDetailsCache((prev) => ({
         ...prev,
-        [locationId]: {
+          [locationId]: {
           location: response.data.location as Location,
-          contents: (response.data.contents || {}) as LocationContents,
+          contents: response.data.contents as LocationContents,
           hierarchyStats: response.data.hierarchyStats as LocationHierarchyStats | undefined,
         },
       }))
@@ -171,7 +172,7 @@ export default function Locations() {
   useEffect(() => {
     if (selectedNode) {
       // Set loading state immediately if not cached to show skeleton right away
-      if (!locationDetailsCache[selectedNode.locationId]) {
+      if (!locationDetailsCache[selectedNode.locationId]) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- cache may be cold
         setLoadingSelection(true)
       }
       ensureLocationLoaded(selectedNode.locationId)
@@ -180,10 +181,12 @@ export default function Locations() {
 
   // Scroll selected node into view when it changes
   useEffect(() => {
-    if (selectedNodeRef.current && treeRef.current) {
+    const nodeRef = selectedNodeRef.current
+    const tree = treeRef.current
+    if (nodeRef && tree) {
       // Small delay to ensure DOM is updated
       setTimeout(() => {
-        selectedNodeRef.current?.scrollIntoView({
+        nodeRef.scrollIntoView({
           behavior: 'smooth',
           block: 'center',
           inline: 'nearest',
@@ -223,7 +226,7 @@ export default function Locations() {
       setSearchLoading(true)
       const response = await searchApi.search(searchQuery, 'collection')
       // Filter to only collection types (micronix_plate, cryovial_box, box, bag)
-      const collectionResults = (response.data.results || []).filter(
+      const collectionResults = response.data.results.filter(
         (r): r is CollectionSearchResult =>
           r.type === 'micronix_plate' || r.type === 'cryovial_box' || r.type === 'box' || r.type === 'bag'
       )
@@ -266,6 +269,7 @@ export default function Locations() {
     if (!selectedNode) return null
 
     const cached = locationDetailsCache[selectedNode.locationId]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cache may be empty before load
     if (cached) {
       // We have cached data, not loading
       return { mode: 'location' as const, ...cached, isLoading: false }
@@ -280,6 +284,7 @@ export default function Locations() {
     // If switching to a different location that isn't cached, clear the cache entry
     // to force skeleton to show immediately
     if (selectedNode && selectedNode.locationId !== node.locationId) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cache may not have new location yet
       if (!locationDetailsCache[node.locationId]) {
         // New location not cached - set loading state immediately
         setLoadingSelection(true)
@@ -350,7 +355,8 @@ export default function Locations() {
   // Handle delete confirmation
   const handleDeleteClick = async (location: Location, e: React.MouseEvent) => {
     e.stopPropagation()
-    // Ensure location details are loaded for delete confirmation
+    // Ensure location details are loaded for delete confirmation (defensive: cache may be cold)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime cache check
     if (!locationDetailsCache[location.id]) {
       await ensureLocationLoaded(location.id)
     }
@@ -498,7 +504,8 @@ export default function Locations() {
                   </p>
                 )}
                 {/* Show cached container count if available */}
-                {locationDetailsCache[loc.id]?.hierarchyStats && (() => {
+                {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cache may be cold for this loc */}
+                {locationDetailsCache[loc.id] && locationDetailsCache[loc.id].hierarchyStats && (() => {
                   const stats = locationDetailsCache[loc.id].hierarchyStats!
                   const directTotal = stats.directContainers.micronix + stats.directContainers.cryovial + stats.directContainers.boxes + stats.directContainers.bags
                   if (directTotal > 0) {
@@ -592,27 +599,27 @@ export default function Locations() {
 
     const { location, contents, hierarchyStats } = selectedDetails
     
-    // If we don't have location data, show skeleton
+    // If we don't have location data, show skeleton (defensive for type/API)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard
     if (!location) {
       return <LocationDetailsSkeleton />
     }
     
-    // Critical check: Ensure the location ID matches the selected node
-    // This prevents showing stale data from a previous selection
+    // Critical check: Ensure the location ID matches the selected node (defensive for race)
+     
     if (location.id !== selectedNode.locationId) {
       return <LocationDetailsSkeleton />
     }
     
     // If we're missing critical data (contents or hierarchyStats), show skeleton
-    // This ensures we don't show partial data with wrong badges or stale information
-    // Only render the actual content when we have complete cached data
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ensures complete cached data
     if (contents === null || hierarchyStats === undefined) {
       return <LocationDetailsSkeleton />
     }
     
     // At this point we have complete data for the correct location, so we can safely render everything
 
-    const c = contents || {}
+    const c = contents
     const stats = {
       micronix: c.micronixPlates?.length || 0,
       cryovial: c.cryovialBoxes?.length || 0,
@@ -697,14 +704,12 @@ export default function Locations() {
         </div>
 
         {/* Hierarchy Statistics */}
-        {hierarchyStats && (
-          <LocationHierarchyStatsDisplay
-            stats={hierarchyStats}
-            locationName={location.name}
-            canContainCollections={location.canContainCollections}
-            className="storage-hierarchy-stats"
-          />
-        )}
+        <LocationHierarchyStatsDisplay
+          stats={hierarchyStats}
+          locationName={location.name}
+          canContainCollections={location.canContainCollections}
+          className="storage-hierarchy-stats"
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="storage-card p-4">
@@ -887,8 +892,7 @@ export default function Locations() {
                               result.type === 'micronix_plate' ? 'storage-badge-plate' :
                               result.type === 'cryovial_box' ? 'storage-badge-cryovial' :
                               result.type === 'box' ? 'storage-badge-box' :
-                              result.type === 'bag' ? 'storage-badge-bag' :
-                              'storage-badge-plate'
+                              'storage-badge-bag'
                             }>
                               {result.type.replace('_', ' ')}
                             </span>

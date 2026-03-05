@@ -98,7 +98,7 @@ export default function ControlBatchWizard() {
     : isAddMode
       ? 'specimen-types'
       : 'batch-info'
-  const currentStep = (searchParams.get('step') as WizardStep) || defaultStep
+  const currentStep = (searchParams.get('step') as WizardStep | null) ?? defaultStep
 
   const [batchInfo, setBatchInfo] = useState<BatchInfo>({
     controlDefinitionId: null,
@@ -161,7 +161,7 @@ export default function ControlBatchWizard() {
       setLoading(true)
       setError(null)
       const res = await controlsApi.list()
-      const all = (res.data.controls ?? []) as ControlDefinition[]
+      const all = (res.data.controls) as ControlDefinition[]
       const defs = all.filter((def) => {
         const defKey = getCompositionKey((def.strains ?? []).map((s) => ({ id: s.id, percentage: s.percentage })))
         return defKey === key
@@ -191,6 +191,7 @@ export default function ControlBatchWizard() {
         controlsApi.suggestBatchName(defId, today),
       ])
       const { control, composition } = summaryResponse.data
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- API may omit control
       if (!control) {
         setError('Control definition not found')
         return
@@ -244,7 +245,7 @@ export default function ControlBatchWizard() {
                     f.collectionId != null ||
                     (!!f.collectionName && f.collectionLocationId != null && !!f.collectionType)
                   const paperNeedsSheet = f.containerType === 'paper'
-                    ? (!!f.sheetName?.trim() || (f.rows?.length > 0 && f.rows.every(r => !!(r.sheet_name?.trim()))))
+                    ? (!!(f.sheetName?.trim()) || (f.rows.length > 0 && f.rows.every(r => !!(r.sheet_name?.trim()))))
                     : true
                   return collectionOk && paperNeedsSheet
                 }))

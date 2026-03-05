@@ -42,7 +42,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
   const groupedByDate = sortedSpecimens.reduce((groups, specimen) => {
     const dateKey = specimen.collectionDate || specimen.created
     const dateOnly = new Date(dateKey).toDateString() // Gets date without time
-    
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- dynamic key may be missing
     if (!groups[dateOnly]) {
       groups[dateOnly] = []
     }
@@ -221,7 +221,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                 </span>
                               </div>
 
-                              {specimen.containerCount > 0 && specimen.containerBreakdown && Object.keys(specimen.containerBreakdown).length > 0 && (
+                              {specimen.containerCount > 0 && Object.keys(specimen.containerBreakdown).length > 0 && (
                                 <>
                                   <span className="text-gray-300">•</span>
                                   <div className="flex items-center text-xs dashboard-stat-muted gap-1.5">
@@ -294,6 +294,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                         params.set('position', c.position)
                                       }
                                       // For paper containers without position, use container ID as fallback
+                                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- id may be omitted for paper
                                       if (c.type === 'paper' && !c.position && c.id !== undefined) {
                                         params.set('containerId', String(c.id))
                                       }
@@ -340,6 +341,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                     params.set('position', c.position)
                                   }
                                   // For paper containers without position, use container ID as fallback
+                                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- id may be omitted for paper
                                   if (c.type === 'paper' && !c.position && c.id !== undefined) {
                                     params.set('containerId', String(c.id))
                                   }
@@ -372,7 +374,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                               })}
                             </div>
                           )}
-                          {specimen.containers?.some(c => c.comment) && (
+                          {specimen.containers.some(c => c.comment) && (
                             <div className="mt-1.5 text-xs dashboard-stat-muted space-y-0.5">
                               {specimen.containers.filter(c => c.comment).map((c, i) => {
                                 const label = [c.collectionName, c.position].filter(Boolean).join(' ')

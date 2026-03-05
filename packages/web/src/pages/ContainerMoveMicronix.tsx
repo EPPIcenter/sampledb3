@@ -57,7 +57,7 @@ export default function ContainerMoveMicronix() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
   const [searchParams, setSearchParams] = useSearchParams()
-  const currentStep = (searchParams.get('step') as Step) || 'upload'
+  const currentStep = (searchParams.get('step') as Step | null) ?? 'upload'
   const [files, setFiles] = useState<FileData[]>([])
   const [loading, setLoading] = useState(false)
   const [availablePlates, setAvailablePlates] = useState<MicronixPlate[]>([])
@@ -97,7 +97,7 @@ export default function ContainerMoveMicronix() {
           locationPath: c.location?.path || null,
         }))
       )
-      setLocations(locationsResponse.data.locations || [])
+      setLocations(locationsResponse.data.locations)
       
       // Load scanner configurations
       // The API returns { key, value } format, where value is ScannerConfigurations
@@ -176,10 +176,10 @@ export default function ContainerMoveMicronix() {
 
   const buildPosition = (config: ScannerConfiguration, row: CSVRow): string => {
     if (config.positionType === 'single') {
-      return row[config.positionColumn!]?.trim() || ''
+      return (row[config.positionColumn!] ?? '').trim() || ''
     } else {
-      const rowVal = row[config.rowColumn!]?.trim() || ''
-      const colVal = row[config.columnColumn!]?.trim() || ''
+      const rowVal = (row[config.rowColumn!] ?? '').trim() || ''
+      const colVal = (row[config.columnColumn!] ?? '').trim() || ''
       // Always pad column to 2 digits (01-12 for micronix plates)
       const paddedCol = colVal.padStart(2, '0')
       return `${rowVal}${paddedCol}`
@@ -241,7 +241,7 @@ export default function ContainerMoveMicronix() {
     // Require all 96 well positions (A01–H12) exactly once, as from scanning software
     const positionSet = new Set<string>()
     for (const row of rows) {
-      const pos = row.target_position?.trim() ?? ''
+      const pos = row.target_position.trim()
       if (pos) {
         const normalized = normalizeWellPosition(pos)
         if (normalized) positionSet.add(normalized)
@@ -389,7 +389,7 @@ export default function ContainerMoveMicronix() {
 
       files.forEach((fileData, fileIndex) => {
         fileData.csvRows.forEach((row, rowIndex) => {
-          const barcode = row.container_barcode?.trim() ?? ''
+          const barcode = row.container_barcode.trim()
           if (barcode !== '') {
             allIdentifiers.push({
               type: 'barcode',
@@ -508,7 +508,7 @@ export default function ContainerMoveMicronix() {
         }
 
         const plateResponse = await collectionsApi.getMicronixPlate(plateId)
-        const wells: Record<string, { type: string; barcode?: string | null }> = plateResponse.data.wells ?? {}
+        const wells: Record<string, { type: string; barcode?: string | null }> = plateResponse.data.wells
 
         // All rows (from any file) targeting this plate
         const rowsForPlate: { fileIndex: number; row: CSVRow }[] = []
@@ -520,8 +520,8 @@ export default function ContainerMoveMicronix() {
         const positionToBarcode = new Map<string, string>()
         const positionToEmptyFileIndex = new Map<string, number>()
         for (const { fileIndex, row } of rowsForPlate) {
-          const pos = row.target_position?.trim() ?? ''
-          const barcode = row.container_barcode?.trim() ?? ''
+          const pos = row.target_position.trim()
+          const barcode = row.container_barcode.trim()
           if (pos === '') continue
           if (barcode !== '') {
             positionToBarcode.set(pos, barcode)
@@ -534,7 +534,7 @@ export default function ContainerMoveMicronix() {
 
         for (const P of emptyPositions) {
           const well = wells[P]
-          if (well?.type === 'micronix_tube' && well.barcode) {
+          if (well.type === 'micronix_tube' && well.barcode) {
             const B = well.barcode
             if (!barcodesRelocatedInMove.has(B)) {
               const fileIndex = positionToEmptyFileIndex.get(P) ?? 0
@@ -553,8 +553,8 @@ export default function ContainerMoveMicronix() {
       setFiles(prev => prev.map((f, i) => {
         const base = {
           ...f,
-          resolvedContainers: resolvedByFile.get(i) || [],
-          unresolvedContainers: unresolvedByFile.get(i) || [],
+          resolvedContainers: resolvedByFile.get(i) ?? [],
+          unresolvedContainers: unresolvedByFile.get(i) ?? [],
           isResolved: true,
         }
         const relocationErrors = relocationErrorsByFile.get(i) ?? []
@@ -600,7 +600,7 @@ export default function ContainerMoveMicronix() {
 
       files.forEach((fileData, fileIndex) => {
         fileData.csvRows.forEach(row => {
-          const barcode = row.container_barcode?.trim() ?? ''
+          const barcode = row.container_barcode.trim()
           if (barcode === '') return // empty well; no move for this row
           allMoves.push({
             identifier: {

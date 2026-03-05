@@ -86,7 +86,7 @@ export default function Dashboard() {
     qpcrExperimentsApi
       .list({ limit: 5 })
       .then((res) => {
-        const all = (res.data?.experiments ?? []) as QpcrExperiment[]
+        const all = (res.data.experiments) as QpcrExperiment[]
         const sorted = [...all].sort(
           (a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
         )
@@ -110,11 +110,11 @@ export default function Dashboard() {
       ])
 
       const currentStats: DashboardStats = {
-        studies: studiesRes.data.pagination?.total || studiesRes.data.studies?.length || 0,
-        specimens: specimensRes.data.pagination?.total || specimensRes.data.specimens?.length || 0,
-        subjects: subjectsRes.data.pagination?.total || subjectsRes.data.subjects?.length || 0,
-        containers: containersRes.data.pagination?.total || containersRes.data.containers?.length || 0,
-        locations: locationsRes.data.pagination?.total || locationsRes.data.locations?.length || 0,
+        studies: studiesRes.data.pagination.total ?? studiesRes.data.studies.length,
+        specimens: specimensRes.data.pagination.total ?? specimensRes.data.specimens.length,
+        subjects: subjectsRes.data.pagination.total ?? subjectsRes.data.subjects.length,
+        containers: containersRes.data.pagination.total ?? containersRes.data.containers.length,
+        locations: locationsRes.data.pagination.total ?? locationsRes.data.locations.length,
       }
 
       setStats(currentStats)
@@ -173,11 +173,9 @@ export default function Dashboard() {
       ])
 
       // Set all state that doesn't depend on study summaries so qPCR, activity, etc. can render immediately
-      if (statisticsRes.data) {
-        setStatisticsData(statisticsRes.data)
-      }
+      setStatisticsData(statisticsRes.data)
 
-      const activities = (activityRes.data.activity || []) as any[]
+      const activities = activityRes.data.activity as any[]
       setRecentActivity(
         activities.map((item) => ({
           id: item.id,
@@ -188,9 +186,9 @@ export default function Dashboard() {
         }))
       )
 
-      setHasControls((controlsRes.data.controls || []).length > 0)
+      setHasControls(controlsRes.data.controls.length > 0)
 
-      const studies = studiesListRes.studies || []
+      const studies = studiesListRes.studies
       setRecentStudies(
         studies.map((study: Study) => ({ ...study, summary: null }))
       )
@@ -199,12 +197,12 @@ export default function Dashboard() {
       setLoading((prev) => ({ ...prev, secondary: false }))
 
       // Load study summaries in background; Recent Studies section updates when done
-      if (studies.length > 0) {
+      {
         const studyIds = studies.map((s: Study) => s.id)
         try {
           const summariesRes = await studiesApi.getSummaries(studyIds)
           const summariesMap = new Map(
-            (summariesRes.summaries || []).map((s: StudySummaryBasic) => [s.studyId, s])
+            summariesRes.summaries.map((s: StudySummaryBasic) => [s.studyId, s])
           )
           setRecentStudies(
             studies.map((study: Study) => ({
@@ -232,7 +230,8 @@ export default function Dashboard() {
     e.preventDefault()
     const form = e.currentTarget
     const input = form.querySelector<HTMLInputElement>('input[name="dashboard-search"]')
-    const q = input?.value?.trim() ?? ''
+    if (!input) return
+    const q = input.value.trim() || ''
     if (q) {
       setSearchInitialQuery(q)
       setSearchModalOpen(true)
