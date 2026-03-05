@@ -113,6 +113,46 @@ describe('control-batch-creation', () => {
       expect(result.specimens[0].containerIds).toHaveLength(1)
     })
 
+    it('throws when paper container is missing sheet name', async () => {
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(testDb, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'paper', unitId: unit.id })
+      const definition = await createTestControlDefinition(testDb, { name: 'DefPaper' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      const now = new Date().toISOString()
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: specimenType.id,
+        containerType: 'paper',
+        created: now,
+      })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'LocPaper', storageTypeId: String(storageType.id) })
+
+      await expect(
+        createBatchWithSpecimens(testDb, {
+          batch: { controlDefinitionId: definition.id, name: 'BatchPaper' },
+          specimens: [
+            {
+              specimenTypeName: 'DNA',
+              containers: [
+                {
+                  type: 'paper',
+                  collectionName: 'Box1',
+                  collectionLocationId: location.id,
+                  position: 'A1',
+                  containerBarcode: 'P001',
+                  // sheetName omitted
+                },
+              ],
+            },
+          ],
+        })
+      ).rejects.toThrow(/Sheet name is required for paper/)
+    })
+
     it('throws when container type is not allowed for specimen type', async () => {
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
       await setContainerDefaults(testDb, {

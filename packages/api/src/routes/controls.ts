@@ -1348,6 +1348,251 @@ controls.post('/suggest-name', memberMiddleware, async (c) => {
   }
 })
 
+// Find control definition by composition + density (lookup only; 404 when no match)
+controls.post('/definitions/find', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      strains: z.array(z.object({
+        strainId: z.number().int(),
+        percentage: z.number().min(0).max(100),
+      })),
+      targetDensity: z.number(),
+      targetDensityUnitId: z.number().int().optional(),
+    })
+    const data = schema.parse(body)
+    const controlType = 'blood'
+    const { strains, targetDensity, targetDensityUnitId } = data
+
+    if (!strains || strains.length === 0) {
+      return c.json({ error: 'At least one strain is required' }, 400)
+    }
+    if (targetDensity === undefined || targetDensity === null) {
+      return c.json({ error: 'Target density is required' }, 400)
+    }
+
+    const strainIds = strains.map(s => s.strainId)
+    const strainRecords = await dbInstance.select().from(strain).where(inArray(strain.id, strainIds))
+    const strainMap = new Map(strainRecords.map(s => [s.id, { name: s.name }]))
+    const missingStrains = strainIds.filter(id => !strainMap.has(id))
+    if (missingStrains.length > 0) {
+      return c.json({ error: `Invalid strain IDs: ${missingStrains.join(', ')}` }, 400)
+    }
+
+    const allDefinitions = await dbInstance
+      .select()
+      .from(controlDefinition)
+      .where(eq(controlDefinition.controlType, controlType))
+
+    for (const def of allDefinitions) {
+      let props = def.properties
+      if (typeof props === 'string') {
+        try {
+          props = JSON.parse(props) as Record<string, unknown>
+        } catch {
+          continue
+        }
+      }
+      const propsObj = props as Record<string, unknown>
+      if (!propsObj) continue
+      if (propsObj.targetDensity !== targetDensity) continue
+      if (targetDensityUnitId !== undefined) {
+        if (propsObj.targetDensityUnitId !== targetDensityUnitId) continue
+      } else {
+        if (propsObj.targetDensityUnitId !== undefined && propsObj.targetDensityUnitId !== null) continue
+      }
+      const defStrains = (propsObj.strains || []) as Array<{ id: number; percentage?: number } | number>
+      if (defStrains.length !== strains.length) continue
+      const sortedStrainIds = strainIds.slice().sort()
+      const defStrainIds = defStrains.map((s) => (typeof s === 'object' ? s.id : s)).sort()
+      if (!sortedStrainIds.every((id, idx) => id === defStrainIds[idx])) continue
+      const strainPctMap = new Map(strains.map(s => [s.strainId, s.percentage]))
+      const defPctMap = new Map(defStrains.map((s) => [typeof s === 'object' ? s.id : s, typeof s === 'object' ? s.percentage : undefined]))
+      const percentagesMatch = sortedStrainIds.every(id => {
+        const pct = strainPctMap.get(id)
+        const defPct = defPctMap.get(id)
+        return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+      })
+      if (percentagesMatch) {
+        const parsed = parseControlProperties(propsObj, strainMap)
+        return c.json({
+          control: {
+            ...def,
+            strains: parsed.strains,
+            targetDensity: parsed.targetDensity,
+            targetDensityUnitId: parsed.targetDensityUnitId,
+            unitSymbol: parsed.unitSymbol,
+          },
+        })
+      }
+    }
+
+    return c.json(
+      { error: 'No control definition found for this composition and density. Create it first from Blood Controls.' },
+      404
+    )
+  } catch (error) {
+    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    console.error('Error finding control definition:', error)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// Bulk create or get control definitions (same composition, multiple densities)
+controls.post('/definitions/bulk', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      strains: z.array(z.object({
+        strainId: z.number().int(),
+        percentage: z.number().min(0).max(100),
+      })),
+      targetDensities: z.array(z.number()).min(1),
+      targetDensityUnitId: z.number().int().optional(),
+      names: z.array(z.string()),
+    }).refine((d) => d.names.length === d.targetDensities.length, {
+      message: 'names length must match targetDensities length',
+    })
+    const data = schema.parse(body)
+    const controlType = 'blood'
+    const { strains, targetDensities, targetDensityUnitId } = data
+
+    if (!strains || strains.length === 0) {
+      return c.json({ error: 'At least one strain is required' }, 400)
+    }
+
+    const strainIds = strains.map(s => s.strainId)
+    const strainRecords = await dbInstance.select().from(strain).where(inArray(strain.id, strainIds))
+    const strainMap = new Map(strainRecords.map(s => [s.id, { name: s.name }]))
+    const missingStrains = strainIds.filter(id => !strainMap.has(id))
+    if (missingStrains.length > 0) {
+      return c.json({ error: `Invalid strain IDs: ${missingStrains.join(', ')}` }, 400)
+    }
+    const strainsWithNames = strains.map(s => ({
+      id: s.strainId,
+      name: strainMap.get(s.strainId)!.name,
+      percentage: s.percentage,
+    }))
+
+    const allDefinitions = await dbInstance
+      .select()
+      .from(controlDefinition)
+      .where(eq(controlDefinition.controlType, controlType))
+
+    const findExisting = (targetDensity: number) => {
+      for (const def of allDefinitions) {
+        let props = def.properties
+        if (typeof props === 'string') {
+          try {
+            props = JSON.parse(props) as any
+          } catch {
+            continue
+          }
+        }
+        const propsObj = props as any
+        if (!propsObj) continue
+        if (propsObj.targetDensity !== targetDensity) continue
+        if (targetDensityUnitId !== undefined) {
+          if (propsObj.targetDensityUnitId !== targetDensityUnitId) continue
+        } else {
+          if (propsObj.targetDensityUnitId !== undefined && propsObj.targetDensityUnitId !== null) continue
+        }
+        const defStrains = propsObj.strains || []
+        if (defStrains.length !== strains.length) continue
+        const sortedStrainIds = strainIds.slice().sort()
+        const defStrainIds = defStrains.map((s: any) => (typeof s === 'object' ? s.id : s)).sort()
+        if (!sortedStrainIds.every((id, idx) => id === defStrainIds[idx])) continue
+        const strainPctMap = new Map(strains.map(s => [s.strainId, s.percentage]))
+        const defPctMap = new Map(defStrains.map((s: any) => [typeof s === 'object' ? s.id : s, typeof s === 'object' ? s.percentage : undefined]))
+        const percentagesMatch = sortedStrainIds.every(id => {
+          const pct = strainPctMap.get(id)
+          const defPct = defPctMap.get(id)
+          return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+        })
+        if (percentagesMatch) {
+          return { def, propsObj }
+        }
+      }
+      return null
+    }
+
+    const user = c.get('user')
+    const results: Array<ReturnType<typeof parseControlProperties> & { id: number; name: string; controlType: string; properties: unknown; created: string | null; lastUpdated: string | null; createdBy: number | null; updatedBy: number | null }> = []
+    const providedNames = data.names
+
+    for (let i = 0; i < targetDensities.length; i++) {
+      const targetDensity = targetDensities[i]
+      const existing = findExisting(targetDensity)
+      if (existing) {
+        const parsed = parseControlProperties(existing.propsObj, strainMap)
+        results.push({
+          ...existing.def,
+          strains: parsed.strains,
+          targetDensity: parsed.targetDensity,
+          targetDensityUnitId: parsed.targetDensityUnitId,
+          unitSymbol: parsed.unitSymbol,
+        })
+        continue
+      }
+      const props: Record<string, unknown> = {
+        strains: strainsWithNames,
+        targetDensity,
+      }
+      if (targetDensityUnitId !== undefined) {
+        const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
+        if (!unitRecord) return c.json({ error: `Invalid unit ID: ${targetDensityUnitId}` }, 400)
+        props.targetDensityUnitId = targetDensityUnitId
+        props.targetDensityUnitSymbol = unitRecord.symbol
+      }
+      let finalName: string
+      const customName = providedNames[i]?.trim()
+      if (customName) {
+        const existingByName = await dbInstance
+          .select({ id: controlDefinition.id })
+          .from(controlDefinition)
+          .where(eq(controlDefinition.name, customName))
+          .get()
+        if (existingByName) {
+          return c.json({ error: `Control definition name "${customName}" is already in use` }, 400)
+        }
+        finalName = customName
+      } else {
+        finalName = await generateUniqueControlDefinitionName(dbInstance, {
+          controlType,
+          targetDensity,
+          targetDensityUnitId,
+          strains: strainsWithNames,
+        })
+      }
+      const [newControl] = await dbInstance
+        .insert(controlDefinition)
+        .values({
+          name: finalName,
+          controlType,
+          properties: props,
+          createdBy: user?.id,
+          updatedBy: user?.id,
+        })
+        .returning()
+      if (!newControl) throw new Error('Failed to create control definition')
+      const parsed = parseControlProperties(newControl.properties, strainMap)
+      results.push({
+        ...newControl,
+        strains: parsed.strains,
+        targetDensity: parsed.targetDensity,
+        targetDensityUnitId: parsed.targetDensityUnitId,
+        unitSymbol: parsed.unitSymbol,
+      })
+    }
+
+    return c.json({ controls: results }, 201)
+  } catch (error) {
+    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    console.error('Error bulk creating control definitions:', error)
+    return c.json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) }, 500)
+  }
+})
+
 // Create control definition (defaults to blood)
 controls.post('/', memberMiddleware, async (c) => {
   try {

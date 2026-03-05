@@ -307,31 +307,7 @@ async function createContainer(
         sheetId = newSheet.id
       }
     } else {
-      // Fallback to old behavior: find any sheet or create with auto-generated name
-      const existingSheet = await tx
-        .select()
-        .from(sheet)
-        .where(
-          boxId
-            ? eq(sheet.boxId, boxId)
-            : bagId
-            ? eq(sheet.bagId, bagId)
-            : sql`1=0`
-        )
-        .get()
-
-      if (existingSheet) {
-        sheetId = existingSheet.id
-      } else {
-        const [newSheet] = await tx.insert(sheet).values({
-          name: `${containerData.collectionName || 'Sheet'}-Sheet-1`,
-          boxId,
-          bagId,
-          created: sql`current_timestamp`,
-          lastUpdated: sql`current_timestamp`,
-        }).returning()
-        sheetId = newSheet.id
-      }
+      throw new Error('Sheet name is required for paper containers')
     }
 
     await tx.insert(paper).values({
@@ -488,6 +464,10 @@ async function prepareContainerData(
       throw new Error('Collection information required for paper containers')
     }
 
+    if (!containerData.sheetName || !String(containerData.sheetName).trim()) {
+      throw new Error('Sheet name is required for paper (DBS) containers')
+    }
+
     // Find or determine sheet
     if (boxId || bagId) {
       if (containerData.sheetName) {
@@ -508,23 +488,7 @@ async function prepareContainerData(
         }
         // Otherwise will create in transaction with the specified name
       } else {
-        // Fallback to old behavior: find any sheet in box/bag
-        const existingSheet = await database
-          .select()
-          .from(sheet)
-          .where(
-            boxId
-              ? eq(sheet.boxId, boxId)
-              : bagId
-              ? eq(sheet.bagId, bagId)
-              : sql`1=0`
-          )
-          .get()
-        
-        if (existingSheet) {
-          sheetId = existingSheet.id
-        }
-        // Otherwise will create in transaction with auto-generated name
+        throw new Error('Sheet name is required for paper (DBS) containers')
       }
     }
   } else if (containerData.type === 'cryovial_tube') {
@@ -712,32 +676,7 @@ function createContainerSync(
           finalSheetId = newSheet.id
         }
       } else {
-        // Fallback to old behavior: find any sheet or create with auto-generated name
-        const existingSheet = tx
-          .select()
-          .from(sheet)
-          .where(
-            finalBoxId
-              ? eq(sheet.boxId, finalBoxId)
-              : finalBagId
-              ? eq(sheet.bagId, finalBagId)
-              : sql`1=0`
-          )
-          .get()
-
-        if (existingSheet) {
-          finalSheetId = existingSheet.id
-        } else {
-          const sheetResult = tx.insert(sheet).values({
-            name: `${collectionName || 'Sheet'}-Sheet-1`,
-            boxId: finalBoxId,
-            bagId: finalBagId,
-            created: sql`current_timestamp`,
-            lastUpdated: sql`current_timestamp`,
-          }).returning().get()
-          const newSheet = Array.isArray(sheetResult) ? sheetResult[0] : sheetResult
-          finalSheetId = newSheet.id
-        }
+        throw new Error('Sheet name is required for paper containers')
       }
     }
 

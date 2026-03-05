@@ -194,6 +194,273 @@ describe('Controls API', () => {
     })
   })
 
+  describe(`POST ${BASE}/definitions/find`, () => {
+    it('returns 200 and definition when composition and density match', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Find Strain' })
+      const unit = await createTestUnit(testDb, {
+        symbol: 'p/ul',
+        name: 'parasites per microliter',
+        category: 'concentration',
+      })
+      const existing = await createTestControlDefinition(testDb, {
+        name: 'Existing Find Def',
+        controlType: 'blood',
+        properties: {
+          strains: [{ id: strain.id, name: 'Find Strain', percentage: 100 }],
+          targetDensity: 500,
+          targetDensityUnitId: unit.id,
+        },
+      })
+      const app = createApp()
+      const res = await authenticatedRequest(app, `${BASE}/definitions/find`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          strains: [{ strainId: strain.id, percentage: 100 }],
+          targetDensity: 500,
+          targetDensityUnitId: unit.id,
+        },
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { control: { id: number; name: string; unitSymbol?: string } }
+      expect(data.control).toBeDefined()
+      expect(data.control.id).toBe(existing.id)
+      expect(data.control.name).toBe('Existing Find Def')
+    })
+
+    it('returns 404 when no definition matches and does not create', async () => {
+      const strain = await createTestStrain(testDb, { name: 'No Match Strain' })
+      const app = createApp()
+      const listRes = await authenticatedRequest(app, BASE, {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
+      expect(listRes.status).toBe(200)
+      const listData = (await listRes.json()) as { controls?: unknown[] }
+      const countBefore = Array.isArray(listData.controls) ? listData.controls.length : 0
+
+      const findRes = await authenticatedRequest(app, `${BASE}/definitions/find`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          strains: [{ strainId: strain.id, percentage: 100 }],
+          targetDensity: 99999,
+        },
+      })
+      expect(findRes.status).toBe(404)
+      const findData = (await findRes.json()) as { error: string }
+      expect(findData.error).toContain('No control definition found')
+
+      const listRes2 = await authenticatedRequest(app, BASE, {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
+      const listData2 = (await listRes2.json()) as { controls?: unknown[] }
+      const countAfter = Array.isArray(listData2.controls) ? listData2.controls.length : 0
+      expect(countAfter).toBe(countBefore)
+    })
+  })
+
+  describe(`POST ${BASE}/definitions/bulk`, () => {
+    it('creates multiple definitions for same composition with different densities', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Bulk Strain' })
+      const unit = await createTestUnit(testDb, {
+        symbol: 'p/ul',
+        name: 'parasites per microliter',
+        category: 'concentration',
+      })
+      const app = createApp()
+      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          strains: [{ strainId: strain.id, percentage: 100 }],
+          targetDensities: [100, 500, 1000],
+          targetDensityUnitId: unit.id,
+          names: ['Bulk 100', 'Bulk 500', 'Bulk 1K'],
+        },
+      })
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as { controls: Array<{ id: number; name: string; targetDensity?: number }> }
+      expect(data.controls).toBeDefined()
+      expect(data.controls).toHaveLength(3)
+      const densities = data.controls.map((c) => c.targetDensity).sort((a, b) => (a ?? 0) - (b ?? 0))
+      expect(densities).toEqual([100, 500, 1000])
+      const ids = data.controls.map((c) => c.id)
+      expect(new Set(ids).size).toBe(3)
+    })
+
+    it('returns existing definition when composition and density already exist (get-or-create)', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Bulk Existing Strain' })
+      const unit = await createTestUnit(testDb, {
+        symbol: 'p/ul',
+        name: 'parasites per microliter',
+        category: 'concentration',
+      })
+      const existing = await createTestControlDefinition(testDb, {
+        name: 'Existing Bulk Def',
+        controlType: 'blood',
+        properties: {
+          strains: [{ id: strain.id, name: 'Bulk Existing Strain', percentage: 100 }],
+          targetDensity: 500,
+          targetDensityUnitId: unit.id,
+        },
+      })
+      const app = createApp()
+      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          strains: [{ strainId: strain.id, percentage: 100 }],
+          targetDensities: [500, 1000],
+          targetDensityUnitId: unit.id,
+          names: ['Existing Bulk Def', 'New 1K'],
+        },
+      })
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as { controls: Array<{ id: number; name: string; targetDensity?: number }> }
+      expect(data.controls).toHaveLength(2)
+      const at500 = data.controls.find((c) => c.targetDensity === 500)
+      expect(at500).toBeDefined()
+      expect(at500!.id).toBe(existing.id)
+      expect(at500!.name).toBe('Existing Bulk Def')
+      const at1000 = data.controls.find((c) => c.targetDensity === 1000)
+      expect(at1000).toBeDefined()
+      expect(at1000!.id).not.toBe(existing.id)
+    })
+
+    it('returns 400 when targetDensities is empty', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Strain Empty' })
+      const app = createApp()
+      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          strains: [{ strainId: strain.id, percentage: 100 }],
+          targetDensities: [],
+          names: [],
+        },
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('returns 400 when strains are missing', async () => {
+      const app = createApp()
+      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          strains: [],
+          targetDensities: [100, 200],
+          names: ['A', 'B'],
+        },
+      })
+      expect(res.status).toBe(400)
+      const body = (await res.json()) as { error: string }
+      expect(body.error).toContain('strain')
+    })
+
+    it('returns 401 when not authenticated', async () => {
+      const app = createApp()
+      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+        method: 'POST',
+        json: {
+          strains: [{ strainId: 1, percentage: 100 }],
+          targetDensities: [100],
+          names: ['One'],
+        },
+      })
+      expect(res.status).toBe(401)
+    })
+
+    it('uses provided names when names array is supplied and length matches targetDensities', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Name Strain' })
+      const unit = await createTestUnit(testDb, {
+        symbol: 'p/ul',
+        name: 'parasites per microliter',
+        category: 'concentration',
+      })
+      const app = createApp()
+      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          strains: [{ strainId: strain.id, percentage: 100 }],
+          targetDensities: [100, 500, 1000],
+          targetDensityUnitId: unit.id,
+          names: ['Custom 100', 'Custom 500', 'Custom 1K'],
+        },
+      })
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as { controls: Array<{ id: number; name: string; targetDensity?: number }> }
+      expect(data.controls).toHaveLength(3)
+      expect(new Set(data.controls.map((c) => c.name))).toEqual(new Set(['Custom 100', 'Custom 500', 'Custom 1K']))
+      expect(data.controls.map((c) => c.targetDensity).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([100, 500, 1000])
+    })
+
+    it('returns 400 when names is missing', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Strain N' })
+      const app = createApp()
+      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          strains: [{ strainId: strain.id, percentage: 100 }],
+          targetDensities: [100, 500],
+        },
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('returns 400 when names length does not match targetDensities length', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Strain N' })
+      const app = createApp()
+      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          strains: [{ strainId: strain.id, percentage: 100 }],
+          targetDensities: [100, 500],
+          names: ['Only One Name'],
+        },
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('returns 400 when provided name is already used by another definition', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Strain Dup' })
+      const unit = await createTestUnit(testDb, {
+        symbol: 'p/ul',
+        name: 'parasites per microliter',
+        category: 'concentration',
+      })
+      await createTestControlDefinition(testDb, {
+        name: 'Taken Name',
+        controlType: 'blood',
+        properties: {
+          strains: [{ id: strain.id, name: 'Strain Dup', percentage: 100 }],
+          targetDensity: 999,
+          targetDensityUnitId: unit.id,
+        },
+      })
+      const app = createApp()
+      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          strains: [{ strainId: strain.id, percentage: 100 }],
+          targetDensities: [200, 300],
+          targetDensityUnitId: unit.id,
+          names: ['Taken Name', 'Other Name'],
+        },
+      })
+      expect(res.status).toBe(400)
+      const body = (await res.json()) as { error?: string }
+      expect(body.error).toBeDefined()
+      expect(String(body.error).toLowerCase()).toMatch(/name|unique|taken|duplicate/)
+    })
+  })
+
   describe(`POST ${BASE}`, () => {
     it('returns 201 when creating a control definition with valid payload', async () => {
       const strain = await createTestStrain(testDb, { name: 'Strain A' })
