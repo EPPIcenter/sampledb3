@@ -7,7 +7,7 @@ Blood controls are reference samples used for quality control, calibration, and 
 
 The Blood Controls pages use the same "modern precision lab" visual theme as the rest of the app (dashboard, studies, storage); behavior is unchanged.
 
-The blood controls system is built around two main concepts: definitions and batches. A control definition describes what a type of control is—its composition, target properties, and intended use. A control batch is a specific production of that control type, with actual specimens that you can use in your work. This separation allows you to define control types once and then create multiple batches as needed.
+The blood controls system is built around **compositions**, **definitions**, and **batches**. A **composition** is a parasite strain mix (which strains and their percentages). A **control definition** is a composition plus a target density—so one composition can have several definitions (one per density). A **control batch** is a specific production of a definition, with actual specimens. The UI is organized by composition first: you see compositions (grouped by strain signature), then within each composition you see density variants (definitions) and their batches.
 
 ## Understanding Control Definitions
 
@@ -21,17 +21,25 @@ The strain composition is important because it defines the exact makeup of the c
 
 You can also specify a target density, which is the target cell density or concentration for the control. This is useful for quality control tracking, as you can compare actual batch densities to the target to ensure consistency across productions.
 
+## Compositions and the Composition List
+
+On Blood Controls, the **Compositions** tab shows a list of compositions—each row is a unique strain mix (same strain IDs and percentages). For each composition you see how many density variants (definitions) exist, total batches, and inventory. Click **View** or the row to open the **composition detail** page.
+
+On the composition detail page you see the biological content (strain bar and percentages) and a **Density variants** section. Each variant is one control definition (same composition, different target density) with its batches and inventory. From here you can open a definition, **Create batch** (manual, for that density), or **Add batches from CSV** (multi-file, multi-density from CSV).
+
 ## Creating and Managing Control Definitions
 
-To create a control definition, navigate to Blood Controls in the sidebar and make sure you're on the Definitions tab. Click "New Control Definition" or "Create Definition" to open the creation form.
+To create a control definition, navigate to Blood Controls in the sidebar and make sure you're on the Compositions tab (or use **New Control Definition** from the main Blood Controls entry). Click "New Control Definition" or "Create Definition" to open the creation form.
 
-Start by entering a name for your control definition. This should be unique and descriptive. Then add an optional description if you want to provide additional context about the control's purpose or use.
+The form is organized in a lab-oriented order: **composition first**, then **target densities**, then **definition names** (when creating more than one).
 
-Next, select the strains that should be part of this control. You'll see a list of all strains available in your Reference Data. Select the ones you need, and then for each selected strain, specify what percentage it should represent in the control. The system helps you track the total percentage as you add strains, and it will prevent you from saving until the total equals exactly 100%.
+1. **Strain composition** — Define the biological content first. Add one or more parasite strains from your Reference Data and set the percentage each represents in the control. The total must equal exactly 100%. Use "Add strain" to add more strains; the form validates the total as you go.
 
-If you're working with controls that have target densities, enter that value. This becomes part of the definition and will be used when creating batches from this definition.
+2. **Target densities** — Same composition, one or more target concentrations. Choose a **concentration unit** (e.g. p/µL) once for the list. Then enter one or more density values (e.g. 100, 500, 1000). Each value is one definition. Use "Add density" to add another row; remove a row with the × button. Single density is simply one row; multiple densities create multiple definitions in one step.
 
-Once you've filled in all the information, click "Create" to save the definition. It will immediately be available for use when creating control batches.
+3. **Definition names** — When you have two or more densities, a **Definitions to create** section appears with a suggested name per density (e.g. 100_StrainA, 500_StrainA). You can edit any name before creating. For a single density, the optional **Definition name** field and "Auto-generate name" appear instead; you can leave name auto-generated or enter one.
+
+Once you've filled in the information, click "Create" to save the definition (or definitions). They will immediately be available for use when creating control batches. When creating from the **batch wizard** (via "Create new definition" on the Batch Info step), the same form is used; after creating multiple definitions at once, the first is selected so you can continue the wizard, and the others remain in the list for later batches.
 
 You can edit control definitions after creation, which is useful for updating descriptions or adjusting compositions. However, it's important to understand that changing a definition doesn't affect existing batches—those batches retain the composition they were created with. New batches created after you edit the definition will use the updated version.
 
@@ -45,13 +53,27 @@ The batch accumulates specimens as you add them, and the system automatically tr
 
 ## Creating Control Batches
 
-To create a control batch, navigate to the Blood Controls section, open the control definition you want (from the Definitions tab), then click **Create Batch** on the definition detail page. This way you select the definition first in a natural way, and the batch wizard starts with the definition already set.
+You can create batches in two ways: **manual** (one batch for one density) or **from CSV** (one or more CSV files, with optional density column and one collection per file).
 
-The wizard will suggest a batch name based on the definition and today's date. You can edit the name if needed—it should be a unique identifier. Many labs use sequential numbering like "BATCH-001", "BATCH-002", or include dates like "2024-Q1-Control". Optionally, you can specify a production date and a storage location.
+### Manual: one batch per definition
 
-Once you've created the batch, you can start adding specimens to it. The batch creation wizard guides you through selecting specimen types, adding containers (e.g. DBS sheets, cryovial tubes), and assigning each to a collection (box, bag, plate). For DBS sheets, you name each sheet, add papers with barcode and position, then choose whether to place the sheet in a box or bag. The papers list can be collapsed when you have many entries. Each specimen you add to the batch contributes to the batch's inventory count.
+Navigate to Blood Controls, open the **composition** or the **control definition** you want, then click **Create batch**. The wizard starts with that definition. It will suggest a batch name based on the definition and today's date. You can edit the name and production date, then add specimens (manually or via a single CSV). For CSV, you assign one collection per file: collection name defaults to the filename (without `.csv`); you **check existing** by name and type (box, bag, micronix plate, cryovial box). If a collection with that name and type exists, it is used; otherwise you choose a location and the system will create the collection on submit. For **paper (DBS)** containers, you must provide a **sheet name** in the Containers step (required; no default). After configuring specimens and containers, review and submit to create one batch.
 
-You can also add specimens individually through the batch detail page, or use bulk import to add many specimens at once.
+### From CSV: multiple batches and multiple files
+
+From a **composition** detail page, click **Add batches from CSV**. On the first step (Upload CSV) you can set the **production date** (it defaults to today); the same date is used for all batches created in that run. You can also change it on the Review step before submitting. You upload one or more CSV files. Each file corresponds to **one collection**: the default collection name is the filename (without `.csv`) and you can change it. **Container type** is inferred from the CSV template when possible: a **sheet_name** column indicates paper (DBS); a **position** column (without sheet_name) indicates cryovial tubes (you can change to micronix in the Containers step if needed). In the Containers step, when the type was inferred from the CSV, it is shown with “(inferred from CSV)” next to the dropdown; you can override it if needed. For each file you **check existing** (by name and type): if found, that collection is used; if not, you choose a location and the collection will be created on submit. For **paper (DBS)** files, you must provide a sheet name for every row. Either add a **sheet_name** column to your CSV (one value per row; multiple rows can share the same sheet name) or enter a single sheet name in the Containers step to apply to all rows in that file. If your CSV has a **sheet_name** column, the Containers step infers sheet names from it: with one value it shows "Sheet name: … (from CSV)" (read-only); with multiple values it shows "Sheet names from CSV: …". The editable sheet name field appears only when there is no sheet_name column, so you can type a single name for the whole file. All sheets go into the file's collection (box or bag). You cannot proceed to Review until every paper row has a sheet name (from the column or the per-file field).
+
+CSV files can include an optional **density** column. If present, rows are grouped by density and **one batch is created per density** (same composition). **Each density must already have a control definition** for that composition—create definitions first from Blood Controls (e.g. from the composition detail page). If a density in your CSV has no matching definition, the Review step shows an error and you cannot submit until you create that definition. When multiple definitions match the same numeric density (e.g. same 5000 but different units), the Review step shows a **definition selector** so you choose which definition to use for each row. The Review table shows density **with unit** (e.g. "5000 µL") when the definition has a unit. If there is no density column, all rows in a file form a single batch (you must have a single density in context). The wizard shows a **preview** of batches to be created: file, collection, density (with unit when applicable), definition, and specimen count. After you confirm, the system uses your chosen definitions (no automatic creation), resolves or creates collections per file, and creates each batch with its specimens in the correct collection.
+
+### Collection resolution (name + type)
+
+When you enter a collection name and type (box, bag, micronix plate, cryovial box), the system **resolves** whether that collection already exists. If it finds a match, it shows the existing collection and its location and uses it. If not, it shows **Create new** and you must pick a **location**; on submit the collection is created and used. This applies to both manual and CSV flows so you never create duplicate collections by name and type.
+
+### Batch wizard steps
+
+The batch creation wizard includes: Batch Info (name, date), Specimen Types, CSV Upload (with per-file collection name and resolve), Containers (manual entries; for paper/DBS, a required sheet name per file or per sheet), and Review. For the **Add batches from CSV** flow from a composition, you start at CSV Upload, set collection name and type per file and resolve or plan creation, then complete the Containers step (including sheet name for any paper files), then go to Review to see the preview and submit.
+
+You can also add specimens later through the batch detail page or use bulk import to add many specimens at once.
 
 ## Adding Specimens to Batches
 
@@ -69,7 +91,7 @@ This association helps you track which control batches are being used, how much 
 
 As your control inventory grows, being able to find specific definitions or batches becomes important. The Blood Controls interface provides filtering tools to help you locate what you need.
 
-For control definitions, you can filter by search term (which searches names and descriptions), by strains (showing only definitions that include certain strains), and by target density range (if you're looking for controls with specific density targets). The strain filter has a toggle: **Contains** (default) shows definitions or batches that have all selected strains (and may have more), while **Exact** shows only those whose strain set equals the selected strains exactly. These filters help you narrow down long lists to find the definitions you need.
+On the **Compositions** tab, the list is grouped by composition (strain signature). You can filter by search term, strains (Contains or Exact), and target density range. On the **Batches** tab you can filter batches by search term, production date range, strains, and density range.
 
 For batches, you can filter by search term (searching batch names and definition names), by production date range (useful for finding batches from specific time periods), by strains (based on the definition's strains, with the same Contains/Exact toggle), and by density range. This makes it easy to find batches that meet specific criteria, whether you're looking for recent batches, batches with certain strain compositions, or batches within a density range.
 
@@ -91,7 +113,7 @@ Regular inventory reviews help you stay on top of control availability. Monitor 
 
 ## Troubleshooting Control Issues
 
-If you can't find a control definition when creating a batch, verify that the definition exists in the definitions list. Check the spelling of the definition name, and make sure you're looking in the correct tab (Definitions versus Batches).
+If you can't find a composition or definition when creating a batch, open the Compositions tab and use the filters (search, strains, density). Use **View** on a composition to see its density variants and create a batch from there. For CSV-based batch creation, start from the composition detail page with **Add batches from CSV**.
 
 If inventory counts don't match your expectations, verify that all specimens are properly associated with the batch. Check that specimens haven't been deleted, and review the batch detail page to see the complete list of specimens. The inventory is calculated from associated specimens, so if counts are wrong, there might be a specimen association issue.
 
