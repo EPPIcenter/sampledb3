@@ -1,4 +1,5 @@
 import LocationPicker from '../LocationPicker'
+import CollectionNameSearch from './CollectionNameSearch'
 
 export interface CollectionAssignmentChange {
   collectionType?: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
@@ -13,11 +14,12 @@ interface CollectionAssignmentProps {
   collectionLocationId: number | null
   collectionId?: number
   onChange: (updates: CollectionAssignmentChange) => void
-  onCreate: () => void
   /** Optional: when true, hide Collection Type selector (used for non-paper) */
   showCollectionTypeSelector?: boolean
   /** Optional: 'sheet' for DBS sheets (default), 'collection' for other container types */
   successMessageVariant?: 'sheet' | 'collection'
+  /** Optional: list of collection names for the current type; when provided, name field becomes a search combobox */
+  collectionNames?: string[]
 }
 
 function getCollectionLabel(
@@ -51,25 +53,21 @@ export default function CollectionAssignment({
   collectionLocationId,
   collectionId,
   onChange,
-  onCreate,
   showCollectionTypeSelector = true,
   successMessageVariant = 'sheet',
+  collectionNames,
 }: CollectionAssignmentProps) {
   const needsBoxOrBag = containerType === 'paper'
   const label = getCollectionLabel(containerType, collectionType)
   const placeholder = getCollectionPlaceholder(containerType, collectionType)
-  const createLabel =
+  const existingCollectionLabel =
     collectionType === 'bag'
-      ? 'Create Bag'
+      ? 'bag'
       : collectionType === 'box'
-        ? 'Create Box'
-        : 'Create Collection'
-
-  const canCreate =
-    collectionName.trim() &&
-    collectionLocationId !== null &&
-    !collectionId &&
-    (needsBoxOrBag ? (collectionType === 'box' || collectionType === 'bag') : true)
+        ? 'box'
+        : collectionType === 'micronix_plate'
+          ? 'plate'
+          : 'cryovial box'
 
   return (
     <div className="space-y-4">
@@ -97,17 +95,36 @@ export default function CollectionAssignment({
         </div>
       )}
 
-      {collectionId ? (
-        <div className="bg-green-50 border border-green-200 rounded p-2">
+      {collectionId && collectionName && (
+        <div className="flex items-center justify-between gap-2 bg-green-50 border border-green-200 rounded p-2 mb-2">
           <p className="text-xs text-green-800">
             {successMessageVariant === 'sheet'
               ? `✓ Sheet will be placed in: ${collectionName}`
               : `✓ Assigned to collection: ${collectionName}`}
           </p>
+          <button
+            type="button"
+            onClick={() =>
+              onChange({ collectionName: '', collectionLocationId: null })
+            }
+            className="text-xs text-green-700 underline hover:no-underline shrink-0"
+          >
+            Clear
+          </button>
         </div>
-      ) : (
-        <>
-          <div>
+      )}
+      <div>
+        {collectionNames != null ? (
+          <CollectionNameSearch
+            id="collection-name-input"
+            label={label}
+            value={collectionName}
+            onChange={(name) => onChange({ collectionName: name })}
+            options={collectionNames}
+            placeholder={placeholder}
+          />
+        ) : (
+          <>
             <label
               htmlFor="collection-name-input"
               className="blood-controls-filter-label block mb-1"
@@ -122,39 +139,28 @@ export default function CollectionAssignment({
               placeholder={placeholder}
               className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
             />
-          </div>
+          </>
+        )}
+      </div>
 
-          <div>
-            <label className="blood-controls-filter-label block mb-1">
-              Location
-            </label>
-            <LocationPicker
-              value={collectionLocationId}
-              onChange={(locationId) =>
-                onChange({ collectionLocationId: locationId ?? null })
-              }
-              filterCollectionsOnly
-              disabled={!!collectionId && needsBoxOrBag}
-            />
-            {collectionId && needsBoxOrBag && (
-              <p className="text-xs text-gray-500 mt-1">
-                Location from existing{' '}
-                {collectionType === 'bag' ? 'bag' : 'box'}
-              </p>
-            )}
-          </div>
-
-          {canCreate && (
-            <button
-              type="button"
-              onClick={onCreate}
-              className="blood-controls-btn-primary px-4 py-2 text-sm"
-            >
-              {createLabel}
-            </button>
-          )}
-        </>
-      )}
+      <div>
+        <label className="blood-controls-filter-label block mb-1">
+          Location
+        </label>
+        <LocationPicker
+          value={collectionLocationId}
+          onChange={(locationId) =>
+            onChange({ collectionLocationId: locationId ?? null })
+          }
+          filterCollectionsOnly
+          disabled={!!collectionId}
+        />
+        {collectionId && (
+          <p className="text-xs text-gray-500 mt-1">
+            Location from existing {existingCollectionLabel}
+          </p>
+        )}
+      </div>
     </div>
   )
 }

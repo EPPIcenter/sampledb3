@@ -991,6 +991,9 @@ export const collectionsApi = {
     api.get<{ sheet: SheetResponse; papers: PaperEntry[] }>(`/collections/sheets/${id}`),
   check: (data: { collections: Array<{ identifier: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet' }> }) =>
     api.post<{ results: Array<{ identifier: string; type: string; exists: boolean; id: number | null }> }>('/collections/check', data),
+  /** Resolve collection by name and type; returns found + id/location when existing (for batch creation). */
+  resolve: (data: { name: string; type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box' }) =>
+    api.post<{ found: boolean; id?: number; name?: string; type?: string; locationId?: number; locationName?: string }>('/collections/resolve', data),
   createMicronixPlate: (data: { name: string; locationId: number; barcode?: string }) =>
     api.post<{ plate: MicronixPlateResponse }>('/collections/plates/micronix', data),
   validatePlateScan: (data: { csvText: string; plateId?: number; scannerConfigurationId: string }) =>

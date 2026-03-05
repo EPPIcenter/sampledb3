@@ -34,7 +34,6 @@ describe('CollectionAssignment', () => {
 
   it('renders collection name input and location picker', () => {
     const onChange = vi.fn()
-    const onCreate = vi.fn()
 
     render(
       <CollectionAssignment
@@ -44,7 +43,6 @@ describe('CollectionAssignment', () => {
         collectionLocationId={null}
         collectionId={undefined}
         onChange={onChange}
-        onCreate={onCreate}
       />
     )
 
@@ -63,7 +61,6 @@ describe('CollectionAssignment', () => {
         collectionLocationId={null}
         collectionId={undefined}
         onChange={onChange}
-        onCreate={vi.fn()}
       />
     )
 
@@ -73,27 +70,7 @@ describe('CollectionAssignment', () => {
     expect(onChange).toHaveBeenCalledWith({ collectionName: 'My Box' })
   })
 
-  it('shows Create button when name and location are present and collection does not exist', () => {
-    const onChange = vi.fn()
-    const onCreate = vi.fn()
-
-    render(
-      <CollectionAssignment
-        containerType="paper"
-        collectionType="box"
-        collectionName="New Box"
-        collectionLocationId={1}
-        collectionId={undefined}
-        onChange={onChange}
-        onCreate={onCreate}
-      />
-    )
-
-    const createBtn = screen.getByRole('button', { name: /create box/i })
-    expect(createBtn).toBeInTheDocument()
-  })
-
-  it('does not show Create button when collection already exists', () => {
+  it('shows success message and Clear when collection already exists', () => {
     render(
       <CollectionAssignment
         containerType="paper"
@@ -102,34 +79,11 @@ describe('CollectionAssignment', () => {
         collectionLocationId={1}
         collectionId={42}
         onChange={vi.fn()}
-        onCreate={vi.fn()}
       />
     )
 
-    expect(screen.queryByRole('button', { name: /create/i })).not.toBeInTheDocument()
     expect(screen.getByText(/sheet will be placed in/i)).toBeInTheDocument()
-  })
-
-  it('calls onCreate when Create button is clicked', async () => {
-    const user = userEvent.setup()
-    const onCreate = vi.fn()
-
-    render(
-      <CollectionAssignment
-        containerType="paper"
-        collectionType="box"
-        collectionName="New Box"
-        collectionLocationId={1}
-        collectionId={undefined}
-        onChange={vi.fn()}
-        onCreate={onCreate}
-      />
-    )
-
-    const createBtn = screen.getByRole('button', { name: /create box/i })
-    await user.click(createBtn)
-
-    expect(onCreate).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: /clear/i })).toBeInTheDocument()
   })
 
   it('shows Collection Type select for paper container type', () => {
@@ -141,7 +95,6 @@ describe('CollectionAssignment', () => {
         collectionLocationId={null}
         collectionId={undefined}
         onChange={vi.fn()}
-        onCreate={vi.fn()}
       />
     )
 
