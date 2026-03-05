@@ -379,11 +379,12 @@ derivations.get('/containers/:id/derivation-chain', authMiddleware, async (c) =>
     // Ancestors: walk up via parent_container_id
     const ancestors: any[] = []
     let currentId: number | null = id
-    while (true) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- currentId can become null when walking up the chain
+    while (currentId !== null) {
       const record = await database
         .select()
         .from(containerDerivation)
-        .where(eq(containerDerivation.childContainerId, currentId!))
+        .where(eq(containerDerivation.childContainerId, currentId))
         .get()
       if (!record) break
 
@@ -459,10 +460,6 @@ derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
       })
       .where(eq(containerDerivation.id, id))
       .returning()
-
-    if (!updated) {
-      return c.json({ error: 'Derivation not found' }, 404)
-    }
 
     return c.json({ derivation: updated })
   } catch (error: any) {

@@ -130,6 +130,7 @@ export async function generateUniqueBatchName(
   let candidateName = `${baseName} (${increment})`
   
   // Double-check the candidate name is available (in case of gaps)
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional loop until name is free
   while (true) {
     let whereIncrement = eq(controlBatch.name, candidateName) as any
     if (excludeId) {
@@ -141,8 +142,8 @@ export async function generateUniqueBatchName(
       .from(controlBatch)
       .where(whereIncrement)
       .get()
-    
-    if (!existingIncrement) {
+
+    if (existingIncrement == null) {
       return candidateName
     }
     
@@ -275,7 +276,7 @@ export async function validateSpecimenData(data: {
     } else {
       return { valid: false, error: 'Subject specimens require either sourceId or both study short code and subject name' }
     }
-  } else if (data.sourceType === 'control') {
+  } else {
     if (!data.sourceId) {
       return { valid: false, error: 'Control Batch ID required for control specimens' }
     }

@@ -61,18 +61,18 @@ function parseControlProperties(properties: unknown, strainMap?: Map<number, { n
   })
   
   // Extract target density - handle both number and string formats
-  const targetDensity = props.targetDensity !== undefined && props.targetDensity !== null
+  const targetDensity = props.targetDensity !== undefined
     ? (typeof props.targetDensity === 'string' ? parseFloat(props.targetDensity) : props.targetDensity)
     : undefined
   
   // Extract unit symbol - check multiple possible locations
-  const unitSymbol = (typeof props.targetDensityUnit === 'object' && props.targetDensityUnit !== null && 'symbol' in props.targetDensityUnit)
+  const unitSymbol = (typeof props.targetDensityUnit === 'object' && 'symbol' in props.targetDensityUnit)
     ? (props.targetDensityUnit as { symbol: string }).symbol
-    : props.targetDensityUnitSymbol 
+    : props.targetDensityUnitSymbol
     || (typeof props.targetDensityUnit === 'string' ? props.targetDensityUnit : undefined)
   
   // Extract unit ID
-  const targetDensityUnitId = props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null
+  const targetDensityUnitId = props.targetDensityUnitId !== undefined
     ? (typeof props.targetDensityUnitId === 'string' ? parseInt(props.targetDensityUnitId) : props.targetDensityUnitId)
     : undefined
   
@@ -1040,8 +1040,8 @@ controls.get('/:id/summary', authMiddleware, async (c) => {
 
         return {
           ...batch,
-          specimenCount: specimensCount?.count || 0,
-          inventory: inventory || [],
+          specimenCount: specimensCount!.count,
+          inventory,
         }
       })
     )
@@ -1174,7 +1174,7 @@ controls.post('/check-unique', memberMiddleware, async (c) => {
       if (data.targetDensityUnitId !== undefined) {
         if (props.targetDensityUnitId !== data.targetDensityUnitId) continue
       } else {
-        if (props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null) continue
+        if (props.targetDensityUnitId !== undefined) continue
       }
       
       // Check strain composition match
@@ -1200,7 +1200,7 @@ controls.post('/check-unique', memberMiddleware, async (c) => {
         const percentagesMatch = strainIds.every(id => {
           const pct = strainMap.get(id)
           const defPct = defStrainMap.get(id)
-          return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+          return pct !== undefined && defPct !== undefined && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
         })
         
         if (percentagesMatch) {
@@ -1244,13 +1244,8 @@ controls.post('/suggest-name', memberMiddleware, async (c) => {
     const controlType = 'blood' // Only blood controls are created through this system
     
     // Validate strains are provided
-    if (!data.strains || data.strains.length === 0) {
+    if (data.strains.length === 0) {
       return c.json({ error: 'At least one strain is required' }, 400)
-    }
-    
-    // Validate targetDensity is provided
-    if (data.targetDensity === undefined || data.targetDensity === null) {
-      return c.json({ error: 'Target density is required' }, 400)
     }
     
     // Get strain names
@@ -1292,7 +1287,7 @@ controls.post('/suggest-name', memberMiddleware, async (c) => {
       if (data.targetDensityUnitId !== undefined) {
         if (props.targetDensityUnitId !== data.targetDensityUnitId) continue
       } else {
-        if (props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null) continue
+        if (props.targetDensityUnitId !== undefined) continue
       }
       
       // Check strain composition match
@@ -1317,7 +1312,7 @@ controls.post('/suggest-name', memberMiddleware, async (c) => {
       const percentagesMatch = strainIds.every(id => {
         const pct = strainMap.get(id)
         const defPct = defStrainMap.get(id)
-        return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+        return pct !== undefined && defPct !== undefined && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
       })
       
       if (percentagesMatch) {
@@ -1364,11 +1359,8 @@ controls.post('/definitions/find', memberMiddleware, async (c) => {
     const controlType = 'blood'
     const { strains, targetDensity, targetDensityUnitId } = data
 
-    if (!strains || strains.length === 0) {
+    if (strains.length === 0) {
       return c.json({ error: 'At least one strain is required' }, 400)
-    }
-    if (targetDensity === undefined || targetDensity === null) {
-      return c.json({ error: 'Target density is required' }, 400)
     }
 
     const strainIds = strains.map(s => s.strainId)
@@ -1394,12 +1386,11 @@ controls.post('/definitions/find', memberMiddleware, async (c) => {
         }
       }
       const propsObj = props as Record<string, unknown>
-      if (!propsObj) continue
       if (propsObj.targetDensity !== targetDensity) continue
       if (targetDensityUnitId !== undefined) {
         if (propsObj.targetDensityUnitId !== targetDensityUnitId) continue
       } else {
-        if (propsObj.targetDensityUnitId !== undefined && propsObj.targetDensityUnitId !== null) continue
+        if (propsObj.targetDensityUnitId !== undefined) continue
       }
       const defStrains = (propsObj.strains || []) as Array<{ id: number; percentage?: number } | number>
       if (defStrains.length !== strains.length) continue
@@ -1411,7 +1402,7 @@ controls.post('/definitions/find', memberMiddleware, async (c) => {
       const percentagesMatch = sortedStrainIds.every(id => {
         const pct = strainPctMap.get(id)
         const defPct = defPctMap.get(id)
-        return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+        return pct !== undefined && defPct !== undefined && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
       })
       if (percentagesMatch) {
         const parsed = parseControlProperties(propsObj, strainMap)
@@ -1457,7 +1448,7 @@ controls.post('/definitions/bulk', memberMiddleware, async (c) => {
     const controlType = 'blood'
     const { strains, targetDensities, targetDensityUnitId } = data
 
-    if (!strains || strains.length === 0) {
+    if (strains.length === 0) {
       return c.json({ error: 'At least one strain is required' }, 400)
     }
 
@@ -1507,7 +1498,7 @@ controls.post('/definitions/bulk', memberMiddleware, async (c) => {
         const percentagesMatch = sortedStrainIds.every(id => {
           const pct = strainPctMap.get(id)
           const defPct = defPctMap.get(id)
-          return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+          return pct !== undefined && defPct !== undefined && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
         })
         if (percentagesMatch) {
           return { def, propsObj }
@@ -1574,7 +1565,6 @@ controls.post('/definitions/bulk', memberMiddleware, async (c) => {
           updatedBy: user?.id,
         })
         .returning()
-      if (!newControl) throw new Error('Failed to create control definition')
       const parsed = parseControlProperties(newControl.properties, strainMap)
       results.push({
         ...newControl,
@@ -1615,13 +1605,8 @@ controls.post('/', memberMiddleware, async (c) => {
     const { strains, targetDensity, targetDensityUnitId, properties, name, ...baseData } = data
     
     // Validate strains are provided (required)
-    if (!strains || strains.length === 0) {
+    if (strains.length === 0) {
       return c.json({ error: 'At least one strain is required' }, 400)
-    }
-    
-    // Validate targetDensity is provided (required)
-    if (targetDensity === undefined || targetDensity === null) {
-      return c.json({ error: 'Target density is required' }, 400)
     }
     
     // Check if definition with same combination already exists
@@ -1641,7 +1626,7 @@ controls.post('/', memberMiddleware, async (c) => {
       if (targetDensityUnitId !== undefined) {
         if (props.targetDensityUnitId !== targetDensityUnitId) continue
       } else {
-        if (props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null) continue
+        if (props.targetDensityUnitId !== undefined) continue
       }
       
       // Check strain composition match
@@ -1666,7 +1651,7 @@ controls.post('/', memberMiddleware, async (c) => {
       const percentagesMatch = strainIds.every(id => {
         const pct = strainMap.get(id)
         const defPct = defStrainMap.get(id)
-        return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+        return pct !== undefined && defPct !== undefined && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
       })
       
       if (percentagesMatch) {
@@ -1702,7 +1687,7 @@ controls.post('/', memberMiddleware, async (c) => {
     }))
     
     // For blood controls, add strains and density to properties
-    if (controlType === 'blood') {
+    {
       props.strains = strainsWithNames
       props.targetDensity = targetDensity
       if (targetDensityUnitId !== undefined) {
@@ -1752,9 +1737,6 @@ controls.post('/', memberMiddleware, async (c) => {
       .returning()
     
     const newControl = result[0]
-    if (!newControl) {
-      throw new Error('Failed to create control definition: insert returned no result')
-    }
     
     return c.json({ control: newControl }, 201)
   } catch (error) {
@@ -1813,7 +1795,7 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     // Ensure controlType remains 'blood' (don't allow changing it)
     const controlType = 'blood'
     // For blood controls, update strains and density in properties
-    if (controlType === 'blood') {
+    {
       if (strains !== undefined) {
         if (strains.length > 0) {
           // Get strain names
@@ -1835,22 +1817,13 @@ controls.patch('/:id', memberMiddleware, async (c) => {
         }
       }
       if (targetDensity !== undefined) {
-        if (targetDensity === null) {
-          delete newProps.targetDensity
-        } else {
-          newProps.targetDensity = targetDensity
-        }
+        newProps.targetDensity = targetDensity
       }
       if (targetDensityUnitId !== undefined) {
-        if (targetDensityUnitId === null) {
-          delete newProps.targetDensityUnitId
-          delete newProps.targetDensityUnitSymbol
-        } else {
-          newProps.targetDensityUnitId = targetDensityUnitId
-          const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
-          if (unitRecord) {
-            newProps.targetDensityUnitSymbol = unitRecord.symbol
-          }
+        newProps.targetDensityUnitId = targetDensityUnitId
+        const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
+        if (unitRecord) {
+          newProps.targetDensityUnitSymbol = unitRecord.symbol
         }
       }
     }

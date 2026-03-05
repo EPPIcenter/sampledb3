@@ -40,9 +40,9 @@ import { createAuthMiddleware } from '../middleware/auth'
  */
 function parseCSVOptions(params: any): CSVExportOptions {
   return {
-    delimiter: (params.csv_delimiter as ',' | ';' | '\t') || ',',
+    delimiter: (params.csv_delimiter as ',' | ';' | '\t' | undefined) ?? ',',
     includeBOM: params.csv_bom !== false && params.csv_bom !== 'false', // Default to true
-    lineEnding: (params.csv_line_ending as 'LF' | 'CRLF') || 'CRLF',
+    lineEnding: (params.csv_line_ending as 'LF' | 'CRLF' | undefined) ?? 'CRLF',
   }
 }
 
@@ -76,9 +76,9 @@ export_.get('/specimens.csv', authMiddleware, async (c) => {
     
     // Parse CSV options from query params
     const csvOptions: CSVExportOptions = {
-      delimiter: (c.req.query('csv_delimiter') as ',' | ';' | '\t') || ',',
+      delimiter: (c.req.query('csv_delimiter') as ',' | ';' | '\t' | undefined) ?? ',',
       includeBOM: c.req.query('csv_bom') !== 'false', // Default to true
-      lineEnding: (c.req.query('csv_line_ending') as 'LF' | 'CRLF') || 'CRLF',
+      lineEnding: (c.req.query('csv_line_ending') as 'LF' | 'CRLF' | undefined) ?? 'CRLF',
     }
     
     let query = database
@@ -158,9 +158,9 @@ export_.get('/inventory.csv', authMiddleware, async (c) => {
   try {
     // Parse CSV options from query params
     const csvOptions: CSVExportOptions = {
-      delimiter: (c.req.query('csv_delimiter') as ',' | ';' | '\t') || ',',
+      delimiter: (c.req.query('csv_delimiter') as ',' | ';' | '\t' | undefined) ?? ',',
       includeBOM: c.req.query('csv_bom') !== 'false', // Default to true
-      lineEnding: (c.req.query('csv_line_ending') as 'LF' | 'CRLF') || 'CRLF',
+      lineEnding: (c.req.query('csv_line_ending') as 'LF' | 'CRLF' | undefined) ?? 'CRLF',
     }
     
     // Get all specimens
@@ -264,11 +264,11 @@ export_.get('/containers', authMiddleware, async (c) => {
       study = result.study
       specimens = result.specimens
     } catch (error: any) {
-      return c.json({ error: error.message || 'Failed to build export query' }, 404)
+      return c.json({ error: error.message }, 404)
     }
 
     if (countOnly) {
-      let filteredContainers = containers || []
+      let filteredContainers = containers
       if (filters.container_types && filters.container_types.length > 0 && filteredContainers.length > 0) {
         const containerIds = filteredContainers.map((c: { id: number }) => c.id)
         const matchingIds = await filterContainersByType(database, containerIds, filters.container_types)
@@ -277,15 +277,11 @@ export_.get('/containers', authMiddleware, async (c) => {
       return c.json({ count: filteredContainers.length })
     }
 
-    if (!containers || containers.length === 0) {
-      return c.json({ error: 'No containers found' }, 404)
-    }
-
     // Enrich container data (this also applies container type filtering)
     const enrichedData = await enrichContainerData(database, containers, specimens || [], study, filters.container_types, undefined)
 
     // Determine format
-    const format = (c.req.query('format') || 'csv') as 'csv' | 'xlsx' | 'json'
+    const format = (c.req.query('format') as 'csv' | 'xlsx' | 'json' | undefined) ?? 'csv'
 
     // Generate filename with local datetime
     const timestamp = formatLocalDateTime()
@@ -306,16 +302,13 @@ export_.get('/containers', authMiddleware, async (c) => {
       return c.text(csv)
     }
 
-    if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(database, enrichedData, columns, userId)
-      c.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-      c.header('Content-Disposition', `attachment; filename="${filename}.xlsx"`)
-      return c.body(new Uint8Array(excelBuffer), 200, {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      })
-    }
-
-    return c.json({ error: 'Invalid format. Use csv, xlsx, or json' }, 400)
+    // format === 'xlsx'
+    const excelBuffer = await formatAsExcel(database, enrichedData, columns, userId)
+    c.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    c.header('Content-Disposition', `attachment; filename="${filename}.xlsx"`)
+    return c.body(new Uint8Array(excelBuffer), 200, {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
   } catch (error: any) {
     console.error('Error exporting containers:', error)
     return c.json({ error: 'Failed to export containers', details: error.message }, 500)
@@ -423,7 +416,7 @@ export_.post('/containers', authMiddleware, async (c) => {
       study = result.study
       specimens = result.specimens
     } catch (error: any) {
-      return c.json({ error: error.message || 'Failed to build export query' }, 404)
+      return c.json({ error: error.message }, 404)
     }
 
     if (countOnly) {
@@ -489,18 +482,15 @@ export_.post('/containers', authMiddleware, async (c) => {
       })
     }
 
-    if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(database, enrichedData, columns, userId)
-      const base64Excel = excelBuffer.toString('base64')
-      return c.json({
-        summary,
-        data: base64Excel,
-        format: 'xlsx',
-        filename: `${filename}.xlsx`,
-      })
-    }
-
-    return c.json({ error: 'Invalid format. Use csv, xlsx, or json' }, 400)
+    // format === 'xlsx'
+    const excelBuffer = await formatAsExcel(database, enrichedData, columns, userId)
+    const base64Excel = excelBuffer.toString('base64')
+    return c.json({
+      summary,
+      data: base64Excel,
+      format: 'xlsx',
+      filename: `${filename}.xlsx`,
+    })
   } catch (error: any) {
     console.error('Error exporting containers by names:', error)
     return c.json({ error: 'Failed to export containers', details: error.message }, 500)
@@ -709,7 +699,7 @@ export_.post('/containers/multi-study', authMiddleware, async (c) => {
     if (format === 'json') {
       // For multi-study, we need to create a dummy study object for formatAsJSON
       // Since it's multi-study, we'll use the first study or create a generic one
-      const firstStudy = result.studies && result.studies.size > 0 
+      const firstStudy = result.studies.size > 0
         ? Array.from(result.studies.values())[0]
         : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', description: null, leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '', createdBy: null, updatedBy: null }
       const dummyFilters: ExportFilters = { study: 'MULTI' }
@@ -734,18 +724,15 @@ export_.post('/containers/multi-study', authMiddleware, async (c) => {
       })
     }
     
-    if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(database, result.containers, columns, userId)
-      const base64Excel = excelBuffer.toString('base64')
-      return c.json({
-        summary: result.summary,
-        data: base64Excel,
-        format: 'xlsx',
-        filename: `${filename}.xlsx`,
-      })
-    }
-    
-    return c.json({ error: 'Invalid format. Use csv, xlsx, or json' }, 400)
+    // format === 'xlsx'
+    const excelBuffer = await formatAsExcel(database, result.containers, columns, userId)
+    const base64Excel = excelBuffer.toString('base64')
+    return c.json({
+      summary: result.summary,
+      data: base64Excel,
+      format: 'xlsx',
+      filename: `${filename}.xlsx`,
+    })
   } catch (error: any) {
     console.error('Error exporting containers from multiple studies:', error)
     return c.json({ error: 'Failed to export containers', details: error.message }, 500)
@@ -796,7 +783,7 @@ export_.post('/containers/by-barcodes', authMiddleware, async (c) => {
       studies = result.studies
       subjectToStudyMap = result.subjectToStudyMap
     } catch (error: any) {
-      return c.json({ error: error.message || 'Failed to build export query' }, 404)
+      return c.json({ error: error.message }, 404)
     }
 
     if (containers.length === 0) {
@@ -815,8 +802,8 @@ export_.post('/containers/by-barcodes', authMiddleware, async (c) => {
 
     // Enrich container data
     // For multi-study, we use subjectToStudyMap to get the correct study for each container
-    const firstStudy = studies && studies.length > 0 
-      ? studies[0] 
+    const firstStudy = studies.length > 0
+      ? studies[0]
       : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', description: null, leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '', createdBy: null, updatedBy: null }
     
     const enrichedData = await enrichContainerData(database, containers, specimens, firstStudy, undefined, subjectToStudyMap)
@@ -837,8 +824,7 @@ export_.post('/containers/by-barcodes', authMiddleware, async (c) => {
 
     if (format === 'json') {
       const dummyFilters: ExportFilters = { study: 'MULTI' }
-      const studyWithDescription = firstStudy.description !== undefined ? firstStudy : { ...firstStudy, description: null as string | null }
-      const jsonData = await formatAsJSON(database, enrichedData, dummyFilters, studyWithDescription, columns, userId)
+      const jsonData = await formatAsJSON(database, enrichedData, dummyFilters, firstStudy, columns, userId)
       return c.json({
         summary,
         data: jsonData.containers,
@@ -859,18 +845,15 @@ export_.post('/containers/by-barcodes', authMiddleware, async (c) => {
       })
     }
 
-    if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(database, enrichedData, columns, userId)
-      const base64Excel = excelBuffer.toString('base64')
-      return c.json({
-        summary,
-        data: base64Excel,
-        format: 'xlsx',
-        filename: `${filename}.xlsx`,
-      })
-    }
-
-    return c.json({ error: 'Invalid format. Use csv, xlsx, or json' }, 400)
+    // format === 'xlsx'
+    const excelBuffer = await formatAsExcel(database, enrichedData, columns, userId)
+    const base64Excel = excelBuffer.toString('base64')
+    return c.json({
+      summary,
+      data: base64Excel,
+      format: 'xlsx',
+      filename: `${filename}.xlsx`,
+    })
   } catch (error: any) {
     console.error('Error exporting containers by barcodes:', error)
     return c.json({ error: 'Failed to export containers', details: error.message }, 500)

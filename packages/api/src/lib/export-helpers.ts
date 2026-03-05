@@ -299,7 +299,8 @@ export async function buildContainerQueryByMicronixBarcodes(
   }
 
   // Get specimens for these containers
-  const specimenIds = [...new Set(containers.map(c => c.specimenId).filter(id => id !== null) as number[])]
+  // specimenId can be null from DB; filter to numbers only
+  const specimenIds = [...new Set(containers.map(c => c.specimenId).filter((id): id is number => typeof id === 'number'))]
   if (specimenIds.length === 0) {
     return { containers, specimens: [], studies: [], subjectToStudyMap: new Map() }
   }
@@ -711,11 +712,12 @@ export async function enrichContainerData(
       label,
       collection_name: collectionName,
       state: '',
-      status: container.remainingQuantity === null || container.remainingQuantity === undefined
-        ? 'Unknown'
-        : container.remainingQuantity > 0
-        ? 'In Use'
-        : 'Exhausted',
+      status:
+        container.remainingQuantity == null
+          ? 'Unknown'
+          : container.remainingQuantity > 0
+            ? 'In Use'
+            : 'Exhausted',
       comment: container.comment || undefined,
       specimen_id: spec.id,
       specimen_type: specimenTypeMap.get(spec.specimenTypeId) || '',
@@ -1068,14 +1070,11 @@ export async function formatAsCSV(
   } else {
     // No columns specified, use default configuration
     const defaultConfig = await getDefaultExportConfiguration(database, userId)
-    if (defaultConfig && defaultConfig.columns && defaultConfig.columns.length > 0) {
-      headers = defaultConfig.columns.filter(col => availableKeys.includes(col))
-      // If no valid columns, fall back to all columns
-      if (headers.length === 0) {
-        headers = availableKeys
-      }
+    const defaultColumns = defaultConfig?.columns ?? []
+    if (defaultColumns.length > 0) {
+      headers = defaultColumns.filter(col => availableKeys.includes(col))
+      if (headers.length === 0) headers = availableKeys
     } else {
-      // No configuration, use all columns in default order
       headers = availableKeys
     }
   }
@@ -1150,11 +1149,11 @@ export async function formatAsJSON(
       })
     }
   } else {
-    // Use default configuration
     const defaultConfig = await getDefaultExportConfiguration(database, userId)
-    if (defaultConfig && defaultConfig.columns && defaultConfig.columns.length > 0) {
+    const defaultColumns = defaultConfig?.columns ?? []
+    if (defaultColumns.length > 0) {
       const availableKeys = Object.keys(data[0] || {})
-      const validColumns = defaultConfig.columns.filter(col => availableKeys.includes(col))
+      const validColumns = defaultColumns.filter(col => availableKeys.includes(col))
       if (validColumns.length > 0) {
         filteredData = data.map(row => {
           const filtered: any = {}
@@ -1207,16 +1206,12 @@ export async function formatAsExcel(
       headers = availableKeys
     }
   } else {
-    // No columns specified, use default configuration
     const defaultConfig = await getDefaultExportConfiguration(database, userId)
-    if (defaultConfig && defaultConfig.columns && defaultConfig.columns.length > 0) {
-      headers = defaultConfig.columns.filter(col => availableKeys.includes(col))
-      // If no valid columns, fall back to all columns
-      if (headers.length === 0) {
-        headers = availableKeys
-      }
+    const defaultColumns = defaultConfig?.columns ?? []
+    if (defaultColumns.length > 0) {
+      headers = defaultColumns.filter(col => availableKeys.includes(col))
+      if (headers.length === 0) headers = availableKeys
     } else {
-      // No configuration, use all columns in default order
       headers = availableKeys
     }
   }

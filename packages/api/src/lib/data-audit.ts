@@ -81,8 +81,8 @@ export async function listEmptyCollections(db: Database): Promise<EmptyCollectio
         type: 'micronix_plate',
         id: p.id,
         name: p.name,
-        locationId: p.locationId ?? undefined,
-        locationPath: p.path ?? null,
+        locationId: p.locationId,
+        locationPath: p.path,
       })
     }
   }
@@ -119,8 +119,8 @@ export async function listEmptyCollections(db: Database): Promise<EmptyCollectio
         type: 'cryovial_box',
         id: b.id,
         name: b.name,
-        locationId: b.locationId ?? undefined,
-        locationPath: b.path ?? null,
+        locationId: b.locationId,
+        locationPath: b.path,
       })
     }
   }
@@ -157,8 +157,8 @@ export async function listEmptyCollections(db: Database): Promise<EmptyCollectio
         type: 'box',
         id: b.id,
         name: b.name,
-        locationId: b.locationId ?? undefined,
-        locationPath: b.path ?? null,
+        locationId: b.locationId,
+        locationPath: b.path,
       })
     }
   }
@@ -195,8 +195,8 @@ export async function listEmptyCollections(db: Database): Promise<EmptyCollectio
         type: 'bag',
         id: b.id,
         name: b.name,
-        locationId: b.locationId ?? undefined,
-        locationPath: b.path ?? null,
+        locationId: b.locationId,
+        locationPath: b.path,
       })
     }
   }

@@ -33,7 +33,7 @@ async function getPaginationSettings(db: Database): Promise<{ defaultPageSize: n
 export async function validateLimit(db: Database, limit: string | number | undefined): Promise<number> {
   const settings = await getPaginationSettings(db)
   const parsed = typeof limit === 'string' ? parseInt(limit, 10) : limit
-  if (isNaN(parsed as number) || parsed === undefined || parsed === null) {
+  if (isNaN(parsed as number) || parsed === undefined) {
     return settings.defaultPageSize
   }
   const num = Number(parsed)
@@ -49,7 +49,7 @@ export async function validateLimit(db: Database, limit: string | number | undef
  */
 export function validatePage(page: string | number | undefined): number {
   const parsed = typeof page === 'string' ? parseInt(page, 10) : page
-  if (isNaN(parsed as number) || parsed === undefined || parsed === null) {
+  if (isNaN(parsed as number) || parsed === undefined) {
     return 1
   }
   const num = Number(parsed)

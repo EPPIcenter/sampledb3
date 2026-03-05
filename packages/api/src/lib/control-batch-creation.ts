@@ -86,7 +86,7 @@ async function getOrCreateCollection(
   } else if (type === 'micronix_plate') {
     const existing = await tx.select().from(micronixPlate).where(eq(micronixPlate.name, name)).get()
     if (existing) return existing.id
-  } else if (type === 'cryovial_box') {
+  } else {
     const existing = await tx.select().from(cryovialBox).where(eq(cryovialBox.name, name)).get()
     if (existing) return existing.id
   }
@@ -338,7 +338,7 @@ async function createContainer(
       barcode: containerData.containerBarcode || null,
       position: normalizePosition(containerData.position),
     })
-  } else if (containerData.type === 'micronix_tube') {
+  } else {
     let collectionId: number
     if (containerData.collectionId) {
       collectionId = containerData.collectionId
@@ -445,14 +445,10 @@ async function prepareContainerData(
         
         if (existingBox && !isBag) {
           boxId = existingBox.id
-          if (boxId !== null) {
-            collectionMap.set(key, boxId)
-          }
+          collectionMap.set(key, boxId)
         } else if (existingBag && isBag) {
           bagId = existingBag.id
-          if (bagId !== null) {
-            collectionMap.set(key, bagId)
-          }
+          collectionMap.set(key, bagId)
         } else if (!existingBox && !existingBag) {
           // Will create in transaction
           collectionMap.set(key, -1) // Placeholder
@@ -511,7 +507,7 @@ async function prepareContainerData(
     } else {
       throw new Error('Collection information required for cryovial tubes')
     }
-  } else if (containerData.type === 'micronix_tube') {
+  } else {
     if (containerData.collectionId) {
       collectionId = containerData.collectionId
     } else if (containerData.collectionName && containerData.collectionLocationId) {
@@ -715,7 +711,7 @@ function createContainerSync(
       barcode: containerData.containerBarcode || null,
       position: normalizePosition(containerData.position),
     }).run()
-  } else if (containerData.type === 'micronix_tube') {
+  } else {
     let finalCollectionId = prepared.collectionId
     if (!finalCollectionId && collectionName && collectionLocationId) {
       const key = `micronix_plate-${collectionName}-${collectionLocationId}`
@@ -818,7 +814,7 @@ export async function createBatchWithSpecimens(
       } else if (coll.type === 'micronix_plate') {
         const existing = await database.select().from(micronixPlate).where(eq(micronixPlate.name, coll.name)).get()
         if (existing) collectionId = existing.id
-      } else if (coll.type === 'cryovial_box') {
+      } else {
         const existing = await database.select().from(cryovialBox).where(eq(cryovialBox.name, coll.name)).get()
         if (existing) collectionId = existing.id
       }
@@ -1099,7 +1095,7 @@ export async function addSpecimensToBatch(
       } else if (coll.type === 'micronix_plate') {
         const existing = await database.select().from(micronixPlate).where(eq(micronixPlate.name, coll.name)).get()
         if (existing) collectionId = existing.id
-      } else if (coll.type === 'cryovial_box') {
+      } else {
         const existing = await database.select().from(cryovialBox).where(eq(cryovialBox.name, coll.name)).get()
         if (existing) collectionId = existing.id
       }

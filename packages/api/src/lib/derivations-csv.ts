@@ -948,22 +948,24 @@ export async function importDerivationsFromCsv(
     } catch (error: unknown) {
       // Transaction failed and rolled back - return error for failed row
       // All other rows are marked as not processed (transaction rolled back)
-      if (failedRowIndex !== null) {
+      // failedRowIndex is set in the inner catch before rethrow; control flow narrows it to number here
+      const idx = failedRowIndex as number | null
+      if (idx !== null) {
         const transactionErrorMessage = transactionError instanceof Error ? transactionError.message : String(transactionError || 'Unknown error')
         const errorMessage = error instanceof Error ? error.message : String(error)
         const rawMessage = transactionErrorMessage !== 'null' && transactionErrorMessage !== 'Unknown error' ? transactionErrorMessage : errorMessage
         const friendlyMessage = toUserFriendlyDerivationError(rawMessage)
         results.push({
-          index: failedRowIndex,
+          index: idx,
           success: false,
-          error: `Row ${failedRowIndex + 1}: ${friendlyMessage} No derivations were created; please fix the error and try again.`,
+          error: `Row ${idx + 1}: ${friendlyMessage} No derivations were created; please fix the error and try again.`,
         })
         // Mark all previous rows as failed due to transaction rollback
-        for (let i = 0; i < failedRowIndex; i++) {
+        for (let i = 0; i < idx; i++) {
           results[i] = {
             index: i,
             success: false,
-            error: `Stopped at row ${failedRowIndex + 1}. No derivations were created.`,
+            error: `Stopped at row ${idx + 1}. No derivations were created.`,
           }
         }
       } else {

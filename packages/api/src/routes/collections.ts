@@ -337,8 +337,7 @@ collections.get('/boxes/cryovial/:id', authMiddleware, async (c) => {
         pos = `${row}${col.padStart(2, '0')}`
       }
     }
-    if (!positions[pos]) positions[pos] = []
-    positions[pos].push(entry)
+    (positions[pos] ??= []).push(entry)
   })
 
   return c.json({

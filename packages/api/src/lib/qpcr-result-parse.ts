@@ -50,7 +50,7 @@ function normalizeWell(s: string): string {
 }
 
 function parseNum(v: string): number | null {
-  if (v == null || v === '') return null
+  if (v === '') return null
   const n = parseFloat(String(v).replace(/,/g, ''))
   if (Number.isNaN(n)) return null
   return n
@@ -164,14 +164,17 @@ export async function parseQuantStudioXls(buffer: Buffer, fileName: string): Pro
 
   const resultsSheet = wb.SheetNames.find((n) => /results/i.test(n)) ?? wb.SheetNames[0]
   const sheet = wb.Sheets[resultsSheet]
-  if (sheet) {
-    const data = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' }) as string[][]
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- sheet can be undefined when workbook has no sheets
+  const data: string[][] = sheet
+    ? (XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' }) as string[][])
+    : []
+  {
     for (let r = 0; r < Math.min(50, data.length); r++) {
       const row = data[r]
       if (Array.isArray(row) && row.length >= 2) {
-        const key = String(row[0] ?? '').trim().toLowerCase()
-        if (key.includes('experiment run end time') || key.includes('run end')) runStartedAt = String(row[1] ?? '').trim() || null
-        if (key.includes('experiment name')) experimentName = String(row[1] ?? '').trim() || null
+        const key = String(row[0]).trim().toLowerCase()
+        if (key.includes('experiment run end time') || key.includes('run end')) runStartedAt = String(row[1]).trim() || null
+        if (key.includes('experiment name')) experimentName = String(row[1]).trim() || null
       }
     }
     let headerRowIdx = -1
@@ -185,10 +188,10 @@ export async function parseQuantStudioXls(buffer: Buffer, fileName: string): Pro
     for (let r = 0; r < Math.min(60, data.length); r++) {
       const row = data[r]
       if (!Array.isArray(row)) continue
-      const rowStr = row.map((c) => String(c ?? '')).join(' ').toLowerCase()
+      const rowStr = row.map((c) => String(c)).join(' ').toLowerCase()
       if (rowStr.includes('well') && (rowStr.includes('ct') || rowStr.includes('sample'))) {
         headerRowIdx = r
-        const headers = row.map((c) => String(c ?? ''))
+        const headers = row.map((c) => String(c))
         wellPosIdx = headers.findIndex((h) => /well position|well/i.test(h))
         sampleIdx = headers.findIndex((h) => /sample name/i.test(h))
         taskIdx = headers.findIndex((h) => /task/i.test(h))
@@ -203,21 +206,21 @@ export async function parseQuantStudioXls(buffer: Buffer, fileName: string): Pro
       for (let r = headerRowIdx + 1; r < data.length; r++) {
         const row = data[r]
         if (!Array.isArray(row) || row.length < 2) continue
-        const wellRaw = wellPosIdx >= 0 ? String(row[wellPosIdx] ?? '') : String(row[0] ?? '')
+        const wellRaw = wellPosIdx >= 0 ? String(row[wellPosIdx]) : String(row[0])
         const wellPosition = normalizeWell(wellRaw)
         if (!wellPosition) continue
-        const sampleBarcode = (sampleIdx >= 0 ? String(row[sampleIdx] ?? '').trim() : '') || null
-        let task = (taskIdx >= 0 ? String(row[taskIdx] ?? '').trim().toUpperCase() : 'UNKNOWN') || 'UNKNOWN'
+        const sampleBarcode = (sampleIdx >= 0 ? String(row[sampleIdx]).trim() : '') || null
+        let task = (taskIdx >= 0 ? String(row[taskIdx]).trim().toUpperCase() : 'UNKNOWN') || 'UNKNOWN'
         if (task !== 'STANDARD' && task !== 'NTC') task = 'UNKNOWN'
         let cq: number | null = null
         if (ctIdx >= 0) {
-          const v = String(row[ctIdx] ?? '')
+          const v = String(row[ctIdx])
           if (v && v.toLowerCase() !== 'undetermined') cq = parseNum(v)
         }
         let quantity: number | null = null
-        if (quantityIdx >= 0) quantity = parseNum(String(row[quantityIdx] ?? ''))
-        const targetName = targetIdx >= 0 ? (String(row[targetIdx] ?? '').trim() || null) : null
-        const ampStatus = ampStatusIdx >= 0 ? (String(row[ampStatusIdx] ?? '').trim() || null) : null
+        if (quantityIdx >= 0) quantity = parseNum(String(row[quantityIdx]))
+        const targetName = targetIdx >= 0 ? (String(row[targetIdx]).trim() || null) : null
+        const ampStatus = ampStatusIdx >= 0 ? (String(row[ampStatusIdx]).trim() || null) : null
         wellResults.push({
           wellPosition,
           targetName,
@@ -245,10 +248,10 @@ export async function parseQuantStudioXls(buffer: Buffer, fileName: string): Pro
     for (let r = 0; r < Math.min(50, data.length); r++) {
       const row = data[r]
       if (!Array.isArray(row)) continue
-      const rowStr = row.map((c) => String(c ?? '')).join(' ').toLowerCase()
+      const rowStr = row.map((c) => String(c)).join(' ').toLowerCase()
       if (rowStr.includes('cycle') && (rowStr.includes('rn') || rowStr.includes('delta'))) {
         headerRowIdx = r
-        const headers = row.map((c) => String(c ?? ''))
+        const headers = row.map((c) => String(c))
         wellPosIdx = headers.findIndex((h) => /well position|well/i.test(h))
         cycleIdx = headers.findIndex((h) => /cycle/i.test(h))
         targetIdx = headers.findIndex((h) => /target name/i.test(h))

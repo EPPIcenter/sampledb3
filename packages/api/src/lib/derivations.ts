@@ -180,7 +180,7 @@ async function adjustParentQuantity(
     })
   }
 
-  const newRemaining = Math.max(0, (parent.remainingQuantity ?? 0) - quantityUsed)
+  const newRemaining = Math.max(0, parent.remainingQuantity - quantityUsed)
 
   const [updated] = await database
     .update(storageContainer)

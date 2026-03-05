@@ -88,10 +88,6 @@ const settingsCache = new Map<string, any>()
 
 function getCacheKey(db: Database, key: string, userId: number | null): string {
   // Use a simple identifier for the database (could be improved with a unique ID)
-  // Handle case where db might be undefined (shouldn't happen, but be defensive)
-  if (!db) {
-    throw new Error('Database instance is required for cache key generation')
-  }
   const dbId = (db as any)._id || String(db)
   return userId !== null ? `${dbId}:${key}:${userId}` : `${dbId}:${key}`
 }
@@ -345,19 +341,22 @@ export async function setExportConfigurations(db: Database, configs: ExportConfi
  */
 export async function getDefaultExportConfiguration(db: Database, userId?: number | null): Promise<{ columns: string[] } | null> {
   // First check for personal default if userId is provided
-  if (userId !== undefined && userId !== null) {
+  /* eslint-disable @typescript-eslint/no-unnecessary-condition -- optional params and nullable return types */
+  if (userId != null) {
     const userConfigs = await getPersonalExportConfigurations(db, userId)
-    if (userConfigs && userConfigs.configurations) {
+    if (userConfigs != null && userConfigs.configurations) {
       const personalDefault = userConfigs.configurations.find(c => c.isDefault === true)
       if (personalDefault) {
         return { columns: personalDefault.columns }
       }
     }
   }
-  
+
+  /* eslint-enable @typescript-eslint/no-unnecessary-condition */
+
   // Fall back to shared default
   const systemConfigs = await getSharedExportConfigurations(db)
-  if (systemConfigs && systemConfigs.configurations) {
+  if (systemConfigs && systemConfigs.configurations) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition
     const sharedDefault = systemConfigs.configurations.find(c => c.isDefault === true)
     if (sharedDefault) {
       return { columns: sharedDefault.columns }
@@ -376,9 +375,10 @@ export async function getDefaultExportConfiguration(db: Database, userId?: numbe
  */
 export async function getExportConfigurationByName(db: Database, name: string, userId?: number | null): Promise<{ columns: string[] } | null> {
   // First check for personal config if userId is provided
-  if (userId !== undefined && userId !== null) {
+  if (userId != null) {
     const userConfigs = await getPersonalExportConfigurations(db, userId)
-    if (userConfigs && userConfigs.configurations) {
+    // userConfigs can be null per API; eslint thinks it's always truthy
+    if (userConfigs != null && userConfigs.configurations) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition
       const personalConfig = userConfigs.configurations.find(c => c.name === name)
       if (personalConfig) {
         return { columns: personalConfig.columns }
@@ -388,7 +388,7 @@ export async function getExportConfigurationByName(db: Database, name: string, u
   
   // Fall back to shared config
   const systemConfigs = await getSharedExportConfigurations(db)
-  if (systemConfigs && systemConfigs.configurations) {
+  if (systemConfigs && systemConfigs.configurations) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition
     const sharedConfig = systemConfigs.configurations.find(c => c.name === name)
     if (sharedConfig) {
       return { columns: sharedConfig.columns }
@@ -407,7 +407,7 @@ export async function getScannerConfigurations(db: Database, userId?: number | n
   const systemConfigs = await getSetting<ScannerConfigurations>(db, 'scanner_configurations', null)
   
   // Initialize system defaults if none exist
-  if (!systemConfigs || !systemConfigs.configurations || systemConfigs.configurations.length === 0) {
+  if (!systemConfigs || !systemConfigs.configurations || systemConfigs.configurations.length === 0) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- all checks needed for init
     const defaults: ScannerConfigurations = {
       configurations: [
         {
@@ -441,8 +441,8 @@ export async function getScannerConfigurations(db: Database, userId?: number | n
     }
     await setScannerConfigurations(db, defaults, null)
     const initialized = await getSetting<ScannerConfigurations>(db, 'scanner_configurations', null)
-    
-    if (userId !== undefined && userId !== null) {
+
+    if (userId != null) {  
       const userConfigs = await getSetting<ScannerConfigurations>(db, 'scanner_configurations', userId)
       if (initialized && userConfigs) {
         return {
@@ -455,23 +455,20 @@ export async function getScannerConfigurations(db: Database, userId?: number | n
     }
     return initialized
   }
-  
-  if (userId !== undefined && userId !== null) {
+
+  if (userId != null) {
     const userConfigs = await getSetting<ScannerConfigurations>(db, 'scanner_configurations', userId)
-    
-    // Merge: system configs + user personal configs
-    if (systemConfigs && userConfigs) {
+    // systemConfigs is truthy here (we only skip the init block above when it exists)
+    if (userConfigs) {
       return {
         configurations: [
-          ...systemConfigs.configurations,
+          ...systemConfigs!.configurations,
           ...userConfigs.configurations,
         ],
       }
-    } else if (userConfigs) {
-      return userConfigs
     }
   }
-  
+
   return systemConfigs
 }
 
@@ -498,7 +495,7 @@ export async function getPersonalScannerConfigurations(db: Database, userId: num
  * @param userId - Optional user ID. If provided, saves as user-specific; if null/undefined, saves as system-wide
  */
 export async function setScannerConfigurations(db: Database, configs: ScannerConfigurations, userId?: number | null): Promise<void> {
-  return setSetting(db, 'scanner_configurations', configs, userId ?? null)
+  return setSetting(db, 'scanner_configurations', configs, userId ?? undefined)
 }
 
 /**
@@ -507,7 +504,7 @@ export async function setScannerConfigurations(db: Database, configs: ScannerCon
  */
 export async function getTableViewConfigurations(db: Database): Promise<TableViewConfigurations | null> {
   const configs = await getSetting<TableViewConfigurations>(db, 'table_view_configurations', null)
-  if (!configs || !configs.configurations || configs.configurations.length === 0) {
+  if (!configs || !configs.configurations || configs.configurations.length === 0) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- all checks needed for init
     await setTableViewConfigurations(db, DEFAULT_TABLE_VIEW_CONFIGURATIONS)
     return getSetting<TableViewConfigurations>(db, 'table_view_configurations', null)
   }
@@ -529,14 +526,8 @@ export async function setTableViewConfigurations(db: Database, configs: TableVie
  */
 export async function getDefaultScannerConfiguration(db: Database): Promise<ScannerConfiguration | null> {
   const scannerConfigs = await getScannerConfigurations(db)
-  if (scannerConfigs && scannerConfigs.configurations) {
-    const defaultConfig = scannerConfigs.configurations.find(c => c.isDefault === true)
-    if (defaultConfig) {
-      return defaultConfig
-    }
-  }
-  
-  return null
+  const defaultConfig = scannerConfigs?.configurations.find(c => c.isDefault === true)
+  return defaultConfig ?? null
 }
 
 /**
@@ -545,13 +536,9 @@ export async function getDefaultScannerConfiguration(db: Database): Promise<Scan
  */
 export async function getScannerConfigurationById(db: Database, id: string): Promise<ScannerConfiguration | null> {
   const scannerConfigs = await getScannerConfigurations(db)
-  if (scannerConfigs && scannerConfigs.configurations) {
-    const config = scannerConfigs.configurations.find(c => c.id === id)
-    if (config) {
-      return config
-    }
-  }
-  return null
+  if (!scannerConfigs) return null
+  const config = scannerConfigs.configurations.find(c => c.id === id)
+  return config ?? null
 }
 
 /**

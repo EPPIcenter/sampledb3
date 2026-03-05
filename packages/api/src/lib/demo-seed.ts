@@ -104,7 +104,7 @@ export async function runDemoSeed(
     const s = DEMO_STORAGE_TYPES[i]
     const result = await database
       .insert(storageType)
-      .values({ id: i + 1, name: s.name, description: s.description ?? null })
+      .values({ id: i + 1, name: s.name, description: s.description })
       .returning()
     const row = Array.isArray(result) ? result[0] : result
     storageTypeMap.set(s.name, row.id)
@@ -176,7 +176,7 @@ export async function runDemoSeed(
   specimenTypeRows.forEach((st) => specimenTypeMap.set(st.name, st.id))
   for (const s of DEMO_SPECIMEN_TYPES) {
     const specimenTypeId = specimenTypeMap.get(s.name)
-    if (specimenTypeId && s.containerTypes?.length) {
+    if (specimenTypeId !== undefined) {
       for (const ct of s.containerTypes) {
         await database
           .insert(specimenTypeContainerType)

@@ -392,10 +392,6 @@ containers.patch('/:id', memberMiddleware, async (c) => {
       .where(eq(storageContainer.id, id))
       .returning()
     
-    if (!updated) {
-      return c.json({ error: 'Container not found' }, 404)
-    }
-    
     // Update tags if provided
     if (tagIds !== undefined) {
       // Remove all existing tags

@@ -169,7 +169,7 @@ async function revalidatePreparedSubjectInTx(
           }
           prepared.collectionMap.set(`${collectionType}-${identifier}`, collectionId)
         }
-      } else if (container.containerType === 'paper' && container.collectionName && !container.collectionLocationId) {
+      } else if (container.collectionName && !container.collectionLocationId) {
         const boxId = await resolveCollection(container.collectionName, 'box', dbTx)
         if (!boxId) {
           throw new ValidationError(`${specimenLabel}: box '${container.collectionName}' no longer exists; provide collectionLocationId to create it`)
@@ -241,7 +241,7 @@ export async function prepareSubjectWithSpecimens(
             throw new ValidationError(`Collection '${identifier}' not found. Please provide collectionLocationId to create it.`)
           }
         }
-      } else if (containerType === 'paper' && container.collectionName) {
+      } else if (container.collectionName) {
         const existingBoxId = await resolveCollection(container.collectionName, 'box', database)
         if (existingBoxId) collectionMap.set(`box-${container.collectionName}`, existingBoxId)
         else if (!container.collectionLocationId) {
@@ -473,7 +473,7 @@ export function createSubjectWithSpecimensInTx(
           barcode: container.barcode ?? null,
           position: normalizePosition(container.position),
         }).run()
-      } else if (containerType === 'static_well') {
+      } else {
         const identifier = container.collectionName || container.collectionBarcode!
         const key = `micronix_plate-${identifier}`
         let collectionId: number

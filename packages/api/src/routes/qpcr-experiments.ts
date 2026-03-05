@@ -219,7 +219,6 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
           updatedBy: user?.id ?? null,
         })
         .returning()
-      if (!inserted) throw new Error('Insert failed')
       await database.insert(qpcrExperimentTarget).values({
         qpcrExperimentId: inserted.id,
         targetName: 'varATS',
@@ -358,7 +357,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         .from(qpcrExperimentTarget)
         .where(eq(qpcrExperimentTarget.qpcrExperimentId, id))
         .orderBy(asc(qpcrExperimentTarget.sortOrder))
-      const result = updated ?? exp
+      const result = updated
       return c.json({
         ...result,
         targets: targets.map((t) => ({
@@ -412,7 +411,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
 
       const unresolved: { wellPosition: string; barcode: string }[] = []
       for (const r of rows) {
-        if (r.barcode && !barcodeToContainerId.has(r.barcode)) {
+        if (!barcodeToContainerId.has(r.barcode)) {
           unresolved.push({ wellPosition: r.wellPosition, barcode: r.barcode })
         }
       }
@@ -427,7 +426,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
           .where(inArray(storageContainer.id, containerIds))
         for (const row of containers) {
           containerToStorage.set(row.id, { specimenId: row.specimenId })
-          if (row.specimenId != null) containerToSpecimen.set(row.id, row.specimenId)
+          containerToSpecimen.set(row.id, row.specimenId)
         }
       }
 
@@ -487,13 +486,13 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       for (const r of rows) {
         if (seenPositions.has(r.wellPosition)) continue
         seenPositions.add(r.wellPosition)
-        if (!r.barcode?.trim()) {
+        if (!r.barcode.trim()) {
           continue
         }
         const containerId = barcodeToContainerId.get(r.barcode)
         if (!containerId) continue
-        const storage = containerToStorage.get(containerId)
-        const specimenId = storage?.specimenId ?? null
+        const storage = containerToStorage.get(containerId)!
+        const specimenId = storage.specimenId
         const content = specimenId != null ? specimenToContent.get(specimenId) : null
         wellsToInsert.push({
           qpcrExperimentId: id,
@@ -701,7 +700,6 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
           efficiency: parseResult.runMetadata.efficiency ?? null,
         })
         .returning()
-      if (!runRow) return c.json({ error: 'Failed to create run' }, 500)
       const runId = runRow.id
 
       const wellResultKeys = new Map<string, number>()
@@ -711,24 +709,22 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         deduped.set(key, row)
       }
       for (const row of deduped.values()) {
-        const targetKey = row.targetName ?? ''
+        const targetKey = row.targetName
         const [inserted] = await database
           .insert(qpcrWellResult)
           .values({
             qpcrRunId: runId,
             wellPosition: row.wellPosition,
-            targetName: row.targetName ?? null,
-            sampleBarcode: row.sampleBarcode ?? null,
-            task: row.task ?? null,
-            cq: row.cq ?? null,
-            quantity: row.quantity ?? null,
-            standardQuantity: row.standardQuantity ?? null,
-            ampStatus: row.ampStatus ?? null,
+            targetName: row.targetName,
+            sampleBarcode: row.sampleBarcode,
+            task: row.task,
+            cq: row.cq,
+            quantity: row.quantity,
+            standardQuantity: row.standardQuantity,
+            ampStatus: row.ampStatus,
           })
           .returning()
-        if (inserted) {
-          wellResultKeys.set(`${row.wellPosition}\t${targetKey}`, inserted.id)
-        }
+        wellResultKeys.set(`${row.wellPosition}\t${targetKey}`, inserted.id)
       }
 
       if (parseResult.amplificationData.length > 0) {
@@ -841,7 +837,8 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         return c.json({ error: 'Invalid ID' }, 400)
       }
       const format = c.req.query('format') as 'biorad' | 'quant_studio' | undefined
-      if (!format || (format !== 'biorad' && format !== 'quant_studio')) {
+      const validFormat = format === 'biorad' || format === 'quant_studio'
+      if (!validFormat) {
         logTemplateError(400, 'Query parameter format must be biorad or quant_studio')
         return c.json({ error: 'Query parameter format must be biorad or quant_studio' }, 400)
       }
@@ -873,7 +870,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       const wellMap = new Map<string, { well: typeof wells[0]; source: WellSource }>()
       wellsWithSource.forEach(({ well, source }) => wellMap.set(well.wellPosition, { well, source }))
 
-      const instrumentType = exp.instrumentType ?? 'QuantStudio 5 Real-Time PCR System'
+      const instrumentType = exp.instrumentType
 
       if (format === 'biorad') {
         const header = 'Well,Fluorophore,Target Name,Content,Sample Name,Quantity'
@@ -884,13 +881,13 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
             const entry = wellMap.get(pos)
             const well = entry?.well
             if (!well) continue
-            const source = entry?.source ?? null
+            const source = entry.source ?? null
             const sampleName = sampleNameForWell(well, source)
             const content = bioradContentForWell(well)
             const quantity = well.contentType === 'standard' && well.standardDensity != null ? String(well.standardDensity) : ''
             const wellA1 = wellPositionToA1(pos)
             for (const t of targets) {
-              const fluorophore = t.fluorophore ?? 'FAM'
+              const fluorophore = t.fluorophore
               lines.push(`${wellA1},${fluorophore},${t.targetName},${content},${sampleName},${quantity}`)
             }
           }
@@ -920,14 +917,14 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
           const entry = wellMap.get(pos)
           const well = entry?.well
           if (!well) continue
-          const source = entry?.source ?? null
+          const source = entry.source ?? null
           const sampleName = sampleNameForWell(well, source)
           const task = quantStudioTaskForWell(well)
           const quantity = well.contentType === 'standard' && well.standardDensity != null ? String(well.standardDensity) : ''
           const wellIdx = wellPositionToIndex(pos)
           const wellPos = wellPositionToA1(pos)
           for (const t of targets) {
-            const reporter = t.reporter ?? 'FAM'
+            const reporter = t.reporter
             const quencher = (() => {
               const r = (reporter ?? '').trim()
               if (r.toLowerCase() === 'sybr') return 'None'

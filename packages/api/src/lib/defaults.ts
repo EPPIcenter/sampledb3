@@ -34,10 +34,6 @@ export async function getDefaultUnit(db: Database, containerType: ContainerType)
   }
 
   const containerDefaults = defaults[containerType]
-  if (!containerDefaults || !containerDefaults.defaultUnitSymbol) {
-    throw new Error(`Default unit symbol not configured for container type '${containerType}'. Please update settings.`)
-  }
-
   const unitSymbol = containerDefaults.defaultUnitSymbol
   
   const unitRecord = await db
@@ -65,9 +61,6 @@ export async function getDefaultTotalQuantity(db: Database, containerType: Conta
   if (!defaults) {
     throw new Error('Container defaults are not configured. Please run database initialization.')
   }
-  if (!defaults[containerType]) {
-    throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
-  }
   return defaults[containerType].totalQuantity
 }
 
@@ -80,9 +73,6 @@ export async function getDefaultRemainingQuantity(db: Database, containerType: C
   const defaults = await getContainerDefaults(db)
   if (!defaults) {
     throw new Error('Container defaults are not configured. Please run database initialization.')
-  }
-  if (!defaults[containerType]) {
-    throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
   }
   return defaults[containerType].remainingQuantity
 }

@@ -103,7 +103,7 @@ const initSchema = z.object({
               name: s.name,
               description: s.description
             }).returning()
-            if (result && result.length > 0 && result[0]) {
+            if (result.length > 0 && result[0]) {
               storageTypeMap.set(s.name, result[0].id)
             }
           }
@@ -365,12 +365,13 @@ const initSchema = z.object({
       
       const validationErrors: string[] = []
       
-      if ((specimenTypeCount?.count || 0) === 0) {
+      if (specimenTypeCount!.count === 0) {
         validationErrors.push('No specimen types were created')
       }
       if ((unitCount?.count || 0) === 0) {
         validationErrors.push('No units were created')
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- count can be undefined before first query
       if (storageTypes && storageTypes.length > 0 && (storageTypeCount?.count || 0) === 0) {
         validationErrors.push('No storage types were created')
       }

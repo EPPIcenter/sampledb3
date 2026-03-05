@@ -141,10 +141,6 @@ reagents.patch('/:id', memberMiddleware, async (c) => {
       .where(eq(reagent.id, id))
       .returning()
     
-    if (!updated) {
-      return c.json({ error: 'Reagent not found' }, 404)
-    }
-    
     return c.json({ reagent: updated })
   } catch (error) {
     if (error instanceof z.ZodError) {

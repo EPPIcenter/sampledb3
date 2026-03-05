@@ -107,7 +107,7 @@ export async function validateContainerData(
     if (!data.label) {
       return { valid: false, error: 'Label is required for papers' }
     }
-  } else if (containerType === 'static_well') {
+  } else {
     if (!data.collectionName && !data.collectionBarcode) {
       return { valid: false, error: 'Collection name or barcode is required' }
     }
@@ -351,11 +351,9 @@ export async function createContainerForSpecimen(
   }
 
   // Validate container type is allowed for specimen type
-  if (data.containerType) {
-    const containerTypeValidation = await validateContainerTypeForSpecimenType(dbForValidation, specimenRecord.specimenTypeId, data.containerType)
-    if (!containerTypeValidation.valid) {
-      return { success: false, error: containerTypeValidation.error }
-    }
+  const containerTypeValidation = await validateContainerTypeForSpecimenType(dbForValidation, specimenRecord.specimenTypeId, data.containerType)
+  if (!containerTypeValidation.valid) {
+    return { success: false, error: containerTypeValidation.error }
   }
 
   switch (data.containerType) {

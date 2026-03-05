@@ -82,7 +82,7 @@ export async function inferPlateFromScan(
   const parsed = parsePlateCSV(params.csvText, config)
   const barcodes = new Set<string>()
   for (const row of parsed) {
-    const b = (row.barcode ?? '').trim()
+    const b = row.barcode.trim()
     if (b !== '') barcodes.add(b)
   }
 
@@ -104,10 +104,8 @@ export async function inferPlateFromScan(
   const foundBarcodes = new Set<string>()
   const platesByKey = new Map<string, { id: number; name: string }>()
   for (const row of rows) {
-    if (row.barcode != null) {
-      foundBarcodes.add(row.barcode)
-      platesByKey.set(`${row.plateId}`, { id: row.plateId, name: row.plateName })
-    }
+    foundBarcodes.add(row.barcode)
+    platesByKey.set(`${row.plateId}`, { id: row.plateId, name: row.plateName })
   }
 
   const unknown = barcodeList.filter((b) => !foundBarcodes.has(b))
@@ -117,15 +115,9 @@ export async function inferPlateFromScan(
 
   const plates = [...platesByKey.values()]
   if (plates.length > 1) {
-    const names = plates.map((p) => p.name).join(', ')
-    throw new Error(`Tubes from multiple plates: ${names}`)
+    throw new Error(`Tubes from multiple plates: ${plates.map((p) => p.name).join(', ')}`)
   }
-
-  const plate = plates[0]
-  if (!plate) {
-    throw new Error('Cannot infer plate: scan has no barcodes')
-  }
-
+  const plate = plates[0]!
   return { plate }
 }
 
@@ -148,7 +140,7 @@ export async function inferPlateOrGetReport(
   for (const row of parsed) {
     const pos = normalizeWellPosition(row.wellPosition)
     if (pos) scannedByPosition.set(pos, row.barcode)
-    const b = (row.barcode ?? '').trim()
+    const b = row.barcode.trim()
     if (b !== '') barcodes.add(b)
   }
 
@@ -174,6 +166,7 @@ export async function inferPlateOrGetReport(
     { plateName: string; entries: { barcode: string; position: string }[] }
   >()
   for (const row of rows) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- barcode column nullable at runtime
     if (row.barcode == null) continue
     foundBarcodes.add(row.barcode)
     const pos = (row.position ?? '').trim()
@@ -291,14 +284,14 @@ export async function validatePlateScan(
     }
 
     for (const t of tubes) {
-      const entry = expectedByPosition.get(normalizeWellPosition(t.position ?? '') ?? '')
+      const entry = expectedByPosition.get(normalizeWellPosition(t.position ?? ''))
       if (entry) {
         entry.remainingQuantity = remainingByContainerId.get(t.id) ?? null
         entry.tags = tagsByContainerId.get(t.id) ?? []
       }
     }
     for (const w of wells) {
-      const entry = expectedByPosition.get(normalizeWellPosition(w.position ?? '') ?? '')
+      const entry = expectedByPosition.get(normalizeWellPosition(w.position ?? ''))
       if (entry) {
         entry.remainingQuantity = remainingByContainerId.get(w.id) ?? null
         entry.tags = tagsByContainerId.get(w.id) ?? []
@@ -309,7 +302,7 @@ export async function validatePlateScan(
   // Positions to report: all expected, plus scanned positions that have a barcode (empty scan rows with nothing in DB are skipped)
   const allPositions = new Set<string>(expectedByPosition.keys())
   for (const [pos, barcode] of scannedByPosition) {
-    if ((barcode?.trim() ?? '') !== '') allPositions.add(pos)
+    if (barcode.trim() !== '') allPositions.add(pos)
     else if (expectedByPosition.has(pos)) allPositions.add(pos)
   }
   const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -332,7 +325,7 @@ export async function validatePlateScan(
     const expected = expectedByPosition.get(position)
     const scanBarcodeRaw = scannedByPosition.get(position)
     const scanPresent = scannedByPosition.has(position)
-    const scanHasBarcode = scanPresent && (scanBarcodeRaw?.trim() ?? '') !== ''
+    const scanHasBarcode = scanPresent && (scanBarcodeRaw ?? '').trim() !== ''
     const scanBarcode = scanPresent ? (scanBarcodeRaw ?? null) : null
     const expectedBarcode = expected?.barcode ?? null
     const exhausted = expected != null && expected.remainingQuantity != null && expected.remainingQuantity <= 0
@@ -378,7 +371,7 @@ export async function validatePlateScan(
             w.scanBarcode != null &&
             w.scanBarcode.trim() !== ''
         )
-        .map((w) => w.scanBarcode!.trim())
+        .map((w) => (w.scanBarcode ?? '').trim())
     ),
   ]
   const originByBarcode = new Map<string, ScanBarcodeOrigin>()
@@ -395,8 +388,9 @@ export async function validatePlateScan(
       .where(inArray(micronixTube.barcode, barcodesToLookup))
 
     for (const row of rows) {
-      if (row.barcode != null) {
-        originByBarcode.set(row.barcode, {
+      const barcode = row.barcode
+      if (barcode !== '') {
+        originByBarcode.set(barcode, {
           plateId: row.plateId,
           plateName: row.plateName,
           position: row.position ?? '',

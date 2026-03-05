@@ -324,8 +324,8 @@ locations.post('/', adminMiddleware, async (c) => {
         parentId: data.parentId ?? null,
         name: data.name,
         storageTypeId: data.parentId === null ? data.storageTypeId : null, // Only set for root locations
-        description: data.description ?? null,
-        canContainCollections: data.canContainCollections ?? false,
+        description: data.description,
+        canContainCollections: data.canContainCollections,
         created: now,
         lastUpdated: now,
         createdBy: user?.id,

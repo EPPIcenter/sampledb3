@@ -152,15 +152,8 @@ export function createSubjectsRoutes(database: Database): Hono {
     }
 
     // Type guard for ContainerDefaults
-    const defaults = defaultsRecord.value as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
-    if (!defaults) {
-      throw new Error('Container defaults are not configured. Please run database initialization.')
-    }
+    const defaults = defaultsRecord.value as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }>
     const containerDefaults = defaults[containerType]
-    if (!containerDefaults || !containerDefaults.defaultUnitSymbol) {
-      throw new Error(`Default unit symbol not configured for container type '${containerType}'. Please update settings.`)
-    }
-
     const unitSymbol = containerDefaults.defaultUnitSymbol
     const unitRecord = await dbInstance
       .select()
@@ -182,14 +175,9 @@ export function createSubjectsRoutes(database: Database): Hono {
       .from(settings)
       .where(and(eq(settings.key, 'container_defaults'), isNull(settings.userId)))
       .get()
-    
-    if (!defaultsRecord || !defaultsRecord.value) {
+    const defaults = (defaultsRecord?.value ?? null) as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
+    if (!defaults?.[containerType]) {
       throw new Error('Container defaults are not configured. Please run database initialization.')
-    }
-
-    const defaults = defaultsRecord.value as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
-    if (!defaults || !defaults[containerType]) {
-      throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
     }
     return defaults[containerType].totalQuantity
   }
@@ -201,14 +189,9 @@ export function createSubjectsRoutes(database: Database): Hono {
       .from(settings)
       .where(and(eq(settings.key, 'container_defaults'), isNull(settings.userId)))
       .get()
-    
-    if (!defaultsRecord || !defaultsRecord.value) {
+    const defaults = (defaultsRecord?.value ?? null) as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
+    if (!defaults?.[containerType]) {
       throw new Error('Container defaults are not configured. Please run database initialization.')
-    }
-
-    const defaults = defaultsRecord.value as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
-    if (!defaults || !defaults[containerType]) {
-      throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
     }
     return defaults[containerType].remainingQuantity
   }
@@ -981,7 +964,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
       }
       
       // Validate container data if provided
-      if (spec.container && spec.container.containerType) {
+      if (spec.container?.containerType) {
         // Validate container type is allowed for specimen type
         const containerTypeValidation = await validateContainerTypeForSpecimenType(
           dbInstance,
@@ -1041,7 +1024,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
               specimenIndex: i,
             }, 400)
           }
-        } else if (spec.container.containerType === 'static_well') {
+        } else {
           if (!spec.container.collectionName && !spec.container.collectionBarcode) {
             return c.json({
               error: 'Collection name or barcode is required for static wells',
@@ -1067,7 +1050,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
     // Resolve collections before transaction (for validation)
     const collectionMap = new Map<string, number>()
     for (const spec of resolvedSpecimens) {
-      if (spec.container && spec.container.containerType) {
+      if (spec.container?.containerType) {
         const container = spec.container as ExtendedContainerData
         const containerType = container.containerType
         const collectionName = container.collectionName
@@ -1098,7 +1081,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
               }, 400)
             }
           }
-        } else if (containerType === 'paper') {
+        } else {
           if (collectionName) {
             // Try to resolve existing collection
             let existingBoxId: number | null = null
@@ -1129,7 +1112,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
     }> = []
     
     for (const spec of resolvedSpecimens) {
-      if (spec.container && spec.container.containerType) {
+      if (spec.container?.containerType) {
         const container = spec.container as ExtendedContainerData
         const containerType = container.containerType
         
@@ -1168,7 +1151,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
     const seenBarcodes = new Set<string>()
     for (let i = 0; i < resolvedSpecimens.length; i++) {
       const spec = resolvedSpecimens[i]
-      if (spec.container && spec.container.containerType) {
+      if (spec.container?.containerType) {
         const container = spec.container as ExtendedContainerData
         const containerType = container.containerType
         const barcode = container.barcode?.trim()
@@ -1197,7 +1180,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
     const seenPositionByCollection = new Map<string, Set<string>>()
     for (let i = 0; i < resolvedSpecimens.length; i++) {
       const spec = resolvedSpecimens[i]
-      if (spec.container && spec.container.containerType) {
+      if (spec.container?.containerType) {
         const container = spec.container as ExtendedContainerData
         const containerType = container.containerType
         const normalizedPosition = normalizePosition(container.position)
@@ -1211,7 +1194,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
         const collectionId = collectionMap.get(collectionKey) ?? null
         
         // Check DB: position already used in this plate/box (only when collection exists)
-        if (collectionId !== undefined && collectionId !== null) {
+        if (collectionId != null) {
           if (containerType === 'micronix_tube' || containerType === 'static_well') {
             const existingTube = dbInstance
               .select({ id: micronixTube.id })
@@ -1349,7 +1332,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
         let containerId: number | undefined
         
         // Create container if provided
-        if (spec.container && spec.container.containerType) {
+        if (spec.container?.containerType) {
           const container = spec.container as ExtendedContainerData
           const containerType = container.containerType
           
@@ -1528,8 +1511,8 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
               barcode: container.barcode || null,
               position: normalizePosition(container.position),
             }).run()
-          } else if (containerType === 'static_well') {
-            // Resolve or create collection (same as micronix)
+          } else {
+            // Resolve or create collection (same as micronix) - containerType is 'static_well'
             let collectionId: number
             const identifier = container.collectionName || container.collectionBarcode!
             const key = `micronix_plate-${identifier}`

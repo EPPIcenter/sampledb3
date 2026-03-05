@@ -177,7 +177,7 @@ export async function validateBulkCombinedPayload(
           }
         }
       } else {
-        if (!identifier && (containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'static_well')) {
+        if (!identifier) {
           add(subjectIndex, specimenIndex, 'Plate/box name or barcode is required', rowIndex)
         }
         collectionKey = `${collectionType}-${identifier ?? ''}`

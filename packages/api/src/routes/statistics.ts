@@ -776,7 +776,7 @@ statistics.get('/', authMiddleware, async (c) => {
     const byStatus: Record<string, number> = {}
     finalContainers.forEach(c => {
       let statusName: string
-      if (c.remainingQuantity === null || c.remainingQuantity === undefined) {
+      if (c.remainingQuantity == null) {
         statusName = 'Unknown'
       } else if (c.remainingQuantity > 0) {
         statusName = 'In Use'
@@ -899,7 +899,7 @@ statistics.get('/', authMiddleware, async (c) => {
       const parentIdsToLoad = new Set<number>()
       locations.forEach(loc => {
         let current: typeof location.$inferSelect | undefined = loc
-        while (current?.parentId !== null && current.parentId !== undefined) {
+        while (current.parentId != null) {
           if (!locationMap.has(current.parentId)) {
             parentIdsToLoad.add(current.parentId)
           }
@@ -956,7 +956,7 @@ statistics.get('/', authMiddleware, async (c) => {
       // Helper function to find root location by walking up parent chain
       const getRootLocation = (loc: typeof location.$inferSelect): typeof location.$inferSelect => {
         let current = loc
-        while (current.parentId !== null && current.parentId !== undefined) {
+        while (current.parentId != null) {
           const parent = locationMap.get(current.parentId)
           if (!parent) {
             // If parent not found, current is as high as we can go
