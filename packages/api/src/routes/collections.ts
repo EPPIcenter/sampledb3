@@ -24,7 +24,7 @@ import {
 import { eq, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { executeMoves, resolveContainersByBarcodes, type BatchMoveRequest, type ContainerInfo } from '../lib/container-move'
-import { resolveCollection } from '../lib/collection-resolution'
+import { resolveCollection, resolveCollectionByName, getCollectionLocation } from '../lib/collection-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
@@ -524,6 +524,39 @@ collections.post('/check', memberMiddleware, async (c) => {
     )
     
     return c.json({ results })
+  } catch (error) {
+    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// Resolve collection by name and type (for batch creation: show existing or prompt for new)
+collections.post('/resolve', authMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      name: z.string().min(1),
+      type: z.enum(['box', 'bag', 'micronix_plate', 'cryovial_box']),
+    })
+    const data = schema.parse(body)
+    const id = await resolveCollectionByName(data.name, data.type, database)
+    if (!id) {
+      return c.json({ found: false })
+    }
+    const locationId = await getCollectionLocation(database, id, data.type)
+    let locationName: string | undefined
+    if (locationId != null) {
+      const loc = await database.select({ name: location.name, path: location.path }).from(location).where(eq(location.id, locationId)).get()
+      locationName = loc?.path ?? loc?.name ?? undefined
+    }
+    return c.json({
+      found: true,
+      id,
+      name: data.name,
+      type: data.type,
+      locationId: locationId ?? undefined,
+      locationName,
+    })
   } catch (error) {
     if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
     return c.json({ error: 'Internal server error' }, 500)

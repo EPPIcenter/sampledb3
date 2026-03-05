@@ -20,7 +20,7 @@ import {
   createTestUnit,
 } from '../../__tests__/helpers/factories'
 import { setScannerConfigurations } from '../../lib/settings'
-import { storageContainer, micronixTube } from '../../db/schema'
+import { storageContainer, micronixTube, box } from '../../db/schema'
 
 describe('Collections API', () => {
   let testDb: Database
@@ -278,6 +278,61 @@ describe('Collections API', () => {
     it('returns 401 when not authenticated', async () => {
       const app = createApp()
       const res = await authenticatedRequest(app, '/api/collections/list-all', { method: 'GET' })
+      expect(res.status).toBe(401)
+    })
+  })
+
+  describe('POST /api/collections/resolve', () => {
+    it('returns found: true with id and location when collection exists', async () => {
+      const storageType = await createTestStorageType(testDb, { name: 'Shelf', description: 'Test' })
+      const loc = await createTestLocation(testDb, {
+        name: 'Freezer A',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+        path: '/Freezer A',
+      })
+      const now = new Date().toISOString()
+      const [boxRecord] = await testDb.insert(box).values({
+        name: 'ResolveTestBox',
+        locationId: loc.id,
+        created: now,
+        lastUpdated: now,
+      }).returning()
+
+      const app = createApp()
+      const res = await authenticatedRequest(app, '/api/collections/resolve', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: { name: 'ResolveTestBox', type: 'box' },
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { found: boolean; id?: number; name?: string; type?: string; locationId?: number; locationName?: string }
+      expect(data.found).toBe(true)
+      expect(data.id).toBe(boxRecord!.id)
+      expect(data.name).toBe('ResolveTestBox')
+      expect(data.type).toBe('box')
+      expect(data.locationId).toBe(loc.id)
+      expect(data.locationName).toBeDefined()
+    })
+
+    it('returns found: false when collection does not exist', async () => {
+      const app = createApp()
+      const res = await authenticatedRequest(app, '/api/collections/resolve', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: { name: 'NonexistentBox', type: 'box' },
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { found: boolean }
+      expect(data.found).toBe(false)
+    })
+
+    it('returns 401 when not authenticated', async () => {
+      const app = createApp()
+      const res = await authenticatedRequest(app, '/api/collections/resolve', {
+        method: 'POST',
+        json: { name: 'X', type: 'box' },
+      })
       expect(res.status).toBe(401)
     })
   })
