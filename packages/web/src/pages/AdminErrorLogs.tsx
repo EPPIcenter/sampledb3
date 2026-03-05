@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { errorLogsApi, type ErrorLog, type ErrorLogsQueryParams } from '../lib/api'
+import { formatErrorLogForLLM } from '../lib/error-log-prompt'
 import Pagination from '../components/Pagination'
 import ModalPortal from '../components/ModalPortal'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
@@ -13,6 +14,8 @@ export default function AdminErrorLogs() {
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [showCleanupModal, setShowCleanupModal] = useState(false)
   const [cleanupLoading, setCleanupLoading] = useState(false)
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
+  const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   
   // Filter states - default to unresolved
   const [filters, setFilters] = useState<Omit<ErrorLogsQueryParams, 'page' | 'limit'>>({
@@ -108,11 +111,35 @@ export default function AdminErrorLogs() {
       const response = await errorLogsApi.get(id)
       setSelectedLog(response.data)
       setShowDetailModal(true)
+      setCopyFeedback(null)
     } catch (err: unknown) {
       const message = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : null
       setError(message || 'Failed to load error log details')
+    }
+  }
+
+  const handleCopyForLLM = async () => {
+    if (!selectedLog) return
+    if (copyFeedbackTimeoutRef.current) {
+      clearTimeout(copyFeedbackTimeoutRef.current)
+      copyFeedbackTimeoutRef.current = null
+    }
+    try {
+      const prompt = formatErrorLogForLLM(selectedLog)
+      await navigator.clipboard.writeText(prompt)
+      setCopyFeedback('Copied!')
+      copyFeedbackTimeoutRef.current = setTimeout(() => {
+        setCopyFeedback(null)
+        copyFeedbackTimeoutRef.current = null
+      }, 2000)
+    } catch {
+      setCopyFeedback('Copy failed')
+      copyFeedbackTimeoutRef.current = setTimeout(() => {
+        setCopyFeedback(null)
+        copyFeedbackTimeoutRef.current = null
+      }, 2000)
     }
   }
 
@@ -342,10 +369,16 @@ export default function AdminErrorLogs() {
               <h2 className="text-xl font-semibold">Error Log Details</h2>
               <button
                 onClick={() => {
+                  if (copyFeedbackTimeoutRef.current) {
+                    clearTimeout(copyFeedbackTimeoutRef.current)
+                    copyFeedbackTimeoutRef.current = null
+                  }
+                  setCopyFeedback(null)
                   setShowDetailModal(false)
                   setSelectedLog(null)
                 }}
                 className="text-gray-400 hover:text-gray-600"
+                aria-label="Close"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -441,7 +474,19 @@ export default function AdminErrorLogs() {
                 )}
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-[rgb(var(--dashboard-border))] flex items-center justify-end gap-2">
+            <div className="px-6 py-4 border-t border-[rgb(var(--dashboard-border))] flex items-center justify-end gap-2 flex-wrap">
+              {copyFeedback && (
+                <span className="text-sm text-[rgb(var(--dashboard-text-muted))] self-center mr-2" aria-live="polite">
+                  {copyFeedback}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleCopyForLLM}
+                className="admin-btn-secondary px-4 py-2"
+              >
+                Copy for LLM
+              </button>
               {!selectedLog.resolved && (
                 <button
                   onClick={() => handleResolve(selectedLog.id)}
@@ -452,6 +497,11 @@ export default function AdminErrorLogs() {
               )}
               <button
                 onClick={() => {
+                  if (copyFeedbackTimeoutRef.current) {
+                    clearTimeout(copyFeedbackTimeoutRef.current)
+                    copyFeedbackTimeoutRef.current = null
+                  }
+                  setCopyFeedback(null)
                   setShowDetailModal(false)
                   setSelectedLog(null)
                 }}
