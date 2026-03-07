@@ -70,7 +70,7 @@ describe('CollectionAssignment', () => {
     expect(onChange).toHaveBeenCalledWith({ collectionName: 'My Box' })
   })
 
-  it('shows success message and Clear when collection already exists', () => {
+  it('shows Selected and Clear when collection already exists and collectionOptions provided', () => {
     render(
       <CollectionAssignment
         containerType="paper"
@@ -79,10 +79,11 @@ describe('CollectionAssignment', () => {
         collectionLocationId={1}
         collectionId={42}
         onChange={vi.fn()}
+        collectionOptions={[{ id: 42, name: 'Existing Box', locationPath: null }]}
       />
     )
 
-    expect(screen.getByText(/sheet will be placed in/i)).toBeInTheDocument()
+    expect(screen.getByText(/Selected:.*Existing Box/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /clear/i })).toBeInTheDocument()
   })
 

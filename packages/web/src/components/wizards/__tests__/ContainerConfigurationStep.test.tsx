@@ -17,9 +17,26 @@ vi.mock('../../LocationPicker', () => ({
   },
 }))
 
+const mockUnitsByType: Record<string, Array<{ id: number; symbol: string; name: string; category: string }>> = {
+  paper: [{ id: 1, symbol: 'spots', name: 'DBS spots', category: 'count' }],
+  micronix_tube: [
+    { id: 2, symbol: 'µL', name: 'Microliter', category: 'volume' },
+    { id: 3, symbol: 'items', name: 'Items', category: 'count' },
+  ],
+  cryovial_tube: [
+    { id: 4, symbol: 'µL', name: 'Microliter', category: 'volume' },
+    { id: 5, symbol: 'items', name: 'Items', category: 'count' },
+  ],
+}
+
 vi.mock('../../../lib/api', () => ({
   collectionsApi: {
     listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
+  },
+  settingsApi: {
+    getContainerTypeUnits: vi.fn((ct: string) =>
+      Promise.resolve({ data: { units: mockUnitsByType[ct] ?? [] } })
+    ),
   },
 }))
 
@@ -181,6 +198,26 @@ describe('ContainerConfigurationStep', () => {
       unitSymbol: 'spots',
       sheetName: '',
     })
+  })
+
+  it('renders unit as select with allowed units for tube specimen types when units are loaded', async () => {
+    await render(
+      <ContainerConfigurationStep
+        specimenTypes={specimenTypesWithCollectionConfig}
+        csvFiles={[]}
+        onChangeSpecimenTypes={vi.fn()}
+        onChangeCsvFiles={vi.fn()}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+
+    const unitSelect = await screen.findByRole('combobox', { name: /unit/i })
+    expect(unitSelect).toBeInTheDocument()
+    const options = screen.getAllByRole('option')
+    const symbols = options.map((o) => (o as HTMLOptionElement).value)
+    expect(symbols).toEqual(expect.arrayContaining(['µL', 'items']))
   })
 
   it('calls onChangeSpecimenTypes when Add Paper is clicked for a sheet', async () => {

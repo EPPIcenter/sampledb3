@@ -1,5 +1,7 @@
 import PapersSection from './PapersSection'
+import type { UnitOption } from './PapersSection'
 import CollectionAssignment from './CollectionAssignment'
+import type { CollectionOption } from '../CollectionSelectOrCreate'
 import type { ContainerConfig } from '../../pages/ControlBatchWizard'
 import type { CollectionAssignmentChange } from './CollectionAssignment'
 
@@ -17,8 +19,10 @@ interface SheetCardProps {
     boxes: Map<string, { id: number; locationId: number }>
     bags: Map<string, { id: number; locationId: number }>
   }
-  /** Names for box and bag (for collection name search). */
-  collectionNames?: { box: string[]; bag: string[] }
+  /** Collection options (id, name, locationPath) for box and bag. */
+  collectionOptions?: { box: CollectionOption[]; bag: CollectionOption[] }
+  /** Allowed units for paper containers (enables unit dropdown). */
+  allowedUnits?: UnitOption[]
 }
 
 export default function SheetCard({
@@ -31,15 +35,16 @@ export default function SheetCard({
   onAddPaper,
   onRemoveContainer,
   onCollectionChange,
-  collectionNames,
+  collectionOptions,
+  allowedUnits,
 }: SheetCardProps) {
   const first = containers[0]
   const sheetName = first.sheetName ?? ''
   const currentCollectionType = (first.collectionType as 'box' | 'bag')
-  const namesForType = collectionNames ? collectionNames[currentCollectionType] : undefined
+  const optionsForType = collectionOptions ? collectionOptions[currentCollectionType] : undefined
 
   return (
-    <div className="space-y-4 pt-4 border-t border-gray-200 first:pt-0 first:border-t-0">
+    <div className="space-y-4 pt-4 border-t border-app-border first:pt-0 first:border-t-0">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <label
@@ -54,7 +59,7 @@ export default function SheetCard({
             value={sheetName}
             onChange={(e) => onUpdateSheetName(e.target.value)}
             placeholder="Enter sheet name"
-            className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="block w-full px-3 py-2 border border-app-border rounded-lg text-sm bg-app-card text-app-text"
           />
         </div>
         <button
@@ -73,6 +78,7 @@ export default function SheetCard({
         onUpdate={onUpdateContainer}
         onAdd={onAddPaper}
         onRemove={onRemoveContainer}
+        allowedUnits={allowedUnits}
       />
 
       <div>
@@ -86,7 +92,8 @@ export default function SheetCard({
           onChange={onCollectionChange}
           showCollectionTypeSelector={true}
           successMessageVariant="sheet"
-          collectionNames={namesForType}
+          collectionOptions={optionsForType}
+          allowCreateCollection
         />
       </div>
     </div>

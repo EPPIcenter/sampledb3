@@ -11,7 +11,7 @@ vi.mock('../../lib/api', () => ({
     getContainerTypes: vi.fn().mockResolvedValue({ data: { containerTypes: ['micronix_tube'] } }),
   },
   collectionsApi: {
-    search: vi.fn().mockResolvedValue({ data: [] }),
+    listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
   },
 }))
 

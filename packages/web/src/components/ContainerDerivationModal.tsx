@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { derivationsApi, specimenTypesApi, collectionsApi, type SpecimenType, type CreateDerivationPayload } from '../lib/api'
+import type { CollectionOption, CollectionSelectValue } from './CollectionSelectOrCreate'
+import CollectionSelectOrCreate from './CollectionSelectOrCreate'
 import ModalPortal from './ModalPortal'
 import '../styles/storage.css'
 
@@ -53,10 +55,7 @@ function ContainerDerivationModalContent({
   const [warnings, setWarnings] = useState<string[]>([])
   const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
   const [allowedContainerTypes, setAllowedContainerTypes] = useState<string[]>([])
-  const [collectionSearch, setCollectionSearch] = useState<string>('')
-  const [collectionSearchResults, setCollectionSearchResults] = useState<Array<{ id: number; name: string; barcode?: string; locationPath?: string }>>([])
-  const [collectionSearchLoading, setCollectionSearchLoading] = useState(false)
-  const [showCollectionResults, setShowCollectionResults] = useState(false)
+  const [collectionOptions, setCollectionOptions] = useState<CollectionOption[]>([])
 
   const [formData, setFormData] = useState<CreateDerivationPayload>({
     derivationType: 'dna_extraction',
@@ -78,27 +77,46 @@ function ContainerDerivationModalContent({
     position: '',
   })
 
+  const effectiveCollectionType: 'micronix_plate' | 'cryovial_box' | 'sheet' | null =
+    formData.containerType === 'micronix_tube'
+      ? 'micronix_plate'
+      : formData.containerType === 'cryovial_tube'
+        ? 'cryovial_box'
+        : formData.containerType === 'paper'
+          ? 'sheet'
+          : null
+
   // Load reference data when content mounts (key resets state on each open)
   useEffect(() => {
     loadReferenceData()
   }, [])
 
-  // Sync collectionSearch with formData.collectionName when it changes externally
-  const prevCollectionNameRef = useRef(formData.collectionName ?? '')
-  if (formData.collectionName && formData.collectionName !== prevCollectionNameRef.current) {
-    prevCollectionNameRef.current = formData.collectionName
-    setCollectionSearch(formData.collectionName)
-  } else if (!formData.collectionName) {
-    prevCollectionNameRef.current = ''
-  }
-
-  const prevContainerTypeRef = useRef(formData.containerType)
-  if (formData.containerType !== prevContainerTypeRef.current) {
-    prevContainerTypeRef.current = formData.containerType
-    setCollectionSearch('')
-    setCollectionSearchResults([])
-    setShowCollectionResults(false)
-  }
+  useEffect(() => {
+    if (effectiveCollectionType === null) {
+      setCollectionOptions([])
+      return
+    }
+    let cancelled = false
+    collectionsApi
+      .listCollectionsByType(effectiveCollectionType)
+      .then((res) => {
+        if (cancelled) return
+        const options: CollectionOption[] = res.data.collections.map(
+          (c: { id: number; name: string; location?: { path: string | null } | null }) => ({
+            id: c.id,
+            name: c.name,
+            locationPath: c.location?.path ?? null,
+          })
+        )
+        setCollectionOptions(options)
+      })
+      .catch(() => {
+        if (!cancelled) setCollectionOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [effectiveCollectionType])
 
   // Fetch allowed container types when specimen type changes (with ignore for race conditions)
   useEffect(() => {
@@ -156,99 +174,6 @@ function ContainerDerivationModalContent({
       setLoading(false)
     }
   }
-
-  // Search collections as user types
-  const collectionSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    if (collectionSearchTimeoutRef.current) clearTimeout(collectionSearchTimeoutRef.current)
-
-    if (!collectionSearch.trim()) {
-      setCollectionSearchResults([])
-      setShowCollectionResults(false)
-      return
-    }
-
-    // Determine collection type based on container type
-    const collectionType =
-      formData.containerType === 'micronix_tube'
-        ? 'micronix_plate'
-        : formData.containerType === 'cryovial_tube'
-          ? 'cryovial_box'
-          : formData.containerType === 'paper'
-            ? 'sheet'
-            : null
-
-    if (!collectionType) {
-      return
-    }
-
-    // Debounce search
-    collectionSearchTimeoutRef.current = setTimeout(async () => {
-      try {
-        setCollectionSearchLoading(true)
-        
-        // Use listCollectionsByType and filter client-side for all collection types
-        // This is more reliable than the search API which doesn't support all types
-        const response = await collectionsApi.listCollectionsByType(collectionType as 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet')
-        const allCollections = response.data.collections
-        const searchLower = collectionSearch.toLowerCase()
-        
-        // Filter by name, barcode (if available), or location path
-        const filtered = allCollections.filter((c: any) => {
-          const nameMatch = c.name.toLowerCase().includes(searchLower) || false
-          const barcodeMatch = (c.barcode || '').toLowerCase().includes(searchLower) || false
-          const locationMatch = (c.location.path.toLowerCase().includes(searchLower)) || false
-          return nameMatch || barcodeMatch || locationMatch
-        })
-        
-        setCollectionSearchResults(filtered.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          barcode: c.barcode,
-          locationPath: c.location?.path,
-        })))
-        setShowCollectionResults(true)
-      } catch (err: any) {
-        console.error('Failed to search collections:', err)
-        console.error('Error details:', err.response?.data || err.message)
-        setCollectionSearchResults([])
-        // Show error state in UI if needed
-      } finally {
-        setCollectionSearchLoading(false)
-      }
-    }, 300)
-
-    return () => {
-      if (collectionSearchTimeoutRef.current) clearTimeout(collectionSearchTimeoutRef.current)
-    }
-  }, [collectionSearch, formData.containerType])
-
-  const handleCollectionSelect = (collection: { id: number; name: string }) => {
-    setFormData(prev => ({
-      ...prev,
-      collectionName: collection.name,
-      collectionId: collection.id,
-    }))
-    setCollectionSearch(collection.name)
-    setShowCollectionResults(false)
-  }
-
-  const collectionInputRef = useRef<HTMLDivElement>(null)
-
-  // Close results when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (collectionInputRef.current && !collectionInputRef.current.contains(event.target as Node)) {
-        setShowCollectionResults(false)
-      }
-    }
-
-    if (showCollectionResults) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showCollectionResults])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -331,14 +256,14 @@ function ContainerDerivationModalContent({
   const sourceSummary = sourceParts.length > 0 ? sourceParts.join(' · ') : containerTypeLabel
 
   return (
-    <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full sm:max-h-[90vh]">
-      <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto max-h-[90vh]">
+    <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full sm:max-h-[90vh]">
+      <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">Create Derivation</h2>
+          <h2 className="text-2xl font-bold text-app-text">Create Derivation</h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-app-text-muted hover:text-app-text transition-colors"
             disabled={loading}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -348,7 +273,7 @@ function ContainerDerivationModalContent({
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+          <div className="mb-4 p-3 bg-app-trend-down/10 border border-app-trend-down rounded text-app-trend-down text-sm">
             {error}
           </div>
         )}
@@ -366,20 +291,20 @@ function ContainerDerivationModalContent({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Source (read-only) */}
-          <div className="p-3 rounded-md border bg-gray-50 border-gray-200">
-            <label className="block text-xs font-medium text-gray-500 mb-1">Source container</label>
-            <p className="text-sm font-medium text-gray-900">{sourceSummary}</p>
+          <div className="p-3 rounded-md border bg-app-surface border-app-border">
+            <label className="block text-xs font-medium text-app-text-muted mb-1">Source container</label>
+            <p className="text-sm font-medium text-app-text">{sourceSummary}</p>
           </div>
 
           {/* Derivation type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Derivation type <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium text-app-text mb-1">
+              Derivation type <span className="text-app-trend-down">*</span>
             </label>
             <select
               value={formData.derivationType}
               onChange={(e) => setFormData({ ...formData, derivationType: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
               required
               disabled={loading}
             >
@@ -393,13 +318,13 @@ function ContainerDerivationModalContent({
 
           {/* Derived specimen type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Derived specimen type <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium text-app-text mb-1">
+              Derived specimen type <span className="text-app-trend-down">*</span>
             </label>
             <select
               value={formData.specimenTypeName}
               onChange={(e) => setFormData({ ...formData, specimenTypeName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
               required
               disabled={loading}
             >
@@ -414,8 +339,8 @@ function ContainerDerivationModalContent({
 
           {/* Derived container type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Derived container type <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium text-app-text mb-1">
+              Derived container type <span className="text-app-trend-down">*</span>
             </label>
             <select
               value={formData.containerType}
@@ -423,7 +348,7 @@ function ContainerDerivationModalContent({
                 const newType = e.target.value as CreateDerivationPayload['containerType']
                 setFormData({ ...formData, containerType: newType, collectionId: undefined, collectionName: undefined })
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
               required
               disabled={loading}
             >
@@ -437,74 +362,64 @@ function ContainerDerivationModalContent({
               ))}
             </select>
             {allowedContainerTypes.length > 0 && (
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-app-text-muted mt-1">
                 Allowed for this specimen type: {allowedContainerTypes.map((ct) => CONTAINER_TYPES.find((t) => t.value === ct)?.label ?? ct).join(', ')}
               </p>
             )}
           </div>
 
-          {/* Where to put derived: existing collection + identifier */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Collection (existing) <span className="text-red-500">*</span>
-            </label>
-            <div className="relative" ref={collectionInputRef}>
-              <input
-                type="text"
-                placeholder={`Search ${formData.containerType === 'micronix_tube' ? 'micronix plate' : formData.containerType === 'cryovial_tube' ? 'cryovial box' : formData.containerType === 'paper' ? 'sheet' : 'collection'} by name or barcode…`}
-                value={collectionSearch}
-                onChange={(e) => {
-                  setCollectionSearch(e.target.value)
+          {/* Where to put derived: existing collection */}
+          {effectiveCollectionType !== null && (
+            <div>
+              <CollectionSelectOrCreate
+                collectionType={effectiveCollectionType}
+                collections={collectionOptions}
+                value={
+                  formData.collectionName != null && formData.collectionName !== ''
+                    ? (formData.collectionId != null
+                        ? {
+                            id: formData.collectionId,
+                            name: formData.collectionName,
+                            locationPath: undefined,
+                          }
+                        : {
+                            name: formData.collectionName,
+                            id: undefined,
+                            locationPath: undefined,
+                          })
+                    : null
+                }
+                onChange={(v: CollectionSelectValue | null) => {
                   setFormData((prev) => ({
                     ...prev,
-                    collectionName: e.target.value || undefined,
-                    collectionId: undefined,
+                    collectionId: v?.id,
+                    collectionName: v?.name ?? undefined,
+                    collectionLocationId: undefined,
                   }))
-                  if (e.target.value.trim()) setShowCollectionResults(true)
                 }}
-                onFocus={() => {
-                  if (collectionSearchResults.length > 0) setShowCollectionResults(true)
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
-                disabled={loading || !formData.containerType}
+                allowCreate={false}
+                label="Collection (existing) *"
+                placeholder={
+                  formData.containerType === 'micronix_tube'
+                    ? 'Type to search micronix plate…'
+                    : formData.containerType === 'cryovial_tube'
+                      ? 'Type to search cryovial box…'
+                      : formData.containerType === 'paper'
+                        ? 'Type to search sheet…'
+                        : 'Type to search collection…'
+                }
+                disabled={loading}
               />
-              {showCollectionResults && (collectionSearchLoading || collectionSearchResults.length > 0 || collectionSearch.trim()) && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                  {collectionSearchLoading ? (
-                    <div className="p-3 text-sm text-gray-500">Searching…</div>
-                  ) : collectionSearchResults.length === 0 && collectionSearch.trim() ? (
-                    <div className="p-3 text-sm text-gray-500">
-                      No collections found matching &quot;{collectionSearch}&quot;
-                    </div>
-                  ) : (
-                    collectionSearchResults.length > 0 && (
-                      <ul className="divide-y divide-gray-200">
-                        {collectionSearchResults.map((c) => (
-                          <li key={c.id}>
-                            <button
-                              type="button"
-                              className="w-full px-4 py-3 text-left hover:bg-gray-50 focus:outline-none focus:bg-gray-50 transition-colors"
-                              onClick={() => handleCollectionSelect(c)}
-                            >
-                              <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
-                              {c.barcode && <p className="text-xs text-gray-500 mt-0.5">Barcode: {c.barcode}</p>}
-                              {c.locationPath && <p className="text-xs text-gray-400 mt-0.5 truncate">{c.locationPath}</p>}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )
-                  )}
-                </div>
-              )}
+              <p className="text-xs text-app-text-muted mt-1">
+                Search and select an existing collection. Create new plates/boxes from Storage first if needed.
+              </p>
             </div>
-            <p className="text-xs text-gray-500 mt-1">Search and select an existing collection. Create new plates/boxes from Storage first if needed.</p>
-          </div>
+          )}
 
           {/* Barcode / position / label for derived container */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-app-text mb-1">
                 {formData.containerType === 'paper' ? 'Label' : 'Barcode'}
               </label>
               <input
@@ -515,19 +430,19 @@ function ContainerDerivationModalContent({
                     ? setFormData({ ...formData, position: e.target.value })
                     : setFormData({ ...formData, containerBarcode: e.target.value })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                 disabled={loading}
                 placeholder={formData.containerType === 'paper' ? 'Spot label' : 'e.g. MTX-001'}
               />
             </div>
             {formData.containerType !== 'paper' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+                <label className="block text-sm font-medium text-app-text mb-1">Position</label>
                 <input
                   type="text"
                   value={formData.position}
                   onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                   disabled={loading}
                   placeholder="e.g. A01"
                 />
@@ -537,24 +452,24 @@ function ContainerDerivationModalContent({
 
           {/* Derivation date */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Derivation date</label>
+            <label className="block text-sm font-medium text-app-text mb-1">Derivation date</label>
             <input
               type="date"
               value={formData.derivationDate}
               onChange={(e) => setFormData({ ...formData, derivationDate: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
               disabled={loading}
             />
           </div>
 
           {/* Protocol */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Protocol (optional)</label>
+            <label className="block text-sm font-medium text-app-text mb-1">Protocol (optional)</label>
             <input
               type="text"
               value={formData.protocol}
               onChange={(e) => setFormData({ ...formData, protocol: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
               disabled={loading}
               placeholder="Protocol name or reference"
             />
@@ -562,12 +477,12 @@ function ContainerDerivationModalContent({
 
           {/* Notes (optional) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+            <label className="block text-sm font-medium text-app-text mb-1">Notes (optional)</label>
             <textarea
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
               disabled={loading}
               placeholder="Additional notes…"
             />
@@ -612,7 +527,7 @@ export default function ContainerDerivationModal({
       <div className="fixed inset-0 z-[100] overflow-y-auto">
         <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
           <div
-            className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+            className="fixed inset-0 bg-black/40 backdrop-blur-md"
             onClick={onClose}
           />
           <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
