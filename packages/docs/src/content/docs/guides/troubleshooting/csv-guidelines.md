@@ -71,6 +71,10 @@ Specimen type names must exist in your Reference Data and match exactly, includi
 
 Collection names should be alphanumeric with hyphens or underscores. Examples include "PLATE-001" or "BOX-001". Use descriptive names that help identify collections, and be consistent with your naming conventions.
 
+## Units
+
+CSV templates do **not** include a unit column. The system uses the **default unit for that container or specimen type**, configured in Settings (Container Defaults). You do not need to type unit symbols (e.g. µL, spots) in your CSV. Where a flow provides a preview or configuration step (e.g. control batch wizard, bulk derivations), you can adjust quantity and unit in the interface before submitting if needed.
+
 ## Common CSV Errors and Solutions
 
 Understanding common errors helps you avoid them and fix them quickly when they occur.
@@ -104,6 +108,10 @@ Before importing, verify your file meets all requirements. Check that the file i
 Testing with a small file first saves time and prevents problems. Import just 2-3 rows to verify the format is correct, then check that imported data looks right. Fix any issues you find, then import the complete file once you're confident the format is correct.
 
 Before importing, open the file in spreadsheet software to verify it opens correctly. Check that column names match the template. Review a few sample rows to ensure data looks correct. Use the system's validation feature before importing to catch problems early.
+
+## Where Template Values Come From
+
+Downloaded CSV templates (control batch, derivations, etc.) are generated from your current database and settings. Templates do not include a unit column; the system uses the default unit for the container type (Settings → Container Defaults). **Specimen type names** in examples come from your **Reference Data** (specimen types and their allowed container types). **Position** examples use the normalized format (e.g. A01, B02) expected by the system. Using a fresh template ensures column names and example values match what your system expects.
 
 ## Getting Help with CSV Issues
 

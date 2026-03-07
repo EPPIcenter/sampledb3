@@ -57,7 +57,7 @@ There are two main ways to associate specimens with containers: you can create t
 
 ### Creating Containers During Specimen Registration
 
-When you're registering a specimen and you know where it will be stored, you can create the container right then. In the specimen registration form, check the "Create container" option, and you'll see additional fields appear. Select the container type that matches your storage method, then either select an existing collection or create a new one on the spot.
+When you're registering a specimen and you know where it will be stored, you can create the container right then. In the specimen registration form, check the "Create container" option, and you'll see additional fields appear. Select the container type that matches your storage method, then either select an existing collection or create a new one on the spot. When choosing a collection, type to search by name; matches show the collection name and storage path (exact and partial matches), and you can create a new collection (name and location) from the same control when the flow allows it.
 
 For each container type, you'll need to provide the appropriate details. Micronix tubes need a barcode (which must be unique across your entire system) and a position in the plate. Cryovial tubes need a position, and you can optionally add a barcode if your lab uses them. Papers need a label identifier. Static wells need a position.
 
@@ -68,6 +68,10 @@ This approach is efficient when you're entering data for specimens that are alre
 If you've already created collections and want to add specimens to them, you can do so from the collection detail page. Navigate to the collection you want to add to, and you'll see options to add specimens. The interface will guide you through selecting the specimen type, providing specimen details, and entering the container information (barcode, position, or label depending on the container type).
 
 This approach is useful when you're populating a collection over time, or when you're organizing specimens that were registered without containers initially.
+
+### Adding a container from the specimen details page
+
+When viewing a specimen's detail page, you can add a new container for that specimen without re-registering it. In the **Containers** section, click **Add container** to open the form. Choose the container type (allowed types depend on the specimen type), select or create a collection, and enter the required fields (barcode and position for micronix or cryovial tubes, label for paper). This is useful when a specimen gains an additional aliquot or is moved to a new container after initial registration.
 
 ## Understanding Container Details
 

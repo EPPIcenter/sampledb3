@@ -53,7 +53,7 @@ When you're processing many samples at once—perhaps extracting DNA from an ent
 
 - Choose **Source** (Control batch or Study subject) and **Parent container type** (Paper, Micronix tube, or Cryovial tube). These determine the CSV columns and the template.
 - Optionally expand **Apply to all rows (optional)** to set derivation type, derived specimen type, derived container type, protocol, and derivation date once; otherwise you can provide these per row in the CSV.
-- Select a CSV file and use **Download template** to get a template that matches your source and parent type.
+- Select a CSV file and use **Download template** to get a template that matches your source and parent type. The template’s example specimen types, derivation type, and protocol come from your reference data and current import settings, so the examples align with your database.
 - Click **Validate & Continue**. The system validates the CSV (parent containers exist, positions and barcodes valid, etc.). Validation does not write to the database.
 
 **Step 2: Collections** (only if validation reports collections to create)
