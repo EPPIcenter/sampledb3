@@ -751,7 +751,11 @@ studies.post('/', memberMiddleware, async (c) => {
         updatedBy: user?.id,
       })
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newStudy) {
+      throw new Error('Insert did not return study row')
+    }
     return c.json({ study: newStudy }, 201)
   } catch (error) {
     return handleRouteError(error, c)
@@ -825,7 +829,11 @@ studies.put('/:id', memberMiddleware, async (c) => {
       })
       .where(eq(study.id, id))
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+    if (!updatedStudy) {
+      return c.json({ error: 'Study not found' }, 404)
+    }
     return c.json({ study: updatedStudy })
   } catch (error) {
     return handleRouteError(error, c)
@@ -889,7 +897,7 @@ studies.delete('/:id', authMiddleware, async (c) => {
       }
     }
 
-    await database.transaction((tx) => {
+    await database.transaction(async (tx) => {
       if (containerIds.length > 0) {
         runBatch(containerIds, (batch) => {
           tx.delete(storageContainerTag)
@@ -926,7 +934,10 @@ studies.delete('/:id', authMiddleware, async (c) => {
           tx.delete(studySubject).where(inArray(studySubject.id, batch)).run()
         })
       }
-      tx.delete(study).where(eq(study.id, id)).run()
+      const deleted = await tx.delete(study).where(eq(study.id, id)).returning()
+      if (deleted.length === 0) {
+        throw new NotFoundError('Study', id)
+      }
     })
 
     return c.json({ message: 'Study deleted successfully' })

@@ -391,6 +391,11 @@ containers.patch('/:id', memberMiddleware, async (c) => {
       })
       .where(eq(storageContainer.id, id))
       .returning()
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+    if (!updated) {
+      return c.json({ error: 'Container not found' }, 404)
+    }
     
     // Update tags if provided
     if (tagIds !== undefined) {
@@ -503,14 +508,18 @@ containers.delete('/:id/tags/:tagId', memberMiddleware, async (c) => {
       return c.json({ error: 'Invalid container ID or tag ID' }, 400)
     }
 
-    await database.delete(storageContainerTag)
+    const deleted = await database.delete(storageContainerTag)
       .where(
         and(
           eq(storageContainerTag.storageContainerId, id),
           eq(storageContainerTag.tagId, tagId)
         )
       )
+      .returning()
 
+    if (deleted.length === 0) {
+      return c.json({ error: 'Tag association not found' }, 404)
+    }
     return c.json({ success: true })
   } catch (error: unknown) {
     console.error('Error removing container tag:', error)

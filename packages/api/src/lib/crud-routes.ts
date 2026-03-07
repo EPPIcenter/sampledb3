@@ -229,7 +229,12 @@ export function createCrudRoutes<
         .values(insertData as any)
         .returning()
 
-      const transformed = transformDetail ? transformDetail(result[0] as TSelect) : result[0]
+      const row = result[0]
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+      if (!row) {
+        throw new Error('Insert did not return row')
+      }
+      const transformed = transformDetail ? transformDetail(row as TSelect) : row
       return createdResponse(c, transformed)
     } catch (error) {
       return handleRouteError(error, c)
@@ -303,7 +308,12 @@ export function createCrudRoutes<
         .where(eq((table as any).id, id))
         .returning()
 
-      const transformed = transformDetail ? transformDetail(result[0] as TSelect) : result[0]
+      const row = result[0]
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+      if (!row) {
+        throw new NotFoundError(entityName, id)
+      }
+      const transformed = transformDetail ? transformDetail(row as TSelect) : row
       return successResponse(c, transformed)
     } catch (error) {
       return handleRouteError(error, c)

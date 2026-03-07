@@ -477,7 +477,7 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
     }
 
     return { success: true, moved: finalMoves.length }
-  } catch (error: any) {
-    return { success: false, moved: 0, errors: [{ row: 0, error: error.message }] }
+  } catch (error) {
+    throw error
   }
 }

@@ -607,7 +607,7 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
         return c.json({ error: 'Invalid unit ID' }, 400)
       }
 
-      await database
+      const deleted = await database
         .delete(containerTypeUnit)
         .where(
           and(
@@ -615,7 +615,11 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
             eq(containerTypeUnit.unitId, unitId)
           )
         )
+        .returning()
 
+      if (deleted.length === 0) {
+        return c.json({ error: 'Unit association not found' }, 404)
+      }
       return c.json({ success: true })
     } catch (error) {
       console.error('Error removing unit:', error)

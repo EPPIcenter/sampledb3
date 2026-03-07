@@ -277,11 +277,20 @@ export_.get('/containers', authMiddleware, async (c) => {
       return c.json({ count: filteredContainers.length })
     }
 
+    if (containers.length === 0) {
+      return c.json({ error: 'No containers found for this study' }, 404)
+    }
+
     // Enrich container data (this also applies container type filtering)
     const enrichedData = await enrichContainerData(database, containers, specimens || [], study, filters.container_types, undefined)
 
-    // Determine format
-    const format = (c.req.query('format') as 'csv' | 'xlsx' | 'json' | undefined) ?? 'csv'
+    // Determine format and validate
+    const formatParam = c.req.query('format') as string | undefined
+    const validFormats = ['csv', 'xlsx', 'json']
+    if (!formatParam || !validFormats.includes(formatParam)) {
+      return c.json({ error: 'Invalid format. Use csv, xlsx, or json.' }, 400)
+    }
+    const format = formatParam as 'csv' | 'xlsx' | 'json'
 
     // Generate filename with local datetime
     const timestamp = formatLocalDateTime()

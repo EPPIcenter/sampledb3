@@ -97,7 +97,11 @@ reagents.post('/', memberMiddleware, async (c) => {
         updatedBy: user?.id,
       })
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newReagent) {
+      throw new Error('Insert did not return reagent row')
+    }
     return c.json({ reagent: newReagent }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -140,7 +144,11 @@ reagents.patch('/:id', memberMiddleware, async (c) => {
       })
       .where(eq(reagent.id, id))
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+    if (!updated) {
+      return c.json({ error: 'Reagent not found' }, 404)
+    }
     return c.json({ reagent: updated })
   } catch (error) {
     if (error instanceof z.ZodError) {

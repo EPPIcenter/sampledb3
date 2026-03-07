@@ -146,7 +146,7 @@ async function createMicronixTube(
     const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'micronix_tube')
 
     const now = new Date().toISOString()
-    const [container] = await database.insert(storageContainer).values({
+    const inserted = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
@@ -158,6 +158,9 @@ async function createMicronixTube(
       updatedBy: userId,
     }).returning()
 
+    const container = inserted[0]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (inserted.length === 0 || container === undefined) throw new Error('Insert did not return container row')
     await database.insert(micronixTube).values({
       id: container.id,
       collectionId: collectionId,
@@ -167,8 +170,7 @@ async function createMicronixTube(
 
     return { success: true, containerId: container.id }
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create micronix tube'
-    return { success: false, error: errorMessage }
+    throw error
   }
 }
 
@@ -199,7 +201,7 @@ async function createCryovialTube(
     const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'cryovial_tube')
 
     const now = new Date().toISOString()
-    const [container] = await database.insert(storageContainer).values({
+    const inserted = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
@@ -211,6 +213,9 @@ async function createCryovialTube(
       updatedBy: userId,
     }).returning()
 
+    const container = inserted[0]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (inserted.length === 0 || container === undefined) throw new Error('Insert did not return container row')
     await database.insert(cryovialTube).values({
       id: container.id,
       collectionId: collectionId,
@@ -220,8 +225,7 @@ async function createCryovialTube(
 
     return { success: true, containerId: container.id }
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create cryovial tube'
-    return { success: false, error: errorMessage }
+    throw error
   }
 }
 
@@ -253,7 +257,7 @@ async function createPaper(
     const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'paper')
 
     const now = new Date().toISOString()
-    const [container] = await database.insert(storageContainer).values({
+    const inserted = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
@@ -265,6 +269,9 @@ async function createPaper(
       updatedBy: userId,
     }).returning()
 
+    const container = inserted[0]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (inserted.length === 0 || container === undefined) throw new Error('Insert did not return container row')
     await database.insert(paper).values({
       id: container.id,
       sheetId: sheetRecord.id,
@@ -274,8 +281,7 @@ async function createPaper(
 
     return { success: true, containerId: container.id }
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create paper'
-    return { success: false, error: errorMessage }
+    throw error
   }
 }
 
@@ -306,7 +312,7 @@ async function createStaticWell(
     const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'static_well')
 
     const now = new Date().toISOString()
-    const [container] = await database.insert(storageContainer).values({
+    const inserted = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
@@ -318,6 +324,9 @@ async function createStaticWell(
       updatedBy: userId,
     }).returning()
 
+    const container = inserted[0]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (inserted.length === 0 || container === undefined) throw new Error('Insert did not return container row')
     await database.insert(staticWell).values({
       id: container.id,
       collectionId: collectionId,
@@ -326,8 +335,7 @@ async function createStaticWell(
 
     return { success: true, containerId: container.id }
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create static well'
-    return { success: false, error: errorMessage }
+    throw error
   }
 }
 

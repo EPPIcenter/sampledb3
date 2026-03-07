@@ -301,8 +301,13 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       }
       await database.delete(qpcrRun).where(eq(qpcrRun.qpcrExperimentId, id))
       await database.delete(qpcrExperimentWell).where(eq(qpcrExperimentWell.qpcrExperimentId, id))
-      await database.delete(qpcrExperiment).where(eq(qpcrExperiment.id, id))
-
+      const deleted = await database
+        .delete(qpcrExperiment)
+        .where(eq(qpcrExperiment.id, id))
+        .returning()
+      if (deleted.length === 0) {
+        return c.json({ error: 'Not found' }, 404)
+      }
       return c.body(null, 204)
     } catch (error) {
       return handleRouteError(error, c)

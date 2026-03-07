@@ -12,7 +12,7 @@ import { findExistingStudySpecimen } from '../lib/specimen-helpers'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { resolveCollection } from '../lib/collection-resolution'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
-import { containerSchema, containerSchemaWithLocation } from '../lib/schemas'
+import { containerSchema, containerSchemaRequired, containerSchemaWithLocation } from '../lib/schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 
 /**
@@ -242,6 +242,40 @@ specimens.get('/:id', authMiddleware, async (c) => {
   }
 })
 
+// Add container to existing specimen
+specimens.post('/:id/containers', memberMiddleware, async (c) => {
+  try {
+    const id = parseInt(c.req.param('id'))
+    if (isNaN(id)) {
+      return c.json({ error: 'Invalid specimen ID' }, 400)
+    }
+
+    const specimenRecord = await dbInstance
+      .select({ id: specimen.id })
+      .from(specimen)
+      .where(eq(specimen.id, id))
+      .get()
+
+    if (!specimenRecord) {
+      throw new NotFoundError('Specimen', id)
+    }
+
+    const body = await c.req.json()
+    const data = containerSchemaRequired.parse(body) as ContainerData
+
+    const user = c.get('user')
+    const result = await createContainerForSpecimen(id, data, dbInstance, user?.id)
+
+    if (!result.success) {
+      return c.json({ error: result.error || 'Failed to create container' }, 400)
+    }
+
+    return c.json({ containerId: result.containerId }, 201)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
 // Create specimen
 specimens.post('/', memberMiddleware, async (c) => {
   try {
@@ -295,14 +329,25 @@ specimens.post('/', memberMiddleware, async (c) => {
       .values(insertData)
       .returning()
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newSpecimen) {
+      throw new Error('Insert did not return specimen row')
+    }
     let containerResult: { success: boolean; containerId?: number; error?: string } | null = null
 
     if (data.container) {
-      containerResult = await createContainerForSpecimen(newSpecimen.id, data.container as ContainerData, dbInstance, user?.id)
-      if (!containerResult.success) {
+      try {
+        const result = await createContainerForSpecimen(newSpecimen.id, data.container as ContainerData, dbInstance, user?.id)
+        if (!result.success) {
+          await dbInstance.delete(storageContainer).where(eq(storageContainer.specimenId, newSpecimen.id))
+          await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))
+          throw new ValidationError(result.error || 'Failed to create container')
+        }
+        containerResult = result
+      } catch (err) {
         await dbInstance.delete(storageContainer).where(eq(storageContainer.specimenId, newSpecimen.id))
         await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))
-        throw new ValidationError(containerResult.error || 'Failed to create container')
+        throw err instanceof ValidationError ? err : new ValidationError(err instanceof Error ? err.message : 'Failed to create container')
       }
     }
     
@@ -442,7 +487,11 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
             })
             .returning()
             .get()
-          specimenRecord = (Array.isArray(insertResult) ? insertResult[0] : insertResult) as typeof specimen.$inferSelect
+          const inserted = Array.isArray(insertResult) ? insertResult[0] : insertResult
+          if (!inserted) {
+            throw new Error('Insert did not return specimen row')
+          }
+          specimenRecord = inserted as typeof specimen.$inferSelect
           newCount += 1
         }
         specimensOut.push(specimenRecord)
@@ -460,14 +509,18 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
             remainingQuantity: spec.container.remainingQuantity,
             comment: spec.container.comment,
           }
-          const containerResult = await createContainerForSpecimen(
-            specimenRecord.id,
-            containerData,
-            dbTx,
-            user?.id
-          )
-          if (!containerResult.success || !containerResult.containerId) {
-            throw new Error(containerResult.error ?? `Row ${i}: failed to create container`)
+          try {
+            const containerResult = await createContainerForSpecimen(
+              specimenRecord.id,
+              containerData,
+              dbTx,
+              user?.id
+            )
+            if (!containerResult.success || !containerResult.containerId) {
+              throw new Error(containerResult.error ?? `Row ${i}: failed to create container`)
+            }
+          } catch (err) {
+            throw new Error(err instanceof Error ? err.message : `Row ${i}: failed to create container`)
           }
           containersCount += 1
         }

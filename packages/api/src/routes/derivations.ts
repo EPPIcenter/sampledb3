@@ -461,6 +461,10 @@ derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
       .where(eq(containerDerivation.id, id))
       .returning()
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+    if (!updated) {
+      return c.json({ error: 'Derivation not found' }, 404)
+    }
     return c.json({ derivation: updated })
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -489,10 +493,14 @@ derivations.delete('/derivations/:id', memberMiddleware, async (c) => {
       return c.json({ error: 'Derivation not found' }, 404)
     }
 
-    await database
+    const deleted = await database
       .delete(containerDerivation)
       .where(eq(containerDerivation.id, id))
+      .returning()
 
+    if (deleted.length === 0) {
+      return c.json({ error: 'Derivation not found' }, 404)
+    }
     return c.json({ message: 'Derivation deleted' })
   } catch (error: any) {
     console.error('Error deleting derivation:', error)

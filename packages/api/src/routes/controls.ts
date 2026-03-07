@@ -22,10 +22,11 @@ import {
 } from '../db/schema'
 import { eq, and, like, desc, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
+import { parseControlProperties } from '../lib/control-properties'
 import { validateControlBatchName, generateUniqueBatchName } from '../lib/validation'
 import { generateControlDefinitionName, generateUniqueControlDefinitionName } from '../lib/control-name-generation'
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
-import type { BloodControlProperties, ParsedControlProperties } from '../types/properties'
+import type { BloodControlProperties } from '../types/properties'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 
 /**
@@ -38,53 +39,7 @@ export function createControlsRoutes(database: Database): Hono {
   const authMiddleware = createAuthMiddleware(database)
   const memberMiddleware = createMemberMiddleware(database)
 
-// Helper function to extract strain/density data from properties JSON
-function parseControlProperties(properties: unknown, strainMap?: Map<number, { name: string }>): ParsedControlProperties {
-  if (!properties) return { strains: [], targetDensity: undefined, unitSymbol: undefined, targetDensityUnitId: undefined }
-  
-  let props: BloodControlProperties
-  try {
-    const parsed = typeof properties === 'string' ? JSON.parse(properties) : properties
-    props = parsed as BloodControlProperties
-  } catch (e) {
-    // If parsing fails, return empty data
-    return { strains: [], targetDensity: undefined, unitSymbol: undefined, targetDensityUnitId: undefined }
-  }
-  
-  const strains = (props.strains || []).map((s: number | { id: number; name?: string; percentage?: number }) => {
-    if (typeof s === 'number') {
-      // Just strain ID - look up name if available
-      return { id: s, name: strainMap?.get(s)?.name || `Strain ${s}` }
-    }
-    // Full strain object with id, name, percentage
-    return { id: s.id, name: s.name || `Strain ${s.id}`, percentage: s.percentage }
-  })
-  
-  // Extract target density - handle both number and string formats
-  const targetDensity = props.targetDensity !== undefined
-    ? (typeof props.targetDensity === 'string' ? parseFloat(props.targetDensity) : props.targetDensity)
-    : undefined
-  
-  // Extract unit symbol - check multiple possible locations
-  const unitSymbol = (typeof props.targetDensityUnit === 'object' && 'symbol' in props.targetDensityUnit)
-    ? (props.targetDensityUnit as { symbol: string }).symbol
-    : props.targetDensityUnitSymbol
-    || (typeof props.targetDensityUnit === 'string' ? props.targetDensityUnit : undefined)
-  
-  // Extract unit ID
-  const targetDensityUnitId = props.targetDensityUnitId !== undefined
-    ? (typeof props.targetDensityUnitId === 'string' ? parseInt(props.targetDensityUnitId) : props.targetDensityUnitId)
-    : undefined
-  
-  return {
-    strains,
-    targetDensity,
-    unitSymbol,
-    targetDensityUnitId,
-  }
-}
-
-// --- Control Batches ---
+  // --- Control Batches ---
 
 // List all control batches
 controls.get('/batches', authMiddleware, async (c) => {
@@ -272,7 +227,7 @@ controls.delete('/batches/:id', memberMiddleware, async (c) => {
     }
 
     // Delete in transaction to ensure atomicity
-    await dbInstance.transaction((tx) => {
+    await dbInstance.transaction(async (tx) => {
       // 1. Delete storageContainerTag records for all containers
       if (containerIds.length > 0) {
         tx.delete(storageContainerTag)
@@ -318,9 +273,12 @@ controls.delete('/batches/:id', memberMiddleware, async (c) => {
       }
 
       // 5. Delete controlBatch record
-      tx.delete(controlBatch)
+      const deleted = await tx.delete(controlBatch)
         .where(eq(controlBatch.id, id))
-        .run()
+        .returning()
+      if (deleted.length === 0) {
+        throw new NotFoundError('Blood control batch', id)
+      }
     })
 
     return c.json({ message: 'Batch deleted successfully' })
@@ -1026,6 +984,9 @@ controls.get('/:id/summary', authMiddleware, async (c) => {
           .where(eq(specimen.controlBatchId, batch.id))
           .get()
 
+        if (!specimensCount) {
+          throw new Error('Failed to get specimen count for batch')
+        }
         // Get total remaining quantity and unit for summary badges
         const inventory = await dbInstance
           .select({
@@ -1040,7 +1001,7 @@ controls.get('/:id/summary', authMiddleware, async (c) => {
 
         return {
           ...batch,
-          specimenCount: specimensCount!.count,
+          specimenCount: specimensCount.count,
           inventory,
         }
       })
@@ -1381,7 +1342,8 @@ controls.post('/definitions/find', memberMiddleware, async (c) => {
       if (typeof props === 'string') {
         try {
           props = JSON.parse(props) as Record<string, unknown>
-        } catch {
+        } catch (e) {
+          console.error('Invalid definition properties JSON', { definitionId: def.id, error: e })
           continue
         }
       }
@@ -1476,7 +1438,8 @@ controls.post('/definitions/bulk', memberMiddleware, async (c) => {
         if (typeof props === 'string') {
           try {
             props = JSON.parse(props) as any
-          } catch {
+          } catch (e) {
+            console.error('Invalid definition properties JSON', { definitionId: def.id, error: e })
             continue
           }
         }
@@ -1737,7 +1700,10 @@ controls.post('/', memberMiddleware, async (c) => {
       .returning()
     
     const newControl = result[0]
-    
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newControl) {
+      throw new Error('Insert did not return control definition row')
+    }
     return c.json({ control: newControl }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -1840,7 +1806,11 @@ controls.patch('/:id', memberMiddleware, async (c) => {
       })
       .where(eq(controlDefinition.id, id))
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+    if (!updatedControl) {
+      return c.json({ error: 'Blood control definition not found' }, 404)
+    }
     return c.json({ control: updatedControl })
   } catch (error) {
     return handleRouteError(error, c)
@@ -1990,7 +1960,11 @@ controls.post('/:id/batches', memberMiddleware, async (c) => {
         updatedBy: user?.id,
       })
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newBatch) {
+      throw new Error('Insert did not return control batch row')
+    }
     return c.json({ batch: newBatch }, 201)
   } catch (error: any) {
     if (error instanceof z.ZodError) {

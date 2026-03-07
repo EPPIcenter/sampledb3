@@ -100,6 +100,7 @@ async function getOrCreateCollection(
       created: now,
       lastUpdated: now,
     }).returning()
+    if (!newBox) throw new Error('Insert did not return box row')
     return newBox.id
   } else if (type === 'bag') {
     const [newBag] = await tx.insert(bag).values({
@@ -108,6 +109,7 @@ async function getOrCreateCollection(
       created: now,
       lastUpdated: now,
     }).returning()
+    if (!newBag) throw new Error('Insert did not return bag row')
     return newBag.id
   } else if (type === 'micronix_plate') {
     const [newPlate] = await tx.insert(micronixPlate).values({
@@ -117,6 +119,7 @@ async function getOrCreateCollection(
       created: now,
       lastUpdated: now,
     }).returning()
+    if (!newPlate) throw new Error('Insert did not return plate row')
     return newPlate.id
   } else {
     const [newBox] = await tx.insert(cryovialBox).values({
@@ -126,6 +129,7 @@ async function getOrCreateCollection(
       created: now,
       lastUpdated: now,
     }).returning()
+    if (!newBox) throw new Error('Insert did not return cryovial box row')
     return newBox.id
   }
   

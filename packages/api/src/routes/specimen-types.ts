@@ -288,7 +288,7 @@ specimenTypes.delete('/:id/container-types/:containerType', adminMiddleware, asy
       }, 400)
     }
 
-    await database
+    const deleted = await database
       .delete(specimenTypeContainerType)
       .where(
         and(
@@ -296,7 +296,11 @@ specimenTypes.delete('/:id/container-types/:containerType', adminMiddleware, asy
           eq(specimenTypeContainerType.containerType, containerType as any)
         )
       )
+      .returning()
 
+    if (deleted.length === 0) {
+      return c.json({ error: 'Container type association not found' }, 404)
+    }
     return c.json({ success: true })
   } catch (error) {
     return handleRouteError(error, c)

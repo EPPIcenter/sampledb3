@@ -20,6 +20,14 @@ const baseContainerObject = z.object({
 export const containerSchema = baseContainerObject.optional()
 
 /**
+ * Container schema for POST /specimens/:id/containers (add container to existing specimen).
+ * Container object is required; containerType is required.
+ */
+export const containerSchemaRequired = baseContainerObject.extend({
+  containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', 'static_well']),
+})
+
+/**
  * Extended container schema for bulk endpoints (POST /bulk, imports) that support
  * collection creation. Includes collectionLocationId for creating collections when missing.
  */

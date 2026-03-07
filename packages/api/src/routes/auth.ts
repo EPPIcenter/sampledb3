@@ -417,6 +417,10 @@ auth.patch('/me', authMiddleware, async (c) => {
       .where(eq(users.id, currentUser.id))
       .returning()
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+    if (!updated) {
+      return c.json({ error: 'User not found' }, 404)
+    }
     return c.json({
       user: {
         id: updated.id,
@@ -713,6 +717,10 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
       .where(eq(users.id, id))
       .returning()
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+    if (!updated) {
+      return c.json({ error: 'User not found' }, 404)
+    }
     return c.json({
       user: {
         id: updated.id,
@@ -873,11 +881,15 @@ auth.delete('/users/:id', adminMiddleware, async (c) => {
 
     // Soft delete: set deletedAt timestamp
     const deletedAt = new Date().toISOString()
-    await database
+    const softDeleted = await database
       .update(users)
       .set({ deletedAt })
       .where(eq(users.id, id))
+      .returning()
 
+    if (softDeleted.length === 0) {
+      return c.json({ error: 'User not found' }, 404)
+    }
     // Revoke all existing sessions for this user
     await database.delete(sessions).where(eq(sessions.userId, id))
 

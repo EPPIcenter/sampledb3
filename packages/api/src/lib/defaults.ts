@@ -35,7 +35,11 @@ export async function getDefaultUnit(db: Database, containerType: ContainerType)
 
   const containerDefaults = defaults[containerType]
   const unitSymbol = containerDefaults.defaultUnitSymbol
-  
+
+  if (!unitSymbol || !String(unitSymbol).trim()) {
+    throw new Error(`Default unit symbol not configured for container type '${containerType}'`)
+  }
+
   const unitRecord = await db
     .select()
     .from(unit)

@@ -127,6 +127,8 @@ async function findOrCreateDerivedSpecimen(
     })
     .returning()
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+  if (!created) throw new Error('Insert did not return specimen row')
   return created.id
 }
 

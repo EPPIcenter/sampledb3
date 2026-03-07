@@ -596,8 +596,14 @@ collections.post('/plates/micronix', memberMiddleware, async (c) => {
       createdBy: user?.id,
       updatedBy: user?.id,
     }).returning()
-    
-    return c.json({ plate: newPlate }, 201)
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newPlate) {
+      throw new Error('Insert did not return plate row')
+    }
+    return c.json({
+      plate: { ...newPlate, locationPath: buildLocationPath(loc) },
+    }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
     return c.json({ error: 'Internal server error' }, 500)
@@ -638,8 +644,14 @@ collections.post('/boxes/cryovial', memberMiddleware, async (c) => {
       createdBy: user?.id,
       updatedBy: user?.id,
     }).returning()
-    
-    return c.json({ box: newBox }, 201)
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newBox) {
+      throw new Error('Insert did not return cryovial box row')
+    }
+    return c.json({
+      box: { ...newBox, locationPath: buildLocationPath(loc) },
+    }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
     return c.json({ error: 'Internal server error' }, 500)
@@ -678,8 +690,14 @@ collections.post('/boxes', memberMiddleware, async (c) => {
       createdBy: user?.id,
       updatedBy: user?.id,
     }).returning()
-    
-    return c.json({ box: newBox }, 201)
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newBox) {
+      throw new Error('Insert did not return box row')
+    }
+    return c.json({
+      box: { ...newBox, locationPath: buildLocationPath(loc) },
+    }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
     return c.json({ error: 'Internal server error' }, 500)
@@ -718,8 +736,14 @@ collections.post('/bags', memberMiddleware, async (c) => {
       createdBy: user?.id,
       updatedBy: user?.id,
     }).returning()
-    
-    return c.json({ bag: newBag }, 201)
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newBag) {
+      throw new Error('Insert did not return bag row')
+    }
+    return c.json({
+      bag: { ...newBag, locationPath: buildLocationPath(loc) },
+    }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
     return c.json({ error: 'Internal server error' }, 500)
@@ -1180,24 +1204,28 @@ collections.post('/sheets/move', memberMiddleware, async (c) => {
 
     await database.transaction(async (tx) => {
       for (const sheetId of data.sheetIds) {
-        if (data.targetCollectionType === 'box') {
-          tx.update(sheet)
-            .set({
-              boxId: data.targetCollectionId,
-              bagId: null,
-              lastUpdated: sql`current_timestamp`,
-            })
-            .where(eq(sheet.id, sheetId))
-            .run()
-        } else {
-          tx.update(sheet)
-            .set({
-              bagId: data.targetCollectionId,
-              boxId: null,
-              lastUpdated: sql`current_timestamp`,
-            })
-            .where(eq(sheet.id, sheetId))
-            .run()
+        const updated =
+          data.targetCollectionType === 'box'
+            ? await tx
+                .update(sheet)
+                .set({
+                  boxId: data.targetCollectionId,
+                  bagId: null,
+                  lastUpdated: sql`current_timestamp`,
+                })
+                .where(eq(sheet.id, sheetId))
+                .returning()
+            : await tx
+                .update(sheet)
+                .set({
+                  bagId: data.targetCollectionId,
+                  boxId: null,
+                  lastUpdated: sql`current_timestamp`,
+                })
+                .where(eq(sheet.id, sheetId))
+                .returning()
+        if (updated.length === 0) {
+          throw new Error(`Sheet not found: ${sheetId}`)
         }
       }
     })

@@ -1281,6 +1281,9 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
           .returning()
           .get()
         const newSubject = Array.isArray(newSubjectResult) ? newSubjectResult[0] : newSubjectResult
+        if (!newSubject) {
+          throw new Error('Insert did not return study subject row')
+        }
         subject = newSubject
         subjectId = newSubject.id
       }

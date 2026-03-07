@@ -9,6 +9,7 @@ import { setupPasswordRequirements, setupSessionSettings, createTestUser } from 
 import {
   createTestStudy,
   createTestStudySubject,
+  createTestSpecimen,
   createTestSpecimenType,
   createTestLocation,
   createTestUnit,
@@ -22,6 +23,8 @@ import {
   cryovialBox,
   micronixPlate,
   specimen,
+  storageContainer,
+  micronixTube,
 } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
@@ -335,6 +338,120 @@ describe('Specimens API', () => {
       const data = (await res.json()) as { valid: boolean; errors: Array<{ message: string }> }
       expect(data.valid).toBe(false)
       expect(data.errors.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('POST /api/specimens/:id/containers', () => {
+    let testStudy: Awaited<ReturnType<typeof createTestStudy>>
+    let testSubject: Awaited<ReturnType<typeof createTestStudySubject>>
+    let testSpecimenType: Awaited<ReturnType<typeof createTestSpecimenType>>
+    let testLocation: Awaited<ReturnType<typeof createTestLocation>>
+    let testSpecimen: Awaited<ReturnType<typeof createTestSpecimen>>
+    const now = new Date().toISOString()
+
+    beforeEach(async () => {
+      testStudy = await createTestStudy(testDb, { title: 'Add Container Study', shortCode: 'ADD01' })
+      testSubject = await createTestStudySubject(testDb, { studyId: testStudy.id, name: 'ADD-SUBJ' })
+      testSpecimenType = await createTestSpecimenType(testDb, { name: 'Plasma' })
+      const testStorageType = await createTestStorageType(testDb, { name: 'Freezer', description: 'Test' })
+      testLocation = await createTestLocation(testDb, {
+        name: 'Add Loc',
+        parentId: null,
+        storageTypeId: String(testStorageType.id),
+        canContainCollections: true,
+      })
+      const testUnit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: testSpecimenType.id,
+        containerType: 'micronix_tube',
+      })
+      await testDb.insert(containerTypeUnit).values({
+        containerType: 'micronix_tube',
+        unitId: testUnit.id,
+      })
+      await testDb.insert(settings).values({
+        key: 'container_defaults',
+        value: { micronix_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' } },
+        userId: null,
+      })
+      await testDb.insert(micronixPlate).values({
+        name: 'ADD-PLATE',
+        locationId: testLocation.id,
+        barcode: null,
+        created: now,
+        lastUpdated: now,
+      })
+      testSpecimen = await createTestSpecimen(testDb, testSpecimenType.id, {
+        studySubjectId: testSubject.id,
+      })
+    })
+
+    it('returns 201 and containerId and creates container for specimen', async () => {
+      const res = await authenticatedRequest(app, `/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        cookie,
+        json: {
+          containerType: 'micronix_tube',
+          collectionName: 'ADD-PLATE',
+          barcode: 'ADD-TUBE-001',
+          position: 'A01',
+        },
+      })
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as { containerId?: number }
+      expect(data.containerId).toBeDefined()
+      expect(typeof data.containerId).toBe('number')
+
+      const containers = await testDb
+        .select()
+        .from(storageContainer)
+        .where(eq(storageContainer.specimenId, testSpecimen.id))
+      expect(containers).toHaveLength(1)
+      expect(containers[0].id).toBe(data.containerId)
+
+      const tubes = await testDb
+        .select()
+        .from(micronixTube)
+        .where(eq(micronixTube.id, data.containerId!))
+      expect(tubes).toHaveLength(1)
+      expect(tubes[0].barcode).toBe('ADD-TUBE-001')
+      expect(tubes[0].position).toBe('A01')
+    })
+
+    it('returns 404 when specimen does not exist', async () => {
+      const res = await authenticatedRequest(app, '/api/specimens/99999/containers', {
+        method: 'POST',
+        cookie,
+        json: {
+          containerType: 'micronix_tube',
+          collectionName: 'ADD-PLATE',
+          barcode: 'ADD-404',
+          position: 'B01',
+        },
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('returns 400 when container type is not allowed for specimen type', async () => {
+      await testDb.delete(specimenTypeContainerType).where(eq(specimenTypeContainerType.specimenTypeId, testSpecimenType.id))
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: testSpecimenType.id,
+        containerType: 'cryovial_tube',
+      })
+
+      const res = await authenticatedRequest(app, `/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        cookie,
+        json: {
+          containerType: 'micronix_tube',
+          collectionName: 'ADD-PLATE',
+          barcode: 'ADD-BAD-TYPE',
+          position: 'C01',
+        },
+      })
+      expect(res.status).toBe(400)
+      const body = (await res.json()) as { error?: string }
+      expect(body.error).toMatch(/container type|not allowed|specimen type/i)
     })
   })
 })

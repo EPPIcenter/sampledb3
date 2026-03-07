@@ -569,12 +569,8 @@ export async function executeCollectionMoves(
       moved: validMoves.length,
       errors: errors.length > 0 ? errors : undefined,
     }
-  } catch (error: any) {
-    return {
-      success: false,
-      moved: 0,
-      errors: [{ row: 0, error: error.message || 'Internal server error' }],
-    }
+  } catch (error) {
+    throw error
   }
 }
 
