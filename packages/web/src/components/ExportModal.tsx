@@ -9,10 +9,12 @@ import {
   type Tag,
   type StudySubject,
 } from '../lib/api'
+import { parseExportCsv, type ExportCsvRow } from '../lib/export-modal-csv'
 import { useExportConfigurations } from '../hooks/useExportConfigurations'
 import { formatLocalDateTime } from '../lib/date-utils'
 import { useModifierHotkey } from '../hooks/useHotkey'
 import ModalPortal from './ModalPortal'
+import ExportModalResultSummary from './ExportModalResultSummary'
 
 interface ExportModalProps {
   isOpen: boolean
@@ -53,12 +55,7 @@ export default function ExportModal({
   // CSV upload mode
   const [uploadMode, setUploadMode] = useState<'manual' | 'csv'>('manual')
   const [csvFile, setCsvFile] = useState<File | null>(null)
-  const [csvData, setCsvData] = useState<Array<{
-    subject_name: string
-    collection_date?: string
-    date_from?: string
-    date_to?: string
-  }>>([])
+  const [csvData, setCsvData] = useState<ExportCsvRow[]>([])
   const [csvError, setCsvError] = useState<string | null>(null)
   const [dateTolerance, setDateTolerance] = useState<number>(0)
   const [exportSummary, setExportSummary] = useState<{
@@ -95,37 +92,19 @@ export default function ExportModal({
         tagsApi.list(),
       ])
       
-      // Safely extract data with null checks
       const availableTypesData = availableTypesRes.data
-      const tagsData = tagsRes.data // tagsApi.list() returns { data: Tag[] }
-      
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive check for server response
-      if (!availableTypesData) {
-        throw new Error('Invalid response from server: missing data')
-      }
-      
-      // Use only specimen types and container types that exist in this study
-      const specimenTypesData = Array.isArray(availableTypesData.specimen_types) 
-        ? availableTypesData.specimen_types 
-        : []
-      
+      const tagsData = tagsRes.data
+
       setSpecimenTypes(
-        specimenTypesData.map(st => ({
+        availableTypesData.specimen_types.map(st => ({
           id: st.id,
           name: st.name,
           created: '',
           lastUpdated: '',
         }))
       )
-      
-      // Filter container types to only show what exists in the study
-      const availableContainerTypes = Array.isArray(availableTypesData.container_types)
-        ? availableTypesData.container_types
-        : []
       setTags(tagsData)
-      
-      // Store available container types for filtering the UI
-      setAvailableContainerTypes(availableContainerTypes)
+      setAvailableContainerTypes(availableTypesData.container_types)
     } catch (error: any) {
       console.error('Failed to load reference data:', error)
       const errorMessage = error?.response?.data?.error || error?.message || 'Failed to load export options'
@@ -138,135 +117,6 @@ export default function ExportModal({
       setLoadingRefData(false)
     }
   }, [studyCode])
-
-  const parseCSV = useCallback((file: File) => {
-    return new Promise<Array<{
-      subject_name: string
-      collection_date?: string
-      date_from?: string
-      date_to?: string
-    }>>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        try {
-          const text = e.target?.result as string
-          if (!text) {
-            reject(new Error('File is empty'))
-            return
-          }
-
-          const lines = text.split('\n').filter(line => line.trim())
-          if (lines.length === 0) {
-            reject(new Error('CSV file is empty'))
-            return
-          }
-
-          // Parse header
-          const headerLine = lines[0].trim()
-          const headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''))
-          
-          // Find column indices
-          const subjectNameIdx = headers.findIndex(h => h === 'subject_name' || h === 'subject name')
-          if (subjectNameIdx === -1) {
-            reject(new Error('CSV must contain a "subject_name" column'))
-            return
-          }
-          
-          const collectionDateIdx = headers.findIndex(h => h === 'collection_date' || h === 'collection date')
-          const dateFromIdx = headers.findIndex(h => h === 'date_from' || h === 'date from')
-          const dateToIdx = headers.findIndex(h => h === 'date_to' || h === 'date to')
-
-          // Parse data rows
-          const data: Array<{
-            subject_name: string
-            collection_date?: string
-            date_from?: string
-            date_to?: string
-          }> = []
-
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim()
-            if (!line) continue
-
-            // Simple CSV parsing (handles quoted values)
-            const values: string[] = []
-            let current = ''
-            let inQuotes = false
-            
-            for (let j = 0; j < line.length; j++) {
-              const char = line[j]
-              if (char === '"') {
-                if (inQuotes && line[j + 1] === '"') {
-                  current += '"'
-                  j++
-                } else {
-                  inQuotes = !inQuotes
-                }
-              } else if (char === ',' && !inQuotes) {
-                values.push(current.trim())
-                current = ''
-              } else {
-                current += char
-              }
-            }
-            values.push(current.trim())
-
-            const subjectName = values[subjectNameIdx]?.replace(/^"|"$/g, '').trim()
-            if (!subjectName) continue
-
-            const row: {
-              subject_name: string
-              collection_date?: string
-              date_from?: string
-              date_to?: string
-            } = { subject_name: subjectName }
-
-            if (collectionDateIdx >= 0 && values[collectionDateIdx]) {
-              const date = values[collectionDateIdx].replace(/^"|"$/g, '').trim()
-              if (date) row.collection_date = date
-            }
-            if (dateFromIdx >= 0 && values[dateFromIdx]) {
-              const date = values[dateFromIdx].replace(/^"|"$/g, '').trim()
-              if (date) row.date_from = date
-            }
-            if (dateToIdx >= 0 && values[dateToIdx]) {
-              const date = values[dateToIdx].replace(/^"|"$/g, '').trim()
-              if (date) row.date_to = date
-            }
-
-            data.push(row)
-          }
-
-          if (data.length === 0) {
-            reject(new Error('No valid data rows found in CSV'))
-            return
-          }
-
-          resolve(data)
-        } catch (err: any) {
-          reject(new Error(`Failed to parse CSV: ${err.message}`))
-        }
-      }
-      reader.onerror = () => reject(new Error('Failed to read file'))
-      reader.readAsText(file)
-    })
-  }, [])
-
-  const handleCSVUpload = useCallback(async (file: File) => {
-    try {
-      setCsvError(null)
-      const data = await parseCSV(file)
-      setCsvData(data)
-      setCsvFile(file)
-      setExportSummary(null)
-      setSummaryExpanded(false)
-      scheduleUpdateCount()
-    } catch (err: any) {
-      setCsvError(err.message)
-      setCsvData([])
-      setCsvFile(null)
-    }
-  }, [parseCSV])
 
   const updateCount = useCallback(async () => {
     if (uploadMode === 'csv' && csvData.length === 0) {
@@ -330,6 +180,22 @@ export default function ExportModal({
       countDebounceTimerRef.current = null
     }, 500)
   }, [])
+
+  const handleCSVUpload = useCallback(async (file: File) => {
+    try {
+      setCsvError(null)
+      const data = await parseExportCsv(file)
+      setCsvData(data)
+      setCsvFile(file)
+      setExportSummary(null)
+      setSummaryExpanded(false)
+      scheduleUpdateCount()
+    } catch (err: unknown) {
+      setCsvError(err instanceof Error ? err.message : 'Failed to parse CSV')
+      setCsvData([])
+      setCsvFile(null)
+    }
+  }, [scheduleUpdateCount])
 
   // Initialize state and load data when modal opens (avoids reset-on-close effect)
   useEffect(() => {
@@ -551,18 +417,18 @@ export default function ExportModal({
         <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
           {/* Background overlay */}
           <div
-            className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+            className="fixed inset-0 bg-black/40 backdrop-blur-md"
             onClick={onClose}
           />
 
         {/* Modal panel */}
-        <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
-          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+        <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full border border-app-border">
+          <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-2xl font-bold text-gray-900">Export Study Data</h3>
+              <h3 className="text-2xl font-bold text-app-text">Export Study Data</h3>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-500"
+                className="text-app-text-muted hover:text-app-text"
               >
                 <span className="sr-only">Close</span>
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -572,13 +438,13 @@ export default function ExportModal({
             </div>
 
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+              <div className="mb-4 p-3 bg-app-trend-down/10 border border-app-trend-down rounded text-app-trend-down text-sm">
                 {error}
               </div>
             )}
 
             {/* Tab Selection */}
-            <div className="mb-6 border-b border-gray-200">
+            <div className="mb-6 border-b border-app-border">
               <nav className="-mb-px flex space-x-8">
                 <button
                   onClick={() => {
@@ -587,8 +453,8 @@ export default function ExportModal({
                   }}
                   className={`py-4 px-1 border-b-2 font-medium text-sm ${
                     uploadMode === 'manual'
-                      ? 'border-teal-500 text-teal-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? 'border-app-accent text-app-accent'
+                      : 'border-transparent text-app-text-muted hover:text-app-text hover:border-app-border'
                   }`}
                 >
                   Manual Selection
@@ -600,8 +466,8 @@ export default function ExportModal({
                   }}
                   className={`py-4 px-1 border-b-2 font-medium text-sm ${
                     uploadMode === 'csv'
-                      ? 'border-teal-500 text-teal-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? 'border-app-accent text-app-accent'
+                      : 'border-transparent text-app-text-muted hover:text-app-text hover:border-app-border'
                   }`}
                 >
                   CSV Upload
@@ -613,7 +479,7 @@ export default function ExportModal({
             {uploadMode === 'csv' && (
               <div className="space-y-4 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Upload CSV File
                   </label>
                   <input
@@ -627,23 +493,23 @@ export default function ExportModal({
                     }}
                     className="file-input-accent"
                   />
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-app-text-muted">
                     CSV should contain: subject_name (required), collection_date (optional), date_from (optional), date_to (optional)
                   </p>
                   {csvError && (
-                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                    <div className="mt-2 p-2 bg-app-trend-down/10 border border-app-trend-down rounded text-app-trend-down text-sm">
                       {csvError}
                     </div>
                   )}
                   {csvData.length > 0 && (
-                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-green-700 text-sm">
+                    <div className="mt-2 p-2 bg-app-trend-up/10 border border-app-trend-up rounded text-app-trend-up text-sm">
                       Successfully parsed {csvData.length} subject{csvData.length !== 1 ? 's' : ''}
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Date Tolerance (days)
                   </label>
                   <input
@@ -654,10 +520,10 @@ export default function ExportModal({
                       setDateTolerance(Math.max(0, parseInt(e.target.value) || 0))
                       scheduleUpdateCount()
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent bg-app-card text-app-text"
                     placeholder="0 (exact match)"
                   />
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-app-text-muted">
                     Applies to all subjects with collection_date. Default: 0 (exact match). Example: 2 means ±2 days.
                   </p>
                 </div>
@@ -668,12 +534,12 @@ export default function ExportModal({
             <div className="space-y-4 mb-6">
               {/* Specimen Types */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Specimen Types
                 </label>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-32 overflow-y-auto border border-gray-100 rounded p-2">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-32 overflow-y-auto border border-app-border rounded p-2">
                   {loadingRefData ? (
-                    <div className="text-sm text-gray-500">Loading...</div>
+                    <div className="text-sm text-app-text-muted">Loading...</div>
                   ) : (
                     specimenTypes.map(type => (
                       <label key={type.id} className="flex items-center space-x-2 cursor-pointer">
@@ -681,9 +547,9 @@ export default function ExportModal({
                           type="checkbox"
                           checked={filters.specimen_type_ids?.includes(type.id) || false}
                           onChange={() => toggleArrayFilter('specimen_type_ids', type.id)}
-                          className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
+                          className="rounded border-app-border text-app-accent focus:ring-app-accent"
                         />
-                        <span className="text-sm text-gray-700">{type.name}</span>
+                        <span className="text-sm text-app-text">{type.name}</span>
                       </label>
                     ))
                   )}
@@ -692,11 +558,11 @@ export default function ExportModal({
 
               {/* Container Types */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Container Types
                 </label>
                 {availableContainerTypes.length === 0 ? (
-                  <div className="text-sm text-gray-500 italic">
+                  <div className="text-sm text-app-text-muted italic">
                     No containers found in this study
                   </div>
                 ) : (
@@ -707,9 +573,9 @@ export default function ExportModal({
                           type="checkbox"
                           checked={filters.container_types?.includes(type.value) || false}
                           onChange={() => toggleArrayFilter('container_types', type.value)}
-                          className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
+                          className="rounded border-app-border text-app-accent focus:ring-app-accent"
                         />
-                        <span className="text-sm text-gray-700">{type.label}</span>
+                        <span className="text-sm text-app-text">{type.label}</span>
                       </label>
                     ))}
                   </div>
@@ -719,7 +585,7 @@ export default function ExportModal({
               {/* Date Ranges */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Collection Date Range
                   </label>
                   <div className="flex gap-2">
@@ -727,18 +593,18 @@ export default function ExportModal({
                       type="date"
                       value={filters.date_from || ''}
                       onChange={(e) => updateFilter('date_from', e.target.value || undefined)}
-                      className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                      className="flex-1 px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent bg-app-card text-app-text"
                     />
                     <input
                       type="date"
                       value={filters.date_to || ''}
                       onChange={(e) => updateFilter('date_to', e.target.value || undefined)}
-                      className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                      className="flex-1 px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent bg-app-card text-app-text"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Created Date Range
                   </label>
                   <div className="flex gap-2">
@@ -746,13 +612,13 @@ export default function ExportModal({
                       type="date"
                       value={filters.created_from || ''}
                       onChange={(e) => updateFilter('created_from', e.target.value || undefined)}
-                      className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                      className="flex-1 px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent bg-app-card text-app-text"
                     />
                     <input
                       type="date"
                       value={filters.created_to || ''}
                       onChange={(e) => updateFilter('created_to', e.target.value || undefined)}
-                      className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                      className="flex-1 px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent bg-app-card text-app-text"
                     />
                   </div>
                 </div>
@@ -761,12 +627,12 @@ export default function ExportModal({
               {/* Tags */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Tags (optional)
                   </label>
-                  <div className="max-h-32 overflow-y-auto border border-gray-100 rounded p-2">
+                  <div className="max-h-32 overflow-y-auto border border-app-border rounded p-2">
                     {loadingRefData ? (
-                      <div className="text-sm text-gray-500">Loading...</div>
+                      <div className="text-sm text-app-text-muted">Loading...</div>
                     ) : (
                       tags.map(tag => (
                         <label key={tag.id} className="flex items-center space-x-2 cursor-pointer mb-1">
@@ -774,9 +640,9 @@ export default function ExportModal({
                             type="checkbox"
                             checked={filters.tag_ids?.includes(tag.id) || false}
                             onChange={() => toggleArrayFilter('tag_ids', tag.id)}
-                            className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
+                            className="rounded border-app-border text-app-accent focus:ring-app-accent"
                           />
-                          <span className="text-sm text-gray-700">{tag.name}</span>
+                          <span className="text-sm text-app-text">{tag.name}</span>
                         </label>
                       ))
                     )}
@@ -787,19 +653,19 @@ export default function ExportModal({
               {/* Subjects - Only show in manual mode */}
               {uploadMode === 'manual' && subjects.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Subjects (optional)
                   </label>
-                  <div className="max-h-32 overflow-y-auto border border-gray-100 rounded p-2">
+                  <div className="max-h-32 overflow-y-auto border border-app-border rounded p-2">
                     {subjects.map(subject => (
                       <label key={subject.id} className="flex items-center space-x-2 cursor-pointer mb-1">
                         <input
                           type="checkbox"
                           checked={filters.subject_ids?.includes(subject.id) || false}
                           onChange={() => toggleArrayFilter('subject_ids', subject.id)}
-                          className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
+                          className="rounded border-app-border text-app-accent focus:ring-app-accent"
                         />
-                        <span className="text-sm text-gray-700">{subject.name}</span>
+                        <span className="text-sm text-app-text">{subject.name}</span>
                       </label>
                     ))}
                   </div>
@@ -811,7 +677,7 @@ export default function ExportModal({
                 <div>
                   <button
                     onClick={clearFilters}
-                    className="text-sm text-teal-600 hover:text-teal-800"
+                    className="text-sm text-app-accent hover:text-app-accent-hover"
                   >
                     Clear All Filters
                   </button>
@@ -820,13 +686,13 @@ export default function ExportModal({
             </div>
 
             {/* Preview Count */}
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+            <div className="mb-6 p-4 bg-app-surface rounded-lg">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Matching Containers:</span>
+                <span className="text-sm font-medium text-app-text">Matching Containers:</span>
                 {loadingCount ? (
-                  <span className="text-sm text-gray-500">Calculating...</span>
+                  <span className="text-sm text-app-text-muted">Calculating...</span>
                 ) : (
-                  <span className="text-lg font-bold text-teal-600">
+                  <span className="text-lg font-bold text-app-accent">
                     {count !== null ? count.toLocaleString() : '—'}
                   </span>
                 )}
@@ -836,13 +702,13 @@ export default function ExportModal({
             {/* Export Configuration Selector */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">
+                <label className="block text-sm font-medium text-app-text">
                   Export Configuration
                 </label>
                 <Link
-                  to="/settings?category=data-management&section=export-configurations"
-                  className="text-xs text-teal-600 hover:text-teal-800 hover:underline flex items-center gap-1"
-                >
+                to="/settings?category=data-management&section=export-configurations"
+                className="text-xs text-app-accent hover:text-app-accent-hover hover:underline flex items-center gap-1"
+              >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -853,15 +719,15 @@ export default function ExportModal({
               {loadingConfigs ? (
                 <div className="space-y-1.5">
                   {[1, 2, 3].map(i => (
-                    <div key={i} className="w-full h-10 bg-gray-100 rounded border border-gray-200 animate-pulse" />
+                    <div key={i} className="w-full h-10 app-skeleton-bar rounded border border-app-border animate-pulse" />
                   ))}
                 </div>
               ) : exportConfigurations.length === 0 ? (
-                <div className="text-sm p-3 bg-gray-50 rounded border border-gray-200">
-                  <p className="text-gray-700 mb-2">No export configurations available.</p>
+                <div className="text-sm p-3 bg-app-surface rounded border border-app-border">
+                  <p className="text-app-text mb-2">No export configurations available.</p>
                   <Link
                     to="/settings?category=data-management&section=export-configurations"
-                    className="text-teal-600 hover:text-teal-800 hover:underline font-medium inline-flex items-center gap-1"
+                    className="text-app-accent hover:text-app-accent-hover hover:underline font-medium inline-flex items-center gap-1"
                   >
                     Create one in Settings
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -927,38 +793,38 @@ export default function ExportModal({
                             setFocusedConfigIndex(null)
                           }
                         }}
-                        className={`w-full text-left px-3 py-2 border rounded transition-all focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${
+                        className={`w-full text-left px-3 py-2 border rounded transition-all focus:outline-none focus:ring-2 focus:ring-app-accent focus:ring-offset-1 ${
                           isSelected
-                            ? 'border-teal-500 bg-teal-50 shadow-sm'
+                            ? 'border-app-accent bg-app-accent-muted shadow-sm'
                             : isFocused
-                            ? 'border-teal-300 bg-teal-50/70'
-                            : 'border-gray-200 hover:border-teal-300 hover:bg-teal-50/50'
+                            ? 'border-app-accent/50 bg-app-accent-muted/70'
+                            : 'border-app-border hover:border-app-accent/50 hover:bg-app-accent-muted/50'
                         }`}
                         title={config.columns.length > 0 ? `Columns: ${config.columns.slice(0, 5).join(', ')}${config.columns.length > 5 ? `, +${config.columns.length - 5} more` : ''}` : 'No columns'}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                            <span className={`font-medium text-sm truncate ${isSelected ? 'text-teal-900' : 'text-gray-900'}`}>
+                            <span className={`font-medium text-sm truncate ${isSelected ? 'text-app-accent-hover' : 'text-app-text'}`}>
                               {config.name}
                             </span>
                             {config.isDefault && (
-                              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-teal-100 text-teal-900 rounded flex-shrink-0" aria-label="Default configuration">
+                              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-app-accent-muted text-app-accent-hover rounded flex-shrink-0" aria-label="Default configuration">
                                 Default
                               </span>
                             )}
                             <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded flex-shrink-0 ${
                               config.source === 'personal'
-                                ? 'bg-purple-100 text-purple-700'
-                                : 'bg-gray-100 text-gray-700'
+                                ? 'bg-app-accent-muted text-app-accent-hover'
+                                : 'bg-app-surface text-app-text-muted'
                             }`} aria-label={config.source === 'personal' ? 'Personal configuration' : 'Shared configuration'}>
                               {config.source === 'personal' ? 'Personal' : 'Shared'}
                             </span>
-                            <span className="text-xs text-gray-500 flex-shrink-0" aria-label={`${config.columns.length} columns`}>
+                            <span className="text-xs text-app-text-muted flex-shrink-0" aria-label={`${config.columns.length} columns`}>
                               {config.columns.length} cols
                             </span>
                           </div>
                           {isSelected && (
-                            <svg className="w-4 h-4 text-teal-900 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                            <svg className="w-4 h-4 text-app-accent-hover flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           )}
@@ -968,14 +834,14 @@ export default function ExportModal({
                   })}
                 </div>
               )}
-              <p className="mt-2 text-xs text-gray-500">
+              <p className="mt-2 text-xs text-app-text-muted">
                 Select which columns to include in the export. Configure options in Settings.
               </p>
             </div>
 
             {/* Export Format Selection */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-app-text mb-2">
                 Export Format
               </label>
               <div className="flex gap-4">
@@ -987,9 +853,9 @@ export default function ExportModal({
                       value={format}
                       checked={exportFormat === format}
                       onChange={() => setExportFormat(format)}
-                      className="text-teal-600 focus:ring-teal-500"
+                      className="text-app-accent focus:ring-app-accent"
                     />
-                    <span className="text-sm text-gray-700 uppercase">{format}</span>
+                    <span className="text-sm text-app-text uppercase">{format}</span>
                   </label>
                 ))}
               </div>
@@ -997,12 +863,12 @@ export default function ExportModal({
 
             {/* CSV Options - Only show when CSV format is selected */}
             {exportFormat === 'csv' && (
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">CSV Options</h3>
+              <div className="mb-6 p-4 bg-app-surface rounded-lg border border-app-border">
+                <h3 className="text-sm font-medium text-app-text mb-3">CSV Options</h3>
                 
                 {/* Delimiter Selection */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Delimiter
                   </label>
                   <div className="flex gap-4">
@@ -1013,9 +879,9 @@ export default function ExportModal({
                         value=","
                         checked={csvDelimiter === ','}
                         onChange={() => setCsvDelimiter(',')}
-                        className="text-teal-600 focus:ring-teal-500"
+                        className="text-app-accent focus:ring-app-accent"
                       />
-                      <span className="text-sm text-gray-700">Comma (,)</span>
+                      <span className="text-sm text-app-text">Comma (,)</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input
@@ -1024,9 +890,9 @@ export default function ExportModal({
                         value=";"
                         checked={csvDelimiter === ';'}
                         onChange={() => setCsvDelimiter(';')}
-                        className="text-teal-600 focus:ring-teal-500"
+                        className="text-app-accent focus:ring-app-accent"
                       />
-                      <span className="text-sm text-gray-700">Semicolon (;)</span>
+                      <span className="text-sm text-app-text">Semicolon (;)</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input
@@ -1035,9 +901,9 @@ export default function ExportModal({
                         value="\t"
                         checked={csvDelimiter === '\t'}
                         onChange={() => setCsvDelimiter('\t')}
-                        className="text-teal-600 focus:ring-teal-500"
+                        className="text-app-accent focus:ring-app-accent"
                       />
-                      <span className="text-sm text-gray-700">Tab</span>
+                      <span className="text-sm text-app-text">Tab</span>
                     </label>
                   </div>
                 </div>
@@ -1049,18 +915,18 @@ export default function ExportModal({
                       type="checkbox"
                       checked={csvBOM}
                       onChange={(e) => setCsvBOM(e.target.checked)}
-                      className="text-teal-600 focus:ring-teal-500"
+                      className="text-app-accent focus:ring-app-accent"
                     />
-                    <span className="text-sm text-gray-700">Include UTF-8 BOM (recommended for Excel)</span>
+                    <span className="text-sm text-app-text">Include UTF-8 BOM (recommended for Excel)</span>
                   </label>
-                  <p className="mt-1 text-xs text-gray-500 ml-6">
+                  <p className="mt-1 text-xs text-app-text-muted ml-6">
                     Helps Excel recognize UTF-8 encoding automatically
                   </p>
                 </div>
 
                 {/* Line Ending Selection */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Line Ending
                   </label>
                   <div className="flex gap-4">
@@ -1071,9 +937,9 @@ export default function ExportModal({
                         value="CRLF"
                         checked={csvLineEnding === 'CRLF'}
                         onChange={() => setCsvLineEnding('CRLF')}
-                        className="text-teal-600 focus:ring-teal-500"
+                        className="text-app-accent focus:ring-app-accent"
                       />
-                      <span className="text-sm text-gray-700">CRLF (Windows, recommended for Excel)</span>
+                      <span className="text-sm text-app-text">CRLF (Windows, recommended for Excel)</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input
@@ -1082,146 +948,35 @@ export default function ExportModal({
                         value="LF"
                         checked={csvLineEnding === 'LF'}
                         onChange={() => setCsvLineEnding('LF')}
-                        className="text-teal-600 focus:ring-teal-500"
+                        className="text-app-accent focus:ring-app-accent"
                       />
-                      <span className="text-sm text-gray-700">LF (Unix)</span>
+                      <span className="text-sm text-app-text">LF (Unix)</span>
                     </label>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Inline Export Summary - Only show for CSV mode */}
             {uploadMode === 'csv' && exportSummary && (
-              <div className="mb-6 border border-gray-200 rounded-lg overflow-hidden transition-all duration-300">
-                <button
-                  onClick={() => setSummaryExpanded(!summaryExpanded)}
-                  className="w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 flex items-center justify-between transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <svg
-                      className={`w-5 h-5 text-green-600 transition-transform duration-300 ${
-                        summaryExpanded ? 'rotate-0' : 'rotate-180'
-                      }`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="text-sm font-medium text-gray-900">Export Summary</span>
-                    <span className="text-xs text-gray-500 ml-2">
-                      ({exportSummary.total_containers.toLocaleString()} containers)
-                    </span>
-                  </div>
-                  <svg
-                    className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${
-                      summaryExpanded ? 'rotate-180' : 'rotate-0'
-                    }`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                <div
-                  className={`overflow-hidden transition-all duration-300 ${
-                    summaryExpanded ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'
-                  }`}
-                >
-                  <div className="px-4 py-4 space-y-4 bg-white">
-                    {/* Total Containers */}
-                    <div className="p-4 bg-teal-50 rounded-lg">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-700">Total Containers Exported:</span>
-                        <span className="text-2xl font-bold text-teal-900">
-                          {exportSummary.total_containers.toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Subjects with Results */}
-                    {exportSummary.subjects_with_results.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">
-                          Subjects with Results ({exportSummary.subjects_with_results.length})
-                        </h4>
-                        <div className="max-h-48 overflow-y-auto border border-gray-200 rounded p-2">
-                          {exportSummary.subjects_with_results.map((item, idx) => (
-                            <div key={idx} className="flex justify-between items-center py-1 text-sm">
-                              <span className="text-gray-700">{item.name}</span>
-                              <span className="font-medium text-teal-600">
-                                {item.count.toLocaleString()} container{item.count !== 1 ? 's' : ''}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Subjects with No Results */}
-                    {exportSummary.subjects_no_results.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-medium text-yellow-700 mb-2">
-                          Subjects with No Results ({exportSummary.subjects_no_results.length})
-                        </h4>
-                        <div className="max-h-32 overflow-y-auto border border-yellow-200 rounded p-2 bg-yellow-50">
-                          {exportSummary.subjects_no_results.map((name, idx) => (
-                            <div key={idx} className="text-sm text-yellow-700 py-1">
-                              {name}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Subjects Not Found */}
-                    {exportSummary.subjects_not_found.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-medium text-red-700 mb-2">
-                          Subjects Not Found ({exportSummary.subjects_not_found.length})
-                        </h4>
-                        <div className="max-h-32 overflow-y-auto border border-red-200 rounded p-2 bg-red-50">
-                          {exportSummary.subjects_not_found.map((name, idx) => (
-                            <div key={idx} className="text-sm text-red-700 py-1">
-                              {name}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Errors */}
-                    {exportSummary.errors && exportSummary.errors.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-medium text-red-700 mb-2">Errors</h4>
-                        <div className="border border-red-200 rounded p-2 bg-red-50">
-                          {exportSummary.errors.map((error, idx) => (
-                            <div key={idx} className="text-sm text-red-700 py-1">
-                              {error}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <ExportModalResultSummary
+                exportSummary={exportSummary}
+                expanded={summaryExpanded}
+                onToggleExpand={() => setSummaryExpanded(!summaryExpanded)}
+              />
             )}
 
             {/* Action Buttons */}
             <div className="flex justify-end gap-3">
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-100 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 text-sm font-medium text-app-text bg-app-card border border-app-border rounded-lg hover:bg-app-surface"
               >
                 Cancel
               </button>
               <button
                 onClick={handleExport}
                 disabled={exporting || count === 0 || loadingCount || (uploadMode === 'csv' && csvData.length === 0)}
-                className="px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-sm font-medium text-white bg-app-accent rounded-lg hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {exporting ? 'Exporting...' : 'Export'}
               </button>
