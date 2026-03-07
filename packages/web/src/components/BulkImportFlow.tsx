@@ -1,21 +1,25 @@
 import { useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { subjectsApi, specimensApi, collectionsApi, importsApi, type BulkCombinedAtomicMode } from '../lib/api'
+import { subjectsApi, specimensApi, collectionsApi, importsApi, specimenTypesApi, type BulkCombinedAtomicMode } from '../lib/api'
+import { buildBulkImportTemplateContent } from '../lib/bulk-import-csv'
+import {
+  getBulkImportCollectionType,
+  getBulkImportRequiredFields,
+  getBulkImportOptionalFields,
+  parseBulkImportCSV,
+  validateBulkImportCSV,
+  getBulkImportRowCollectionName,
+  type CSVRow,
+  type BulkImportValidationError,
+  type ImportType as LibImportType,
+} from '../lib/bulk-import-validation'
+import { getCollectionNameColumn } from '../lib/container-columns'
 import { type ContainerType } from './ContainerRegistration'
 import LocationPicker from './LocationPicker'
 import '../styles/storage.css'
 
-export type ImportType = 'subjects' | 'specimens' | 'combined'
-type Step = 'upload' | 'collections' | 'import'
-
-interface CSVRow {
-  [key: string]: string
-}
-
-interface ValidationError {
-  row: number
-  error: string
-}
+export type ImportType = LibImportType
+type Step = 'upload' | 'collections' | 'review' | 'import'
 
 interface MissingCollection {
   name: string
@@ -50,7 +54,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
   const [file, setFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [preview, setPreview] = useState<CSVRow[]>([])
-  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
+  const [validationErrors, setValidationErrors] = useState<BulkImportValidationError[]>([])
   const [importResult, setImportResult] = useState<{
     success: boolean
     created: number
@@ -60,59 +64,64 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
   const [csvRows, setCsvRows] = useState<CSVRow[]>([])
   const [missingCollections, setMissingCollections] = useState<MissingCollection[]>([])
   const [validatedData, setValidatedData] = useState<Record<string, unknown>[]>([])
+  /** Editable copy of validated data for the review step; same shape as validatedData. */
+  const [reviewData, setReviewData] = useState<Record<string, unknown>[]>([])
   const [atomicMode, setAtomicMode] = useState<BulkCombinedAtomicMode>('full_file')
 
-  const getCollectionType = (): 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | null => {
-    switch (containerType) {
-      case 'micronix_tube':
-      case 'static_well':
-        return 'micronix_plate'
-      case 'cryovial_tube':
-        return 'cryovial_box'
-      case 'paper':
-        return 'box'
-      default:
-        return null
-    }
-  }
+  const getCollectionType = () =>
+    getBulkImportCollectionType(containerType)
 
-  const getRequiredFields = (): string[] => {
-    const base = fixedStudyShortCode
-      ? ['subject_name', 'specimen_type_name']
-      : ['study_short_code', 'subject_name', 'specimen_type_name']
-    if (!containerType || containerType === 'none' || importType === 'subjects') {
-      if (importType === 'subjects') {
-        return fixedStudyShortCode ? ['subject_name'] : ['study_short_code', 'subject_name']
-      }
-      return base
-    }
+  const getRequiredFields = () =>
+    getBulkImportRequiredFields({ importType, containerType, fixedStudyShortCode })
 
-    const containerFields: Record<ContainerType, string[]> = {
-      micronix_tube: ['plate_name', 'barcode', 'position'],
-      cryovial_tube: ['box_name', 'position'],
-      paper: ['bag_name', 'label'],
-      static_well: ['plate_name', 'position'],
-    }
-
-    return [...base, ...containerFields[containerType]]
-  }
-
-  const getOptionalFields = (): string[] => {
-    if (!containerType || containerType === 'none') return []
-
-    const optionalFields: Record<ContainerType, string[]> = {
-      micronix_tube: ['comment'],
-      cryovial_tube: ['barcode', 'comment'],
-      paper: ['comment'],
-      static_well: ['comment'],
-    }
-
-    return optionalFields[containerType]
-  }
+  const getOptionalFields = () => getBulkImportOptionalFields(containerType)
 
   const getSpecimenOptionalFields = (): string[] => {
     if (importType === 'specimens' || importType === 'combined') return ['collection_date']
     return []
+  }
+
+  /** Column config for the review step editable table: key, label, get value from row, set value on row. */
+  const getReviewColumns = (): Array<{ key: string; label: string; get: (row: Record<string, unknown>) => string; set: (row: Record<string, unknown>, value: string) => void }> => {
+    if (importType === 'subjects') {
+      const cols: Array<{ key: string; label: string; get: (row: Record<string, unknown>) => string; set: (row: Record<string, unknown>, value: string) => void }> = []
+      if (!fixedStudyShortCode) {
+        cols.push({
+          key: 'studyShortCode',
+          label: 'Study',
+          get: (r) => String(r.studyShortCode ?? ''),
+          set: (r, v) => { r.studyShortCode = v }
+        })
+      }
+      cols.push({ key: 'name', label: 'Subject name', get: (r) => String(r.name ?? ''), set: (r, v) => { r.name = v } })
+      return cols
+    }
+    const cols: Array<{ key: string; label: string; get: (row: Record<string, unknown>) => string; set: (row: Record<string, unknown>, value: string) => void }> = []
+    if (!fixedStudyShortCode) {
+      cols.push({
+        key: 'studyShortCode',
+        label: 'Study',
+        get: (r) => String(r.studyShortCode ?? ''),
+        set: (r, v) => { r.studyShortCode = v }
+      })
+    }
+    cols.push(
+      { key: 'subjectName', label: 'Subject', get: (r) => String(r.subjectName ?? ''), set: (r, v) => { r.subjectName = v } },
+      { key: 'specimenTypeName', label: 'Specimen type', get: (r) => String(r.specimenTypeName ?? ''), set: (r, v) => { r.specimenTypeName = v } },
+      { key: 'collectionDate', label: 'Collection date', get: (r) => String(r.collectionDate ?? ''), set: (r, v) => { r.collectionDate = v || undefined } }
+    )
+    if (containerType && containerType !== 'none') {
+      const containerLabel = containerType === 'paper' ? 'Bag/Collection' : containerType === 'cryovial_tube' ? 'Box' : 'Plate'
+      const getContainer = (r: Record<string, unknown>): Record<string, unknown> => (typeof r.container === 'object' && r.container !== null ? (r.container as Record<string, unknown>) : {})
+      cols.push(
+        { key: 'collectionName', label: containerLabel, get: (r) => String(getContainer(r).collectionName ?? ''), set: (r, v) => { const c = getContainer(r); r.container = { ...c, collectionName: v || undefined } } },
+        { key: 'barcode', label: 'Barcode', get: (r) => String(getContainer(r).barcode ?? ''), set: (r, v) => { const c = getContainer(r); r.container = { ...c, barcode: v || undefined } } },
+        { key: 'position', label: 'Position', get: (r) => String(getContainer(r).position ?? ''), set: (r, v) => { const c = getContainer(r); r.container = { ...c, position: v || undefined } } },
+        { key: 'label', label: 'Label', get: (r) => String(getContainer(r).label ?? ''), set: (r, v) => { const c = getContainer(r); r.container = { ...c, label: v || undefined } } },
+        { key: 'comment', label: 'Comment', get: (r) => String(getContainer(r).comment ?? ''), set: (r, v) => { const c = getContainer(r); r.container = { ...c, comment: v || undefined } } }
+      )
+    }
+    return cols
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -163,96 +172,34 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     }
   }
 
-  const getContainerColumns = (type: ContainerType): string => {
-    switch (type) {
-      case 'micronix_tube':
-        return 'plate_name,barcode,position,comment'
-      case 'cryovial_tube':
-        return 'box_name,barcode,position,comment'
-      case 'paper':
-        return 'bag_name,label,comment'
-      case 'static_well':
-        return 'plate_name,position,comment'
-      default:
-        return ''
-    }
-  }
+  const getRowCollectionName = (row: CSVRow) =>
+    getBulkImportRowCollectionName(row, containerType)
 
-  const getTemplateExample = (type: ContainerType): string => {
-    const subjectExample = 'SUBJ-001'
-    if (type === 'micronix_tube') {
-      return fixedStudyShortCode
-        ? `${subjectExample},Whole Blood,2024-01-15,PLATE-001,MTX-12345,A01,`
-        : `NAM15,${subjectExample},Whole Blood,2024-01-15,PLATE-001,MTX-12345,A01,`
-    }
-    if (type === 'cryovial_tube') {
-      return fixedStudyShortCode
-        ? `${subjectExample},Plasma,2024-01-15,BOX-001,,B5,`
-        : `NAM15,${subjectExample},Plasma,2024-01-15,BOX-001,,B5,`
-    }
-    if (type === 'paper') {
-      return fixedStudyShortCode
-        ? `${subjectExample},Blood Spot,2024-01-15,BOX-003,SPOT-001,`
-        : `NAM15,${subjectExample},Blood Spot,2024-01-15,BOX-003,SPOT-001,`
-    }
-    // static_well (only remaining ContainerType after paper)
-    return fixedStudyShortCode
-      ? `${subjectExample},Whole Blood,2024-01-15,PLATE-002,A01,`
-      : `NAM15,${subjectExample},Whole Blood,2024-01-15,PLATE-002,A01,`
-    return fixedStudyShortCode
-      ? `${subjectExample},Whole Blood,2024-01-15`
-      : `NAM15,${subjectExample},Whole Blood,2024-01-15`
-  }
-
-  const getCollectionNameColumn = (type: ContainerType | 'none' | ''): string | null => {
-    switch (type) {
-      case 'micronix_tube':
-      case 'static_well':
-        return 'plate_name'
-      case 'cryovial_tube':
-        return 'box_name'
-      case 'paper':
-        return 'bag_name'
-      default:
-        return null
-    }
-  }
-
-  const getRowCollectionName = (row: CSVRow): string | undefined => {
-    const column = getCollectionNameColumn(containerType)
-    const value = column ? row[column] : undefined
-    const collectionNameValue = row.collection_name
-    const resolved = (value && value.trim() !== '' ? value : undefined) ?? (collectionNameValue && collectionNameValue.trim() !== '' ? collectionNameValue : undefined)
-    return resolved ?? undefined
-  }
-
-  const downloadTemplate = () => {
-    let csvContent = ''
-    let filename = ''
-
-    if (importType === 'subjects') {
-      if (fixedStudyShortCode) {
-        csvContent = 'subject_name\nSUBJ-001\nSUBJ-002'
-      } else {
-        csvContent = 'study_short_code,subject_name\nNAM15,SUBJ-001\nNAM15,SUBJ-002'
+  const downloadTemplate = async () => {
+    let specimenTypeNames: string[] = []
+    if (importType !== 'subjects' && containerType && containerType !== 'none') {
+      try {
+        const res = await specimenTypesApi.getByContainerType(containerType)
+        specimenTypeNames = res.data.specimenTypes.map((st) => st.name)
+      } catch (err) {
+        console.error('Failed to fetch specimen types for template', err)
+        // Continue with empty array; builder will use fallback names
       }
-      filename = 'subjects_template.csv'
-    } else {
-      const baseColumns = fixedStudyShortCode
-        ? 'subject_name,specimen_type_name,collection_date'
-        : 'study_short_code,subject_name,specimen_type_name,collection_date'
-
-      if (containerType === 'none') {
-        csvContent = fixedStudyShortCode
-          ? `${baseColumns}\nSUBJ-001,Whole Blood,2024-01-15\nSUBJ-001,Plasma,2024-01-15`
-          : `${baseColumns}\nNAM15,SUBJ-001,Whole Blood,2024-01-15\nNAM15,SUBJ-001,Plasma,2024-01-15`
-        filename = importType === 'specimens' ? 'specimens_template.csv' : 'combined_template.csv'
-      } else {
-        const containerColumns = getContainerColumns(containerType as ContainerType)
-        csvContent = `${baseColumns},${containerColumns}\n${getTemplateExample(containerType as ContainerType)}`
-        filename = importType === 'specimens' ? 'specimens_template.csv' : 'combined_template.csv'
+    } else if (importType !== 'subjects') {
+      try {
+        const res = await specimenTypesApi.list()
+        specimenTypeNames = res.data.map((st) => st.name)
+      } catch (err) {
+        console.error('Failed to fetch specimen types for template', err)
       }
     }
+
+    const { csvContent, filename } = buildBulkImportTemplateContent({
+      importType,
+      containerType: containerType === '' ? 'none' : containerType,
+      fixedStudyShortCode,
+      specimenTypeNames,
+    })
 
     const blob = new Blob([csvContent], { type: 'text/csv' })
     const url = window.URL.createObjectURL(blob)
@@ -261,140 +208,6 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     a.download = filename
     a.click()
     window.URL.revokeObjectURL(url)
-  }
-
-  const normalizeHeader = (header: string): string => {
-    const lower = header.trim().toLowerCase()
-    if (lower === 'well_position' || lower === 'well') return 'position'
-    return lower
-  }
-
-  const parseCSV = (text: string): CSVRow[] => {
-    const lines = text.split('\n').filter(line => line.trim())
-    if (lines.length < 2) return []
-
-    const rawHeaders = lines[0].split(',').map(h => h.trim())
-    const headers = rawHeaders.map(normalizeHeader)
-    const rows: CSVRow[] = []
-
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',')
-      const row: CSVRow = {}
-      headers.forEach((header, j) => {
-        (row as Record<string, string>)[header] = values[j]?.trim() || ''
-      })
-      rows.push(row)
-    }
-
-    return rows
-  }
-
-  const validateCSV = (rows: CSVRow[]): { valid: boolean; errors: ValidationError[]; data: Record<string, unknown>[] } => {
-    const errors: ValidationError[] = []
-    const data: Record<string, unknown>[] = []
-    const requiredFields = getRequiredFields()
-    const studyShortCode = fixedStudyShortCode ?? ''
-
-    if (rows.length === 0) {
-      return { valid: false, errors: [{ row: 0, error: 'CSV file is empty' }], data: [] }
-    }
-
-    const headers = Object.keys(rows[0])
-    const collectionNameColumn = containerType && containerType !== 'none' ? getCollectionNameColumn(containerType) : null
-    const missingColumns = requiredFields.filter((col) => {
-      if (headers.includes(col)) return false
-      if (collectionNameColumn && col === collectionNameColumn && headers.includes('collection_name')) return false
-      return true
-    })
-
-    if (missingColumns.length > 0) {
-      return {
-        valid: false,
-        errors: [{ row: 0, error: `Missing required columns: ${missingColumns.join(', ')}` }],
-        data: [],
-      }
-    }
-
-    if (containerType !== 'none' && headers.includes('container_type')) {
-      const containerTypes = new Set(rows.map(row => row.container_type).filter(Boolean))
-      if (containerTypes.size > 1) {
-        errors.push({ row: 0, error: 'All rows must have the same container_type' })
-      }
-      if (containerTypes.size === 1 && !containerTypes.has(containerType)) {
-        errors.push({ row: 0, error: `Container type mismatch: CSV has ${Array.from(containerTypes)[0]}, but selected type is ${containerType}` })
-      }
-    }
-
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]
-      const rowErrors: string[] = []
-
-      for (const field of requiredFields) {
-        const value = row[field]
-        const hasCollectionName = collectionNameColumn && field === collectionNameColumn && row.collection_name.trim() !== ''
-        if (!hasCollectionName && (!value || (typeof value === 'string' && value.trim() === ''))) {
-          rowErrors.push(`Missing required field: ${field}`)
-        }
-      }
-
-      if (containerType !== 'none') {
-        if (containerType === 'micronix_tube') {
-          if (!row.barcode || row.barcode.trim() === '') {
-            rowErrors.push('Barcode is required for micronix tubes')
-          }
-          if (!row.position || row.position.trim() === '') {
-            rowErrors.push('Position is required for micronix tubes')
-          }
-        } else if (containerType === 'cryovial_tube') {
-          if (!row.position || row.position.trim() === '') {
-            rowErrors.push('Position is required for cryovial tubes')
-          }
-        } else if (containerType === 'static_well') {
-          if (!row.position || row.position.trim() === '') {
-            rowErrors.push('Position is required for static wells')
-          }
-        } else if (containerType === 'paper') {
-          if (!row.label || row.label.trim() === '') {
-            rowErrors.push('Label is required for papers')
-          }
-        }
-      }
-
-      if (rowErrors.length > 0) {
-        errors.push({ row: i + 1, error: rowErrors.join('; ') })
-      } else {
-        if (importType === 'subjects') {
-          data.push({
-            studyShortCode: fixedStudyShortCode ?? row.study_short_code,
-            name: row.subject_name,
-          })
-        } else {
-          const spec: Record<string, unknown> = {
-            sourceType: 'subject' as const,
-            studyShortCode: fixedStudyShortCode ?? row.study_short_code,
-            subjectName: row.subject_name,
-            specimenTypeName: row.specimen_type_name,
-            collectionDate: row.collection_date || undefined,
-          }
-
-          if (containerType !== 'none') {
-            spec.container = {
-              containerType,
-              collectionName: getRowCollectionName(row),
-              collectionBarcode: row.collection_barcode || undefined,
-              barcode: row.barcode || undefined,
-              position: row.position || undefined,
-              label: row.label || undefined,
-              comment: row.comment || undefined,
-            }
-          }
-
-          data.push(spec)
-        }
-      }
-    }
-
-    return { valid: errors.length === 0, errors, data }
   }
 
   const checkCollections = async (rows: CSVRow[]): Promise<MissingCollection[]> => {
@@ -473,10 +286,14 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
     try {
       const text = await file.text()
-      const rows = parseCSV(text)
+      const rows = parseBulkImportCSV(text)
       setCsvRows(rows)
 
-      const validation = validateCSV(rows)
+      const validation = validateBulkImportCSV(rows, {
+        importType,
+        containerType,
+        fixedStudyShortCode,
+      })
 
       if (!validation.valid) {
         setValidationErrors(validation.errors)
@@ -485,6 +302,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       }
 
       setValidatedData(validation.data)
+      setReviewData(validation.data.map((r) => ({ ...r, container: r.container ? { ...(r.container as object) } : undefined })))
 
       if (importType !== 'subjects' && containerType !== 'none') {
         const missing = await checkCollections(rows)
@@ -493,12 +311,10 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         if (missing.length > 0) {
           setCurrentStep('collections')
         } else {
-          setCurrentStep('import')
-          handleImport(validation.data)
+          setCurrentStep('review')
         }
       } else {
-        setCurrentStep('import')
-        handleImport(validation.data)
+        setCurrentStep('review')
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Validation failed'
@@ -567,8 +383,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     setMissingCollections(updated)
 
     if (allSuccess && updated.every(c => c.status === 'success' || c.status === 'pending')) {
-      setCurrentStep('import')
-      handleImport(validatedData)
+      setReviewData(validatedData.map((r) => ({ ...r, container: r.container ? { ...(r.container as object) } : undefined })))
+      setCurrentStep('review')
     } else {
       setLoading(false)
     }
@@ -767,7 +583,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
   const getRequiredColumnsDisplay = () => {
     const required = getRequiredFields()
     const optional = getOptionalFields()
-    const infoBoxStyle = { background: 'rgb(var(--dashboard-accent-muted))', border: '1px solid rgb(var(--dashboard-accent) / 0.3)', color: 'rgb(var(--dashboard-text))' } as const
+    const infoBoxStyle = { background: 'rgb(var(--app-accent-muted))', border: '1px solid rgb(var(--app-accent) / 0.3)', color: 'rgb(var(--app-text))' } as const
 
     if (importType === 'subjects') {
       return (
@@ -776,7 +592,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           <div className="space-y-1">
             <div>
               <span className="font-medium">Required:</span>
-              <span className="ml-2 font-mono" style={{ color: 'rgb(var(--dashboard-accent-on-tint))' }}>{required.join(', ')}</span>
+              <span className="ml-2 font-mono" style={{ color: 'rgb(var(--app-accent-on-tint))' }}>{required.join(', ')}</span>
             </div>
           </div>
         </div>
@@ -791,12 +607,12 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           <div className="space-y-1">
             <div>
               <span className="font-medium">Required:</span>
-              <span className="ml-2 font-mono" style={{ color: 'rgb(var(--dashboard-accent-on-tint))' }}>{required.join(', ')}</span>
+              <span className="ml-2 font-mono" style={{ color: 'rgb(var(--app-accent-on-tint))' }}>{required.join(', ')}</span>
             </div>
             {specimenOptional.length > 0 && (
               <div>
                 <span className="font-medium">Optional:</span>
-                <span className="ml-2 font-mono" style={{ color: 'rgb(var(--dashboard-accent-on-tint))' }}>collection_date (YYYY-MM-DD)</span>
+                <span className="ml-2 font-mono" style={{ color: 'rgb(var(--app-accent-on-tint))' }}>collection_date (YYYY-MM-DD)</span>
               </div>
             )}
           </div>
@@ -815,20 +631,20 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         <div className="space-y-2">
           <div>
             <span className="font-medium">Base Required:</span>
-            <span className="ml-2 font-mono" style={{ color: 'rgb(var(--dashboard-accent-on-tint))' }}>{baseRequired.join(', ')}</span>
+            <span className="ml-2 font-mono" style={{ color: 'rgb(var(--app-accent-on-tint))' }}>{baseRequired.join(', ')}</span>
           </div>
           <div>
             <span className="font-medium">Container Required:</span>
-            <span className="ml-2 font-mono" style={{ color: 'rgb(var(--dashboard-accent-on-tint))' }}>{containerSpecific.join(', ')}</span>
+            <span className="ml-2 font-mono" style={{ color: 'rgb(var(--app-accent-on-tint))' }}>{containerSpecific.join(', ')}</span>
           </div>
           {allOptional.length > 0 && (
             <div>
               <span className="font-medium">Optional:</span>
-              <span className="ml-2 font-mono" style={{ color: 'rgb(var(--dashboard-accent-on-tint))' }}>{allOptional.join(', ')}</span>
+              <span className="ml-2 font-mono" style={{ color: 'rgb(var(--app-accent-on-tint))' }}>{allOptional.join(', ')}</span>
             </div>
           )}
           {(containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'static_well') && (
-            <div className="mt-2 pt-2 border-t" style={{ borderColor: 'rgb(var(--dashboard-accent) / 0.3)', color: 'rgb(var(--dashboard-accent-on-tint))' }}>
+            <div className="mt-2 pt-2 border-t" style={{ borderColor: 'rgb(var(--app-accent) / 0.3)', color: 'rgb(var(--app-accent-on-tint))' }}>
               <strong>Position format:</strong> A01, B12 (letter + 2 digits) - <strong>Required</strong>
             </div>
           )}
@@ -850,8 +666,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         {!fixedStudyShortCode && (
           <div className="mb-6">
             <h1 className="text-3xl font-bold">Bulk Import</h1>
-            <p className="text-sm text-gray-600 mt-1">
-              <a href="/docs/guides/bulk-operations/import/" className="text-blue-600 hover:text-blue-800 hover:underline">
+            <p className="text-sm text-app-text-muted mt-1">
+              <a href="/docs/guides/bulk-operations/import/" className="text-app-accent hover:text-app-accent-hover hover:underline">
                 Import guide
               </a>
             </p>
@@ -870,8 +686,14 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                 <span>Create Collections{missingCollections.length === 0 && currentStep === 'upload' ? ' (if needed)' : ''}</span>
               </div>
               <div className="storage-step-connector" />
-              <div className={`storage-step-item ${currentStep === 'import' ? 'storage-step-item--active' : ''}`}>
+              <div className="storage-step-connector" />
+              <div className={`storage-step-item ${currentStep === 'review' ? 'storage-step-item--active' : ''}`}>
                 <span className="storage-step-item__circle">3</span>
+                <span>Review & Edit</span>
+              </div>
+              <div className="storage-step-connector" />
+              <div className={`storage-step-item ${currentStep === 'import' ? 'storage-step-item--active' : ''}`}>
+                <span className="storage-step-item__circle">4</span>
                 <span>Import</span>
               </div>
             </div>
@@ -882,7 +704,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           {currentStep === 'upload' && (
             <form onSubmit={(e) => { e.preventDefault(); handleValidateAndCheck(); }} className="space-y-6">
               <div>
-                <label htmlFor="import-type" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="import-type" className="block text-sm font-medium text-app-text mb-2">
                   Import Type *
                 </label>
                 <select
@@ -902,7 +724,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                   <option value="specimens">Specimens Only</option>
                   <option value="combined">Subjects with Specimens (Combined)</option>
                 </select>
-                <p className="text-sm text-gray-500 mt-1">
+                <p className="text-sm text-app-text-muted mt-1">
                   {importType === 'subjects' && (fixedStudyShortCode ? 'Import subjects for this study.' : 'Import study subjects using study short codes and subject names')}
                   {importType === 'specimens' && (fixedStudyShortCode ? 'Import specimens for existing subjects in this study.' : 'Import specimens for existing subjects using study short codes, subject names, and specimen type names')}
                   {importType === 'combined' && (fixedStudyShortCode ? 'Create subjects and their specimens for this study. Subjects will be created if they don\'t exist.' : 'Create subjects and their specimens in one import. Subjects will be created if they don\'t exist.')}
@@ -911,7 +733,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
               {(importType === 'specimens' || importType === 'combined') && (
                 <div>
-                  <label htmlFor="container-type" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="container-type" className="block text-sm font-medium text-app-text mb-2">
                     Container Type *
                   </label>
                   <select
@@ -933,7 +755,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                     <option value="paper">Papers</option>
                     <option value="static_well">Static Wells</option>
                   </select>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-app-text-muted mt-1">
                     All specimens in this batch will use the same container type. Select the container type for containers, or "No Containers" to skip container creation.
                   </p>
                 </div>
@@ -941,7 +763,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
               {importType === 'combined' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Atomicity</label>
+                  <label className="block text-sm font-medium text-app-text mb-2">Atomicity</label>
                   <div className="flex gap-4">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -964,7 +786,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                       <span>Per subject</span>
                     </label>
                   </div>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-app-text-muted mt-1">
                     {atomicMode === 'full_file'
                       ? 'The entire file is imported in one transaction. If anything fails, nothing is committed.'
                       : 'Each subject is imported in its own transaction. Some subjects can succeed while others fail.'}
@@ -981,12 +803,12 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
               {(importType === 'subjects' || !!containerType) && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label htmlFor="import-csv-file" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="import-csv-file" className="block text-sm font-medium text-app-text">
                       CSV File *
                     </label>
                     <div className="flex items-center gap-3">
                       {file && (
-                        <button type="button" onClick={handleClearFile} className="text-sm text-red-600 hover:text-red-700 underline">
+                        <button type="button" onClick={handleClearFile} className="text-sm text-app-trend-down hover:text-app-trend-down/80 underline">
                           Clear File
                         </button>
                       )}
@@ -1004,10 +826,10 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                     required
                   />
                   {file && (
-                    <p className="text-sm text-green-600 mt-1">Selected: {file.name}</p>
+                    <p className="text-sm text-app-trend-up mt-1">Selected: {file.name}</p>
                   )}
                   {!file && (
-                    <p className="text-sm text-gray-500 mt-1">
+                    <p className="text-sm text-app-text-muted mt-1">
                       {uploadHelperText()}
                       {(importType === 'specimens' || importType === 'combined') && ' Optional columns: collection_date (YYYY-MM-DD)' + (containerType && containerType !== 'none' ? '; comment (per container).' : '.')}
                     </p>
@@ -1017,18 +839,18 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
               {preview.length > 0 && (
                 <div>
-                  <h3 className="font-semibold mb-2 text-gray-900">Preview (first 5 rows)</h3>
+                  <h3 className="font-semibold mb-2 text-app-text">Preview (first 5 rows)</h3>
                   <div className="overflow-x-auto border rounded-lg">
                     <table className="min-w-full text-sm">
-                      <thead className="bg-gray-50">
+                      <thead className="bg-app-surface">
                         <tr>
                           {Object.keys(preview[0] ?? {}).map((key) => {
                             const required = getRequiredFields()
                             const isRequired = required.includes(key)
                             return (
-                              <th key={key} className={`px-4 py-2 text-left border-b text-gray-700 font-medium ${isRequired ? 'bg-red-50' : ''}`}>
+                              <th key={key} className={`px-4 py-2 text-left border-b text-app-text font-medium border-app-border ${isRequired ? 'bg-app-trend-down/10' : ''}`}>
                                 {key}
-                                {isRequired && <span className="text-red-600 ml-1">*</span>}
+                                {isRequired && <span className="text-app-trend-down ml-1">*</span>}
                               </th>
                             )
                           })}
@@ -1036,9 +858,9 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                       </thead>
                       <tbody>
                         {preview.map((row, i) => (
-                          <tr key={i} className="hover:bg-gray-50">
+                          <tr key={i} className="hover:bg-app-surface">
                             {Object.values(row).map((value, j) => (
-                              <td key={j} className="px-4 py-2 border-b text-gray-900">
+                              <td key={j} className="px-4 py-2 border-b text-app-text border-app-border">
                                 {String(value)}
                               </td>
                             ))}
@@ -1051,9 +873,9 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
               )}
 
               {validationErrors.length > 0 && (
-                <div className="bg-red-50 border border-red-200 rounded p-4">
-                  <h3 className="font-semibold text-red-800 mb-2">Validation Errors:</h3>
-                  <ul className="list-disc list-inside text-red-700 space-y-1">
+                <div className="bg-app-trend-down/10 border border-app-trend-down rounded p-4">
+                  <h3 className="font-semibold text-app-trend-down mb-2">Validation Errors:</h3>
+                  <ul className="list-disc list-inside text-app-trend-down space-y-1">
                     {validationErrors.map((error, i) => (
                       <li key={i}>
                         {error.row > 0 ? `Row ${error.row}: ` : ''}{error.error}
@@ -1076,8 +898,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           {currentStep === 'collections' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold mb-2 text-gray-900">Create Missing Collections</h2>
-                <p className="text-sm text-gray-600">
+                <h2 className="text-xl font-semibold mb-2 text-app-text">Create Missing Collections</h2>
+                <p className="text-sm text-app-text-muted">
                   The following collections need to be created. Please specify a location for each one.
                 </p>
               </div>
@@ -1087,27 +909,27 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                   <div key={index} className="border rounded-lg p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <h3 className="font-medium text-gray-900">
+                        <h3 className="font-medium text-app-text">
                           {collection.name || collection.barcode || collection.collectionBarcode || `Collection ${index + 1}`}
                         </h3>
                         {(collection.barcode || collection.collectionBarcode) && (
-                          <p className="text-sm text-gray-500">Barcode: {collection.barcode || collection.collectionBarcode}</p>
+                          <p className="text-sm text-app-text-muted">Barcode: {collection.barcode || collection.collectionBarcode}</p>
                         )}
                         {!collection.name && (collection.barcode || collection.collectionBarcode) && (
-                          <p className="text-xs text-gray-400 mt-1">A name will be generated from the barcode</p>
+                          <p className="text-xs text-app-text-muted mt-1">A name will be generated from the barcode</p>
                         )}
                       </div>
-                      {collection.status === 'success' && <span className="text-green-600 text-sm font-medium">✓ Created</span>}
-                      {collection.status === 'creating' && <span className="text-teal-600 text-sm">Creating...</span>}
-                      {collection.status === 'error' && <span className="text-red-600 text-sm">Error</span>}
+                      {collection.status === 'success' && <span className="text-app-trend-up text-sm font-medium">✓ Created</span>}
+                      {collection.status === 'creating' && <span className="text-app-accent text-sm">Creating...</span>}
+                      {collection.status === 'error' && <span className="text-app-trend-down text-sm">Error</span>}
                     </div>
 
                     {collection.status === 'error' && collection.error && (
-                      <div className="mb-3 text-sm text-red-600">{collection.error}</div>
+                      <div className="mb-3 text-sm text-app-trend-down">{collection.error}</div>
                     )}
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Location *</label>
+                      <label className="block text-sm font-medium text-app-text mb-2">Location *</label>
                       <LocationPicker
                         value={collection.locationId ?? null}
                         onChange={(locationId) => {
@@ -1122,7 +944,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
                     {(getCollectionType() === 'micronix_plate' || getCollectionType() === 'cryovial_box') && !collection.barcode && (
                       <div className="mt-3">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Barcode (Optional)</label>
+                        <label className="block text-sm font-medium text-app-text mb-2">Barcode (Optional)</label>
                         <input
                           type="text"
                           value={collection.collectionBarcode || ''}
@@ -1148,11 +970,14 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                 {importType === 'combined' && atomicMode === 'full_file' ? (
                   <button
                     type="button"
-                    onClick={() => handleImport(validatedData)}
+                    onClick={() => {
+                      setReviewData(validatedData.map((r) => ({ ...r, container: r.container ? { ...(r.container as object) } : undefined })))
+                      setCurrentStep('review')
+                    }}
                     disabled={loading || missingCollections.some((c) => !c.locationId)}
                     className="storage-btn-primary py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   >
-                    {loading ? 'Importing...' : 'Import (creates collections in same transaction)'}
+                    Continue to Review
                   </button>
                 ) : (
                   <button
@@ -1168,13 +993,79 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
             </div>
           )}
 
+          {currentStep === 'review' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold mb-2 text-app-text">Review and edit data</h2>
+                <p className="text-sm text-app-text-muted mb-4">
+                  Edit any values below before importing. Changes are applied when you click Import.
+                </p>
+              </div>
+              <div className="overflow-x-auto border border-app-border rounded-lg">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-app-surface border-b border-app-border">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-app-text w-10">#</th>
+                      {getReviewColumns().map((col) => (
+                        <th key={col.key} className="px-3 py-2 text-left font-medium text-app-text">
+                          {col.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-app-border">
+                    {reviewData.map((row, rowIndex) => (
+                      <tr key={rowIndex} className="hover:bg-app-surface">
+                        <td className="px-3 py-1.5 text-app-text-muted">{rowIndex + 1}</td>
+                        {getReviewColumns().map((col) => (
+                          <td key={col.key} className="px-3 py-1.5">
+                            <input
+                              type="text"
+                              value={col.get(row)}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                setReviewData((prev) => {
+                                  const next = prev.map((r, i) => (i === rowIndex ? { ...r, container: r.container ? { ...(r.container as object) } : undefined } : r))
+                                  const target = next[rowIndex]!
+                                  col.set(target, value)
+                                  return next
+                                })
+                              }}
+                              className="w-full px-2 py-1 border border-app-border rounded text-app-text bg-app-card focus:ring-1 focus:ring-app-accent focus:border-app-accent"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button type="button" onClick={() => setCurrentStep(missingCollections.length > 0 ? 'collections' : 'upload')} className="storage-btn-secondary">
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentStep('import')
+                    handleImport(reviewData)
+                  }}
+                  disabled={loading}
+                  className="storage-btn-primary py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  {loading ? 'Importing...' : 'Import'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {currentStep === 'import' && (
             <div className="space-y-6">
               {validationErrors.length > 0 && (
-                <div className="bg-red-50 border border-red-200 rounded p-4">
-                  <h3 className="font-semibold text-red-800 mb-2">Validation Errors (fix before importing):</h3>
-                  <p className="text-sm text-red-700 mb-2">The following issues were found. Update your CSV and run Validate & Continue again.</p>
-                  <ul className="list-disc list-inside text-red-700 space-y-1">
+                <div className="bg-app-trend-down/10 border border-app-trend-down rounded p-4">
+                  <h3 className="font-semibold text-app-trend-down mb-2">Validation Errors (fix before importing):</h3>
+                  <p className="text-sm text-app-trend-down mb-2">The following issues were found. Update your CSV and run Validate & Continue again.</p>
+                  <ul className="list-disc list-inside text-app-trend-down space-y-1">
                     {validationErrors.map((error, i) => (
                       <li key={i}>
                         {error.row > 0 ? `Row ${error.row}: ` : ''}{error.error}
@@ -1191,11 +1082,11 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                 </div>
               )}
               {importResult && (
-                <div className={`border rounded p-4 ${importResult.success ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
-                  <h3 className={`font-semibold mb-2 ${importResult.success ? 'text-green-800' : 'text-yellow-800'}`}>
+                <div className={`border rounded p-4 ${importResult.success ? 'bg-app-trend-up/10 border-app-trend-up/30' : 'bg-yellow-50 border-yellow-200'}`}>
+                  <h3 className={`font-semibold mb-2 ${importResult.success ? 'text-app-trend-up' : 'text-yellow-800'}`}>
                     Import {importResult.success ? 'Successful' : 'Completed with Errors'}
                   </h3>
-                  <p className={importResult.success ? 'text-green-700' : 'text-yellow-700'}>
+                  <p className={importResult.success ? 'text-app-trend-up' : 'text-yellow-700'}>
                     {importResult.created === 0 && importResult.errors && importResult.errors.length > 0
                       ? 'No items were created. Please fix the errors below and try again.'
                       : importResult.containersCreated != null && importResult.containersCreated > 0
@@ -1219,7 +1110,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
               {!importResult && loading && (
                 <div className="text-center py-4">
-                  <p className="text-gray-600">Import in progress...</p>
+                  <p className="text-app-text-muted">Import in progress...</p>
                 </div>
               )}
 
@@ -1239,6 +1130,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                     setCsvRows([])
                     setMissingCollections([])
                     setValidatedData([])
+                    setReviewData([])
                   }}
                   className="storage-btn-primary py-2 font-medium"
                 >

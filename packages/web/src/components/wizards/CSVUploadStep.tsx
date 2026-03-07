@@ -121,16 +121,14 @@ export default function CSVUploadStep({
 
   const downloadTemplate = async () => {
     try {
-      // Get specimen types allowed for selected container type
       const response = await specimenTypesApi.getByContainerType(selectedContainerType)
       const allowedSpecimenTypes = response.data.specimenTypes
-      
+
       if (allowedSpecimenTypes.length === 0) {
         alert(`No specimen types are configured for ${selectedContainerType}. Please configure container type relationships first.`)
         return
       }
-      
-      // Generate template with allowed specimen types
+
       const template = generateCSVTemplate(selectedContainerType, allowedSpecimenTypes)
       
       const blob = new Blob([template], { type: 'text/csv' })
@@ -151,7 +149,7 @@ export default function CSVUploadStep({
     <div className="space-y-6">
       {showProductionDateField && (
         <div>
-          <label htmlFor="production-date" className="block text-sm font-medium mb-2 text-gray-900">
+          <label htmlFor="production-date" className="block text-sm font-medium mb-2 text-app-text">
             Production date
           </label>
           <input
@@ -159,16 +157,17 @@ export default function CSVUploadStep({
             type="date"
             value={batchInfo.productionDate}
             onChange={(e) => onBatchInfoChange({ productionDate: e.target.value })}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="block w-full px-3 py-2 border border-app-border rounded-lg text-sm bg-app-card text-app-text focus:outline-none focus:ring-2 focus:ring-app-accent"
           />
         </div>
       )}
 
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Upload CSV Files</h2>
-        <p className="text-sm text-gray-600 mb-6">
+        <h2 className="text-xl font-semibold text-app-text mb-4">Upload CSV Files</h2>
+        <p className="text-sm text-app-text-muted mb-6">
           Upload CSV files where each file represents one collection (box, bag, or plate).
           Each row in the CSV represents one container within that collection.
+          The default unit for the container type is used; quantity and unit can be edited in the configuration step.
         </p>
       </div>
 
@@ -179,7 +178,7 @@ export default function CSVUploadStep({
         onDragOver={handleDrag}
         onDrop={handleDrop}
         className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-          dragActive ? 'border-teal-500 bg-teal-50' : 'border-gray-300 bg-white'
+          dragActive ? 'border-app-accent bg-app-accent-muted' : 'border-app-border bg-app-card'
         }`}
       >
         <input
@@ -192,7 +191,7 @@ export default function CSVUploadStep({
         />
         <div className="space-y-4">
           <svg
-            className="mx-auto h-12 w-12 text-gray-400"
+            className="mx-auto h-12 w-12 text-app-text-muted"
             stroke="currentColor"
             fill="none"
             viewBox="0 0 48 48"
@@ -212,17 +211,17 @@ export default function CSVUploadStep({
             >
               Click to upload
             </button>
-            <span className="text-gray-600"> or drag and drop</span>
+            <span className="text-app-text-muted"> or drag and drop</span>
           </div>
-          <p className="text-xs text-gray-500">CSV files only (one file per collection)</p>
+          <p className="text-xs text-app-text-muted">CSV files only (one file per collection)</p>
         </div>
       </div>
 
       {/* Template download */}
       <div className="flex justify-end">
         {showTemplateDialog ? (
-          <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-lg">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Select Container Type</h3>
+          <div className="bg-app-card border border-app-border rounded-lg p-4 shadow-lg">
+            <h3 className="text-sm font-semibold text-app-text mb-3">Select Container Type</h3>
             <div className="space-y-2 mb-4">
               <label className="flex items-center">
                 <input
@@ -262,14 +261,14 @@ export default function CSVUploadStep({
               <button
                 type="button"
                 onClick={() => setShowTemplateDialog(false)}
-                className="px-3 py-1 text-sm border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+                className="px-3 py-1 text-sm border border-app-border rounded text-app-text hover:bg-app-surface"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={downloadTemplate}
-                className="px-3 py-1 text-sm bg-teal-600 text-white rounded hover:bg-teal-700"
+                className="px-3 py-1 text-sm bg-app-accent text-white rounded hover:bg-app-accent-hover"
               >
                 Download Template
               </button>
@@ -279,7 +278,7 @@ export default function CSVUploadStep({
           <button
             type="button"
             onClick={() => setShowTemplateDialog(true)}
-            className="text-sm text-teal-600 hover:text-teal-700"
+            className="text-sm text-app-accent hover:text-app-accent-hover"
           >
             Download CSV Template
           </button>
@@ -289,33 +288,33 @@ export default function CSVUploadStep({
       {/* Uploaded files list */}
       {csvFiles.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Uploaded Files</h3>
+          <h3 className="text-sm font-semibold text-app-text mb-3">Uploaded Files</h3>
           <div className="space-y-3">
             {csvFiles.map((file, index) => (
               <div
                 key={index}
-                className="bg-white border border-gray-200 rounded-lg p-4"
+                className="bg-app-card border border-app-border rounded-lg p-4"
               >
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <span className="font-medium text-gray-900">{file.filename}</span>
-                    <span className="text-sm text-gray-500 ml-2">
+                    <span className="font-medium text-app-text">{file.filename}</span>
+                    <span className="text-sm text-app-text-muted ml-2">
                       ({file.rows.length} containers)
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => removeFile(index)}
-                    className="text-red-600 hover:text-red-700"
+                    className="text-app-trend-down hover:text-app-trend-down/80"
                   >
                     Remove
                   </button>
                 </div>
 
                 {file.errors.length > 0 && (
-                  <div className="mt-2 bg-red-50 border border-red-200 rounded p-2">
-                    <p className="text-xs font-semibold text-red-800 mb-1">Validation Errors:</p>
-                    <ul className="text-xs text-red-700 space-y-1">
+                  <div className="mt-2 bg-app-trend-down/10 border border-app-trend-down rounded p-2">
+                    <p className="text-xs font-semibold text-app-trend-down mb-1">Validation Errors:</p>
+                    <ul className="text-xs text-app-trend-down space-y-1">
                       {file.errors.slice(0, 5).map((error, i) => (
                         <li key={i}>
                           Row {error.row}: {error.error}
@@ -329,19 +328,19 @@ export default function CSVUploadStep({
                 )}
 
                 {file.errors.length === 0 && (
-                  <div className="mt-2 text-xs text-green-700">
+                  <div className="mt-2 text-xs text-app-trend-up">
                     ✓ File parsed successfully
                   </div>
                 )}
 
                 {/* Show specimen types in file */}
                 {file.rows.length > 0 && (
-                  <div className="mt-2 text-xs text-gray-600">
+                  <div className="mt-2 text-xs text-app-text-muted">
                     Specimen types: {Array.from(new Set(file.rows.map(r => r.specimen_type_name))).join(', ')}
                   </div>
                 )}
 
-                <p className="mt-2 text-xs text-gray-500">
+                <p className="mt-2 text-xs text-app-text-muted">
                   Assign container type and collection in the next step (Containers).
                 </p>
               </div>
@@ -356,7 +355,7 @@ export default function CSVUploadStep({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
           >
             Cancel
           </button>
@@ -364,7 +363,7 @@ export default function CSVUploadStep({
         <button
           type="button"
           onClick={onBack}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
         >
           {backLabel ?? 'Back'}
         </button>
@@ -375,7 +374,7 @@ export default function CSVUploadStep({
             csvFiles.length === 0 ||
             csvFiles.some(f => f.errors.length > 0)
           }
-          className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Next: Configure Containers
         </button>

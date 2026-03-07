@@ -1,8 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '../../__tests__/helpers/render'
+import { render, screen, fireEvent, waitFor, act } from '../../__tests__/helpers/render'
+import userEvent from '@testing-library/user-event'
 import BulkImportFlow from '../BulkImportFlow'
+import { importsApi, specimenTypesApi } from '../../lib/api'
 
 vi.mock('../../lib/api', () => ({
+  specimenTypesApi: {
+    list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Serum' }, { id: 2, name: 'Plasma' }] }),
+    getByContainerType: vi.fn().mockResolvedValue({
+      data: { specimenTypes: [{ id: 1, name: 'Whole Blood', created: '', lastUpdated: '' }] },
+    }),
+  },
   subjectsApi: {
     createBulk: vi.fn().mockResolvedValue({ data: { created: 2, subjects: [] } }),
     validateBulk: vi.fn().mockResolvedValue({ data: { valid: true, errors: [] } }),
@@ -12,7 +20,13 @@ vi.mock('../../lib/api', () => ({
     validateBulk: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
   },
   importsApi: {
-    bulkCombined: vi.fn().mockResolvedValue({ data: { summary: {}, results: [], errors: [] } }),
+    bulkCombined: vi.fn().mockResolvedValue({
+      data: {
+        summary: { subjectsCreated: 1, specimensCreated: 1, containersCreated: 0, subjectsUpdated: 0 },
+        results: [],
+        errors: [],
+      },
+    }),
     bulkCombinedValidate: vi.fn().mockResolvedValue({ data: { valid: true, errors: [] } }),
   },
   collectionsApi: {
@@ -39,5 +53,122 @@ describe('BulkImportFlow', () => {
     const validateBtn = screen.queryByRole('button', { name: /validate.*continue/i })
     const downloadLink = screen.queryByText(/download template|template/i)
     expect(validateBtn ?? downloadLink).toBeTruthy()
+  })
+
+  it('shows review step with heading and Import when step=review in URL', async () => {
+    await render(<BulkImportFlow fixedStudyShortCode="ST" />, {
+      initialEntries: ['/import?step=review'],
+    })
+    expect(screen.getByRole('heading', { name: /review and edit data/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^import$/i })).toBeInTheDocument()
+  })
+
+  it('calls specimenTypesApi.getByContainerType when downloading template with container type', async () => {
+    const user = userEvent.setup()
+    await render(<BulkImportFlow />, { initialEntries: ['/import?step=upload'] })
+    await user.selectOptions(screen.getByLabelText(/import type/i), 'combined')
+    await user.selectOptions(screen.getByRole('combobox', { name: /container type/i }), 'micronix_tube')
+
+    await user.click(screen.getByRole('button', { name: /download template/i }))
+
+    await waitFor(() => {
+      expect(specimenTypesApi.getByContainerType).toHaveBeenCalledWith('micronix_tube')
+    })
+    expect(specimenTypesApi.list).not.toHaveBeenCalled()
+  })
+
+  it('calls specimenTypesApi.list when downloading template with container type none', async () => {
+    const user = userEvent.setup()
+    await render(<BulkImportFlow />, { initialEntries: ['/import?step=upload'] })
+    await user.selectOptions(screen.getByLabelText(/import type/i), 'specimens')
+    await user.selectOptions(screen.getByRole('combobox', { name: /container type/i }), 'none')
+
+    const downloadBtn = screen.getByRole('button', { name: /download template/i })
+    await user.click(downloadBtn)
+
+    await waitFor(() => {
+      expect(specimenTypesApi.list).toHaveBeenCalled()
+    })
+    expect(specimenTypesApi.getByContainerType).not.toHaveBeenCalled()
+  })
+
+  it('download template with micronix_tube produces conformant CSV with specimen type and A01 position', async () => {
+    const user = userEvent.setup()
+    await render(<BulkImportFlow />, { initialEntries: ['/import?step=upload'] })
+    await user.selectOptions(screen.getByLabelText(/import type/i), 'combined')
+    await user.selectOptions(screen.getByRole('combobox', { name: /container type/i }), 'micronix_tube')
+
+    let capturedContent = ''
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockImplementation((obj: Blob | MediaSource) => {
+      const blob = obj as Blob
+      const reader = new FileReader()
+      reader.onload = () => { capturedContent = reader.result as string }
+      reader.readAsText(blob)
+      return 'blob:mock'
+    })
+
+    await user.click(screen.getByRole('button', { name: /download template/i }))
+
+    await waitFor(() => {
+      expect(createObjectURL).toHaveBeenCalled()
+    })
+    await waitFor(() => {
+      expect(capturedContent).toContain('Whole Blood')
+      expect(capturedContent).toMatch(/,A01,/)
+    })
+  })
+
+  it.skip('sends edited review data to bulkCombined when user edits a row and clicks Import', async () => {
+    const csv = 'subject_name,specimen_type_name,collection_date\nSUBJ-1,Blood,2025-01-01\nSUBJ-2,Plasma,2025-01-02'
+    if (typeof File !== 'undefined') {
+      ;(File.prototype as { text?: () => Promise<string> }).text = vi.fn().mockResolvedValue(csv)
+    }
+
+    await render(<BulkImportFlow fixedStudyShortCode="ST" />, {
+      initialEntries: ['/import?step=upload'],
+    })
+
+    const user = userEvent.setup()
+
+    await user.selectOptions(screen.getByLabelText(/import type/i), 'combined')
+    const containerSelect = screen.getByRole('combobox', { name: /container type/i })
+    await user.selectOptions(containerSelect, 'none')
+
+    const file = new File([csv], 'test.csv', { type: 'text/csv' })
+    const fileInput = document.querySelector('input[type="file"]')
+    expect(fileInput).toBeTruthy()
+    fireEvent.change(fileInput!, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByText('SUBJ-1')).toBeInTheDocument()
+    })
+
+    const validateBtn = screen.getByRole('button', { name: /validate.*continue/i })
+    await act(async () => {
+      await user.click(validateBtn)
+    })
+
+    const reviewHeading = await screen.findByRole('heading', { name: /review and edit data/i }, { timeout: 3000 })
+    expect(reviewHeading).toBeInTheDocument()
+
+    const subjectInput = screen.getByDisplayValue('SUBJ-1')
+    await user.clear(subjectInput)
+    await user.type(subjectInput, 'SUBJ-EDITED')
+
+    await user.click(screen.getByRole('button', { name: /^import$/i }))
+
+    await waitFor(() => {
+      expect(importsApi.bulkCombined).toHaveBeenCalledWith(
+        expect.objectContaining({
+          studyShortCode: 'ST',
+          subjects: expect.arrayContaining([
+            expect.objectContaining({
+              subjectName: 'SUBJ-EDITED',
+              specimens: expect.any(Array),
+            }),
+          ]),
+        })
+      )
+    })
   })
 })

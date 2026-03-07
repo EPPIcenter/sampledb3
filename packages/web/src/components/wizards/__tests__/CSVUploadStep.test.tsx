@@ -9,6 +9,8 @@ vi.mock('../../../lib/control-batch-csv', () => ({
     filename,
     rows: [{ specimen_type_name: 'Blood' }],
     errors: [],
+    inferredContainerCategory: 'paper',
+    inferredContainerType: 'paper',
   })),
   validateCSVRows: vi.fn(() => []),
   generateCSVTemplate: vi.fn(),
@@ -18,6 +20,9 @@ vi.mock('../../../lib/control-batch-csv', () => ({
 vi.mock('../../../lib/api', () => ({
   specimenTypesApi: {
     getByContainerType: vi.fn(),
+  },
+  settingsApi: {
+    get: vi.fn().mockResolvedValue({ data: { value: null } }),
   },
 }))
 
