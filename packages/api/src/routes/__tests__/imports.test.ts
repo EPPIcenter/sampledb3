@@ -14,7 +14,8 @@ import {
   createTestStorageType,
   createTestUnit,
 } from '../../__tests__/helpers/factories'
-import { studySubject, specimen, specimenTypeContainerType, containerTypeUnit, micronixPlate, cryovialBox, settings } from '../../db/schema'
+import { studySubject, specimen, specimenTypeContainerType, containerTypeUnit, micronixPlate, cryovialBox, settings, storageContainer } from '../../db/schema'
+import { setContainerDefaults } from '../../lib/settings'
 import { eq } from 'drizzle-orm'
 
 describe('Imports API', () => {
@@ -275,6 +276,65 @@ describe('Imports API', () => {
 
       const boxes = await testDb.select().from(cryovialBox).where(eq(cryovialBox.name, 'NewBox'))
       expect(boxes.length).toBe(0)
+    })
+
+    it('uses default unit for container when unitId is omitted in payload', async () => {
+      await createTestStudy(testDb, { title: 'Unit Default Study', shortCode: 'UNITDEF' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Whole Blood' })
+      const testUnit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(testDb, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: specimenType.id,
+        containerType: 'micronix_tube',
+      })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: testUnit.id })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer', description: 'Test' })
+      const loc = await createTestLocation(testDb, {
+        name: 'LocUnit',
+        parentId: null,
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+
+      const app = createApp()
+      const res = await authenticatedRequest(app, '/api/imports/bulk-combined', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'UNITDEF',
+          atomicMode: 'full_file',
+          createCollections: [{ type: 'micronix_plate', name: 'PlateUnit', locationId: loc.id }],
+          subjects: [
+            {
+              subjectName: 'SUBJ1',
+              specimens: [
+                {
+                  specimenTypeName: 'Whole Blood',
+                  collectionDate: '2025-01-01',
+                  container: {
+                    containerType: 'micronix_tube',
+                    collectionName: 'PlateUnit',
+                    collectionLocationId: loc.id,
+                    barcode: 'BC1',
+                    position: 'A01',
+                    // unitId deliberately omitted - backend should use default
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      })
+
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as { results: Array<{ specimens: Array<{ containerId?: number }> }> }
+      const containerId = data.results[0].specimens[0].containerId
+      expect(containerId).toBeDefined()
+      const created = await testDb.select().from(storageContainer).where(eq(storageContainer.id, containerId!)).get()
+      expect(created).toBeDefined()
+      expect(created!.unitId).toBe(testUnit.id)
     })
   })
 

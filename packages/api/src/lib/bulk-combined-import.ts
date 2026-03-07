@@ -309,7 +309,11 @@ export function createSubjectWithSpecimensInTx(
       })
       .returning()
       .get()
-    subject = (Array.isArray(newSubjectResult) ? newSubjectResult[0] : newSubjectResult) as typeof studySubject.$inferSelect
+    const insertedSubject = Array.isArray(newSubjectResult) ? newSubjectResult[0] : newSubjectResult
+    if (!insertedSubject) {
+      throw new Error('Insert did not return study subject row')
+    }
+    subject = insertedSubject as typeof studySubject.$inferSelect
     subjectId = subject.id
   }
 
