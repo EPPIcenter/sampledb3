@@ -386,7 +386,7 @@ export default function Studies() {
       <div className="container mx-auto px-4 py-8 relative z-10">
       {showDeletedMessage && (
         <div className="mb-4 flex items-center justify-between rounded-lg border px-4 py-3 studies-reveal studies-reveal-1"
-          style={{ backgroundColor: 'rgb(var(--dashboard-accent-muted))', borderColor: 'rgb(var(--dashboard-accent) / 0.4)', color: 'rgb(var(--dashboard-accent-hover))' }}
+          style={{ backgroundColor: 'rgb(var(--app-accent-muted))', borderColor: 'rgb(var(--app-accent) / 0.4)', color: 'rgb(var(--app-accent-hover))' }}
         >
           <p className="text-sm font-medium">Study deleted successfully.</p>
           <button
@@ -397,7 +397,7 @@ export default function Studies() {
               return next
             })}
             className="font-medium hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 rounded"
-            style={{ color: 'rgb(var(--dashboard-accent-hover))' }}
+            style={{ color: 'rgb(var(--app-accent-hover))' }}
             aria-label="Dismiss"
           >
             Dismiss
@@ -408,9 +408,9 @@ export default function Studies() {
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <div>
-            <h1 className="text-3xl font-bold studies-reveal studies-reveal-1" style={{ color: 'rgb(var(--dashboard-text))' }}>Studies</h1>
+            <h1 className="text-3xl font-bold studies-reveal studies-reveal-1" style={{ color: 'rgb(var(--app-text))' }}>Studies</h1>
             {displayTotal > 0 && (
-              <p className="text-sm mt-1 studies-reveal studies-reveal-2" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              <p className="text-sm mt-1 studies-reveal studies-reveal-2" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 {hasActiveFilters ? (
                   <>
                     {filteredTotal} of {total} {total === 1 ? 'study' : 'studies'}
@@ -429,12 +429,12 @@ export default function Studies() {
             <Link
               to="/studies/new"
               className="px-4 py-2 text-white rounded-lg font-medium whitespace-nowrap transition-colors inline-flex items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 studies-reveal studies-reveal-2"
-              style={{ backgroundColor: 'rgb(var(--dashboard-accent))' }}
+              style={{ backgroundColor: 'rgb(var(--app-accent))' }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgb(var(--dashboard-accent-hover))'
+                e.currentTarget.style.backgroundColor = 'rgb(var(--app-accent-hover))'
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgb(var(--dashboard-accent))'
+                e.currentTarget.style.backgroundColor = 'rgb(var(--app-accent))'
               }}
             >
               New Study
@@ -443,12 +443,12 @@ export default function Studies() {
         </div>
         {!canWrite && (
           <div className="mb-4 rounded-lg border p-3 flex items-center gap-2 studies-reveal studies-reveal-3"
-            style={{ backgroundColor: 'rgb(var(--dashboard-surface))', borderColor: 'rgb(var(--dashboard-border))' }}
+            style={{ backgroundColor: 'rgb(var(--app-surface))', borderColor: 'rgb(var(--app-border))' }}
           >
-            <svg className="w-5 h-5 flex-shrink-0" style={{ color: 'rgb(var(--dashboard-accent))' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5 flex-shrink-0" style={{ color: 'rgb(var(--app-accent))' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>
+            <p className="text-sm font-medium" style={{ color: 'rgb(var(--app-text))' }}>
               You have view-only access. Contact an administrator or member to create or modify studies.
             </p>
           </div>
@@ -473,7 +473,7 @@ export default function Studies() {
                     setSearch(e.target.value)
                   }}
                   className="form-input w-full rounded-lg border px-3 py-2 text-sm"
-                  style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                  style={{ borderColor: 'rgb(var(--app-border))' }}
                 />
               </div>
             </div>
@@ -482,16 +482,16 @@ export default function Studies() {
           <div className="flex flex-wrap items-center gap-3">
             {/* View Toggle */}
             <div className="flex items-center gap-1 rounded-lg p-1 border"
-              style={{ backgroundColor: 'rgb(var(--dashboard-surface))', borderColor: 'rgb(var(--dashboard-border))' }}
+              style={{ backgroundColor: 'rgb(var(--app-surface))', borderColor: 'rgb(var(--app-border))' }}
             >
               <button
                 onClick={() => setViewModeAndPersist('grid')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
                   viewMode === 'grid'
                     ? 'shadow-sm text-white'
-                    : 'hover:border-[rgb(var(--dashboard-accent)/0.3)]'
+                    : 'hover:border-[rgb(var(--app-accent)/0.3)]'
                 }`}
-                style={viewMode === 'grid' ? { backgroundColor: 'rgb(var(--dashboard-accent))' } : { color: 'rgb(var(--dashboard-text-muted))' }}
+                style={viewMode === 'grid' ? { backgroundColor: 'rgb(var(--app-accent))' } : { color: 'rgb(var(--app-text-muted))' }}
                 title="Grid view"
               >
                 Grid
@@ -501,9 +501,9 @@ export default function Studies() {
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
                   viewMode === 'list'
                     ? 'shadow-sm text-white'
-                    : 'hover:border-[rgb(var(--dashboard-accent)/0.3)]'
+                    : 'hover:border-[rgb(var(--app-accent)/0.3)]'
                 }`}
-                style={viewMode === 'list' ? { backgroundColor: 'rgb(var(--dashboard-accent))' } : { color: 'rgb(var(--dashboard-text-muted))' }}
+                style={viewMode === 'list' ? { backgroundColor: 'rgb(var(--app-accent))' } : { color: 'rgb(var(--app-text-muted))' }}
                 title="List view"
               >
                 List
@@ -526,7 +526,7 @@ export default function Studies() {
                   }
                 }}
                 className="form-select text-sm rounded-lg border px-3 py-2"
-                style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                style={{ borderColor: 'rgb(var(--app-border))' }}
               >
                 <option value="title">Sort by Title</option>
                 <option value="date">Sort by Date</option>
@@ -538,7 +538,7 @@ export default function Studies() {
               <button
                 onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
                 className="px-3 py-2 border rounded-lg text-sm flex items-center gap-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
-                style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                style={{ borderColor: 'rgb(var(--app-border))' }}
                 title={`Sort ${sortDirection === 'asc' ? 'Ascending' : 'Descending'}`}
               >
                 {sortDirection === 'asc' ? (
@@ -566,7 +566,7 @@ export default function Studies() {
                 setFilterType(e.target.value as FilterType)
               }}
               className="form-select text-sm rounded-lg border px-3 py-2"
-              style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+              style={{ borderColor: 'rgb(var(--app-border))' }}
             >
               <option value="all">All Types</option>
               <option value="longitudinal">Longitudinal</option>
@@ -581,7 +581,7 @@ export default function Studies() {
                   setFilterLead(e.target.value)
                 }}
                 className="form-select text-sm rounded-lg border px-3 py-2"
-                style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                style={{ borderColor: 'rgb(var(--app-border))' }}
               >
                 <option value="">All Lead Persons</option>
                 {allLeadPersons.map(lead => (
@@ -599,7 +599,7 @@ export default function Studies() {
                   setSearch('')
                 }}
                 className="px-3 py-2 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 rounded"
-                style={{ color: 'rgb(var(--dashboard-accent))' }}
+                style={{ color: 'rgb(var(--app-accent))' }}
               >
                 Clear filters
               </button>
@@ -623,15 +623,15 @@ export default function Studies() {
         </div>
       ) : filteredAndSortedStudies.length === 0 ? (
         <div className="dashboard-card text-center py-12 rounded-xl">
-          <p className="text-lg font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>No studies found</p>
+          <p className="text-lg font-medium" style={{ color: 'rgb(var(--app-text))' }}>No studies found</p>
           {(search || filterType !== 'all' || filterLead) && (
-            <p className="text-sm mt-2" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Try adjusting your filters</p>
+            <p className="text-sm mt-2" style={{ color: 'rgb(var(--app-text-muted))' }}>Try adjusting your filters</p>
           )}
           {canWrite && (
             <Link
               to="/studies/new"
               className="inline-block mt-4 px-4 py-2 rounded-lg font-medium text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ backgroundColor: 'rgb(var(--dashboard-accent))' }}
+              style={{ backgroundColor: 'rgb(var(--app-accent))' }}
             >
               Create a study
             </Link>
@@ -673,7 +673,7 @@ export default function Studies() {
               <div ref={loadMoreRef} className="h-10" />
               {loadingMore && (
                 <div className="flex justify-center items-center py-8">
-                  <div className="flex items-center gap-3" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                  <div className="flex items-center gap-3" style={{ color: 'rgb(var(--app-text-muted))' }}>
                     <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -683,7 +683,7 @@ export default function Studies() {
                 </div>
               )}
               {!hasMore && studies.length > 0 && (
-                <div className="text-center py-8 text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                <div className="text-center py-8 text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
                   No more studies to load
                 </div>
               )}

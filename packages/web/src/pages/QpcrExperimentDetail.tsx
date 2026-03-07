@@ -261,8 +261,8 @@ export default function QpcrExperimentDetail() {
     return (
       <div className="qpcr-theme min-h-screen bg-gradient-to-b from-slate-50 to-white">
         <div className="container mx-auto px-4 py-8 max-w-7xl">
-          <div className="text-center py-12 text-red-600 font-medium">{error ?? 'Experiment not found'}</div>
-          <Link to="/qpcr-experiments" className="text-teal-600 hover:underline text-sm font-medium">
+          <div className="text-center py-12 text-app-trend-down font-medium">{error ?? 'Experiment not found'}</div>
+          <Link to="/qpcr-experiments" className="text-app-accent hover:underline text-sm font-medium">
             Back to qPCR experiments
           </Link>
         </div>
@@ -513,9 +513,9 @@ export default function QpcrExperimentDetail() {
                   <span
                     className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium transition-colors ${
                       isActive
-                        ? 'bg-teal-500 text-white'
+                        ? 'bg-app-accent-muted0 text-white'
                         : isPast
-                          ? 'bg-teal-100 text-teal-900'
+                          ? 'bg-teal-100 text-app-text'
                           : 'bg-slate-100 text-slate-500'
                     }`}
                   >
@@ -546,7 +546,7 @@ export default function QpcrExperimentDetail() {
           {canWrite && (
             <div className="space-y-3">
               {plateError && (
-                <p className="text-sm text-red-600 rounded-lg bg-red-50 px-3 py-2" role="alert">
+                <p className="text-sm text-app-trend-down rounded-lg bg-app-trend-down/10 px-3 py-2" role="alert">
                   {plateError}
                 </p>
               )}
@@ -646,7 +646,7 @@ export default function QpcrExperimentDetail() {
                       <p className="text-sm text-slate-500">Loading…</p>
                     )}
                     {wellDetailsError && (
-                      <p className="text-sm text-red-600 rounded-lg bg-red-50 px-3 py-2" role="alert">
+                      <p className="text-sm text-app-trend-down rounded-lg bg-app-trend-down/10 px-3 py-2" role="alert">
                         {wellDetailsError}
                       </p>
                     )}
@@ -925,7 +925,7 @@ export default function QpcrExperimentDetail() {
           {QPCR_RESULTS_UPLOAD_ENABLED && canWrite && (
             <div className="space-y-3">
               {resultsError && (
-                <p className="text-sm text-red-600 rounded-lg bg-red-50 px-3 py-2" role="alert">
+                <p className="text-sm text-app-trend-down rounded-lg bg-app-trend-down/10 px-3 py-2" role="alert">
                   {resultsError}
                 </p>
               )}

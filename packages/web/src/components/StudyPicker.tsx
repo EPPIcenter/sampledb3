@@ -58,7 +58,7 @@ export default function StudyPicker({ value, onChange }: StudyPickerProps) {
     <>
       <button
         type="button"
-        className="w-full px-3 py-2 border border-gray-100 rounded-md shadow-sm bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        className="w-full px-3 py-2 border border-app-border rounded-md shadow-sm bg-app-card text-app-text text-left focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-app-accent"
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => {
@@ -71,7 +71,7 @@ export default function StudyPicker({ value, onChange }: StudyPickerProps) {
             {selectedStudy.title} ({selectedStudy.shortCode})
           </span>
         ) : (
-          <span className="text-gray-400">Select a study…</span>
+          <span className="text-app-text-muted">Select a study…</span>
         )}
       </button>
 
@@ -79,15 +79,15 @@ export default function StudyPicker({ value, onChange }: StudyPickerProps) {
         <ModalPortal>
           <div className="fixed inset-0 z-[100] flex items-center justify-center">
             <div
-              className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+              className="fixed inset-0 bg-black/40 backdrop-blur-md"
               onClick={() => setOpen(false)}
             />
-          <div className="relative z-10 w-full max-w-3xl mx-4 bg-white rounded-lg shadow-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Select Study</h2>
+<div className="relative z-10 w-full max-w-3xl mx-4 bg-app-card rounded-lg shadow-xl p-6 border border-app-border">
+              <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-app-text">Select Study</h2>
               <button
                 type="button"
-                className="text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded"
                 onClick={() => setOpen(false)}
                 aria-label="Close study selection dialog"
               >
@@ -109,18 +109,18 @@ export default function StudyPicker({ value, onChange }: StudyPickerProps) {
               />
             </div>
 
-            <div className="border border-gray-100 rounded-md max-h-80 overflow-y-auto">
+            <div className="border border-app-border rounded-md max-h-80 overflow-y-auto bg-app-card">
               {loading ? (
-                <div className="p-4 text-sm text-gray-500">Loading studies…</div>
+                <div className="p-4 text-sm text-app-text-muted">Loading studies…</div>
               ) : studies.length === 0 ? (
-                <div className="p-4 text-sm text-gray-500">No studies found.</div>
+                <div className="p-4 text-sm text-app-text-muted">No studies found.</div>
               ) : (
-                <ul className="divide-y divide-gray-200">
+                <ul className="divide-y divide-app-border">
                   {studies.map((study) => (
                     <li key={study.id}>
                       <button
                         type="button"
-                        className="w-full px-4 py-3 text-left hover:bg-gray-50 focus:outline-none focus:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                        className="w-full px-4 py-3 text-left hover:bg-app-surface focus:outline-none focus:bg-app-surface focus-visible:ring-2 focus-visible:ring-app-accent rounded text-app-text"
                         onClick={() => {
                           onChange(study.id)
                           setOpen(false)
@@ -128,10 +128,10 @@ export default function StudyPicker({ value, onChange }: StudyPickerProps) {
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium text-gray-900">
+                            <p className="text-sm font-medium text-app-text">
                               {study.title}
                             </p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-app-text-muted">
                               {study.shortCode}
                               {study.leadPerson ? ` • Lead: ${study.leadPerson}` : ''}
                             </p>

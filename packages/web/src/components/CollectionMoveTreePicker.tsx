@@ -43,17 +43,16 @@ export default function CollectionMoveTreePicker({
   const [search, setSearch] = useState('')
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
-  // Map collections by location ID
+  // Map collections by location ID (only those with a location; API can return null for unassigned)
   const collectionsByLocation = useMemo(() => {
-    const map: Record<number, Collection[]> = {}
-    collections.forEach((c) => {
+    const map: Partial<Record<number, Collection[]>> = {}
+    const withLocation = collections.filter((c): c is Collection & { locationId: number } =>
+      c.locationId != null
+    )
+    withLocation.forEach((c) => {
       const lid = c.locationId
-      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- defensive null check */
-      if (lid != null) {
-        if (!map[lid]) map[lid] = []
-        map[lid].push(c)
-      }
-      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
+      if (!map[lid]) map[lid] = []
+      map[lid]!.push(c)
     })
     return map
   }, [collections])
@@ -101,7 +100,7 @@ export default function CollectionMoveTreePicker({
 
     // Filter by collections if needed
     if (filterEmptyLocations) {
-      filtered = filtered.filter((loc) => collectionsByLocation[loc.id].length > 0)
+      filtered = filtered.filter((loc) => (collectionsByLocation[loc.id] ?? []).length > 0)
     }
 
     // Apply search filter
@@ -159,7 +158,7 @@ export default function CollectionMoveTreePicker({
     
     // First pass: mark locations that directly have collections
     locations.forEach((loc) => {
-      if (collectionsByLocation[loc.id].length > 0) {
+      if ((collectionsByLocation[loc.id] ?? []).length > 0) {
         visible.add(loc.id)
       }
     })
@@ -207,15 +206,15 @@ export default function CollectionMoveTreePicker({
   const getCollectionTypeBadgeColor = useCallback((type: string) => {
     switch (type) {
       case 'micronix_plate':
-        return 'bg-teal-100 text-teal-900'
+        return 'bg-app-accent-muted text-app-accent-hover'
       case 'cryovial_box':
-        return 'bg-green-100 text-green-800'
+        return 'bg-app-trend-up/10 text-app-trend-up'
       case 'box':
         return 'bg-purple-100 text-purple-800'
       case 'bag':
         return 'bg-orange-100 text-orange-800'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-app-surface text-app-text-muted'
     }
   }, [])
 
@@ -264,10 +263,10 @@ export default function CollectionMoveTreePicker({
                 toggleExpanded(loc.id)
               }
             }}
-            className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border border-transparent hover:bg-gray-50 hover:border-gray-200 transition-colors text-left group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:border-transparent disabled:opacity-70"
+            className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border border-transparent hover:bg-app-surface hover:border-app-border transition-colors text-left group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent focus-visible:ring-offset-1 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:border-transparent disabled:opacity-70"
           >
             {canExpand ? (
-              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-500 group-hover:text-gray-700" aria-hidden>
+              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-app-text-muted group-hover:text-app-text" aria-hidden>
                 {isExpanded ? (
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -282,15 +281,15 @@ export default function CollectionMoveTreePicker({
               <span className="w-5 flex-shrink-0" aria-hidden />
             )}
             <div className="flex-1 min-w-0">
-              <span className="font-medium text-sm text-gray-800 group-hover:text-gray-900">{loc.name}</span>
+              <span className="font-medium text-sm text-app-text group-hover:text-app-text">{loc.name}</span>
               {loc.path && loc.path !== loc.name && (
-                <span className="text-xs text-gray-500 ml-1">({loc.path})</span>
+                <span className="text-xs text-app-text-muted ml-1">({loc.path})</span>
               )}
               {storageTypeLabel && (
-                <span className="text-xs text-gray-500 ml-1">({storageTypeLabel})</span>
+                <span className="text-xs text-app-text-muted ml-1">({storageTypeLabel})</span>
               )}
               {hasCollections && (
-                <span className="text-xs text-gray-400 ml-1">
+                <span className="text-xs text-app-text-muted ml-1">
                   ({locCollections.length} collection{locCollections.length !== 1 ? 's' : ''})
                 </span>
               )}
@@ -305,8 +304,8 @@ export default function CollectionMoveTreePicker({
               }}
               className={`flex-shrink-0 text-xs px-3 py-2 min-h-[44px] rounded-lg font-medium transition-colors ${
                 allSelectedAtLocation
-                  ? 'bg-teal-100 text-teal-900 hover:bg-teal-200'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-app-accent-muted text-app-accent-hover hover:bg-app-accent-muted/80'
+                  : 'bg-app-surface text-app-text-muted hover:bg-app-border'
               }`}
             >
               {allSelectedAtLocation ? 'Deselect All' : 'Select All'}
@@ -314,23 +313,23 @@ export default function CollectionMoveTreePicker({
           )}
         </div>
         {loc.description && (
-          <div className="ml-8 text-xs text-gray-500 truncate max-w-full mt-0.5" title={loc.description}>
+          <div className="ml-8 text-xs text-app-text-muted truncate max-w-full mt-0.5" title={loc.description}>
             {loc.description}
           </div>
         )}
 
         {hasCollections && isExpanded && (
-          <div className="ml-6 mt-1 space-y-1 border-l-2 border-gray-200 pl-3">
+          <div className="ml-6 mt-1 space-y-1 border-l-2 border-app-border pl-3">
             {locCollections.map((col) => (
               <label
                 key={`${col.type}:${col.id}`}
-                className="flex items-start gap-3 py-3 px-3 min-h-[44px] hover:bg-gray-50 rounded-lg cursor-pointer border border-transparent hover:border-gray-200 transition-colors"
+                className="flex items-start gap-3 py-3 px-3 min-h-[44px] hover:bg-app-surface rounded-lg cursor-pointer border border-transparent hover:border-app-border transition-colors"
               >
                 <input
                   type="checkbox"
                   checked={selectedKeys.has(`${col.type}:${col.id}`)}
                   onChange={() => onToggle(col.id, col.type)}
-                  className="mt-0.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500 flex-shrink-0"
+                  className="mt-0.5 rounded border-app-border text-app-accent focus:ring-app-accent flex-shrink-0"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -408,12 +407,12 @@ export default function CollectionMoveTreePicker({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Filter by location or collection name..."
-          className="w-full px-4 py-2 border border-gray-100 rounded-lg shadow-sm focus:ring-teal-500 focus:border-teal-500 text-sm"
+          className="w-full px-4 py-2 border border-app-border rounded-lg shadow-sm bg-app-card text-app-text focus:ring-app-accent focus:border-app-accent text-sm"
         />
         {search && (
           <button
             onClick={() => setSearch('')}
-            className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+            className="absolute right-3 top-2.5 text-app-text-muted hover:text-app-text"
           >
             ×
           </button>
@@ -421,15 +420,15 @@ export default function CollectionMoveTreePicker({
       </div>
 
       {selectedKeys.size > 0 && (
-        <div className="flex items-center justify-between p-3 bg-teal-50 border border-teal-200 rounded-lg">
-          <span className="text-sm font-medium text-teal-900">
+        <div className="flex items-center justify-between p-3 bg-app-accent-muted border border-app-accent rounded-lg">
+          <span className="text-sm font-medium text-app-accent-hover">
             {selectedKeys.size} collection{selectedKeys.size !== 1 ? 's' : ''} selected
           </span>
           <div className="flex gap-2">
             {onSelectAll && (
               <button
                 onClick={onSelectAll}
-                className="text-xs text-teal-900 hover:text-teal-900 font-medium"
+                className="text-xs text-app-accent-hover hover:text-app-accent-hover font-medium"
               >
                 Select All
               </button>
@@ -437,7 +436,7 @@ export default function CollectionMoveTreePicker({
             {onDeselectAll && (
               <button
                 onClick={onDeselectAll}
-                className="text-xs text-teal-900 hover:text-teal-900 font-medium"
+                className="text-xs text-app-accent-hover hover:text-app-accent-hover font-medium"
               >
                 Clear
               </button>
@@ -446,7 +445,7 @@ export default function CollectionMoveTreePicker({
         </div>
       )}
 
-      <div className="border border-gray-100 rounded-lg overflow-y-auto max-h-[500px] p-2 bg-white">
+      <div className="border border-app-border rounded-lg overflow-y-auto max-h-[500px] p-2 bg-app-card">
         {renderLocationTree()}
       </div>
     </div>

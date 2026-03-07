@@ -31,13 +31,13 @@ export default function CollectionGrid<T>({
         <table className={tableClassName}>
           <thead>
             <tr>
-              <th className="border border-gray-100 bg-gray-50 px-2 py-1 text-left text-[11px] font-semibold text-gray-500">
+              <th className="border border-app-border bg-app-surface px-2 py-1 text-left text-[11px] font-semibold text-app-text-muted">
                 &nbsp;
               </th>
               {columns.map((col) => (
                 <th
                   key={col}
-                  className="border border-gray-100 bg-gray-50 px-2 py-1 text-center text-[11px] font-semibold text-gray-600"
+                  className="border border-app-border bg-app-surface px-2 py-1 text-center text-[11px] font-semibold text-app-text-muted"
                 >
                   {col}
                 </th>
@@ -47,7 +47,7 @@ export default function CollectionGrid<T>({
           <tbody>
             {rows.map((row) => (
               <tr key={row}>
-                <th className="border border-gray-100 bg-gray-50 px-2 py-1 text-center text-[11px] font-semibold text-gray-600">
+                <th className="border border-app-border bg-app-surface px-2 py-1 text-center text-[11px] font-semibold text-app-text-muted">
                   {row}
                 </th>
                 {columns.map((col) => {
@@ -56,7 +56,7 @@ export default function CollectionGrid<T>({
                   return (
                     <td
                       key={key}
-                      className="border border-gray-100 px-1 py-1 align-top"
+                      className="border border-app-border px-1 py-1 align-top"
                     >
                       {renderCell(value, { row, column: col })}
                     </td>

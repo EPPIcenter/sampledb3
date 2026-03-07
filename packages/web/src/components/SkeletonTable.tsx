@@ -9,24 +9,24 @@ export default function SkeletonTable({ rows = 5, columns = 4, density = 'normal
   const textSizeClass = density === 'compact' ? 'text-xs' : 'text-sm'
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden animate-pulse">
+    <div className="bg-app-card rounded-lg shadow overflow-hidden animate-pulse">
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-gray-50">
+          <thead className="bg-app-surface">
             <tr>
               {Array.from({ length: columns }).map((_, i) => (
                 <th key={i} className={`${paddingClass} text-left`}>
-                  <div className="h-4 bg-gray-200 rounded w-20"></div>
+                  <div className="h-4 app-skeleton-bar rounded w-20"></div>
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-app-border">
             {Array.from({ length: rows }).map((_, rowIndex) => (
               <tr key={rowIndex}>
                 {Array.from({ length: columns }).map((_, colIndex) => (
                   <td key={colIndex} className={`${paddingClass} ${textSizeClass}`}>
-                    <div className="h-4 bg-gray-200 rounded w-full"></div>
+                    <div className="h-4 app-skeleton-bar rounded w-full"></div>
                   </td>
                 ))}
               </tr>

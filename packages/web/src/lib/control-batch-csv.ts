@@ -1,3 +1,5 @@
+import { buildCsv } from './csv'
+
 export interface CSVContainerRow {
   specimen_type_name: string
   position?: string
@@ -322,49 +324,42 @@ export function validateCSVRows(
 }
 
 /**
- * Generate CSV template for a specific container type
+ * Generate CSV template for a specific container type.
+ * Unit is not included; the system uses the default unit for the container type (Settings).
  */
 export function generateCSVTemplate(
   containerType: 'paper' | 'cryovial_tube' | 'micronix_tube',
   allowedSpecimenTypes: Array<{ id: number; name: string }>
 ): string {
-  const examples: string[] = []
-  
-  if (containerType === 'paper') {
-    // Paper: each row has sheet_name (required). Multiple rows can share a sheet; all sheets go into the file's collection (box/bag).
-    const firstType = allowedSpecimenTypes[0]
-    examples.push(`${firstType.name},,5,spots,100,Sheet1`)
-    if (allowedSpecimenTypes.length > 1) {
-      examples.push(`${allowedSpecimenTypes[1].name},,5,spots,200,Sheet2`)
-    } else {
-      examples.push(`${firstType.name},,5,spots,200,Sheet2`)
-    }
-    return `specimen_type_name,barcode,quantity,unit_symbol,density,sheet_name
-${examples.join('\n')}`
-  } else if (containerType === 'cryovial_tube') {
-    const firstType = allowedSpecimenTypes[0]
-    examples.push(`${firstType.name},B1,CV-001,1,items,100`)
-    if (allowedSpecimenTypes.length > 1) {
-      examples.push(`${allowedSpecimenTypes[1].name},B2,CV-002,500,µL,200`)
-    } else {
-      examples.push(`${firstType.name},B2,CV-002,500,µL,200`)
-    }
-    return `specimen_type_name,position,barcode,quantity,unit_symbol,density
-${examples.join('\n')}`
-  } else if (containerType === 'micronix_tube') { // eslint-disable-line @typescript-eslint/no-unnecessary-condition
-    const firstType = allowedSpecimenTypes[0]
-    examples.push(`${firstType.name},A1,MT-001,1,items,100`)
-    if (allowedSpecimenTypes.length > 1) {
-      examples.push(`${allowedSpecimenTypes[1].name},A2,MT-002,100,µL,200`)
-    } else {
-      examples.push(`${firstType.name},A2,MT-002,100,µL,200`)
-    }
-    return `specimen_type_name,position,barcode,quantity,unit_symbol,density
-${examples.join('\n')}`
-  }
+  const firstType = allowedSpecimenTypes[0]
+  const secondType = allowedSpecimenTypes.length > 1 ? allowedSpecimenTypes[1] : firstType
 
-  // Fallback (should not reach here)
-  return `specimen_type_name,position,barcode,quantity,unit_symbol`
+  if (containerType === 'paper') {
+    return buildCsv(
+      ['specimen_type_name', 'barcode', 'quantity', 'density', 'sheet_name'],
+      [
+        [firstType.name, '', 5, 100, 'Sheet1'],
+        [secondType.name, '', 5, 200, 'Sheet2'],
+      ]
+    )
+  }
+  if (containerType === 'cryovial_tube') {
+    return buildCsv(
+      ['specimen_type_name', 'position', 'barcode', 'quantity', 'density'],
+      [
+        [firstType.name, 'B01', 'CV-001', 1, 100],
+        [secondType.name, 'B02', 'CV-002', 500, 200],
+      ]
+    )
+  }
+  // micronix_tube
+  return buildCsv(
+    ['specimen_type_name', 'position', 'barcode', 'quantity', 'density'],
+    [
+      [firstType.name, 'A01', 'MT-001', 1, 100],
+      [secondType.name, 'A02', 'MT-002', 100, 200],
+    ]
+  )
 }
 
 /**

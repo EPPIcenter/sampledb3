@@ -88,7 +88,7 @@ export default function SessionSettingsForm({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <div className="flex items-center gap-1.5 mb-1">
-            <label className="block text-xs font-medium text-gray-700">
+            <label className="block text-xs font-medium text-app-text">
               Session Timeout (seconds)
             </label>
             <InfoTooltip text="Duration in seconds before user sessions expire and require re-authentication. Affects all logged-in users." />
@@ -98,13 +98,13 @@ export default function SessionSettingsForm({
             min="1"
             value={formData.maxAgeSeconds}
             onChange={(e) => handleChange(e.target.value)}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-2 py-1.5 text-sm border border-app-border rounded-md focus:ring-app-accent focus:border-app-accent"
             required
           />
         </div>
-        <div className="text-xs text-gray-600">
+        <div className="text-xs text-app-text-muted">
           <div className="font-medium mb-0.5">Current: {formatDuration(formData.maxAgeSeconds)}</div>
-          <div className="text-gray-500 text-[10px]">
+          <div className="text-app-text-muted text-[10px]">
             Quick: 3600 (1h) • 86400 (1d) • 604800 (7d) • 2592000 (30d)
           </div>
         </div>
@@ -116,8 +116,8 @@ export default function SessionSettingsForm({
           disabled={saving || !hasUnsavedChanges}
           className={`px-3 py-1.5 text-xs rounded transition-all ${
             hasUnsavedChanges
-              ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              ? 'bg-app-accent text-white hover:bg-app-accent-hover shadow-md'
+              : 'bg-app-surface text-app-text-muted cursor-not-allowed'
           } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {saving ? (

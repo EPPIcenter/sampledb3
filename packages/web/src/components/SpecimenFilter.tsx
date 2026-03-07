@@ -128,13 +128,13 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
   const hasChanges = JSON.stringify(localFilters) !== JSON.stringify(filters)
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
+    <div className="bg-app-card rounded-xl shadow-sm border border-app-border mb-6 overflow-hidden">
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
+            <h2 className="text-lg font-semibold text-app-text">Filters</h2>
             {hasActiveFilters && (
-              <span className="px-2.5 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+              <span className="px-2.5 py-1 text-xs font-medium bg-app-accent-muted text-app-accent-on-tint rounded-full">
                 {activeFilterCount}
               </span>
             )}
@@ -151,7 +151,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
               />
               <button
                 onClick={handleSubmit}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-app-text-muted hover:text-app-accent transition-colors"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -161,7 +161,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
             {hasActiveFilters && (
               <button
                 onClick={clearFilters}
-                className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                className="text-sm text-app-accent hover:text-app-accent-hover font-medium transition-colors"
               >
                 Clear all
               </button>
@@ -171,13 +171,13 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
 
         <div className="space-y-4">
           {loading && (
-            <div className="text-center py-4 text-gray-500">Loading filter options...</div>
+            <div className="text-center py-4 text-app-text-muted">Loading filter options...</div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Study Filter - Searchable */}
             <div>
-              <label htmlFor="filter-study" className="block text-sm font-medium mb-2 text-gray-700">
+              <label htmlFor="filter-study" className="block text-sm font-medium mb-2 text-app-text-muted">
                 Study
               </label>
               <div className="relative">
@@ -188,14 +188,14 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
                 setStudyPickerOpen(true)
                 void loadStudies()
               }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400"
+                  className="w-full px-3 py-2 border border-app-border rounded-lg shadow-sm bg-app-card text-left text-app-text focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-app-accent transition-colors hover:border-app-border/80"
                 >
                   {selectedStudy ? (
                     <span className="block truncate">
                       {selectedStudy.shortCode} - {selectedStudy.title}
                     </span>
                   ) : (
-                    <span className="text-gray-400">All Studies</span>
+                    <span className="text-app-text-muted">All Studies</span>
                   )}
                 </button>
                 {localFilters.study && (
@@ -205,7 +205,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
                       e.stopPropagation()
                       updateFilter('study', '')
                     }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-app-text-muted hover:text-app-text"
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -220,17 +220,17 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
                     <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
                       {/* Background overlay */}
                       <div
-                        className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+                        className="fixed inset-0 bg-black/40 backdrop-blur-md"
                         onClick={() => setStudyPickerOpen(false)}
                       />
                     {/* Modal panel */}
-                    <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
-                      <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full border border-app-border">
+                      <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                         <div className="flex items-center justify-between mb-4">
-                          <h2 className="text-lg font-semibold text-gray-900">Select Study</h2>
+                          <h2 className="text-lg font-semibold text-app-text">Select Study</h2>
                           <button
                             type="button"
-                            className="text-gray-500 hover:text-gray-700"
+                            className="text-app-text-muted hover:text-app-text"
                             onClick={() => setStudyPickerOpen(false)}
                           >
                             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -250,40 +250,40 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
                           />
                         </div>
 
-                        <div className="border border-gray-200 rounded-lg max-h-80 overflow-y-auto">
+                        <div className="border border-app-border rounded-lg max-h-80 overflow-y-auto">
                           {studyLoading ? (
-                            <div className="p-4 text-sm text-gray-500">Loading studies…</div>
+                            <div className="p-4 text-sm text-app-text-muted">Loading studies…</div>
                           ) : studies.length === 0 ? (
-                            <div className="p-4 text-sm text-gray-500">No studies found.</div>
+                            <div className="p-4 text-sm text-app-text-muted">No studies found.</div>
                           ) : (
-                            <ul className="divide-y divide-gray-200">
+                            <ul className="divide-y divide-app-border">
                               <li>
                                 <button
                                   type="button"
-                                  className="w-full px-4 py-3 text-left hover:bg-gray-50"
+                                  className="w-full px-4 py-3 text-left hover:bg-app-surface text-app-text"
                                   onClick={() => {
                                     updateFilter('study', '')
                                     setStudyPickerOpen(false)
                                     setStudySearch('')
                                   }}
                                 >
-                                  <p className="text-sm font-medium text-gray-900">All Studies</p>
-                                  <p className="text-xs text-gray-500">Clear study filter</p>
+                                  <p className="text-sm font-medium">All Studies</p>
+                                  <p className="text-xs text-app-text-muted">Clear study filter</p>
                                 </button>
                               </li>
                               {studies.map((study) => (
                                 <li key={study.id}>
                                   <button
                                     type="button"
-                                    className="w-full px-4 py-3 text-left hover:bg-gray-50"
+                                    className="w-full px-4 py-3 text-left hover:bg-app-surface text-app-text"
                                     onClick={() => {
                                       updateFilter('study', study.shortCode)
                                       setStudyPickerOpen(false)
                                       setStudySearch('')
                                     }}
                                   >
-                                    <p className="text-sm font-medium text-gray-900">{study.title}</p>
-                                    <p className="text-xs text-gray-500">{study.shortCode}</p>
+                                    <p className="text-sm font-medium">{study.title}</p>
+                                    <p className="text-xs text-app-text-muted">{study.shortCode}</p>
                                   </button>
                                 </li>
                               ))}
@@ -300,7 +300,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
 
             {/* Source Type Filter */}
             <div>
-              <label htmlFor="filter-source-type" className="block text-sm font-medium mb-2 text-gray-700">
+              <label htmlFor="filter-source-type" className="block text-sm font-medium mb-2 text-app-text-muted">
                 Source Type
               </label>
               <select
@@ -319,7 +319,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
 
             {/* Specimen Type Filter */}
             <div>
-              <label htmlFor="filter-specimen-type" className="block text-sm font-medium mb-2 text-gray-700">
+              <label htmlFor="filter-specimen-type" className="block text-sm font-medium mb-2 text-app-text-muted">
                 Specimen Type
               </label>
               <select
@@ -339,7 +339,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
 
             {/* Collection Date Range */}
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700">
+              <label className="block text-sm font-medium mb-2 text-app-text-muted">
                 Collection Date From
               </label>
               <input
@@ -350,7 +350,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700">
+              <label className="block text-sm font-medium mb-2 text-app-text-muted">
                 Collection Date To
               </label>
               <input
@@ -363,7 +363,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
 
             {/* Created Date Range */}
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700">
+              <label className="block text-sm font-medium mb-2 text-app-text-muted">
                 Created Date From
               </label>
               <input
@@ -374,7 +374,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700">
+              <label className="block text-sm font-medium mb-2 text-app-text-muted">
                 Created Date To
               </label>
               <input
@@ -386,7 +386,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
             </div>
           </div>
 
-          <div className="flex items-center justify-end pt-4 border-t border-gray-200 space-x-3">
+          <div className="flex items-center justify-end pt-4 border-t border-app-border space-x-3">
             <button
               type="button"
               onClick={clearFilters}

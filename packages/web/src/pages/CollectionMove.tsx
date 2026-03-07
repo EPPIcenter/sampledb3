@@ -315,7 +315,7 @@ export default function CollectionMove() {
           <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             <div className="mb-4">
               <h2 className="text-xl font-semibold">Select Collections to Move</h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-app-text-muted mt-1">
                 Select any collections you want to move together, regardless of type.
               </p>
             </div>
@@ -323,7 +323,7 @@ export default function CollectionMove() {
             {loading ? (
               <div className="text-center py-8">Loading collections...</div>
             ) : collections.length === 0 ? (
-              <p className="text-sm text-gray-500">No collections of this type found.</p>
+              <p className="text-sm text-app-text-muted">No collections of this type found.</p>
             ) : (
               <CollectionMoveTreePicker
                 locations={locations}
@@ -356,7 +356,7 @@ export default function CollectionMove() {
         {currentStep === 'select-destination' && (
           <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             <h2 className="text-xl font-semibold mb-4">Choose Destination Location</h2>
-            <p className="text-gray-700 mb-6">
+            <p className="text-app-text mb-6">
               Select the target location where the collections will be moved.
             </p>
 
@@ -389,7 +389,7 @@ export default function CollectionMove() {
 
             <div className="space-y-4">
               <div>
-                <h3 className="font-medium text-gray-700 mb-2">Atomicity Mode:</h3>
+                <h3 className="font-medium text-app-text mb-2">Atomicity Mode:</h3>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -412,7 +412,7 @@ export default function CollectionMove() {
                     <span>Best effort</span>
                   </label>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-app-text-muted mt-2">
                   {atomicMode === 'all_or_nothing'
                     ? 'For each collection type request, any validation error blocks moves for that type.'
                     : 'Valid moves are applied and invalid rows are returned as errors.'}
@@ -420,8 +420,8 @@ export default function CollectionMove() {
               </div>
 
               <div>
-                <h3 className="font-medium text-gray-700 mb-2">Collections to Move:</h3>
-                <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                <h3 className="font-medium text-app-text mb-2">Collections to Move:</h3>
+                <ul className="list-disc list-inside text-sm text-app-text-muted space-y-1">
                   {Array.from(selectedCollectionIds).map((key) => {
                     const { type, id } = fromKey(key)
                     const collection = collections.find((c) => c.type === type && c.id === id)
@@ -433,34 +433,34 @@ export default function CollectionMove() {
                       : ''
                     return (
                       <li key={key}>
-                        {collection.name} <span className="text-gray-500">({getCollectionTypeLabel(collection.type)})</span>
-                        {locationDisplay && <span className="text-gray-400">{locationDisplay}</span>}
+                        {collection.name} <span className="text-app-text-muted">({getCollectionTypeLabel(collection.type)})</span>
+                        {locationDisplay && <span className="text-app-text-muted">{locationDisplay}</span>}
                       </li>
                     )
                   })}
                 </ul>
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-app-text-muted mt-2">
                   Total: {selectedCollectionIds.size} collection
                   {selectedCollectionIds.size !== 1 ? 's' : ''}
                 </p>
               </div>
 
               <div>
-                <h3 className="font-medium text-gray-700 mb-2">Destination Location:</h3>
+                <h3 className="font-medium text-app-text mb-2">Destination Location:</h3>
                 {(() => {
                   const destLoc = targetLocationId ? locations.find(l => l.id === targetLocationId) : null
                   if (!destLoc) {
-                    return <p className="text-sm text-gray-600">{targetLocationPath || `Location ID: ${targetLocationId}`}</p>
+                    return <p className="text-sm text-app-text-muted">{targetLocationPath || `Location ID: ${targetLocationId}`}</p>
                   }
                   const storageTypeLabel = destLoc.effectiveStorageTypeName || destLoc.storageTypeName
                   return (
-                    <div className="text-sm text-gray-600 space-y-1">
+                    <div className="text-sm text-app-text-muted space-y-1">
                       <p className="font-medium">{destLoc.path || destLoc.name}</p>
                       {storageTypeLabel && (
-                        <p className="text-gray-500">Storage type: {storageTypeLabel}</p>
+                        <p className="text-app-text-muted">Storage type: {storageTypeLabel}</p>
                       )}
                       {destLoc.description && (
-                        <p className="text-gray-500 truncate max-w-xl" title={destLoc.description}>{destLoc.description}</p>
+                        <p className="text-app-text-muted truncate max-w-xl" title={destLoc.description}>{destLoc.description}</p>
                       )}
                     </div>
                   )
@@ -492,7 +492,7 @@ export default function CollectionMove() {
             {moveResult.success ? (
               <>
                 <div className="mb-4">
-                  <div className="flex items-center text-green-600 mb-2">
+                  <div className="flex items-center text-app-trend-up mb-2">
                     <svg
                       className="w-6 h-6 mr-2"
                       fill="none"
@@ -508,7 +508,7 @@ export default function CollectionMove() {
                     </svg>
                     <h2 className="text-xl font-semibold">Move Completed Successfully</h2>
                   </div>
-                  <p className="text-gray-700">
+                  <p className="text-app-text">
                     Successfully moved {moveResult.moved} collection
                     {moveResult.moved !== 1 ? 's' : ''} to {targetLocationPath || `location ${targetLocationId}`}.
                   </p>
@@ -517,7 +517,7 @@ export default function CollectionMove() {
             ) : (
               <>
                 <div className="mb-4">
-                  <div className="flex items-center text-red-600 mb-2">
+                  <div className="flex items-center text-app-trend-down mb-2">
                     <svg
                       className="w-6 h-6 mr-2"
                       fill="none"
@@ -533,15 +533,15 @@ export default function CollectionMove() {
                     </svg>
                     <h2 className="text-xl font-semibold">Move Failed</h2>
                   </div>
-                  <p className="text-gray-700 mb-4">
+                  <p className="text-app-text mb-4">
                     {moveResult.moved > 0
                       ? `Moved ${moveResult.moved} collection${moveResult.moved !== 1 ? 's' : ''}, but some errors occurred.`
                       : 'Failed to move collections.'}
                   </p>
                   {moveResult.errors && moveResult.errors.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded p-4">
-                      <h3 className="font-medium text-red-800 mb-2">Errors:</h3>
-                      <ul className="list-disc list-inside text-sm text-red-700 space-y-1">
+                    <div className="bg-app-trend-down/10 border border-app-trend-down rounded p-4">
+                      <h3 className="font-medium text-app-trend-down mb-2">Errors:</h3>
+                      <ul className="list-disc list-inside text-sm text-app-trend-down space-y-1">
                         {moveResult.errors.map((error, idx) => (
                           <li key={idx}>
                             Row {error.row + 1}: {error.error}

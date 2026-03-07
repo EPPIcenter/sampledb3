@@ -397,7 +397,7 @@ export default function Settings() {
     return (
       <div className="settings-page">
         <div className="container mx-auto px-4 py-8 relative z-10">
-          <div className="text-center text-red-600">Failed to load settings</div>
+          <div className="text-center text-app-trend-down">Failed to load settings</div>
         </div>
       </div>
     )
@@ -414,7 +414,7 @@ export default function Settings() {
           <p className="settings-description mt-0.5">
             Configure application, security, and data preferences.
             {' '}
-            <a href="/docs/guides/advanced/settings/" className="text-blue-600 hover:text-blue-800 hover:underline">
+            <a href="/docs/guides/advanced/settings/" className="text-app-accent hover:text-app-accent-hover hover:underline">
               Settings guide
             </a>
           </p>

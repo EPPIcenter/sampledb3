@@ -1,12 +1,20 @@
 import { useState } from 'react'
 import type { ContainerConfig } from '../../pages/ControlBatchWizard'
 
+export interface UnitOption {
+  id: number
+  symbol: string
+  name?: string
+}
+
 interface PapersSectionProps {
   containers: ContainerConfig[]
   specimenTypeId: string
   onUpdate: (specimenTypeId: string, containerId: string, updates: Partial<ContainerConfig>) => void
   onAdd: () => void
   onRemove: (specimenTypeId: string, containerId: string) => void
+  /** When provided, unit is rendered as a dropdown of allowed units instead of free text. */
+  allowedUnits?: UnitOption[]
 }
 
 export default function PapersSection({
@@ -15,6 +23,7 @@ export default function PapersSection({
   onUpdate,
   onAdd,
   onRemove,
+  allowedUnits,
 }: PapersSectionProps) {
   const [expanded, setExpanded] = useState(containers.length <= 3)
 
@@ -24,11 +33,11 @@ export default function PapersSection({
         <button
           type="button"
           onClick={() => setExpanded((e) => !e)}
-          className="text-sm font-medium flex items-center gap-1 hover:text-gray-700"
+          className="text-sm font-medium flex items-center gap-1 hover:text-app-text"
           aria-expanded={expanded}
           aria-controls="papers-list"
         >
-          <span className="text-gray-600">
+          <span className="text-app-text-muted">
             Papers in this sheet ({containers.length})
           </span>
           <svg
@@ -54,7 +63,7 @@ export default function PapersSection({
           {containers.map((container) => (
             <div
               key={container.id}
-              className="grid grid-cols-4 gap-2 items-center bg-white p-2 rounded border border-gray-200"
+              className="grid grid-cols-4 gap-2 items-center bg-app-card p-2 rounded border border-app-border"
             >
               <input
                 type="text"
@@ -63,7 +72,7 @@ export default function PapersSection({
                 onChange={(e) =>
                   onUpdate(specimenTypeId, container.id, { barcode: e.target.value })
                 }
-                className="px-2 py-1 border border-gray-300 rounded text-sm"
+                className="px-2 py-1 border border-app-border rounded text-sm bg-app-card text-app-text"
               />
               <input
                 type="text"
@@ -72,7 +81,7 @@ export default function PapersSection({
                 onChange={(e) =>
                   onUpdate(specimenTypeId, container.id, { position: e.target.value })
                 }
-                className="px-2 py-1 border border-gray-300 rounded text-sm"
+                className="px-2 py-1 border border-app-border rounded text-sm bg-app-card text-app-text"
               />
               <input
                 type="number"
@@ -83,22 +92,39 @@ export default function PapersSection({
                     quantity: parseFloat(e.target.value) || 0,
                   })
                 }
-                className="px-2 py-1 border border-gray-300 rounded text-sm"
+                className="px-2 py-1 border border-app-border rounded text-sm bg-app-card text-app-text"
               />
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Unit"
-                  value={container.unitSymbol || ''}
-                  onChange={(e) =>
-                    onUpdate(specimenTypeId, container.id, { unitSymbol: e.target.value })
-                  }
-                  className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                />
+                {allowedUnits && allowedUnits.length > 0 ? (
+                  <select
+                    aria-label="Unit"
+                    value={container.unitSymbol && allowedUnits.some((u) => u.symbol === container.unitSymbol) ? container.unitSymbol : allowedUnits[0]!.symbol}
+                    onChange={(e) =>
+                      onUpdate(specimenTypeId, container.id, { unitSymbol: e.target.value })
+                    }
+                    className="flex-1 px-2 py-1 border border-app-border rounded text-sm bg-app-card text-app-text"
+                  >
+                    {allowedUnits.map((u) => (
+                      <option key={u.id} value={u.symbol}>
+                        {u.symbol}{u.name ? ` (${u.name})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    placeholder="Unit"
+                    value={container.unitSymbol || ''}
+                    onChange={(e) =>
+                      onUpdate(specimenTypeId, container.id, { unitSymbol: e.target.value })
+                    }
+                    className="flex-1 px-2 py-1 border border-app-border rounded text-sm bg-app-card text-app-text"
+                  />
+                )}
                 <button
                   type="button"
                   onClick={() => onRemove(specimenTypeId, container.id)}
-                  className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded hover:bg-red-100 hover:border-red-300 transition-colors"
+                  className="px-2 py-1 text-xs font-medium text-app-trend-down bg-app-trend-down/10 border border-app-trend-down rounded hover:bg-app-trend-down/20 transition-colors"
                   title="Remove this paper"
                 >
                   ×

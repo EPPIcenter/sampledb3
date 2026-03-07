@@ -12,6 +12,23 @@ vi.mock('../../../lib/api', () => ({
     createBatchWithSpecimens: (...args: unknown[]) => mockCreateBatchWithSpecimens(...args),
     suggestBatchName: (...args: unknown[]) => mockSuggestBatchName(...args),
   },
+  settingsApi: {
+    get: vi.fn((key: string) => {
+      if (key === 'container_defaults') {
+        return Promise.resolve({
+          data: {
+            value: {
+              paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+              cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
+              micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
+              static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+            },
+          },
+        })
+      }
+      return Promise.resolve({ data: { value: null } })
+    }),
+  },
 }))
 
 function makeBatchInfo(overrides: Partial<BatchInfo> = {}): BatchInfo {
@@ -200,5 +217,42 @@ describe('ReviewStep multi-batch CSV', () => {
         batch: expect.objectContaining({ controlDefinitionId: 21 }),
       })
     )
+  })
+})
+
+describe('ReviewStep CSV unit fallback', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSuggestBatchName.mockResolvedValue({ data: { name: 'Suggested Batch' } })
+    mockCreateBatchWithSpecimens.mockResolvedValue({ data: { batch: { id: 102 } } })
+  })
+
+  it('uses container default unit when CSV row omits unit_symbol', async () => {
+    render(
+      <ReviewStep
+        batchInfo={makeBatchInfo({ controlDefinitionId: 1 })}
+        specimenTypes={[]}
+        csvFiles={[
+          makeCsvFile({
+            containerType: 'micronix_tube',
+            rows: [{ specimen_type_name: 'Whole Blood', position: 'A1' }],
+          }),
+        ]}
+        onBack={() => {}}
+        onCancel={() => {}}
+        onSuccess={() => {}}
+        isAddMode={true}
+      />
+    )
+
+    const submitBtn = await screen.findByRole('button', { name: /Add Specimens/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(mockCreateBatchWithSpecimens).toHaveBeenCalledTimes(1)
+    })
+    const payload = mockCreateBatchWithSpecimens.mock.calls[0][0]
+    const container = payload.specimens[0].containers[0]
+    expect(container.unitSymbol).toBe('µL')
   })
 })

@@ -329,17 +329,17 @@ export default function ReferenceData() {
       <div className="container mx-auto px-4 py-8 relative z-10">
         <div className="mb-6 ref-data-reveal ref-data-reveal-1">
           <h1 className="text-3xl font-bold">Reference Data Management</h1>
-          <p className="text-sm text-gray-600 mt-1 ref-data-description">
+          <p className="text-sm text-app-text-muted mt-1 ref-data-description">
             Manage static lookup tables and reference data used throughout the system.
             {' '}
-            <a href="/docs/guides/reference-data/overview/" className="text-blue-600 hover:text-blue-800 hover:underline">
+            <a href="/docs/guides/reference-data/overview/" className="text-app-accent hover:text-app-accent-hover hover:underline">
               Reference data guide
             </a>
           </p>
         </div>
 
         <div className="ref-data-card ref-data-reveal ref-data-reveal-2">
-          <div className="border-b border-gray-100">
+          <div className="border-b border-app-border">
             <nav className="flex -mb-px">
               {referenceDataConfigs.map((tab) => (
                 <button
@@ -374,7 +374,7 @@ export default function ReferenceData() {
             {canManageReferenceData && (
               <button
                 onClick={() => setEditingItem({})}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover"
               >
                 Add New
               </button>

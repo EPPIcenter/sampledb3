@@ -31,8 +31,8 @@ export default function CollectionTableWithExport({
         <button
           type="button"
           onClick={handleExportCsv}
-          className="px-3 py-1.5 text-sm border rounded-md border-gray-300 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400"
-          style={{ color: 'rgb(var(--dashboard-text))' }}
+          className="px-3 py-1.5 text-sm border rounded-md border-app-border bg-app-card hover:bg-app-surface focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400"
+          style={{ color: 'rgb(var(--app-text))' }}
         >
           Export CSV
         </button>
@@ -44,7 +44,7 @@ export default function CollectionTableWithExport({
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className="border border-gray-100 bg-gray-50 px-2 py-1 text-left text-[11px] font-semibold text-gray-600"
+                  className="border border-app-border bg-app-surface px-2 py-1 text-left text-[11px] font-semibold text-app-text-muted"
                 >
                   {col.label}
                 </th>
@@ -57,7 +57,7 @@ export default function CollectionTableWithExport({
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className="border border-gray-100 px-2 py-1 align-top"
+                    className="border border-app-border px-2 py-1 align-top"
                   >
                     {row[col.key] ?? ''}
                   </td>

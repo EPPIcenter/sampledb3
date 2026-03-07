@@ -204,17 +204,17 @@ export default function ReferenceDataForm<T extends { id?: number }>({
         <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
           {/* Background overlay */}
           <div
-            className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+            className="fixed inset-0 bg-black/40 backdrop-blur-md"
             onClick={onCancel}
           />
         
         {/* Modal panel */}
-        <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full sm:max-h-[90vh]">
-          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto max-h-[90vh]">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">{title}</h2>
+        <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full sm:max-h-[90vh] border border-app-border">
+          <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto max-h-[90vh]">
+          <h2 className="text-xl font-semibold text-app-text mb-4">{title}</h2>
 
           {error && (
-            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            <div className="mb-4 bg-app-card border border-app-trend-down/60 text-app-trend-down px-4 py-3 rounded">
               {error}
             </div>
           )}
@@ -233,9 +233,9 @@ export default function ReferenceDataForm<T extends { id?: number }>({
               
               return (
                 <div key={String(field.key)}>
-                  <label htmlFor={fieldId} className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor={fieldId} className="block text-sm font-medium text-app-text-muted mb-2">
                     {field.label}
-                    {isRequired && <span className="text-red-500 ml-1">*</span>}
+                    {isRequired && <span className="text-app-trend-down ml-1">*</span>}
                   </label>
                   {field.type === 'custom' && field.render ? (
                     field.render(formData[field.key], formData, (value) => handleChange(field.key, value))
@@ -246,7 +246,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
                       onChange={(e) => handleChange(field.key, e.target.value)}
                       required={isRequired}
                       disabled={isDisabled}
-                      className="form-textarea disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="form-textarea disabled:bg-app-surface disabled:cursor-not-allowed"
                       rows={3}
                     />
                   ) : field.options || fieldOptions[String(field.key)] ? ( // eslint-disable-line @typescript-eslint/no-unnecessary-condition
@@ -264,7 +264,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
                       }}
                       required={isRequired}
                       disabled={isDisabled}
-                      className="form-select disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="form-select disabled:bg-app-surface disabled:cursor-not-allowed"
                     >
                       <option value="">Select...</option>
                       {(field.options ?? fieldOptions[String(field.key)] ?? []).map((option) => ( // eslint-disable-line @typescript-eslint/no-unnecessary-condition
@@ -280,7 +280,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
                       checked={!!formData[field.key]}
                       onChange={(e) => handleChange(field.key, e.target.checked)}
                       disabled={isDisabled}
-                      className="form-checkbox disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="form-checkbox disabled:bg-app-surface disabled:cursor-not-allowed"
                     />
                   ) : (
                     <input
@@ -295,7 +295,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
                       }
                       required={isRequired}
                       disabled={isDisabled}
-                      className="form-input disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="form-input disabled:bg-app-surface disabled:cursor-not-allowed"
                     />
                   )}
                 </div>
@@ -306,7 +306,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2 border border-gray-100 rounded-lg text-gray-700 hover:bg-gray-50"
+                className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
                 disabled={loading}
               >
                 Cancel
@@ -314,7 +314,7 @@ export default function ReferenceDataForm<T extends { id?: number }>({
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50"
               >
                 {loading ? 'Saving...' : item ? 'Update' : 'Create'}
               </button>

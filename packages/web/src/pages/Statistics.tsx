@@ -57,8 +57,11 @@ export default function Statistics() {
   const [filters, setFilters] = useState<StatisticsFilters>({})
   const [appliedFilters, setAppliedFilters] = useState<StatisticsFilters>({})
   const [searchParams, setSearchParams] = useSearchParams()
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- URL param may be missing
-  const binSize = (searchParams.get('bin') as BinSize) || 'day'
+  const binParam = searchParams.get('bin')
+  const binSize: BinSize =
+    binParam === 'week' || binParam === 'month' || binParam === 'quarter' || binParam === 'year'
+      ? binParam
+      : 'day'
   const histogramMinDate = searchParams.get('minDate') ?? '2000-01-01'
 
   const setBinSize = (size: BinSize) => {
@@ -159,25 +162,23 @@ export default function Statistics() {
     if (!data) return ''
     const n = data.specimens.total
     const studies = Object.keys(data.specimens.byStudy).length
-    const top = Object.entries(data.specimens.bySpecimenType).sort((a, b) => b[1] - a[1])[0]
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- empty bySpecimenType
-    const topType = top ? top[0] : '—'
+    const specimenTypeEntries = Object.entries(data.specimens.bySpecimenType).sort((a, b) => b[1] - a[1])
+    const topType = specimenTypeEntries.length > 0 ? specimenTypeEntries[0][0] : '—'
     return `${n.toLocaleString()} specimens across ${studies} studies; top type: ${topType}`
   }, [data])
   const containerSummary = useMemo(() => {
     if (!data) return ''
     const n = data.containers.total
     const types = Object.keys(data.containers.byType).length
-     
     const avg = data.containers.averagePerSpecimen.toFixed(1)
     return `${n.toLocaleString()} containers across ${types} types; avg ${avg} per specimen`
   }, [data])
   const storageSummary = useMemo(() => {
     if (!data) return ''
     const n = data.storage.byLocation.length
-    const top = data.storage.byLocation[0]
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- empty byLocation
-    const topName = top ? (top.location.length > 25 ? top.location.slice(0, 25) + '…' : top.location) : '—'
+    const locs = data.storage.byLocation
+    const firstLoc = locs.length > 0 ? locs[0].location : '—'
+    const topName = firstLoc.length > 25 ? firstLoc.slice(0, 25) + '…' : firstLoc
     return `${n} locations; top: ${topName}`
   }, [data])
 
@@ -279,10 +280,7 @@ export default function Statistics() {
 
   const collectionTimelineData = useMemo(() => {
     if (!data) return []
-    
     const minTimestamp = histogramMinDate ? new Date(histogramMinDate).getTime() : 0
-    
-    // Filter by minimum date and group by bin size
     const grouped = data.specimens.collectionTimeline
       .filter(({ date }) => {
         const dateTimestamp = new Date(date).getTime()
@@ -308,10 +306,7 @@ export default function Statistics() {
 
   const creationTimelineData = useMemo(() => {
     if (!data) return []
-    
     const minTimestamp = histogramMinDate ? new Date(histogramMinDate).getTime() : 0
-    
-    // Filter by minimum date and group by bin size
     const grouped = data.specimens.creationTimeline
       .filter(({ date }) => {
         const dateTimestamp = new Date(date).getTime()
@@ -365,7 +360,7 @@ export default function Statistics() {
               <SkeletonCard key={i} height="h-24" className="statistics-card border border-slate-200" />
             ))}
           </div>
-          <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+          <div className="text-center py-8" style={{ color: 'rgb(var(--app-text-muted))' }}>
             Loading statistics…
           </div>
         </div>
@@ -379,9 +374,9 @@ export default function Statistics() {
         <div className="container mx-auto px-4 py-8 relative z-10">
           <div className="mb-6">
             <h1 className="text-3xl font-bold">Statistics & Analytics</h1>
-            <p className="mt-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Comprehensive statistics about specimens, containers, and storage utilization</p>
+            <p className="mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>Comprehensive statistics about specimens, containers, and storage utilization</p>
           </div>
-          <div className="statistics-card p-6 text-center" style={{ color: 'rgb(var(--dashboard-trend-down))' }}>
+          <div className="statistics-card p-6 text-center" style={{ color: 'rgb(var(--app-trend-down))' }}>
             Failed to load statistics
           </div>
         </div>
@@ -395,7 +390,7 @@ export default function Statistics() {
         {/* Hero */}
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Statistics & Analytics</h1>
-          <p className="mt-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+          <p className="mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
             Comprehensive statistics about specimens, containers, and storage utilization
           </p>
         </div>
@@ -421,7 +416,7 @@ export default function Statistics() {
                   type="button"
                   onClick={() => handleRemoveFilter(key)}
                   className="rounded p-0.5 hover:bg-black/10 focus:outline-none focus-visible:ring-2"
-                  style={{ color: 'rgb(var(--dashboard-text))' }}
+                  style={{ color: 'rgb(var(--app-text))' }}
                   aria-label={`Remove ${label}`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -444,24 +439,23 @@ export default function Statistics() {
         )}
 
         {/* Loading overlay when refreshing with data */}
-        {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- show overlay when refreshing with existing data */}
-        {loading && data && (
-          <div className="mb-6 p-4 rounded-lg flex items-center gap-3 border" style={{ backgroundColor: 'rgb(var(--dashboard-accent-muted))', borderColor: 'rgb(var(--dashboard-accent) / 0.3)' }}>
-            <svg className="animate-spin h-5 w-5 flex-shrink-0" style={{ color: 'rgb(var(--dashboard-accent-hover))' }} fill="none" viewBox="0 0 24 24">
+        {loading && (
+          <div className="mb-6 p-4 rounded-lg flex items-center gap-3 border" style={{ backgroundColor: 'rgb(var(--app-accent-muted))', borderColor: 'rgb(var(--app-accent) / 0.3)' }}>
+            <svg className="animate-spin h-5 w-5 flex-shrink-0" style={{ color: 'rgb(var(--app-accent-hover))' }} fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
-            <span className="font-medium" style={{ color: 'rgb(var(--dashboard-accent-hover))' }}>Updating statistics…</span>
+            <span className="font-medium" style={{ color: 'rgb(var(--app-accent-hover))' }}>Updating statistics…</span>
           </div>
         )}
 
         {/* Unified empty state */}
         {isEmptyWithFilters && (
           <div className="statistics-card p-6 mb-8 text-center">
-            <p className="text-lg font-medium mb-2" style={{ color: 'rgb(var(--dashboard-text))' }}>
+            <p className="text-lg font-medium mb-2" style={{ color: 'rgb(var(--app-text))' }}>
               No data for this filter combination
             </p>
-            <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            <p className="text-sm mb-4" style={{ color: 'rgb(var(--app-text-muted))' }}>
               Try broadening or clearing filters to see statistics.
             </p>
             <button
@@ -509,22 +503,22 @@ export default function Statistics() {
 
             {/* Timeline chart display: bin/date apply only to Collection and Creation timeline charts */}
             <div className="statistics-card p-4 mb-8">
-              <h3 className="text-sm font-semibold mb-1" style={{ color: 'rgb(var(--dashboard-text))' }}>
+              <h3 className="text-sm font-semibold mb-1" style={{ color: 'rgb(var(--app-text))' }}>
                 Timeline chart display
               </h3>
-              <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              <p className="text-sm mb-4" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 Bin size and date range apply only to the Collection Timeline and Creation Timeline charts below.
               </p>
               <div className="flex flex-wrap items-center gap-4 md:gap-6">
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                  <label className="text-sm font-medium" style={{ color: 'rgb(var(--app-text))' }}>
                     Bin size:
                   </label>
                   <select
                     value={binSize}
                     onChange={(e) => setBinSize(e.target.value as BinSize)}
                     className="px-3 py-2 rounded-lg border text-sm focus:ring-2 focus:ring-offset-0"
-                    style={{ borderColor: 'rgb(var(--dashboard-border))', outlineColor: 'rgb(var(--dashboard-accent))' }}
+                    style={{ borderColor: 'rgb(var(--app-border))', outlineColor: 'rgb(var(--app-accent))' }}
                   >
                     <option value="day">Daily</option>
                     <option value="week">Weekly</option>
@@ -534,7 +528,7 @@ export default function Statistics() {
                   </select>
                 </div>
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                  <label className="text-sm font-medium" style={{ color: 'rgb(var(--app-text))' }}>
                     Min date:
                   </label>
                   <input
@@ -542,7 +536,7 @@ export default function Statistics() {
                     value={histogramMinDate}
                     onChange={(e) => setHistogramMinDate(e.target.value)}
                     className="px-3 py-2 rounded-lg border text-sm focus:ring-2 focus:ring-offset-0"
-                    style={{ borderColor: 'rgb(var(--dashboard-border))', outlineColor: 'rgb(var(--dashboard-accent))' }}
+                    style={{ borderColor: 'rgb(var(--app-border))', outlineColor: 'rgb(var(--app-accent))' }}
                   />
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -560,7 +554,7 @@ export default function Statistics() {
                     type="button"
                     onClick={() => setHistogramMinDate('2000-01-01')}
                     className="text-sm px-3 py-1.5 rounded border transition-colors hover:bg-slate-100"
-                    style={{ borderColor: 'rgb(var(--dashboard-border))', color: 'rgb(var(--dashboard-text-muted))' }}
+                    style={{ borderColor: 'rgb(var(--app-border))', color: 'rgb(var(--app-text-muted))' }}
                   >
                     Reset
                   </button>
@@ -574,7 +568,7 @@ export default function Statistics() {
         {!isEmptyWithFilters && (
           <div className="mb-8">
             <h2 className="statistics-section-title mb-1">Specimen Overview</h2>
-            <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{specimenSummary}</p>
+            <p className="text-sm mb-4" style={{ color: 'rgb(var(--app-text-muted))' }}>{specimenSummary}</p>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <StatChart
                 type="pie"
@@ -611,7 +605,7 @@ export default function Statistics() {
         {!isEmptyWithFilters && (
           <div className="mb-8">
             <h2 className="statistics-section-title mb-1">Container Overview</h2>
-            <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{containerSummary}</p>
+            <p className="text-sm mb-4" style={{ color: 'rgb(var(--app-text-muted))' }}>{containerSummary}</p>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <StatChart
                 type="pie"
@@ -642,7 +636,7 @@ export default function Statistics() {
         {!isEmptyWithFilters && (
           <div className="mb-8">
             <h2 className="statistics-section-title mb-1">Storage Utilization</h2>
-            <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{storageSummary}</p>
+            <p className="text-sm mb-4" style={{ color: 'rgb(var(--app-text-muted))' }}>{storageSummary}</p>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <StatChart
                 type="bar"

@@ -83,7 +83,7 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
   return (
     <div 
       className="studies-card rounded-xl flex flex-col h-full border-l-4"
-      style={{ borderLeftColor: 'rgb(var(--dashboard-accent))' }}
+      style={{ borderLeftColor: 'rgb(var(--app-accent))' }}
       onClick={() => {
         if (!expanded && onLoadSummary && !summary && !loading) {
           onLoadSummary()
@@ -98,13 +98,13 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
             onClick={(e) => e.stopPropagation()}
             className="flex-1 min-w-0 group studies-link"
           >
-            <h3 className="text-lg font-semibold line-clamp-2 transition-colors group-hover:opacity-80" style={{ color: 'rgb(var(--dashboard-text))' }}>
+            <h3 className="text-lg font-semibold line-clamp-2 transition-colors group-hover:opacity-80" style={{ color: 'rgb(var(--app-text))' }}>
               {study.title}
             </h3>
           </Link>
           <span
             className="ml-3 px-2 py-1 text-xs font-medium rounded whitespace-nowrap flex-shrink-0"
-            style={{ backgroundColor: 'rgb(var(--dashboard-accent-muted))', color: 'rgb(var(--dashboard-accent-hover))' }}
+            style={{ backgroundColor: 'rgb(var(--app-accent-muted))', color: 'rgb(var(--app-accent-hover))' }}
           >
             {study.shortCode}
           </span>
@@ -123,7 +123,7 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
           </span>
           <span
             className="px-2 py-1 text-xs font-medium rounded"
-            style={{ backgroundColor: 'rgb(var(--dashboard-surface))', color: 'rgb(var(--dashboard-text-muted))' }}
+            style={{ backgroundColor: 'rgb(var(--app-surface))', color: 'rgb(var(--app-text-muted))' }}
           >
             {study.leadPerson}
           </span>
@@ -134,51 +134,51 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
       <div className="px-5 pb-3 flex-1">
         {loading ? (
           <div className="space-y-3">
-            <div className="h-12 rounded animate-pulse" style={{ backgroundColor: 'rgb(var(--dashboard-border) / 0.5)' }}></div>
-            <div className="h-12 rounded animate-pulse" style={{ backgroundColor: 'rgb(var(--dashboard-border) / 0.5)' }}></div>
+            <div className="h-12 rounded animate-pulse" style={{ backgroundColor: 'rgb(var(--app-border) / 0.5)' }}></div>
+            <div className="h-12 rounded animate-pulse" style={{ backgroundColor: 'rgb(var(--app-border) / 0.5)' }}></div>
           </div>
         ) : summary ? (
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2">
-              <div style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              <div style={{ color: 'rgb(var(--app-text-muted))' }}>
                 <UsersIcon />
               </div>
               <div className="min-w-0">
-                <div className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Subjects</div>
-                <div className="text-sm font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                <div className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>Subjects</div>
+                <div className="text-sm font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
                   {summary.totalSubjects.toLocaleString()}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              <div style={{ color: 'rgb(var(--app-text-muted))' }}>
                 <BeakerIcon />
               </div>
               <div className="min-w-0">
-                <div className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Specimens</div>
-                <div className="text-sm font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                <div className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>Specimens</div>
+                <div className="text-sm font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
                   {summary.totalSpecimens.toLocaleString()}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              <div style={{ color: 'rgb(var(--app-text-muted))' }}>
                 <ContainerIcon />
               </div>
               <div className="min-w-0">
-                <div className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Containers</div>
-                <div className="text-sm font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                <div className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>Containers</div>
+                <div className="text-sm font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
                   {summary.totalContainers.toLocaleString()}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              <div style={{ color: 'rgb(var(--app-text-muted))' }}>
                 <BeakerIcon />
               </div>
               <div className="min-w-0">
-                <div className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Avg/Subject</div>
-                <div className="text-sm font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                <div className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>Avg/Subject</div>
+                <div className="text-sm font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
                   {summary.averageSpecimensPerSubject !== undefined
                     ? summary.averageSpecimensPerSubject.toFixed(1)
                     : summary.totalSubjects > 0
@@ -189,27 +189,27 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
             </div>
           </div>
         ) : (
-          <div className="text-xs italic" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Hover or click to load statistics</div>
+          <div className="text-xs italic" style={{ color: 'rgb(var(--app-text-muted))' }}>Hover or click to load statistics</div>
         )}
       </div>
 
       {/* Metadata Section */}
       {(summary || study.description) && (
-        <div className="px-5 py-3 border-t" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+        <div className="px-5 py-3 border-t" style={{ borderColor: 'rgb(var(--app-border))' }}>
           {summary?.collectionDateRange && (
             <div className="flex items-start gap-2 mb-2">
-              <div className="mt-0.5" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              <div className="mt-0.5" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 <CalendarIcon />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Collection Period</div>
-                <div className="text-xs" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                <div className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>Collection Period</div>
+                <div className="text-xs" style={{ color: 'rgb(var(--app-text))' }}>
                   {formatDateRange(summary.collectionDateRange)}
                 </div>
                 {(() => {
                   const duration = summary.studyDurationDays ?? calculateDuration(summary.collectionDateRange)
                   return duration !== null && (
-                    <div className="text-xs mt-0.5" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                    <div className="text-xs mt-0.5" style={{ color: 'rgb(var(--app-text-muted))' }}>
                       Duration: {formatDuration(duration)}
                     </div>
                   )
@@ -222,8 +222,8 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
             <div className="mt-2">
               {variant === 'list' ? (
                 <>
-                  <div className="text-xs mb-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Description</div>
-                  <p className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{study.description}</p>
+                  <div className="text-xs mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>Description</div>
+                  <p className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>{study.description}</p>
                 </>
               ) : (
                 <>
@@ -238,7 +238,7 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
                     <ChevronDownIcon />
                   </button>
                   {expanded && (
-                    <p className="text-xs mt-1 line-clamp-3" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{study.description}</p>
+                    <p className="text-xs mt-1 line-clamp-3" style={{ color: 'rgb(var(--app-text-muted))' }}>{study.description}</p>
                   )}
                 </>
               )}
@@ -247,19 +247,19 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
 
           {summary?.topSpecimenTypes && summary.topSpecimenTypes.length > 0 && (
             <div className="mt-2">
-              <div className="text-xs mb-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Top Specimen Types</div>
+              <div className="text-xs mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>Top Specimen Types</div>
               <div className="flex flex-wrap gap-1">
                 {summary.topSpecimenTypes.slice(0, 3).map((type, idx) => (
                   <span
                     key={idx}
                     className="px-1.5 py-0.5 text-xs rounded"
-                    style={{ backgroundColor: 'rgb(var(--dashboard-surface))', color: 'rgb(var(--dashboard-text))' }}
+                    style={{ backgroundColor: 'rgb(var(--app-surface))', color: 'rgb(var(--app-text))' }}
                   >
                     {type.name} ({type.count})
                   </span>
                 ))}
                 {summary.topSpecimenTypes.length > 3 && (
-                  <span className="px-1.5 py-0.5 text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                  <span className="px-1.5 py-0.5 text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
                     +{summary.topSpecimenTypes.length - 3} more
                   </span>
                 )}
@@ -270,9 +270,9 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
       )}
 
       {/* Footer */}
-      <div className="px-5 py-3 border-t rounded-b-xl mt-auto" style={{ borderColor: 'rgb(var(--dashboard-border))', backgroundColor: 'rgb(var(--dashboard-surface))' }}>
+      <div className="px-5 py-3 border-t rounded-b-xl mt-auto" style={{ borderColor: 'rgb(var(--app-border))', backgroundColor: 'rgb(var(--app-surface))' }}>
         <div className="flex items-center justify-between text-xs">
-          <span style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Updated {new Date(study.lastUpdated).toLocaleDateString()}</span>
+          <span style={{ color: 'rgb(var(--app-text-muted))' }}>Updated {new Date(study.lastUpdated).toLocaleDateString()}</span>
           <Link
             to={`/studies/${study.id}`}
             onClick={(e) => e.stopPropagation()}

@@ -3,7 +3,7 @@ import { CONTAINER_TYPES } from '../lib/container-types'
 
 interface ContainerTypeToggleProps {
   specimenTypeId: number
-  allowedTypes: string[]
+  allowedTypes?: string[]
   onToggle: (specimenTypeId: number, containerType: string, isAdding: boolean) => Promise<void>
   disabled?: boolean
   usageInfo?: Record<string, boolean> // Maps containerType to whether it's in use
@@ -11,7 +11,7 @@ interface ContainerTypeToggleProps {
 
 export default function ContainerTypeToggle({
   specimenTypeId,
-  allowedTypes,
+  allowedTypes = [],
   onToggle,
   disabled = false,
   usageInfo = {},
@@ -69,9 +69,9 @@ export default function ContainerTypeToggle({
             className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium transition-colors ${
               isSelected
                 ? isInUse
-                  ? 'bg-blue-600 text-white hover:bg-blue-600 cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                  ? 'bg-app-accent text-white hover:bg-app-accent cursor-not-allowed'
+                  : 'bg-app-accent text-white hover:bg-app-accent-hover'
+                : 'bg-app-surface text-app-text-muted hover:bg-app-border/80'
             } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             title={tooltip}
           >

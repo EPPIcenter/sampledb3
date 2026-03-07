@@ -165,7 +165,7 @@ export default function MicronixPlatePicker({
       : `Expand ${locationLabel}`
 
     return (
-      <div key={loc.id} className={depth > 0 ? 'ml-4 border-l border-gray-100 pl-2 mb-1' : 'mb-2'}>
+      <div key={loc.id} className={depth > 0 ? 'ml-4 border-l border-app-border pl-2 mb-1' : 'mb-2'}>
         {children.length > 0 ? (
           <button
             type="button"
@@ -186,9 +186,9 @@ export default function MicronixPlatePicker({
             }}
             aria-expanded={isExpanded}
             aria-label={expandAriaLabel}
-            className="storage-tree-picker-row w-full flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border border-transparent hover:bg-gray-50 hover:border-gray-200 transition-colors text-left group relative cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1"
+            className="storage-tree-picker-row w-full flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border border-transparent hover:bg-app-surface hover:border-app-border transition-colors text-left group relative cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1"
           >
-            <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-500 group-hover:text-gray-700" aria-hidden>
+            <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-app-text-muted group-hover:text-app-text" aria-hidden>
               {isExpanded ? (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -200,11 +200,11 @@ export default function MicronixPlatePicker({
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm text-gray-800 font-medium">
+              <div className="text-sm text-app-text font-medium">
                 {locationLabel}
               </div>
               {loc.path && (
-                <div className="text-[10px] text-gray-400 font-mono truncate">
+                <div className="text-[10px] text-app-text-muted font-mono truncate">
                   {loc.path}
                 </div>
               )}
@@ -214,11 +214,11 @@ export default function MicronixPlatePicker({
           <div className="storage-tree-picker-row flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg">
             <div className="w-5 flex-shrink-0" aria-hidden />
             <div className="flex-1 min-w-0">
-              <div className="text-sm text-gray-800 font-medium">
+              <div className="text-sm text-app-text font-medium">
                 {locationLabel}
               </div>
               {loc.path && (
-                <div className="text-[10px] text-gray-400 font-mono truncate">
+                <div className="text-[10px] text-app-text-muted font-mono truncate">
                   {loc.path}
                 </div>
               )}
@@ -257,8 +257,8 @@ export default function MicronixPlatePicker({
                     onClick={() => handleSelect(plate.name)}
                     className={`w-full text-left px-3 py-3 min-h-[44px] border rounded-lg transition-colors ${
                       isSelected
-                        ? 'border-blue-500 bg-blue-50 text-blue-900'
-                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-900'
+                        ? 'border-app-accent bg-app-accent-muted text-app-accent-hover'
+                        : 'border-app-border hover:border-app-accent/50 hover:bg-app-accent-muted text-app-text'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -266,12 +266,12 @@ export default function MicronixPlatePicker({
                         {plate.name}
                       </span>
                       {plate.barcode && (
-                        <span className={`text-[10px] ml-2 ${highlightBarcode ? 'bg-yellow-200 font-semibold' : 'text-gray-500'}`}>
+                        <span className={`text-[10px] ml-2 ${highlightBarcode ? 'bg-yellow-200 font-semibold' : 'text-app-text-muted'}`}>
                           {plate.barcode}
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">
+                    <div className="text-[10px] text-app-text-muted mt-0.5">
                       {plate.itemCount} item{plate.itemCount !== 1 ? 's' : ''}
                     </div>
                   </button>
@@ -290,20 +290,20 @@ export default function MicronixPlatePicker({
       const checkDescendants = (parentId: number | null): boolean => {
         const directChildren = locations.filter((l) => l.parentId === parentId)
         return directChildren.some((child) => {
-          if (platesByLocation[child.id].length > 0) return true
+          if ((platesByLocation[child.id] ?? []).length > 0) return true
           return checkDescendants(child.id)
         })
       }
-      if (platesByLocation[root.id].length > 0) return true
+      if ((platesByLocation[root.id] ?? []).length > 0) return true
       return checkDescendants(root.id)
     })
     
     if (rootsWithPlates.length === 0 && !search.trim()) {
-      return <p className="text-sm text-gray-500 p-4">No locations with plates found.</p>
+      return <p className="text-sm text-app-text-muted p-4">No locations with plates found.</p>
     }
     
     if (rootsWithPlates.length === 0 && search.trim()) {
-      return <p className="text-sm text-gray-500 p-4">No locations match this filter.</p>
+      return <p className="text-sm text-app-text-muted p-4">No locations match this filter.</p>
     }
 
     return (
@@ -311,11 +311,13 @@ export default function MicronixPlatePicker({
         {rootsWithPlates.map((root) => renderLocationNode(root, 0))}
         
         {/* Show unlocated plates if any */}
-        {platesByLocation[0].length > 0 && (
-          <div className="mt-4 pt-4 border-t border-gray-200" role="listbox" aria-label="Unlocated plates">
-            <div className="font-medium text-sm text-gray-700 mb-2">Unlocated Plates</div>
+        {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- platesByLocation[0] may be missing when key 0 not in map (e.g. no unlocated plates) */}
+        {(platesByLocation[0] ?? []).length > 0 && (
+          <div className="mt-4 pt-4 border-t border-app-border" role="listbox" aria-label="Unlocated plates">
+            <div className="font-medium text-sm text-app-text mb-2">Unlocated Plates</div>
             <div className="space-y-1">
-              {platesByLocation[0]
+              {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- same as above */}
+              {(platesByLocation[0] ?? [])
                 .filter((plate) => {
                   if (!search.trim()) return true
                   const searchLower = search.toLowerCase()
@@ -338,8 +340,8 @@ export default function MicronixPlatePicker({
                       onClick={() => handleSelect(plate.name)}
                       className={`w-full text-left px-3 py-3 min-h-[44px] border rounded-lg transition-colors ${
                         isSelected
-                          ? 'border-blue-500 bg-blue-50 text-blue-900'
-                          : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-900'
+                          ? 'border-app-accent bg-app-accent-muted text-app-accent-hover'
+                          : 'border-app-border hover:border-app-accent/50 hover:bg-app-accent-muted text-app-text'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -347,12 +349,12 @@ export default function MicronixPlatePicker({
                           {plate.name}
                         </span>
                         {plate.barcode && (
-                          <span className={`text-[10px] ml-2 ${highlightBarcode ? 'bg-yellow-200 font-semibold' : 'text-gray-500'}`}>
+                          <span className={`text-[10px] ml-2 ${highlightBarcode ? 'bg-yellow-200 font-semibold' : 'text-app-text-muted'}`}>
                             {plate.barcode}
                           </span>
                         )}
                       </div>
-                      <div className="text-[10px] text-gray-500 mt-0.5">
+                      <div className="text-[10px] text-app-text-muted mt-0.5">
                         {plate.itemCount} item{plate.itemCount !== 1 ? 's' : ''}
                       </div>
                     </button>
@@ -371,19 +373,19 @@ export default function MicronixPlatePicker({
         type="button"
         onClick={() => !disabled && setOpen(true)}
         disabled={disabled}
-        className={`w-full px-3 py-2 border border-gray-200 rounded-lg shadow-sm bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-          disabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'hover:border-gray-300'
+        className={`w-full px-3 py-2 border border-app-border rounded-lg shadow-sm bg-app-card text-left focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-app-accent ${
+          disabled ? 'bg-app-surface text-app-text-muted cursor-not-allowed' : 'hover:border-app-border'
         }`}
       >
         {selectedPlate ? (
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-900">{selectedPlate.name}</span>
+            <span className="text-sm font-medium text-app-text">{selectedPlate.name}</span>
             {selectedPlate.locationPath && (
-              <span className="text-xs text-gray-500 ml-2 truncate">{selectedPlate.locationPath}</span>
+              <span className="text-xs text-app-text-muted ml-2 truncate">{selectedPlate.locationPath}</span>
             )}
           </div>
         ) : (
-          <span className="text-sm text-gray-400">Select target plate...</span>
+          <span className="text-sm text-app-text-muted">Select target plate...</span>
         )}
       </button>
 
@@ -391,18 +393,18 @@ export default function MicronixPlatePicker({
         <ModalPortal>
           <div className="fixed inset-0 z-[100] flex items-center justify-center">
             <div
-              className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+              className="fixed inset-0 bg-black/40 backdrop-blur-md"
               onClick={() => setOpen(false)}
             />
           <div
-            className="relative z-10 w-full max-w-2xl mx-4 bg-white rounded-lg shadow-xl p-6 max-h-[80vh] flex flex-col"
+            className="relative z-10 w-full max-w-2xl mx-4 bg-app-card rounded-lg shadow-xl p-6 max-h-[80vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Select Micronix Plate</h3>
+              <h3 className="text-lg font-semibold text-app-text">Select Micronix Plate</h3>
               <button
                 type="button"
-                className="text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded"
                 onClick={() => setOpen(false)}
                 aria-label="Close plate selection"
               >
@@ -423,20 +425,20 @@ export default function MicronixPlatePicker({
               />
             </div>
 
-            <div className="border border-gray-200 rounded-lg overflow-y-auto flex-1 min-h-0">
+            <div className="border border-app-border rounded-lg overflow-y-auto flex-1 min-h-0">
               {loading ? (
-                <div className="p-4 text-sm text-gray-500">Loading plates...</div>
+                <div className="p-4 text-sm text-app-text-muted">Loading plates...</div>
               ) : (
                 <div className="p-2">
                   {search.trim() && matchingPlates.length > 0 && (
                     <div className="mb-4">
-                      <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-600 sticky top-0 rounded-t-lg">
+                      <div className="px-3 py-1.5 bg-app-surface border-b border-app-border text-xs font-medium text-app-text-muted sticky top-0 rounded-t-lg">
                         Matching plates
                       </div>
                       <div
                         role="listbox"
                         aria-label="Plate list"
-                        className="border border-gray-200 rounded-b-lg overflow-hidden"
+                        className="border border-app-border rounded-b-lg overflow-hidden"
                       >
                         {matchingPlates.map((plate) => {
                           const isSelected = plate.name === value
@@ -450,10 +452,10 @@ export default function MicronixPlatePicker({
                               role="option"
                               aria-selected={isSelected}
                               onClick={() => handleSelect(plate.name)}
-                              className={`w-full text-left px-3 py-3 min-h-[44px] border-b border-gray-100 last:border-b-0 transition-colors ${
+                              className={`w-full text-left px-3 py-3 min-h-[44px] border-b border-app-border last:border-b-0 transition-colors ${
                                 isSelected
-                                  ? 'bg-blue-50 text-blue-900'
-                                  : 'hover:bg-gray-50 text-gray-900'
+                                  ? 'bg-app-accent-muted text-app-accent-hover'
+                                  : 'hover:bg-app-surface text-app-text'
                               }`}
                             >
                               <div className="flex items-center justify-between">
@@ -461,12 +463,12 @@ export default function MicronixPlatePicker({
                                   {plate.name}
                                 </span>
                                 {plate.barcode && (
-                                  <span className={`text-[10px] ml-2 ${highlightBarcode ? 'bg-yellow-200 font-semibold' : 'text-gray-500'}`}>
+                                  <span className={`text-[10px] ml-2 ${highlightBarcode ? 'bg-yellow-200 font-semibold' : 'text-app-text-muted'}`}>
                                     {plate.barcode}
                                   </span>
                                 )}
                               </div>
-                              <div className="text-[10px] text-gray-500 mt-0.5">
+                              <div className="text-[10px] text-app-text-muted mt-0.5">
                                 {plate.itemCount} item{plate.itemCount !== 1 ? 's' : ''}
                                 {plate.locationPath && ` · ${plate.locationPath}`}
                               </div>
@@ -485,7 +487,7 @@ export default function MicronixPlatePicker({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover font-medium"
               >
                 Done
               </button>

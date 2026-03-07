@@ -102,4 +102,12 @@ describe('DerivationsBulkImport', () => {
       expect(api.derivationsApi.validateCsv).toHaveBeenCalled()
     }, { timeout: 3000 })
   })
+
+  it('shows Review & Edit as active step when step=review in URL', async () => {
+    await render(<DerivationsBulkImport />, { initialEntries: ['/derivations/import?step=review'] })
+    await waitFor(() => {
+      const reviewStep = screen.getByText('Review & Edit').closest('.storage-step-item')
+      expect(reviewStep?.classList.contains('storage-step-item--active')).toBe(true)
+    }, { timeout: 2000 })
+  })
 })

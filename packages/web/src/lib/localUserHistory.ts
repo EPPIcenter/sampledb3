@@ -23,7 +23,7 @@ export function getRecentUsers(): LocalUser[] {
     return users.sort((a, b) => new Date(b.lastLogin).getTime() - new Date(a.lastLogin).getTime())
   } catch (error) {
     console.error('Failed to load recent users from localStorage:', error)
-    return []
+    throw error
   }
 }
 

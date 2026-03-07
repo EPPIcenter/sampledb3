@@ -279,14 +279,14 @@ export default function TableViewConfigurationsManager({
   return (
     <div className="space-y-4">
       {error && (
-        <div className="rounded-md bg-red-50 p-2">
-          <p className="text-xs font-medium text-red-800">{error}</p>
+        <div className="rounded-md bg-app-trend-down/10 p-2">
+          <p className="text-xs font-medium text-app-trend-down">{error}</p>
         </div>
       )}
 
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
-          <label className="text-sm font-medium text-gray-700">Table view configurations</label>
+          <label className="text-sm font-medium text-app-text">Table view configurations</label>
           <InfoTooltip text="Presets for which columns appear in collection table views (plates, boxes, bags, sheets). The default preset is used when no selection has been made. Table CSV download exports the current view columns." />
         </div>
         <button
@@ -298,26 +298,26 @@ export default function TableViewConfigurationsManager({
             setNewConfigColumns(DEFAULT_TABLE_VIEW_COLUMN_KEYS)
             setError(null)
           }}
-          className="text-sm text-blue-600 hover:text-blue-800"
+          className="text-sm text-app-accent hover:text-app-accent-hover"
         >
           + Add configuration
         </button>
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-gray-500">Loading configurations...</div>
+        <div className="text-center py-8 text-app-text-muted">Loading configurations...</div>
       ) : (
         <>
           <div className="space-y-2">
             {configurations.map((config, index) => (
-              <div key={config.name} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+              <div key={config.name} className="border border-app-border rounded-lg p-3 bg-app-surface">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     {config.isDefault && (
-                      <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded">Default</span>
+                      <span className="text-xs font-medium text-app-accent bg-app-accent-muted px-2 py-1 rounded">Default</span>
                     )}
-                    <span className="text-sm font-medium text-gray-900">{config.name}</span>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-sm font-medium text-app-text">{config.name}</span>
+                    <span className="text-xs text-app-text-muted">
                       ({config.columns.length} column{config.columns.length !== 1 ? 's' : ''})
                     </span>
                   </div>
@@ -326,7 +326,7 @@ export default function TableViewConfigurationsManager({
                       <button
                         type="button"
                         onClick={() => handleSetDefault(index)}
-                        className="text-xs text-blue-600 hover:text-blue-800"
+                        className="text-xs text-app-accent hover:text-app-accent-hover"
                       >
                         Set as default
                       </button>
@@ -334,14 +334,14 @@ export default function TableViewConfigurationsManager({
                     <button
                       type="button"
                       onClick={() => handleEdit(index)}
-                      className="text-xs text-gray-600 hover:text-gray-800"
+                      className="text-xs text-app-text-muted hover:text-app-text"
                     >
                       Edit
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDelete(index)}
-                      className="text-xs text-red-600 hover:text-red-800"
+                      className="text-xs text-app-trend-down hover:text-app-trend-down"
                     >
                       Delete
                     </button>
@@ -350,7 +350,7 @@ export default function TableViewConfigurationsManager({
               </div>
             ))}
             {configurations.length === 0 && !showNewForm && (
-              <div className="text-sm text-gray-500 italic text-center py-4">
+              <div className="text-sm text-app-text-muted italic text-center py-4">
                 No table view configurations. Add one to control which columns appear in collection table views.
               </div>
             )}
@@ -359,25 +359,25 @@ export default function TableViewConfigurationsManager({
       )}
 
       {showNewForm && (
-        <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+        <div className="border border-app-border rounded-lg p-4 bg-app-surface">
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Configuration name</label>
+            <label className="block text-sm font-medium text-app-text mb-2">Configuration name</label>
             <input
               type="text"
               value={newConfigName}
               onChange={(e) => setNewConfigName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
               placeholder="e.g., Default, Browse"
             />
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-app-text mb-2">
               Selected columns (in order) – drag to reorder
             </label>
             <div
               ref={scrollContainerRef}
-              className="border border-gray-200 rounded-lg p-2 bg-white max-h-96 overflow-y-auto"
+              className="border border-app-border rounded-lg p-2 bg-app-card max-h-96 overflow-y-auto"
             >
               {newConfigColumns.map((columnKey, idx) => (
                 <div
@@ -390,25 +390,25 @@ export default function TableViewConfigurationsManager({
                   onDragEnd={handleDragEnd}
                   className={`flex items-center justify-between p-2 rounded cursor-move transition-colors ${
                     draggedIndex === idx
-                      ? 'opacity-50 bg-gray-100'
+                      ? 'opacity-50 bg-app-surface'
                       : dragOverIndex === idx
-                        ? 'bg-blue-50 border-2 border-blue-300 border-dashed'
-                        : 'hover:bg-gray-50'
+                        ? 'bg-app-accent-muted border-2 border-app-accent/50 border-dashed'
+                        : 'hover:bg-app-surface'
                   }`}
                 >
                   <div className="flex items-center gap-2 flex-1">
-                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-4 h-4 text-app-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
                     </svg>
-                    <span className="text-xs text-gray-500 w-6">{idx + 1}.</span>
-                    <span className="text-sm text-gray-700">{getColumnLabel(columnKey)}</span>
+                    <span className="text-xs text-app-text-muted w-6">{idx + 1}.</span>
+                    <span className="text-sm text-app-text">{getColumnLabel(columnKey)}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     {idx > 0 && (
                       <button
                         type="button"
                         onClick={() => handleMoveColumn(idx, idx - 1)}
-                        className="p-1 text-gray-400 hover:text-gray-600"
+                        className="p-1 text-app-text-muted hover:text-app-text-muted"
                         title="Move up"
                         onMouseDown={(e) => e.stopPropagation()}
                       >
@@ -421,7 +421,7 @@ export default function TableViewConfigurationsManager({
                       <button
                         type="button"
                         onClick={() => handleMoveColumn(idx, idx + 1)}
-                        className="p-1 text-gray-400 hover:text-gray-600"
+                        className="p-1 text-app-text-muted hover:text-app-text-muted"
                         title="Move down"
                         onMouseDown={(e) => e.stopPropagation()}
                       >
@@ -433,7 +433,7 @@ export default function TableViewConfigurationsManager({
                     <button
                       type="button"
                       onClick={() => handleToggleColumn(columnKey)}
-                      className="p-1 text-red-400 hover:text-red-600"
+                      className="p-1 text-red-400 hover:text-app-trend-down"
                       title="Remove"
                       onMouseDown={(e) => e.stopPropagation()}
                     >
@@ -448,21 +448,21 @@ export default function TableViewConfigurationsManager({
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Available columns (not selected)</label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto border border-gray-200 rounded p-2 bg-white">
+            <label className="block text-sm font-medium text-app-text mb-2">Available columns (not selected)</label>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto border border-app-border rounded p-2 bg-app-card">
               {EXPORT_ENTRY_COLUMNS.filter((col) => !newConfigColumns.includes(col.key)).map((column) => (
                 <button
                   key={column.key}
                   type="button"
                   onClick={() => handleToggleColumn(column.key)}
-                  className="text-left p-2 text-sm border border-gray-200 rounded hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                  className="text-left p-2 text-sm border border-app-border rounded hover:bg-app-accent-muted hover:border-app-accent/50 transition-colors"
                 >
-                  <div className="font-medium text-gray-700">{column.label}</div>
-                  <div className="text-xs text-gray-400">{column.key}</div>
+                  <div className="font-medium text-app-text">{column.label}</div>
+                  <div className="text-xs text-app-text-muted">{column.key}</div>
                 </button>
               ))}
               {EXPORT_ENTRY_COLUMNS.filter((col) => !newConfigColumns.includes(col.key)).length === 0 && (
-                <div className="text-xs text-gray-500 italic">All columns selected</div>
+                <div className="text-xs text-app-text-muted italic">All columns selected</div>
               )}
             </div>
           </div>
@@ -477,14 +477,14 @@ export default function TableViewConfigurationsManager({
                 setNewConfigColumns(DEFAULT_TABLE_VIEW_COLUMN_KEYS)
                 setError(null)
               }}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="px-4 py-2 text-sm font-medium text-app-text bg-app-card border border-app-border rounded-lg hover:bg-app-surface"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={editingIndex !== null ? handleUpdate : handleAdd}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+              className="px-4 py-2 text-sm font-medium text-white bg-app-accent rounded-lg hover:bg-app-accent-hover"
             >
               {editingIndex !== null ? 'Save' : 'Add'}
             </button>

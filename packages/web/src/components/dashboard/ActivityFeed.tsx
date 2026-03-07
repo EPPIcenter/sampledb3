@@ -112,7 +112,7 @@ function getActivityBadgeColor(type: ActivityItem['type']): string {
     case 'specimen':
       return 'bg-emerald-50 text-emerald-700'
     case 'study':
-      return 'bg-blue-50 text-blue-700'
+      return 'bg-app-accent-muted text-app-accent-hover'
     case 'container':
       return 'bg-amber-50 text-amber-700'
     case 'subject':
@@ -167,13 +167,13 @@ function renderActivityGroup(title: string, activities: ActivityItem[]) {
 
   return (
     <div className="mb-4">
-      <h3 className="text-xs font-semibold text-[rgb(var(--dashboard-text-muted))] uppercase tracking-wider mb-2">{title}</h3>
+      <h3 className="text-xs font-semibold text-[rgb(var(--app-text-muted))] uppercase tracking-wider mb-2">{title}</h3>
       <div className="space-y-2">
         {activities.map((item, index) => (
           <Link
             key={`${item.type}-${item.id}-${index}`}
             to={getActivityUrl(item)}
-            className="block p-3 border border-[rgb(var(--dashboard-border))] rounded-lg hover:border-[rgb(var(--dashboard-accent)/0.4)] hover:bg-[rgb(var(--dashboard-surface))] transition-all duration-200"
+            className="block p-3 border border-[rgb(var(--app-border))] rounded-lg hover:border-[rgb(var(--app-accent)/0.4)] hover:bg-[rgb(var(--app-surface))] transition-all duration-200"
             aria-label={item.label || getActivityFallbackLabel(item.type)}
           >
             <div className="flex items-start gap-3">
@@ -185,15 +185,15 @@ function renderActivityGroup(title: string, activities: ActivityItem[]) {
                   <span className={`px-2 py-0.5 text-xs font-medium rounded ${getActivityBadgeColor(item.type)}`}>
                     {item.type}
                   </span>
-                  <span className="font-medium text-[rgb(var(--dashboard-text))] truncate">
+                  <span className="font-medium text-[rgb(var(--app-text))] truncate">
                     {item.label || getActivityFallbackLabel(item.type)}
                   </span>
                 </div>
                 {item.context && (
-                  <p className="text-sm text-[rgb(var(--dashboard-text-muted))] truncate">{item.context}</p>
+                  <p className="text-sm text-[rgb(var(--app-text-muted))] truncate">{item.context}</p>
                 )}
               </div>
-              <span className="text-xs text-[rgb(var(--dashboard-text-muted))] flex-shrink-0 whitespace-nowrap">
+              <span className="text-xs text-[rgb(var(--app-text-muted))] flex-shrink-0 whitespace-nowrap">
                 {formatRelativeTime(item.timestamp)}
               </span>
             </div>
@@ -218,7 +218,7 @@ export default function ActivityFeed({ activities, loading }: ActivityFeedProps)
     return (
       <section className="dashboard-card p-6" aria-labelledby="recent-activity-title">
         <h2 id="recent-activity-title" className="dashboard-section-title mb-4">Recent Activity</h2>
-        <div className="text-center py-8 text-[rgb(var(--dashboard-text-muted))]">No recent activity</div>
+        <div className="text-center py-8 text-[rgb(var(--app-text-muted))]">No recent activity</div>
       </section>
     )
   }

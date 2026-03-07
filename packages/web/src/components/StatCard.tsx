@@ -17,11 +17,11 @@ export default function StatCard({ title, value, subtitle, trend, unfilteredValu
   const hasUnfiltered = unfilteredValue !== undefined && unfilteredValue !== Number(value)
   
   return (
-    <div className={className ?? 'bg-white rounded-lg shadow p-6'}>
-      <h3 className="stat-card-title text-sm font-medium text-gray-500 mb-1">{title}</h3>
+    <div className={className ?? 'bg-app-card rounded-lg shadow p-6'}>
+      <h3 className="stat-card-title text-sm font-medium text-app-text-muted mb-1">{title}</h3>
       <div className="flex items-baseline justify-between">
         <div className="flex-1">
-          <p className="stat-card-value text-3xl font-bold text-gray-900">{value.toLocaleString()}</p>
+          <p className="stat-card-value text-3xl font-bold text-app-text">{value.toLocaleString()}</p>
           {hasUnfiltered && showUnfilteredWarning && (
             <div className="mt-1 flex items-center gap-1.5">
               <svg 
@@ -45,7 +45,7 @@ export default function StatCard({ title, value, subtitle, trend, unfilteredValu
         {trend && (
           <span
             className={`text-sm font-medium ${
-              trend.positive !== false ? 'text-green-600' : 'text-red-600'
+              trend.positive !== false ? 'text-app-trend-up' : 'text-app-trend-down'
             }`}
           >
             {trend.positive !== false ? '+' : ''}
@@ -53,7 +53,7 @@ export default function StatCard({ title, value, subtitle, trend, unfilteredValu
           </span>
         )}
       </div>
-      {subtitle && <p className="text-sm text-gray-500 mt-2">{subtitle}</p>}
+      {subtitle && <p className="text-sm text-app-text-muted mt-2">{subtitle}</p>}
     </div>
   )
 }

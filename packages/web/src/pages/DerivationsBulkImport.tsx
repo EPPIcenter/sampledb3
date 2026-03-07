@@ -11,6 +11,7 @@ import {
   type SpecimenType,
   type Unit,
 } from '../lib/api'
+import { getCollectionNameColumn } from '../lib/container-columns'
 import { generateDerivationsTemplate, type TemplateOptions } from '../lib/template-generator'
 import { useUser } from '../contexts/UserContext'
 import LocationPicker from '../components/LocationPicker'
@@ -43,15 +44,9 @@ const SOURCE_TYPES = [
   { value: 'study_subject', label: 'Study Subject (e.g., participant specimens)' },
 ]
 
-type UrlStep = 'upload' | 'collections' | 'import'
+type UrlStep = 'upload' | 'collections' | 'review' | 'import'
 type SourceType = 'control_batch' | 'study_subject'
 type ParentContainerType = 'paper' | 'cryovial_tube' | 'micronix_tube'
-
-function getCollectionNameColumnByContainerType(containerType: BulkDerivationSettings['containerType'] | ParentContainerType): 'plate_name' | 'box_name' | 'bag_name' {
-  if (containerType === 'cryovial_tube') return 'box_name'
-  if (containerType === 'paper') return 'bag_name'
-  return 'plate_name'
-}
 
 function parseCsvPreview(csv: string): Record<string, string>[] {
   const lines = csv.trim().split(/\r?\n/).filter((l) => l.trim())
@@ -67,6 +62,36 @@ function parseCsvPreview(csv: string): Record<string, string>[] {
     rows.push(row)
   }
   return rows
+}
+
+/** Parse full CSV into headers and rows (naive split; used for editable review). */
+function parseFullCsv(csv: string): { headers: string[]; rows: Record<string, string>[] } {
+  const lines = csv.trim().split(/\r?\n/).filter((l) => l.trim())
+  if (lines.length < 2) return { headers: [], rows: [] }
+  const headers = lines[0].split(',').map((h) => h.trim())
+  const rows: Record<string, string>[] = []
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(',')
+    const row: Record<string, string> = {}
+    headers.forEach((header, j) => {
+      row[header] = values[j]?.trim() ?? ''
+    })
+    rows.push(row)
+  }
+  return { headers, rows }
+}
+
+/** Serialize headers and rows back to CSV (escape values that contain comma or quote). */
+function serializeToCsv(headers: string[], rows: Record<string, string>[]): string {
+  const escape = (v: string): string => {
+    if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+      return `"${v.replace(/"/g, '""')}"`
+    }
+    return v
+  }
+  const headerLine = headers.map(escape).join(',')
+  const dataLines = rows.map((r) => headers.map((h) => escape(r[h] ?? '')).join(','))
+  return [headerLine, ...dataLines].join('\n')
 }
 
 /** Required and optional CSV columns for the current source, parent type, and settings. */
@@ -173,6 +198,9 @@ export default function DerivationsBulkImport() {
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
   const [importResults, setImportResults] = useState<DerivationCsvImportResultRow[] | null>(null)
   const importResultsRef = useRef<HTMLDivElement>(null)
+  /** Editable rows for review step; headers from parsed CSV. */
+  const [reviewHeaders, setReviewHeaders] = useState<string[]>([])
+  const [reviewRows, setReviewRows] = useState<Record<string, string>[]>([])
 
   // Pure derivation: compute base list from validationResult during render
   const baseMissingCollections = useMemo(() => {
@@ -294,6 +322,8 @@ export default function DerivationsBulkImport() {
     setCsvContent('')
     setValidationResult(null)
     setImportResults(null)
+    setReviewHeaders([])
+    setReviewRows([])
     setError(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -329,6 +359,9 @@ export default function DerivationsBulkImport() {
     e.preventDefault()
     const result = await validateCsv()
     if (!result) return
+    const { headers, rows } = parseFullCsv(csvContent)
+    setReviewHeaders(headers)
+    setReviewRows(rows.map((r) => ({ ...r })))
     const hasMissingCollections = result.collections.some(
       (c) =>
         c.status === 'will_be_created' &&
@@ -337,19 +370,27 @@ export default function DerivationsBulkImport() {
     if (hasMissingCollections) {
       setCurrentStep('collections')
     } else {
-      setCurrentStep('import')
+      setCurrentStep('review')
     }
   }
 
+  const getCsvForImport = (): string => {
+    if (reviewHeaders.length > 0 && reviewRows.length > 0) {
+      return serializeToCsv(reviewHeaders, reviewRows)
+    }
+    return csvContent
+  }
+
   const handleImport = async () => {
-    if (!csvContent.trim()) {
+    const csvToSend = getCsvForImport()
+    if (!csvToSend.trim()) {
       setError('Please upload a CSV file')
       return
     }
     setLoading(true)
     setError(null)
     try {
-      const response = await derivationsApi.importCsv(csvContent, {
+      const response = await derivationsApi.importCsv(csvToSend, {
         dryRun: false,
         settings,
       })
@@ -414,12 +455,22 @@ export default function DerivationsBulkImport() {
 
     if (allSuccess) {
       setError(null)
-      await handleImport()
-      setCurrentStep('import')
+      const { headers, rows } = parseFullCsv(csvContent)
+      setReviewHeaders(headers)
+      setReviewRows(rows.map((r) => ({ ...r })))
+      setCurrentStep('review')
     }
   }
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    let specimenTypes: Array<{ id: number; name: string }> | undefined
+    try {
+      const res = await specimenTypesApi.list()
+      specimenTypes = res.data
+    } catch {
+      specimenTypes = undefined
+    }
+
     let parentType: TemplateOptions['parentType']
     if (sourceType === 'control_batch') {
       parentType =
@@ -435,6 +486,9 @@ export default function DerivationsBulkImport() {
       settings,
       sourceType,
       parentContainerType,
+      specimenTypes,
+      exampleDerivationType: settings.derivationType || DERIVATION_TYPES[0]?.value,
+      exampleProtocol: settings.protocol || undefined,
     })
 
     const blob = new Blob([template], { type: 'text/csv' })
@@ -459,7 +513,7 @@ export default function DerivationsBulkImport() {
       <div className="container mx-auto px-4 py-8 relative z-10">
         <div className="mb-6">
           <h1 className="text-3xl font-bold mb-2">Bulk Derivation Import</h1>
-          <p className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+          <p className="text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
             Create derivation records that link parent specimens to new specimens. One row per derivation; upload a CSV or use the template.
           </p>
         </div>
@@ -478,20 +532,27 @@ export default function DerivationsBulkImport() {
               className={`storage-step-item ${currentStep === 'collections' ? 'storage-step-item--active' : ''}`}
             >
               <span className="storage-step-item__circle">2</span>
-              <span>{missingCollections.length > 0 ? 'Collections' : 'Review'}</span>
+              <span>Collections</span>
+            </div>
+            <div className="storage-step-connector" />
+            <div
+              className={`storage-step-item ${currentStep === 'review' ? 'storage-step-item--active' : ''}`}
+            >
+              <span className="storage-step-item__circle">3</span>
+              <span>Review & Edit</span>
             </div>
             <div className="storage-step-connector" />
             <div
               className={`storage-step-item ${currentStep === 'import' ? 'storage-step-item--active' : ''}`}
             >
-              <span className="storage-step-item__circle">3</span>
+              <span className="storage-step-item__circle">4</span>
               <span>Import</span>
             </div>
           </div>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+          <div className="mb-4 p-3 bg-app-trend-down/10 border border-app-trend-down rounded text-app-trend-down text-sm">
             {error}
           </div>
         )}
@@ -502,8 +563,8 @@ export default function DerivationsBulkImport() {
             <form onSubmit={handleValidateAndContinue} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Source <span className="text-red-500">*</span>
+                  <label className="block text-sm font-medium text-app-text mb-1">
+                    Source <span className="text-app-trend-down">*</span>
                   </label>
                   <select
                     value={sourceType}
@@ -511,7 +572,7 @@ export default function DerivationsBulkImport() {
                       setSourceType(e.target.value as SourceType)
                       setParentContainerType('paper')
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                     disabled={loading}
                   >
                     {SOURCE_TYPES.map((t) => (
@@ -520,20 +581,20 @@ export default function DerivationsBulkImport() {
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-app-text-muted mt-1">
                     Where parent specimens come from
                   </p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Parent container type <span className="text-red-500">*</span>
+                  <label className="block text-sm font-medium text-app-text mb-1">
+                    Parent container type <span className="text-app-trend-down">*</span>
                   </label>
                   <select
                     value={parentContainerType}
                     onChange={(e) =>
                       setParentContainerType(e.target.value as ParentContainerType)
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                     disabled={loading}
                   >
                     {sourceType === 'control_batch' ? (
@@ -549,7 +610,7 @@ export default function DerivationsBulkImport() {
                       </>
                     )}
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-app-text-muted mt-1">
                     Type of container you're deriving from
                   </p>
                 </div>
@@ -562,20 +623,20 @@ export default function DerivationsBulkImport() {
                   onClick={() => setDefaultsExpanded(!defaultsExpanded)}
                   className="w-full px-4 py-3 text-left text-sm font-medium flex items-center justify-between"
                   style={{
-                    background: 'rgb(var(--dashboard-accent-muted))',
-                    color: 'rgb(var(--dashboard-text))',
+                    background: 'rgb(var(--app-accent-muted))',
+                    color: 'rgb(var(--app-text))',
                   }}
                 >
                   <span>Import settings</span>
                   <span className="text-lg">{defaultsExpanded ? '−' : '+'}</span>
                 </button>
                 {defaultsExpanded && (
-                  <div className="p-4 space-y-4 border-t bg-white">
-                    <p className="text-sm text-gray-600 mb-3">
+                  <div className="p-4 space-y-4 border-t bg-app-card">
+                    <p className="text-sm text-app-text-muted mb-3">
                       Set a value to use it for every row. Choose &quot;In CSV (per row)&quot; or leave a field blank to provide that column in your CSV instead (one value per row).
                     </p>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-app-text mb-1">
                         Derivation type
                       </label>
                       <select
@@ -583,7 +644,7 @@ export default function DerivationsBulkImport() {
                         onChange={(e) =>
                           setSettings({ ...settings, derivationType: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                         disabled={loading}
                       >
                         <option value="">— In CSV (per row) —</option>
@@ -595,7 +656,7 @@ export default function DerivationsBulkImport() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-app-text mb-1">
                         Derived specimen type
                       </label>
                       <select
@@ -603,7 +664,7 @@ export default function DerivationsBulkImport() {
                         onChange={(e) =>
                           setSettings({ ...settings, specimenTypeName: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                         disabled={loading}
                       >
                         <option value="">— In CSV (per row) —</option>
@@ -615,7 +676,7 @@ export default function DerivationsBulkImport() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-app-text mb-1">
                         Derived container type
                       </label>
                       <select
@@ -626,7 +687,7 @@ export default function DerivationsBulkImport() {
                             containerType: e.target.value as BulkDerivationSettings['containerType'],
                           })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                         disabled={loading}
                       >
                         <option value="">— In CSV (per row) —</option>
@@ -643,7 +704,7 @@ export default function DerivationsBulkImport() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-app-text mb-1">
                         Protocol
                       </label>
                       <input
@@ -652,13 +713,13 @@ export default function DerivationsBulkImport() {
                         onChange={(e) =>
                           setSettings({ ...settings, protocol: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                         placeholder="Protocol name or reference"
                         disabled={loading}
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-app-text mb-1">
                         Derivation date
                       </label>
                       <input
@@ -667,18 +728,18 @@ export default function DerivationsBulkImport() {
                         onChange={(e) =>
                           setSettings({ ...settings, derivationDate: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                         disabled={loading}
                       />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Leave empty to use a <code className="bg-gray-100 px-1 rounded">derivation_date</code> column in your CSV (one value per row).
+                      <p className="text-xs text-app-text-muted mt-1">
+                        Leave empty to use a <code className="bg-app-surface px-1 rounded">derivation_date</code> column in your CSV (one value per row).
                       </p>
                     </div>
-                    <div className="border-t border-gray-200 pt-4 mt-2">
-                      <p className="text-sm font-medium text-gray-800 mb-3">Quantity (optional)</p>
+                    <div className="border-t border-app-border pt-4 mt-2">
+                      <p className="text-sm font-medium text-app-text mb-3">Quantity (optional)</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-app-text mb-1">
                             Derived container quantity
                           </label>
                           <input
@@ -695,14 +756,14 @@ export default function DerivationsBulkImport() {
                                 if (!Number.isNaN(n)) setSettings({ ...settings, quantity: n })
                               }
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                             placeholder="e.g. 1"
                             disabled={loading}
                           />
-                          <p className="text-xs text-gray-500 mt-1">Leave empty to use CSV column per row.</p>
+                          <p className="text-xs text-app-text-muted mt-1">Leave empty to use CSV column per row.</p>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-app-text mb-1">
                             Unit
                           </label>
                           <select
@@ -710,7 +771,7 @@ export default function DerivationsBulkImport() {
                             onChange={(e) =>
                               setSettings({ ...settings, unitSymbol: e.target.value || '' })
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                             disabled={loading}
                           >
                             <option value="">— In CSV (per row) —</option>
@@ -722,7 +783,7 @@ export default function DerivationsBulkImport() {
                           </select>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-app-text mb-1">
                             Quantity used (from parent)
                           </label>
                           <input
@@ -739,14 +800,14 @@ export default function DerivationsBulkImport() {
                                 if (!Number.isNaN(n)) setSettings({ ...settings, quantityUsed: n })
                               }
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                             placeholder="e.g. 1"
                             disabled={loading}
                           />
-                          <p className="text-xs text-gray-500 mt-1">Leave empty to use CSV column per row. Used when reducing parent quantity (e.g. DBS spot count).</p>
+                          <p className="text-xs text-app-text-muted mt-1">Leave empty to use CSV column per row. Used when reducing parent quantity (e.g. DBS spot count).</p>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-app-text mb-1">
                             Reduce parent quantity
                           </label>
                           <select
@@ -758,7 +819,7 @@ export default function DerivationsBulkImport() {
                                 reduceParentQuantity: v === '' ? undefined : v === 'true',
                               })
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                             disabled={loading}
                           >
                             <option value="true">Yes (same for all rows)</option>
@@ -779,37 +840,37 @@ export default function DerivationsBulkImport() {
                   settings
                 )
                 return (
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 space-y-3">
-                    <p className="font-medium text-gray-900">
+                  <div className="rounded-lg border border-app-border bg-app-surface px-4 py-3 text-sm text-app-text space-y-3">
+                    <p className="font-medium text-app-text">
                       CSV template guide
                       {' — '}
-                      <a href="/docs/guides/features/derivations/" className="text-blue-600 hover:text-blue-800 hover:underline">
+                      <a href="/docs/guides/features/derivations/" className="text-app-accent hover:text-app-accent-hover hover:underline">
                         full guide
                       </a>
                     </p>
                     <div>
-                      <p className="font-medium text-gray-800 mb-0.5">Required columns</p>
-                      <p className="text-gray-600">{required.join(', ')}</p>
+                      <p className="font-medium text-app-text mb-0.5">Required columns</p>
+                      <p className="text-app-text-muted">{required.join(', ')}</p>
                     </div>
                     {optional.length > 0 && (
                       <div>
-                        <p className="font-medium text-gray-800 mb-0.5">Optional columns</p>
-                        <p className="text-gray-600">{optional.join(', ')}</p>
+                        <p className="font-medium text-app-text mb-0.5">Optional columns</p>
+                        <p className="text-app-text-muted">{optional.join(', ')}</p>
                       </div>
                     )}
-                    <div className="border-t border-gray-200 pt-3 mt-1 space-y-1.5 text-gray-600">
+                    <div className="border-t border-app-border pt-3 mt-1 space-y-1.5 text-app-text-muted">
                       <p>
-                        <span className="font-medium text-gray-700">
+                        <span className="font-medium text-app-text">
                           {settings.containerType
-                            ? `${getCollectionNameColumnByContainerType(settings.containerType)}${settings.containerType === 'paper' ? '' : ' or collection_barcode'}`
+                            ? `${getCollectionNameColumn(settings.containerType)!}${settings.containerType === 'paper' ? '' : ' or collection_barcode'}`
                             : 'plate_name / box_name / bag_name (based on container_type)'}
                         </span>
                         {' '}
                         — Required collection identifier. For tube types, collection barcode can also be used. Collections are created if they don&apos;t exist.
                       </p>
-                      <p><span className="font-medium text-gray-700">position</span> — Position in the collection (e.g. A01, B02).</p>
-                      <p><span className="font-medium text-gray-700">quantity, unit_symbol, quantity_used, reduce_parent_quantity</span> — Optional. You can set these in Import settings (same for all rows) or provide columns in the CSV (per row). Use <code className="bg-gray-200 px-1 rounded text-xs">quantity_used</code> and <code className="bg-gray-200 px-1 rounded text-xs">reduce_parent_quantity</code> to reduce the parent&apos;s remaining quantity (e.g. DBS spot count). Not a blocker if missing or if data is imperfect.</p>
-                      <p className="pt-1"><span className="font-medium text-gray-700">parent_specimen_type_name</span> is the <em>parent</em> specimen type (e.g. DBS, Whole Blood). The <em>derived</em> specimen type (e.g. DNA (DBS)) is set in Import settings or in the <code className="bg-gray-200 px-1 rounded text-xs">specimen_type_name</code> column.</p>
+                      <p><span className="font-medium text-app-text">position</span> — Position in the collection (e.g. A01, B02).</p>
+                      <p><span className="font-medium text-app-text">quantity, unit_symbol, quantity_used, reduce_parent_quantity</span> — Optional. You can set these in Import settings (same for all rows) or provide columns in the CSV (per row). Use <code className="bg-app-surface px-1 rounded text-xs">quantity_used</code> and <code className="bg-app-surface px-1 rounded text-xs">reduce_parent_quantity</code> to reduce the parent&apos;s remaining quantity (e.g. DBS spot count). Not a blocker if missing or if data is imperfect.</p>
+                      <p className="pt-1"><span className="font-medium text-app-text">parent_specimen_type_name</span> is the <em>parent</em> specimen type (e.g. DBS, Whole Blood). The <em>derived</em> specimen type (e.g. DNA (DBS)) is set in Import settings or in the <code className="bg-app-surface px-1 rounded text-xs">specimen_type_name</code> column.</p>
                     </div>
                   </div>
                 )
@@ -819,16 +880,16 @@ export default function DerivationsBulkImport() {
                 <div className="flex items-center justify-between mb-2">
                   <label
                     htmlFor="derivation-csv-file"
-                    className="block text-sm font-medium text-gray-700"
+                    className="block text-sm font-medium text-app-text"
                   >
-                    CSV file <span className="text-red-500">*</span>
+                    CSV file <span className="text-app-trend-down">*</span>
                   </label>
                   <div className="flex items-center gap-3">
                     {csvContent && (
                       <button
                         type="button"
                         onClick={handleClearFile}
-                        className="text-sm text-red-600 hover:text-red-700 underline"
+                        className="text-sm text-app-trend-down hover:text-app-trend-down underline"
                       >
                         Clear file
                       </button>
@@ -852,7 +913,7 @@ export default function DerivationsBulkImport() {
                   disabled={loading}
                 />
                 {csvContent && (
-                  <p className="text-sm text-green-600 mt-1">
+                  <p className="text-sm text-app-trend-up mt-1">
                     Selected: {csvContent.split(/\r?\n/).length - 1} rows
                   </p>
                 )}
@@ -860,17 +921,17 @@ export default function DerivationsBulkImport() {
 
               {previewRows.length > 0 && (
                 <div>
-                  <h3 className="font-semibold mb-2 text-gray-900">
+                  <h3 className="font-semibold mb-2 text-app-text">
                     Preview (first 5 rows)
                   </h3>
                   <div className="overflow-x-auto border rounded-lg">
                     <table className="min-w-full text-sm">
-                      <thead className="bg-gray-50">
+                      <thead className="bg-app-surface">
                         <tr>
                           {Object.keys(previewRows[0] ?? {}).map((key) => (
                             <th
                               key={key}
-                              className="px-4 py-2 text-left border-b text-gray-700 font-medium"
+                              className="px-4 py-2 text-left border-b text-app-text font-medium"
                             >
                               {key}
                             </th>
@@ -879,11 +940,11 @@ export default function DerivationsBulkImport() {
                       </thead>
                       <tbody>
                         {previewRows.map((row, i) => (
-                          <tr key={i} className="hover:bg-gray-50">
+                          <tr key={i} className="hover:bg-app-surface">
                             {Object.values(row).map((value, j) => (
                               <td
                                 key={j}
-                                className="px-4 py-2 border-b text-gray-900"
+                                className="px-4 py-2 border-b text-app-text"
                               >
                                 {String(value)}
                               </td>
@@ -924,22 +985,22 @@ export default function DerivationsBulkImport() {
               <h2 className="storage-section-title text-xl font-semibold mb-2">
                 Create missing collections
               </h2>
-              <p className="text-sm mb-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              <p className="text-sm mb-4" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 Assign a location for each collection below, then click Create collections & continue.
               </p>
               <div className="space-y-4">
                 {missingCollections.map((coll, index) => (
                   <div
                     key={index}
-                    className="border rounded-lg p-4 bg-white"
+                    className="border rounded-lg p-4 bg-app-card"
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <h3 className="font-medium text-gray-900">
+                        <h3 className="font-medium text-app-text">
                           {coll.name ?? coll.barcode ?? `Collection ${index + 1}`}
                         </h3>
                         {(coll.barcode ?? coll.name) && (
-                          <p className="text-sm text-gray-500">
+                          <p className="text-sm text-app-text-muted">
                             {coll.barcode ? `Barcode: ${coll.barcode}` : ''}
                             {coll.barcode && coll.name ? ' · ' : ''}
                             {coll.name ? `Name: ${coll.name}` : ''}
@@ -947,21 +1008,21 @@ export default function DerivationsBulkImport() {
                         )}
                       </div>
                       {coll.status === 'success' && (
-                        <span className="text-green-600 text-sm font-medium">Created</span>
+                        <span className="text-app-trend-up text-sm font-medium">Created</span>
                       )}
                       {coll.status === 'creating' && (
-                        <span className="text-teal-600 text-sm">Creating…</span>
+                        <span className="text-app-accent text-sm">Creating…</span>
                       )}
                       {coll.status === 'error' && (
-                        <span className="text-red-600 text-sm">Error</span>
+                        <span className="text-app-trend-down text-sm">Error</span>
                       )}
                     </div>
                     {coll.status === 'error' && coll.error && (
-                      <div className="mb-3 text-sm text-red-600">{coll.error}</div>
+                      <div className="mb-3 text-sm text-app-trend-down">{coll.error}</div>
                     )}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Location <span className="text-red-500">*</span>
+                      <label className="block text-sm font-medium text-app-text mb-2">
+                        Location <span className="text-app-trend-down">*</span>
                       </label>
                       <LocationPicker
                         value={coll.locationId ?? null}
@@ -1007,7 +1068,83 @@ export default function DerivationsBulkImport() {
           </div>
         )}
 
-        {/* Step: Import (review + Create derivations or result) */}
+        {/* Step: Review & Edit */}
+        {currentStep === 'review' && reviewHeaders.length > 0 && (
+          <div className="space-y-6">
+            <div className="storage-card p-6 storage-reveal storage-reveal-2">
+              <h2 className="storage-section-title text-xl font-semibold mb-2">
+                Review and edit data
+              </h2>
+              <p className="text-sm mb-4" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                The default unit for the derived container type (e.g. µL for tubes) is used; you can change it in the review step if needed. Edit any values below before importing.
+              </p>
+              <div className="overflow-x-auto border border-app-border rounded-lg mb-6">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-app-surface border-b border-app-border">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-app-text w-10">#</th>
+                      {reviewHeaders.map((h) => (
+                        <th key={h} className="px-3 py-2 text-left font-medium text-app-text">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-app-border">
+                    {reviewRows.map((row, rowIndex) => (
+                      <tr key={rowIndex} className="hover:bg-app-surface">
+                        <td className="px-3 py-1.5 text-app-text-muted">{rowIndex + 1}</td>
+                        {reviewHeaders.map((header) => (
+                          <td key={header} className="px-3 py-1.5">
+                            <input
+                              type="text"
+                              value={row[header] ?? ''}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                setReviewRows((prev) =>
+                                  prev.map((r, i) =>
+                                    i === rowIndex ? { ...r, [header]: value } : r
+                                  )
+                                )
+                              }}
+                              className="w-full px-2 py-1 border border-app-border rounded text-app-text focus:ring-1 focus:ring-app-accent focus:border-app-accent"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentStep(
+                      missingCollections.length > 0 ? 'collections' : 'upload'
+                    )
+                  }
+                  className="storage-btn-secondary"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleImport()
+                    setCurrentStep('import')
+                  }}
+                  disabled={loading}
+                  className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Creating…' : 'Create derivations'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Import (Create derivations or result) */}
         {currentStep === 'import' && validationResult && (
           <div className="space-y-6">
             <div className="storage-card p-6 storage-reveal storage-reveal-2">
@@ -1016,15 +1153,15 @@ export default function DerivationsBulkImport() {
               </h2>
 
               <div className="grid grid-cols-4 gap-4 mb-6">
-                <div className="bg-green-50 border border-green-200 rounded p-3">
-                  <div className="text-sm text-green-700 font-medium">Valid</div>
-                  <div className="text-2xl font-bold text-green-900">
+                <div className="bg-app-trend-up/10 border border-app-trend-up/30 rounded p-3">
+                  <div className="text-sm text-app-trend-up font-medium">Valid</div>
+                  <div className="text-2xl font-bold text-app-text">
                     {validationResult.summary.valid}
                   </div>
                 </div>
-                <div className="bg-red-50 border border-red-200 rounded p-3">
-                  <div className="text-sm text-red-700 font-medium">Invalid</div>
-                  <div className="text-2xl font-bold text-red-900">
+                <div className="bg-app-trend-down/10 border border-app-trend-down rounded p-3">
+                  <div className="text-sm text-app-trend-down font-medium">Invalid</div>
+                  <div className="text-2xl font-bold text-app-trend-down">
                     {validationResult.summary.invalid}
                   </div>
                 </div>
@@ -1037,19 +1174,19 @@ export default function DerivationsBulkImport() {
                 <div
                   className="rounded p-3"
                   style={{
-                    background: 'rgb(var(--dashboard-accent-muted))',
-                    border: '1px solid rgb(var(--dashboard-accent) / 0.3)',
+                    background: 'rgb(var(--app-accent-muted))',
+                    border: '1px solid rgb(var(--app-accent) / 0.3)',
                   }}
                 >
                   <div
                     className="text-sm font-medium"
-                    style={{ color: 'rgb(var(--dashboard-accent-hover))' }}
+                    style={{ color: 'rgb(var(--app-accent-hover))' }}
                   >
                     Total
                   </div>
                   <div
                     className="text-2xl font-bold"
-                    style={{ color: 'rgb(var(--dashboard-text))' }}
+                    style={{ color: 'rgb(var(--app-text))' }}
                   >
                     {validationResult.summary.total}
                   </div>
@@ -1058,7 +1195,7 @@ export default function DerivationsBulkImport() {
 
               {validationResult.collections.length > 0 && (
                 <div className="mb-6">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Collections</h4>
+                  <h4 className="text-sm font-medium text-app-text mb-2">Collections</h4>
                   <div className="space-y-1">
                     {validationResult.collections.map((col, idx) => (
                       <div key={idx} className="text-sm">
@@ -1068,7 +1205,7 @@ export default function DerivationsBulkImport() {
                         <span
                           className={`ml-2 px-2 py-1 rounded text-xs ${
                             col.status === 'existing'
-                              ? 'bg-green-100 text-green-700'
+                              ? 'bg-app-trend-up/10 text-app-trend-up'
                               : 'bg-yellow-100 text-yellow-700'
                           }`}
                         >
@@ -1083,46 +1220,46 @@ export default function DerivationsBulkImport() {
               <div
                 className="mb-4 p-3 rounded text-sm"
                 style={{
-                  background: 'rgb(var(--dashboard-accent-muted))',
-                  border: '1px solid rgb(var(--dashboard-accent) / 0.3)',
-                  color: 'rgb(var(--dashboard-accent-hover))',
+                  background: 'rgb(var(--app-accent-muted))',
+                  border: '1px solid rgb(var(--app-accent) / 0.3)',
+                  color: 'rgb(var(--app-accent-hover))',
                 }}
               >
                 <strong>All-or-nothing import:</strong> All derivations will be created, or none if any row fails.
               </div>
 
               <div className="max-h-96 overflow-y-auto mb-6">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50 sticky top-0">
+                <table className="min-w-full divide-y divide-app-border">
+                  <thead className="bg-app-surface sticky top-0">
                     <tr>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-app-text-muted uppercase">
                         Row
                       </th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-app-text-muted uppercase">
                         Status
                       </th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-app-text-muted uppercase">
                         Collection
                       </th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-app-text-muted uppercase">
                         Details
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-app-card divide-y divide-app-border">
                     {validationResult.rows.map((row) => (
                       <tr
                         key={row.index}
-                        className={row.valid ? 'bg-green-50' : 'bg-red-50'}
+                        className={row.valid ? 'bg-app-trend-up/10' : 'bg-app-trend-down/10'}
                       >
-                        <td className="px-3 py-2 text-sm text-gray-900">
+                        <td className="px-3 py-2 text-sm text-app-text">
                           {row.index + 1}
                         </td>
                         <td className="px-3 py-2 text-sm">
                           {row.valid ? (
-                            <span className="text-green-700 font-medium">✓ Valid</span>
+                            <span className="text-app-trend-up font-medium">✓ Valid</span>
                           ) : (
-                            <span className="text-red-700 font-medium">✗ Invalid</span>
+                            <span className="text-app-trend-down font-medium">✗ Invalid</span>
                           )}
                         </td>
                         <td className="px-3 py-2 text-sm">
@@ -1130,7 +1267,7 @@ export default function DerivationsBulkImport() {
                             <span
                               className={`px-2 py-1 rounded text-xs ${
                                 row.collectionStatus === 'existing'
-                                  ? 'bg-green-100 text-green-700'
+                                  ? 'bg-app-trend-up/10 text-app-trend-up'
                                   : 'bg-yellow-100 text-yellow-700'
                               }`}
                             >
@@ -1142,7 +1279,7 @@ export default function DerivationsBulkImport() {
                         </td>
                         <td className="px-3 py-2 text-sm">
                           {row.error && (
-                            <div className="text-red-700">{row.error}</div>
+                            <div className="text-app-trend-down">{row.error}</div>
                           )}
                           {row.warnings && row.warnings.length > 0 && (
                             <div className="text-yellow-700">
@@ -1155,7 +1292,7 @@ export default function DerivationsBulkImport() {
                             </div>
                           )}
                           {row.valid && !row.error && (
-                            <div className="text-green-700">Ready to import</div>
+                            <div className="text-app-trend-up">Ready to import</div>
                           )}
                         </td>
                       </tr>
@@ -1207,15 +1344,15 @@ export default function DerivationsBulkImport() {
                   Import results
                 </h3>
                 <div className="grid grid-cols-3 gap-4 mb-6">
-                  <div className="bg-green-50 border border-green-200 rounded p-3">
-                    <div className="text-sm text-green-700 font-medium">Successful</div>
-                    <div className="text-2xl font-bold text-green-900">
+                  <div className="bg-app-trend-up/10 border border-app-trend-up/30 rounded p-3">
+                    <div className="text-sm text-app-trend-up font-medium">Successful</div>
+                    <div className="text-2xl font-bold text-app-text">
                       {successCount}
                     </div>
                   </div>
-                  <div className="bg-red-50 border border-red-200 rounded p-3">
-                    <div className="text-sm text-red-700 font-medium">Errors</div>
-                    <div className="text-2xl font-bold text-red-900">{errorCount}</div>
+                  <div className="bg-app-trend-down/10 border border-app-trend-down rounded p-3">
+                    <div className="text-sm text-app-trend-down font-medium">Errors</div>
+                    <div className="text-2xl font-bold text-app-trend-down">{errorCount}</div>
                   </div>
                   <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
                     <div className="text-sm text-yellow-700 font-medium">Warnings</div>
@@ -1225,41 +1362,41 @@ export default function DerivationsBulkImport() {
                   </div>
                 </div>
                 <div className="max-h-96 overflow-y-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50 sticky top-0">
+                  <table className="min-w-full divide-y divide-app-border">
+                    <thead className="bg-app-surface sticky top-0">
                       <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-app-text-muted uppercase">
                           Row
                         </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-app-text-muted uppercase">
                           Status
                         </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-app-text-muted uppercase">
                           Details
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-app-card divide-y divide-app-border">
                       {importResults.map((row, idx) => (
                         <tr
                           key={idx}
-                          className={row.success ? 'bg-green-50' : 'bg-red-50'}
+                          className={row.success ? 'bg-app-trend-up/10' : 'bg-app-trend-down/10'}
                         >
-                          <td className="px-3 py-2 text-sm text-gray-900">
+                          <td className="px-3 py-2 text-sm text-app-text">
                             {row.index + 1}
                           </td>
                           <td className="px-3 py-2 text-sm">
                             {row.success ? (
-                              <span className="text-green-700 font-medium">
+                              <span className="text-app-trend-up font-medium">
                                 ✓ Success
                               </span>
                             ) : (
-                              <span className="text-red-700 font-medium">✗ Error</span>
+                              <span className="text-app-trend-down font-medium">✗ Error</span>
                             )}
                           </td>
                           <td className="px-3 py-2 text-sm">
                             {row.error && (
-                              <div className="text-red-700">{row.error}</div>
+                              <div className="text-app-trend-down">{row.error}</div>
                             )}
                             {row.warnings && row.warnings.length > 0 && (
                               <div className="text-yellow-700">
@@ -1272,7 +1409,7 @@ export default function DerivationsBulkImport() {
                               </div>
                             )}
                             {row.success && !row.error && (
-                              <div className="text-green-700">
+                              <div className="text-app-trend-up">
                                 {row.derivationTypeName ?? row.parentSummary ?? row.childSummary ? (
                                   <>
                                     {[row.parentSummary, row.derivationTypeName, row.childSummary]

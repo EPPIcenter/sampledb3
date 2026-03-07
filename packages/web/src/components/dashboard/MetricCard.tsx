@@ -16,7 +16,7 @@ interface MetricCardProps {
 }
 
 const colorClasses = {
-  blue: 'bg-blue-50 text-blue-600',
+  blue: 'bg-app-accent-muted text-app-accent',
   green: 'bg-emerald-50 text-emerald-600',
   purple: 'bg-violet-50 text-violet-600',
   orange: 'bg-amber-50 text-amber-600',
@@ -79,7 +79,7 @@ export default function MetricCard({ title, value, linkTo, trend, color = 'blue'
 
   const content = (
     <div
-      className={`dashboard-card p-6 transition-all duration-200 cursor-pointer hover:shadow-md hover:border-[rgb(var(--dashboard-accent)/0.4)] overflow-hidden min-w-0 ${revealClass}`}
+      className={`dashboard-card p-6 transition-all duration-200 cursor-pointer hover:shadow-md hover:border-[rgb(var(--app-accent)/0.4)] overflow-hidden min-w-0 ${revealClass}`}
       onClick={onClick}
       role={linkTo || onClick ? 'button' : undefined}
       tabIndex={linkTo || onClick ? 0 : undefined}
@@ -94,13 +94,13 @@ export default function MetricCard({ title, value, linkTo, trend, color = 'blue'
     >
       <div className="flex items-start justify-between gap-3 min-w-0">
         <div className="min-w-0 flex-1 overflow-hidden">
-          <h2 className="text-xs font-medium text-[rgb(var(--dashboard-text-muted))] mb-1.5 leading-tight">{title}</h2>
+          <h2 className="text-xs font-medium text-[rgb(var(--app-text-muted))] mb-1.5 leading-tight">{title}</h2>
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0">
-            <p className="text-xl sm:text-2xl font-bold text-[rgb(var(--dashboard-text))] tabular-nums break-words">{formattedValue}</p>
+            <p className="text-xl sm:text-2xl font-bold text-[rgb(var(--app-text))] tabular-nums break-words">{formattedValue}</p>
             {trend && (
               <div className="flex items-center gap-1 flex-shrink-0">
                 <svg
-                  className={`w-4 h-4 ${trend.positive !== false ? 'text-[rgb(var(--dashboard-trend-up))]' : 'text-[rgb(var(--dashboard-trend-down))]'}`}
+                  className={`w-4 h-4 ${trend.positive !== false ? 'text-[rgb(var(--app-trend-up))]' : 'text-[rgb(var(--app-trend-down))]'}`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -113,13 +113,13 @@ export default function MetricCard({ title, value, linkTo, trend, color = 'blue'
                   )}
                 </svg>
                 <span
-                  className={`text-xs font-medium ${trend.positive !== false ? 'text-[rgb(var(--dashboard-trend-up))]' : 'text-[rgb(var(--dashboard-trend-down))]'}`}
+                  className={`text-xs font-medium ${trend.positive !== false ? 'text-[rgb(var(--app-trend-up))]' : 'text-[rgb(var(--app-trend-down))]'}`}
                 >
                   {trend.positive !== false ? '+' : ''}
                   {trend.value}%
                 </span>
                 {trend.label && (
-                  <span className="text-[10px] text-[rgb(var(--dashboard-text-muted))]">{trend.label}</span>
+                  <span className="text-[10px] text-[rgb(var(--app-text-muted))]">{trend.label}</span>
                 )}
               </div>
             )}

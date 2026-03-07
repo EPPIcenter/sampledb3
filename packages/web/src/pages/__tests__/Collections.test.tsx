@@ -132,6 +132,18 @@ describe('Collections page', () => {
     expect(screen.getByRole('button', { name: /^Bags$/i })).toBeInTheDocument()
   })
 
+  it('uses URL as source of truth for tab so tab and page reset when opening with ?tab=', async () => {
+    await render(<Collections />, { initialEntries: ['/collections?tab=micronix_plate'] })
+    await waitFor(() => {
+      expect(screen.getByText('Plate Alpha')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Cryo Box Beta')).not.toBeInTheDocument()
+    expect(screen.queryByText('Generic Box Gamma')).not.toBeInTheDocument()
+    expect(screen.queryByText('Bag Delta')).not.toBeInTheDocument()
+    const micronixTab = screen.getByRole('button', { name: /Micronix Plates/i })
+    expect(micronixTab).toHaveClass(/border-\[rgb\(var\(--app-accent\)\)\]/)
+  })
+
   it('after sorting by Items and switching to a type tab, list shows only that type', async () => {
     const user = userEvent.setup()
     await render(<Collections />)

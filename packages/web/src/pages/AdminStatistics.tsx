@@ -54,8 +54,8 @@ export default function AdminStatistics() {
         <div className="relative z-10 p-6">
           <div className="max-w-7xl mx-auto">
             <h1 className="text-2xl font-bold mb-6">System Statistics</h1>
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-              <p className="text-red-800">{error}</p>
+            <div className="rounded-lg border border-app-trend-down bg-app-trend-down/10 p-4">
+              <p className="text-app-trend-down">{error}</p>
               <button
                 onClick={loadStats}
                 className="admin-btn-primary mt-4 px-4 py-2 rounded-lg"
@@ -71,7 +71,7 @@ export default function AdminStatistics() {
 
   if (!stats) return null
 
-  const iconBgClass = 'p-2 rounded-lg bg-[rgb(var(--dashboard-accent-muted))] text-[rgb(var(--dashboard-accent))]'
+  const iconBgClass = 'p-2 rounded-lg bg-[rgb(var(--app-accent-muted))] text-[rgb(var(--app-accent))]'
 
   const renderIcon = (iconName: string, className: string) => {
     switch (iconName) {
@@ -184,7 +184,7 @@ export default function AdminStatistics() {
         <div className="max-w-7xl mx-auto">
           <header className="mb-6">
             <h1 className="text-2xl font-bold">System Statistics</h1>
-            <p className="text-[rgb(var(--dashboard-text-muted))] mt-1">Comprehensive overview of your SampleDB system</p>
+            <p className="text-[rgb(var(--app-text-muted))] mt-1">Comprehensive overview of your SampleDB system</p>
           </header>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -200,10 +200,10 @@ export default function AdminStatistics() {
                   {section.items.map((item, itemIndex) => (
                     <div
                       key={itemIndex}
-                      className="flex items-center justify-between py-2 border-b border-[rgb(var(--dashboard-border))] last:border-0"
+                      className="flex items-center justify-between py-2 border-b border-[rgb(var(--app-border))] last:border-0"
                     >
-                      <span className="text-sm text-[rgb(var(--dashboard-text-muted))]">{item.label}</span>
-                      <span className="text-lg font-bold" style={{ color: 'rgb(var(--dashboard-text))' }}>{item.value.toLocaleString()}</span>
+                      <span className="text-sm text-[rgb(var(--app-text-muted))]">{item.label}</span>
+                      <span className="text-lg font-bold" style={{ color: 'rgb(var(--app-text))' }}>{item.value.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
@@ -219,10 +219,10 @@ export default function AdminStatistics() {
                 {Object.entries(stats.users.byRole).map(([role, count]) => (
                   <div
                     key={role}
-                    className="flex items-center justify-between p-4 rounded-lg border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-surface))]"
+                    className="flex items-center justify-between p-4 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-surface))]"
                   >
-                    <span className="text-sm font-medium capitalize" style={{ color: 'rgb(var(--dashboard-text))' }}>{role}</span>
-                    <span className="text-2xl font-bold" style={{ color: 'rgb(var(--dashboard-text))' }}>{count}</span>
+                    <span className="text-sm font-medium capitalize" style={{ color: 'rgb(var(--app-text))' }}>{role}</span>
+                    <span className="text-2xl font-bold" style={{ color: 'rgb(var(--app-text))' }}>{count}</span>
                   </div>
                 ))}
               </div>

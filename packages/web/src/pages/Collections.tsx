@@ -40,18 +40,17 @@ export default function Collections() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabFromUrl = (searchParams.get('tab') as CollectionTypeFilter | null) ?? 'all'
-  const [typeTab, setTypeTabState] = useState<CollectionTypeFilter>(tabFromUrl)
   const [page, setPage] = useState(1)
+  const prevTabRef = useRef(tabFromUrl)
 
-  // Sync tab state from URL when URL changes (e.g. back/forward or initial load)
-  useEffect(() => {
-    setTypeTabState(tabFromUrl)
+  // Reset page when tab changes (e.g. back/forward or tab click); URL is source of truth
+  if (prevTabRef.current !== tabFromUrl) {
+    prevTabRef.current = tabFromUrl
     setPage(1)
-  }, [tabFromUrl])
+  }
 
   const setTypeTab = useCallback(
     (tab: CollectionTypeFilter) => {
-      setTypeTabState(tab)
       setPage(1)
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
@@ -95,8 +94,8 @@ export default function Collections() {
   }, [])
 
   const filteredCollections = useMemo(
-    () => filterCollections(collections, search, typeTab),
-    [collections, search, typeTab]
+    () => filterCollections(collections, search, tabFromUrl),
+    [collections, search, tabFromUrl]
   )
 
   const columns: Column<CollectionListItem>[] = [
@@ -135,7 +134,7 @@ export default function Collections() {
   ]
 
   const emptyMessage =
-    search.trim() || typeTab !== 'all'
+    search.trim() || tabFromUrl !== 'all'
       ? 'No collections match your search.'
       : 'No collections in the system.'
 
@@ -144,14 +143,14 @@ export default function Collections() {
       <div className="container mx-auto px-4 py-8 relative z-[1]">
         <div className="subject-specimen-reveal subject-specimen-reveal-1 mb-6">
           <h1 className="text-3xl font-bold">Collections</h1>
-          <p className="mt-1 text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+          <p className="mt-1 text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
             Browse and search plates, boxes, and bags. Use the search box to find by name, barcode, or location.
           </p>
         </div>
 
         {error && (
           <div
-            className="subject-specimen-reveal subject-specimen-reveal-2 mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-red-800"
+            className="subject-specimen-reveal subject-specimen-reveal-2 mb-4 rounded-lg border border-app-trend-down bg-app-trend-down/10 p-3 text-app-trend-down"
             role="alert"
           >
             {error}
@@ -161,7 +160,7 @@ export default function Collections() {
         <div className="dashboard-card rounded-xl overflow-hidden subject-specimen-reveal subject-specimen-reveal-3">
           <div
             className="border-b flex flex-wrap gap-1 px-4 pt-2"
-            style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+            style={{ borderColor: 'rgb(var(--app-border))' }}
           >
             {TYPE_TABS.map((tab) => (
               <button
@@ -169,7 +168,7 @@ export default function Collections() {
                 type="button"
                 onClick={() => setTypeTab(tab.value)}
                 className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
-                  typeTab === tab.value ? 'border-[rgb(var(--dashboard-accent))] text-[rgb(var(--dashboard-accent))]' : 'border-transparent'
+                  tabFromUrl === tab.value ? 'border-[rgb(var(--app-accent))] text-[rgb(var(--app-accent))]' : 'border-transparent'
                 }`}
               >
                 {tab.label}
@@ -185,7 +184,7 @@ export default function Collections() {
               <div className="relative max-w-md">
                 <div
                   className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
-                  style={{ color: 'rgb(var(--dashboard-text-muted))' }}
+                  style={{ color: 'rgb(var(--app-text-muted))' }}
                 >
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -197,7 +196,7 @@ export default function Collections() {
                   type="search"
                   placeholder="Search by name, barcode, or location"
                   className="block w-full pl-10 pr-3 py-2 border rounded-lg text-sm"
-                  style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                  style={{ borderColor: 'rgb(var(--app-border))' }}
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value)
@@ -211,7 +210,7 @@ export default function Collections() {
               <SkeletonTable rows={8} columns={5} density="compact" />
             ) : (
               <DataTable
-                key={typeTab}
+                key={tabFromUrl}
                 data={filteredCollections}
                 columns={columns}
                 loading={false}
@@ -230,7 +229,7 @@ export default function Collections() {
         </div>
 
         {!loading && !error && filteredCollections.length > 0 && (
-          <p className="mt-2 text-sm subject-specimen-reveal subject-specimen-reveal-4" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+          <p className="mt-2 text-sm subject-specimen-reveal subject-specimen-reveal-4" style={{ color: 'rgb(var(--app-text-muted))' }}>
             Showing {Math.min((page - 1) * PAGE_SIZE + 1, filteredCollections.length)}–
             {Math.min(page * PAGE_SIZE, filteredCollections.length)} of {filteredCollections.length} collections
             {filteredCollections.length < collections.length && ' (filtered)'}.

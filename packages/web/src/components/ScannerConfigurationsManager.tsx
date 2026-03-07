@@ -45,7 +45,7 @@ export default function ScannerConfigurationsManager({
       try {
         const [sharedRes, personalRes] = await Promise.all([
           scannerConfigurationsApi.getShared(),
-          scannerConfigurationsApi.getPersonal().catch(() => ({ data: { configurations: [] } })),
+          scannerConfigurationsApi.getPersonal(),
         ])
         setSharedConfigurations(sharedRes.data.configurations)
         setPersonalConfigurations(personalRes.data.configurations)
@@ -336,14 +336,14 @@ export default function ScannerConfigurationsManager({
   return (
     <div className="space-y-4">
       {error && (
-        <div className="rounded-md bg-red-50 p-2">
-          <p className="text-xs font-medium text-red-800">{error}</p>
+        <div className="rounded-md bg-app-trend-down/10 p-2">
+          <p className="text-xs font-medium text-app-trend-down">{error}</p>
         </div>
       )}
 
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
-          <label className="text-sm font-medium text-gray-700">
+          <label className="text-sm font-medium text-app-text">
             Scanner Configurations
           </label>
           <InfoTooltip text="Create and manage scanner configurations for different CSV formats. Shared configurations are available to all users. Personal configurations are only visible to you. Each configuration defines how to parse barcode and position columns from scanner output files." />
@@ -356,7 +356,7 @@ export default function ScannerConfigurationsManager({
               setShowNewForm(true)
             }}
             disabled={saving}
-            className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="text-sm text-app-accent hover:text-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
             + Add Personal Configuration
           </button>
@@ -369,7 +369,7 @@ export default function ScannerConfigurationsManager({
               setShowNewForm(true)
             }}
             disabled={saving}
-            className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="text-sm text-app-accent hover:text-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
             + Add Shared Configuration
           </button>
@@ -377,19 +377,19 @@ export default function ScannerConfigurationsManager({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-200 mb-4">
+      <div className="flex gap-2 border-b border-app-border mb-4">
         <button
           type="button"
           onClick={() => setActiveTab('shared')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'shared'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-app-accent text-app-accent'
+              : 'border-transparent text-app-text-muted hover:text-app-text'
           }`}
         >
           Shared Configurations
           {sharedConfigurations.length > 0 && (
-            <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+            <span className="ml-2 text-xs bg-app-surface text-app-text-muted px-2 py-0.5 rounded-full">
               {sharedConfigurations.length}
             </span>
           )}
@@ -399,13 +399,13 @@ export default function ScannerConfigurationsManager({
           onClick={() => setActiveTab('personal')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'personal'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-app-accent text-app-accent'
+              : 'border-transparent text-app-text-muted hover:text-app-text'
           }`}
         >
           My Configurations
           {personalConfigurations.length > 0 && (
-            <span className="ml-2 text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
+            <span className="ml-2 text-xs bg-app-accent-muted text-app-accent px-2 py-0.5 rounded-full">
               {personalConfigurations.length}
             </span>
           )}
@@ -413,7 +413,7 @@ export default function ScannerConfigurationsManager({
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-gray-500">Loading configurations...</div>
+        <div className="text-center py-8 text-app-text-muted">Loading configurations...</div>
       ) : (
         <>
           {/* Existing Configurations */}
@@ -423,29 +423,29 @@ export default function ScannerConfigurationsManager({
                 key={config.id}
                 className={`border rounded-lg p-3 ${
                   activeTab === 'shared' 
-                    ? 'border-gray-200 bg-gray-50' 
-                    : 'border-blue-200 bg-blue-50'
+                    ? 'border-app-border bg-app-surface' 
+                    : 'border-app-accent/50 bg-app-accent-muted'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     {activeTab === 'shared' && (
-                      <span className="text-xs font-medium text-gray-600 bg-gray-200 px-2 py-1 rounded">
+                      <span className="text-xs font-medium text-app-text-muted bg-app-surface px-2 py-1 rounded">
                         Shared
                       </span>
                     )}
                     {activeTab === 'personal' && (
-                      <span className="text-xs font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                      <span className="text-xs font-medium text-app-accent bg-app-accent-muted px-2 py-1 rounded">
                         Personal
                       </span>
                     )}
                     {config.isDefault && (
-                      <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                      <span className="text-xs font-medium text-app-accent bg-app-accent-muted px-2 py-1 rounded">
                         Default
                       </span>
                     )}
-                    <span className="text-sm font-medium text-gray-900">{config.name}</span>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-sm font-medium text-app-text">{config.name}</span>
+                    <span className="text-xs text-app-text-muted">
                       Barcode: {config.barcodeColumn}
                       {config.positionType === 'single' && `, Position: ${config.positionColumn}`}
                       {config.positionType === 'combined' && `, Row: ${config.rowColumn}, Column: ${config.columnColumn}`}
@@ -458,7 +458,7 @@ export default function ScannerConfigurationsManager({
                         type="button"
                         onClick={() => handleSetDefault(index, activeTab)}
                         disabled={saving}
-                        className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="text-xs text-app-accent hover:text-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Set as Default
                       </button>
@@ -469,7 +469,7 @@ export default function ScannerConfigurationsManager({
                           type="button"
                           onClick={() => handleEdit(index, 'shared')}
                           disabled={saving}
-                          className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="text-xs text-app-text-muted hover:text-app-text disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Edit
                         </button>
@@ -477,7 +477,7 @@ export default function ScannerConfigurationsManager({
                           type="button"
                           onClick={() => handleDelete(index, 'shared')}
                           disabled={saving}
-                          className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="text-xs text-app-trend-down hover:text-app-trend-down disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Delete
                         </button>
@@ -489,7 +489,7 @@ export default function ScannerConfigurationsManager({
                           type="button"
                           onClick={() => handleEdit(index, 'personal')}
                           disabled={saving}
-                          className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="text-xs text-app-text-muted hover:text-app-text disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Edit
                         </button>
@@ -497,21 +497,21 @@ export default function ScannerConfigurationsManager({
                           type="button"
                           onClick={() => handleDelete(index, 'personal')}
                           disabled={saving}
-                          className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="text-xs text-app-trend-down hover:text-app-trend-down disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Delete
                         </button>
                       </>
                     )}
                     {activeTab === 'shared' && !isAdmin && (
-                      <span className="text-xs text-gray-400 italic">Read-only</span>
+                      <span className="text-xs text-app-text-muted italic">Read-only</span>
                     )}
                   </div>
                 </div>
               </div>
             ))}
             {currentConfigurations.length === 0 && !showNewForm && (
-              <div className="text-sm text-gray-500 italic text-center py-4">
+              <div className="text-sm text-app-text-muted italic text-center py-4">
                 {activeTab === 'shared' 
                   ? 'No shared configurations available.'
                   : 'No personal configurations yet. Click "Add Personal Configuration" to create one.'}
@@ -523,35 +523,35 @@ export default function ScannerConfigurationsManager({
 
       {/* New/Edit Form */}
       {showNewForm && (
-        <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+        <div className="border border-app-border rounded-lg p-4 bg-app-surface">
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-app-text mb-2">
               Configuration Name *
             </label>
             <input
               type="text"
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
               placeholder="e.g., Traxcer, VisionMate, General"
             />
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-app-text mb-2">
               Barcode Column Name *
             </label>
             <input
               type="text"
               value={formBarcodeColumn}
               onChange={(e) => setFormBarcodeColumn(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
               placeholder="e.g., Tube ID, TubeCode, Barcode"
             />
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-app-text mb-2">
               Position Type *
             </label>
             <div className="flex gap-4">
@@ -567,7 +567,7 @@ export default function ScannerConfigurationsManager({
                   }}
                   className="mr-2"
                 />
-                <span className="text-sm text-gray-700">Single Column</span>
+                <span className="text-sm text-app-text">Single Column</span>
               </label>
               <label className="flex items-center">
                 <input
@@ -580,21 +580,21 @@ export default function ScannerConfigurationsManager({
                   }}
                   className="mr-2"
                 />
-                <span className="text-sm text-gray-700">Combined (Row + Column)</span>
+                <span className="text-sm text-app-text">Combined (Row + Column)</span>
               </label>
             </div>
           </div>
 
           {formPositionType === 'single' && (
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-app-text mb-2">
                 Position Column Name *
               </label>
               <input
                 type="text"
                 value={formPositionColumn}
                 onChange={(e) => setFormPositionColumn(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
                 placeholder="e.g., Position"
               />
             </div>
@@ -603,27 +603,27 @@ export default function ScannerConfigurationsManager({
           {formPositionType === 'combined' && (
             <>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Row Column Name *
                 </label>
                 <input
                   type="text"
                   value={formRowColumn}
                   onChange={(e) => setFormRowColumn(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
                   placeholder="e.g., LocationRow, Row"
                 />
-                <p className="text-xs text-gray-500 mt-1">Column will be automatically zero-padded to 2 digits (01-12)</p>
+                <p className="text-xs text-app-text-muted mt-1">Column will be automatically zero-padded to 2 digits (01-12)</p>
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Column Column Name *
                 </label>
                 <input
                   type="text"
                   value={formColumnColumn}
                   onChange={(e) => setFormColumnColumn(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
                   placeholder="e.g., LocationColumn, Column"
                 />
               </div>
@@ -631,7 +631,7 @@ export default function ScannerConfigurationsManager({
           )}
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-app-text mb-2">
               Skip Rows
             </label>
             <input
@@ -639,9 +639,9 @@ export default function ScannerConfigurationsManager({
               value={formSkipRows}
               onChange={(e) => setFormSkipRows(parseInt(e.target.value) || 0)}
               min="0"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
             />
-            <p className="text-xs text-gray-500 mt-1">Number of header/metadata rows to skip at the start of the file</p>
+            <p className="text-xs text-app-text-muted mt-1">Number of header/metadata rows to skip at the start of the file</p>
           </div>
 
           <div className="mb-4">
@@ -652,9 +652,9 @@ export default function ScannerConfigurationsManager({
                 onChange={(e) => setFormIsDefault(e.target.checked)}
                 className="mr-2"
               />
-              <span className="text-sm text-gray-700">Set as default configuration</span>
+              <span className="text-sm text-app-text">Set as default configuration</span>
             </label>
-            <p className="text-xs text-gray-500 mt-1">Default configuration will be automatically selected when uploading files</p>
+            <p className="text-xs text-app-text-muted mt-1">Default configuration will be automatically selected when uploading files</p>
           </div>
 
           <div className="flex justify-end gap-2">
@@ -662,7 +662,7 @@ export default function ScannerConfigurationsManager({
               type="button"
               onClick={resetForm}
               disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm font-medium text-app-text bg-app-card border border-app-border rounded-lg hover:bg-app-surface disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
@@ -670,7 +670,7 @@ export default function ScannerConfigurationsManager({
               type="button"
               onClick={editingIndex !== null ? handleUpdate : handleAdd}
               disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm font-medium text-white bg-app-accent rounded-lg hover:bg-app-accent-hover disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {saving ? 'Saving...' : editingIndex !== null ? 'Update' : activeTab === 'personal' ? 'Create' : 'Add'}
             </button>

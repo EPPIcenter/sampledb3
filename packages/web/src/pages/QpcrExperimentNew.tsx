@@ -81,7 +81,7 @@ export default function QpcrExperimentNew() {
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
               <div
-                className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                className="rounded-lg border border-app-trend-down bg-app-trend-down/10 p-3 text-sm text-app-trend-down"
                 role="alert"
               >
                 {error}

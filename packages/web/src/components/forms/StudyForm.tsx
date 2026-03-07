@@ -77,13 +77,13 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+        <div className="bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded">
           {error}
         </div>
       )}
 
       {!study && formData.shortCode && isTutorialNamespace(formData.shortCode) && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded" role="alert">
+        <div className="bg-app-standard-muted border border-app-standard/50 text-app-standard px-4 py-3 rounded" role="alert">
           Studies whose short code starts with &quot;{TUTORIAL_SHORT_CODE_PREFIX}&quot; can be deleted by any user. Consider using a different code for production data.
         </div>
       )}
@@ -91,7 +91,7 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
       <UserBadge action={study ? 'updating' : 'creating'} />
 
       <div>
-        <label htmlFor="study-title" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="study-title" className="block text-sm font-medium text-app-text mb-2">
           Title *
         </label>
         <input
@@ -105,7 +105,7 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
       </div>
 
       <div>
-        <label htmlFor="study-short-code" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="study-short-code" className="block text-sm font-medium text-app-text mb-2">
           Short Code *
         </label>
         <input
@@ -119,7 +119,7 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
       </div>
 
       <div>
-        <label htmlFor="study-description" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="study-description" className="block text-sm font-medium text-app-text mb-2">
           Description
         </label>
         <textarea
@@ -132,7 +132,7 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
       </div>
 
       <div>
-        <label htmlFor="study-lead-person" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="study-lead-person" className="block text-sm font-medium text-app-text mb-2">
           Lead Person *
         </label>
         <input
@@ -152,11 +152,11 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
           checked={formData.isLongitudinal}
           onChange={(e) => setFormData({ ...formData, isLongitudinal: e.target.checked })}
           disabled={!!study}
-          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          className="h-4 w-4 text-app-accent focus:ring-app-accent border-app-border rounded disabled:opacity-50 disabled:cursor-not-allowed"
         />
-        <label htmlFor="isLongitudinal" className={`ml-2 block text-sm ${study ? 'text-gray-500' : 'text-gray-700'}`}>
+        <label htmlFor="isLongitudinal" className={`ml-2 block text-sm ${study ? 'text-app-text-muted' : 'text-app-text'}`}>
           Longitudinal Study
-          {study && <span className="ml-2 text-xs text-gray-400">(cannot be changed after creation)</span>}
+          {study && <span className="ml-2 text-xs text-app-text-muted">(cannot be changed after creation)</span>}
         </label>
       </div>
 
@@ -164,14 +164,14 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="px-4 py-2 border border-gray-100 rounded-lg text-gray-700 hover:bg-gray-50"
+          className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50"
         >
           {loading ? 'Saving...' : study ? 'Update' : 'Create'}
         </button>

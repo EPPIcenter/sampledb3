@@ -20,6 +20,7 @@ export function isTypingInInput(): boolean {
 
   // activeElement can be document or other non-Element nodes in edge cases; they have no tagName/getAttribute
   const el = activeElement as Element
+  if (typeof el.tagName !== 'string') return false
   const tagName = el.tagName.toLowerCase()
   const isInput = tagName === 'input' || tagName === 'textarea'
   const isContentEditable = el.getAttribute('contenteditable') === 'true'

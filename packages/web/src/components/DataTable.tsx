@@ -185,24 +185,24 @@ export default function DataTable<T extends { id: number }>({
 
   if (data.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">{emptyMessage}</div>
+      <div className="text-center py-8 text-app-text-muted">{emptyMessage}</div>
     )
   }
 
-  const wrapperClass = className ?? 'bg-white rounded-lg shadow overflow-hidden'
+  const wrapperClass = className ?? 'bg-app-card rounded-lg shadow overflow-hidden'
 
   return (
     <div ref={tableRef} className={wrapperClass} tabIndex={0}>
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-gray-50">
+          <thead className="bg-app-surface">
             <tr>
               {columns.map((column) => (
                 <th
                   key={String(column.key)}
                   onClick={() => handleSort(column)}
-                  className={`${density === 'compact' ? 'px-3 py-2' : 'px-6 py-3'} text-left text-xs font-medium text-gray-500 uppercase ${
-                    column.sortable ? 'cursor-pointer hover:bg-gray-100' : ''
+                  className={`${density === 'compact' ? 'px-3 py-2' : 'px-6 py-3'} text-left text-xs font-medium text-app-text-muted uppercase ${
+                    column.sortable ? 'cursor-pointer hover:bg-app-border/50' : ''
                   }`}
                 >
                   <div className="flex items-center space-x-1">
@@ -227,7 +227,7 @@ export default function DataTable<T extends { id: number }>({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-app-border">
             {paginatedData.map((row, index) => {
               const isSelected = selectedRowIndex === index
               return (
@@ -241,10 +241,10 @@ export default function DataTable<T extends { id: number }>({
                     }
                   }}
                   onClick={() => onRowClick?.(row)}
-                  className={onRowClick ? `cursor-pointer hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}` : ''}
+                  className={onRowClick ? `cursor-pointer hover:bg-app-surface ${isSelected ? 'bg-app-accent-muted' : ''}` : ''}
                 >
                 {columns.map((column) => (
-                  <td key={String(column.key)} className={`${density === 'compact' ? 'px-3 py-2 text-xs' : 'px-6 py-4 text-sm'} whitespace-nowrap text-gray-900`}>
+                  <td key={String(column.key)} className={`${density === 'compact' ? 'px-3 py-2 text-xs' : 'px-6 py-4 text-sm'} whitespace-nowrap text-app-text`}>
                     {column.render
                       ? column.render(row[column.key as keyof T], row)
                       : String(row[column.key as keyof T] || '')}
@@ -257,7 +257,7 @@ export default function DataTable<T extends { id: number }>({
         </table>
       </div>
       {pagination && pagination.showPagination !== false && totalPages > 1 && (
-        <div className="px-6 py-4 border-t border-gray-100">
+        <div className="px-6 py-4 border-t border-app-border">
           <Pagination
             currentPage={pagination.page}
             totalPages={totalPages}

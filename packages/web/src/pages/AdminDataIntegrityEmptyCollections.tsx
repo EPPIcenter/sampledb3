@@ -176,27 +176,27 @@ export default function AdminDataIntegrityEmptyCollections() {
   return (
     <>
       <section className="admin-card p-4 mb-6">
-        <h2 className="text-xl font-semibold mb-2" style={{ color: 'rgb(var(--dashboard-text))' }}>
+        <h2 className="text-xl font-semibold mb-2" style={{ color: 'rgb(var(--app-text))' }}>
           Empty collections
         </h2>
-        <p className="text-sm text-[rgb(var(--dashboard-text-muted))] mb-4">
+        <p className="text-sm text-[rgb(var(--app-text-muted))] mb-4">
           Collections (plates, boxes, bags) with no items. You may delete them to keep the database tidy.
         </p>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
-            <p className="text-sm text-red-800">{error}</p>
+          <div className="mb-4 rounded-lg bg-app-trend-down/10 border border-app-trend-down p-3">
+            <p className="text-sm text-app-trend-down">{error}</p>
           </div>
         )}
 
         {loading ? (
-          <div className="p-8 text-center text-[rgb(var(--dashboard-text-muted))]">Loading…</div>
+          <div className="p-8 text-center text-[rgb(var(--app-text-muted))]">Loading…</div>
         ) : collections.length === 0 ? (
-          <div className="p-8 text-center text-[rgb(var(--dashboard-text-muted))]">No empty collections found.</div>
+          <div className="p-8 text-center text-[rgb(var(--app-text-muted))]">No empty collections found.</div>
         ) : (
           <>
             {summaryParts.length > 0 && (
-              <p className="text-sm text-[rgb(var(--dashboard-text-muted))] mb-4">
+              <p className="text-sm text-[rgb(var(--app-text-muted))] mb-4">
                 {summaryParts.join(', ')}
               </p>
             )}
@@ -222,7 +222,7 @@ export default function AdminDataIntegrityEmptyCollections() {
               if (items.length === 0) return null
               return (
                 <div key={type} className="mb-6 last:mb-0">
-                  <h3 className="text-sm font-semibold text-[rgb(var(--dashboard-text))] mb-2">
+                  <h3 className="text-sm font-semibold text-[rgb(var(--app-text))] mb-2">
                     {typePlural[type]} ({items.length})
                   </h3>
                   <div className="overflow-x-auto">
@@ -237,22 +237,22 @@ export default function AdminDataIntegrityEmptyCollections() {
                               aria-label={`Select all ${typePlural[type]}`}
                             />
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">
                             Type
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">
                             Name
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">
                             Location
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-app-card divide-y divide-app-border">
                         {items.map((c) => {
                           const key = selectionKey(c)
                           return (
-                            <tr key={key} className="hover:bg-gray-50">
+                            <tr key={key} className="hover:bg-app-surface">
                               <td className="px-4 py-3">
                                 <input
                                   type="checkbox"
@@ -267,7 +267,7 @@ export default function AdminDataIntegrityEmptyCollections() {
                               <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                                 <Link
                                   to={getCollectionDetailUrl(c.type, c.id)}
-                                  className="text-[rgb(var(--dashboard-accent))] hover:underline"
+                                  className="text-[rgb(var(--app-accent))] hover:underline"
                                 >
                                   {c.name}
                                 </Link>
@@ -276,7 +276,7 @@ export default function AdminDataIntegrityEmptyCollections() {
                                 {c.locationId != null ? (
                                   <Link
                                     to={`/locations/${c.locationId}`}
-                                    className="text-[rgb(var(--dashboard-accent))] hover:underline"
+                                    className="text-[rgb(var(--app-accent))] hover:underline"
                                   >
                                     {c.locationPath ?? `Location #${c.locationId}`}
                                   </Link>
@@ -300,21 +300,21 @@ export default function AdminDataIntegrityEmptyCollections() {
       {showDeleteModal && (
         <ModalPortal>
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay z-50 flex items-center justify-center p-4">
-            <div className="admin-card max-w-md w-full border border-[rgb(var(--dashboard-border))]">
-              <div className="px-6 py-4 border-b border-[rgb(var(--dashboard-border))]">
-                <h2 className="text-xl font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>
+            <div className="admin-card max-w-md w-full border border-[rgb(var(--app-border))]">
+              <div className="px-6 py-4 border-b border-[rgb(var(--app-border))]">
+                <h2 className="text-xl font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
                   Delete empty collections
                 </h2>
               </div>
               <div className="px-6 py-4">
                 {deleteResult === null ? (
-                  <p className="text-sm text-[rgb(var(--dashboard-text-muted))]">
+                  <p className="text-sm text-[rgb(var(--app-text-muted))]">
                     Delete {selectedItems.length} selected empty collection{selectedItems.length !== 1 ? 's' : ''}? This
                     cannot be undone.
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-sm text-[rgb(var(--dashboard-text))]">
+                    <p className="text-sm text-[rgb(var(--app-text))]">
                       Deleted <strong>{deleteResult.deleted}</strong> collection{deleteResult.deleted !== 1 ? 's' : ''}.
                     </p>
                     {deleteResult.errors && deleteResult.errors.length > 0 && (
@@ -330,7 +330,7 @@ export default function AdminDataIntegrityEmptyCollections() {
                   </div>
                 )}
               </div>
-              <div className="px-6 py-4 border-t border-[rgb(var(--dashboard-border))] flex items-center justify-end gap-2">
+              <div className="px-6 py-4 border-t border-[rgb(var(--app-border))] flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={handleCloseDeleteModal}
@@ -344,7 +344,7 @@ export default function AdminDataIntegrityEmptyCollections() {
                     type="button"
                     onClick={handleDeleteConfirm}
                     disabled={deleteLoading}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                    className="px-4 py-2 bg-app-trend-down text-white rounded-lg hover:opacity-90 transition-colors disabled:opacity-50"
                   >
                     {deleteLoading ? 'Deleting…' : 'Delete'}
                   </button>

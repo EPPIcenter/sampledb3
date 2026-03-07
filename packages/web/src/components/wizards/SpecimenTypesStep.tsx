@@ -281,18 +281,18 @@ export default function SpecimenTypesStep({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Add Specimen Types</h2>
-        <p className="text-sm text-gray-600 mb-6">
+        <h2 className="text-xl font-semibold text-app-text mb-4">Add Specimen Types</h2>
+        <p className="text-sm text-app-text-muted mb-6">
           Add specimen types for this batch. Each specimen type will become one specimen record with multiple containers.
         </p>
       </div>
 
       {/* Add new specimen type form */}
-      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Add Specimen Type</h3>
+      <div className="bg-app-surface rounded-lg p-4 border border-app-border">
+        <h3 className="text-sm font-semibold text-app-text mb-4">Add Specimen Type</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="specimen-type" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="specimen-type" className="block text-sm font-medium text-app-text mb-2">
               Specimen Type *
             </label>
             <select
@@ -300,8 +300,8 @@ export default function SpecimenTypesStep({
               value={newSpecimenType.specimenTypeId || 0}
               onChange={(e) => handleSpecimenTypeSelect(parseInt(e.target.value))}
               disabled={loadingSpecimenTypes}
-              className={`block w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ${
-                duplicateError ? 'border-red-300' : 'border-gray-300'
+              className={`block w-full px-3 py-2 border rounded-lg text-sm bg-app-card text-app-text focus:outline-none focus:ring-2 focus:ring-app-accent disabled:opacity-50 disabled:cursor-not-allowed ${
+                duplicateError ? 'border-app-trend-down' : 'border-app-border'
               }`}
             >
               <option value={0}>Select specimen type...</option>
@@ -312,15 +312,15 @@ export default function SpecimenTypesStep({
               ))}
             </select>
             {loadingSpecimenTypes && (
-              <p className="mt-1 text-xs text-gray-500">Loading allowed specimen types...</p>
+              <p className="mt-1 text-xs text-app-text-muted">Loading allowed specimen types...</p>
             )}
             {duplicateError && (
-              <p className="mt-1 text-sm text-red-600">{duplicateError}</p>
+              <p className="mt-1 text-sm text-app-trend-down">{duplicateError}</p>
             )}
           </div>
 
           <div>
-            <label htmlFor="container-type" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="container-type" className="block text-sm font-medium text-app-text mb-2">
               Container Type *
             </label>
             <select
@@ -328,7 +328,7 @@ export default function SpecimenTypesStep({
               value={newSpecimenType.containerType || ''}
               onChange={(e) => handleContainerTypeChange(e.target.value as any)}
               disabled={loadingContainerTypes}
-              className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="block w-full px-3 py-2 border border-app-border rounded-lg text-sm bg-app-card text-app-text focus:outline-none focus:ring-2 focus:ring-app-accent disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">Select container type...</option>
               {availableContainerTypes.length === 0 ? (
@@ -346,7 +346,7 @@ export default function SpecimenTypesStep({
               )}
             </select>
             {loadingContainerTypes && (
-              <p className="mt-1 text-xs text-gray-500">Loading allowed container types...</p>
+              <p className="mt-1 text-xs text-app-text-muted">Loading allowed container types...</p>
             )}
           </div>
 
@@ -355,7 +355,7 @@ export default function SpecimenTypesStep({
               type="button"
               onClick={addSpecimenType}
               disabled={!newSpecimenType.specimenTypeId || !newSpecimenType.containerType || !!duplicateError}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Add Specimen Type
             </button>
@@ -366,17 +366,17 @@ export default function SpecimenTypesStep({
       {/* Added specimen types list */}
       {specimenTypes.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Added Specimen Types</h3>
+          <h3 className="text-sm font-semibold text-app-text mb-3">Added Specimen Types</h3>
           <div className="space-y-2">
             {specimenTypes.map((st) => (
               <div
                 key={st.id}
-                className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3"
+                className="flex items-center justify-between bg-app-card border border-app-border rounded-lg p-3"
               >
                 <div className="flex items-center gap-3">
                   <div className="flex flex-col">
-                    <span className="font-medium text-gray-900">{st.specimenTypeName}</span>
-                    <span className="text-xs text-gray-500">
+                    <span className="font-medium text-app-text">{st.specimenTypeName}</span>
+                    <span className="text-xs text-app-text-muted">
                       Container: {st.containerType === 'paper' ? 'DBS Sheet' : st.containerType === 'cryovial_tube' ? 'Cryovial' : 'Micronix'}
                     </span>
                   </div>
@@ -384,7 +384,7 @@ export default function SpecimenTypesStep({
                 <button
                   type="button"
                   onClick={() => removeSpecimenType(st.id)}
-                  className="text-red-600 hover:text-red-700 px-2 py-1"
+                  className="text-app-trend-down hover:text-app-trend-down/80 px-2 py-1"
                 >
                   Remove
                 </button>
@@ -398,15 +398,15 @@ export default function SpecimenTypesStep({
       <div className="border-t pt-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">Alternative: CSV Upload</h3>
-            <p className="text-xs text-gray-600 mt-1">
+            <h3 className="text-sm font-semibold text-app-text">Alternative: CSV Upload</h3>
+            <p className="text-xs text-app-text-muted mt-1">
               Upload CSV files instead of manually adding specimen types
             </p>
           </div>
           <button
             type="button"
             onClick={onSwitchToCSV}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
           >
             Switch to CSV Upload
           </button>
@@ -417,14 +417,14 @@ export default function SpecimenTypesStep({
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
         >
           Cancel
         </button>
         <button
           type="button"
           onClick={onBack}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
         >
           Back
         </button>
@@ -432,7 +432,7 @@ export default function SpecimenTypesStep({
           type="button"
           onClick={onNext}
           disabled={specimenTypes.length === 0}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Next: Configure Containers
         </button>

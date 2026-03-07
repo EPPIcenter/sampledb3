@@ -146,8 +146,12 @@ export default function ContainerMoveMicronix() {
             unresolvedContainers: [],
             isResolved: false,
           })
-        } catch {
-          updated.push(fileData)
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Failed to parse or validate with new config'
+          updated.push({
+            ...fileData,
+            validationErrors: [{ row: 0, error: message }],
+          })
         }
       }
       if (configRevalidateRequestIdRef.current === requestId) {
@@ -534,7 +538,8 @@ export default function ContainerMoveMicronix() {
 
         for (const P of emptyPositions) {
           const well = wells[P]
-          if (well.type === 'micronix_tube' && well.barcode) {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- well can be undefined when position not in plate data (e.g. empty wells mock in tests)
+          if (well?.type === 'micronix_tube' && well.barcode) {
             const B = well.barcode
             if (!barcodesRelocatedInMove.has(B)) {
               const fileIndex = positionToEmptyFileIndex.get(P) ?? 0
@@ -762,11 +767,11 @@ export default function ContainerMoveMicronix() {
               <button
                 type="button"
                 onClick={() => setInstructionsExpanded(!instructionsExpanded)}
-                className="flex items-center justify-between w-full text-left focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
+                className="flex items-center justify-between w-full text-left focus:outline-none focus:ring-2 focus:ring-app-accent rounded"
               >
                 <h2 className="text-xl font-semibold">Instructions</h2>
                 <svg
-                  className={`w-5 h-5 text-gray-500 transition-transform ${instructionsExpanded ? 'transform rotate-180' : ''}`}
+                  className={`w-5 h-5 text-app-text-muted transition-transform ${instructionsExpanded ? 'transform rotate-180' : ''}`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -776,14 +781,14 @@ export default function ContainerMoveMicronix() {
               </button>
               
               {instructionsExpanded && (
-                <div className="space-y-4 text-gray-700 mt-4">
+                <div className="space-y-4 text-app-text mt-4">
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Overview</h3>
+                    <h3 className="font-semibold text-app-text mb-2">Overview</h3>
                     <p>Upload one or more CSV files representing plate scans. Each file should be named after the destination plate it represents. The system will infer the destination plate from the filename, or you can select it manually.</p>
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Scanner Configuration</h3>
+                    <h3 className="font-semibold text-app-text mb-2">Scanner Configuration</h3>
                     <p className="mb-2">Select a scanner configuration that matches your CSV file format. The default configuration is automatically selected, but you can change it if needed.</p>
                     <p className="mb-2">Scanner configurations support:</p>
                     <ul className="list-disc list-inside space-y-1 ml-4">
@@ -795,7 +800,7 @@ export default function ContainerMoveMicronix() {
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">CSV Format</h3>
+                    <h3 className="font-semibold text-app-text mb-2">CSV Format</h3>
                     <p className="mb-2">The required columns depend on your selected scanner configuration:</p>
                     <ul className="list-disc list-inside space-y-1 ml-4">
                       <li>
@@ -812,16 +817,16 @@ export default function ContainerMoveMicronix() {
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Filename Convention</h3>
-                    <p className="mb-2">Name your CSV files after the destination plate. The system derives a stem from the filename (path and .csv are removed; date/time suffixes like <code className="bg-gray-100 px-1 rounded">_2024-01-15</code> are stripped) and suggests plates by exact, then partial, match. If exactly one plate is suggested, it is auto-selected.</p>
+                    <h3 className="font-semibold text-app-text mb-2">Filename Convention</h3>
+                    <p className="mb-2">Name your CSV files after the destination plate. The system derives a stem from the filename (path and .csv are removed; date/time suffixes like <code className="bg-app-surface px-1 rounded">_2024-01-15</code> are stripped) and suggests plates by exact, then partial, match. If exactly one plate is suggested, it is auto-selected.</p>
                     <ul className="list-disc list-inside space-y-1 ml-4">
-                      <li>Example: <code className="bg-gray-100 px-1 rounded">PLATE-001.csv</code> or <code className="bg-gray-100 px-1 rounded">PLATE-001_2024-01-15.csv</code> → stem &quot;PLATE-001&quot;</li>
+                      <li>Example: <code className="bg-app-surface px-1 rounded">PLATE-001.csv</code> or <code className="bg-app-surface px-1 rounded">PLATE-001_2024-01-15.csv</code> → stem &quot;PLATE-001&quot;</li>
                       <li>If no single plate is suggested, choose the destination from the list</li>
                     </ul>
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Workflow</h3>
+                    <h3 className="font-semibold text-app-text mb-2">Workflow</h3>
                     <p className="mb-2">This process has 3 steps:</p>
                     <ol className="list-decimal list-inside space-y-1 ml-4">
                       <li><strong>Upload & Configure:</strong> Upload CSV files and assign destination plates. Click <strong>Next: Resolve Containers</strong> to validate (e.g. tubes removed with no destination) and resolve barcodes.</li>
@@ -833,12 +838,12 @@ export default function ContainerMoveMicronix() {
               )}
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="bg-app-card rounded-lg shadow p-6 mb-6">
               <h2 className="text-xl font-semibold mb-4">Upload CSV Files</h2>
 
               {/* Scanner Configuration Selector */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Scanner Configuration *
                 </label>
                 {scannerConfigurations.length > 0 ? (
@@ -847,7 +852,7 @@ export default function ContainerMoveMicronix() {
                       value={selectedConfigId || ''}
                       onChange={(e) => handleConfigChange(e.target.value)}
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                      className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
                     >
                       {scannerConfigurations.map((config) => (
                         <option key={config.id} value={config.id}>
@@ -858,7 +863,7 @@ export default function ContainerMoveMicronix() {
                     {selectedConfigId && (() => {
                       const config = scannerConfigurations.find(c => c.id === selectedConfigId)
                       return config ? (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-app-text-muted mt-1">
                           Barcode: {config.barcodeColumn}
                           {config.positionType === 'single' && `, Position: ${config.positionColumn}`}
                           {config.positionType === 'combined' && `, Row: ${config.rowColumn}, Column: ${config.columnColumn} (auto-padded)`}
@@ -868,8 +873,8 @@ export default function ContainerMoveMicronix() {
                     })()}
                   </>
                 ) : (
-                  <p className="text-sm text-gray-500 italic">
-                    No scanner configurations available. Please configure them in <Link to="/settings?tab=scanner-configurations" className="text-teal-600 hover:text-teal-800 underline">Settings → Scanner Configurations</Link>.
+                  <p className="text-sm text-app-text-muted italic">
+                    No scanner configurations available. Please configure them in <Link to="/settings?tab=scanner-configurations" className="text-app-accent hover:text-app-accent-hover underline">Settings → Scanner Configurations</Link>.
                   </p>
                 )}
               </div>
@@ -892,18 +897,18 @@ export default function ContainerMoveMicronix() {
               {files.length > 0 && (
                 <div className="mt-6 space-y-4">
                   {files.map((fileData, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                    <div key={index} className="border border-app-border rounded-lg p-4">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900">{fileData.file.name}</h3>
-                          <p className="text-sm text-gray-500 mt-1">
+                          <h3 className="font-semibold text-app-text">{fileData.file.name}</h3>
+                          <p className="text-sm text-app-text-muted mt-1">
                             {fileData.csvRows.length} row{fileData.csvRows.length !== 1 ? 's' : ''}
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeFile(index)}
-                          className="text-red-600 hover:text-red-800 text-sm"
+                          className="text-app-trend-down hover:text-app-trend-down text-sm"
                         >
                           Remove
                         </button>
@@ -911,12 +916,12 @@ export default function ContainerMoveMicronix() {
 
                       {/* Plate Selection */}
                       <div className="mb-3">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-app-text mb-2">
                           Destination Plate:
                         </label>
                         {fileData.inferredMatches.length === 1 &&
                           fileData.selectedPlateName === fileData.inferredMatches[0].name && (
-                          <p className="text-xs text-green-700 mb-1">✓ Inferred from filename — you can change it below if needed.</p>
+                          <p className="text-xs text-app-trend-up mb-1">✓ Inferred from filename — you can change it below if needed.</p>
                         )}
                         <MicronixPlatePicker
                           locations={locations}
@@ -925,7 +930,7 @@ export default function ContainerMoveMicronix() {
                           onChange={(plateName) => updateFilePlateSelection(index, plateName)}
                         />
                         {fileData.inferredPlateName && !fileData.selectedPlateName && (
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-xs text-app-text-muted mt-1">
                             No single plate suggested for &quot;{fileData.inferredPlateName}&quot;. Please select a destination plate.
                             {fileData.inferredMatches.length > 0 && (
                               <span className="ml-1">({fileData.inferredMatches.length} similar plate{fileData.inferredMatches.length !== 1 ? 's' : ''} found)</span>
@@ -940,26 +945,26 @@ export default function ContainerMoveMicronix() {
                         const previewHeaders = Object.keys(fileData.preview[0]).filter((h) => !internalKeys.has(h))
                         return (
                           <div className="mt-3">
-                            <h4 className="text-sm font-medium text-gray-700 mb-2">Preview (first 5 rows):</h4>
+                            <h4 className="text-sm font-medium text-app-text mb-2">Preview (first 5 rows):</h4>
                             <div className="overflow-x-auto">
-                              <table className="min-w-full divide-y divide-gray-200 text-xs">
-                                <thead className="bg-gray-50">
+                              <table className="min-w-full divide-y divide-app-border text-xs">
+                                <thead className="bg-app-surface">
                                   <tr>
                                     {previewHeaders.map((header) => (
                                       <th
                                         key={header}
-                                        className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase"
+                                        className="px-2 py-1 text-left text-xs font-medium text-app-text-muted uppercase"
                                       >
                                         {header}
                                       </th>
                                     ))}
                                   </tr>
                                 </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
+                                <tbody className="bg-app-card divide-y divide-app-border">
                                   {fileData.preview.map((row, i) => (
                                     <tr key={i}>
                                       {previewHeaders.map((header) => (
-                                        <td key={header} className="px-2 py-1 whitespace-nowrap text-gray-900">
+                                        <td key={header} className="px-2 py-1 whitespace-nowrap text-app-text">
                                           {row[header]}
                                         </td>
                                       ))}
@@ -974,9 +979,9 @@ export default function ContainerMoveMicronix() {
 
                       {/* Validation Errors */}
                       {fileData.validationErrors.length > 0 && (
-                        <div className="mt-3 bg-red-50 border border-red-200 rounded p-2">
-                          <h4 className="text-sm font-semibold text-red-800 mb-1">Errors:</h4>
-                          <ul className="list-disc list-inside space-y-1 text-red-700 text-xs">
+                        <div className="mt-3 bg-app-trend-down/10 border border-app-trend-down rounded p-2">
+                          <h4 className="text-sm font-semibold text-app-trend-down mb-1">Errors:</h4>
+                          <ul className="list-disc list-inside space-y-1 text-app-trend-down text-xs">
                             {fileData.validationErrors.map((error, i) => (
                               <li key={i}>
                                 {error.row > 0 ? `Row ${error.row}: ` : ''}{error.error}
@@ -1010,14 +1015,14 @@ export default function ContainerMoveMicronix() {
               <h2 className="text-xl font-semibold mb-4">Resolved Micronix Tubes</h2>
               
               <div className="mb-4">
-                <p className="text-gray-700">
+                <p className="text-app-text">
                   <strong>Total Files:</strong> {files.length}
                 </p>
-                <p className="text-gray-700">
+                <p className="text-app-text">
                   <strong>Total Tubes:</strong> {files.reduce((sum, f) => sum + f.resolvedContainers.length, 0)} of {files.reduce((sum, f) => sum + f.csvRows.length, 0)} resolved
                 </p>
                 {files.reduce((sum, f) => sum + f.unresolvedContainers.length, 0) > 0 && (
-                  <p className="text-red-600 font-semibold mt-1">
+                  <p className="text-app-trend-down font-semibold mt-1">
                     <strong>Unresolved:</strong> {files.reduce((sum, f) => sum + f.unresolvedContainers.length, 0)} tube(s) could not be found in the database
                   </p>
                 )}
@@ -1025,7 +1030,7 @@ export default function ContainerMoveMicronix() {
 
               <div className="mb-4">
                 <h3 className="font-semibold mb-2">Source Plates Detected:</h3>
-                <ul className="list-disc list-inside space-y-1 text-gray-700">
+                <ul className="list-disc list-inside space-y-1 text-app-text">
                   {getAllSourcePlates().map((plateName) => (
                     <li key={plateName}>{plateName}</li>
                   ))}
@@ -1035,42 +1040,42 @@ export default function ContainerMoveMicronix() {
               {/* Per-file breakdown */}
               <div className="mt-6 space-y-4">
                 {files.map((fileData, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 mb-2">{fileData.file.name}</h4>
-                    <p className="text-sm text-gray-700 mb-2">
+                  <div key={index} className="border border-app-border rounded-lg p-4">
+                    <h4 className="font-semibold text-app-text mb-2">{fileData.file.name}</h4>
+                    <p className="text-sm text-app-text mb-2">
                       Destination: <span className="font-semibold">{fileData.selectedPlateName}</span>
                     </p>
-                    <p className="text-sm text-gray-700 mb-2">
+                    <p className="text-sm text-app-text mb-2">
                       Resolved: {fileData.resolvedContainers.length} of {fileData.csvRows.length} tubes
                     </p>
                     {fileData.unresolvedContainers.length > 0 && (
-                      <div className="mt-3 bg-red-50 border border-red-200 rounded p-3">
-                        <h5 className="text-sm font-semibold text-red-800 mb-2">
+                      <div className="mt-3 bg-app-trend-down/10 border border-app-trend-down rounded p-3">
+                        <h5 className="text-sm font-semibold text-app-trend-down mb-2">
                           Unresolved Tubes ({fileData.unresolvedContainers.length}):
                         </h5>
-                        <p className="text-xs text-red-700 mb-2">
+                        <p className="text-xs text-app-trend-down mb-2">
                           The following barcodes were not found in the database. Please check for typos or verify the barcodes exist.
                         </p>
                         <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-red-200 text-xs">
-                            <thead className="bg-red-100">
+                          <table className="min-w-full divide-y divide-app-trend-down text-xs">
+                            <thead className="bg-app-trend-down/10">
                               <tr>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-red-800 uppercase">Row</th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-red-800 uppercase">Barcode</th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-red-800 uppercase">Target Position</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-app-trend-down uppercase">Row</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-app-trend-down uppercase">Barcode</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-app-trend-down uppercase">Target Position</th>
                               </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-red-200">
+                            <tbody className="bg-app-card divide-y divide-app-trend-down">
                               {fileData.unresolvedContainers.map((unresolved, i) => (
                                 <tr key={i}>
-                                  <td className="px-3 py-2 whitespace-nowrap text-red-900 font-medium">
+                                  <td className="px-3 py-2 whitespace-nowrap text-app-trend-down font-medium">
                                     {unresolved.rowIndex}
                                   </td>
-                                  <td className="px-3 py-2 whitespace-nowrap text-red-900 font-mono">
+                                  <td className="px-3 py-2 whitespace-nowrap text-app-trend-down font-mono">
                                     {unresolved.barcode}
                                   </td>
-                                  <td className="px-3 py-2 whitespace-nowrap text-red-700">
-                                    {unresolved.targetPosition || <span className="text-gray-400 italic">N/A</span>}
+                                  <td className="px-3 py-2 whitespace-nowrap text-app-trend-down">
+                                    {unresolved.targetPosition || <span className="text-app-text-muted italic">N/A</span>}
                                   </td>
                                 </tr>
                               ))}
@@ -1083,8 +1088,8 @@ export default function ContainerMoveMicronix() {
                 ))}
               </div>
 
-              <div className="mt-6 border border-gray-200 rounded-lg p-4 bg-gray-50">
-                <h3 className="font-semibold text-gray-900 mb-3">Atomicity Mode</h3>
+              <div className="mt-6 border border-app-border rounded-lg p-4 bg-app-surface">
+                <h3 className="font-semibold text-app-text mb-3">Atomicity Mode</h3>
                 <div className="space-y-2">
                   <label className="flex items-start gap-2">
                     <input
@@ -1095,7 +1100,7 @@ export default function ContainerMoveMicronix() {
                       onChange={() => setAtomicMode('all_or_nothing')}
                       className="mt-1"
                     />
-                    <span className="text-sm text-gray-700">
+                    <span className="text-sm text-app-text">
                       <strong>All-or-nothing</strong>: any invalid row blocks all moves.
                     </span>
                   </label>
@@ -1108,7 +1113,7 @@ export default function ContainerMoveMicronix() {
                       onChange={() => setAtomicMode('best_effort')}
                       className="mt-1"
                     />
-                    <span className="text-sm text-gray-700">
+                    <span className="text-sm text-app-text">
                       <strong>Best effort</strong>: valid rows are moved, invalid rows are returned as errors.
                     </span>
                   </label>
@@ -1140,18 +1145,18 @@ export default function ContainerMoveMicronix() {
             <div
               className={`border rounded-lg p-6 mb-6 ${
                 moveResult.success
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-red-50 border-red-200'
+                  ? 'bg-app-trend-up/10 border-app-trend-up/30'
+                  : 'bg-app-trend-down/10 border-app-trend-down'
               }`}
             >
               <h3
                 className={`text-lg font-semibold mb-2 ${
-                  moveResult.success ? 'text-green-800' : 'text-red-800'
+                  moveResult.success ? 'text-app-trend-up' : 'text-app-trend-down'
                 }`}
               >
                 {moveResult.success ? 'Moves Successful' : 'Moves Failed'}
               </h3>
-              <p className={moveResult.success ? 'text-green-700' : 'text-red-700'}>
+              <p className={moveResult.success ? 'text-app-trend-up' : 'text-app-trend-down'}>
                 {moveResult.success
                   ? `Successfully moved ${moveResult.moved} tube(s) across ${files.length} file(s)`
                   : moveResult.moved > 0
@@ -1164,18 +1169,18 @@ export default function ContainerMoveMicronix() {
               {/* Per-file results */}
               {moveResult.fileResults && moveResult.fileResults.length > 0 && (
                 <div className="mt-4 space-y-3">
-                  <h4 className="font-semibold text-gray-900">Per-File Results:</h4>
+                  <h4 className="font-semibold text-app-text">Per-File Results:</h4>
                   {moveResult.fileResults.map((result, i) => (
-                    <div key={i} className="bg-white border border-gray-200 rounded p-3">
+                    <div key={i} className="bg-app-card border border-app-border rounded p-3">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-gray-900">{result.filename}</span>
-                        <span className={`text-sm ${result.moved > 0 ? 'text-green-600' : 'text-gray-500'}`}>
+                        <span className="font-medium text-app-text">{result.filename}</span>
+                        <span className={`text-sm ${result.moved > 0 ? 'text-app-trend-up' : 'text-app-text-muted'}`}>
                           {result.moved} moved
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600">Destination: {result.destinationPlate}</p>
+                      <p className="text-sm text-app-text-muted">Destination: {result.destinationPlate}</p>
                       {result.errors && result.errors.length > 0 && (
-                        <ul className="mt-2 list-disc list-inside text-sm text-red-700">
+                        <ul className="mt-2 list-disc list-inside text-sm text-app-trend-down">
                           {result.errors.map((error, j) => (
                             <li key={j}>
                               {error.row > 0 ? `Row ${error.row}: ` : ''}{error.error}
@@ -1191,8 +1196,8 @@ export default function ContainerMoveMicronix() {
               {/* Overall errors */}
               {moveResult.errors && moveResult.errors.length > 0 && (
                 <div className="mt-4">
-                  <h4 className="font-semibold text-red-800 mb-2">Errors:</h4>
-                  <ul className="list-disc list-inside space-y-2 text-red-700">
+                  <h4 className="font-semibold text-app-trend-down mb-2">Errors:</h4>
+                  <ul className="list-disc list-inside space-y-2 text-app-trend-down">
                     {moveResult.errors.map((error, i) => (
                       <li key={i} className="text-sm">
                         {error.row > 0 ? (

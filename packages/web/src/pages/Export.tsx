@@ -461,7 +461,7 @@ export default function Export() {
           <h1 className="text-3xl font-bold mb-6">Export Containers (Multi-Study)</h1>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+            <div className="mb-6 p-4 bg-app-trend-down/10 border border-app-trend-down rounded text-app-trend-down text-sm">
               {error}
             </div>
           )}
@@ -469,7 +469,7 @@ export default function Export() {
           {/* CSV Upload Section */}
           <div className="space-y-4 mb-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-app-text mb-2">
                 Upload CSV File
               </label>
               <input
@@ -483,16 +483,16 @@ export default function Export() {
                 }}
                 className="file-input-accent"
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-app-text-muted">
                 CSV should contain: study_short_code (required), subject_name (required), collection_date (optional), date_from (optional), date_to (optional)
               </p>
               {csvError && (
-                <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                <div className="mt-2 p-2 bg-app-trend-down/10 border border-app-trend-down rounded text-app-trend-down text-sm">
                   {csvError}
                 </div>
               )}
               {csvData.length > 0 && (
-                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-green-700 text-sm">
+                <div className="mt-2 p-2 bg-app-trend-up/10 border border-app-trend-up rounded text-app-trend-up text-sm">
                   Successfully parsed {csvData.length} row{csvData.length !== 1 ? 's' : ''}
                 </div>
               )}
@@ -500,24 +500,24 @@ export default function Export() {
 
             {/* Study Validation Results */}
             {validating && (
-              <div className="p-3 rounded text-sm" style={{ background: 'rgb(var(--dashboard-accent-muted))', border: '1px solid rgb(var(--dashboard-accent) / 0.3)', color: 'rgb(var(--dashboard-accent-hover))' }}>
+              <div className="p-3 rounded text-sm" style={{ background: 'rgb(var(--app-accent-muted))', border: '1px solid rgb(var(--app-accent) / 0.3)', color: 'rgb(var(--app-accent-hover))' }}>
                 Validating study codes...
               </div>
             )}
             {validationResult && !validating && (
               <div className={`p-4 border rounded ${
                 validationResult.invalid_count > 0
-                  ? 'bg-yellow-50 border-yellow-200'
-                  : 'bg-green-50 border-green-200'
+                  ? 'bg-app-standard-muted/50 border-app-standard'
+                  : 'bg-app-trend-up/10 border-app-trend-up'
               }`}>
-                <div className="text-sm font-medium mb-2">
+                <div className="text-sm font-medium mb-2 text-app-text">
                   Study Validation Results
                 </div>
-                <div className="text-sm space-y-1">
+                <div className="text-sm space-y-1 text-app-text">
                   <div>Total unique studies: {validationResult.total_unique}</div>
-                  <div className="text-green-700">Valid: {validationResult.valid_count}</div>
+                  <div className="text-app-trend-up">Valid: {validationResult.valid_count}</div>
                   {validationResult.invalid_count > 0 && (
-                    <div className="text-red-700">Invalid: {validationResult.invalid_count}</div>
+                    <div className="text-app-trend-down">Invalid: {validationResult.invalid_count}</div>
                   )}
                   {validationResult.valid.length > 0 && (
                     <div className="mt-2">
@@ -533,8 +533,8 @@ export default function Export() {
                   )}
                   {validationResult.invalid.length > 0 && (
                     <div className="mt-2">
-                      <div className="font-medium mb-1 text-red-700">Invalid Study Codes:</div>
-                      <ul className="list-disc list-inside space-y-1 text-red-700">
+                      <div className="font-medium mb-1 text-app-trend-down">Invalid Study Codes:</div>
+                      <ul className="list-disc list-inside space-y-1 text-app-trend-down">
                         {validationResult.invalid.map(code => (
                           <li key={code}>{code}</li>
                         ))}
@@ -546,7 +546,7 @@ export default function Export() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-app-text mb-2">
                 Date Tolerance (days)
               </label>
               <input
@@ -554,10 +554,10 @@ export default function Export() {
                 min="0"
                 value={dateTolerance}
                 onChange={(e) => setDateTolerance(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent bg-app-card text-app-text"
                 placeholder="0 (exact match)"
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-app-text-muted">
                 Applies to all subjects with collection_date. Default: 0 (exact match). Example: 2 means ±2 days.
               </p>
             </div>
@@ -567,12 +567,12 @@ export default function Export() {
           <div className="space-y-4 mb-6">
             {/* Specimen Types */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-app-text mb-2">
                 Specimen Types
               </label>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-32 overflow-y-auto border border-gray-100 rounded p-2">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-32 overflow-y-auto border border-app-border rounded p-2">
                 {loadingRefData ? (
-                  <div className="text-sm text-gray-500">Loading...</div>
+                  <div className="text-sm text-app-text-muted">Loading...</div>
                 ) : (
                   specimenTypes.map(type => (
                     <label key={type.id} className="flex items-center space-x-2 cursor-pointer">
@@ -580,9 +580,9 @@ export default function Export() {
                         type="checkbox"
                         checked={filters.specimen_type_ids?.includes(type.id) || false}
                         onChange={() => toggleArrayFilter('specimen_type_ids', type.id)}
-                        className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
+                        className="rounded border-app-border text-app-accent focus:ring-app-accent"
                       />
-                      <span className="text-sm text-gray-700">{type.name}</span>
+                      <span className="text-sm text-app-text">{type.name}</span>
                     </label>
                   ))
                 )}
@@ -591,7 +591,7 @@ export default function Export() {
 
             {/* Container Types */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-app-text mb-2">
                 Container Types
               </label>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -601,9 +601,9 @@ export default function Export() {
                       type="checkbox"
                       checked={filters.container_types?.includes(type.value) || false}
                       onChange={() => toggleArrayFilter('container_types', type.value)}
-                      className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
+                      className="rounded border-app-border text-app-accent focus:ring-app-accent"
                     />
-                    <span className="text-sm text-gray-700">{type.label}</span>
+                    <span className="text-sm text-app-text">{type.label}</span>
                   </label>
                 ))}
               </div>
@@ -612,7 +612,7 @@ export default function Export() {
             {/* Date Ranges */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Collection Date Range
                 </label>
                 <div className="flex gap-2">
@@ -620,18 +620,18 @@ export default function Export() {
                     type="date"
                     value={filters.date_from || ''}
                     onChange={(e) => updateFilter('date_from', e.target.value || undefined)}
-                    className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    className="flex-1 px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent bg-app-card text-app-text"
                   />
                   <input
                     type="date"
                     value={filters.date_to || ''}
                     onChange={(e) => updateFilter('date_to', e.target.value || undefined)}
-                    className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    className="flex-1 px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent bg-app-card text-app-text"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Created Date Range
                 </label>
                 <div className="flex gap-2">
@@ -639,13 +639,13 @@ export default function Export() {
                     type="date"
                     value={filters.created_from || ''}
                     onChange={(e) => updateFilter('created_from', e.target.value || undefined)}
-                    className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    className="flex-1 px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent bg-app-card text-app-text"
                   />
                   <input
                     type="date"
                     value={filters.created_to || ''}
                     onChange={(e) => updateFilter('created_to', e.target.value || undefined)}
-                    className="flex-1 px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    className="flex-1 px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent bg-app-card text-app-text"
                   />
                 </div>
               </div>
@@ -653,12 +653,12 @@ export default function Export() {
 
             {/* Tags */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-app-text mb-2">
                 Tags (optional)
               </label>
-              <div className="max-h-32 overflow-y-auto border border-gray-100 rounded p-2">
+              <div className="max-h-32 overflow-y-auto border border-app-border rounded p-2">
                 {loadingRefData ? (
-                  <div className="text-sm text-gray-500">Loading...</div>
+                  <div className="text-sm text-app-text-muted">Loading...</div>
                 ) : (
                   tags.map(tag => (
                     <label key={tag.id} className="flex items-center space-x-2 cursor-pointer mb-1">
@@ -666,9 +666,9 @@ export default function Export() {
                         type="checkbox"
                         checked={filters.tag_ids?.includes(tag.id) || false}
                         onChange={() => toggleArrayFilter('tag_ids', tag.id)}
-                        className="rounded border-gray-100 text-teal-600 focus:ring-teal-500"
+                        className="rounded border-app-border text-app-accent focus:ring-app-accent"
                       />
-                      <span className="text-sm text-gray-700">{tag.name}</span>
+                      <span className="text-sm text-app-text">{tag.name}</span>
                     </label>
                   ))
                 )}
@@ -690,13 +690,13 @@ export default function Export() {
           </div>
 
           {/* Preview Count */}
-          <div className="mb-6 p-4 rounded-lg" style={{ background: 'rgb(var(--dashboard-surface))' }}>
+          <div className="mb-6 p-4 rounded-lg" style={{ background: 'rgb(var(--app-surface))' }}>
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Matching Containers:</span>
+              <span className="text-sm font-medium" style={{ color: 'rgb(var(--app-text-muted))' }}>Matching Containers:</span>
               {loadingCount ? (
-                <span className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Calculating...</span>
+                <span className="text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>Calculating...</span>
               ) : (
-                <span className="text-lg font-bold" style={{ color: 'rgb(var(--dashboard-accent-hover))' }}>
+                <span className="text-lg font-bold" style={{ color: 'rgb(var(--app-accent-hover))' }}>
                   {count !== null ? count.toLocaleString() : '—'}
                 </span>
               )}
@@ -706,7 +706,7 @@ export default function Export() {
           {/* Export Configuration Selector */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-app-text">
                 Export Configuration
               </label>
               <Link
@@ -723,12 +723,12 @@ export default function Export() {
             {loadingConfigs ? (
               <div className="space-y-1.5">
                 {[1, 2, 3].map(i => (
-                  <div key={i} className="w-full h-10 bg-gray-100 rounded border border-gray-200 animate-pulse" />
+                  <div key={i} className="w-full h-10 app-skeleton-bar rounded border border-app-border animate-pulse" />
                 ))}
               </div>
             ) : exportConfigurations.length === 0 ? (
-              <div className="text-sm p-3 bg-gray-50 rounded border border-gray-200">
-                <p className="text-gray-700 mb-2">No export configurations available.</p>
+              <div className="text-sm p-3 bg-app-surface rounded border border-app-border">
+                <p className="text-app-text mb-2">No export configurations available.</p>
                 <Link
                   to="/settings?category=data-management&section=export-configurations"
                   className="storage-link font-medium inline-flex items-center gap-1"
@@ -801,34 +801,34 @@ export default function Export() {
                       className={`w-full text-left px-3 py-2 border rounded transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
                         isSelected
                           ? 'shadow-sm'
-                          : 'border-gray-200'
+                          : 'border-app-border'
                       }`}
-                      style={isSelected ? { borderColor: 'rgb(var(--dashboard-accent))', background: 'rgb(var(--dashboard-accent-muted))' } : isFocused ? { borderColor: 'rgb(var(--dashboard-accent)/0.5)', background: 'rgb(var(--dashboard-accent-muted)/0.7)' } : undefined}
+                      style={isSelected ? { borderColor: 'rgb(var(--app-accent))', background: 'rgb(var(--app-accent-muted))' } : isFocused ? { borderColor: 'rgb(var(--app-accent)/0.5)', background: 'rgb(var(--app-accent-muted)/0.7)' } : undefined}
                       title={config.columns.length > 0 ? `Columns: ${config.columns.slice(0, 5).join(', ')}${config.columns.length > 5 ? `, +${config.columns.length - 5} more` : ''}` : 'No columns'}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                          <span className="font-medium text-sm truncate" style={isSelected ? { color: 'rgb(var(--dashboard-accent-hover))' } : { color: 'rgb(var(--dashboard-text))' }}>
+                          <span className="font-medium text-sm truncate" style={isSelected ? { color: 'rgb(var(--app-accent-hover))' } : { color: 'rgb(var(--app-text))' }}>
                             {config.name}
                           </span>
                           {config.isDefault && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-medium rounded flex-shrink-0" style={{ background: 'rgb(var(--dashboard-accent-muted))', color: 'rgb(var(--dashboard-accent-hover))' }} aria-label="Default configuration">
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium rounded flex-shrink-0" style={{ background: 'rgb(var(--app-accent-muted))', color: 'rgb(var(--app-accent-hover))' }} aria-label="Default configuration">
                               Default
                             </span>
                           )}
                           <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded flex-shrink-0 ${
                             config.source === 'personal'
-                              ? 'bg-purple-100 text-purple-700'
-                              : 'bg-gray-100 text-gray-700'
+                              ? 'bg-app-accent-muted text-app-accent-hover'
+                              : 'bg-app-surface text-app-text-muted'
                           }`} aria-label={config.source === 'personal' ? 'Personal configuration' : 'Shared configuration'}>
                             {config.source === 'personal' ? 'Personal' : 'Shared'}
                           </span>
-                          <span className="text-xs text-gray-500 flex-shrink-0" aria-label={`${config.columns.length} columns`}>
+                          <span className="text-xs text-app-text-muted flex-shrink-0" aria-label={`${config.columns.length} columns`}>
                             {config.columns.length} cols
                           </span>
                         </div>
                         {isSelected && (
-                          <svg className="w-4 h-4 flex-shrink-0" style={{ color: 'rgb(var(--dashboard-accent-hover))' }} fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                          <svg className="w-4 h-4 flex-shrink-0" style={{ color: 'rgb(var(--app-accent-hover))' }} fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                           </svg>
                         )}
@@ -838,14 +838,14 @@ export default function Export() {
                 })}
               </div>
             )}
-            <p className="mt-2 text-xs text-gray-500">
+            <p className="mt-2 text-xs text-app-text-muted">
               Select which columns to include in the export. Configure options in Settings.
             </p>
           </div>
 
           {/* Export Format Selection */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-app-text mb-2">
               Export Format
             </label>
             <div className="flex gap-4">
@@ -857,9 +857,9 @@ export default function Export() {
                     value={format}
                     checked={exportFormat === format}
                     onChange={() => setExportFormat(format)}
-                    className="text-teal-600 focus:ring-teal-500"
+                    className="text-app-accent focus:ring-app-accent"
                   />
-                  <span className="text-sm text-gray-700 uppercase">{format}</span>
+                  <span className="text-sm text-app-text uppercase">{format}</span>
                 </label>
               ))}
             </div>
@@ -867,12 +867,12 @@ export default function Export() {
 
           {/* CSV Options - Only show when CSV format is selected */}
           {exportFormat === 'csv' && (
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">CSV Options</h3>
+            <div className="mb-6 p-4 bg-app-surface rounded-lg border border-app-border">
+              <h3 className="text-sm font-medium text-app-text mb-3">CSV Options</h3>
               
               {/* Delimiter Selection */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Delimiter
                 </label>
                 <div className="flex gap-4">
@@ -883,9 +883,9 @@ export default function Export() {
                       value=","
                       checked={csvDelimiter === ','}
                       onChange={() => setCsvDelimiter(',')}
-                      className="text-teal-600 focus:ring-teal-500"
+                      className="text-app-accent focus:ring-app-accent"
                     />
-                    <span className="text-sm text-gray-700">Comma (,)</span>
+                    <span className="text-sm text-app-text">Comma (,)</span>
                   </label>
                   <label className="flex items-center space-x-2 cursor-pointer">
                     <input
@@ -894,9 +894,9 @@ export default function Export() {
                       value=";"
                       checked={csvDelimiter === ';'}
                       onChange={() => setCsvDelimiter(';')}
-                      className="text-teal-600 focus:ring-teal-500"
+                      className="text-app-accent focus:ring-app-accent"
                     />
-                    <span className="text-sm text-gray-700">Semicolon (;)</span>
+                    <span className="text-sm text-app-text">Semicolon (;)</span>
                   </label>
                   <label className="flex items-center space-x-2 cursor-pointer">
                     <input
@@ -905,9 +905,9 @@ export default function Export() {
                       value="\t"
                       checked={csvDelimiter === '\t'}
                       onChange={() => setCsvDelimiter('\t')}
-                      className="text-teal-600 focus:ring-teal-500"
+                      className="text-app-accent focus:ring-app-accent"
                     />
-                    <span className="text-sm text-gray-700">Tab</span>
+                    <span className="text-sm text-app-text">Tab</span>
                   </label>
                 </div>
               </div>
@@ -919,18 +919,18 @@ export default function Export() {
                     type="checkbox"
                     checked={csvBOM}
                     onChange={(e) => setCsvBOM(e.target.checked)}
-                    className="text-teal-600 focus:ring-teal-500"
+                    className="text-app-accent focus:ring-app-accent"
                   />
-                  <span className="text-sm text-gray-700">Include UTF-8 BOM (recommended for Excel)</span>
+                  <span className="text-sm text-app-text">Include UTF-8 BOM (recommended for Excel)</span>
                 </label>
-                <p className="mt-1 text-xs text-gray-500 ml-6">
+                <p className="mt-1 text-xs text-app-text-muted ml-6">
                   Helps Excel recognize UTF-8 encoding automatically
                 </p>
               </div>
 
               {/* Line Ending Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Line Ending
                 </label>
                 <div className="flex gap-4">
@@ -941,9 +941,9 @@ export default function Export() {
                       value="CRLF"
                       checked={csvLineEnding === 'CRLF'}
                       onChange={() => setCsvLineEnding('CRLF')}
-                      className="text-teal-600 focus:ring-teal-500"
+                      className="text-app-accent focus:ring-app-accent"
                     />
-                    <span className="text-sm text-gray-700">CRLF (Windows, recommended for Excel)</span>
+                    <span className="text-sm text-app-text">CRLF (Windows, recommended for Excel)</span>
                   </label>
                   <label className="flex items-center space-x-2 cursor-pointer">
                     <input
@@ -952,9 +952,9 @@ export default function Export() {
                       value="LF"
                       checked={csvLineEnding === 'LF'}
                       onChange={() => setCsvLineEnding('LF')}
-                      className="text-teal-600 focus:ring-teal-500"
+                      className="text-app-accent focus:ring-app-accent"
                     />
-                    <span className="text-sm text-gray-700">LF (Unix)</span>
+                    <span className="text-sm text-app-text">LF (Unix)</span>
                   </label>
                 </div>
               </div>
@@ -963,14 +963,14 @@ export default function Export() {
 
           {/* Export Summary */}
           {exportSummary && (
-            <div className="mb-6 border border-gray-200 rounded-lg overflow-hidden transition-all duration-300">
+            <div className="mb-6 border border-app-border rounded-lg overflow-hidden transition-all duration-300">
               <button
                 onClick={() => setSummaryExpanded(!summaryExpanded)}
-                className="w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 flex items-center justify-between transition-colors"
+                className="w-full px-4 py-3 bg-app-surface hover:bg-app-border/30 flex items-center justify-between transition-colors text-app-text"
               >
                 <div className="flex items-center gap-2">
                   <svg
-                    className={`w-5 h-5 text-green-600 transition-transform duration-300 ${
+                    className={`w-5 h-5 text-app-trend-up transition-transform duration-300 ${
                       summaryExpanded ? 'rotate-0' : 'rotate-180'
                     }`}
                     fill="none"
@@ -979,13 +979,13 @@ export default function Export() {
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-sm font-medium text-gray-900">Export Summary</span>
-                  <span className="text-xs text-gray-500 ml-2">
+                  <span className="text-sm font-medium text-app-text">Export Summary</span>
+                  <span className="text-xs text-app-text-muted ml-2">
                     ({exportSummary.total_containers.toLocaleString()} containers across {exportSummary.studies.length} studies)
                   </span>
                 </div>
                 <svg
-                  className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${
+                  className={`w-5 h-5 text-app-text-muted transition-transform duration-300 ${
                     summaryExpanded ? 'rotate-180' : 'rotate-0'
                   }`}
                   fill="none"
@@ -1002,12 +1002,12 @@ export default function Export() {
                     : 'max-h-0 opacity-0 overflow-hidden'
                 }`}
               >
-                <div className="px-4 py-4 space-y-4 bg-white">
+                <div className="px-4 py-4 space-y-4 bg-app-card">
                   {/* Total Containers */}
-                  <div className="p-4 rounded-lg" style={{ background: 'rgb(var(--dashboard-accent-muted))' }}>
+                  <div className="p-4 rounded-lg" style={{ background: 'rgb(var(--app-accent-muted))' }}>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Total Containers Exported:</span>
-                      <span className="text-2xl font-bold" style={{ color: 'rgb(var(--dashboard-accent-hover))' }}>
+                      <span className="text-sm font-medium" style={{ color: 'rgb(var(--app-text-muted))' }}>Total Containers Exported:</span>
+                      <span className="text-2xl font-bold" style={{ color: 'rgb(var(--app-accent-hover))' }}>
                         {exportSummary.total_containers.toLocaleString()}
                       </span>
                     </div>
@@ -1015,27 +1015,27 @@ export default function Export() {
 
                   {/* Study Breakdown */}
                   {exportSummary.studies.map((study, idx) => (
-                    <div key={idx} className="border border-gray-200 rounded-lg p-4">
-                      <div className="font-medium text-gray-900 mb-2">
+                    <div key={idx} className="border border-app-border rounded-lg p-4">
+                      <div className="font-medium text-app-text mb-2">
                         {study.study_code} - {study.study_title}
                       </div>
-                      <div className="text-xs text-gray-500 mb-3">Lead: {study.study_lead_person}</div>
+                      <div className="text-xs text-app-text-muted mb-3">Lead: {study.study_lead_person}</div>
                       
-                      <div className="text-sm mb-2">
+                      <div className="text-sm mb-2 text-app-text">
                         <span className="font-medium">Containers: </span>
-                        <span style={{ color: 'rgb(var(--dashboard-accent-hover))' }}>{study.containers.toLocaleString()}</span>
+                        <span style={{ color: 'rgb(var(--app-accent-hover))' }}>{study.containers.toLocaleString()}</span>
                       </div>
 
                       {study.subjects_with_results.length > 0 && (
                         <div className="mt-2">
-                          <div className="text-xs font-medium text-gray-700 mb-1">
+                          <div className="text-xs font-medium text-app-text mb-1">
                             Subjects with Results ({study.subjects_with_results.length})
                           </div>
                           <div className="max-h-24 overflow-y-auto text-xs">
                             {study.subjects_with_results.map((item, i) => (
                               <div key={i} className="flex justify-between">
                                 <span>{item.name}</span>
-                                <span style={{ color: 'rgb(var(--dashboard-accent-hover))' }}>{item.count}</span>
+                                <span style={{ color: 'rgb(var(--app-accent-hover))' }}>{item.count}</span>
                               </div>
                             ))}
                           </div>
@@ -1044,10 +1044,10 @@ export default function Export() {
 
                       {study.subjects_no_results.length > 0 && (
                         <div className="mt-2">
-                          <div className="text-xs font-medium text-yellow-700 mb-1">
+                          <div className="text-xs font-medium text-app-standard mb-1">
                             No Results ({study.subjects_no_results.length})
                           </div>
-                          <div className="max-h-16 overflow-y-auto text-xs text-yellow-700">
+                          <div className="max-h-16 overflow-y-auto text-xs text-app-standard">
                             {study.subjects_no_results.join(', ')}
                           </div>
                         </div>
@@ -1055,10 +1055,10 @@ export default function Export() {
 
                       {study.subjects_not_found.length > 0 && (
                         <div className="mt-2">
-                          <div className="text-xs font-medium text-red-700 mb-1">
+                          <div className="text-xs font-medium text-app-trend-down mb-1">
                             Not Found ({study.subjects_not_found.length})
                           </div>
-                          <div className="max-h-16 overflow-y-auto text-xs text-red-700">
+                          <div className="max-h-16 overflow-y-auto text-xs text-app-trend-down">
                             {study.subjects_not_found.join(', ')}
                           </div>
                         </div>
@@ -1068,11 +1068,11 @@ export default function Export() {
 
                   {/* Invalid Study Codes */}
                   {exportSummary.invalid_study_codes.length > 0 && (
-                    <div className="border border-red-200 rounded-lg p-4 bg-red-50">
-                      <div className="text-sm font-medium text-red-700 mb-2">
+                    <div className="border border-app-trend-down rounded-lg p-4 bg-app-trend-down/10">
+                      <div className="text-sm font-medium text-app-trend-down mb-2">
                         Invalid Study Codes ({exportSummary.invalid_study_codes.length})
                       </div>
-                      <div className="text-xs text-red-700">
+                      <div className="text-xs text-app-trend-down">
                         {exportSummary.invalid_study_codes.join(', ')}
                       </div>
                     </div>

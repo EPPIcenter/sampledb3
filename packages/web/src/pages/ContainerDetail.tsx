@@ -30,10 +30,10 @@ interface ContainerDetail {
 
 function statusColor(name: string): string {
   const key = name.toLowerCase()
-  if (key.includes('active') || key.includes('in use') || key.includes('in-use')) return 'bg-green-500'
-  if (key.includes('used')) return 'bg-blue-500'
+  if (key.includes('active') || key.includes('in use') || key.includes('in-use')) return 'bg-app-trend-up/100'
+  if (key.includes('used')) return 'bg-app-accent-muted0'
   if (key.includes('archived')) return 'bg-yellow-500'
-  if (key.includes('discard') || key.includes('destroy')) return 'bg-red-500'
+  if (key.includes('discard') || key.includes('destroy')) return 'bg-app-trend-down/100'
   return 'bg-gray-400'
 }
 
@@ -146,7 +146,7 @@ export default function ContainerDetail() {
     return (
       <div className="storage-page">
         <div className="container mx-auto px-4 py-8 relative z-10">
-          <div className="text-center py-8 text-red-600">Container not found</div>
+          <div className="text-center py-8 text-app-trend-down">Container not found</div>
         </div>
       </div>
     )
@@ -246,7 +246,7 @@ export default function ContainerDetail() {
         <div className="storage-card-divider px-6 py-4 border-b">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="text-2xl" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{containerTypeIcon}</div>
+              <div className="text-2xl" style={{ color: 'rgb(var(--app-text-muted))' }}>{containerTypeIcon}</div>
               <div>
                 <h1 className="text-2xl font-bold">{containerTypeName}</h1>
                 {(effectiveCollection?.position || effectiveCollection?.barcode || effectiveCollection?.label) && (
@@ -257,7 +257,7 @@ export default function ContainerDetail() {
                           ? 'storage-barcode text-lg'
                           : 'text-sm font-mono'
                       }
-                      style={effectiveContainerType === 'micronix_tube' && effectiveCollection?.barcode ? undefined : { color: 'rgb(var(--dashboard-text-muted))' }}
+                      style={effectiveContainerType === 'micronix_tube' && effectiveCollection?.barcode ? undefined : { color: 'rgb(var(--app-text-muted))' }}
                     >
                       {containerIdentifier}
                     </span>
@@ -282,7 +282,7 @@ export default function ContainerDetail() {
                 </span>
               )}
               <span
-                className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-white ${container.remainingQuantity > 0 ? 'bg-green-500' : 'bg-red-500'}`}
+                className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-white ${container.remainingQuantity > 0 ? 'bg-app-trend-up/100' : 'bg-app-trend-down/100'}`}
               >
                 {container.remainingQuantity > 0 ? 'In Use' : 'Exhausted'}
               </span>
@@ -326,7 +326,7 @@ export default function ContainerDetail() {
                       >
                         {effectiveCollection.name}
                       </Link>
-                      <span className="text-xs ml-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                      <span className="text-xs ml-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
                         (View in {effectiveCollection.type === 'micronix_plate' ? 'plate' : effectiveCollection.type === 'cryovial_box' ? 'box' : 'sheet'})
                       </span>
                     </dd>
@@ -378,9 +378,9 @@ export default function ContainerDetail() {
                 )}
               </dl>
               {container.totalQuantity != null && container.totalQuantity > 0 && container.remainingQuantity != null && (
-                <div className="mt-1.5 h-1 w-full max-w-[12rem] rounded-full bg-gray-200 overflow-hidden" role="presentation" aria-hidden>
+                <div className="mt-1.5 h-1 w-full max-w-[12rem] rounded-full bg-app-surface overflow-hidden" role="presentation" aria-hidden>
                   <div
-                    className="h-full rounded-full bg-green-500"
+                    className="h-full rounded-full bg-app-trend-up/100"
                     style={{ width: `${Math.min(100, (container.remainingQuantity / container.totalQuantity) * 100)}%` }}
                   />
                 </div>
@@ -390,7 +390,7 @@ export default function ContainerDetail() {
 
           {/* 4. Sample: Specimen | Source (same row, dense) */}
           {(specimen || source) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-4 pt-4 border-t border-gray-100">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-4 pt-4 border-t border-app-border">
               {specimen && (
                 <div className="min-w-0">
                   <h3 className="storage-subsection-title mb-2 text-sm font-semibold">Specimen</h3>
@@ -444,7 +444,7 @@ export default function ContainerDetail() {
                         <dd className="storage-detail-dd mt-0.5">
                           <Link to={`/studies/${source.study.id}`} className="dashboard-link hover:underline break-all">
                             {source.study.title}
-                            {source.study.code && <span style={{ color: 'rgb(var(--dashboard-text-muted))' }}> ({source.study.code})</span>}
+                            {source.study.code && <span style={{ color: 'rgb(var(--app-text-muted))' }}> ({source.study.code})</span>}
                           </Link>
                         </dd>
                       </div>
@@ -467,13 +467,13 @@ export default function ContainerDetail() {
 
           {/* 5. Tags + 6. Notes (compact) + 7. Audit footer */}
           {((container.tags && Array.isArray(container.tags) && container.tags.length > 0) || container.comment) && (
-            <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+            <div className="mt-4 pt-4 border-t border-app-border space-y-2">
               {container.tags && Array.isArray(container.tags) && container.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {container.tags.map((tag: { id: number; name: string }) => (
                     <span
                       key={tag.id}
-                      className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-gray-200 bg-gray-50 text-gray-700"
+                      className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-app-border bg-app-surface text-app-text"
                     >
                       {tag.name}
                     </span>
@@ -489,8 +489,8 @@ export default function ContainerDetail() {
             </div>
           )}
           {(container.created || container.lastUpdated) && (
-            <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end">
-              <p className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            <div className="mt-3 pt-3 border-t border-app-border flex justify-end">
+              <p className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 {container.created && (
                   <span>Created {new Date(container.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                 )}
@@ -563,7 +563,7 @@ export default function ContainerDetail() {
             <div className="storage-card-divider px-6 py-4 border-b">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold storage-section-title">
-                  Derived Containers <span style={{ color: 'rgb(var(--dashboard-text-muted))', fontWeight: 400 }}>({derivations.length})</span>
+                  Derived Containers <span style={{ color: 'rgb(var(--app-text-muted))', fontWeight: 400 }}>({derivations.length})</span>
                 </h3>
                 <button
                   onClick={() => {
@@ -601,18 +601,18 @@ export default function ContainerDetail() {
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2">
-                              {containerTypeIcon && <span style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{containerTypeIcon}</span>}
+                              {containerTypeIcon && <span style={{ color: 'rgb(var(--app-text-muted))' }}>{containerTypeIcon}</span>}
                               <span className="font-semibold storage-detail-dd">{containerTypeName}</span>
                               {derivation.derivationType && (
-                                <span className="text-xs storage-detail-dt bg-white px-2 py-0.5 rounded border storage-card-divider">
+                                <span className="text-xs storage-detail-dt bg-app-card px-2 py-0.5 rounded border storage-card-divider">
                                   {derivation.derivationType}
                                 </span>
                               )}
                               {container?.remainingQuantity !== undefined && (
                                 <span className={`text-xs px-2 py-0.5 rounded font-medium ${
                                   container.remainingQuantity > 0 
-                                    ? 'bg-green-100 text-green-700' 
-                                    : 'bg-red-100 text-red-700'
+                                    ? 'bg-app-trend-up/10 text-app-trend-up' 
+                                    : 'bg-app-trend-down/10 text-app-trend-down'
                                 }`}>
                                   {container.remainingQuantity > 0 ? 'In Use' : 'Exhausted'}
                                 </span>
@@ -634,7 +634,7 @@ export default function ContainerDetail() {
                                   </span>
                                   <span className="storage-detail-dd font-mono">{effectiveCollection.name}</span>
                                   {(effectiveCollection.position || effectiveCollection.barcode || effectiveCollection.label) && (
-                                    <span style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                                    <span style={{ color: 'rgb(var(--app-text-muted))' }}>
                                       ({effectiveCollection.position || effectiveCollection.barcode || effectiveCollection.label})
                                     </span>
                                   )}

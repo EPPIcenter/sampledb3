@@ -45,10 +45,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const response = await authApi.getCurrentUser()
       const userData = response.data.user
       setUser(userData)
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive check
-      if (userData) {
-        addRecentUser(userData)
-      }
+      addRecentUser(userData)
     } catch (err: unknown) {
       if (typeof err === 'object' && err !== null && 'response' in err) {
         const axiosErr = err as { response?: { status?: number; data?: { error?: string } } }

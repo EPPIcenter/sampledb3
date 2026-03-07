@@ -74,5 +74,48 @@ describe('template-generator', () => {
       expect(csv).toContain('bag_name')
       expect(csv).not.toContain('plate_name')
     })
+
+    it('uses first specimen type name in example rows when specimenTypes provided', () => {
+      const csv = generateDerivationsTemplate({
+        parentType: 'study_subject',
+        settings: { ...baseSettings, specimenTypeName: '' },
+        specimenTypes: [
+          { id: 1, name: 'DBS' },
+          { id: 2, name: 'DNA (DBS)' },
+        ],
+      })
+      expect(csv).toContain('DBS')
+    })
+
+    it('uses exampleDerivationType and exampleProtocol when provided', () => {
+      const csv = generateDerivationsTemplate({
+        parentType: 'barcode',
+        settings: { ...baseSettings, derivationType: '', protocol: '' },
+        exampleDerivationType: 'aliquot',
+        exampleProtocol: 'SOP-99',
+      })
+      expect(csv).toContain('aliquot')
+      expect(csv).toContain('SOP-99')
+    })
+
+    it('falls back to hardcoded derivation/specimen defaults when reference data not provided', () => {
+      const csv = generateDerivationsTemplate({
+        parentType: 'control_batch',
+        settings: { ...baseSettings, specimenTypeName: '', derivationType: '', protocol: '' },
+        parentContainerType: 'paper',
+      })
+      expect(csv).toContain('DNA (DBS)')
+      expect(csv).toContain('dna_extraction')
+      expect(csv).toContain('Extraction v1')
+      expect(csv).toContain('Whole Blood')
+    })
+
+    it('does not include unit_symbol column (default unit used for derived container)', () => {
+      const csv = generateDerivationsTemplate({
+        parentType: 'barcode',
+        settings: { ...baseSettings, unitSymbol: '' },
+      })
+      expect(csv).not.toContain('unit_symbol')
+    })
   })
 })

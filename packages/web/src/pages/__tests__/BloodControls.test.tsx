@@ -32,4 +32,31 @@ describe('BloodControls', () => {
       { timeout: 3000 }
     )
   })
+
+  it('highlights Compositions tab when no search params', async () => {
+    await render(<BloodControls />, { initialEntries: ['/blood-controls'] })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /compositions/i })).toBeInTheDocument()
+    })
+    const compositionsTab = screen.getByRole('button', { name: /compositions/i })
+    expect(compositionsTab).toHaveClass('blood-controls-tab-active')
+  })
+
+  it('highlights Control Batches tab when tab=batches', async () => {
+    await render(<BloodControls />, { initialEntries: ['/blood-controls?tab=batches'] })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /control batches/i })).toBeInTheDocument()
+    })
+    const batchesTab = screen.getByRole('button', { name: /control batches/i })
+    expect(batchesTab).toHaveClass('blood-controls-tab-active')
+  })
+
+  it('highlights Compositions tab when tab=definitions', async () => {
+    await render(<BloodControls />, { initialEntries: ['/blood-controls?tab=definitions'] })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /compositions/i })).toBeInTheDocument()
+    })
+    const compositionsTab = screen.getByRole('button', { name: /compositions/i })
+    expect(compositionsTab).toHaveClass('blood-controls-tab-active')
+  })
 })

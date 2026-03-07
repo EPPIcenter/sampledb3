@@ -27,7 +27,8 @@ export default function BloodControls() {
   const [strains, setStrains] = useState<Strain[]>([])
   const [loading, setLoading] = useState(true)
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = (searchParams.get('tab') as 'definitions' | 'batches')
+  const tabParam = searchParams.get('tab')
+  const activeTab: 'definitions' | 'batches' = tabParam === 'batches' ? 'batches' : 'definitions'
 
   // Pagination state (per tab)
   const [definitionsPage, setDefinitionsPage] = useState(1)
@@ -58,11 +59,14 @@ export default function BloodControls() {
     loadData()
   }, [])
 
-  // Reset pagination when filters change so we don't land on an empty page
-  useEffect(() => {
+  // Reset pagination when filters change so we don't land on an empty page (during render)
+  const filterKey = [searchTerm, dateFrom, dateTo, strainMatchMode, minDensity, maxDensity, strainFilters.join(',')].join('\0')
+  const prevFilterKeyRef = useRef(filterKey)
+  if (prevFilterKeyRef.current !== filterKey) {
+    prevFilterKeyRef.current = filterKey
     setDefinitionsPage(1)
     setBatchesPage(1)
-  }, [searchTerm, dateFrom, dateTo, strainFilters, strainMatchMode, minDensity, maxDensity])
+  }
 
   const loadData = async () => {
     try {
@@ -184,16 +188,16 @@ export default function BloodControls() {
       label: 'Biological Content',
       render: (_, row) => {
         if (!row.strains || row.strains.length === 0) {
-          return <span className="text-gray-400 italic text-xs">No strains</span>;
+          return <span className="text-app-text-muted italic text-xs">No strains</span>;
         }
         return (
           <div className="space-y-2 max-w-sm">
             {/* Visual proportion bar */}
-            <div className="flex h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="flex h-2 bg-app-surface rounded-full overflow-hidden">
               {row.strains.map((s: any, idx: number) => {
                 const percentage = s.percentage || 0
                 const colors = [
-                  'bg-blue-500',
+                  'bg-app-accent-muted0',
                   'bg-emerald-500',
                   'bg-amber-500',
                   'bg-purple-500',
@@ -215,12 +219,12 @@ export default function BloodControls() {
               {row.strains.map((s: any) => (
                 <span 
                   key={s.id} 
-                  className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100"
+                  className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-app-accent-muted text-app-accent-hover border border-app-accent"
                   title={s.percentage ? `${s.percentage}%` : undefined}
                 >
                   {s.name}
                   {s.percentage !== undefined && (
-                    <span className="ml-1 text-blue-600 font-semibold">({s.percentage}%)</span>
+                    <span className="ml-1 text-app-accent font-semibold">({s.percentage}%)</span>
                   )}
                 </span>
               ))}
@@ -255,10 +259,10 @@ export default function BloodControls() {
             </div>
             <div className="flex flex-wrap gap-2 text-sm">
               {hasSpots && badge('paper', row.spotCount!, 'Spots', 'bg-amber-50', 'text-amber-700', 'border-amber-100')}
-              {hasMicronix && badge('micronix_tube', row.micronixCount!, 'Micronix', 'bg-teal-50', 'text-teal-700', 'border-teal-100')}
-              {hasCryovial && badge('cryovial_tube', row.cryovialCount!, 'Cryovial', 'bg-blue-50', 'text-blue-700', 'border-blue-100')}
+              {hasMicronix && badge('micronix_tube', row.micronixCount!, 'Micronix', 'bg-app-accent-muted', 'text-app-accent-hover', 'border-app-accent')}
+              {hasCryovial && badge('cryovial_tube', row.cryovialCount!, 'Cryovial', 'bg-app-accent-muted', 'text-app-accent-hover', 'border-app-accent')}
               {hasStaticWells && badge('static_well', row.staticWellCount!, 'Static wells', 'bg-slate-50', 'text-slate-700', 'border-slate-200')}
-              {!hasAny && <span className="text-gray-400 italic text-xs">No stock</span>}
+              {!hasAny && <span className="text-app-text-muted italic text-xs">No stock</span>}
             </div>
           </div>
         )
@@ -274,13 +278,13 @@ export default function BloodControls() {
             <span className="dashboard-stat-value font-medium">{value.toLocaleString()}</span>
             <span className="dashboard-stat-muted ml-1">{row.unitSymbol}</span>
           </div>
-        ) : <span className="text-gray-400">N/A</span>
+        ) : <span className="text-app-text-muted">N/A</span>
       ),
     },
     {
       key: 'description',
       label: 'Description',
-      render: (value) => <span className="text-gray-600 line-clamp-1 max-w-xs">{value || '-'}</span>
+      render: (value) => <span className="text-app-text-muted line-clamp-1 max-w-xs">{value || '-'}</span>
     },
   ]
 
@@ -290,18 +294,18 @@ export default function BloodControls() {
       label: 'Composition (parasite strains)',
       render: (_, row) => (
           <div className="space-y-2 max-w-sm">
-            <div className="flex h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="flex h-2 bg-app-surface rounded-full overflow-hidden">
               {row.strains.map((s, idx) => {
                 const pct = s.percentage ?? 0
-                const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-purple-500', 'bg-rose-500', 'bg-cyan-500']
+                const colors = ['bg-app-accent-muted0', 'bg-emerald-500', 'bg-amber-500', 'bg-purple-500', 'bg-rose-500', 'bg-cyan-500']
                 return <div key={s.id} className={colors[idx % colors.length]} style={{ width: `${pct}%` }} title={`${s.name}: ${pct}%`} />
               })}
             </div>
             <div className="flex flex-wrap gap-1.5">
               {row.strains.map((s) => (
-                <span key={s.id} className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                <span key={s.id} className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-app-accent-muted text-app-accent-hover border border-app-accent">
                   {s.name}
-                  {s.percentage !== undefined && <span className="ml-1 text-blue-600 font-semibold">({s.percentage}%)</span>}
+                  {s.percentage !== undefined && <span className="ml-1 text-app-accent font-semibold">({s.percentage}%)</span>}
                 </span>
               ))}
             </div>
@@ -331,7 +335,7 @@ export default function BloodControls() {
         const totalMicronix = row.definitions.reduce((s, d) => s + (d.micronixCount ?? 0), 0)
         const totalCryovial = row.definitions.reduce((s, d) => s + (d.cryovialCount ?? 0), 0)
         const hasAny = totalSpots > 0 || totalMicronix > 0 || totalCryovial > 0
-        if (!hasAny) return <span className="text-gray-400 italic text-xs">No stock</span>
+        if (!hasAny) return <span className="text-app-text-muted italic text-xs">No stock</span>
         return (
           <div className="flex flex-wrap gap-2 text-sm">
             {totalSpots > 0 && (
@@ -342,14 +346,14 @@ export default function BloodControls() {
               </div>
             )}
             {totalMicronix > 0 && (
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-teal-50 text-teal-700 border border-teal-100 rounded-md">
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-app-accent-muted text-app-accent-hover border border-app-accent rounded-md">
                 {getContainerTypeIcon('micronix_tube')}
                 <span className="font-bold">{totalMicronix}</span>
                 <span className="text-[10px] uppercase font-medium">Micronix</span>
               </div>
             )}
             {totalCryovial > 0 && (
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-md">
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-app-accent-muted text-app-accent-hover border border-app-accent rounded-md">
                 {getContainerTypeIcon('cryovial_tube')}
                 <span className="font-bold">{totalCryovial}</span>
                 <span className="text-[10px] uppercase font-medium">Cryovial</span>
@@ -394,7 +398,7 @@ export default function BloodControls() {
             <span className="dashboard-stat-value font-medium">{value.toLocaleString()}</span>
             <span className="dashboard-stat-muted ml-1">{row.unitSymbol}</span>
           </div>
-        ) : <span className="text-gray-400">N/A</span>
+        ) : <span className="text-app-text-muted">N/A</span>
       ),
     },
     {
@@ -402,16 +406,16 @@ export default function BloodControls() {
       label: 'Biological Content',
       render: (_, row) => {
         if (!row.strains || row.strains.length === 0) {
-          return <span className="text-gray-400 italic text-xs">No strains</span>;
+          return <span className="text-app-text-muted italic text-xs">No strains</span>;
         }
         return (
           <div className="space-y-2 max-w-sm">
             {/* Visual proportion bar */}
-            <div className="flex h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="flex h-2 bg-app-surface rounded-full overflow-hidden">
               {row.strains.map((s: any, idx: number) => {
                 const percentage = s.percentage || 0
                 const colors = [
-                  'bg-blue-500',
+                  'bg-app-accent-muted0',
                   'bg-emerald-500',
                   'bg-amber-500',
                   'bg-purple-500',
@@ -433,12 +437,12 @@ export default function BloodControls() {
               {row.strains.map((s: any) => (
                 <span 
                   key={s.id} 
-                  className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100"
+                  className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-app-accent-muted text-app-accent-hover border border-app-accent"
                   title={s.percentage ? `${s.percentage}%` : undefined}
                 >
                   {s.name}
                   {s.percentage !== undefined && (
-                    <span className="ml-1 text-blue-600 font-semibold">({s.percentage}%)</span>
+                    <span className="ml-1 text-app-accent font-semibold">({s.percentage}%)</span>
                   )}
                 </span>
               ))}
@@ -467,10 +471,10 @@ export default function BloodControls() {
         return (
           <div className="flex flex-wrap gap-2 text-sm">
             {hasSpots && badge('paper', row.spotCount!, 'Spots', 'bg-amber-50', 'text-amber-700', 'border-amber-100')}
-            {hasMicronix && badge('micronix_tube', row.micronixCount!, 'Micronix', 'bg-teal-50', 'text-teal-700', 'border-teal-100')}
-            {hasCryovial && badge('cryovial_tube', row.cryovialCount!, 'Cryovial', 'bg-blue-50', 'text-blue-700', 'border-blue-100')}
+            {hasMicronix && badge('micronix_tube', row.micronixCount!, 'Micronix', 'bg-app-accent-muted', 'text-app-accent-hover', 'border-app-accent')}
+            {hasCryovial && badge('cryovial_tube', row.cryovialCount!, 'Cryovial', 'bg-app-accent-muted', 'text-app-accent-hover', 'border-app-accent')}
             {hasStaticWells && badge('static_well', row.staticWellCount!, 'Static wells', 'bg-slate-50', 'text-slate-700', 'border-slate-200')}
-            {!hasAny && <span className="text-gray-400 italic">Empty</span>}
+            {!hasAny && <span className="text-app-text-muted italic">Empty</span>}
           </div>
         )
       }
@@ -481,7 +485,7 @@ export default function BloodControls() {
       sortable: true,
       render: (value) => value ? (
         <span className="dashboard-stat-value">{new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-      ) : <span className="text-gray-400 italic">Not set</span>,
+      ) : <span className="text-app-text-muted italic">Not set</span>,
     },
   ]
 
@@ -491,7 +495,7 @@ export default function BloodControls() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 blood-controls-reveal blood-controls-reveal-1">
           <div>
             <h1 className="text-3xl font-bold">Blood Controls Management</h1>
-            <p className="mt-1 text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Manage and track blood control definitions and their production batches.</p>
+            <p className="mt-1 text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>Manage and track blood control definitions and their production batches.</p>
           </div>
           {canWrite && activeTab === 'definitions' && (
             <button
@@ -524,7 +528,7 @@ export default function BloodControls() {
         </div>
 
         <div className="dashboard-card rounded-xl mb-8 overflow-hidden blood-controls-reveal blood-controls-reveal-6">
-          <div className="border-b blood-controls-tabs" style={{ borderColor: 'rgb(var(--dashboard-border))', background: 'rgb(var(--dashboard-surface) / 0.5)' }}>
+          <div className="border-b blood-controls-tabs" style={{ borderColor: 'rgb(var(--app-border))', background: 'rgb(var(--app-surface) / 0.5)' }}>
             <nav className="flex -mb-px px-6">
               <button
                 onClick={() => setActiveTab('definitions')}
@@ -548,7 +552,7 @@ export default function BloodControls() {
                 <div className="relative col-span-1 lg:col-span-6">
                   <label className="block blood-controls-filter-label mb-2">Search</label>
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" style={{ color: 'rgb(var(--app-text-muted))' }}>
                       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                       </svg>
@@ -557,8 +561,8 @@ export default function BloodControls() {
                       ref={searchInputRef}
                       type="text"
                       placeholder={`Search ${activeTab === 'batches' ? 'batches' : 'definitions'}...`}
-                      className="block w-full pl-10 pr-3 py-2 border rounded-lg leading-5 bg-white sm:text-sm transition-shadow"
-                      style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                      className="block w-full pl-10 pr-3 py-2 border rounded-lg leading-5 bg-app-card sm:text-sm transition-shadow"
+                      style={{ borderColor: 'rgb(var(--app-border))' }}
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -566,11 +570,11 @@ export default function BloodControls() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-6 pt-6 border-t" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-6 pt-6 border-t" style={{ borderColor: 'rgb(var(--app-border))' }}>
                 <div className="lg:col-span-6">
                   <div className="flex flex-wrap items-center gap-3 mb-2">
                     <label className="block blood-controls-filter-label mb-0">Strains</label>
-                    <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+                    <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'rgb(var(--app-border))' }}>
                       <button
                         type="button"
                         onClick={() => setStrainMatchMode('contains')}
@@ -586,11 +590,11 @@ export default function BloodControls() {
                         Exact
                       </button>
                     </div>
-                    <span className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                    <span className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
                       {strainMatchMode === 'contains' ? 'Must contain all selected' : 'Exact strains only'}
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-2 p-2 border rounded-lg min-h-[42px] bg-white" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+                  <div className="flex flex-wrap gap-2 p-2 border rounded-lg min-h-[42px] bg-app-card" style={{ borderColor: 'rgb(var(--app-border))' }}>
                     {strains.map(s => {
                       const isSelected = strainFilters.includes(s.id.toString());
                       return (
@@ -609,7 +613,7 @@ export default function BloodControls() {
                         </button>
                       );
                     })}
-                    {strainFilters.length === 0 && <span className="text-sm ml-1 self-center italic" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No strains selected...</span>}
+                    {strainFilters.length === 0 && <span className="text-sm ml-1 self-center italic" style={{ color: 'rgb(var(--app-text-muted))' }}>No strains selected...</span>}
                   </div>
                 </div>
                 <div className="lg:col-span-3">
@@ -620,17 +624,17 @@ export default function BloodControls() {
                     <input
                       type="number"
                       placeholder="Min"
-                      className="block w-full px-3 py-2 border rounded-lg text-sm min-w-0 bg-white"
-                      style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                      className="block w-full px-3 py-2 border rounded-lg text-sm min-w-0 bg-app-card"
+                      style={{ borderColor: 'rgb(var(--app-border))' }}
                       value={minDensity}
                       onChange={(e) => setMinDensity(e.target.value)}
                     />
-                    <span className="font-medium text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>to</span>
+                    <span className="font-medium text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>to</span>
                     <input
                       type="number"
                       placeholder="Max"
-                      className="block w-full px-3 py-2 border rounded-lg text-sm min-w-0 bg-white"
-                      style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                      className="block w-full px-3 py-2 border rounded-lg text-sm min-w-0 bg-app-card"
+                      style={{ borderColor: 'rgb(var(--app-border))' }}
                       value={maxDensity}
                       onChange={(e) => setMaxDensity(e.target.value)}
                     />
@@ -642,16 +646,16 @@ export default function BloodControls() {
                     <div className="flex items-center gap-2">
                       <input
                         type="date"
-                        className="block w-full px-2 py-2 border rounded-lg text-sm min-w-0 bg-white"
-                        style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                        className="block w-full px-2 py-2 border rounded-lg text-sm min-w-0 bg-app-card"
+                        style={{ borderColor: 'rgb(var(--app-border))' }}
                         value={dateFrom}
                         onChange={(e) => setDateFrom(e.target.value)}
                       />
-                      <span className="font-medium" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>to</span>
+                      <span className="font-medium" style={{ color: 'rgb(var(--app-text-muted))' }}>to</span>
                       <input
                         type="date"
-                        className="block w-full px-2 py-2 border rounded-lg text-sm min-w-0 bg-white"
-                        style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                        className="block w-full px-2 py-2 border rounded-lg text-sm min-w-0 bg-app-card"
+                        style={{ borderColor: 'rgb(var(--app-border))' }}
                         value={dateTo}
                         onChange={(e) => setDateTo(e.target.value)}
                       />
@@ -661,7 +665,7 @@ export default function BloodControls() {
               </div>
 
               {(searchTerm || dateFrom || dateTo || strainFilters.length > 0 || minDensity || maxDensity) && (
-                <div className="flex justify-end items-center pt-2 border-t" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+                <div className="flex justify-end items-center pt-2 border-t" style={{ borderColor: 'rgb(var(--app-border))' }}>
                   <button
                     onClick={() => {
                       setSearchTerm('')

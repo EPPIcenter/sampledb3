@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api, { type SearchResult } from '../lib/api'
 import { useHotkey } from '../hooks/useHotkey'
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock'
 import ModalPortal from './ModalPortal'
 
 interface SearchModalProps {
@@ -56,17 +57,7 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
     }
   }, [isOpen])
 
-  // Prevent body scroll when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-    }
-  }, [isOpen])
+  useBodyScrollLock(isOpen)
 
   // Search when query changes (with ignore flag to avoid race conditions)
   useEffect(() => {
@@ -157,14 +148,14 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
 
   const getTypeColor = (type: string) => {
     const colors: Record<string, string> = {
-      specimen: 'bg-green-100 text-green-800',
-      container: 'bg-blue-100 text-blue-800',
+      specimen: 'bg-app-trend-up/10 text-app-trend-up',
+      container: 'bg-app-accent-muted text-app-accent-hover',
       study: 'bg-purple-100 text-purple-800',
       subject: 'bg-yellow-100 text-yellow-800',
       location: 'bg-indigo-100 text-indigo-800',
       control_batch: 'bg-pink-100 text-pink-800',
     }
-    return colors[type] || 'bg-gray-100 text-gray-800'
+    return colors[type] || 'bg-app-surface text-app-text'
   }
 
   if (!isOpen) return null

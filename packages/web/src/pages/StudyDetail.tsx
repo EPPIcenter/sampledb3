@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useHotkey } from '../hooks/useHotkey'
+import { useClickOutside } from '../hooks/useClickOutside'
 import { studiesApi, subjectsApi, type Study, type StudySubject, type StudySummary, type StudyTimelineData } from '../lib/api'
 import api from '../lib/api'
 import StudyDetailHeader from '../components/StudyDetailHeader'
@@ -105,16 +106,7 @@ export default function StudyDetail() {
   }, { enabled: actionsMenuOpen || createSubjectModalOpen || editStudyModalOpen || mergeModalOpen || deleteModalOpen, enableOnFormTags: true })
 
   // Close actions dropdown on click outside
-  useEffect(() => {
-    if (!actionsMenuOpen) return
-    const handleClick = (e: MouseEvent) => {
-      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node)) {
-        setActionsMenuOpen(false)
-      }
-    }
-    document.addEventListener('click', handleClick)
-    return () => document.removeEventListener('click', handleClick)
-  }, [actionsMenuOpen])
+  useClickOutside(actionsMenuRef, () => setActionsMenuOpen(false), actionsMenuOpen)
 
   useEffect(() => {
     if (!id) return
@@ -206,7 +198,7 @@ export default function StudyDetail() {
     return (
       <div className="studies-page min-h-screen">
         <div className="max-w-screen-2xl mx-auto px-4 py-8 relative z-10">
-          <div className="text-center py-8 text-red-600">Study not found</div>
+          <div className="text-center py-8 text-app-trend-down">Study not found</div>
         </div>
       </div>
     )
@@ -308,16 +300,16 @@ export default function StudyDetail() {
 
       {/* Tabs */}
       <div className="mb-6">
-        <div className="border-b" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+        <div className="border-b" style={{ borderColor: 'rgb(var(--app-border))' }}>
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab('overview')}
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'overview'
                   ? ''
-                  : 'border-transparent hover:border-[rgb(var(--dashboard-border))]'
+                  : 'border-transparent hover:border-[rgb(var(--app-border))]'
               }`}
-              style={activeTab === 'overview' ? { borderBottomColor: 'rgb(var(--dashboard-accent))', color: 'rgb(var(--dashboard-accent))' } : { color: 'rgb(var(--dashboard-text-muted))' }}
+              style={activeTab === 'overview' ? { borderBottomColor: 'rgb(var(--app-accent))', color: 'rgb(var(--app-accent))' } : { color: 'rgb(var(--app-text-muted))' }}
             >
               Overview
             </button>
@@ -327,9 +319,9 @@ export default function StudyDetail() {
                 className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                   activeTab === 'timeline'
                     ? ''
-                    : 'border-transparent hover:border-[rgb(var(--dashboard-border))]'
+                    : 'border-transparent hover:border-[rgb(var(--app-border))]'
                 }`}
-                style={activeTab === 'timeline' ? { borderBottomColor: 'rgb(var(--dashboard-accent))', color: 'rgb(var(--dashboard-accent))' } : { color: 'rgb(var(--dashboard-text-muted))' }}
+                style={activeTab === 'timeline' ? { borderBottomColor: 'rgb(var(--app-accent))', color: 'rgb(var(--app-accent))' } : { color: 'rgb(var(--app-text-muted))' }}
               >
                 Timeline
               </button>
@@ -339,9 +331,9 @@ export default function StudyDetail() {
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'subjects'
                   ? ''
-                  : 'border-transparent hover:border-[rgb(var(--dashboard-border))]'
+                  : 'border-transparent hover:border-[rgb(var(--app-border))]'
               }`}
-              style={activeTab === 'subjects' ? { borderBottomColor: 'rgb(var(--dashboard-accent))', color: 'rgb(var(--dashboard-accent))' } : { color: 'rgb(var(--dashboard-text-muted))' }}
+              style={activeTab === 'subjects' ? { borderBottomColor: 'rgb(var(--app-accent))', color: 'rgb(var(--app-accent))' } : { color: 'rgb(var(--app-text-muted))' }}
             >
               Subjects
             </button>
@@ -353,12 +345,12 @@ export default function StudyDetail() {
       {activeTab === 'overview' && (
         <div>
           {summaryLoading ? (
-            <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Loading summary...</div>
+            <div className="text-center py-8" style={{ color: 'rgb(var(--app-text-muted))' }}>Loading summary...</div>
           ) : summary ? (
             <>
               <div className="dashboard-card rounded-xl p-4 mb-6">
-                <h3 className="text-sm font-medium mb-3" style={{ color: 'rgb(var(--dashboard-text))' }}>Date Filter</h3>
-                <p className="text-xs mb-3" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                <h3 className="text-sm font-medium mb-3" style={{ color: 'rgb(var(--app-text))' }}>Date Filter</h3>
+                <p className="text-xs mb-3" style={{ color: 'rgb(var(--app-text-muted))' }}>
                   Filter statistics and charts by collection date. Default minimum is year 2000 to exclude invalid dates.
                 </p>
                 <DateFilterControls
@@ -373,7 +365,7 @@ export default function StudyDetail() {
               />
             </>
           ) : (
-            <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Failed to load summary</div>
+            <div className="text-center py-8" style={{ color: 'rgb(var(--app-text-muted))' }}>Failed to load summary</div>
           )}
         </div>
       )}
@@ -381,22 +373,22 @@ export default function StudyDetail() {
       {activeTab === 'timeline' && study.isLongitudinal && (
         <div>
           {timelineLoading ? (
-            <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Loading timeline...</div>
+            <div className="text-center py-8" style={{ color: 'rgb(var(--app-text-muted))' }}>Loading timeline...</div>
           ) : timeline ? (
             <StudyTimeline data={timeline} />
           ) : (
-            <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Failed to load timeline</div>
+            <div className="text-center py-8" style={{ color: 'rgb(var(--app-text-muted))' }}>Failed to load timeline</div>
           )}
         </div>
       )}
 
       {activeTab === 'subjects' && (
         <div className="dashboard-card rounded-xl overflow-hidden">
-          <div className="p-6 border-b" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+          <div className="p-6 border-b" style={{ borderColor: 'rgb(var(--app-border))' }}>
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="flex items-center gap-2">
                 <h2 className="dashboard-section-title text-xl font-semibold">Subjects</h2>
-                <span className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                <span className="text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
                   {filteredSubjects.length} subject{filteredSubjects.length !== 1 ? 's' : ''}
                 </span>
               </div>
@@ -408,14 +400,14 @@ export default function StudyDetail() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-64 px-4 py-2 border rounded-lg form-input"
-                  style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                  style={{ borderColor: 'rgb(var(--app-border))' }}
                 />
                 {canWrite && (
                   <button
                     type="button"
                     onClick={() => setCreateSubjectModalOpen(true)}
                     className="px-3 py-2 text-white rounded-lg font-medium text-sm transition-colors"
-                    style={{ backgroundColor: 'rgb(var(--dashboard-accent))' }}
+                    style={{ backgroundColor: 'rgb(var(--app-accent))' }}
                   >
                     Add subject
                   </button>
@@ -462,16 +454,16 @@ export default function StudyDetail() {
           <div className="fixed inset-0 z-[100] overflow-y-auto">
             <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
               <div
-                className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+                className="fixed inset-0 bg-black/40 backdrop-blur-md"
                 onClick={() => setCreateSubjectModalOpen(false)}
               />
-            <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+              <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Create Subject</h2>
+              <h2 className="text-lg font-semibold text-app-text">Create Subject</h2>
               <button
                 type="button"
-                className="text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded"
                 onClick={() => setCreateSubjectModalOpen(false)}
                 aria-label="Close"
               >
@@ -500,16 +492,16 @@ export default function StudyDetail() {
           <div className="fixed inset-0 z-[100] overflow-y-auto">
             <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
               <div
-                className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+                className="fixed inset-0 bg-black/40 backdrop-blur-md"
                 onClick={() => setEditStudyModalOpen(false)}
               />
-            <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+              <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Edit Study</h2>
+              <h2 className="text-lg font-semibold text-app-text">Edit Study</h2>
               <button
                 type="button"
-                className="text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded"
                 onClick={() => setEditStudyModalOpen(false)}
                 aria-label="Close"
               >
@@ -537,16 +529,16 @@ export default function StudyDetail() {
           <div className="fixed inset-0 z-[100] overflow-y-auto">
             <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
               <div
-                className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+                className="fixed inset-0 bg-black/40 backdrop-blur-md"
                 onClick={() => !deleteInProgress && (setDeleteModalOpen(false), setDeleteConfirmInput(''), setDeleteError(null))}
               />
-            <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900">Delete study</h2>
+                  <h2 className="text-xl font-semibold text-app-text">Delete study</h2>
                   <button
                     type="button"
-                    className="text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded disabled:opacity-50"
+                    className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded disabled:opacity-50"
                     onClick={() => !deleteInProgress && (setDeleteModalOpen(false), setDeleteConfirmInput(''), setDeleteError(null))}
                     aria-label="Close"
                     disabled={deleteInProgress}
@@ -554,17 +546,17 @@ export default function StudyDetail() {
                     ✕
                   </button>
                 </div>
-                <p className="text-sm font-medium text-gray-700 mb-2">
+                <p className="text-sm font-medium text-app-text mb-2">
                   You are about to permanently delete the following. This cannot be undone.
                 </p>
-                <ul className="list-disc list-inside text-sm text-gray-600 mb-4 space-y-1">
+                <ul className="list-disc list-inside text-sm text-app-text-muted mb-4 space-y-1">
                   <li>The study &quot;{study.title}&quot; (short code: {study.shortCode})</li>
                   <li>{(summary?.summary.totalSubjects ?? 0).toLocaleString()} subject(s)</li>
                   <li>{(summary?.summary.totalSpecimens ?? 0).toLocaleString()} specimen(s)</li>
                   <li>{(summary?.summary.totalContainers ?? 0).toLocaleString()} storage container(s) (and any tags, derivations, and container-type records)</li>
                 </ul>
                 <div className="mb-4">
-                  <label htmlFor="delete-confirm" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="delete-confirm" className="block text-sm font-medium text-app-text mb-1">
                     Type the study short code <strong>{study.shortCode}</strong> below to confirm
                   </label>
                   <input
@@ -573,13 +565,13 @@ export default function StudyDetail() {
                     value={deleteConfirmInput}
                     onChange={(e) => setDeleteConfirmInput(e.target.value)}
                     placeholder={study.shortCode}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-trend-down focus:border-app-trend-down"
                     disabled={deleteInProgress}
                     autoComplete="off"
                   />
                 </div>
                 {deleteError && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+                  <div className="mb-4 p-3 bg-app-trend-down/10 border border-app-trend-down text-app-trend-down text-sm rounded-lg">
                     {deleteError}
                   </div>
                 )}
@@ -588,7 +580,7 @@ export default function StudyDetail() {
                     type="button"
                     onClick={() => !deleteInProgress && (setDeleteModalOpen(false), setDeleteConfirmInput(''), setDeleteError(null))}
                     disabled={deleteInProgress}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
+                    className="px-4 py-2 border border-app-border text-app-text rounded-lg hover:bg-app-surface font-medium disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -596,7 +588,7 @@ export default function StudyDetail() {
                     type="button"
                     onClick={handleDeleteStudy}
                     disabled={deleteInProgress || deleteConfirmInput.trim() !== study.shortCode}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-app-trend-down text-white rounded-lg hover:opacity-90 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {deleteInProgress ? 'Deleting...' : 'Delete study'}
                   </button>

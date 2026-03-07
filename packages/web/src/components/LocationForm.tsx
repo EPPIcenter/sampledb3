@@ -115,7 +115,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
         <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
           {/* Background overlay */}
           <div
-            className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+            className="fixed inset-0 bg-black/40 backdrop-blur-md"
             onClick={(e) => {
               if (!loading) {
                 onCancel()
@@ -124,14 +124,14 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
           />
         
         {/* Modal panel */}
-        <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full sm:max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto max-h-[90vh]">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+        <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full sm:max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto max-h-[90vh]">
+          <h2 className="text-xl font-semibold text-app-text mb-4">
             {isEdit ? 'Edit Location' : isRoot ? 'Add Root Location' : 'Add Child Location'}
           </h2>
 
           {error && (
-            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            <div className="mb-4 bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded">
               {error}
             </div>
           )}
@@ -140,10 +140,10 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
             {/* Parent Location (read-only for child locations) */}
             {!isRoot && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Parent Location
                 </label>
-                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded text-sm text-gray-700">
+                <div className="px-3 py-2 bg-app-surface border border-app-border rounded text-sm text-app-text">
                   {(() => {
                     // When editing, use the location's path to get parent path
                     if (location?.path) {
@@ -165,7 +165,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
                     return 'Root'
                   })()}
                 </div>
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-app-text-muted">
                   Storage type will be inherited from the parent location.
                 </p>
               </div>
@@ -173,8 +173,8 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
 
             {/* Name */}
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                Name <span className="text-red-500">*</span>
+              <label htmlFor="name" className="block text-sm font-medium text-app-text mb-2">
+                Name <span className="text-app-trend-down">*</span>
               </label>
               <input
                 id="name"
@@ -183,7 +183,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
                 onChange={(e) => handleChange('name', e.target.value)}
                 required
                 disabled={loading}
-                className="form-input w-full disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="form-input w-full disabled:bg-app-surface disabled:cursor-not-allowed"
                 autoFocus
               />
             </div>
@@ -191,24 +191,24 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
             {/* Storage Type - editable for root locations, read-only for child locations */}
             {isEdit && location.parentId && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Storage Type (inherited)
                 </label>
-                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded text-sm text-gray-700">
+                <div className="px-3 py-2 bg-app-surface border border-app-border rounded text-sm text-app-text">
                   {location.effectiveStorageTypeName || location.storageTypeName || 'N/A'}
                 </div>
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-app-text-muted">
                   Storage type is inherited from the parent location and cannot be changed.
                 </p>
               </div>
             )}
             {isRoot && (
               <div>
-                <label htmlFor="storageTypeId" className="block text-sm font-medium text-gray-700 mb-2">
-                  Storage Type <span className="text-red-500">*</span>
+                <label htmlFor="storageTypeId" className="block text-sm font-medium text-app-text mb-2">
+                  Storage Type <span className="text-app-trend-down">*</span>
                 </label>
                 {loadingStorageTypes ? (
-                  <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded text-sm text-gray-500">
+                  <div className="px-3 py-2 bg-app-surface border border-app-border rounded text-sm text-app-text-muted">
                     Loading storage types...
                   </div>
                 ) : (
@@ -218,7 +218,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
                     onChange={(e) => handleChange('storageTypeId', e.target.value)}
                     required
                     disabled={loading || loadingStorageTypes}
-                    className="form-select w-full disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    className="form-select w-full disabled:bg-app-surface disabled:cursor-not-allowed"
                   >
                     <option value="">Select storage type...</option>
                     {storageTypes.map((st) => (
@@ -233,7 +233,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
 
             {/* Description */}
             <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="description" className="block text-sm font-medium text-app-text mb-2">
                 Description
               </label>
               <textarea
@@ -242,7 +242,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
                 onChange={(e) => handleChange('description', e.target.value)}
                 disabled={loading}
                 rows={3}
-                className="form-textarea w-full disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="form-textarea w-full disabled:bg-app-surface disabled:cursor-not-allowed"
               />
             </div>
 
@@ -254,11 +254,11 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
                   checked={formData.canContainCollections}
                   onChange={(e) => handleChange('canContainCollections', e.target.checked)}
                   disabled={loading}
-                  className="form-checkbox mr-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="form-checkbox mr-2 disabled:bg-app-surface disabled:cursor-not-allowed"
                 />
-                <span className="text-sm font-medium text-gray-700">Can Contain Collections</span>
+                <span className="text-sm font-medium text-app-text">Can Contain Collections</span>
               </label>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-app-text-muted">
                 Allow this location to store collections (plates, boxes, bags).
               </p>
             </div>
@@ -267,7 +267,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface disabled:opacity-50"
                 disabled={loading}
               >
                 Cancel
@@ -275,7 +275,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Saving...' : isEdit ? 'Update' : 'Create'}
               </button>

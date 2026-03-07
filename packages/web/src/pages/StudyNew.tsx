@@ -21,7 +21,7 @@ export default function StudyNew() {
               { label: 'Create Study' },
             ]}
           />
-          <h1 className="text-3xl font-bold" style={{ color: 'rgb(var(--dashboard-text))' }}>Create Study</h1>
+          <h1 className="text-3xl font-bold" style={{ color: 'rgb(var(--app-text))' }}>Create Study</h1>
         </div>
 
         <div className="dashboard-card rounded-xl p-6 max-w-2xl mx-auto">

@@ -44,13 +44,13 @@ export default function StatChart({
   colors = DEFAULT_COLORS,
   labelThreshold = 5,
   showPercentageList = false,
-  cardClassName = 'bg-white rounded-lg shadow p-6',
+  cardClassName = 'bg-app-card rounded-lg shadow p-6',
 }: StatChartProps) {
   if (data.length === 0) {
     return (
       <div className={cardClassName}>
-        {title && <h3 className="stat-chart-title text-lg font-semibold mb-4 text-gray-900">{title}</h3>}
-        <div className="stat-chart-empty flex items-center justify-center h-64 text-gray-500">
+        {title && <h3 className="stat-chart-title text-lg font-semibold mb-4 text-app-text">{title}</h3>}
+        <div className="stat-chart-empty flex items-center justify-center h-64 text-app-text-muted">
           No data available
         </div>
       </div>
@@ -225,12 +225,12 @@ export default function StatChart({
 
   return (
     <div className={cardClassName}>
-      {title && <h3 className="stat-chart-title text-lg font-semibold mb-4 text-gray-900">{title}</h3>}
+      {title && <h3 className="stat-chart-title text-lg font-semibold mb-4 text-app-text">{title}</h3>}
       <div className={showPercentageList && type === 'pie' ? 'flex gap-6 items-start' : ''}>
         {chartContent}
         {showPercentageList && type === 'pie' && (
           <div className="flex-shrink-0 min-w-[200px]">
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Percentages</h4>
+            <h4 className="text-sm font-medium text-app-text mb-2">Percentages</h4>
             <div className="space-y-1">
               {pieDataWithPercentages
                 .sort((a, b) => b.percentage - a.percentage)
@@ -240,8 +240,8 @@ export default function StatChart({
                       className="w-3 h-3 rounded-full flex-shrink-0"
                       style={{ backgroundColor: entry.color }}
                     />
-                    <span className="text-gray-600 flex-1">{entry.name}</span>
-                    <span className="text-gray-900 font-medium">
+                    <span className="text-app-text-muted flex-1">{entry.name}</span>
+                    <span className="text-app-text font-medium">
                       {entry.percentage.toFixed(1)}%
                     </span>
                   </div>

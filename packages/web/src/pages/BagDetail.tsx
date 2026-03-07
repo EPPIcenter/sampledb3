@@ -112,7 +112,7 @@ export default function BagDetail() {
     return (
       <div className="storage-page">
         <div className="container mx-auto px-4 py-8 relative z-10">
-          <div className="text-center py-8 text-red-600">Bag not found</div>
+          <div className="text-center py-8 text-app-trend-down">Bag not found</div>
         </div>
       </div>
     )
@@ -157,7 +157,7 @@ export default function BagDetail() {
           Bag {bag.name || `#${bag.id}`}
         </h1>
         {bag.locationPath && (
-          <p className="mt-1 text-xs font-mono" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{bag.locationPath}</p>
+          <p className="mt-1 text-xs font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>{bag.locationPath}</p>
         )}
       </div>
 
@@ -165,14 +165,14 @@ export default function BagDetail() {
       <div className="storage-card p-3 mb-4 storage-reveal storage-reveal-2">
         <div className="flex flex-wrap items-center gap-4 text-xs">
           <div className="flex items-center gap-2">
-            <span className="font-semibold" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Sheets:</span>
-            <span style={{ color: 'rgb(var(--dashboard-text))' }}>{sheets.length}</span>
+            <span className="font-semibold" style={{ color: 'rgb(var(--app-text-muted))' }}>Sheets:</span>
+            <span style={{ color: 'rgb(var(--app-text))' }}>{sheets.length}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-semibold" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Spots:</span>
-            <span style={{ color: 'rgb(var(--dashboard-text))' }}>{totalSpots}</span>
+            <span className="font-semibold" style={{ color: 'rgb(var(--app-text-muted))' }}>Spots:</span>
+            <span style={{ color: 'rgb(var(--app-text))' }}>{totalSpots}</span>
             {activeSpots > 0 && (
-              <span style={{ color: 'rgb(var(--dashboard-accent))' }}>({activeSpots} active)</span>
+              <span style={{ color: 'rgb(var(--app-accent))' }}>({activeSpots} active)</span>
             )}
           </div>
         </div>
@@ -181,11 +181,11 @@ export default function BagDetail() {
       <div className="space-y-3 storage-reveal storage-reveal-3">
         <div className="flex items-center gap-2 flex-wrap">
           <h2 className="text-base font-semibold storage-section-title">Sheets in this Bag</h2>
-          <div className="flex rounded-md border border-gray-200 overflow-hidden" role="group" aria-label="View mode">
+          <div className="flex rounded-md border border-app-border overflow-hidden" role="group" aria-label="View mode">
             <button
               type="button"
               onClick={() => setViewMode('sheets')}
-              className={`px-2 py-1 text-xs font-medium ${viewMode === 'sheets' ? 'bg-gray-100 border-gray-300' : 'bg-white hover:bg-gray-50'} border-r border-gray-200`}
+              className={`px-2 py-1 text-xs font-medium ${viewMode === 'sheets' ? 'bg-app-surface border-app-border' : 'bg-app-card hover:bg-app-surface'} border-r border-app-border`}
               aria-pressed={viewMode === 'sheets'}
             >
               Sheets
@@ -193,7 +193,7 @@ export default function BagDetail() {
             <button
               type="button"
               onClick={() => setViewMode('table')}
-              className={`px-2 py-1 text-xs font-medium ${viewMode === 'table' ? 'bg-gray-100 border-gray-300' : 'bg-white hover:bg-gray-50'}`}
+              className={`px-2 py-1 text-xs font-medium ${viewMode === 'table' ? 'bg-app-surface border-app-border' : 'bg-app-card hover:bg-app-surface'}`}
               aria-pressed={viewMode === 'table'}
             >
               Table
@@ -201,13 +201,13 @@ export default function BagDetail() {
           </div>
           {viewMode === 'table' && (
             <div className="flex items-center gap-2">
-              <label htmlFor="bag-table-column-config" className="text-xs font-medium text-gray-600 whitespace-nowrap">
+              <label htmlFor="bag-table-column-config" className="text-xs font-medium text-app-text-muted whitespace-nowrap">
                 Columns:
               </label>
               {loadingConfigs ? (
-                <span className="text-xs text-gray-500">Loading…</span>
+                <span className="text-xs text-app-text-muted">Loading…</span>
 ) : viewConfigurations.length === 0 ? (
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-app-text-muted">
                     <Link to="/settings?category=data-management&section=table-view-configurations" className="underline">
                       Add in Settings
                     </Link>
@@ -217,8 +217,8 @@ export default function BagDetail() {
                     id="bag-table-column-config"
                     value={selectedConfigId}
                     onChange={(e) => setSelectedConfigId(e.target.value)}
-                    className="text-xs border border-gray-200 rounded px-2 py-1 bg-white min-w-[140px]"
-                    style={{ color: 'rgb(var(--dashboard-text))' }}
+                    className="text-xs border border-app-border rounded px-2 py-1 bg-app-card min-w-[140px]"
+                    style={{ color: 'rgb(var(--app-text))' }}
                     aria-label="Column configuration for table view"
                   >
                     {viewConfigurations.map((config) => (
@@ -241,7 +241,7 @@ export default function BagDetail() {
           </div>
         )}
         {viewMode === 'sheets' && sheets.length === 0 && (
-          <p className="text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No sheets in this bag.</p>
+          <p className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>No sheets in this bag.</p>
         )}
         {viewMode === 'sheets' && sheets.map((sheet: any) => {
           const isExpanded = expandedSheets.has(sheet.id)
@@ -253,11 +253,11 @@ export default function BagDetail() {
               <button
                 type="button"
                 onClick={() => toggleSheet(sheet.id)}
-                className="bg-gray-50 px-3 py-2 border-b border-gray-100 flex justify-between items-center w-full hover:bg-gray-100 transition-colors"
+                className="bg-app-surface px-3 py-2 border-b border-app-border flex justify-between items-center w-full hover:bg-app-surface transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <svg
-                    className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                    className={`w-4 h-4 text-app-text-muted transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -267,12 +267,12 @@ export default function BagDetail() {
                   <Link 
                     to={`/collections/sheets/${sheet.id}`} 
                     onClick={(e) => e.stopPropagation()}
-                    className="font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+                    className="font-semibold text-app-accent hover:text-app-accent-hover hover:underline"
                   >
                     Sheet: {sheet.name}
                   </Link>
                 </div>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-app-text-muted">
                   {sheetSpots} spots{activeSheetSpots > 0 && ` (${activeSheetSpots} active)`}
                 </span>
               </button>
@@ -291,24 +291,24 @@ export default function BagDetail() {
                             if (p.id) navigate(`/containers/${p.id}`)
                           }}
                           disabled={!isClickable}
-                          className={`px-1.5 py-1 flex items-center justify-between text-left transition-colors border border-gray-100 rounded ${
+                          className={`px-1.5 py-1 flex items-center justify-between text-left transition-colors border border-app-border rounded ${
                             isClickable
-                              ? 'hover:bg-blue-50 hover:border-blue-200 cursor-pointer'
-                              : 'bg-gray-50 opacity-50'
+                              ? 'hover:bg-app-accent-muted hover:border-app-accent/50 cursor-pointer'
+                              : 'bg-app-surface opacity-50'
                           }`}
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="font-medium text-[10px] text-gray-900 truncate">
+                            <div className="font-medium text-[10px] text-app-text truncate">
                               {p.position ? `Pos: ${p.position}` : `#${p.id}`}
                             </div>
                             {p.container?.specimenId && (
-                              <div className="text-[9px] text-gray-500 truncate">
+                              <div className="text-[9px] text-app-text-muted truncate">
                                 Spec: {p.container.specimenId}
                               </div>
                             )}
                           </div>
                           <div className="flex flex-col items-end gap-0.5 flex-shrink-0 ml-1">
-                            <div className={`px-1 py-0.5 rounded text-[8px] font-bold ${p.container?.remainingQuantity > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            <div className={`px-1 py-0.5 rounded text-[8px] font-bold ${p.container?.remainingQuantity > 0 ? 'bg-app-trend-up/10 text-app-trend-up' : 'bg-app-trend-down/10 text-app-trend-down'}`}>
                               {p.container?.remainingQuantity > 0 ? 'ACTIVE' : 'EMPTY'}
                             </div>
                           </div>

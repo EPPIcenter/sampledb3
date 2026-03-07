@@ -68,14 +68,13 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
     }
   }, [])
 
-  // Initial strain for new definitions when strains have loaded (no setState during render)
-  useEffect(() => {
-    if (id || propControlDefinition || strains.length === 0 || strainInputs.length > 0) return
+  // Initial strain for new definitions when strains have loaded (adjust during render)
+  if (!id && !propControlDefinition && strains.length > 0 && strainInputs.length === 0) {
     setStrainInputs([
       { strainId: strains[0].id, percentage: 100, strainName: strains[0].name },
     ])
     setShowStrains(true)
-  }, [id, propControlDefinition, strains, strainInputs.length])
+  }
 
   // Sync form when controlDefinition is set from fetch (in loadControlDefinition)
   const loadControlDefinition = async () => {
@@ -416,10 +415,10 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">
+        <h1 className="text-3xl font-bold text-app-text">
           {controlDefinition ? 'Edit Blood Control Definition' : 'New Blood Control Definition'}
         </h1>
-        <p className="text-gray-500 mt-1">
+        <p className="text-app-text-muted mt-1">
           {controlDefinition
             ? 'Update blood control definition details and strain composition'
             : 'Create a new blood control definition with density and strain composition'}
@@ -427,23 +426,23 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
       </div>
       <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          <div className="bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded">
             {error}
           </div>
         )}
 
         {/* Section 1: Strain composition (first) */}
         <div className="space-y-3">
-          <h2 className="blood-controls-section-title text-lg font-semibold text-gray-900">Strain composition</h2>
-          <p className="text-sm text-gray-500">Parasite strains and percentages; total must equal 100%.</p>
-          <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 space-y-4">
+          <h2 className="blood-controls-section-title text-lg font-semibold text-app-text">Strain composition</h2>
+          <p className="text-sm text-app-text-muted">Parasite strains and percentages; total must equal 100%.</p>
+          <div className="border border-app-border rounded-lg p-4 bg-app-surface space-y-4">
             {strainInputs.length === 0 && (
-              <p className="text-sm text-gray-500 italic">No strains added yet. Click &quot;Add strain&quot; to begin.</p>
+              <p className="text-sm text-app-text-muted italic">No strains added yet. Click &quot;Add strain&quot; to begin.</p>
             )}
             {strainInputs.map((strainInput, index) => {
               const availableStrains = availableStrainsForIndex(index)
               return (
-                <div key={index} className="flex gap-2 items-center bg-white p-3 rounded border border-gray-200">
+                <div key={index} className="flex gap-2 items-center bg-app-card p-3 rounded border border-app-border">
                   <select
                     value={strainInput.strainId}
                     onChange={(e) => handleStrainChange(index, 'strainId', e.target.value)}
@@ -473,7 +472,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
                   <button
                     type="button"
                     onClick={() => handleRemoveStrain(index)}
-                    className="text-red-600 hover:text-red-800 font-bold px-3 py-2"
+                    className="text-app-trend-down hover:text-app-trend-down/80 font-bold px-3 py-2"
                     title="Remove strain"
                     aria-label="Remove strain"
                   >
@@ -484,7 +483,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
             })}
             {strainInputs.length > 0 && (
               <div
-                className={`text-sm font-medium ${isTotalValid ? 'text-green-600' : 'text-red-600'} bg-white p-2 rounded border`}
+                className={`text-sm font-medium ${isTotalValid ? 'text-app-trend-up' : 'text-app-trend-down'} bg-app-card p-2 rounded border border-app-border`}
               >
                 Total: {totalPercentage.toFixed(2)}% {isTotalValid ? '✓' : `(need ${(100 - totalPercentage).toFixed(2)}% more)`}
               </div>
@@ -492,7 +491,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
             <button
               type="button"
               onClick={handleAddStrain}
-              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+              className="text-sm text-app-accent hover:text-app-accent-hover font-medium"
               disabled={strains.filter((s) => !strainInputs.some((si) => si.strainId === s.id)).length === 0}
               aria-label="Add strain"
             >
@@ -503,13 +502,13 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
 
         {/* Section 2: Target density / densities */}
         <div className="space-y-3">
-          <h2 className="blood-controls-section-title text-lg font-semibold text-gray-900">
+          <h2 className="blood-controls-section-title text-lg font-semibold text-app-text">
             {isEdit ? 'Target density' : 'Target densities'}
           </h2>
           {isEdit ? (
-            <p className="text-sm text-gray-500">Concentration for this definition.</p>
+            <p className="text-sm text-app-text-muted">Concentration for this definition.</p>
           ) : (
-            <p className="text-sm text-gray-500">Same composition, one or more target concentrations.</p>
+            <p className="text-sm text-app-text-muted">Same composition, one or more target concentrations.</p>
           )}
           {isEdit ? (
             <div className="flex gap-2">
@@ -543,7 +542,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-2 mb-2">
-                <label htmlFor="density-unit" className="text-sm font-medium text-gray-700">
+                <label htmlFor="density-unit" className="text-sm font-medium text-app-text">
                   Concentration unit
                 </label>
                 <select
@@ -562,7 +561,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
                 </select>
               </div>
               <div className="space-y-2">
-                <div className="grid grid-cols-[minmax(0,10rem)_1fr_auto] gap-2 items-center text-sm font-medium text-gray-600 border-b border-gray-200 pb-1">
+                <div className="grid grid-cols-[minmax(0,10rem)_1fr_auto] gap-2 items-center text-sm font-medium text-app-text-muted border-b border-app-border pb-1">
                   <span>Density</span>
                   <span>Definition name</span>
                   <span className="w-8" aria-hidden="true" />
@@ -603,7 +602,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
                       type="button"
                       onClick={() => removeDensity(index)}
                       disabled={densityValues.length <= 1}
-                      className="text-red-600 hover:text-red-800 font-bold px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="text-app-trend-down hover:text-app-trend-down/80 font-bold px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Remove density"
                       aria-label={`Remove density ${index + 1}`}
                     >
@@ -614,7 +613,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
                 <button
                   type="button"
                   onClick={addDensity}
-                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  className="text-sm text-app-accent hover:text-app-accent-hover font-medium"
                   aria-label="Add density"
                 >
                   + Add density
@@ -628,7 +627,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
         {isEdit && (
           <div className="space-y-2">
             <div className="flex items-center justify-between mb-2">
-              <label htmlFor="control-name" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="control-name" className="block text-sm font-medium text-app-text">
                 Definition name {!autoGenerateName && '*'}
               </label>
               <div className="flex items-center gap-2">
@@ -648,7 +647,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
                   className="rounded"
                   aria-label="Auto-generate name"
                 />
-                <label htmlFor="auto-generate-name" className="text-sm text-gray-600 cursor-pointer">
+                <label htmlFor="auto-generate-name" className="text-sm text-app-text-muted cursor-pointer">
                   Auto-generate name
                 </label>
               </div>
@@ -666,11 +665,11 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
                 aria-label="Definition name"
               />
               {autoGenerateName && suggestedName && !isGeneratingName && (
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">Suggested: {suggestedName}</div>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-app-text-muted">Suggested: {suggestedName}</div>
               )}
             </div>
             {autoGenerateName && getFirstDensityForName() != null && strainInputs.length > 0 && (
-              <p className="text-xs text-gray-500">Name will be generated from density and strain composition.</p>
+              <p className="text-xs text-app-text-muted">Name will be generated from density and strain composition.</p>
             )}
           </div>
         )}
@@ -679,7 +678,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
           <button
             type="button"
             onClick={() => (onCancel ? onCancel() : navigate(-1))}
-            className="px-4 py-2 border border-gray-100 rounded-lg text-gray-700 hover:bg-gray-50"
+            className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
           >
             Cancel
           </button>
@@ -689,7 +688,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
               loading ||
               (formData.controlType === 'blood' && showStrains && strainInputs.length > 0 && !isTotalValid)
             }
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50"
           >
             {loading ? 'Saving...' : controlDefinition ? 'Update' : 'Create'}
           </button>

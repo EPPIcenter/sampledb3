@@ -245,7 +245,7 @@ export default function AdminUsers() {
       <div className="admin-page">
         <div className="relative z-10 p-6">
           <div className="max-w-7xl mx-auto">
-            <h1 className="text-2xl font-bold mb-6" style={{ color: 'rgb(var(--dashboard-text))' }}>User Management</h1>
+            <h1 className="text-2xl font-bold mb-6" style={{ color: 'rgb(var(--app-text))' }}>User Management</h1>
             <div className="admin-card p-6">
               <div className="animate-pulse space-y-4">
                 {[1, 2, 3, 4, 5].map((i) => (
@@ -266,7 +266,7 @@ export default function AdminUsers() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-2xl font-bold">User Management</h1>
-              <p className="text-[rgb(var(--dashboard-text-muted))] mt-1">Manage users, roles, and permissions</p>
+              <p className="text-[rgb(var(--app-text-muted))] mt-1">Manage users, roles, and permissions</p>
             </div>
             <button
               onClick={() => setShowCreateModal(true)}
@@ -280,10 +280,10 @@ export default function AdminUsers() {
           </div>
 
           {error && (
-            <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="mb-4 bg-app-trend-down/10 border border-app-trend-down rounded-lg p-4">
               <div className="flex items-center justify-between">
-                <p className="text-red-800">{error}</p>
-                <button onClick={() => setError(null)} className="text-red-600 hover:text-red-800">
+                <p className="text-app-trend-down">{error}</p>
+                <button onClick={() => setError(null)} className="text-app-trend-down hover:text-app-trend-down">
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -295,7 +295,7 @@ export default function AdminUsers() {
           {/* Filters */}
           <div className="admin-card p-4 mb-6 flex items-center gap-4">
             <div className="flex-1 relative">
-              <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[rgb(var(--dashboard-text-muted))]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[rgb(var(--app-text-muted))]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
@@ -304,7 +304,7 @@ export default function AdminUsers() {
                 placeholder="Search users..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
+                className="w-full pl-10 pr-4 py-2 border border-[rgb(var(--app-border))] rounded-lg form-input"
               />
             </div>
             <label className="flex items-center gap-2 cursor-pointer">
@@ -312,9 +312,9 @@ export default function AdminUsers() {
                 type="checkbox"
                 checked={showDeleted}
                 onChange={(e) => setShowDeleted(e.target.checked)}
-                className="rounded border-[rgb(var(--dashboard-border))]"
+                className="rounded border-[rgb(var(--app-border))]"
               />
-              <span className="text-sm text-[rgb(var(--dashboard-text))]">Show deleted users</span>
+              <span className="text-sm text-[rgb(var(--app-text))]">Show deleted users</span>
             </label>
           </div>
 
@@ -326,37 +326,37 @@ export default function AdminUsers() {
                   <th className="px-6 py-3 text-left">
                   Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">
                   Email
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">
                   Role
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">
                   Created
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">
                   Last Login
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-app-text-muted uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-app-card divide-y divide-app-border">
               {filteredUsers.map((user) => (
                 <tr
                   key={user.id}
-                  className={user.deletedAt ? 'bg-gray-50 opacity-60' : ''}
+                  className={user.deletedAt ? 'bg-app-surface opacity-60' : ''}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="text-sm font-medium dashboard-stat-value">{user.name}</div>
                       {user.deletedAt && (
-                        <span className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded">
+                        <span className="ml-2 px-2 py-1 text-xs bg-app-trend-down/10 text-app-trend-down rounded">
                           Deleted
                         </span>
                       )}
@@ -376,8 +376,8 @@ export default function AdminUsers() {
                         user.role === 'admin'
                           ? 'bg-purple-100 text-purple-800'
                           : user.role === 'member'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-gray-100 text-gray-800'
+                          ? 'bg-app-accent-muted text-app-accent-hover'
+                          : 'bg-app-surface text-app-text'
                       }`}
                     >
                       {user.role}
@@ -385,7 +385,7 @@ export default function AdminUsers() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {user.approvedAt ? (
-                      <span className="text-sm text-green-600">Approved</span>
+                      <span className="text-sm text-app-trend-up">Approved</span>
                     ) : (
                       <span className="text-sm text-amber-600">Pending</span>
                     )}
@@ -405,7 +405,7 @@ export default function AdminUsers() {
                       {user.deletedAt ? (
                         <button
                           onClick={() => handleRestore(user)}
-                          className="text-green-600 hover:text-green-900 flex items-center gap-1"
+                          className="text-app-trend-up hover:text-app-text flex items-center gap-1"
                           title="Restore user"
                         >
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -417,7 +417,7 @@ export default function AdminUsers() {
                           {!user.approvedAt && (
                             <button
                               onClick={() => handleApprove(user)}
-                              className="text-green-600 hover:text-green-900"
+                              className="text-app-trend-up hover:text-app-text"
                               title="Approve user"
                             >
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -427,7 +427,7 @@ export default function AdminUsers() {
                           )}
                           <button
                             onClick={() => openSessionsModal(user)}
-                            className="text-blue-600 hover:text-blue-900"
+                            className="text-app-accent hover:text-app-accent-hover"
                             title="View sessions"
                           >
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -455,7 +455,7 @@ export default function AdminUsers() {
                           </button>
                           <button
                             onClick={() => openDeleteModal(user)}
-                            className="text-red-600 hover:text-red-900"
+                            className="text-app-trend-down hover:text-app-trend-down"
                             title="Delete user"
                           >
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -471,7 +471,7 @@ export default function AdminUsers() {
             </tbody>
           </table>
           {filteredUsers.length === 0 && (
-            <div className="text-center py-12 text-[rgb(var(--dashboard-text-muted))]">
+            <div className="text-center py-12 text-[rgb(var(--app-text-muted))]">
               {showDeleted ? 'No deleted users found' : 'No users found'}
             </div>
           )}
@@ -481,33 +481,33 @@ export default function AdminUsers() {
         {showCreateModal && (
           <ModalPortal>
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
-            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--dashboard-border))]">
+            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--app-border))]">
               <h2 className="text-xl font-bold mb-4">Create New User</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     Name
                   </label>
                   <input
                     type="text"
                     value={createForm.name}
                     onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
+                    className="w-full px-3 py-2 border border-[rgb(var(--app-border))] rounded-lg form-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     Email
                   </label>
                   <input
                     type="email"
                     value={createForm.email}
                     onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
+                    className="w-full px-3 py-2 border border-[rgb(var(--app-border))] rounded-lg form-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     Password
                   </label>
                   <div className="relative">
@@ -515,12 +515,12 @@ export default function AdminUsers() {
                       type={showPassword ? 'text' : 'password'}
                       value={createForm.password}
                       onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                      className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input pr-10"
+                      className="w-full px-3 py-2 border border-[rgb(var(--app-border))] rounded-lg form-input pr-10"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-app-text-muted hover:text-app-text-muted"
                     >
                       {showPassword ? (
                         <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -536,7 +536,7 @@ export default function AdminUsers() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-app-text mb-1">
                     Role
                   </label>
                   <select
@@ -547,7 +547,7 @@ export default function AdminUsers() {
                         role: e.target.value as 'admin' | 'member' | 'viewer',
                       })
                     }
-                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
+                    className="w-full px-3 py-2 border border-[rgb(var(--app-border))] rounded-lg form-input"
                   >
                     <option value="viewer">Viewer</option>
                     <option value="member">Member</option>
@@ -578,33 +578,33 @@ export default function AdminUsers() {
         {showEditModal && selectedUser && (
           <ModalPortal>
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
-            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--dashboard-border))]">
+            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--app-border))]">
               <h2 className="text-xl font-bold mb-4">Edit User</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     Name
                   </label>
                   <input
                     type="text"
                     value={editForm.name || ''}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
+                    className="w-full px-3 py-2 border border-[rgb(var(--app-border))] rounded-lg form-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     Email
                   </label>
                   <input
                     type="email"
                     value={editForm.email || ''}
                     onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
+                    className="w-full px-3 py-2 border border-[rgb(var(--app-border))] rounded-lg form-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     Role
                   </label>
                   <select
@@ -615,7 +615,7 @@ export default function AdminUsers() {
                         role: e.target.value as 'admin' | 'member' | 'viewer',
                       })
                     }
-                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
+                    className="w-full px-3 py-2 border border-[rgb(var(--app-border))] rounded-lg form-input"
                   >
                     <option value="viewer">Viewer</option>
                     <option value="member">Member</option>
@@ -647,16 +647,16 @@ export default function AdminUsers() {
         {showDeleteModal && selectedUser && (
           <ModalPortal>
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
-            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--dashboard-border))]">
+            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--app-border))]">
               <h2 className="text-xl font-bold mb-4">Delete User</h2>
-              <p className="text-[rgb(var(--dashboard-text-muted))] mb-4">
+              <p className="text-[rgb(var(--app-text-muted))] mb-4">
                 Are you sure you want to soft delete <strong>{selectedUser.name}</strong>? This
                 action can be undone by restoring the user.
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={handleDelete}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                  className="flex-1 px-4 py-2 bg-app-trend-down text-white rounded-lg hover:opacity-90"
                 >
                   Delete
                 </button>
@@ -679,12 +679,12 @@ export default function AdminUsers() {
         {showPasswordModal && selectedUser && (
           <ModalPortal>
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
-            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--dashboard-border))]">
+            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--app-border))]">
               <h2 className="text-xl font-bold mb-4">Reset Password</h2>
-              <p className="text-[rgb(var(--dashboard-text-muted))] mb-4">Reset password for {selectedUser.name}</p>
+              <p className="text-[rgb(var(--app-text-muted))] mb-4">Reset password for {selectedUser.name}</p>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-[rgb(var(--dashboard-text))] mb-1">
+                  <label className="block text-sm font-medium text-[rgb(var(--app-text))] mb-1">
                     New Password
                   </label>
                   <div className="relative">
@@ -694,12 +694,12 @@ export default function AdminUsers() {
                       onChange={(e) =>
                         setPasswordForm({ ...passwordForm, password: e.target.value })
                       }
-                      className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input pr-10"
+                      className="w-full px-3 py-2 border border-[rgb(var(--app-border))] rounded-lg form-input pr-10"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-app-text-muted hover:text-app-text-muted"
                     >
                       {showPassword ? (
                         <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -715,7 +715,7 @@ export default function AdminUsers() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-app-text mb-1">
                     Confirm Password
                   </label>
                   <input
@@ -724,7 +724,7 @@ export default function AdminUsers() {
                     onChange={(e) =>
                       setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-[rgb(var(--dashboard-border))] rounded-lg form-input"
+                    className="w-full px-3 py-2 border border-[rgb(var(--app-border))] rounded-lg form-input"
                   />
                 </div>
               </div>
@@ -752,7 +752,7 @@ export default function AdminUsers() {
         {showSessionsModal && selectedUser && (
           <ModalPortal>
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
-            <div className="admin-card p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto border border-[rgb(var(--dashboard-border))]">
+            <div className="admin-card p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto border border-[rgb(var(--app-border))]">
               <h2 className="text-xl font-bold mb-4">Active Sessions for {selectedUser.name}</h2>
               {sessionsLoading ? (
                 <div className="text-center py-8 dashboard-stat-muted">Loading sessions...</div>
@@ -763,7 +763,7 @@ export default function AdminUsers() {
                   {sessions.map((session) => (
                     <div
                       key={session.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                      className="flex items-center justify-between p-4 bg-app-surface rounded-lg"
                     >
                       <div>
                         <p className="text-sm font-medium dashboard-stat-value">Session ID</p>
@@ -774,7 +774,7 @@ export default function AdminUsers() {
                       </div>
                       <button
                         onClick={() => handleRevokeSession(session.id)}
-                        className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                        className="px-3 py-1 text-sm bg-app-trend-down text-white rounded hover:opacity-90"
                       >
                         Revoke
                       </button>

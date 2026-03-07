@@ -126,25 +126,25 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {error && !nameValidationError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+        <div className="bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded">
           {error}
         </div>
       )}
 
       <div>
-        <label htmlFor="subject-study" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="subject-study" className="block text-sm font-medium text-app-text mb-2">
           Study
         </label>
-        <div className="form-input bg-gray-50 text-gray-700">
+        <div className="form-input bg-app-surface text-app-text">
           {studyName || studyShortCode || (effectiveStudyId ? `Study #${effectiveStudyId}` : 'N/A')}
         </div>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-app-text-muted">
           {subject ? 'Subject belongs to this study' : 'Subject will be created for this study'}
         </p>
       </div>
 
       <div>
-        <label htmlFor="subject-name" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="subject-name" className="block text-sm font-medium text-app-text mb-2">
           Subject Name *
         </label>
         <input
@@ -153,13 +153,13 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
           value={formData.name}
           onChange={(e) => handleNameChange(e.target.value)}
           required
-          className={`form-input ${nameValidationError ? 'border-red-300' : ''}`}
+          className={`form-input ${nameValidationError ? 'border-app-trend-down' : ''}`}
           placeholder="Enter subject name (e.g., SUBJ-001)"
         />
         {nameValidationError && (
-          <p className="mt-1 text-sm text-red-600">{nameValidationError}</p>
+          <p className="mt-1 text-sm text-app-trend-down">{nameValidationError}</p>
         )}
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-app-text-muted">
           Subject names must be unique within each study
         </p>
       </div>
@@ -168,14 +168,14 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 border border-gray-100 rounded-lg text-gray-700 hover:bg-gray-50"
+          className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={loading || !!nameValidationError}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50"
         >
           {loading ? (subject ? 'Updating...' : 'Creating...') : (subject ? 'Update Subject' : 'Create Subject')}
         </button>

@@ -158,12 +158,12 @@ export default function Specimens() {
           )}
         </div>
         {!canWrite && (
-          <div className="subject-specimen-reveal subject-specimen-reveal-2 mb-4 rounded-lg bg-[rgb(var(--dashboard-accent-muted))] border border-[rgb(var(--dashboard-accent)/0.3)] p-3">
+          <div className="subject-specimen-reveal subject-specimen-reveal-2 mb-4 rounded-lg bg-[rgb(var(--app-accent-muted))] border border-[rgb(var(--app-accent)/0.3)] p-3">
             <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[rgb(var(--dashboard-accent))]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-[rgb(var(--app-accent))]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm font-medium text-[rgb(var(--dashboard-text))]">
+              <p className="text-sm font-medium text-[rgb(var(--app-text))]">
                 You have view-only access. Contact an administrator or member to create or modify specimens.
               </p>
             </div>

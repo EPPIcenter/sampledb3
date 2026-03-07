@@ -50,16 +50,16 @@ function IntegritySection({
       <details className="group" open={false}>
         <summary className="cursor-pointer list-none flex items-center justify-between gap-2 py-1">
           <div>
-            <h2 className="text-xl font-semibold inline" style={{ color: 'rgb(var(--dashboard-text))' }}>
+            <h2 className="text-xl font-semibold inline" style={{ color: 'rgb(var(--app-text))' }}>
               {title}
             </h2>
-            <span className="ml-2 text-sm font-normal text-[rgb(var(--dashboard-text-muted))]">({count})</span>
+            <span className="ml-2 text-sm font-normal text-[rgb(var(--app-text-muted))]">({count})</span>
           </div>
-          <span className="text-[rgb(var(--dashboard-text-muted))] group-open:rotate-180 transition-transform" aria-hidden>
+          <span className="text-[rgb(var(--app-text-muted))] group-open:rotate-180 transition-transform" aria-hidden>
             ▼
           </span>
         </summary>
-        <p className="text-sm text-[rgb(var(--dashboard-text-muted))] mt-2 mb-4">{description}</p>
+        <p className="text-sm text-[rgb(var(--app-text-muted))] mt-2 mb-4">{description}</p>
         <div className="mt-2">{children}</div>
       </details>
     </section>
@@ -96,13 +96,13 @@ export default function AdminDataIntegrityReport() {
   }, [])
 
   if (loading) {
-    return <div className="p-8 text-center text-[rgb(var(--dashboard-text-muted))]">Loading…</div>
+    return <div className="p-8 text-center text-[rgb(var(--app-text-muted))]">Loading…</div>
   }
 
   if (error) {
     return (
-      <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
-        <p className="text-sm text-red-800">{error}</p>
+      <div className="mb-4 rounded-lg bg-app-trend-down/10 border border-app-trend-down p-3">
+        <p className="text-sm text-app-trend-down">{error}</p>
       </div>
     )
   }
@@ -111,7 +111,7 @@ export default function AdminDataIntegrityReport() {
 
   return (
     <div className="space-y-0">
-      <p className="text-sm text-[rgb(var(--dashboard-text-muted))] mb-6">
+      <p className="text-sm text-[rgb(var(--app-text-muted))] mb-6">
         Read-only checks. Fix issues via normal app flows or database corrections.
       </p>
 
@@ -124,17 +124,17 @@ export default function AdminDataIntegrityReport() {
           <table className="admin-table min-w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Missing location ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Missing location ID</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-app-card divide-y divide-app-border">
               {report.collectionsWithMissingLocation.map((c) => (
-                <tr key={`${c.type}-${c.id}`} className="hover:bg-gray-50">
+                <tr key={`${c.type}-${c.id}`} className="hover:bg-app-surface">
                   <td className="px-4 py-3 text-sm">{typeLabel(c.type)}</td>
                   <td className="px-4 py-3 text-sm font-medium">
-                    <Link to={getCollectionDetailUrl(c.type, c.id)} className="text-[rgb(var(--dashboard-accent))] hover:underline">
+                    <Link to={getCollectionDetailUrl(c.type, c.id)} className="text-[rgb(var(--app-accent))] hover:underline">
                       {c.name}
                     </Link>
                   </td>
@@ -155,15 +155,15 @@ export default function AdminDataIntegrityReport() {
           <table className="admin-table min-w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Container ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Missing specimen ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Container ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Missing specimen ID</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-app-card divide-y divide-app-border">
               {report.containersWithMissingSpecimen.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50">
+                <tr key={c.id} className="hover:bg-app-surface">
                   <td className="px-4 py-3 text-sm">
-                    <Link to={`/containers/${c.id}`} className="text-[rgb(var(--dashboard-accent))] hover:underline">
+                    <Link to={`/containers/${c.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
                       {c.id}
                     </Link>
                   </td>
@@ -184,14 +184,14 @@ export default function AdminDataIntegrityReport() {
           <table className="admin-table min-w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Container ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Container ID</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-app-card divide-y divide-app-border">
               {report.subtypeOrphans.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50">
+                <tr key={c.id} className="hover:bg-app-surface">
                   <td className="px-4 py-3 text-sm">
-                    <Link to={`/containers/${c.id}`} className="text-[rgb(var(--dashboard-accent))] hover:underline">
+                    <Link to={`/containers/${c.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
                       {c.id}
                     </Link>
                   </td>
@@ -211,15 +211,15 @@ export default function AdminDataIntegrityReport() {
           <table className="admin-table min-w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Box ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bag ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Box ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Bag ID</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-app-card divide-y divide-app-border">
               {report.sheetsWithMissingBoxOrBag.map((s) => (
-                <tr key={s.id} className="hover:bg-gray-50">
+                <tr key={s.id} className="hover:bg-app-surface">
                   <td className="px-4 py-3 text-sm">{s.id}</td>
                   <td className="px-4 py-3 text-sm font-medium">{s.name}</td>
                   <td className="px-4 py-3 text-sm">{s.boxId ?? '—'}</td>
@@ -240,16 +240,16 @@ export default function AdminDataIntegrityReport() {
           <table className="admin-table min-w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Specimen ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Study subject ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control batch ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Specimen ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Study subject ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Control batch ID</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-app-card divide-y divide-app-border">
               {report.specimensWithMissingSubjectOrBatch.map((s) => (
-                <tr key={s.id} className="hover:bg-gray-50">
+                <tr key={s.id} className="hover:bg-app-surface">
                   <td className="px-4 py-3 text-sm">
-                    <Link to={`/specimens/${s.id}`} className="text-[rgb(var(--dashboard-accent))] hover:underline">
+                    <Link to={`/specimens/${s.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
                       {s.id}
                     </Link>
                   </td>
@@ -271,14 +271,14 @@ export default function AdminDataIntegrityReport() {
           <table className="admin-table min-w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Missing study ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Subject ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Missing study ID</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-app-card divide-y divide-app-border">
               {report.studySubjectsWithMissingStudy.map((s) => (
-                <tr key={s.id} className="hover:bg-gray-50">
+                <tr key={s.id} className="hover:bg-app-surface">
                   <td className="px-4 py-3 text-sm">{s.id}</td>
                   <td className="px-4 py-3 text-sm font-medium">{s.name}</td>
                   <td className="px-4 py-3 text-sm">{s.studyId}</td>
@@ -298,14 +298,14 @@ export default function AdminDataIntegrityReport() {
           <table className="admin-table min-w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Derivation ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parent container ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Child container ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Derivation ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Parent container ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Child container ID</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-app-card divide-y divide-app-border">
               {report.derivationBrokenRefs.map((d) => (
-                <tr key={d.id} className="hover:bg-gray-50">
+                <tr key={d.id} className="hover:bg-app-surface">
                   <td className="px-4 py-3 text-sm">{d.id}</td>
                   <td className="px-4 py-3 text-sm">{d.parentContainerId}</td>
                   <td className="px-4 py-3 text-sm">{d.childContainerId}</td>
@@ -325,13 +325,13 @@ export default function AdminDataIntegrityReport() {
           <table className="admin-table min-w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Container ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tag ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Container ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Tag ID</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-app-card divide-y divide-app-border">
               {report.storageContainerTagOrphans.map((t, i) => (
-                <tr key={`${t.storageContainerId}-${t.tagId}-${i}`} className="hover:bg-gray-50">
+                <tr key={`${t.storageContainerId}-${t.tagId}-${i}`} className="hover:bg-app-surface">
                   <td className="px-4 py-3 text-sm">{t.storageContainerId}</td>
                   <td className="px-4 py-3 text-sm">{t.tagId}</td>
                 </tr>
@@ -350,19 +350,19 @@ export default function AdminDataIntegrityReport() {
           <table className="admin-table min-w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Barcode</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Container IDs</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Barcode</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Container IDs</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-app-card divide-y divide-app-border">
               {report.duplicateBarcodes.map((d, i) => (
-                <tr key={`${d.barcode}-${i}`} className="hover:bg-gray-50">
+                <tr key={`${d.barcode}-${i}`} className="hover:bg-app-surface">
                   <td className="px-4 py-3 text-sm font-medium">{d.barcode}</td>
                   <td className="px-4 py-3 text-sm">{d.containerType}</td>
                   <td className="px-4 py-3 text-sm">
                     {d.ids.map((id) => (
-                      <Link key={id} to={`/containers/${id}`} className="text-[rgb(var(--dashboard-accent))] hover:underline mr-2">
+                      <Link key={id} to={`/containers/${id}`} className="text-[rgb(var(--app-accent))] hover:underline mr-2">
                         {id}
                       </Link>
                     ))}
@@ -383,17 +383,17 @@ export default function AdminDataIntegrityReport() {
           <table className="admin-table min-w-full">
             <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stored path</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expected path</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Location ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Stored path</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Expected path</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-app-card divide-y divide-app-border">
               {report.locationPathInconsistencies.map((loc) => (
-                <tr key={loc.id} className="hover:bg-gray-50">
+                <tr key={loc.id} className="hover:bg-app-surface">
                   <td className="px-4 py-3 text-sm">
-                    <Link to={`/locations/${loc.id}`} className="text-[rgb(var(--dashboard-accent))] hover:underline">
+                    <Link to={`/locations/${loc.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
                       {loc.id}
                     </Link>
                   </td>

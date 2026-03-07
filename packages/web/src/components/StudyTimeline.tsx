@@ -540,27 +540,27 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
 
   if (allPoints.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-app-card rounded-lg shadow p-6">
         <div className="mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Collection Timeline</h3>
-          <p className="text-sm text-gray-500 mt-1">
+          <h3 className="text-lg font-semibold text-app-text">Collection Timeline</h3>
+          <p className="text-sm text-app-text-muted mt-1">
             Each dot represents a specimen. Click to view details.
           </p>
         </div>
         <div className="mb-4 flex gap-4 items-end">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-app-text mb-1">
               From Date
             </label>
             <input
               type="date"
               value={minDate}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMinDate(e.target.value)}
-              className="px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-app-text mb-1">
               To Date
             </label>
             <input
@@ -568,17 +568,17 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
               value={maxDate}
               max={maxAvailableDate}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxDate(e.target.value)}
-              className="px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
             />
           </div>
           <button
             onClick={reset}
-            className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            className="px-4 py-2 text-sm text-app-text bg-app-surface rounded-lg hover:bg-app-surface/80 transition-colors"
           >
             Reset
           </button>
         </div>
-        <div className="flex items-center justify-center h-64 text-gray-500">
+        <div className="flex items-center justify-center h-64 text-app-text-muted">
           No collection data available in the selected date range
         </div>
       </div>
@@ -586,10 +586,10 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
+    <div className="bg-app-card rounded-lg shadow p-6">
       <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">Collection Timeline</h3>
-        <p className="text-sm text-gray-500 mt-1">
+        <h3 className="text-lg font-semibold text-app-text">Collection Timeline</h3>
+        <p className="text-sm text-app-text-muted mt-1">
           Each dot represents a specimen. Click to view details.
         </p>
       </div>
@@ -633,14 +633,14 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
                 className="w-3 h-3 rounded-full"
                 style={{ backgroundColor: series.color }}
               />
-              <span className="text-xs text-gray-600">{series.name}</span>
+              <span className="text-xs text-app-text-muted">{series.name}</span>
             </div>
           ))}
         </div>
         {/* Tooltip */}
         {tooltip && (
           <div
-            className="bg-white p-3 border border-gray-100 rounded-lg shadow-lg pointer-events-none z-50 fixed"
+            className="bg-app-card p-3 border border-app-border rounded-lg shadow-lg pointer-events-none z-50 fixed"
             style={{
               left: `${tooltip.x}px`,
               top: `${tooltip.y}px`,
@@ -649,12 +649,12 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
               maxWidth: '200px',
             }}
           >
-            <p className="font-semibold text-gray-900">{tooltip.point.subjectName}</p>
-            <p className="text-sm text-gray-600">{tooltip.point.specimenTypeName}</p>
-            <p className="text-xs text-gray-500">
+            <p className="font-semibold text-app-text">{tooltip.point.subjectName}</p>
+            <p className="text-sm text-app-text-muted">{tooltip.point.specimenTypeName}</p>
+            <p className="text-xs text-app-text-muted">
               {formatCollectionDate(tooltip.point.collectionDate)}
             </p>
-            <p className="text-xs text-gray-400 mt-1">Specimen #{tooltip.point.specimenId}</p>
+            <p className="text-xs text-app-text-muted mt-1">Specimen #{tooltip.point.specimenId}</p>
           </div>
         )}
       </div>

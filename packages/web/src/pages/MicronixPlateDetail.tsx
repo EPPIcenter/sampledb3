@@ -18,10 +18,10 @@ import '../styles/storage.css'
 
 function statusColor(name: string): string {
   const key = name.toLowerCase()
-  if (key.includes('active') || key.includes('in use') || key.includes('in-use')) return 'bg-green-500'
-  if (key.includes('used')) return 'bg-blue-500'
+  if (key.includes('active') || key.includes('in use') || key.includes('in-use')) return 'bg-app-trend-up/100'
+  if (key.includes('used')) return 'bg-app-accent-muted0'
   if (key.includes('archived')) return 'bg-yellow-500'
-  if (key.includes('discard') || key.includes('destroy')) return 'bg-red-500'
+  if (key.includes('discard') || key.includes('destroy')) return 'bg-app-trend-down/100'
   return 'bg-gray-400'
 }
 
@@ -98,7 +98,7 @@ export default function MicronixPlateDetail() {
   const tableRows = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- layout/data.wells may be unset before load
     if (!layout || !data?.wells) return []
-    const wells = data.wells as Record<string, CollectionTableEntry & { type?: string }>
+    const wells = data.wells as Record<string, (CollectionTableEntry & { type?: string }) | undefined>
     const plate = data.plate
     const context = plate
       ? { collectionName: plate.name ?? undefined, locationPath: plate.locationPath ?? undefined }
@@ -108,15 +108,27 @@ export default function MicronixPlateDetail() {
       layout.cols.forEach((col) => {
         const key = `${row}${col.padStart(2, '0')}`
         const entry = wells[key]
-        rows.push(
-          buildCollectionTableRow({
-            position: key,
-            barcode: entry?.barcode,
-            containerType: entry?.type ?? undefined,
-            container: entry?.container ?? undefined,
-            context,
-          })
-        )
+        if (entry == null) {
+          rows.push(
+            buildCollectionTableRow({
+              position: key,
+              barcode: undefined,
+              containerType: undefined,
+              container: undefined,
+              context,
+            })
+          )
+        } else {
+          rows.push(
+            buildCollectionTableRow({
+              position: key,
+              barcode: entry.barcode,
+              containerType: entry.type ?? undefined,
+              container: entry.container ?? undefined,
+              context,
+            })
+          )
+        }
       })
     })
     return rows
@@ -147,7 +159,7 @@ export default function MicronixPlateDetail() {
     return (
       <div className="storage-page">
         <div className="container mx-auto px-4 py-8 relative z-10">
-          <div className="text-center py-8 text-red-600">Micronix plate not found</div>
+          <div className="text-center py-8 text-app-trend-down">Micronix plate not found</div>
         </div>
       </div>
     )
@@ -172,10 +184,10 @@ export default function MicronixPlateDetail() {
           Micronix Plate {plate.name || `#${plate.id}`}
         </h1>
         {plate.barcode && (
-          <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Barcode: {plate.barcode}</p>
+          <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>Barcode: {plate.barcode}</p>
         )}
         {plate.locationPath && (
-          <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{plate.locationPath}</p>
+          <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>{plate.locationPath}</p>
         )}
       </div>
 
@@ -183,11 +195,11 @@ export default function MicronixPlateDetail() {
           <div className="flex items-start justify-between mb-3 gap-4 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-lg font-semibold storage-section-title">Plate Layout</h2>
-              <div className="flex rounded-md border border-gray-200 overflow-hidden" role="group" aria-label="View mode">
+              <div className="flex rounded-md border border-app-border overflow-hidden" role="group" aria-label="View mode">
                 <button
                   type="button"
                   onClick={() => setViewMode('grid')}
-                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'grid' ? 'bg-gray-100 border-gray-300' : 'bg-white hover:bg-gray-50'} border-r border-gray-200`}
+                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'grid' ? 'bg-app-surface border-app-border' : 'bg-app-card hover:bg-app-surface'} border-r border-app-border`}
                   aria-pressed={viewMode === 'grid'}
                 >
                   Grid
@@ -195,7 +207,7 @@ export default function MicronixPlateDetail() {
                 <button
                   type="button"
                   onClick={() => setViewMode('table')}
-                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'table' ? 'bg-gray-100 border-gray-300' : 'bg-white hover:bg-gray-50'}`}
+                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'table' ? 'bg-app-surface border-app-border' : 'bg-app-card hover:bg-app-surface'}`}
                   aria-pressed={viewMode === 'table'}
                 >
                   Table
@@ -203,13 +215,13 @@ export default function MicronixPlateDetail() {
               </div>
               {viewMode === 'table' && (
                 <div className="flex items-center gap-2">
-                  <label htmlFor="plate-table-column-config" className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                  <label htmlFor="plate-table-column-config" className="text-xs font-medium text-app-text-muted whitespace-nowrap">
                     Columns:
                   </label>
                   {loadingConfigs ? (
-                    <span className="text-xs text-gray-500">Loading…</span>
+                    <span className="text-xs text-app-text-muted">Loading…</span>
                   ) : viewConfigurations.length === 0 ? (
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-app-text-muted">
                       <Link to="/settings?category=data-management&section=table-view-configurations" className="underline">
                         Add in Settings
                       </Link>
@@ -219,8 +231,8 @@ export default function MicronixPlateDetail() {
                       id="plate-table-column-config"
                       value={selectedConfigId}
                       onChange={(e) => setSelectedConfigId(e.target.value)}
-                      className="text-xs border border-gray-200 rounded px-2 py-1 bg-white min-w-[140px]"
-                      style={{ color: 'rgb(var(--dashboard-text))' }}
+                      className="text-xs border border-app-border rounded px-2 py-1 bg-app-card min-w-[140px]"
+                      style={{ color: 'rgb(var(--app-text))' }}
                       aria-label="Column configuration for table view"
                     >
                       {viewConfigurations.map((config) => (
@@ -234,8 +246,8 @@ export default function MicronixPlateDetail() {
               )}
             </div>
             {legend.length > 0 && viewMode === 'grid' && (
-              <div className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
-                <span className="font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>Legend:</span>
+              <div className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                <span className="font-semibold" style={{ color: 'rgb(var(--app-text))' }}>Legend:</span>
                 {legend.map((name) => (
                   <span key={name} className="inline-flex items-center gap-1">
                     <span
@@ -262,7 +274,7 @@ export default function MicronixPlateDetail() {
             renderCell={(value, coords) => {
               if (!value) {
                 return (
-                  <div className="h-16 w-16 mx-auto flex items-center justify-center rounded border border-dashed border-gray-100 text-[11px] text-gray-300">
+                  <div className="h-16 w-16 mx-auto flex items-center justify-center rounded border border-dashed border-app-border text-[11px] text-app-border">
                     Empty
                   </div>
                 )
@@ -314,9 +326,9 @@ export default function MicronixPlateDetail() {
                     if (containerId) navigate(`/containers/${containerId}`)
                   }}
                   data-highlighted-position={isHighlighted ? 'true' : 'false'}
-                  className={`h-16 w-16 mx-auto flex flex-col items-center justify-center rounded border text-[10px] px-1 py-1 bg-white space-y-0.5 transition-all
+                  className={`h-16 w-16 mx-auto flex flex-col items-center justify-center rounded border text-[10px] px-1 py-1 bg-app-card space-y-0.5 transition-all
                     ${isHighlighted ? 'ring-4 ring-yellow-400 ring-offset-2 border-yellow-500 shadow-lg bg-yellow-50' : ''}
-                    ${isClickable ? 'hover:shadow-sm hover:border-blue-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400' : ''}`}
+                    ${isClickable ? 'hover:shadow-sm hover:border-app-accent/50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-app-accent' : ''}`}
                   title={title}
                 >
                   {hasContainer && (
@@ -331,7 +343,7 @@ export default function MicronixPlateDetail() {
                       )}
                       {statusName && (
                         <span
-                          className={`inline-block w-2 h-2 rounded-full ${statusName === 'In Use' ? 'bg-green-500' : 'bg-red-500'}`}
+                          className={`inline-block w-2 h-2 rounded-full ${statusName === 'In Use' ? 'bg-app-trend-up/100' : 'bg-app-trend-down/100'}`}
                           title={statusName}
                         />
                       )}
@@ -341,7 +353,7 @@ export default function MicronixPlateDetail() {
                     {entry.barcode || ''}
                   </div>
                   {specimenId && (
-                    <span className="text-blue-600 underline text-[9px] truncate max-w-full">
+                    <span className="text-app-accent underline text-[9px] truncate max-w-full">
                       {subjectName || `Spec #${specimenId}`}
                     </span>
                   )}

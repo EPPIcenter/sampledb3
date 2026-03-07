@@ -297,7 +297,7 @@ export default function ControlBatchWizard() {
     return (
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
-          <div className="text-center" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Loading...</div>
+          <div className="text-center" style={{ color: 'rgb(var(--app-text-muted))' }}>Loading...</div>
         </div>
       </div>
     )
@@ -313,7 +313,7 @@ export default function ControlBatchWizard() {
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
           <div className="text-center space-y-4">
-            <p style={{ color: 'rgb(var(--dashboard-trend-down))' }}>{error}</p>
+            <p style={{ color: 'rgb(var(--app-trend-down))' }}>{error}</p>
             <button
               onClick={() => navigate(backTarget)}
               className="blood-controls-btn-secondary"
@@ -333,7 +333,7 @@ export default function ControlBatchWizard() {
           <h1 className="text-3xl font-bold">
             {isAddMode ? 'Add Specimens to Batch' : 'Create Control Batch'}
           </h1>
-          <p className="mt-1 text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+          <p className="mt-1 text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
             {isAddMode
               ? 'Add specimens and containers to an existing control batch'
               : 'Create a new control batch and add specimens with containers'}
@@ -348,7 +348,7 @@ export default function ControlBatchWizard() {
                 <div
                   className={`flex items-center cursor-pointer ${effectiveStep === step.id ? 'font-semibold' : ''}`}
                   style={{
-                    color: effectiveStep === step.id ? 'rgb(var(--dashboard-accent))' : canProceedToStep(step.id) ? 'rgb(var(--dashboard-text-muted))' : 'rgb(var(--dashboard-border))',
+                    color: effectiveStep === step.id ? 'rgb(var(--app-accent))' : canProceedToStep(step.id) ? 'rgb(var(--app-text-muted))' : 'rgb(var(--app-border))',
                   }}
                   onClick={() => {
                     if (canProceedToStep(step.id)) {
@@ -359,8 +359,8 @@ export default function ControlBatchWizard() {
                   <div
                     className="w-8 h-8 rounded-full flex items-center justify-center"
                     style={{
-                      background: effectiveStep === step.id ? 'rgb(var(--dashboard-accent))' : canProceedToStep(step.id) ? 'rgb(var(--dashboard-border))' : 'rgb(var(--dashboard-surface))',
-                      color: effectiveStep === step.id ? 'white' : 'rgb(var(--dashboard-text-muted))',
+                      background: effectiveStep === step.id ? 'rgb(var(--app-accent))' : canProceedToStep(step.id) ? 'rgb(var(--app-border))' : 'rgb(var(--app-surface))',
+                      color: effectiveStep === step.id ? 'white' : 'rgb(var(--app-text-muted))',
                     }}
                   >
                     {step.number}
@@ -368,7 +368,7 @@ export default function ControlBatchWizard() {
                   <span className="ml-2 hidden sm:inline">{step.label}</span>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className="flex-1 h-1 mx-4" style={{ background: 'rgb(var(--dashboard-border))' }} />
+                  <div className="flex-1 h-1 mx-4" style={{ background: 'rgb(var(--app-border))' }} />
                 )}
               </div>
             ))}

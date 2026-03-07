@@ -23,7 +23,7 @@ export default function SpecimenNew() {
             ]}
           />
           <h1 className="text-3xl font-bold">Create Specimen</h1>
-          <p className="mt-2 text-sm text-[rgb(var(--dashboard-text-muted))]">
+          <p className="mt-2 text-sm text-[rgb(var(--app-text-muted))]">
             Choose the source and study, then enter specimen details. You can always update
             containers and storage later.
           </p>

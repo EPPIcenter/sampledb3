@@ -12,7 +12,7 @@ interface EntityBreadcrumbsProps {
 // Chevron separator component
 function ChevronSeparator() {
   return (
-    <span className="mx-2 text-gray-400" aria-hidden="true">
+    <span className="mx-2 text-app-text-muted" aria-hidden="true">
       ›
     </span>
   )
@@ -41,14 +41,14 @@ function HomeIcon() {
 export default function EntityBreadcrumbs({ items }: EntityBreadcrumbsProps) {
   return (
     <nav
-      className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 mb-4"
+      className="bg-app-surface border border-app-border rounded-lg px-4 py-2.5 mb-4"
       aria-label="Breadcrumb navigation"
     >
       <ol className="flex items-center space-x-3 text-base" itemScope itemType="https://schema.org/BreadcrumbList">
         <li itemProp="itemListElement" itemScope itemType="https://schema.org/ListItem">
           <Link
             to="/"
-            className="flex items-center text-blue-600 hover:text-blue-700 hover:underline transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
+            className="flex items-center text-app-accent hover:text-app-accent-hover hover:underline transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-app-accent focus:ring-offset-2 rounded"
             itemProp="item"
           >
             <HomeIcon />
@@ -69,7 +69,7 @@ export default function EntityBreadcrumbs({ items }: EntityBreadcrumbsProps) {
               <>
                 <Link
                   to={item.to}
-                  className="text-blue-600 hover:text-blue-700 hover:underline transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
+                  className="text-app-accent hover:text-app-accent-hover hover:underline transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-app-accent focus:ring-offset-2 rounded"
                   itemProp="item"
                 >
                   <span itemProp="name">{item.label}</span>
@@ -78,7 +78,7 @@ export default function EntityBreadcrumbs({ items }: EntityBreadcrumbsProps) {
               </>
             ) : (
               <>
-                <span className="text-gray-900 font-medium" itemProp="name" aria-current="page">
+                <span className="text-app-text font-medium" itemProp="name" aria-current="page">
                   {item.label}
                 </span>
                 <meta itemProp="position" content={String(index + 2)} />

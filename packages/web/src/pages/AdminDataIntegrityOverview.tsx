@@ -48,7 +48,7 @@ export default function AdminDataIntegrityOverview() {
 
   if (loading) {
     return (
-      <div className="p-8 text-center text-[rgb(var(--dashboard-text-muted))]">
+      <div className="p-8 text-center text-[rgb(var(--app-text-muted))]">
         Loading…
       </div>
     )
@@ -56,15 +56,15 @@ export default function AdminDataIntegrityOverview() {
 
   if (error) {
     return (
-      <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
-        <p className="text-sm text-red-800">{error}</p>
+      <div className="mb-4 rounded-lg bg-app-trend-down/10 border border-app-trend-down p-3">
+        <p className="text-sm text-app-trend-down">{error}</p>
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      <p className="text-[rgb(var(--dashboard-text-muted))]">
+      <p className="text-[rgb(var(--app-text-muted))]">
         View and manage data integrity: empty collections (with delete) and read-only integrity checks.
       </p>
 
@@ -73,11 +73,11 @@ export default function AdminDataIntegrityOverview() {
           to="/admin/data-integrity/empty-collections"
           className="admin-card block p-6 no-underline transition-shadow hover:shadow-md"
         >
-          <h2 className="text-lg font-semibold mb-1" style={{ color: 'rgb(var(--dashboard-text))' }}>
+          <h2 className="text-lg font-semibold mb-1" style={{ color: 'rgb(var(--app-text))' }}>
             Empty collections
           </h2>
-          <p className="text-2xl font-bold text-[rgb(var(--dashboard-accent))] mb-2">{emptyCount}</p>
-          <p className="text-sm text-[rgb(var(--dashboard-text-muted))]">
+          <p className="text-2xl font-bold text-[rgb(var(--app-accent))] mb-2">{emptyCount}</p>
+          <p className="text-sm text-[rgb(var(--app-text-muted))]">
             Plates, boxes, bags with no items. Select and delete to tidy.
           </p>
         </Link>
@@ -86,11 +86,11 @@ export default function AdminDataIntegrityOverview() {
           to="/admin/data-integrity/report"
           className="admin-card block p-6 no-underline transition-shadow hover:shadow-md"
         >
-          <h2 className="text-lg font-semibold mb-1" style={{ color: 'rgb(var(--dashboard-text))' }}>
+          <h2 className="text-lg font-semibold mb-1" style={{ color: 'rgb(var(--app-text))' }}>
             Integrity report
           </h2>
-          <p className="text-2xl font-bold text-[rgb(var(--dashboard-accent))] mb-2">{integrityIssueCount}</p>
-          <p className="text-sm text-[rgb(var(--dashboard-text-muted))]">
+          <p className="text-2xl font-bold text-[rgb(var(--app-accent))] mb-2">{integrityIssueCount}</p>
+          <p className="text-sm text-[rgb(var(--app-text-muted))]">
             Orphans, broken references, duplicate micronix barcodes, path inconsistencies.
           </p>
         </Link>

@@ -123,4 +123,58 @@ describe('PapersSection', () => {
 
     expect(screen.getByText(/papers in this sheet \(2\)/i)).toBeInTheDocument()
   })
+
+  it('renders unit as select with allowedUnits options when allowedUnits is provided', () => {
+    const allowedUnits = [
+      { id: 1, symbol: 'spots', name: 'DBS spots' },
+      { id: 2, symbol: 'pieces', name: 'Pieces' },
+    ]
+    const onUpdate = vi.fn()
+
+    render(
+      <PapersSection
+        containers={paperContainers}
+        specimenTypeId="st-1"
+        onUpdate={onUpdate}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+        allowedUnits={allowedUnits}
+      />
+    )
+
+    const unitSelects = screen.getAllByRole('combobox', { name: /unit/i })
+    expect(unitSelects).toHaveLength(2)
+    expect(screen.queryByPlaceholderText('Unit')).not.toBeInTheDocument()
+    const firstSelect = unitSelects[0]
+    expect(firstSelect).toHaveValue('spots')
+    const options = screen.getAllByRole('option')
+    expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(
+      expect.arrayContaining(['spots', 'pieces'])
+    )
+  })
+
+  it('calls onUpdate with unitSymbol when unit select is changed and allowedUnits is provided', async () => {
+    const user = userEvent.setup()
+    const allowedUnits = [
+      { id: 1, symbol: 'spots', name: 'DBS spots' },
+      { id: 2, symbol: 'pieces', name: 'Pieces' },
+    ]
+    const onUpdate = vi.fn()
+
+    render(
+      <PapersSection
+        containers={paperContainers}
+        specimenTypeId="st-1"
+        onUpdate={onUpdate}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+        allowedUnits={allowedUnits}
+      />
+    )
+
+    const unitSelects = screen.getAllByRole('combobox', { name: /unit/i })
+    await user.selectOptions(unitSelects[0], 'pieces')
+
+    expect(onUpdate).toHaveBeenCalledWith('st-1', 'c-1', { unitSymbol: 'pieces' })
+  })
 })

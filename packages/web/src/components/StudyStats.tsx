@@ -352,7 +352,7 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
 
       {/* Study Duration and Date Range */}
       {(displaySummary.collectionDateRange || displaySummary.studyDurationDays !== null) && (
-        <div className={cardClassName ?? 'bg-white rounded-lg shadow p-6'}>
+        <div className={cardClassName ?? 'bg-app-card rounded-lg shadow p-6'}>
           <h3 className="text-lg font-semibold mb-4 dashboard-stat-value">Study Period</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {displaySummary.collectionDateRange && (
@@ -409,15 +409,15 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
 
       {/* Bin Size Selector - Above Histograms */}
       {(collectionTimelineData.collection.length > 0 || collectionTimelineData.enrollment.length > 0) && (
-        <div className={cardClassName ? cardClassName.replace('p-6', 'p-4') : 'bg-white rounded-lg shadow p-4'}>
+        <div className={cardClassName ? cardClassName.replace('p-6', 'p-4') : 'bg-app-card rounded-lg shadow p-4'}>
           <div className="flex items-center gap-4">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-app-text">
               Histogram Bin Size:
             </label>
             <select
               value={binSize}
               onChange={(e) => setBinSize(e.target.value as BinSize)}
-              className="px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
             >
               <option value="day">Daily</option>
               <option value="week">Weekly</option>

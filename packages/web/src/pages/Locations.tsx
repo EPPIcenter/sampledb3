@@ -11,6 +11,7 @@ import ModalPortal from '../components/ModalPortal'
 import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
 import { useUser } from '../contexts/UserContext'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
+import { useClickOutside } from '../hooks/useClickOutside'
 import '../styles/storage.css'
 
 interface Location {
@@ -57,7 +58,7 @@ export default function Locations() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
   const [locationDetailsCache, setLocationDetailsCache] = useState<
-    Record<number, { location: Location; contents: LocationContents; hierarchyStats?: LocationHierarchyStats }>
+    Partial<Record<number, { location: Location; contents: LocationContents; hierarchyStats?: LocationHierarchyStats }>>
   >({})
   const [loadingSelection, setLoadingSelection] = useState(false)
   
@@ -145,8 +146,7 @@ export default function Locations() {
 
   // Define ensureLocationLoaded before useEffects that use it
   const ensureLocationLoaded = useCallback(async (locationId: number) => {
-    // If already cached, don't show loading state (defensive: cache may be populated by race)
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime cache check
+    // Skip fetch if we already have this location in cache (Record index can be undefined)
     if (locationDetailsCache[locationId]) return
     
     // Set loading state immediately to trigger skeleton
@@ -172,7 +172,7 @@ export default function Locations() {
   useEffect(() => {
     if (selectedNode) {
       // Set loading state immediately if not cached to show skeleton right away
-      if (!locationDetailsCache[selectedNode.locationId]) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- cache may be cold
+      if (!locationDetailsCache[selectedNode.locationId]) {
         setLoadingSelection(true)
       }
       ensureLocationLoaded(selectedNode.locationId)
@@ -195,18 +195,7 @@ export default function Locations() {
     }
   }, [selectedNode])
 
-  
-  // Collection search effect
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setIsSearchOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  useClickOutside(searchRef, () => setIsSearchOpen(false), isSearchOpen)
 
   useEffect(() => {
     if (search.length >= 1) {
@@ -269,7 +258,6 @@ export default function Locations() {
     if (!selectedNode) return null
 
     const cached = locationDetailsCache[selectedNode.locationId]
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cache may be empty before load
     if (cached) {
       // We have cached data, not loading
       return { mode: 'location' as const, ...cached, isLoading: false }
@@ -284,7 +272,6 @@ export default function Locations() {
     // If switching to a different location that isn't cached, clear the cache entry
     // to force skeleton to show immediately
     if (selectedNode && selectedNode.locationId !== node.locationId) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cache may not have new location yet
       if (!locationDetailsCache[node.locationId]) {
         // New location not cached - set loading state immediately
         setLoadingSelection(true)
@@ -355,11 +342,7 @@ export default function Locations() {
   // Handle delete confirmation
   const handleDeleteClick = async (location: Location, e: React.MouseEvent) => {
     e.stopPropagation()
-    // Ensure location details are loaded for delete confirmation (defensive: cache may be cold)
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime cache check
-    if (!locationDetailsCache[location.id]) {
-      await ensureLocationLoaded(location.id)
-    }
+    await ensureLocationLoaded(location.id)
     setDeletingLocationId(location.id)
   }
 
@@ -451,18 +434,18 @@ export default function Locations() {
     }
 
     return (
-      <div key={loc.id} className={depth > 0 ? 'ml-3 border-l pl-2 mt-1' : 'mb-2'} style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
+      <div key={loc.id} className={depth > 0 ? 'ml-3 border-l pl-2 mt-1' : 'mb-2'} style={{ borderColor: 'rgb(var(--app-border))' }}>
         <div className="group flex items-center gap-0.5">
           <button
             ref={isSelected ? selectedNodeRef : null}
             type="button"
             onClick={handleNodeClick}
-            className={`flex items-center flex-1 min-w-0 px-1.5 py-0.5 rounded text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dashboard-accent))] transition-colors ${
+            className={`flex items-center flex-1 min-w-0 px-1.5 py-0.5 rounded text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--app-accent))] transition-colors ${
               isSelected
                 ? 'border shadow-sm'
-                : 'border border-transparent hover:bg-[rgb(var(--dashboard-surface))]'
+                : 'border border-transparent hover:bg-[rgb(var(--app-surface))]'
             }`}
-            style={isSelected ? { backgroundColor: 'rgb(var(--dashboard-accent-muted))', borderColor: 'rgb(var(--dashboard-accent) / 0.4)' } : undefined}
+            style={isSelected ? { backgroundColor: 'rgb(var(--app-accent-muted))', borderColor: 'rgb(var(--app-accent) / 0.4)' } : undefined}
           >
             <div className="flex items-center flex-1">
               {children.length > 0 && (
@@ -472,8 +455,8 @@ export default function Locations() {
                     e.stopPropagation()
                     toggleExpanded(loc.id)
                   }}
-                  className="w-3 h-3 mr-1.5 flex-shrink-0 rounded hover:bg-[rgb(var(--dashboard-accent)/0.15)]"
-                  style={{ color: 'rgb(var(--dashboard-text-muted))' }}
+                  className="w-3 h-3 mr-1.5 flex-shrink-0 rounded hover:bg-[rgb(var(--app-accent)/0.15)]"
+                  style={{ color: 'rgb(var(--app-text-muted))' }}
                 >
                   {isExpanded ? '▾' : '▸'}
                 </button>
@@ -481,36 +464,37 @@ export default function Locations() {
               {children.length === 0 && <span className="w-3 h-3 mr-1.5"></span>}
               <div className="text-left flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <p className="truncate" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                  <p className="truncate" style={{ color: 'rgb(var(--app-text))' }}>
                     {getLocationLabel(loc)}
                   </p>
                   {loc.canContainCollections && (
                     <LocationCapabilityBadge canContainCollections={true} size="sm" />
                   )}
                   {children.length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: 'rgb(var(--dashboard-text-muted))', backgroundColor: 'rgb(var(--dashboard-surface))' }}>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: 'rgb(var(--app-text-muted))', backgroundColor: 'rgb(var(--app-surface))' }}>
                       {children.length} child{children.length !== 1 ? 'ren' : ''}
                     </span>
                   )}
                 </div>
                 {loc.description && (
-                  <p className="text-[11px] truncate" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                  <p className="text-[11px] truncate" style={{ color: 'rgb(var(--app-text-muted))' }}>
                     {loc.description}
                   </p>
                 )}
                 {loc.path && (
-                  <p className="text-[10px] font-mono break-words" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                  <p className="text-[10px] font-mono break-words" style={{ color: 'rgb(var(--app-text-muted))' }}>
                     {loc.path}
                   </p>
                 )}
                 {/* Show cached container count if available */}
-                {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cache may be cold for this loc */}
-                {locationDetailsCache[loc.id] && locationDetailsCache[loc.id].hierarchyStats && (() => {
-                  const stats = locationDetailsCache[loc.id].hierarchyStats!
+                {(() => {
+                  const cached = locationDetailsCache[loc.id]
+                  const stats = cached?.hierarchyStats
+                  if (!stats) return null
                   const directTotal = stats.directContainers.micronix + stats.directContainers.cryovial + stats.directContainers.boxes + stats.directContainers.bags
                   if (directTotal > 0) {
                     return (
-                      <p className="text-[10px] font-medium mt-0.5" style={{ color: 'rgb(var(--dashboard-accent))' }}>
+                      <p className="text-[10px] font-medium mt-0.5" style={{ color: 'rgb(var(--app-accent))' }}>
                         {directTotal} container{directTotal !== 1 ? 's' : ''}
                       </p>
                     )
@@ -525,8 +509,8 @@ export default function Locations() {
               <button
                 type="button"
                 onClick={(e) => handleAddChild(loc.id, e)}
-                className="p-0.5 rounded hover:bg-[rgb(var(--dashboard-accent-muted))]"
-                style={{ color: 'rgb(var(--dashboard-text-muted))' }}
+                className="p-0.5 rounded hover:bg-[rgb(var(--app-accent-muted))]"
+                style={{ color: 'rgb(var(--app-text-muted))' }}
                 title="Add child location"
                 disabled={mutationLoading}
               >
@@ -537,8 +521,8 @@ export default function Locations() {
               <button
                 type="button"
                 onClick={(e) => handleEdit(loc, e)}
-                className="p-0.5 rounded hover:bg-[rgb(var(--dashboard-accent-muted))]"
-                style={{ color: 'rgb(var(--dashboard-text-muted))' }}
+                className="p-0.5 rounded hover:bg-[rgb(var(--app-accent-muted))]"
+                style={{ color: 'rgb(var(--app-text-muted))' }}
                 title="Edit location"
                 disabled={mutationLoading}
               >
@@ -549,7 +533,7 @@ export default function Locations() {
               <button
                 type="button"
                 onClick={(e) => handleDeleteClick(loc, e)}
-                className="p-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                className="p-0.5 text-app-text-muted hover:text-app-trend-down hover:bg-app-trend-down/10 rounded"
                 title="Delete location"
                 disabled={mutationLoading}
               >
@@ -574,7 +558,7 @@ export default function Locations() {
     const rootLocations = getRootLocations(locations)
     
     if (rootLocations.length === 0) {
-      return <p className="text-xs text-gray-500">No locations available.</p>
+      return <p className="text-xs text-app-text-muted">No locations available.</p>
     }
 
     return (
@@ -587,7 +571,7 @@ export default function Locations() {
   const renderSummaryAndPreview = () => {
     if (!selectedNode) {
       return (
-        <div className="text-center py-16" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+        <div className="text-center py-16" style={{ color: 'rgb(var(--app-text-muted))' }}>
           Select a location or node in the tree to see details.
         </div>
       )
@@ -598,26 +582,10 @@ export default function Locations() {
     }
 
     const { location, contents, hierarchyStats } = selectedDetails
-    
-    // If we don't have location data, show skeleton (defensive for type/API)
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard
-    if (!location) {
-      return <LocationDetailsSkeleton />
-    }
-    
-    // Critical check: Ensure the location ID matches the selected node (defensive for race)
-     
+
     if (location.id !== selectedNode.locationId) {
       return <LocationDetailsSkeleton />
     }
-    
-    // If we're missing critical data (contents or hierarchyStats), show skeleton
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ensures complete cached data
-    if (contents === null || hierarchyStats === undefined) {
-      return <LocationDetailsSkeleton />
-    }
-    
-    // At this point we have complete data for the correct location, so we can safely render everything
 
     const c = contents
     const stats = {
@@ -670,21 +638,21 @@ export default function Locations() {
                 </h2>
                 <LocationCapabilityBadge canContainCollections={location.canContainCollections} />
               </div>
-              <p className="text-sm font-mono" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              <p className="text-sm font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 {displayPath}
               </p>
-              <p className="mt-2 text-sm" style={{ color: 'rgb(var(--dashboard-text))' }}>
+              <p className="mt-2 text-sm" style={{ color: 'rgb(var(--app-text))' }}>
                 Type:{' '}
                 <span className="font-medium">
                   {location.effectiveStorageTypeName || location.storageTypeName || location.storageTypeId || 'N/A'}
                 </span>
               </p>
               {location.description && (
-                <p className="mt-1 text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                <p className="mt-1 text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
                   {location.description}
                 </p>
               )}
-              <p className="mt-2 text-xs" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+              <p className="mt-2 text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 Created{' '}
                 {new Date(location.created).toLocaleDateString()} • Last
                 updated{' '}
@@ -703,20 +671,22 @@ export default function Locations() {
           </div>
         </div>
 
-        {/* Hierarchy Statistics */}
-        <LocationHierarchyStatsDisplay
-          stats={hierarchyStats}
-          locationName={location.name}
-          canContainCollections={location.canContainCollections}
-          className="storage-hierarchy-stats"
-        />
+        {/* Hierarchy Statistics (optional from API) */}
+        {hierarchyStats && (
+          <LocationHierarchyStatsDisplay
+            stats={hierarchyStats}
+            locationName={location.name}
+            canContainCollections={location.canContainCollections}
+            className="storage-hierarchy-stats"
+          />
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="storage-card p-4">
-            <h3 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            <h3 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
               Storage units
             </h3>
-            <p className="text-2xl font-bold" style={{ color: 'rgb(var(--dashboard-accent))' }}>
+            <p className="text-2xl font-bold" style={{ color: 'rgb(var(--app-accent))' }}>
               {(
                 stats.micronix +
                 stats.cryovial +
@@ -724,16 +694,16 @@ export default function Locations() {
                 stats.bags
               ).toLocaleString()}
             </p>
-            <p className="text-xs mt-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            <p className="text-xs mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
               Plates, boxes and bags
             </p>
           </div>
 
           <div className="storage-card p-4">
-            <h3 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            <h3 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
               Container types
             </h3>
-            <ul className="text-xs space-y-1" style={{ color: 'rgb(var(--dashboard-text))' }}>
+            <ul className="text-xs space-y-1" style={{ color: 'rgb(var(--app-text))' }}>
               <li>Micronix plates: {stats.micronix}</li>
               <li>Cryovial boxes: {stats.cryovial}</li>
               <li>Boxes: {stats.boxes}</li>
@@ -742,10 +712,10 @@ export default function Locations() {
           </div>
 
           <div className="storage-card p-4">
-            <h3 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            <h3 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
               Status
             </h3>
-            <p className="text-sm" style={{ color: 'rgb(var(--dashboard-text))' }}>
+            <p className="text-sm" style={{ color: 'rgb(var(--app-text))' }}>
               {stats.micronix +
                 stats.cryovial +
                 stats.boxes +
@@ -765,7 +735,7 @@ export default function Locations() {
           </div>
 
           {collectionCards.length === 0 ? (
-            <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            <div className="text-center py-8" style={{ color: 'rgb(var(--app-text-muted))' }}>
               No contents found for this location.
             </div>
           ) : (
@@ -779,16 +749,16 @@ export default function Locations() {
                   <span className={getBadgeClass(item.type)}>
                     {item.type.replace('_', ' ')}
                   </span>
-                  <p className="font-medium mt-1.5 truncate" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                  <p className="font-medium mt-1.5 truncate" style={{ color: 'rgb(var(--app-text))' }}>
                     {item.name}
                   </p>
                   {item.barcode && (
-                    <p className="text-xs font-mono mt-0.5" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                    <p className="text-xs font-mono mt-0.5" style={{ color: 'rgb(var(--app-text-muted))' }}>
                       {item.barcode}
                     </p>
                   )}
                   {item.itemCount != null && (
-                    <p className="text-xs mt-0.5" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                    <p className="text-xs mt-0.5" style={{ color: 'rgb(var(--app-text-muted))' }}>
                       {item.itemCount} item{item.itemCount !== 1 ? 's' : ''}
                     </p>
                   )}
@@ -807,20 +777,20 @@ export default function Locations() {
       <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 storage-reveal storage-reveal-1">
         <div>
           <h1 className="text-3xl font-bold">Storage Locations</h1>
-          <p className="text-sm mt-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+          <p className="text-sm mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
             Browse all storage roots, levels, and locations. Select a node to see an information-dense preview of its contents.
           </p>
         </div>
         <div className="flex gap-3">
           <div className="storage-card px-4 py-3 text-right">
-            <div className="text-[11px]" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Locations</div>
-            <div className="text-lg font-semibold" style={{ color: 'rgb(var(--dashboard-accent))' }}>
+            <div className="text-[11px]" style={{ color: 'rgb(var(--app-text-muted))' }}>Locations</div>
+            <div className="text-lg font-semibold" style={{ color: 'rgb(var(--app-accent))' }}>
               {globalStats.totalLocations.toLocaleString()}
             </div>
           </div>
           <div className="storage-card px-4 py-3 text-right">
-            <div className="text-[11px]" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Storage roots</div>
-            <div className="text-lg font-semibold" style={{ color: 'rgb(var(--dashboard-accent))' }}>
+            <div className="text-[11px]" style={{ color: 'rgb(var(--app-text-muted))' }}>Storage roots</div>
+            <div className="text-lg font-semibold" style={{ color: 'rgb(var(--app-accent))' }}>
               {globalStats.distinctRoots.toLocaleString()}
             </div>
           </div>
@@ -831,7 +801,7 @@ export default function Locations() {
       <div className="relative z-20">
         <div className="mb-6 storage-reveal storage-reveal-2">
           <div className="storage-card p-4">
-          <label htmlFor="locations-search" className="block text-sm font-medium mb-2" style={{ color: 'rgb(var(--dashboard-text))' }}>
+          <label htmlFor="locations-search" className="block text-sm font-medium mb-2" style={{ color: 'rgb(var(--app-text))' }}>
             Search Collections
           </label>
           <div ref={searchRef} className="relative w-full">
@@ -853,7 +823,7 @@ export default function Locations() {
               />
               <svg
                 className="absolute left-4 top-4 h-5 w-5"
-                style={{ color: 'rgb(var(--dashboard-text-muted))' }}
+                style={{ color: 'rgb(var(--app-text-muted))' }}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -867,7 +837,7 @@ export default function Locations() {
               </svg>
               {searchLoading && (
                 <div className="absolute right-4 top-4">
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-transparent border-t-current" style={{ borderTopColor: 'rgb(var(--dashboard-accent))' }}></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-transparent border-t-current" style={{ borderTopColor: 'rgb(var(--app-accent))' }}></div>
                 </div>
               )}
               {isSearchOpen && collectionResults.length > 0 && (
@@ -881,8 +851,8 @@ export default function Locations() {
                     <button
                       key={`${result.type}-${result.id}-${index}`}
                       onClick={() => handleSelectCollection(result)}
-                      className="w-full px-4 py-3 text-left hover:bg-[rgb(var(--dashboard-surface))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dashboard-accent))] border-b last:border-b-0"
-                      style={{ borderColor: 'rgb(var(--dashboard-border))' }}
+                      className="w-full px-4 py-3 text-left hover:bg-[rgb(var(--app-surface))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--app-accent))] border-b last:border-b-0"
+                      style={{ borderColor: 'rgb(var(--app-border))' }}
                       role="option"
                     >
                       <div className="flex items-center justify-between">
@@ -896,13 +866,13 @@ export default function Locations() {
                             }>
                               {result.type.replace('_', ' ')}
                             </span>
-                            <p className="font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>{result.title}</p>
+                            <p className="font-medium" style={{ color: 'rgb(var(--app-text))' }}>{result.title}</p>
                           </div>
-                          <p className="text-sm mt-1" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{result.subtitle}</p>
+                          <p className="text-sm mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>{result.subtitle}</p>
                         </div>
                         <svg
                           className="h-5 w-5"
-                          style={{ color: 'rgb(var(--dashboard-text-muted))' }}
+                          style={{ color: 'rgb(var(--app-text-muted))' }}
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -921,7 +891,7 @@ export default function Locations() {
               )}
 
               {isSearchOpen && search.length >= 1 && !searchLoading && collectionResults.length === 0 && (
-                <div className="absolute z-[9999] w-full top-full mt-1 storage-card p-4 text-center" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                <div className="absolute z-[9999] w-full top-full mt-1 storage-card p-4 text-center" style={{ color: 'rgb(var(--app-text-muted))' }}>
                   No collections found
                 </div>
               )}
@@ -934,10 +904,10 @@ export default function Locations() {
       {loading ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 storage-reveal storage-reveal-3">
           <div className="storage-card p-4">
-            <div className="h-6 rounded w-32 mb-4 animate-pulse" style={{ backgroundColor: 'rgb(var(--dashboard-border))' }}></div>
+            <div className="h-6 rounded w-32 mb-4 animate-pulse" style={{ backgroundColor: 'rgb(var(--app-border))' }}></div>
             <div className="space-y-2">
               {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="h-8 rounded animate-pulse" style={{ backgroundColor: 'rgb(var(--dashboard-border))' }}></div>
+                <div key={i} className="h-8 rounded animate-pulse" style={{ backgroundColor: 'rgb(var(--app-border))' }}></div>
               ))}
             </div>
           </div>
@@ -948,7 +918,7 @@ export default function Locations() {
         </div>
       ) : locations.length === 0 ? (
         <div className="storage-card p-8 text-center">
-          <p className="mb-6" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+          <p className="mb-6" style={{ color: 'rgb(var(--app-text-muted))' }}>
             No locations have been configured yet.
           </p>
           {canEdit && (
@@ -999,7 +969,7 @@ export default function Locations() {
 
       {/* Success Message */}
       {successMessage && (
-        <div className="fixed bottom-4 right-4 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg shadow-lg z-50">
+        <div className="fixed bottom-4 right-4 bg-app-trend-up/10 border border-app-trend-up/30 text-app-trend-up px-4 py-3 rounded-lg shadow-lg z-50">
           <div className="flex items-center">
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1039,15 +1009,15 @@ export default function Locations() {
               <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
                 {/* Background overlay */}
                 <div
-                  className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+                  className="fixed inset-0 bg-black/40 backdrop-blur-md"
                   onClick={handleDeleteCancel}
                 />
               
               {/* Modal panel */}
-              <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full" onClick={(e) => e.stopPropagation()}>
-                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Delete Location</h2>
-                <p className="text-sm text-gray-700 mb-4">
+              <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full" onClick={(e) => e.stopPropagation()}>
+                <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <h2 className="text-xl font-semibold text-app-text mb-4">Delete Location</h2>
+                <p className="text-sm text-app-text mb-4">
                   Are you sure you want to delete <strong>{locationToDelete?.name}</strong>?
                 </p>
                 {hasChildren && (
@@ -1063,13 +1033,13 @@ export default function Locations() {
                   </div>
                 )}
                 {!hasChildren && !hasContents && (
-                  <p className="text-sm text-gray-600 mb-4">This action cannot be undone.</p>
+                  <p className="text-sm text-app-text-muted mb-4">This action cannot be undone.</p>
                 )}
                 <div className="flex justify-end space-x-3">
                   <button
                     type="button"
                     onClick={handleDeleteCancel}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface disabled:opacity-50"
                     disabled={mutationLoading}
                   >
                     Cancel
@@ -1078,7 +1048,7 @@ export default function Locations() {
                     type="button"
                     onClick={handleDeleteConfirm}
                     disabled={mutationLoading || hasChildren || hasContents}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-app-trend-down text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {mutationLoading ? 'Deleting...' : 'Delete'}
                   </button>

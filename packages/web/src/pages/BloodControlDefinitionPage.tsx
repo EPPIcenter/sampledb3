@@ -31,7 +31,7 @@ export default function BloodControlDefinitionPage() {
           <h1 className="text-3xl font-bold">
             {isEdit ? 'Edit Blood Control Definition' : 'New Blood Control Definition'}
           </h1>
-          <p className="mt-2 text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+          <p className="mt-2 text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
             {isEdit
               ? 'Update the control definition name, target density, and biological content.'
               : 'Define a new blood control type with target density and strain composition.'}

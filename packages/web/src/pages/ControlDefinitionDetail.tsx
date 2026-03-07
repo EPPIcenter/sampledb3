@@ -49,7 +49,7 @@ export default function ControlDefinitionDetail() {
     return (
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
-          <div className="text-center py-8" style={{ color: 'rgb(var(--dashboard-trend-down))' }}>
+          <div className="text-center py-8" style={{ color: 'rgb(var(--app-trend-down))' }}>
             {error || 'Control definition not found'}
           </div>
         </div>
@@ -78,7 +78,7 @@ export default function ControlDefinitionDetail() {
       sortable: true,
       render: (value) => value ? (
         <span className="dashboard-stat-value">{new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-      ) : <span className="text-gray-400 italic">Not set</span>,
+      ) : <span className="text-app-text-muted italic">Not set</span>,
     },
     {
       key: 'inventoryTotal',
@@ -100,10 +100,10 @@ export default function ControlDefinitionDetail() {
         return (
           <div className="flex flex-wrap gap-2 text-sm">
             {hasSpots && badge('paper', row.spotCount!, 'Spots', 'bg-amber-50', 'text-amber-700', 'border-amber-100')}
-            {hasMicronix && badge('micronix_tube', row.micronixCount!, 'Micronix', 'bg-teal-50', 'text-teal-700', 'border-teal-100')}
-            {hasCryovial && badge('cryovial_tube', row.cryovialCount!, 'Cryovial', 'bg-blue-50', 'text-blue-700', 'border-blue-100')}
+            {hasMicronix && badge('micronix_tube', row.micronixCount!, 'Micronix', 'bg-app-accent-muted', 'text-teal-700', 'border-teal-100')}
+            {hasCryovial && badge('cryovial_tube', row.cryovialCount!, 'Cryovial', 'bg-app-accent-muted', 'text-app-accent-hover', 'border-blue-100')}
             {hasStaticWells && badge('static_well', row.staticWellCount!, 'Static wells', 'bg-slate-50', 'text-slate-700', 'border-slate-200')}
-            {!hasAny && <span className="text-gray-400 italic">Empty</span>}
+            {!hasAny && <span className="text-app-text-muted italic">Empty</span>}
           </div>
         )
       }
@@ -115,7 +115,7 @@ export default function ControlDefinitionDetail() {
         const hasStock = (row.inventoryTotal || 0) > 0
         return (
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-            hasStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            hasStock ? 'bg-app-trend-up/10 text-app-trend-up' : 'bg-app-trend-down/10 text-app-trend-down'
           }`}>
             {hasStock ? 'In Stock' : 'Exhausted'}
           </span>
@@ -138,7 +138,7 @@ export default function ControlDefinitionDetail() {
             <div>
               <h1 className="text-3xl font-bold">{control.name}</h1>
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Type:</span>
+                <span className="text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>Type:</span>
                 <span className="blood-controls-badge">Blood</span>
               </div>
             </div>
@@ -169,11 +169,11 @@ export default function ControlDefinitionDetail() {
               <h2 className="blood-controls-section-title mb-4">Definition Details</h2>
               <div className="space-y-6">
                 <div>
-                  <p className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Target Density</p>
-                  <p className="font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>
+                  <p className="text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>Target Density</p>
+                  <p className="font-medium" style={{ color: 'rgb(var(--app-text))' }}>
                     {control.targetDensity != null ? (
                       <>
-                        {control.targetDensity.toLocaleString()} <span className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{control.unitSymbol || ''}</span>
+                        {control.targetDensity.toLocaleString()} <span className="text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>{control.unitSymbol || ''}</span>
                       </>
                     ) : (
                       'Not specified'
@@ -181,19 +181,19 @@ export default function ControlDefinitionDetail() {
                   </p>
                 </div>
                 {strains.length > 0 && (
-                  <div className="pt-6 border-t" style={{ borderColor: 'rgb(var(--dashboard-border))' }}>
-                    <h3 className="text-sm font-semibold mb-4" style={{ color: 'rgb(var(--dashboard-text))' }}>Biological Content (Parasite Strains)</h3>
+                  <div className="pt-6 border-t" style={{ borderColor: 'rgb(var(--app-border))' }}>
+                    <h3 className="text-sm font-semibold mb-4" style={{ color: 'rgb(var(--app-text))' }}>Biological Content (Parasite Strains)</h3>
                     <div className="space-y-4">
                       {strains.map((s) => (
                         <div key={s.id} className="space-y-1.5">
                           <div className="flex justify-between text-sm">
-                            <span className="font-medium" style={{ color: 'rgb(var(--dashboard-text))' }}>{s.name}</span>
-                            <span className="font-bold" style={{ color: 'rgb(var(--dashboard-text))' }}>{s.percentage}%</span>
+                            <span className="font-medium" style={{ color: 'rgb(var(--app-text))' }}>{s.name}</span>
+                            <span className="font-bold" style={{ color: 'rgb(var(--app-text))' }}>{s.percentage}%</span>
                           </div>
-                          <div className="w-full rounded-full h-1.5" style={{ background: 'rgb(var(--dashboard-border))' }}>
+                          <div className="w-full rounded-full h-1.5" style={{ background: 'rgb(var(--app-border))' }}>
                             <div
                               className="h-1.5 rounded-full transition-all duration-500"
-                              style={{ width: `${s.percentage}%`, background: 'rgb(var(--dashboard-accent))' }}
+                              style={{ width: `${s.percentage}%`, background: 'rgb(var(--app-accent))' }}
                             />
                           </div>
                         </div>
@@ -206,9 +206,9 @@ export default function ControlDefinitionDetail() {
           </div>
           <div className="lg:col-span-2">
             <div className="dashboard-card overflow-hidden blood-controls-reveal blood-controls-reveal-7">
-              <div className="px-6 py-4 border-b flex justify-between items-center" style={{ borderColor: 'rgb(var(--dashboard-border))', background: 'rgb(var(--dashboard-surface))' }}>
-                <h2 className="text-lg font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>Production History</h2>
-                <span className="text-sm font-medium" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{batches.length} batches</span>
+              <div className="px-6 py-4 border-b flex justify-between items-center" style={{ borderColor: 'rgb(var(--app-border))', background: 'rgb(var(--app-surface))' }}>
+                <h2 className="text-lg font-semibold" style={{ color: 'rgb(var(--app-text))' }}>Production History</h2>
+                <span className="text-sm font-medium" style={{ color: 'rgb(var(--app-text-muted))' }}>{batches.length} batches</span>
               </div>
               <div className="p-0">
                 <DataTable

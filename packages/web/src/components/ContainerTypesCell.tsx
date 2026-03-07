@@ -3,7 +3,7 @@ import ContainerTypeToggle from './ContainerTypeToggle'
 
 interface ContainerTypesCellProps {
   item: SpecimenType
-  allowedTypes: string[]
+  allowedTypes?: string[]
   onToggle?: (specimenTypeId: number, containerType: string, isAdding: boolean) => Promise<void>
   usageInfo?: Record<string, boolean>
   disabled?: boolean
@@ -11,7 +11,7 @@ interface ContainerTypesCellProps {
 
 export default function ContainerTypesCell({
   item,
-  allowedTypes,
+  allowedTypes = [],
   onToggle,
   usageInfo = {},
   disabled = false,
@@ -24,13 +24,13 @@ export default function ContainerTypesCell({
           allowedTypes.map((ct) => (
             <span
               key={ct}
-              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
+              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-app-accent-muted text-app-accent-hover"
             >
               {ct}
             </span>
           ))
         ) : (
-          <span className="text-sm text-gray-400">None</span>
+          <span className="text-sm text-app-text-muted">None</span>
         )}
       </div>
     )

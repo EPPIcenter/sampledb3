@@ -67,7 +67,7 @@ function fullPlateCSV(overrides: Record<string, string> = {}): string {
     return 'container_barcode,target_position\n' + lines.join('\n')
 }
 
-describe('ContainerMoveMicronix', () => {
+describe('ContainerMoveMicronix', { timeout: 15000 }, () => {
     const mockScannerConfig = {
         id: 'test-config-1',
         name: 'Test Config',

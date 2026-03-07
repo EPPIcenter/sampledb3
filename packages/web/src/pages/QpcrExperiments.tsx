@@ -230,7 +230,7 @@ export default function QpcrExperiments() {
 
         {error && (
           <div
-            className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm"
+            className="mb-6 p-4 bg-app-trend-down/10 border border-app-trend-down rounded-xl text-app-trend-down text-sm"
             role="alert"
           >
             {error}

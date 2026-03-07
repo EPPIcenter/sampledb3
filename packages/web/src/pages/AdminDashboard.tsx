@@ -34,7 +34,7 @@ export default function AdminDashboard() {
       <div className="admin-page">
         <div className="relative z-10 p-6">
           <div className="max-w-7xl mx-auto">
-            <h1 className="text-2xl font-bold mb-6" style={{ color: 'rgb(var(--dashboard-text))' }}>Admin Dashboard</h1>
+            <h1 className="text-2xl font-bold mb-6" style={{ color: 'rgb(var(--app-text))' }}>Admin Dashboard</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3, 4, 5, 6].map((i) => (
                 <div key={i} className="admin-card p-6 animate-pulse">
@@ -54,9 +54,9 @@ export default function AdminDashboard() {
       <div className="admin-page">
         <div className="relative z-10 p-6">
           <div className="max-w-7xl mx-auto">
-            <h1 className="text-2xl font-bold mb-6" style={{ color: 'rgb(var(--dashboard-text))' }}>Admin Dashboard</h1>
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-              <p className="text-red-800">{error}</p>
+            <h1 className="text-2xl font-bold mb-6" style={{ color: 'rgb(var(--app-text))' }}>Admin Dashboard</h1>
+            <div className="rounded-lg border border-app-trend-down bg-app-trend-down/10 p-4">
+              <p className="text-app-trend-down">{error}</p>
               <button
                 onClick={loadStats}
                 className="admin-btn-primary mt-4 px-4 py-2 rounded-lg"
@@ -91,7 +91,7 @@ export default function AdminDashboard() {
     { label: 'Reference Data', value: Object.values(stats.referenceData).reduce((a, b) => a + b, 0), subtitle: 'Types, tags, units, etc.', icon: 'settings' },
   ]
 
-  const statIconBgClass = 'bg-[rgb(var(--dashboard-accent-muted))] text-[rgb(var(--dashboard-accent))]'
+  const statIconBgClass = 'bg-[rgb(var(--app-accent-muted))] text-[rgb(var(--app-accent))]'
 
   const renderIcon = (iconName: string, className: string) => {
     switch (iconName) {
@@ -137,10 +137,10 @@ export default function AdminDashboard() {
         <div className="max-w-7xl mx-auto">
           <header className="mb-6 admin-reveal admin-reveal-1">
             <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-            <p className="mt-1 text-[rgb(var(--dashboard-text-muted))]">
+            <p className="mt-1 text-[rgb(var(--app-text-muted))]">
               Manage and monitor your SampleDB system.
               {' '}
-              <a href="/docs/guides/advanced/deployment/" className="text-blue-600 hover:text-blue-800 hover:underline">
+              <a href="/docs/guides/advanced/deployment/" className="text-app-accent hover:text-app-accent-hover hover:underline">
                 Deployment guide
               </a>
             </p>
@@ -154,14 +154,14 @@ export default function AdminDashboard() {
               <Link
                 key={card.to}
                 to={card.to}
-                className={`admin-card p-6 admin-reveal ${revealClass} flex items-start gap-4 transition-all duration-200 hover:border-[rgb(var(--dashboard-accent))] hover:shadow-md`}
+                className={`admin-card p-6 admin-reveal ${revealClass} flex items-start gap-4 transition-all duration-200 hover:border-[rgb(var(--app-accent))] hover:shadow-md`}
               >
                 <div className={`p-3 rounded-lg ${statIconBgClass}`}>
                   {renderIcon(card.icon, 'h-6 w-6')}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-semibold" style={{ color: 'rgb(var(--dashboard-text))' }}>{card.title}</h3>
-                  <p className="text-sm mt-1 text-[rgb(var(--dashboard-text-muted))]">{card.description}</p>
+                  <h3 className="text-lg font-semibold" style={{ color: 'rgb(var(--app-text))' }}>{card.title}</h3>
+                  <p className="text-sm mt-1 text-[rgb(var(--app-text-muted))]">{card.description}</p>
                 </div>
               </Link>
               )
@@ -181,10 +181,10 @@ export default function AdminDashboard() {
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-[rgb(var(--dashboard-text-muted))]">{card.label}</p>
-                      <p className="text-3xl font-bold mt-2" style={{ color: 'rgb(var(--dashboard-text))' }}>{card.value.toLocaleString()}</p>
+                      <p className="text-sm font-medium text-[rgb(var(--app-text-muted))]">{card.label}</p>
+                      <p className="text-3xl font-bold mt-2" style={{ color: 'rgb(var(--app-text))' }}>{card.value.toLocaleString()}</p>
                       {card.subtitle && (
-                        <p className="text-sm mt-1 text-[rgb(var(--dashboard-text-muted))]">{card.subtitle}</p>
+                        <p className="text-sm mt-1 text-[rgb(var(--app-text-muted))]">{card.subtitle}</p>
                       )}
                     </div>
                     <div className={`p-3 rounded-lg ${statIconBgClass}`}>
@@ -205,10 +205,10 @@ export default function AdminDashboard() {
                 {Object.entries(stats.users.byRole).map(([role, count]) => (
                   <div
                     key={role}
-                    className="flex items-center justify-between p-4 rounded-lg border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-surface))]"
+                    className="flex items-center justify-between p-4 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-surface))]"
                   >
-                    <span className="text-sm font-medium capitalize" style={{ color: 'rgb(var(--dashboard-text))' }}>{role}</span>
-                    <span className="text-2xl font-bold" style={{ color: 'rgb(var(--dashboard-text))' }}>{count}</span>
+                    <span className="text-sm font-medium capitalize" style={{ color: 'rgb(var(--app-text))' }}>{role}</span>
+                    <span className="text-2xl font-bold" style={{ color: 'rgb(var(--app-text))' }}>{count}</span>
                   </div>
                 ))}
               </div>

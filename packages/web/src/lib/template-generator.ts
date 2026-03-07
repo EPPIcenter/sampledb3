@@ -1,24 +1,30 @@
 import type { BulkDerivationSettings } from './api'
+import { buildCsv } from './csv'
+import { getCollectionNameColumn } from './container-columns'
 
 export interface TemplateOptions {
   parentType: 'barcode' | 'control_batch' | 'study_subject' | 'cryovial_position'
   settings: BulkDerivationSettings
   sourceType?: 'control_batch' | 'study_subject'
   parentContainerType?: 'paper' | 'cryovial_tube' | 'micronix_tube'
+  /** Specimen types from API; first is used for specimen_type_name defaults and example rows when provided. */
+  specimenTypes?: Array<{ id: number; name: string }>
+  /** Example derivation type for default/example row when column is included (e.g. from UI or DB). */
+  exampleDerivationType?: string
+  /** Example protocol for default/example row when column is included (e.g. from UI or DB). */
+  exampleProtocol?: string
 }
 
 export function generateDerivationsTemplate(options: TemplateOptions): string {
-  const { parentType, settings, sourceType, parentContainerType } = options
-  const lines: string[] = []
+  const { parentType, settings, sourceType, parentContainerType, specimenTypes, exampleDerivationType, exampleProtocol } = options
   const derivedContainerType = settings.containerType || 'micronix_tube'
+  const exampleSpecimenTypeName = specimenTypes?.[0]?.name
+  const parentExampleSpecimenType = exampleSpecimenTypeName ?? 'Whole Blood'
+  const derivedExampleSpecimenType = exampleSpecimenTypeName ?? 'DNA (DBS)'
+  const exampleDerivation = exampleDerivationType ?? 'dna_extraction'
+  const exampleProtocolVal = exampleProtocol ?? 'Extraction v1'
 
-  const getCollectionNameColumn = (containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | ''): string => {
-    if (containerType === 'cryovial_tube') return 'box_name'
-    if (containerType === 'paper') return 'bag_name'
-    return 'plate_name'
-  }
-
-  const collectionNameColumn = getCollectionNameColumn(derivedContainerType)
+  const collectionNameColumn = getCollectionNameColumn(derivedContainerType) ?? 'plate_name'
   const defaultCollectionName =
     derivedContainerType === 'cryovial_tube'
       ? 'BOX-001'
@@ -66,56 +72,49 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
   parentColumns.push('container_barcode')
   parentColumns.push('notes')
   // Quantity fields: include only when not set in Import settings (so same-for-all can be set in form)
+  // Unit is not included in template; backend uses default unit for the derived container type.
   if (settings.quantity === undefined && !parentColumns.includes('quantity')) parentColumns.push('quantity')
-  if (!settings.unitSymbol && !parentColumns.includes('unit_symbol')) parentColumns.push('unit_symbol')
   if (settings.quantityUsed === undefined && !parentColumns.includes('quantity_used')) parentColumns.push('quantity_used')
   if (settings.reduceParentQuantity === undefined && !parentColumns.includes('reduce_parent_quantity')) parentColumns.push('reduce_parent_quantity')
 
-  // Header row
-  lines.push(parentColumns.join(','))
-
   // Default values for per-row columns when they're in the template (user didn't set "Apply to all rows")
   const defaultDerivationPerRow: Record<string, string> = {}
-  if (parentColumns.includes('derivation_type')) defaultDerivationPerRow.derivation_type = 'dna_extraction'
-  if (parentColumns.includes('specimen_type_name')) defaultDerivationPerRow.specimen_type_name = 'DNA (DBS)'
+  if (parentColumns.includes('derivation_type')) defaultDerivationPerRow.derivation_type = exampleDerivation
+  if (parentColumns.includes('specimen_type_name')) defaultDerivationPerRow.specimen_type_name = derivedExampleSpecimenType
   if (parentColumns.includes('container_type')) defaultDerivationPerRow.container_type = settings.containerType || 'micronix_tube'
-  if (parentColumns.includes('protocol')) defaultDerivationPerRow.protocol = 'Extraction v1'
+  if (parentColumns.includes('protocol')) defaultDerivationPerRow.protocol = exampleProtocolVal
   if (parentColumns.includes('derivation_date')) defaultDerivationPerRow.derivation_date = new Date().toISOString().split('T')[0]
   if (parentColumns.includes('quantity')) defaultDerivationPerRow.quantity = '1'
   if (parentColumns.includes('quantity_used')) defaultDerivationPerRow.quantity_used = '1'
   if (parentColumns.includes('reduce_parent_quantity')) defaultDerivationPerRow.reduce_parent_quantity = 'true'
 
-  // Helper to build example row matching column order
-  const buildRow = (values: Record<string, string>): string => {
-    return parentColumns.map(col => (defaultDerivationPerRow[col] ?? values[col] ?? '')).join(',') // eslint-disable-line @typescript-eslint/no-unnecessary-condition
-  }
+  const buildRow = (values: Record<string, string>): (string | null)[] =>
+    parentColumns.map((col) => defaultDerivationPerRow[col] ?? values[col])
 
-  // Example rows based on parent type and container types
+  const rows: (string | null)[][] = []
+
   if (parentType === 'control_batch') {
-    // Control batch examples
     if (parentContainerType === 'paper') {
-      // DBS on paper → extracting to derived container
-      lines.push(buildRow({
+      rows.push(buildRow({
         parent_control_batch_name: 'Batch-2024-001',
-        parent_specimen_type_name: 'Whole Blood', // Example - user should use actual parent specimen type
+        parent_specimen_type_name: parentExampleSpecimenType,
         [collectionNameColumn]: defaultCollectionName,
         position: 'A01',
         container_barcode: 'CHILD001',
         notes: 'First extraction',
       }))
-      lines.push(buildRow({
+      rows.push(buildRow({
         parent_control_batch_name: 'Batch-2024-001',
-        parent_specimen_type_name: 'Whole Blood',
+        parent_specimen_type_name: parentExampleSpecimenType,
         [collectionNameColumn]: defaultCollectionName,
         position: 'A02',
         container_barcode: 'CHILD002',
         notes: 'Second extraction',
       }))
     } else if (parentContainerType === 'cryovial_tube') {
-      // Cryovial in control batch → extracting to derived container
-      lines.push(buildRow({
+      rows.push(buildRow({
         parent_control_batch_name: 'Batch-2024-001',
-        parent_specimen_type_name: 'Whole Blood',
+        parent_specimen_type_name: parentExampleSpecimenType,
         parent_box_barcode: 'BOX-001',
         parent_position: 'A01',
         [collectionNameColumn]: defaultCollectionName,
@@ -123,9 +122,9 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
         container_barcode: 'CHILD001',
         notes: 'First extraction',
       }))
-      lines.push(buildRow({
+      rows.push(buildRow({
         parent_control_batch_name: 'Batch-2024-001',
-        parent_specimen_type_name: 'Whole Blood',
+        parent_specimen_type_name: parentExampleSpecimenType,
         parent_box_barcode: 'BOX-001',
         parent_position: 'A02',
         [collectionNameColumn]: defaultCollectionName,
@@ -135,15 +134,14 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
       }))
     }
   } else if (parentType === 'barcode') {
-    // Study subject with micronix/cryovial parent (identified by barcode)
-    lines.push(buildRow({
+    rows.push(buildRow({
       parent_container_barcode: 'MT001',
       [collectionNameColumn]: defaultCollectionName,
       position: 'A01',
       container_barcode: 'CHILD001',
       notes: 'First extraction',
     }))
-    lines.push(buildRow({
+    rows.push(buildRow({
       parent_container_barcode: 'MT002',
       [collectionNameColumn]: defaultCollectionName,
       position: 'A02',
@@ -151,30 +149,28 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
       notes: 'Second extraction',
     }))
   } else if (parentType === 'study_subject') {
-    // Study subject with paper parent
-    lines.push(buildRow({
+    rows.push(buildRow({
       parent_study_short_code: 'TCC08',
       parent_subject_name: 'SUBJ-001',
-      parent_specimen_type_name: 'Whole Blood', // Example - user should use actual parent specimen type
-      parent_collection_date: '2024-01-15', // Optional: only needed if subject has multiple specimens of same type
+      parent_specimen_type_name: parentExampleSpecimenType,
+      parent_collection_date: '2024-01-15',
       [collectionNameColumn]: defaultCollectionName,
       position: 'A01',
       container_barcode: 'CHILD001',
       notes: 'First extraction',
     }))
-    lines.push(buildRow({
+    rows.push(buildRow({
       parent_study_short_code: 'TCC08',
       parent_subject_name: 'SUBJ-002',
-      parent_specimen_type_name: 'Whole Blood',
-      parent_collection_date: '', // Can be empty if not needed
+      parent_specimen_type_name: parentExampleSpecimenType,
+      parent_collection_date: '',
       [collectionNameColumn]: defaultCollectionName,
       position: 'A02',
       container_barcode: 'CHILD002',
       notes: 'Second extraction',
     }))
   } else if (parentType === 'cryovial_position') { // eslint-disable-line @typescript-eslint/no-unnecessary-condition
-    // Study subject with cryovial parent (identified by box + position)
-    lines.push(buildRow({
+    rows.push(buildRow({
       parent_box_barcode: 'BOX-001',
       parent_position: 'A01',
       [collectionNameColumn]: defaultCollectionName,
@@ -182,7 +178,7 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
       container_barcode: 'CHILD001',
       notes: 'First extraction',
     }))
-    lines.push(buildRow({
+    rows.push(buildRow({
       parent_box_barcode: 'BOX-001',
       parent_position: 'A02',
       [collectionNameColumn]: defaultCollectionName,
@@ -192,6 +188,5 @@ export function generateDerivationsTemplate(options: TemplateOptions): string {
     }))
   }
 
-  // Template is header + data only; guidance is shown in the app UI
-  return lines.join('\n')
+  return buildCsv(parentColumns, rows)
 }

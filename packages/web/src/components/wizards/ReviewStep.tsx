@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { controlsApi } from '../../lib/api'
+import { controlsApi, settingsApi } from '../../lib/api'
 import type { ControlDefinition } from '../../lib/api'
 import { normalizePosition, groupRowsByDensity } from '../../lib/control-batch-csv'
 import type { BatchInfo, SpecimenTypeConfig, CSVFileData, CompositionStrains } from '../../pages/ControlBatchWizard'
@@ -44,6 +44,27 @@ export default function ReviewStep({
   const [error, setError] = useState<string | null>(null)
   /** Selected definition id per batch row (key = batchRowKey(fileIndex, densityKey)). */
   const [batchDefinitionSelections, setBatchDefinitionSelections] = useState<Record<string, number>>({})
+  /** Default unit symbol per container type (from settings); used when CSV row omits unit_symbol. */
+  const [defaultUnitByContainerType, setDefaultUnitByContainerType] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    settingsApi.get('container_defaults').then((res) => {
+      if (cancelled) return
+      const defaults = res.data.value
+      if (defaults) {
+        setDefaultUnitByContainerType({
+          paper: defaults.paper.defaultUnitSymbol,
+          cryovial_tube: defaults.cryovial_tube.defaultUnitSymbol,
+          micronix_tube: defaults.micronix_tube.defaultUnitSymbol,
+        })
+      }
+    }).catch(() => { /* ignore */ })
+    return () => { cancelled = true }
+  }, [])
+
+  const fallbackUnitForContainerType = (containerType: string): string =>
+    defaultUnitByContainerType[containerType] ?? (containerType === 'paper' ? 'spots' : 'µL')
 
   const isMultiBatchCsv = !!compositionStrains && compositionStrains.length > 0 && !!compositionDefinitions && csvFiles.length > 0 &&
     csvFiles.some((f) => f.rows.some((r) => r.density !== undefined))
@@ -157,7 +178,7 @@ export default function ReviewStep({
             containerBarcode: row.barcode,
             position: row.position ? normalizePosition(row.position) : undefined,
             quantity: row.quantity ?? 1,
-            unitSymbol: row.unit_symbol ?? (file.containerType === 'paper' ? 'spots' : 'µL'),
+            unitSymbol: row.unit_symbol ?? fallbackUnitForContainerType(file.containerType ?? 'paper'),
             ...(file.containerType === 'paper' && (row.sheet_name ?? file.sheetName) != null && { sheetName: (row.sheet_name ?? file.sheetName)!.trim() }),
           }
           if (!specimensMap.has(row.specimen_type_name)) specimensMap.set(row.specimen_type_name, [])
@@ -260,7 +281,7 @@ export default function ReviewStep({
             containerBarcode: row.barcode,
             position: row.position ? normalizePosition(row.position) : undefined,
             quantity: row.quantity || 1,
-            unitSymbol: row.unit_symbol || (file.containerType === 'paper' ? 'spots' : 'µL'),
+            unitSymbol: row.unit_symbol || fallbackUnitForContainerType(file.containerType!),
             sheetName: file.containerType === 'paper' ? (row.sheet_name ?? file.sheetName)?.trim() ?? undefined : undefined,
           }
 
@@ -407,54 +428,54 @@ export default function ReviewStep({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Review & Confirm</h2>
-        <p className="text-sm text-gray-600 mb-6">
+        <h2 className="text-xl font-semibold text-app-text mb-4">Review & Confirm</h2>
+        <p className="text-sm text-app-text-muted mb-6">
           Review the batch information and specimen configuration before creating.
         </p>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-sm text-red-800">{error}</p>
+        <div className="bg-app-trend-down/10 border border-app-trend-down rounded-lg p-4">
+          <p className="text-sm text-app-trend-down">{error}</p>
         </div>
       )}
 
       {/* Batch Info Summary */}
-      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-        <h3 className="font-semibold text-gray-900 mb-3">Batch Information</h3>
+      <div className="bg-app-surface rounded-lg p-4 border border-app-border">
+        <h3 className="font-semibold text-app-text mb-3">Batch Information</h3>
         {isMultiBatchCsv ? (
           <div className="text-sm space-y-2">
-            <p className="text-gray-600">Creating multiple batches from CSV by density. Each density must have an existing control definition; choose which definition to use when multiple match the same density.</p>
+            <p className="text-app-text-muted">Creating multiple batches from CSV by density. Each density must have an existing control definition; choose which definition to use when multiple match the same density.</p>
             {onBatchInfoChange ? (
               <div>
-                <label htmlFor="review-production-date" className="text-gray-600 block mb-1">Production Date</label>
+                <label htmlFor="review-production-date" className="text-app-text-muted block mb-1">Production Date</label>
                 <input
                   id="review-production-date"
                   type="date"
                   value={batchInfo.productionDate || ''}
                   onChange={(e) => onBatchInfoChange({ productionDate: e.target.value })}
-                  className="block w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  className="block w-full max-w-xs px-3 py-2 border border-app-border rounded-lg text-sm bg-app-card text-app-text focus:outline-none focus:ring-2 focus:ring-app-accent"
                 />
               </div>
             ) : (
-              <p><span className="text-gray-600">Production Date:</span><span className="ml-2 font-medium text-gray-900">{batchInfo.productionDate || 'Not set'}</span></p>
+              <p><span className="text-app-text-muted">Production Date:</span><span className="ml-2 font-medium text-app-text">{batchInfo.productionDate || 'Not set'}</span></p>
             )}
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="text-gray-600">Control Definition:</span>
-              <span className="ml-2 font-medium text-gray-900">
+              <span className="text-app-text-muted">Control Definition:</span>
+              <span className="ml-2 font-medium text-app-text">
                 {batchInfo.controlDefinition?.name || 'N/A'}
               </span>
             </div>
             <div>
-              <span className="text-gray-600">Batch Name:</span>
-              <span className="ml-2 font-medium text-gray-900">{batchInfo.name}</span>
+              <span className="text-app-text-muted">Batch Name:</span>
+              <span className="ml-2 font-medium text-app-text">{batchInfo.name}</span>
             </div>
             <div>
-              <span className="text-gray-600">Production Date:</span>
-              <span className="ml-2 font-medium text-gray-900">
+              <span className="text-app-text-muted">Production Date:</span>
+              <span className="ml-2 font-medium text-app-text">
                 {batchInfo.productionDate || 'Not set'}
               </span>
             </div>
@@ -464,20 +485,20 @@ export default function ReviewStep({
 
       {/* Multi-batch CSV preview */}
       {isMultiBatchCsv && multiBatchRows.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <h3 className="font-semibold text-gray-900 mb-3">Batches to create</h3>
-          <p className="text-sm text-gray-600 mb-3">
+        <div className="bg-app-card border border-app-border rounded-lg p-4">
+          <h3 className="font-semibold text-app-text mb-3">Batches to create</h3>
+          <p className="text-sm text-app-text-muted mb-3">
             One batch per density from your CSV. Choose which control definition to use for each row when multiple definitions match the same density.
           </p>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 pr-4 font-medium text-gray-700">File</th>
-                  <th className="text-left py-2 pr-4 font-medium text-gray-700">Collection</th>
-                  <th className="text-left py-2 pr-4 font-medium text-gray-700">Density</th>
-                  <th className="text-left py-2 pr-4 font-medium text-gray-700">Definition</th>
-                  <th className="text-left py-2 pr-4 font-medium text-gray-700">Specimen count</th>
+                <tr className="border-b border-app-border">
+                  <th className="text-left py-2 pr-4 font-medium text-app-text">File</th>
+                  <th className="text-left py-2 pr-4 font-medium text-app-text">Collection</th>
+                  <th className="text-left py-2 pr-4 font-medium text-app-text">Density</th>
+                  <th className="text-left py-2 pr-4 font-medium text-app-text">Definition</th>
+                  <th className="text-left py-2 pr-4 font-medium text-app-text">Specimen count</th>
                 </tr>
               </thead>
               <tbody>
@@ -490,15 +511,15 @@ export default function ReviewStep({
                     ? `${targetDensity} ${selectedDef.unitSymbol}`
                     : String(targetDensity)
                   return (
-                    <tr key={rowKey} className={`border-b border-gray-100 ${candidates.length === 0 ? 'bg-red-50' : ''}`}>
-                      <td className="py-2 pr-4 text-gray-900">{file.filename}</td>
-                      <td className="py-2 pr-4 text-gray-700">{file.collectionName ?? file.collectionId ?? '—'}</td>
-                      <td className="py-2 pr-4 text-gray-700">{densityLabel}</td>
+                    <tr key={rowKey} className={`border-b border-app-border ${candidates.length === 0 ? 'bg-app-trend-down/10' : ''}`}>
+                      <td className="py-2 pr-4 text-app-text">{file.filename}</td>
+                      <td className="py-2 pr-4 text-app-text-muted">{file.collectionName ?? file.collectionId ?? '—'}</td>
+                      <td className="py-2 pr-4 text-app-text-muted">{densityLabel}</td>
                       <td className="py-2 pr-4">
                         {candidates.length === 0 ? (
-                          <span className="text-red-700 font-medium">No definition found — create it first from Blood Controls</span>
+                          <span className="text-app-trend-down font-medium">No definition found — create it first from Blood Controls</span>
                         ) : candidates.length === 1 ? (
-                          <span className="text-gray-700">{candidates[0]!.name} {candidates[0]!.unitSymbol ? `(${candidates[0]!.targetDensity} ${candidates[0]!.unitSymbol})` : ''}</span>
+                          <span className="text-app-text">{candidates[0]!.name} {candidates[0]!.unitSymbol ? `(${candidates[0]!.targetDensity} ${candidates[0]!.unitSymbol})` : ''}</span>
                         ) : (
                           <select
                             value={batchDefinitionSelections[rowKey] ?? ''}
@@ -506,7 +527,7 @@ export default function ReviewStep({
                               const id = Number(e.target.value)
                               if (!Number.isNaN(id)) setBatchDefinitionSelections((prev) => ({ ...prev, [rowKey]: id }))
                             }}
-                            className="block w-full max-w-xs px-2 py-1.5 border border-gray-300 rounded text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            className="block w-full max-w-xs px-2 py-1.5 border border-app-border rounded text-app-text bg-app-card focus:outline-none focus:ring-2 focus:ring-app-accent"
                             aria-label={`Definition for density ${targetDensity}`}
                           >
                             <option value="">Select definition...</option>
@@ -518,7 +539,7 @@ export default function ReviewStep({
                           </select>
                         )}
                       </td>
-                      <td className="py-2 pr-4 text-gray-700">{fileRows.length}</td>
+                      <td className="py-2 pr-4 text-app-text-muted">{fileRows.length}</td>
                     </tr>
                   )
                 })}
@@ -530,13 +551,13 @@ export default function ReviewStep({
 
       {/* Specimen Types Summary */}
       {specimenTypes.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <h3 className="font-semibold text-gray-900 mb-3">Specimen Types ({specimenTypes.length})</h3>
+        <div className="bg-app-card border border-app-border rounded-lg p-4">
+          <h3 className="font-semibold text-app-text mb-3">Specimen Types ({specimenTypes.length})</h3>
           <div className="space-y-2">
             {specimenTypes.map((st) => (
               <div key={st.id} className="text-sm">
-                <span className="font-medium text-gray-900">{st.specimenTypeName}</span>
-                <span className="text-gray-600 ml-2">
+                <span className="font-medium text-app-text">{st.specimenTypeName}</span>
+                <span className="text-app-text-muted ml-2">
                   - {st.containers.length} containers ({st.containerType})
                   {st.containerType === 'paper' && st.containers.some(c => c.sheetName) && (
                     <span className="ml-1">
@@ -552,13 +573,13 @@ export default function ReviewStep({
 
       {/* CSV Files Summary */}
       {csvFiles.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <h3 className="font-semibold text-gray-900 mb-3">CSV Files ({csvFiles.length})</h3>
+        <div className="bg-app-card border border-app-border rounded-lg p-4">
+          <h3 className="font-semibold text-app-text mb-3">CSV Files ({csvFiles.length})</h3>
           <div className="space-y-2">
             {csvFiles.map((file, index) => (
               <div key={index} className="text-sm">
-                <span className="font-medium text-gray-900">{file.filename}</span>
-                <span className="text-gray-600 ml-2">
+                <span className="font-medium text-app-text">{file.filename}</span>
+                <span className="text-app-text-muted ml-2">
                   - {file.rows.length} containers
                   {file.collectionName && ` → ${file.collectionName}`}
                   {file.containerType === 'paper' && file.sheetName && ` (Sheet: ${file.sheetName})`}
@@ -570,12 +591,12 @@ export default function ReviewStep({
       )}
 
       {/* Summary Stats */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="font-semibold text-blue-900 mb-3">Summary</h3>
+      <div className="bg-app-accent-muted/50 border border-app-accent rounded-lg p-4">
+        <h3 className="font-semibold text-app-accent-hover mb-3">Summary</h3>
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
-            <span className="text-blue-700">Total Specimen Types:</span>
-            <span className="ml-2 font-bold text-blue-900">
+            <span className="text-app-accent-hover">Total Specimen Types:</span>
+            <span className="ml-2 font-bold text-app-text">
               {new Set([
                 ...specimenTypes.map(st => st.specimenTypeName),
                 ...csvFiles.flatMap(f => 
@@ -585,12 +606,12 @@ export default function ReviewStep({
             </span>
           </div>
           <div>
-            <span className="text-blue-700">Total Containers:</span>
-            <span className="ml-2 font-bold text-blue-900">{totalContainers}</span>
+            <span className="text-app-accent-hover">Total Containers:</span>
+            <span className="ml-2 font-bold text-app-text">{totalContainers}</span>
           </div>
           <div>
-            <span className="text-blue-700">Collections to Create:</span>
-            <span className="ml-2 font-bold text-blue-900">{collectionsToCreate.size}</span>
+            <span className="text-app-accent-hover">Collections to Create:</span>
+            <span className="ml-2 font-bold text-app-text">{collectionsToCreate.size}</span>
           </div>
         </div>
       </div>
@@ -599,7 +620,7 @@ export default function ReviewStep({
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
           disabled={submitting}
         >
           Cancel
@@ -607,7 +628,7 @@ export default function ReviewStep({
         <button
           type="button"
           onClick={onBack}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
           disabled={submitting}
         >
           Back
@@ -616,7 +637,7 @@ export default function ReviewStep({
           type="button"
           onClick={handleSubmit}
           disabled={submitting || (isMultiBatchCsv && !multiBatchCanSubmit)}
-          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+          className="px-4 py-2 bg-app-trend-up text-white rounded-lg hover:bg-app-trend-up/90 disabled:opacity-50"
         >
           {submitting ? 'Creating...' : isAddMode ? 'Add Specimens' : 'Create Batch'}
         </button>

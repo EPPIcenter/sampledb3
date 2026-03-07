@@ -92,7 +92,7 @@ export const referenceDataConfigs: ReferenceDataConfig[] = [
           key: 'containerTypes',
           label: 'Allowed Container Types',
           render: (value: any, item: SpecimenType) => {
-            const allowedTypes = containerTypeRelationships[item.id]
+            const allowedTypes = containerTypeRelationships[item.id] ?? []
             const usageInfo = containerTypeUsageInfo[item.id]
             return React.createElement(ContainerTypesCell, {
               item,

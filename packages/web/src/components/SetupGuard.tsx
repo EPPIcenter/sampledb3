@@ -94,10 +94,10 @@ export default function SetupGuard({ children }: { children: React.ReactNode }) 
   // Show loading state while checking
   if (isChecking) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-app-surface flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
-          <p className="text-gray-600">Checking setup status...</p>
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-app-accent mb-4"></div>
+          <p className="text-app-text-muted">Checking setup status...</p>
         </div>
       </div>
     )

@@ -22,10 +22,10 @@ interface ToastItemProps {
 
 function ToastItem({ toast, onClose }: ToastItemProps) {
   const bgColor = {
-    success: 'bg-green-50 border-green-200 text-green-800',
-    error: 'bg-red-50 border-red-200 text-red-800',
-    info: 'bg-blue-50 border-blue-200 text-blue-800',
-    warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
+    success: 'bg-app-card border-app-trend-up/50 text-app-text',
+    error: 'bg-app-card border-app-trend-down/50 text-app-text',
+    info: 'bg-app-card border-app-accent/50 text-app-text',
+    warning: 'bg-app-card border-app-standard/50 text-app-text',
   }[toast.type]
 
   const icon = {
@@ -62,7 +62,7 @@ function ToastItem({ toast, onClose }: ToastItemProps) {
       </div>
       <button
         onClick={onClose}
-        className="flex-shrink-0 text-gray-400 hover:text-gray-600 focus:outline-none"
+        className="flex-shrink-0 text-app-text-muted hover:text-app-text focus:outline-none"
         aria-label="Close"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

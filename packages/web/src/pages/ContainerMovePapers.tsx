@@ -336,7 +336,7 @@ export default function ContainerMovePapers() {
           <>
             <div className="storage-card p-6 mb-6 relative storage-reveal storage-reveal-2" style={{ isolation: 'isolate' }}>
               <h2 className="text-xl font-semibold mb-4">Choose Source Collection</h2>
-              <p className="text-gray-700 mb-6">
+              <p className="text-app-text mb-6">
                 Select the box or bag containing the sheets you want to move.
               </p>
 
@@ -350,7 +350,7 @@ export default function ContainerMovePapers() {
                 
                 if (allCollections.length === 0 && !loading) {
                   return (
-                    <div className="p-4 text-center text-gray-500">
+                    <div className="p-4 text-center text-app-text-muted">
                       <p>No collections found. Please create a box or bag first.</p>
                     </div>
                   )
@@ -358,7 +358,7 @@ export default function ContainerMovePapers() {
                 
                 if (collectionsWithItems.length === 0 && allCollections.length > 0) {
                   return (
-                    <div className="p-4 text-center text-gray-500">
+                    <div className="p-4 text-center text-app-text-muted">
                       <p>No collections with sheets found. Collections need to contain at least one sheet to be used as a source.</p>
                       <p className="text-sm mt-2">Found {allCollections.length} collection{allCollections.length !== 1 ? 's' : ''} total, but none have sheets.</p>
                     </div>
@@ -385,7 +385,7 @@ export default function ContainerMovePapers() {
             <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
               <div className="mb-4">
                 <h2 className="text-xl font-semibold">Select Sheets to Move</h2>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-app-text-muted mt-1">
                   Source: {sourceCollectionName} ({sourceCollectionType})
                 </p>
               </div>
@@ -393,7 +393,7 @@ export default function ContainerMovePapers() {
               {loading ? (
                 <div className="text-center py-8">Loading sheets...</div>
               ) : sheets.length === 0 ? (
-                <p className="text-sm text-gray-500">No sheets in this collection.</p>
+                <p className="text-sm text-app-text-muted">No sheets in this collection.</p>
               ) : (
                 <>
                   {/* Search Input */}
@@ -403,7 +403,7 @@ export default function ContainerMovePapers() {
                       value={sheetSearch}
                       onChange={(e) => setSheetSearch(e.target.value)}
                       placeholder="Search sheets by name..."
-                      className="w-full px-4 py-2 border rounded-lg shadow-sm focus:ring-teal-500 focus:border-teal-500 text-sm"
+                      className="w-full px-4 py-2 border rounded-lg shadow-sm focus:ring-app-accent focus:border-app-accent text-sm"
                     />
                   </div>
 
@@ -419,13 +419,13 @@ export default function ContainerMovePapers() {
                     return (
                       <>
                         {filteredSheets.length === 0 ? (
-                          <p className="text-sm text-gray-500 text-center py-8">
+                          <p className="text-sm text-app-text-muted text-center py-8">
                             No sheets match "{sheetSearch}"
                           </p>
                         ) : (
                           <>
                             <div className="flex items-center justify-between mb-3">
-                              <div className="text-xs text-gray-500">
+                              <div className="text-xs text-app-text-muted">
                                 Showing {filteredSheets.length} of {sheets.length} sheet{sheets.length !== 1 ? 's' : ''}
                               </div>
                               <button
@@ -442,7 +442,7 @@ export default function ContainerMovePapers() {
                                     setSelectedSheetIds(newSelected)
                                   }
                                 }}
-                                className="text-xs text-teal-600 hover:text-teal-800 font-medium"
+                                className="text-xs text-app-accent hover:text-app-accent-hover font-medium"
                               >
                                 {allFilteredSelected ? 'Deselect All Visible' : 'Select All Visible'}
                               </button>
@@ -454,21 +454,21 @@ export default function ContainerMovePapers() {
                                   <label
                                     key={sheet.id}
                                     className={`flex items-center gap-2 p-2 border rounded cursor-pointer transition-colors ${isSelected
-                                        ? 'bg-teal-50 border-teal-300'
-                                        : 'hover:border-teal-200 hover:bg-gray-50'
+                                        ? 'bg-app-accent-muted border-app-accent/50'
+                                        : 'hover:border-app-accent/50 hover:bg-app-surface'
                                       }`}
                                   >
                                     <input
                                       type="checkbox"
                                       checked={isSelected}
                                       onChange={() => handleSheetToggle(sheet.id)}
-                                      className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 flex-shrink-0"
+                                      className="w-4 h-4 text-app-accent rounded focus:ring-app-accent flex-shrink-0"
                                     />
                                     <div className="flex-1 min-w-0">
-                                      <div className="font-medium text-sm text-gray-900 truncate">
+                                      <div className="font-medium text-sm text-app-text truncate">
                                         {sheet.name}
                                       </div>
-                                      <div className="text-xs text-gray-500">
+                                      <div className="text-xs text-app-text-muted">
                                         {sheet.papers.length} paper{sheet.papers.length !== 1 ? 's' : ''}
                                       </div>
                                     </div>
@@ -487,8 +487,8 @@ export default function ContainerMovePapers() {
               {/* Compact Selection Summary */}
               {selectedSheetIds.size > 0 && (
                 <div className="mt-4 pt-4 border-t">
-                  <p className="text-sm text-gray-700">
-                    <span className="font-medium text-teal-600">{selectedSheetIds.size}</span> sheet{selectedSheetIds.size !== 1 ? 's' : ''} selected
+                  <p className="text-sm text-app-text">
+                    <span className="font-medium text-app-accent">{selectedSheetIds.size}</span> sheet{selectedSheetIds.size !== 1 ? 's' : ''} selected
                   </p>
                 </div>
               )}
@@ -520,7 +520,7 @@ export default function ContainerMovePapers() {
           <>
             <div className="storage-card p-6 mb-6 relative storage-reveal storage-reveal-2" style={{ isolation: 'isolate' }}>
               <h2 className="text-xl font-semibold mb-4">Choose Destination Collection</h2>
-              <p className="text-gray-700 mb-6">
+              <p className="text-app-text mb-6">
                 Select where to move the {selectedSheetIds.size} selected sheet{selectedSheetIds.size !== 1 ? 's' : ''}.
               </p>
 
@@ -551,7 +551,7 @@ export default function ContainerMovePapers() {
           <>
             <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
               <h2 className="text-xl font-semibold mb-4">Review & Confirm Move</h2>
-              <p className="text-gray-700 mb-6">
+              <p className="text-app-text mb-6">
                 Please review the move details below before confirming.
               </p>
 
@@ -565,30 +565,30 @@ export default function ContainerMovePapers() {
                   <>
                     <div className="space-y-6">
                       {/* Source Collection */}
-                      <div className="border-l-4 border-teal-500 pl-4">
-                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                      <div className="border-l-4 border-app-accent pl-4">
+                        <h3 className="text-sm font-semibold text-app-text-muted uppercase tracking-wide mb-2">
                           Source Collection
                         </h3>
-                        <div className="text-lg font-medium text-gray-900">
+                        <div className="text-lg font-medium text-app-text">
                           {sourceCollectionName}
                         </div>
-                        <div className="text-sm text-gray-600 mt-1">
+                        <div className="text-sm text-app-text-muted mt-1">
                           Type: {sourceCollectionType}
                         </div>
                       </div>
 
                       {/* Selected Sheets */}
-                      <div className="border-l-4 border-green-500 pl-4">
-                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                      <div className="border-l-4 border-app-trend-up pl-4">
+                        <h3 className="text-sm font-semibold text-app-text-muted uppercase tracking-wide mb-2">
                           Sheets to Move ({selectedSheetIds.size})
                         </h3>
                         <div className="space-y-2">
                           {sheets
                             .filter(s => selectedSheetIds.has(s.id))
                             .map((sheet) => (
-                              <div key={sheet.id} className="bg-gray-50 rounded p-3">
-                                <div className="font-medium text-gray-900">{sheet.name}</div>
-                                <div className="text-xs text-gray-600 mt-1">
+                              <div key={sheet.id} className="bg-app-surface rounded p-3">
+                                <div className="font-medium text-app-text">{sheet.name}</div>
+                                <div className="text-xs text-app-text-muted mt-1">
                                   {sheet.papers.length} paper{sheet.papers.length !== 1 ? 's' : ''}
                                 </div>
                               </div>
@@ -598,20 +598,20 @@ export default function ContainerMovePapers() {
 
                       {/* Destination Collection */}
                       <div className="border-l-4 border-purple-500 pl-4">
-                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                        <h3 className="text-sm font-semibold text-app-text-muted uppercase tracking-wide mb-2">
                           Destination Collection
                         </h3>
                         {destination ? (
                           <>
-                            <div className="text-lg font-medium text-gray-900">
+                            <div className="text-lg font-medium text-app-text">
                               {destinationCollectionName}
                             </div>
-                            <div className="text-sm text-gray-600 mt-1">
+                            <div className="text-sm text-app-text-muted mt-1">
                               Type: {destinationCollectionType}
                             </div>
                           </>
                         ) : (
-                          <div className="text-red-600 font-medium">
+                          <div className="text-app-trend-down font-medium">
                             ⚠️ Destination collection not found. Please go back and select a valid destination.
                           </div>
                         )}
@@ -619,32 +619,32 @@ export default function ContainerMovePapers() {
 
                       {/* Validation Status */}
                       {isValid ? (
-                        <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+                        <div className="bg-app-accent-muted border border-app-accent/50 rounded-lg p-4">
                           <div className="flex items-start">
-                            <svg className="w-5 h-5 text-teal-900 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 text-app-text mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             <div>
-                              <p className="text-sm font-medium text-teal-900">
+                              <p className="text-sm font-medium text-app-text">
                                 Move is valid and ready to execute
                               </p>
-                              <p className="text-xs text-teal-900 mt-1">
+                              <p className="text-xs text-app-text mt-1">
                                 All {selectedSheetIds.size} selected sheet{selectedSheetIds.size !== 1 ? 's' : ''} will be moved from {sourceCollectionName} to {destinationCollectionName}.
                               </p>
                             </div>
                           </div>
                         </div>
                       ) : (
-                        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <div className="bg-app-trend-down/10 border border-app-trend-down rounded-lg p-4">
                           <div className="flex items-start">
-                            <svg className="w-5 h-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 text-app-trend-down mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             <div>
-                              <p className="text-sm font-medium text-red-900">
+                              <p className="text-sm font-medium text-app-trend-down">
                                 Move cannot be completed
                               </p>
-                              <p className="text-xs text-red-700 mt-1">
+                              <p className="text-xs text-app-trend-down mt-1">
                                 {!destination ? 'Destination collection is invalid or no longer available.' : 'No sheets selected for move.'}
                               </p>
                             </div>
@@ -686,7 +686,7 @@ export default function ContainerMovePapers() {
             {loading ? (
               <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
                 <div className="text-center py-8">
-                  <p className="text-gray-700">Moving sheets...</p>
+                  <p className="text-app-text">Moving sheets...</p>
                 </div>
               </div>
             ) : moveResult ? (
@@ -694,14 +694,14 @@ export default function ContainerMovePapers() {
                 {moveResult.success ? (
                   <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
                     <div className="flex items-center mb-6">
-                      <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mr-4">
-                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-12 h-12 rounded-full bg-app-trend-up/10 flex items-center justify-center mr-4">
+                        <svg className="w-6 h-6 text-app-trend-up" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                       </div>
                       <div>
-                        <h2 className="text-2xl font-bold text-gray-900">Move Completed Successfully</h2>
-                        <p className="text-gray-600 mt-1">
+                        <h2 className="text-2xl font-bold text-app-text">Move Completed Successfully</h2>
+                        <p className="text-app-text-muted mt-1">
                           {moveResult.moved} sheet{moveResult.moved !== 1 ? 's' : ''} moved successfully
                         </p>
                       </div>
@@ -710,22 +710,22 @@ export default function ContainerMovePapers() {
                     <div className="space-y-6 border-t pt-6">
                       {/* Source Collection */}
                       <div>
-                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                        <h3 className="text-sm font-semibold text-app-text-muted uppercase tracking-wide mb-3">
                           From
                         </h3>
                         <Link
                           to={`/collections/${sourceCollectionType === 'box' ? 'boxes' : 'bags'}/${sourceCollectionId}`}
-                          className="inline-flex items-center px-4 py-3 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors group"
+                          className="inline-flex items-center px-4 py-3 bg-app-accent-muted border border-app-accent/50 rounded-lg hover:bg-app-accent-muted transition-colors group"
                         >
                           <div className="flex-1">
-                            <div className="font-semibold text-teal-900 group-hover:text-teal-900">
+                            <div className="font-semibold text-app-text group-hover:text-app-text">
                               {sourceCollectionName}
                             </div>
-                            <div className="text-sm text-teal-900 mt-0.5">
+                            <div className="text-sm text-app-text mt-0.5">
                               {sourceCollectionType === 'box' ? 'Box' : 'Bag'} • View collection →
                             </div>
                           </div>
-                          <svg className="w-5 h-5 text-teal-900 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5 text-app-text ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
                         </Link>
@@ -733,14 +733,14 @@ export default function ContainerMovePapers() {
 
                       {/* Moved Sheets */}
                       <div>
-                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                        <h3 className="text-sm font-semibold text-app-text-muted uppercase tracking-wide mb-3">
                           Sheets Moved ({moveResult.movedSheets?.length || 0})
                         </h3>
                         <div className="space-y-2">
                           {moveResult.movedSheets?.map((sheet) => (
-                            <div key={sheet.id} className="px-4 py-3 bg-gray-50 border border-gray-100 rounded-lg">
-                              <div className="font-medium text-gray-900">{sheet.name}</div>
-                              <div className="text-xs text-gray-600 mt-1">
+                            <div key={sheet.id} className="px-4 py-3 bg-app-surface border border-app-border rounded-lg">
+                              <div className="font-medium text-app-text">{sheet.name}</div>
+                              <div className="text-xs text-app-text-muted mt-1">
                                 {sheet.papers.length} paper{sheet.papers.length !== 1 ? 's' : ''}
                               </div>
                             </div>
@@ -750,7 +750,7 @@ export default function ContainerMovePapers() {
 
                       {/* Destination Collection */}
                       <div>
-                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                        <h3 className="text-sm font-semibold text-app-text-muted uppercase tracking-wide mb-3">
                           To
                         </h3>
                         <Link
@@ -775,14 +775,14 @@ export default function ContainerMovePapers() {
                 ) : (
                   <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
                     <div className="flex items-center mb-4">
-                      <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mr-4">
-                        <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-12 h-12 rounded-full bg-app-trend-down/10 flex items-center justify-center mr-4">
+                        <svg className="w-6 h-6 text-app-trend-down" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       </div>
                       <div>
-                        <h2 className="text-2xl font-bold text-gray-900">Move Failed</h2>
-                        <p className="text-red-600 mt-1">{moveResult.error || 'An error occurred'}</p>
+                        <h2 className="text-2xl font-bold text-app-text">Move Failed</h2>
+                        <p className="text-app-trend-down mt-1">{moveResult.error || 'An error occurred'}</p>
                       </div>
                     </div>
                   </div>

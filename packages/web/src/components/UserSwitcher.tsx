@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
 import { getRecentUsers, type LocalUser } from '../lib/localUserHistory'
 import { authApi } from '../lib/api'
+import { useClickOutside } from '../hooks/useClickOutside'
 
 export default function UserSwitcher() {
   const { user, switchUser, refreshUser } = useUser()
@@ -25,31 +26,19 @@ export default function UserSwitcher() {
     loadUsers()
   }, [user?.id])
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
+  useClickOutside(dropdownRef, () => setIsOpen(false), isOpen)
 
+  useEffect(() => {
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
       loadUsers()
-      
       // Calculate if dropdown should open upward
       if (buttonRef.current) {
         const rect = buttonRef.current.getBoundingClientRect()
         const spaceBelow = window.innerHeight - rect.bottom
         const spaceAbove = rect.top
         const dropdownHeight = 384 // max-h-96 = 24rem = 384px (approximate)
-        
-        // If there's not enough space below but enough space above, open upward
         setOpenUpward(spaceBelow < dropdownHeight && spaceAbove > spaceBelow)
       }
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [isOpen])
 
@@ -165,7 +154,7 @@ export default function UserSwitcher() {
               </div>
             )}
 
-            <div className="border-t my-2" style={{ borderColor: 'rgb(var(--palette-border))' }} />
+            <div className="border-t my-2" style={{ borderColor: 'rgb(var(--app-border))' }} />
 
             <button
               type="button"

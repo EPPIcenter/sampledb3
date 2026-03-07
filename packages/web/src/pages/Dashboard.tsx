@@ -252,7 +252,7 @@ export default function Dashboard() {
         {/* Hero + search */}
         <header className="mb-6 dashboard-reveal dashboard-reveal-1">
           <h1 className="text-3xl font-bold mb-1">Lab Overview</h1>
-          <p className="text-[rgb(var(--dashboard-text-muted))] text-lg mb-4">Find samples, track activity, run workflows</p>
+          <p className="text-[rgb(var(--app-text-muted))] text-lg mb-4">Find samples, track activity, run workflows</p>
           <form onSubmit={handleSearchSubmit} className="dashboard-search-form max-w-2xl">
             <div className="flex gap-2">
               <input
@@ -260,19 +260,19 @@ export default function Dashboard() {
                 type="search"
                 name="dashboard-search"
                 placeholder="Search by barcode, study code, subject, or ID"
-                className="dashboard-search-input flex-1 rounded-xl border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-card))] px-4 py-3 text-[rgb(var(--dashboard-text))] placeholder:text-[rgb(var(--dashboard-text-muted))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] focus:border-transparent"
+                className="dashboard-search-input flex-1 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3 text-[rgb(var(--app-text))] placeholder:text-[rgb(var(--app-text-muted))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--app-accent))] focus:border-transparent"
                 aria-label="Search samples and studies"
               />
               <button
                 type="submit"
-                className="dashboard-search-btn rounded-xl px-4 py-3 font-medium text-white bg-[rgb(var(--dashboard-accent))] hover:bg-[rgb(var(--dashboard-accent-hover))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] focus:ring-offset-2 transition-colors"
+                className="dashboard-search-btn rounded-xl px-4 py-3 font-medium text-white bg-[rgb(var(--app-accent))] hover:bg-[rgb(var(--app-accent-hover))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--app-accent))] focus:ring-offset-2 transition-colors"
               >
                 Search
               </button>
             </div>
           </form>
           {dataAsOf && (
-            <p className="mt-2 text-sm text-[rgb(var(--dashboard-text-muted))]" aria-live="polite">
+            <p className="mt-2 text-sm text-[rgb(var(--app-text-muted))]" aria-live="polite">
               Data as of {formatDataAsOf(dataAsOf)}
             </p>
           )}
@@ -286,63 +286,63 @@ export default function Dashboard() {
               <>
                 <Link
                   to="/specimens/new"
-                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-card))] hover:border-[rgb(var(--dashboard-accent))] hover:shadow-md transition-all duration-200"
+                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-[rgb(var(--app-accent))] hover:shadow-md transition-all duration-200"
                   aria-label="Register new specimen"
                 >
-                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--dashboard-accent-muted))] flex items-center justify-center text-[rgb(var(--dashboard-accent))]">
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--app-accent-muted))] flex items-center justify-center text-[rgb(var(--app-accent))]">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
                   </span>
                   <div className="text-left min-w-0">
-                    <div className="font-medium text-[rgb(var(--dashboard-text))]">Register New Specimen</div>
-                    <div className="text-sm text-[rgb(var(--dashboard-text-muted))]">Add a new specimen to the system</div>
+                    <div className="font-medium text-[rgb(var(--app-text))]">Register New Specimen</div>
+                    <div className="text-sm text-[rgb(var(--app-text-muted))]">Add a new specimen to the system</div>
                   </div>
                 </Link>
                 <Link
                   to="/studies/new"
-                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-card))] hover:border-[rgb(var(--dashboard-accent))] hover:shadow-md transition-all duration-200"
+                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-[rgb(var(--app-accent))] hover:shadow-md transition-all duration-200"
                   aria-label="Create new study"
                 >
-                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--dashboard-accent-muted))] flex items-center justify-center text-[rgb(var(--dashboard-accent))]">
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--app-accent-muted))] flex items-center justify-center text-[rgb(var(--app-accent))]">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                     </svg>
                   </span>
                   <div className="text-left min-w-0">
-                    <div className="font-medium text-[rgb(var(--dashboard-text))]">Create New Study</div>
-                    <div className="text-sm text-[rgb(var(--dashboard-text-muted))]">Start a new research study</div>
+                    <div className="font-medium text-[rgb(var(--app-text))]">Create New Study</div>
+                    <div className="text-sm text-[rgb(var(--app-text-muted))]">Start a new research study</div>
                   </div>
                 </Link>
                 <Link
                   to="/import"
-                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-card))] hover:border-[rgb(var(--dashboard-accent))] hover:shadow-md transition-all duration-200"
+                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-[rgb(var(--app-accent))] hover:shadow-md transition-all duration-200"
                   aria-label="Bulk import"
                 >
-                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--dashboard-accent-muted))] flex items-center justify-center text-[rgb(var(--dashboard-accent))]">
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--app-accent-muted))] flex items-center justify-center text-[rgb(var(--app-accent))]">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
                   </span>
                   <div className="text-left min-w-0">
-                    <div className="font-medium text-[rgb(var(--dashboard-text))]">Bulk Import</div>
-                    <div className="text-sm text-[rgb(var(--dashboard-text-muted))]">Import data from CSV</div>
+                    <div className="font-medium text-[rgb(var(--app-text))]">Bulk Import</div>
+                    <div className="text-sm text-[rgb(var(--app-text-muted))]">Import data from CSV</div>
                   </div>
                 </Link>
                 <Link
                   to="/locations"
-                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-card))] hover:border-[rgb(var(--dashboard-accent))] hover:shadow-md transition-all duration-200"
+                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-[rgb(var(--app-accent))] hover:shadow-md transition-all duration-200"
                   aria-label="Browse storage"
                 >
-                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--dashboard-accent-muted))] flex items-center justify-center text-[rgb(var(--dashboard-accent))]">
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--app-accent-muted))] flex items-center justify-center text-[rgb(var(--app-accent))]">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   </span>
                   <div className="text-left min-w-0">
-                    <div className="font-medium text-[rgb(var(--dashboard-text))]">Browse Storage</div>
-                    <div className="text-sm text-[rgb(var(--dashboard-text-muted))]">View locations and collections</div>
+                    <div className="font-medium text-[rgb(var(--app-text))]">Browse Storage</div>
+                    <div className="text-sm text-[rgb(var(--app-text-muted))]">View locations and collections</div>
                   </div>
                 </Link>
               </>
@@ -350,29 +350,29 @@ export default function Dashboard() {
             {!canWrite && (
               <Link
                 to="/locations"
-                className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--dashboard-border))] bg-[rgb(var(--dashboard-card))] hover:border-[rgb(var(--dashboard-accent))] hover:shadow-md transition-all duration-200"
+                className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-[rgb(var(--app-accent))] hover:shadow-md transition-all duration-200"
                 aria-label="Browse storage"
               >
-                <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--dashboard-accent-muted))] flex items-center justify-center text-[rgb(var(--dashboard-accent))]">
+                <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--app-accent-muted))] flex items-center justify-center text-[rgb(var(--app-accent))]">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </span>
                 <div className="text-left min-w-0">
-                  <div className="font-medium text-[rgb(var(--dashboard-text))]">Browse Storage</div>
-                  <div className="text-sm text-[rgb(var(--dashboard-text-muted))]">View locations and collections</div>
+                  <div className="font-medium text-[rgb(var(--app-text))]">Browse Storage</div>
+                  <div className="text-sm text-[rgb(var(--app-text-muted))]">View locations and collections</div>
                 </div>
               </Link>
             )}
           </div>
           {!canWrite && (
-            <div className="mt-4 rounded-lg p-3 bg-[rgb(var(--dashboard-accent-muted))] border border-[rgb(var(--dashboard-accent)/0.3)]">
+            <div className="mt-4 rounded-lg p-3 bg-[rgb(var(--app-accent-muted))] border border-[rgb(var(--app-accent)/0.3)]">
               <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-[rgb(var(--dashboard-accent))]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5 text-[rgb(var(--app-accent))]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <p className="text-sm font-medium text-[rgb(var(--dashboard-text))]">
+                <p className="text-sm font-medium text-[rgb(var(--app-text))]">
                   You have view-only access. Contact an administrator or member to create or modify data.
                 </p>
               </div>
@@ -393,7 +393,7 @@ export default function Dashboard() {
           {qpcrLoading ? (
             <SkeletonCard height="h-24" className="mb-2" />
           ) : recentQpcrExperiments.length === 0 ? (
-            <p className="text-[rgb(var(--dashboard-text-muted))] py-2">
+            <p className="text-[rgb(var(--app-text-muted))] py-2">
               No qPCR experiments yet — {canWrite ? 'create one to get started.' : 'qPCR experiments will appear here.'}
             </p>
           ) : (
@@ -402,10 +402,10 @@ export default function Dashboard() {
                 <li key={exp.id}>
                   <Link
                     to={`/qpcr-experiments/${exp.id}`}
-                    className="flex items-center justify-between p-3 rounded-lg border border-[rgb(var(--dashboard-border))] hover:border-[rgb(var(--dashboard-accent)/0.4)] hover:bg-[rgb(var(--dashboard-surface))] transition-all duration-200"
+                    className="flex items-center justify-between p-3 rounded-lg border border-[rgb(var(--app-border))] hover:border-[rgb(var(--app-accent)/0.4)] hover:bg-[rgb(var(--app-surface))] transition-all duration-200"
                     aria-label={`View qPCR experiment ${exp.name ?? exp.id}`}
                   >
-                    <span className="font-medium text-[rgb(var(--dashboard-text))] truncate">
+                    <span className="font-medium text-[rgb(var(--app-text))] truncate">
                       {exp.name ?? `Experiment #${exp.id}`}
                     </span>
                     <span
@@ -476,7 +476,7 @@ export default function Dashboard() {
                 View All Controls →
               </Link>
             </div>
-            <p className="text-[rgb(var(--dashboard-text-muted))]">
+            <p className="text-[rgb(var(--app-text-muted))]">
               Blood control definitions and batches are available. Visit the Blood Controls page to manage them.
             </p>
           </section>

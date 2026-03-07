@@ -181,14 +181,14 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
     const expandAriaLabel = isExpanded ? `Collapse ${locationLabel}` : `Expand ${locationLabel}`
 
     return (
-      <div key={loc.id} className={depth > 0 ? 'ml-4 border-l-2 border-gray-200 pl-3' : 'mb-1'}>
+      <div key={loc.id} className={depth > 0 ? 'ml-4 border-l-2 border-app-border pl-3' : 'mb-1'}>
         <div
           className={`flex items-center gap-2 w-full rounded-lg transition-colors ${
             locSelected
-              ? 'bg-blue-50 border-2 border-blue-500 shadow-sm'
+              ? 'bg-app-accent-muted border-2 border-app-accent shadow-sm'
               : canContainCollections
-              ? 'border border-transparent hover:border-gray-200'
-              : 'bg-gray-50 border border-gray-200 opacity-75'
+              ? 'border border-transparent hover:border-app-border'
+              : 'bg-app-surface border border-app-border opacity-75'
           }`}
         >
           {hasChildren ? (
@@ -203,9 +203,9 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
               }}
               aria-expanded={isExpanded}
               aria-label={expandAriaLabel}
-              className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border-0 bg-transparent text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1 hover:bg-gray-50"
+              className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border-0 bg-transparent text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent focus-visible:ring-offset-1 hover:bg-app-surface"
             >
-              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-500" aria-hidden>
+              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-app-text-muted" aria-hidden>
                 {isExpanded ? (
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -218,30 +218,30 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
               </span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`font-medium ${locSelected ? 'text-blue-700' : canContainCollections ? 'text-gray-900' : 'text-gray-600'}`}>
+                  <span className={`font-medium ${locSelected ? 'text-app-accent-hover' : canContainCollections ? 'text-app-text' : 'text-app-text-muted'}`}>
                     {search.trim() ? highlightText(locationLabel, search) : locationLabel}
                   </span>
                   {loc.path && loc.path !== loc.name && (
-                    <span className={`text-xs font-mono truncate ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                    <span className={`text-xs font-mono truncate ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
                       {search.trim() ? highlightText(loc.path, search) : loc.path}
                     </span>
                   )}
                   {(loc.effectiveStorageTypeName || loc.storageTypeName) && (
-                    <span className={`text-xs font-normal ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                    <span className={`text-xs font-normal ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
                       ({loc.effectiveStorageTypeName || loc.storageTypeName})
                     </span>
                   )}
                   {!canContainCollections && (
-                    <span className="text-xs text-gray-500 italic">(cannot contain collections)</span>
+                    <span className="text-xs text-app-text-muted italic">(cannot contain collections)</span>
                   )}
                   {locSelected && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600 text-white">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-app-accent text-white">
                       Selected
                     </span>
                   )}
                 </div>
                 {loc.description && (
-                  <div className={`text-xs mt-0.5 truncate ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                  <div className={`text-xs mt-0.5 truncate ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
                     {search.trim() ? highlightText(loc.description, search) : loc.description}
                   </div>
                 )}
@@ -252,30 +252,30 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
               <span className="w-5 flex-shrink-0" aria-hidden />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`font-medium ${locSelected ? 'text-blue-700' : canContainCollections ? 'text-gray-900' : 'text-gray-600'}`}>
+                  <span className={`font-medium ${locSelected ? 'text-app-accent-hover' : canContainCollections ? 'text-app-text' : 'text-app-text-muted'}`}>
                     {search.trim() ? highlightText(locationLabel, search) : locationLabel}
                   </span>
                   {loc.path && loc.path !== loc.name && (
-                    <span className={`text-xs font-mono truncate ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                    <span className={`text-xs font-mono truncate ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
                       {search.trim() ? highlightText(loc.path, search) : loc.path}
                     </span>
                   )}
                   {(loc.effectiveStorageTypeName || loc.storageTypeName) && (
-                    <span className={`text-xs font-normal ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                    <span className={`text-xs font-normal ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
                       ({loc.effectiveStorageTypeName || loc.storageTypeName})
                     </span>
                   )}
                   {!canContainCollections && (
-                    <span className="text-xs text-gray-500 italic">(cannot contain collections)</span>
+                    <span className="text-xs text-app-text-muted italic">(cannot contain collections)</span>
                   )}
                   {locSelected && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600 text-white">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-app-accent text-white">
                       Selected
                     </span>
                   )}
                 </div>
                 {loc.description && (
-                  <div className={`text-xs mt-0.5 truncate ${canContainCollections ? 'text-gray-500' : 'text-gray-400'}`}>
+                  <div className={`text-xs mt-0.5 truncate ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
                     {search.trim() ? highlightText(loc.description, search) : loc.description}
                   </div>
                 )}
@@ -291,8 +291,8 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
               }}
               className={`flex-shrink-0 px-3 py-2 min-h-[44px] text-sm font-medium rounded-lg transition-colors ${
                 locSelected
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  ? 'bg-app-accent text-white hover:bg-app-accent-hover'
+                  : 'bg-app-surface text-app-text-muted hover:bg-app-border'
               }`}
             >
               {locSelected ? 'Deselect' : 'Select'}
@@ -317,9 +317,9 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
     if (displayRoots.length === 0) {
       return (
         <div className="p-8 text-center">
-          <p className="text-sm text-gray-500 mb-2">No locations match this filter.</p>
+          <p className="text-sm text-app-text-muted mb-2">No locations match this filter.</p>
           {filterCollectionsOnly && (
-            <p className="text-xs text-gray-400">Only locations that can contain collections are shown.</p>
+            <p className="text-xs text-app-text-muted">Only locations that can contain collections are shown.</p>
           )}
         </div>
       )
@@ -337,19 +337,19 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full px-3 py-2 border border-gray-100 rounded-md shadow-sm bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        className="w-full px-3 py-2 border border-app-border rounded-md shadow-sm bg-app-card text-app-text text-left focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-app-accent"
       >
         {selected.length > 0 ? (
           <div className="space-y-1">
             {selected.map((sel, index) => (
-              <div key={index} className="text-sm text-gray-900 truncate">
+              <div key={index} className="text-sm text-app-text truncate">
                 {sel.path}
                 {sel.effectiveStorageTypeName ? ` (${sel.effectiveStorageTypeName})` : ''}
               </div>
             ))}
           </div>
         ) : (
-          <span className="text-gray-400">Select locations...</span>
+          <span className="text-app-text-muted">Select locations...</span>
         )}
       </button>
 
@@ -357,15 +357,15 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
         <ModalPortal>
           <div className="fixed inset-0 z-[100] flex items-center justify-center">
             <div
-              className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+              className="fixed inset-0 bg-black/40 backdrop-blur-md"
               onClick={() => setOpen(false)}
             />
-          <div className="relative z-10 w-full max-w-4xl mx-4 bg-white rounded-lg shadow-xl p-6 max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Select Locations</h2>
+<div className="relative z-10 w-full max-w-4xl mx-4 bg-app-card rounded-lg shadow-xl p-6 max-h-[90vh] flex flex-col border border-app-border">
+              <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-app-text">Select Locations</h2>
               <button
                 type="button"
-                className="text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded"
                 onClick={() => setOpen(false)}
                 aria-label="Close location selection dialog"
               >
@@ -386,14 +386,14 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search by name, path, or description…"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-2 border border-app-border rounded-lg shadow-sm bg-app-card text-app-text focus:ring-2 focus:ring-app-accent focus:border-app-accent"
                   autoFocus
                 />
                 {search && (
                   <button
                     type="button"
                     onClick={() => setSearch('')}
-                    className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-2.5 text-app-text-muted hover:text-app-text"
                     aria-label="Clear search"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -403,22 +403,22 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
                 )}
               </div>
               {filterCollectionsOnly && (
-                <p className="mt-2 text-xs text-gray-500">
+                <p className="mt-2 text-xs text-app-text-muted">
                   Only showing locations that can contain collections
                 </p>
               )}
             </div>
 
             {selected.length > 0 && (
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <div className="mb-4 p-3 bg-app-surface rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">
+                  <span className="text-sm font-medium text-app-text">
                     Selected ({selected.length}):
                   </span>
                   <button
                     type="button"
                     onClick={clearAll}
-                    className="text-xs text-blue-600 hover:text-blue-800"
+                    className="text-xs text-app-accent hover:text-app-accent-hover"
                   >
                     Clear all
                   </button>
@@ -427,14 +427,14 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
                   {selected.map((sel, index) => (
                     <span
                       key={index}
-                      className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 text-xs font-medium"
+                      className="inline-flex items-center px-2 py-1 rounded-md bg-app-accent-muted text-app-accent-hover text-xs font-medium"
                     >
                       {sel.path}
                       {sel.effectiveStorageTypeName ? ` (${sel.effectiveStorageTypeName})` : ''}
                       <button
                         type="button"
                         onClick={() => removeSelection(index)}
-                        className="ml-1 text-blue-600 hover:text-blue-800"
+                        className="ml-1 text-app-accent hover:text-app-accent-hover"
                         aria-label={`Remove ${sel.path}`}
                       >
                         <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -447,11 +447,11 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
               </div>
             )}
 
-            <div className="border border-gray-200 rounded-lg overflow-y-auto flex-1 min-h-0 bg-gray-50 p-2">
+            <div className="border border-app-border rounded-lg overflow-y-auto flex-1 min-h-0 bg-app-surface p-2">
               {loading ? (
                 <div className="p-8 text-center">
-                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                  <p className="mt-2 text-sm text-gray-500">Loading locations…</p>
+                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-app-accent"></div>
+                  <p className="mt-2 text-sm text-app-text-muted">Loading locations…</p>
                 </div>
               ) : (
                 renderTree()
@@ -462,7 +462,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover font-medium"
               >
                 Done
               </button>

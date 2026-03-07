@@ -124,11 +124,11 @@ export default function CollectionSpecimenEntry({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-semibold mb-4 text-gray-900">Add Specimens to Collection</h2>
+    <div className="bg-app-card rounded-lg shadow p-6">
+      <h2 className="text-xl font-semibold mb-4 text-app-text">Add Specimens to Collection</h2>
       
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+        <div className="bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded mb-4">
           {error}
         </div>
       )}
@@ -136,15 +136,15 @@ export default function CollectionSpecimenEntry({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="max-h-96 overflow-y-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 sticky top-0">
+            <thead className="bg-app-surface sticky top-0">
               <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-700 border-b">Position</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-700 border-b">Study</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-700 border-b">Subject Name</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-700 border-b">Specimen Type</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-700 border-b">Collection Date</th>
+                <th className="px-3 py-2 text-left font-medium text-app-text border-b">Position</th>
+                <th className="px-3 py-2 text-left font-medium text-app-text border-b">Study</th>
+                <th className="px-3 py-2 text-left font-medium text-app-text border-b">Subject Name</th>
+                <th className="px-3 py-2 text-left font-medium text-app-text border-b">Specimen Type</th>
+                <th className="px-3 py-2 text-left font-medium text-app-text border-b">Collection Date</th>
                 {collectionType === 'micronix_plate' && (
-                  <th className="px-3 py-2 text-left font-medium text-gray-700 border-b">Barcode</th>
+                  <th className="px-3 py-2 text-left font-medium text-app-text border-b">Barcode</th>
                 )}
               </tr>
             </thead>
@@ -157,8 +157,8 @@ export default function CollectionSpecimenEntry({
                 }
                 
                 return (
-                  <tr key={position} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 border-b font-mono text-gray-900">{position}</td>
+                  <tr key={position} className="hover:bg-app-surface">
+                    <td className="px-3 py-2 border-b font-mono text-app-text">{position}</td>
                     <td className="px-3 py-2 border-b">
                       <select
                         value={entry.studyShortCode}
@@ -169,7 +169,7 @@ export default function CollectionSpecimenEntry({
                             updateEntry(position, 'studyId', study.id)
                           }
                         }}
-                        className="w-full px-2 py-1 border border-gray-100 rounded text-sm"
+                        className="w-full px-2 py-1 border border-app-border rounded text-sm"
                       >
                         <option value="">Select study</option>
                         {studies.map((study) => (
@@ -185,14 +185,14 @@ export default function CollectionSpecimenEntry({
                         value={entry.subjectName}
                         onChange={(e) => updateEntry(position, 'subjectName', e.target.value)}
                         placeholder="Subject name"
-                        className="w-full px-2 py-1 border border-gray-100 rounded text-sm"
+                        className="w-full px-2 py-1 border border-app-border rounded text-sm"
                       />
                     </td>
                     <td className="px-3 py-2 border-b">
                       <select
                         value={entry.specimenTypeName}
                         onChange={(e) => updateEntry(position, 'specimenTypeName', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-100 rounded text-sm"
+                        className="w-full px-2 py-1 border border-app-border rounded text-sm"
                       >
                         <option value="">Select type</option>
                         {specimenTypes.map((type) => (
@@ -207,7 +207,7 @@ export default function CollectionSpecimenEntry({
                         type="date"
                         value={entry.collectionDate || ''}
                         onChange={(e) => updateEntry(position, 'collectionDate', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-100 rounded text-sm"
+                        className="w-full px-2 py-1 border border-app-border rounded text-sm"
                       />
                     </td>
                     {collectionType === 'micronix_plate' && (
@@ -217,7 +217,7 @@ export default function CollectionSpecimenEntry({
                           value={entry.containerBarcode || ''}
                           onChange={(e) => updateEntry(position, 'containerBarcode', e.target.value)}
                           placeholder="Barcode"
-                          className="w-full px-2 py-1 border border-gray-100 rounded text-sm"
+                          className="w-full px-2 py-1 border border-app-border rounded text-sm"
                         />
                       </td>
                     )}
@@ -233,7 +233,7 @@ export default function CollectionSpecimenEntry({
             <button
               type="button"
               onClick={onCancel}
-              className="px-4 py-2 border border-gray-100 rounded-lg text-gray-700 hover:bg-gray-50"
+              className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
             >
               Cancel
             </button>
@@ -241,7 +241,7 @@ export default function CollectionSpecimenEntry({
           <button
             type="submit"
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+            className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50 font-medium"
           >
             {loading ? 'Creating...' : 'Create Specimens'}
           </button>

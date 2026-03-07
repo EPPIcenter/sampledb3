@@ -384,6 +384,20 @@ type CreateSpecimensBulkData = {
   }>
 }
 
+/** Payload for adding a container to an existing specimen (POST /specimens/:id/containers). */
+export type AddContainerData = {
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+  collectionName?: string
+  collectionBarcode?: string
+  barcode?: string
+  position?: string
+  label?: string
+  unitId?: number
+  totalQuantity?: number
+  remainingQuantity?: number
+  comment?: string
+}
+
 export const specimensApi = {
   search: async (params?: { source_type?: string; study?: string; barcode?: string; subject_id?: string }): Promise<SpecimensListResponse> => {
     const response = await api.get<SpecimensListResponse>('/specimens', { params })
@@ -403,6 +417,17 @@ export const specimensApi = {
   },
   validateBulk: async (data: CreateSpecimensBulkData): Promise<{ valid: boolean; errors: Array<{ index: number; message: string }> }> => {
     const response = await api.post<{ valid: boolean; errors: Array<{ index: number; message: string }> }>('/specimens/bulk/validate', data)
+    return response.data
+  },
+  /** Add a container to an existing specimen. */
+  addContainer: async (
+    specimenId: number,
+    data: AddContainerData
+  ): Promise<{ containerId: number }> => {
+    const response = await api.post<{ containerId: number }>(
+      `/specimens/${specimenId}/containers`,
+      data
+    )
     return response.data
   },
 }

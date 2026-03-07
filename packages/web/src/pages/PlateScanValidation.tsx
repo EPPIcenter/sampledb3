@@ -31,15 +31,15 @@ function statusLabel(s: WellStatus): string {
 function statusClass(s: WellStatus): string {
   switch (s) {
     case 'match':
-      return 'bg-green-100 text-green-800 border-green-200'
+      return 'bg-app-trend-up/10 text-app-trend-up border-app-trend-up/30'
     case 'mismatch':
-      return 'bg-red-100 text-red-800 border-red-200'
+      return 'bg-app-trend-down/10 text-app-trend-down border-app-trend-down'
     case 'missing_in_scan':
       return 'bg-amber-100 text-amber-800 border-amber-200'
     case 'extra_in_scan':
       return 'bg-sky-100 text-sky-800 border-sky-200'
     default:
-      return 'bg-gray-100 text-gray-700'
+      return 'bg-app-surface text-app-text'
   }
 }
 
@@ -271,19 +271,19 @@ export default function PlateScanValidation() {
     <div className="storage-page min-h-screen">
       <div className="max-w-6xl mx-auto px-4 py-8 relative z-10">
         <div className="mb-6 storage-reveal storage-reveal-1">
-          <nav className="text-sm text-gray-600 mb-2">
+          <nav className="text-sm text-app-text-muted mb-2">
             <Link to="/" className="storage-link hover:underline">Dashboard</Link>
             <span className="mx-2">/</span>
-            <span className="text-gray-800">Validate Plate Scan</span>
+            <span className="text-app-text">Validate Plate Scan</span>
           </nav>
-          <h1 className="text-2xl font-bold text-gray-900">Validate Plate Scan</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-app-text">Validate Plate Scan</h1>
+          <p className="text-app-text-muted mt-1">
             Upload a scanned plate CSV and compare it to a micronix plate in the database. The filename can include dates or times; the system will suggest a plate from the name.
           </p>
         </div>
 
         {error && (
-          <div className="storage-card p-4 mb-6 border-red-200 bg-red-50 text-red-800 storage-reveal storage-reveal-2">
+          <div className="storage-card p-4 mb-6 border-app-trend-down bg-app-trend-down/10 text-app-trend-down storage-reveal storage-reveal-2">
             {error}
           </div>
         )}
@@ -292,7 +292,7 @@ export default function PlateScanValidation() {
           <h2 className="storage-section-title mb-4">Upload and configure</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Scanner configuration</label>
+              <label className="block text-sm font-medium text-app-text mb-1">Scanner configuration</label>
               <select
                 value={selectedConfigId ?? ''}
                 onChange={(e) => {
@@ -301,7 +301,7 @@ export default function PlateScanValidation() {
                   setInferenceReport(null)
                   setError(null)
                 }}
-                className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] focus:border-[rgb(var(--dashboard-accent))]"
+                className="w-full max-w-md px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-[rgb(var(--app-accent))] focus:border-[rgb(var(--app-accent))]"
               >
                 {scannerConfigurations.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -311,15 +311,15 @@ export default function PlateScanValidation() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">CSV file</label>
+              <label className="block text-sm font-medium text-app-text mb-1">CSV file</label>
               <input
                 type="file"
                 accept=".csv"
                 onChange={handleFileChange}
-                className="block w-full max-w-md text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded file:border file:border-gray-300 file:bg-white file:font-medium file:text-gray-700 hover:file:bg-gray-50"
+                className="block w-full max-w-md text-sm text-app-text file:mr-4 file:py-2 file:px-4 file:rounded file:border file:border-app-border file:bg-app-card file:font-medium file:text-app-text hover:file:bg-app-surface"
               />
               {csvFile && (
-                <p className="text-sm text-gray-500 mt-1">
+                <p className="text-sm text-app-text-muted mt-1">
                   {csvFile.name}
                   {candidates.length > 0 && !inferMode && (
                     <span className="ml-2">
@@ -330,7 +330,7 @@ export default function PlateScanValidation() {
               )}
             </div>
             <fieldset className="space-y-2">
-              <legend className="block text-sm font-medium text-gray-700 mb-1">Plate</legend>
+              <legend className="block text-sm font-medium text-app-text mb-1">Plate</legend>
               <div className="flex flex-wrap gap-4">
                 <label className="inline-flex items-center gap-2 cursor-pointer">
                   <input
@@ -343,7 +343,7 @@ export default function PlateScanValidation() {
                       setInferenceReport(null)
                       setError(null)
                     }}
-                    className="rounded border-gray-300 text-[rgb(var(--dashboard-accent))] focus:ring-[rgb(var(--dashboard-accent))]"
+                    className="rounded border-app-border text-[rgb(var(--app-accent))] focus:ring-[rgb(var(--app-accent))]"
                     aria-label="I know the plate"
                   />
                   <span>I know the plate</span>
@@ -359,7 +359,7 @@ export default function PlateScanValidation() {
                       setInferenceReport(null)
                       setError(null)
                     }}
-                    className="rounded border-gray-300 text-[rgb(var(--dashboard-accent))] focus:ring-[rgb(var(--dashboard-accent))]"
+                    className="rounded border-app-border text-[rgb(var(--app-accent))] focus:ring-[rgb(var(--app-accent))]"
                     aria-label="Infer plate from scan"
                   />
                   <span>Infer plate from scan</span>
@@ -368,10 +368,10 @@ export default function PlateScanValidation() {
             </fieldset>
             {plateMode === 'select_plate' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Select plate</label>
+              <label className="block text-sm font-medium text-app-text mb-1">Select plate</label>
               {selectedPlate ? (
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm font-medium text-gray-800">
+                  <span className="text-sm font-medium text-app-text">
                     Selected: <span className="font-semibold">{selectedPlate.name}</span>
                   </span>
                   <button
@@ -382,7 +382,7 @@ export default function PlateScanValidation() {
                       setInferenceReport(null)
                       setError(null)
                     }}
-                    className="text-sm text-[rgb(var(--dashboard-accent))] hover:underline focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] rounded"
+                    className="text-sm text-[rgb(var(--app-accent))] hover:underline focus:outline-none focus:ring-2 focus:ring-[rgb(var(--app-accent))] rounded"
                   >
                     Change
                   </button>
@@ -394,21 +394,21 @@ export default function PlateScanValidation() {
                 onChange={(e) => setPlateSearch(e.target.value)}
                 placeholder="Search by plate name..."
                 aria-label="Search plates"
-                className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] focus:border-[rgb(var(--dashboard-accent))] mb-2"
+                className="w-full max-w-md px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-[rgb(var(--app-accent))] focus:border-[rgb(var(--app-accent))] mb-2"
               />
               <div
                 role="listbox"
                 aria-label="Plate list"
-                className="w-full max-w-md border border-gray-300 rounded-lg overflow-hidden max-h-[240px] overflow-y-auto bg-white"
+                className="w-full max-w-md border border-app-border rounded-lg overflow-hidden max-h-[240px] overflow-y-auto bg-app-card"
               >
                 {suggestedFiltered.length === 0 && otherFiltered.length === 0 ? (
-                  <div className="px-4 py-6 text-center text-sm text-gray-500">
+                  <div className="px-4 py-6 text-center text-sm text-app-text-muted">
                     {plates.length === 0 ? 'No plates in database.' : 'No plates match your search.'}
                   </div>
                 ) : (
                   <>
                     {suggestedFiltered.length > 0 && (
-                      <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-600 sticky top-0">
+                      <div className="px-3 py-1.5 bg-app-surface border-b border-app-border text-xs font-medium text-app-text-muted sticky top-0">
                         Suggested from filename
                       </div>
                     )}
@@ -424,18 +424,18 @@ export default function PlateScanValidation() {
                           setInferenceReport(null)
                           setError(null)
                         }}
-                        className={`w-full px-4 py-2.5 text-left text-sm border-b border-gray-100 last:border-b-0 hover:bg-[rgb(var(--dashboard-accent-muted))] focus:outline-none focus:bg-[rgb(var(--dashboard-accent-muted))] ${
-                          selectedPlateId === p.id ? 'bg-[rgb(var(--dashboard-accent-muted))] font-medium' : ''
+                        className={`w-full px-4 py-2.5 text-left text-sm border-b border-app-border last:border-b-0 hover:bg-[rgb(var(--app-accent-muted))] focus:outline-none focus:bg-[rgb(var(--app-accent-muted))] ${
+                          selectedPlateId === p.id ? 'bg-[rgb(var(--app-accent-muted))] font-medium' : ''
                         }`}
                       >
                         {p.name}
                         {p.matchType ? (
-                          <span className="ml-2 text-gray-500 font-normal">({p.matchType.replace(/_/g, ' ')})</span>
+                          <span className="ml-2 text-app-text-muted font-normal">({p.matchType.replace(/_/g, ' ')})</span>
                         ) : null}
                       </button>
                     ))}
                     {otherFiltered.length > 0 && (
-                      <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-600 sticky top-0">
+                      <div className="px-3 py-1.5 bg-app-surface border-b border-app-border text-xs font-medium text-app-text-muted sticky top-0">
                         {candidates.length > 0 ? 'All plates' : 'Plates'}
                       </div>
                     )}
@@ -451,8 +451,8 @@ export default function PlateScanValidation() {
                           setInferenceReport(null)
                           setError(null)
                         }}
-                        className={`w-full px-4 py-2.5 text-left text-sm border-b border-gray-100 last:border-b-0 hover:bg-[rgb(var(--dashboard-accent-muted))] focus:outline-none focus:bg-[rgb(var(--dashboard-accent-muted))] ${
-                          selectedPlateId === p.id ? 'bg-[rgb(var(--dashboard-accent-muted))] font-medium' : ''
+                        className={`w-full px-4 py-2.5 text-left text-sm border-b border-app-border last:border-b-0 hover:bg-[rgb(var(--app-accent-muted))] focus:outline-none focus:bg-[rgb(var(--app-accent-muted))] ${
+                          selectedPlateId === p.id ? 'bg-[rgb(var(--app-accent-muted))] font-medium' : ''
                         }`}
                       >
                         {p.name}
@@ -489,45 +489,45 @@ export default function PlateScanValidation() {
                 <button
                   type="button"
                   onClick={() => downloadReport(result)}
-                  className="storage-btn-secondary inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium hover:border-[rgb(var(--dashboard-accent))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] focus:ring-offset-2"
+                  className="storage-btn-secondary inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium hover:border-[rgb(var(--app-accent))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--app-accent))] focus:ring-offset-2"
                   aria-label="Download validation report as CSV"
                 >
-                  <svg className="w-4 h-4 shrink-0 text-[rgb(var(--dashboard-accent))]" aria-hidden fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <svg className="w-4 h-4 shrink-0 text-[rgb(var(--app-accent))]" aria-hidden fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
                   Download report
                 </button>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
-                  <div className="text-2xl font-semibold text-gray-900">{result.summary.matched}</div>
-                  <div className="text-sm text-gray-600">Matched</div>
+                <div className="p-3 rounded-lg bg-app-surface border border-app-border">
+                  <div className="text-2xl font-semibold text-app-text">{result.summary.matched}</div>
+                  <div className="text-sm text-app-text-muted">Matched</div>
                 </div>
-                <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
-                  <div className="text-2xl font-semibold text-gray-900">{result.summary.mismatch}</div>
-                  <div className="text-sm text-gray-600">Mismatch</div>
+                <div className="p-3 rounded-lg bg-app-surface border border-app-border">
+                  <div className="text-2xl font-semibold text-app-text">{result.summary.mismatch}</div>
+                  <div className="text-sm text-app-text-muted">Mismatch</div>
                 </div>
-                <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
-                  <div className="text-2xl font-semibold text-gray-900">{result.summary.missingInScan}</div>
-                  <div className="text-sm text-gray-600">Missing in scan</div>
+                <div className="p-3 rounded-lg bg-app-surface border border-app-border">
+                  <div className="text-2xl font-semibold text-app-text">{result.summary.missingInScan}</div>
+                  <div className="text-sm text-app-text-muted">Missing in scan</div>
                 </div>
-                <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
-                  <div className="text-2xl font-semibold text-gray-900">{result.summary.extraInScan}</div>
-                  <div className="text-sm text-gray-600">Extra in scan</div>
+                <div className="p-3 rounded-lg bg-app-surface border border-app-border">
+                  <div className="text-2xl font-semibold text-app-text">{result.summary.extraInScan}</div>
+                  <div className="text-sm text-app-text-muted">Extra in scan</div>
                 </div>
               </div>
               {result.inferredPlate && (
-                <p className="text-sm text-gray-600 mb-2">Plate was inferred from the barcodes on the scan.</p>
+                <p className="text-sm text-app-text-muted mb-2">Plate was inferred from the barcodes on the scan.</p>
               )}
               <div className="flex flex-wrap gap-4 text-sm">
                 {result.summary.exhaustedCount > 0 && (
                   <span className="text-amber-700 font-medium">{result.summary.exhaustedCount} exhausted</span>
                 )}
                 {result.summary.taggedCount > 0 && (
-                  <span className="text-gray-600">{result.summary.taggedCount} with tags</span>
+                  <span className="text-app-text-muted">{result.summary.taggedCount} with tags</span>
                 )}
               </div>
-              <p className="mt-2 text-sm text-gray-600">
+              <p className="mt-2 text-sm text-app-text-muted">
                 {result.summary.mismatch === 0 && result.summary.missingInScan === 0 && result.summary.extraInScan === 0
                   ? 'Scan matches the database.'
                   : 'There are discrepancies. Review the well grid below.'}
@@ -540,21 +540,21 @@ export default function PlateScanValidation() {
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr>
-                      <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium">Position</th>
-                      <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium">Scanned</th>
-                      <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium">Expected</th>
-                      <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium">Scanned barcode from</th>
-                      <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium">Status</th>
-                      <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium">Notes</th>
+                      <th className="border border-app-border bg-app-surface px-2 py-1 text-left font-medium">Position</th>
+                      <th className="border border-app-border bg-app-surface px-2 py-1 text-left font-medium">Scanned</th>
+                      <th className="border border-app-border bg-app-surface px-2 py-1 text-left font-medium">Expected</th>
+                      <th className="border border-app-border bg-app-surface px-2 py-1 text-left font-medium">Scanned barcode from</th>
+                      <th className="border border-app-border bg-app-surface px-2 py-1 text-left font-medium">Status</th>
+                      <th className="border border-app-border bg-app-surface px-2 py-1 text-left font-medium">Notes</th>
                     </tr>
                   </thead>
                   <tbody>
                     {wellList.map((w) => (
-                      <tr key={w.position} className="border-b border-gray-100 hover:bg-gray-50/50">
-                        <td className="border border-gray-100 px-2 py-1 font-mono">{w.position}</td>
-                        <td className="border border-gray-100 px-2 py-1 font-mono text-gray-700">{w.scanBarcode ?? '—'}</td>
-                        <td className="border border-gray-100 px-2 py-1 font-mono text-gray-700">{w.expectedBarcode ?? '—'}</td>
-                        <td className="border border-gray-100 px-2 py-1 text-gray-700">
+                      <tr key={w.position} className="border-b border-app-border hover:bg-app-surface/50">
+                        <td className="border border-app-border px-2 py-1 font-mono">{w.position}</td>
+                        <td className="border border-app-border px-2 py-1 font-mono text-app-text">{w.scanBarcode ?? '—'}</td>
+                        <td className="border border-app-border px-2 py-1 font-mono text-app-text">{w.expectedBarcode ?? '—'}</td>
+                        <td className="border border-app-border px-2 py-1 text-app-text">
                           {w.scanBarcodeOrigin ? (
                             <span title={`Plate ID: ${w.scanBarcodeOrigin.plateId}`}>
                               {w.scanBarcodeOrigin.plateName}
@@ -564,18 +564,18 @@ export default function PlateScanValidation() {
                             '—'
                           )}
                         </td>
-                        <td className="border border-gray-100 px-2 py-1">
+                        <td className="border border-app-border px-2 py-1">
                           <span className={`inline-block px-2 py-0.5 rounded border text-xs font-medium ${statusClass(w.status)}`}>
                             {statusLabel(w.status)}
                           </span>
                         </td>
-                        <td className="border border-gray-100 px-2 py-1">
+                        <td className="border border-app-border px-2 py-1">
                           <div className="flex flex-wrap gap-1">
                             {w.exhausted && (
                               <span className="inline-block px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-xs">Exhausted</span>
                             )}
                             {w.tags.map((t) => (
-                              <span key={t} className="inline-block px-2 py-0.5 rounded bg-gray-200 text-gray-700 text-xs">
+                              <span key={t} className="inline-block px-2 py-0.5 rounded bg-app-surface text-app-text text-xs">
                                 {t}
                               </span>
                             ))}
@@ -597,10 +597,10 @@ export default function PlateScanValidation() {
               <button
                 type="button"
                 onClick={() => downloadInferenceReport(inferenceReport)}
-                className="storage-btn-secondary inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium hover:border-[rgb(var(--dashboard-accent))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dashboard-accent))] focus:ring-offset-2"
+                className="storage-btn-secondary inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium hover:border-[rgb(var(--app-accent))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--app-accent))] focus:ring-offset-2"
                 aria-label="Download inference report as CSV"
               >
-                <svg className="w-4 h-4 shrink-0 text-[rgb(var(--dashboard-accent))]" aria-hidden fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <svg className="w-4 h-4 shrink-0 text-[rgb(var(--app-accent))]" aria-hidden fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
                 Download report
@@ -608,32 +608,32 @@ export default function PlateScanValidation() {
             </div>
             {inferenceReport.unknownBarcodes.length > 0 && (
               <div className="mb-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                <h3 className="text-sm font-medium text-app-text mb-2">
                   Unknown barcodes (not in database): {inferenceReport.unknownBarcodes.length}
                 </h3>
-                <p className="text-sm text-gray-600 font-mono">
+                <p className="text-sm text-app-text-muted font-mono">
                   {inferenceReport.unknownBarcodes.join(', ')}
                 </p>
               </div>
             )}
             {inferenceReport.plateBreakdown.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Plate breakdown</h3>
+                <h3 className="text-sm font-medium text-app-text mb-2">Plate breakdown</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-sm">
                     <thead>
                       <tr>
-                        <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium">Plate name</th>
-                        <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium">Tubes on scan</th>
-                        <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-medium">In expected position</th>
+                        <th className="border border-app-border bg-app-surface px-2 py-1 text-left font-medium">Plate name</th>
+                        <th className="border border-app-border bg-app-surface px-2 py-1 text-left font-medium">Tubes on scan</th>
+                        <th className="border border-app-border bg-app-surface px-2 py-1 text-left font-medium">In expected position</th>
                       </tr>
                     </thead>
                     <tbody>
                       {inferenceReport.plateBreakdown.map((row) => (
-                        <tr key={row.plateId} className="border-b border-gray-100 hover:bg-gray-50/50">
-                          <td className="border border-gray-100 px-2 py-1 text-gray-800">{row.plateName}</td>
-                          <td className="border border-gray-100 px-2 py-1 font-mono">{row.tubeCount}</td>
-                          <td className="border border-gray-100 px-2 py-1 font-mono">{row.inExpectedPositionCount}</td>
+                        <tr key={row.plateId} className="border-b border-app-border hover:bg-app-surface/50">
+                          <td className="border border-app-border px-2 py-1 text-app-text">{row.plateName}</td>
+                          <td className="border border-app-border px-2 py-1 font-mono">{row.tubeCount}</td>
+                          <td className="border border-app-border px-2 py-1 font-mono">{row.inExpectedPositionCount}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -642,7 +642,7 @@ export default function PlateScanValidation() {
               </div>
             )}
             {inferenceReport.unknownBarcodes.length === 0 && inferenceReport.plateBreakdown.length === 0 && (
-              <p className="text-sm text-gray-600">No known barcodes or plates found in the scan.</p>
+              <p className="text-sm text-app-text-muted">No known barcodes or plates found in the scan.</p>
             )}
           </div>
         )}

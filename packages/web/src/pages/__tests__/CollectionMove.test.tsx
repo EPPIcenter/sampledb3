@@ -68,8 +68,8 @@ describe('CollectionMove', () => {
       expect(screen.queryByText(/loading collections/i)).not.toBeInTheDocument()
     })
 
-    // Expand location F1 (click the expand control next to "F1")
-    const expandButton = screen.getByRole('button', { name: /f1/i })
+    // Expand location F1 (click the expand control; accessible name is "Expand F1")
+    const expandButton = screen.getByRole('button', { name: /expand\s+f1/i })
     await user.click(expandButton)
 
     // Select both collections (two checkboxes for Plate A and Cryovial Box B)
@@ -128,7 +128,7 @@ describe('CollectionMove', () => {
       expect(screen.queryByText(/loading collections/i)).not.toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: /f1/i }))
+    await user.click(screen.getByRole('button', { name: /expand\s+f1/i }))
     await user.click(screen.getAllByRole('checkbox')[0])
     await user.click(screen.getByRole('button', { name: /continue with 1 collection/i }))
 
@@ -178,7 +178,7 @@ describe('CollectionMove', () => {
       expect(screen.queryByText(/loading collections/i)).not.toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: /f1/i }))
+    await user.click(screen.getByRole('button', { name: /expand\s+f1/i }))
     await user.click(screen.getAllByRole('checkbox')[0])
     await user.click(screen.getByRole('button', { name: /continue with 1 collection/i }))
 

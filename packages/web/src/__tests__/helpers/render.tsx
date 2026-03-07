@@ -1,7 +1,7 @@
 import { ReactElement } from 'react'
 import { act, render, RenderOptions } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, MemoryRouter } from 'react-router-dom'
 import { ToastProvider } from '../../contexts/ToastContext'
 import { UserProvider } from '../../contexts/UserContext'
 
@@ -22,24 +22,30 @@ function createTestQueryClient() {
 
 interface CustomRenderOptions extends Omit<RenderOptions, 'wrapper'> {
   queryClient?: QueryClient
+  /** When set, use MemoryRouter with these entries so useSearchParams() etc. see the given URL */
+  initialEntries?: string[]
 }
 
 export async function renderWithProviders(
   ui: ReactElement,
-  { queryClient = createTestQueryClient(), ...renderOptions }: CustomRenderOptions = {}
+  { queryClient = createTestQueryClient(), initialEntries, ...renderOptions }: CustomRenderOptions = {}
 ) {
   function Wrapper({ children }: { children: React.ReactNode }) {
-    return (
-      <QueryClientProvider client={queryClient}>
+    const router =
+      initialEntries !== undefined ? (
+        <MemoryRouter initialEntries={initialEntries}>
+          <UserProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </UserProvider>
+        </MemoryRouter>
+      ) : (
         <BrowserRouter>
           <UserProvider>
-            <ToastProvider>
-              {children}
-            </ToastProvider>
+            <ToastProvider>{children}</ToastProvider>
           </UserProvider>
         </BrowserRouter>
-      </QueryClientProvider>
-    )
+      )
+    return <QueryClientProvider client={queryClient}>{router}</QueryClientProvider>
   }
 
   const result = {

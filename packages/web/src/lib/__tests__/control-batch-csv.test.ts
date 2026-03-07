@@ -227,26 +227,30 @@ describe('control-batch-csv', () => {
       { id: 2, name: 'Plasma' },
     ]
 
-    it('generates paper template with specimen_type_name,barcode,quantity,unit_symbol,density,sheet_name', () => {
+    it('generates paper template without unit column (default unit used)', () => {
       const out = generateCSVTemplate('paper', types)
-      expect(out).toContain('specimen_type_name,barcode,quantity,unit_symbol,density,sheet_name')
+      expect(out).toContain('specimen_type_name,barcode,quantity,density,sheet_name')
+      expect(out).not.toContain('unit_symbol')
       expect(out).toContain('Whole Blood')
-      expect(out).toContain('spots')
       expect(out).toContain('Sheet1')
       expect(out).toContain('Sheet2')
     })
 
-    it('generates cryovial_tube template with position and barcode', () => {
+    it('generates cryovial_tube template with A01-style positions and barcode, no unit column', () => {
       const out = generateCSVTemplate('cryovial_tube', types)
-      expect(out).toContain('specimen_type_name,position,barcode,quantity,unit_symbol')
-      expect(out).toContain('B1')
+      expect(out).toContain('specimen_type_name,position,barcode,quantity,density')
+      expect(out).not.toContain('unit_symbol')
+      expect(out).toContain('B01')
+      expect(out).toContain('B02')
       expect(out).toContain('CV-')
     })
 
-    it('generates micronix_tube template with position and barcode', () => {
+    it('generates micronix_tube template with A01-style positions and barcode, no unit column', () => {
       const out = generateCSVTemplate('micronix_tube', types)
-      expect(out).toContain('specimen_type_name,position,barcode,quantity,unit_symbol')
-      expect(out).toContain('A1')
+      expect(out).toContain('specimen_type_name,position,barcode,quantity,density')
+      expect(out).not.toContain('unit_symbol')
+      expect(out).toContain('A01')
+      expect(out).toContain('A02')
       expect(out).toContain('MT-')
     })
 

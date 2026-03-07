@@ -108,7 +108,7 @@ export default function SheetDetail() {
     return (
       <div className="storage-page">
         <div className="container mx-auto px-4 py-8 relative z-10">
-          <div className="text-center py-8 text-red-600">Sheet not found</div>
+          <div className="text-center py-8 text-app-trend-down">Sheet not found</div>
         </div>
       </div>
     )
@@ -133,7 +133,7 @@ export default function SheetDetail() {
           Sheet: {sheet.name}
         </h1>
         {sheet.locationPath && (
-          <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>{sheet.locationPath}</p>
+          <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>{sheet.locationPath}</p>
         )}
       </div>
 
@@ -143,15 +143,15 @@ export default function SheetDetail() {
             <h2 className="text-lg font-semibold storage-section-title">
               DBS Spots
             </h2>
-            <span className="text-sm font-normal" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            <span className="text-sm font-normal" style={{ color: 'rgb(var(--app-text-muted))' }}>
               {papers.reduce((sum: number, p: any) => sum + (p.container?.totalQuantity || 0), 0)} total spots
             </span>
             {papers.length > 0 && (
-              <div className="flex rounded-md border border-gray-200 overflow-hidden" role="group" aria-label="View mode">
+              <div className="flex rounded-md border border-app-border overflow-hidden" role="group" aria-label="View mode">
                 <button
                   type="button"
                   onClick={() => setViewMode('cards')}
-                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'cards' ? 'bg-gray-100 border-gray-300' : 'bg-white hover:bg-gray-50'} border-r border-gray-200`}
+                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'cards' ? 'bg-app-surface border-app-border' : 'bg-app-card hover:bg-app-surface'} border-r border-app-border`}
                   aria-pressed={viewMode === 'cards'}
                 >
                   Cards
@@ -159,7 +159,7 @@ export default function SheetDetail() {
                 <button
                   type="button"
                   onClick={() => setViewMode('table')}
-                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'table' ? 'bg-gray-100 border-gray-300' : 'bg-white hover:bg-gray-50'}`}
+                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'table' ? 'bg-app-surface border-app-border' : 'bg-app-card hover:bg-app-surface'}`}
                   aria-pressed={viewMode === 'table'}
                 >
                   Table
@@ -168,13 +168,13 @@ export default function SheetDetail() {
             )}
             {viewMode === 'table' && papers.length > 0 && (
               <div className="flex items-center gap-2">
-                <label htmlFor="sheet-table-column-config" className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                <label htmlFor="sheet-table-column-config" className="text-xs font-medium text-app-text-muted whitespace-nowrap">
                   Columns:
                 </label>
                 {loadingConfigs ? (
-                  <span className="text-xs text-gray-500">Loading…</span>
+                  <span className="text-xs text-app-text-muted">Loading…</span>
 ) : viewConfigurations.length === 0 ? (
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-app-text-muted">
                       <Link to="/settings?category=data-management&section=table-view-configurations" className="underline">
                         Add in Settings
                       </Link>
@@ -184,8 +184,8 @@ export default function SheetDetail() {
                       id="sheet-table-column-config"
                       value={selectedConfigId}
                       onChange={(e) => setSelectedConfigId(e.target.value)}
-                      className="text-xs border border-gray-200 rounded px-2 py-1 bg-white min-w-[140px]"
-                      style={{ color: 'rgb(var(--dashboard-text))' }}
+                      className="text-xs border border-app-border rounded px-2 py-1 bg-app-card min-w-[140px]"
+                      style={{ color: 'rgb(var(--app-text))' }}
                       aria-label="Column configuration for table view"
                     >
                       {viewConfigurations.map((config) => (
@@ -201,7 +201,7 @@ export default function SheetDetail() {
         </div>
 
         {papers.length === 0 ? (
-          <p className="text-sm italic" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No spots recorded on this sheet.</p>
+          <p className="text-sm italic" style={{ color: 'rgb(var(--app-text-muted))' }}>No spots recorded on this sheet.</p>
         ) : viewMode === 'table' ? (
           <CollectionTableWithExport
             columns={tableColumns}
@@ -247,29 +247,29 @@ export default function SheetDetail() {
                     isHighlighted
                       ? 'ring-4 ring-yellow-400 ring-offset-2 border-yellow-500 shadow-lg bg-yellow-50'
                       : isActive 
-                        ? 'border-green-200 bg-green-50 hover:border-green-400 hover:shadow-md' 
-                        : 'border-gray-100 bg-gray-50 hover:border-gray-200 hover:shadow-md'
+                        ? 'border-app-trend-up/30 bg-app-trend-up/10 hover:border-green-400 hover:shadow-md' 
+                        : 'border-app-border bg-app-surface hover:border-app-border hover:shadow-md'
                   }`}
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-xs font-mono font-bold text-gray-700">
+                    <span className="text-xs font-mono font-bold text-app-text">
                       {p.position || `#${p.id}`}
                     </span>
-                    <div className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${isActive ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
+                    <div className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${isActive ? 'bg-green-200 text-app-trend-up' : 'bg-app-surface text-app-text-muted'}`}>
                       {isActive ? 'IN USE' : 'EMPTY'}
                     </div>
                   </div>
                   {p.barcode && (
-                    <div className="text-[10px] text-gray-500 mb-1">
+                    <div className="text-[10px] text-app-text-muted mb-1">
                       Barcode: {p.barcode}
                     </div>
                   )}
                   {p.container?.specimenId && (
-                    <div className="text-xs font-medium text-blue-600 mt-2">
+                    <div className="text-xs font-medium text-app-accent mt-2">
                       Specimen #{p.container.specimenId}
                     </div>
                   )}
-                  <div className="text-[10px] text-gray-400 mt-1">
+                  <div className="text-[10px] text-app-text-muted mt-1">
                     {p.container?.remainingQuantity} spots remaining
                   </div>
                 </button>

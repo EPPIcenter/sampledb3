@@ -38,7 +38,7 @@ function getWellContentType(well: QpcrExperimentWell | undefined): 'standard' | 
 
 const WELL_STYLES: Record<'standard' | 'unknown' | 'negative' | 'empty', string> = {
   standard: 'bg-amber-50 border-amber-300/80 text-amber-900',
-  unknown: 'bg-teal-50/90 border-teal-300/70 text-teal-900',
+  unknown: 'bg-app-accent-muted/90 border-app-accent/50/70 text-app-text',
   negative: 'bg-slate-100/90 border-slate-300/70 text-slate-600',
   empty: 'bg-slate-50/80 border-slate-200 text-slate-400',
 }
@@ -120,7 +120,7 @@ export default function QpcrWellPlate({ wells, selectedWellPosition = null, onWe
           <span className="h-3.5 w-3.5 rounded border border-amber-300/80 bg-amber-50" /> Standard
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded border border-teal-300/70 bg-teal-50" /> Unknown (study sample)
+          <span className="h-3.5 w-3.5 rounded border border-app-accent/50/70 bg-app-accent-muted" /> Unknown (study sample)
         </span>
         <span className="flex items-center gap-2">
           <span className="h-3.5 w-3.5 rounded border border-slate-300/70 bg-slate-100" /> Negative (NTC)

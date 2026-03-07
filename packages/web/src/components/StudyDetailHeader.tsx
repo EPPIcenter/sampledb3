@@ -95,7 +95,7 @@ export default function StudyDetailHeader({
             type="button"
             onClick={onCreateSubject}
             className="px-4 py-2 text-white rounded-lg font-medium transition-colors"
-            style={{ backgroundColor: 'rgb(var(--dashboard-accent))' }}
+            style={{ backgroundColor: 'rgb(var(--app-accent))' }}
           >
             Create Subject
           </button>
@@ -104,7 +104,7 @@ export default function StudyDetailHeader({
           type="button"
           onClick={onExport}
           className="px-4 py-2 text-white rounded-lg font-medium transition-colors"
-          style={{ backgroundColor: 'rgb(var(--dashboard-accent))' }}
+          style={{ backgroundColor: 'rgb(var(--app-accent))' }}
         >
           Export Data
         </button>
@@ -114,7 +114,7 @@ export default function StudyDetailHeader({
               type="button"
               onClick={() => setActionsMenuOpen((o) => !o)}
               className="px-4 py-2 rounded-lg font-medium border transition-colors"
-              style={{ borderColor: 'rgb(var(--dashboard-border))', color: 'rgb(var(--dashboard-text))' }}
+              style={{ borderColor: 'rgb(var(--app-border))', color: 'rgb(var(--app-text))' }}
               aria-expanded={actionsMenuOpen}
               aria-haspopup="true"
               aria-label="More actions"
@@ -124,14 +124,14 @@ export default function StudyDetailHeader({
             {actionsMenuOpen && (
               <div
                 className="absolute right-0 top-full mt-1 min-w-[10rem] rounded-lg border shadow-lg z-20 py-1"
-                style={{ borderColor: 'rgb(var(--dashboard-border))', background: 'rgb(var(--dashboard-card))' }}
+                style={{ borderColor: 'rgb(var(--app-border))', background: 'rgb(var(--app-card))' }}
                 role="menu"
               >
                 <button
                   type="button"
                   role="menuitem"
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 rounded-none first:rounded-t-lg"
-                  style={{ color: 'rgb(var(--dashboard-text))' }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-app-surface rounded-none first:rounded-t-lg"
+                  style={{ color: 'rgb(var(--app-text))' }}
                   onClick={() => {
                     setActionsMenuOpen(false)
                     onEditStudy()
@@ -142,8 +142,8 @@ export default function StudyDetailHeader({
                 <button
                   type="button"
                   role="menuitem"
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 rounded-none"
-                  style={{ color: 'rgb(var(--dashboard-text))' }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-app-surface rounded-none"
+                  style={{ color: 'rgb(var(--app-text))' }}
                   onClick={() => {
                     setActionsMenuOpen(false)
                     onBulkImport()
@@ -154,8 +154,8 @@ export default function StudyDetailHeader({
                 <button
                   type="button"
                   role="menuitem"
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 rounded-none last:rounded-b-lg"
-                  style={{ color: 'rgb(var(--dashboard-text))' }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-app-surface rounded-none last:rounded-b-lg"
+                  style={{ color: 'rgb(var(--app-text))' }}
                   onClick={() => {
                     setActionsMenuOpen(false)
                     onMergeSubjects()
@@ -171,7 +171,7 @@ export default function StudyDetailHeader({
           <button
             type="button"
             onClick={onDelete}
-            className="px-4 py-2 border-2 border-red-600 text-red-600 rounded-lg hover:bg-red-50 font-medium"
+            className="px-4 py-2 border-2 border-app-trend-down text-app-trend-down rounded-lg hover:bg-app-trend-down/10 font-medium"
           >
             Delete study
           </button>

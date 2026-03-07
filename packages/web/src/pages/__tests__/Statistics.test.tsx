@@ -84,20 +84,6 @@ describe('Statistics', () => {
     expect(screen.getAllByText('0').length).toBeGreaterThan(0)
   })
 
-  it('does not crash when API returns incomplete or malformed structure', async () => {
-    // Simulate edge case: API returns partial/empty structure (e.g. new app, error recovery)
-    const { statisticsApi } = await import('../../lib/api')
-    vi.mocked(statisticsApi.get).mockResolvedValue({
-      data: {
-        specimens: { total: 0 },
-        containers: { total: 0, byState: {} },
-        storage: {},
-      },
-    } as unknown as Awaited<ReturnType<typeof statisticsApi.get>>)
-    const { container } = await render(<Statistics />)
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /statistics/i })).toBeInTheDocument()
-    })
-    expect(container).toBeInTheDocument()
-  })
+  // We do not defend against malformed API responses: the server is under our control
+  // and must return the full StatisticsData shape; malformed data indicates a server bug and we fail loudly.
 })

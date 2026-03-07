@@ -172,17 +172,17 @@ function ContainerEditModalForm({
 
   return (
         <div
-          className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+          className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Edit Container</h2>
+              <h2 className="text-xl font-semibold text-app-text">Edit Container</h2>
               <button
                 type="button"
                 onClick={onClose}
                 disabled={loading}
-                className="text-gray-400 hover:text-gray-500 focus:outline-none disabled:opacity-50"
+                className="text-app-text-muted hover:text-app-text focus:outline-none disabled:opacity-50"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -191,7 +191,7 @@ function ContainerEditModalForm({
             </div>
 
             {error && (
-              <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              <div className="mb-4 bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded">
                 {error}
               </div>
             )}
@@ -200,17 +200,17 @@ function ContainerEditModalForm({
               {/* Unit */}
               {container.containerType && (
                 <div>
-                  <label htmlFor="unitId" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="unitId" className="block text-sm font-medium text-app-text mb-1">
                     Unit
                   </label>
                   {loadingUnits ? (
-                    <div className="text-sm text-gray-500 py-2">Loading units...</div>
+                    <div className="text-sm text-app-text-muted py-2">Loading units...</div>
                   ) : (
                     <select
                       id="unitId"
                       value={formData.unitId || ''}
                       onChange={(e) => setFormData({ ...formData, unitId: e.target.value ? parseInt(e.target.value) : undefined })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 border border-app-border rounded-md shadow-sm focus:ring-app-accent focus:border-app-accent"
                       disabled={loading}
                     >
                       <option value="">Select unit...</option>
@@ -221,7 +221,7 @@ function ContainerEditModalForm({
                       ))}
                     </select>
                   )}
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-app-text-muted">
                     Change the unit type for this container
                   </p>
                 </div>
@@ -229,10 +229,10 @@ function ContainerEditModalForm({
 
               {/* Remaining Quantity */}
               <div>
-                <label htmlFor="remainingQuantity" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="remainingQuantity" className="block text-sm font-medium text-app-text mb-1">
                   Remaining Quantity
                   {container.unit && (
-                    <span className="text-gray-500 font-normal ml-1">({container.unit.symbol})</span>
+                    <span className="text-app-text-muted font-normal ml-1">({container.unit.symbol})</span>
                   )}
                 </label>
                 <input
@@ -242,17 +242,17 @@ function ContainerEditModalForm({
                   min="0"
                   value={formData.remainingQuantity}
                   onChange={(e) => setFormData({ ...formData, remainingQuantity: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-app-border rounded-md shadow-sm focus:ring-app-accent focus:border-app-accent"
                   disabled={loading}
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-app-text-muted">
                   Update the remaining quantity for this container
                 </p>
               </div>
 
               {/* Comment */}
               <div>
-                <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="comment" className="block text-sm font-medium text-app-text mb-1">
                   Comment
                 </label>
                 <textarea
@@ -260,7 +260,7 @@ function ContainerEditModalForm({
                   rows={4}
                   value={formData.comment}
                   onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-app-border rounded-md shadow-sm focus:ring-app-accent focus:border-app-accent"
                   disabled={loading}
                   placeholder="Add a comment or notes about this container..."
                 />
@@ -268,18 +268,18 @@ function ContainerEditModalForm({
 
               {/* Tags */}
               <div>
-                <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="tags" className="block text-sm font-medium text-app-text mb-1">
                   Tags
                 </label>
                 {loadingTags ? (
-                  <div className="text-sm text-gray-500 py-2">Loading tags...</div>
+                  <div className="text-sm text-app-text-muted py-2">Loading tags...</div>
                 ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-md p-3">
+                  <div className="space-y-2 max-h-48 overflow-y-auto border border-app-border rounded-md p-3">
                     {availableTags.length === 0 ? (
-                      <p className="text-sm text-gray-500">No tags available. Create tags in Reference Data.</p>
+                      <p className="text-sm text-app-text-muted">No tags available. Create tags in Reference Data.</p>
                     ) : (
                       availableTags.map((tag) => (
-                        <label key={tag.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                        <label key={tag.id} className="flex items-center space-x-2 cursor-pointer hover:bg-app-surface p-2 rounded">
                           <input
                             type="checkbox"
                             checked={formData.tagIds.includes(tag.id)}
@@ -297,9 +297,9 @@ function ContainerEditModalForm({
                               }
                             }}
                             disabled={loading}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="rounded border-app-border text-app-accent focus:ring-app-accent"
                           />
-                          <span className="text-sm text-gray-700">{tag.name}</span>
+                          <span className="text-sm text-app-text">{tag.name}</span>
                         </label>
                       ))
                     )}
@@ -308,19 +308,19 @@ function ContainerEditModalForm({
               </div>
 
               {/* Form Actions */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <div className="flex justify-end gap-3 pt-4 border-t border-app-border">
                 <button
                   type="button"
                   onClick={onClose}
                   disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-medium text-app-text bg-app-card border border-app-border rounded-md hover:bg-app-surface focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-app-accent disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-medium text-white bg-app-accent border border-transparent rounded-md hover:bg-app-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-app-accent disabled:opacity-50"
                 >
                   {loading ? (
                     <span className="flex items-center gap-2">
@@ -354,7 +354,7 @@ export default function ContainerEditModal({
       <div className="fixed inset-0 z-[100] overflow-y-auto">
         <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
           <div
-            className="fixed inset-0 bg-gray-900/40 backdrop-blur-md"
+            className="fixed inset-0 bg-black/40 backdrop-blur-md"
             onClick={onClose}
             aria-hidden
           />

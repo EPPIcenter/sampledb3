@@ -20,7 +20,7 @@ export default function StudyImport() {
     return (
       <div className="studies-page min-h-screen">
         <div className="max-w-screen-2xl mx-auto px-4 py-8">
-          <p style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Invalid study.</p>
+          <p style={{ color: 'rgb(var(--app-text-muted))' }}>Invalid study.</p>
           <Link to="/studies" className="storage-link mt-2 inline-block">Back to Studies</Link>
         </div>
       </div>
@@ -31,7 +31,7 @@ export default function StudyImport() {
     return (
       <div className="studies-page min-h-screen">
         <div className="max-w-screen-2xl mx-auto px-4 py-8">
-          <p style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Loading study…</p>
+          <p style={{ color: 'rgb(var(--app-text-muted))' }}>Loading study…</p>
         </div>
       </div>
     )
@@ -41,7 +41,7 @@ export default function StudyImport() {
     return (
       <div className="studies-page min-h-screen">
         <div className="max-w-screen-2xl mx-auto px-4 py-8">
-          <p style={{ color: 'rgb(var(--dashboard-text-muted))' }}>Study not found or failed to load.</p>
+          <p style={{ color: 'rgb(var(--app-text-muted))' }}>Study not found or failed to load.</p>
           <Link to="/studies" className="storage-link mt-2 inline-block">Back to Studies</Link>
         </div>
       </div>
@@ -59,10 +59,10 @@ export default function StudyImport() {
           ]}
         />
         <div className="mt-4 mb-6">
-          <h1 className="text-3xl font-bold" style={{ color: 'rgb(var(--dashboard-text))' }}>
+          <h1 className="text-3xl font-bold" style={{ color: 'rgb(var(--app-text))' }}>
             Bulk import
           </h1>
-          <p className="mt-1 text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+          <p className="mt-1 text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
             Study: {study.title} ({study.shortCode}). You do not need a study column in your CSV.
           </p>
         </div>

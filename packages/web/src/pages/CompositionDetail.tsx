@@ -59,9 +59,9 @@ export default function CompositionDetail() {
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
           <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-gray-200 rounded w-1/3" />
-            <div className="h-4 bg-gray-200 rounded w-2/3" />
-            <div className="h-32 bg-gray-200 rounded" />
+            <div className="h-8 bg-app-surface rounded w-1/3" />
+            <div className="h-4 bg-app-surface rounded w-2/3" />
+            <div className="h-32 bg-app-surface rounded" />
           </div>
         </div>
       </div>
@@ -72,7 +72,7 @@ export default function CompositionDetail() {
     return (
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
-          <p className="text-red-600">{error || 'Invalid composition'}</p>
+          <p className="text-app-trend-down">{error || 'Invalid composition'}</p>
           <Link to="/blood-controls" className="blood-controls-btn-secondary mt-4 inline-block">
             Back to Blood Controls
           </Link>
@@ -85,7 +85,7 @@ export default function CompositionDetail() {
     return (
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
-          <p style={{ color: 'rgb(var(--dashboard-text-muted))' }}>No definitions found for this composition.</p>
+          <p style={{ color: 'rgb(var(--app-text-muted))' }}>No definitions found for this composition.</p>
           <Link to="/blood-controls" className="blood-controls-btn-secondary mt-4 inline-block">
             Back to Blood Controls
           </Link>
@@ -106,24 +106,24 @@ export default function CompositionDetail() {
           ]}
         />
         <div className="mt-6">
-          <h1 className="text-3xl font-bold" style={{ color: 'rgb(var(--dashboard-text))' }}>
+          <h1 className="text-3xl font-bold" style={{ color: 'rgb(var(--app-text))' }}>
             Composition
           </h1>
-          <p className="mt-1 text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+          <p className="mt-1 text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
             Same parasite strain mix; each density variant below is a separate control definition with its own batches.
           </p>
         </div>
 
         <div className="dashboard-card p-6 mt-8">
-          <h2 className="text-lg font-semibold mb-4" style={{ color: 'rgb(var(--dashboard-text))' }}>
+          <h2 className="text-lg font-semibold mb-4" style={{ color: 'rgb(var(--app-text))' }}>
             Biological content (parasite strains)
           </h2>
           {strains.length > 0 ? (
             <div className="space-y-4">
-              <div className="flex h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div className="flex h-3 bg-app-surface rounded-full overflow-hidden">
                 {strains.map((s, idx) => {
                   const pct = s.percentage ?? 0
-                  const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-purple-500', 'bg-rose-500', 'bg-cyan-500']
+                  const colors = ['bg-app-accent-muted0', 'bg-emerald-500', 'bg-amber-500', 'bg-purple-500', 'bg-rose-500', 'bg-cyan-500']
                   return (
                     <div
                       key={s.id}
@@ -138,18 +138,18 @@ export default function CompositionDetail() {
                 {strains.map((s) => (
                   <span
                     key={s.id}
-                    className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-blue-50 text-blue-700 border border-blue-100"
+                    className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-app-accent-muted text-app-accent-hover border border-blue-100"
                   >
                     {s.name}
                     {s.percentage !== undefined && (
-                      <span className="ml-1.5 text-blue-600 font-semibold">({s.percentage}%)</span>
+                      <span className="ml-1.5 text-app-accent font-semibold">({s.percentage}%)</span>
                     )}
                   </span>
                 ))}
               </div>
             </div>
           ) : (
-            <p className="text-sm italic" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+            <p className="text-sm italic" style={{ color: 'rgb(var(--app-text-muted))' }}>
               No strain data
             </p>
           )}
@@ -168,7 +168,7 @@ export default function CompositionDetail() {
         )}
 
         <div className="mt-8">
-          <h2 className="text-lg font-semibold mb-4" style={{ color: 'rgb(var(--dashboard-text))' }}>
+          <h2 className="text-lg font-semibold mb-4" style={{ color: 'rgb(var(--app-text))' }}>
             Density variants
           </h2>
           <div className="space-y-4">
@@ -184,7 +184,7 @@ export default function CompositionDetail() {
                   >
                     {def.name}
                   </Link>
-                  <div className="mt-1 flex flex-wrap items-center gap-3 text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+                  <div className="mt-1 flex flex-wrap items-center gap-3 text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
                     <span>
                       Target density: {def.targetDensity != null ? `${def.targetDensity.toLocaleString()} ${def.unitSymbol ?? ''}` : 'N/A'}
                     </span>
@@ -218,8 +218,8 @@ export default function CompositionDetail() {
         </div>
 
         {canWrite && (
-          <div className="mt-8 p-4 rounded-lg border" style={{ borderColor: 'rgb(var(--dashboard-border))', background: 'rgb(var(--dashboard-surface))' }}>
-            <p className="text-sm" style={{ color: 'rgb(var(--dashboard-text-muted))' }}>
+          <div className="mt-8 p-4 rounded-lg border" style={{ borderColor: 'rgb(var(--app-border))', background: 'rgb(var(--app-surface))' }}>
+            <p className="text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
               To add a new density variant for this composition, create a new control definition from Blood Controls and choose the same strain mix with a different target density.
             </p>
           </div>

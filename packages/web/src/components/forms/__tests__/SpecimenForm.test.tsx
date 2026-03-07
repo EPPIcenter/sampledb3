@@ -3,6 +3,9 @@ import { render, screen } from '../../../__tests__/helpers/render'
 import SpecimenForm from '../SpecimenForm'
 
 vi.mock('../../../lib/api', () => ({
+  collectionsApi: {
+    listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
+  },
   studiesApi: {
     list: vi.fn().mockResolvedValue({ studies: [{ id: 1, title: 'Study A', shortCode: 'SA' }] }),
     getSubjects: vi.fn().mockResolvedValue({ subjects: [] }),

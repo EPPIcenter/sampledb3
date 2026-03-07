@@ -12,12 +12,12 @@ export default function AdminDataIntegrityLayout() {
     <div className="admin-page">
       <div className="relative z-10 container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold" style={{ color: 'rgb(var(--dashboard-text))' }}>
+          <h1 className="text-3xl font-bold" style={{ color: 'rgb(var(--app-text))' }}>
             Data integrity
           </h1>
         </div>
 
-        <nav className="flex flex-wrap gap-2 mb-8 border-b border-[rgb(var(--dashboard-border))] pb-4">
+        <nav className="flex flex-wrap gap-2 mb-8 border-b border-[rgb(var(--app-border))] pb-4">
           {navItems.map(({ to, end, label }) => (
             <NavLink
               key={to}
@@ -26,8 +26,8 @@ export default function AdminDataIntegrityLayout() {
               className={({ isActive }) =>
                 `px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-[rgb(var(--dashboard-accent))] text-white'
-                    : 'text-[rgb(var(--dashboard-text-muted))] hover:bg-[rgb(var(--dashboard-surface))] hover:text-[rgb(var(--dashboard-text))]'
+                    ? 'bg-[rgb(var(--app-accent))] text-white'
+                    : 'text-[rgb(var(--app-text-muted))] hover:bg-[rgb(var(--app-surface))] hover:text-[rgb(var(--app-text))]'
                 }`
               }
             >
