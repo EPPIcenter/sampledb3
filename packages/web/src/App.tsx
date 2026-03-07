@@ -63,6 +63,8 @@ import AdminGuard from './components/AdminGuard'
 import { DateFilterProvider } from './contexts/DateFilterContext'
 import { HotkeyProvider, useHotkeyContext } from './contexts/HotkeyContext'
 import { UserProvider } from './contexts/UserContext'
+import { ThemeProvider, useTheme, THEME_IDS, THEME_LABELS } from './contexts/ThemeContext'
+import { useClickOutside } from './hooks/useClickOutside'
 import HotkeyHelpModal from './components/HotkeyHelpModal'
 import CommandPalette from './components/CommandPalette'
 import SearchModal from './components/SearchModal'
@@ -78,6 +80,10 @@ function AppContent() {
   const navigate = useNavigate()
   const location = useLocation()
   const { canWrite, isAdmin } = useUser()
+  const { theme, setTheme } = useTheme()
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
+  const themeMenuRef = useRef<HTMLDivElement>(null)
+  useClickOutside(themeMenuRef, () => setThemeMenuOpen(false), themeMenuOpen)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const {
     isHelpModalOpen,
@@ -489,7 +495,7 @@ function AppContent() {
     <SetupGuard>
       {!isLoginPage && !isSetupPage && !isRegisterPage ? (
         <AuthGuard>
-          <div className="min-h-screen bg-gray-50 flex">
+          <div className="min-h-screen bg-app-bg flex">
             {/* Sidebar */}
             <Sidebar
               isMobileOpen={isMobileSidebarOpen}
@@ -701,7 +707,7 @@ function AppContent() {
               type="button"
               onClick={openSearchModal}
               className="floating-actions__btn"
-              style={{ 
+              style={{
                 transitionDelay: isButtonsExpanded ? '100ms' : '0ms',
                 opacity: isButtonsExpanded ? 1 : 0,
                 transform: isButtonsExpanded ? 'translateX(0)' : 'translateX(8px)'
@@ -715,6 +721,79 @@ function AppContent() {
                 {isMac() ? '⌘K' : 'Ctrl+K'}
               </span>
             </button>
+
+            {/* Theme selector */}
+            <div
+              ref={themeMenuRef}
+              className="floating-actions__theme-wrap"
+              style={{
+                transitionDelay: isButtonsExpanded ? '150ms' : '0ms',
+                opacity: isButtonsExpanded ? 1 : 0,
+                transform: isButtonsExpanded ? 'translateX(0)' : 'translateX(8px)'
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setThemeMenuOpen((open) => !open)}
+                className="floating-actions__btn"
+                aria-label="Choose theme"
+                aria-expanded={themeMenuOpen}
+                aria-haspopup="listbox"
+              >
+                {theme === 'dark' ? (
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                ) : theme === 'sepia' ? (
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                ) : theme === 'ocean' ? (
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                  </svg>
+                ) : theme === 'warm-dark' ? (
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.9 7.9 0 0120 13a7.9 7.9 0 01-2.343 5.657z" />
+                  </svg>
+                ) : theme === 'high-contrast' ? (
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                ) : (
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                )}
+                <span className="floating-actions__kbd">{THEME_LABELS[theme]}</span>
+              </button>
+              {themeMenuOpen && (
+                <div
+                  className="floating-actions__theme-menu"
+                  role="listbox"
+                  aria-label="Theme"
+                >
+                  {THEME_IDS.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="option"
+                      aria-selected={theme === id}
+                      className="floating-actions__theme-option"
+                      onClick={() => {
+                        setTheme(id)
+                        setThemeMenuOpen(false)
+                      }}
+                    >
+                      {THEME_LABELS[id]}
+                      {theme === id && (
+                        <span className="floating-actions__theme-check" aria-hidden>✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -740,11 +819,13 @@ function App() {
   return (
     <DateFilterProvider>
       <HotkeyProvider>
-        <UserProvider>
-          <BrowserRouter>
-            <AppContent />
-          </BrowserRouter>
-        </UserProvider>
+        <ThemeProvider>
+          <UserProvider>
+            <BrowserRouter>
+              <AppContent />
+            </BrowserRouter>
+          </UserProvider>
+        </ThemeProvider>
       </HotkeyProvider>
     </DateFilterProvider>
   )

@@ -1,28 +1,11 @@
 /**
  * Blood Controls pages – "Modern precision lab" theme
- * Scoped to .blood-controls-page. Reuses same design tokens as dashboard/studies for cohesion.
+ * Scoped to .blood-controls-page. Uses app design tokens (see tokens.css).
  */
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap');
-
 .blood-controls-page {
-  /* Same palette as dashboard/studies: off-white/slate, teal accent, cool grays */
-  --dashboard-bg: 248 250 252;
-  --dashboard-surface: 241 245 249;
-  --dashboard-card: 255 255 255;
-  --dashboard-accent: 20 184 166;
-  --dashboard-accent-hover: 13 148 136;
-  --dashboard-accent-muted: 204 251 241;
-  --dashboard-text: 30 41 59;
-  --dashboard-text-muted: 100 116 139;
-  --dashboard-border: 226 232 240;
-  --dashboard-trend-up: 34 197 94;
-  --dashboard-trend-down: 239 68 68;
-  /* Optional blood/lab accent for badges and composition visuals */
-  --blood-controls-badge: 190 18 60;
-  --blood-controls-badge-bg: 255 228 230;
-  font-family: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
-  background: linear-gradient(180deg, rgb(var(--dashboard-bg)) 0%, rgb(241 245 249) 100%);
+  font-family: var(--app-font-sans);
+  background: linear-gradient(180deg, rgb(var(--app-bg)) 0%, rgb(var(--app-surface)) 100%);
   min-height: 100%;
   position: relative;
 }
@@ -33,8 +16,8 @@
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgb(var(--dashboard-border) / 0.15) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(var(--dashboard-border) / 0.15) 1px, transparent 1px);
+    linear-gradient(rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px);
   background-size: 24px 24px;
   pointer-events: none;
   z-index: 0;
@@ -43,16 +26,16 @@
 .blood-controls-page h1,
 .blood-controls-page h2,
 .blood-controls-page h3 {
-  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--app-font-display);
   letter-spacing: -0.02em;
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 
 /* Card surface – use .dashboard-card or .blood-controls-card inside .blood-controls-page */
 .blood-controls-page .dashboard-card,
 .blood-controls-page .blood-controls-card {
-  background: rgb(var(--dashboard-card));
-  border: 1px solid rgb(var(--dashboard-border));
+  background: rgb(var(--app-card));
+  border: 1px solid rgb(var(--app-border));
   border-radius: 0.75rem;
   box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
@@ -61,42 +44,42 @@
 .blood-controls-page .dashboard-card:hover,
 .blood-controls-page .blood-controls-card:hover {
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07);
-  border-color: rgb(var(--dashboard-accent) / 0.3);
+  border-color: rgb(var(--app-accent) / 0.3);
 }
 
 /* Section title */
 .blood-controls-page .dashboard-section-title,
 .blood-controls-page .blood-controls-section-title {
-  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--app-font-display);
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 
 /* Accent link */
 .blood-controls-page .dashboard-link,
 .blood-controls-page .blood-controls-link {
-  color: rgb(var(--dashboard-accent));
+  color: rgb(var(--app-accent));
   font-weight: 500;
   transition: color 0.15s ease;
 }
 
 .blood-controls-page .dashboard-link:hover,
 .blood-controls-page .blood-controls-link:hover {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 
 .blood-controls-page .dashboard-link:focus-visible,
 .blood-controls-page .blood-controls-link:focus-visible {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
 /* Only show outline when the card itself is the focus target (e.g. card-as-link), not when a child has focus */
 .blood-controls-page a.dashboard-card:focus-visible,
 .blood-controls-page a.blood-controls-card:focus-visible {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
@@ -107,7 +90,7 @@
 }
 .blood-controls-page .dashboard-card:focus-visible,
 .blood-controls-page .blood-controls-card:focus-visible {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
@@ -144,18 +127,18 @@
 
 .blood-controls-page .blood-controls-tabs button[aria-selected="true"],
 .blood-controls-page .blood-controls-tabs button.blood-controls-tab-active {
-  border-bottom-color: rgb(var(--dashboard-accent));
-  color: rgb(var(--dashboard-accent));
+  border-bottom-color: rgb(var(--app-accent));
+  color: rgb(var(--app-accent));
 }
 
 .blood-controls-page .blood-controls-tabs button:not(.blood-controls-tab-active) {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
   border-bottom-color: transparent;
 }
 
 .blood-controls-page .blood-controls-tabs button:not(.blood-controls-tab-active):hover {
-  color: rgb(var(--dashboard-text));
-  border-bottom-color: rgb(var(--dashboard-border));
+  color: rgb(var(--app-text));
+  border-bottom-color: rgb(var(--app-border));
 }
 
 /* Filters: search input, strain pills, density/date inputs */
@@ -164,9 +147,9 @@
 .blood-controls-page input[type="date"]:focus,
 .blood-controls-page select:focus,
 .blood-controls-page textarea:focus {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
   outline: none;
-  box-shadow: 0 0 0 3px rgb(var(--dashboard-accent) / 0.2);
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
 }
 
 .blood-controls-page .blood-controls-filter-label {
@@ -174,24 +157,24 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 
 /* Strain pill selected state */
 .blood-controls-page .blood-controls-pill-selected {
-  background: rgb(var(--dashboard-accent));
+  background: rgb(var(--app-accent));
   color: white;
-  border-color: rgb(var(--dashboard-accent));
+  border-color: rgb(var(--app-accent));
 }
 
 .blood-controls-page .blood-controls-pill {
-  background: rgb(var(--dashboard-surface));
-  color: rgb(var(--dashboard-text));
-  border: 1px solid rgb(var(--dashboard-border));
+  background: rgb(var(--app-surface));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
 }
 
 .blood-controls-page .blood-controls-pill:hover {
-  background: rgb(var(--dashboard-border));
+  background: rgb(var(--app-border));
 }
 
 /* Buttons */
@@ -199,7 +182,7 @@
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   font-weight: 500;
-  background: rgb(var(--dashboard-accent));
+  background: rgb(var(--app-accent));
   color: white;
   border: none;
   cursor: pointer;
@@ -207,30 +190,30 @@
 }
 
 .blood-controls-page .blood-controls-btn-primary:hover {
-  background: rgb(var(--dashboard-accent-hover));
+  background: rgb(var(--app-accent-hover));
 }
 
 .blood-controls-page .blood-controls-btn-secondary {
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   font-weight: 500;
-  background: rgb(var(--dashboard-card));
-  color: rgb(var(--dashboard-text));
-  border: 1px solid rgb(var(--dashboard-border));
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .blood-controls-page .blood-controls-btn-secondary:hover {
-  background: rgb(var(--dashboard-surface));
-  border-color: rgb(var(--dashboard-accent) / 0.3);
+  background: rgb(var(--app-surface));
+  border-color: rgb(var(--app-accent) / 0.3);
 }
 
 .blood-controls-page .blood-controls-btn-danger {
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   font-weight: 500;
-  background: rgb(var(--dashboard-trend-down));
+  background: rgb(var(--app-trend-down));
   color: white;
   border: none;
   cursor: pointer;
@@ -254,166 +237,166 @@
   letter-spacing: 0.05em;
   padding: 0.25rem 0.5rem;
   border-radius: 0.25rem;
-  border: 1px solid rgb(var(--blood-controls-badge) / 0.3);
-  background: rgb(var(--blood-controls-badge-bg));
-  color: rgb(var(--blood-controls-badge));
+  border: 1px solid rgb(var(--app-badge) / 0.3);
+  background: rgb(var(--app-badge-bg));
+  color: rgb(var(--app-badge));
 }
 
 /* Form controls and focus ring */
 .blood-controls-page input:focus,
 .blood-controls-page select:focus,
 .blood-controls-page textarea:focus {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
   outline: none;
-  box-shadow: 0 0 0 3px rgb(var(--dashboard-accent) / 0.2);
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
 }
 
 .blood-controls-page button:focus-visible,
 .blood-controls-page a:focus-visible {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
 /* Breadcrumb */
 .blood-controls-page nav[aria-label="Breadcrumb navigation"] a {
-  color: rgb(var(--dashboard-accent));
+  color: rgb(var(--app-accent));
 }
 
 .blood-controls-page nav[aria-label="Breadcrumb navigation"] a:hover {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 
 /* SimpleTimeline inside blood-controls-page */
 .blood-controls-page .simple-timeline .text-gray-500,
 .blood-controls-page .simple-timeline .text-gray-600,
 .blood-controls-page .simple-timeline .text-gray-400 {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 
 .blood-controls-page .simple-timeline .text-gray-900 {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 
 .blood-controls-page .simple-timeline .text-gray-300 {
-  color: rgb(var(--dashboard-border));
+  color: rgb(var(--app-border));
 }
 
 .blood-controls-page .simple-timeline .text-blue-600 {
-  color: rgb(var(--dashboard-accent));
+  color: rgb(var(--app-accent));
 }
 
 .blood-controls-page .simple-timeline .border-blue-500 {
-  border-color: rgb(var(--dashboard-accent));
+  border-color: rgb(var(--app-accent));
 }
 
 .blood-controls-page .simple-timeline .bg-gray-50,
 .blood-controls-page .simple-timeline .hover\:bg-gray-50:hover {
-  background-color: rgb(var(--dashboard-surface));
+  background-color: rgb(var(--app-surface));
 }
 
 .blood-controls-page .simple-timeline .bg-gray-100,
 .blood-controls-page .simple-timeline .border-gray-100 {
-  background-color: rgb(var(--dashboard-accent-muted));
-  border-color: rgb(var(--dashboard-border));
+  background-color: rgb(var(--app-accent-muted));
+  border-color: rgb(var(--app-border));
 }
 
 .blood-controls-page .simple-timeline .hover\:bg-gray-200:hover {
-  background-color: rgb(var(--dashboard-accent-muted));
+  background-color: rgb(var(--app-accent-muted));
 }
 
 .blood-controls-page .simple-timeline .hover\:text-gray-900:hover {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 
 /* ControlDefinitionForm when used inside blood-controls-page: primary/submit and secondary/cancel */
 .blood-controls-page form .flex.justify-end button[type="submit"] {
-  background: rgb(var(--dashboard-accent));
+  background: rgb(var(--app-accent));
   color: white;
   border: none;
 }
 
 .blood-controls-page form .flex.justify-end button[type="submit"]:hover:not(:disabled) {
-  background: rgb(var(--dashboard-accent-hover));
+  background: rgb(var(--app-accent-hover));
 }
 
 .blood-controls-page form .flex.justify-end button[type="button"] {
-  background: rgb(var(--dashboard-card));
-  color: rgb(var(--dashboard-text));
-  border: 1px solid rgb(var(--dashboard-border));
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
 }
 
 .blood-controls-page form .flex.justify-end button[type="button"]:hover {
-  background: rgb(var(--dashboard-surface));
-  border-color: rgb(var(--dashboard-accent) / 0.3);
+  background: rgb(var(--app-surface));
+  border-color: rgb(var(--app-accent) / 0.3);
 }
 
 /* Override blue to teal when inside blood-controls-page */
 .blood-controls-page .bg-blue-50,
 .blood-controls-page .bg-blue-100 {
-  background-color: rgb(var(--dashboard-accent-muted));
+  background-color: rgb(var(--app-accent-muted));
 }
 .blood-controls-page .border-blue-100,
 .blood-controls-page .border-blue-200,
 .blood-controls-page .border-blue-300 {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
 }
 .blood-controls-page .text-blue-600,
 .blood-controls-page .text-blue-700,
 .blood-controls-page .text-blue-800 {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 .blood-controls-page .bg-blue-600,
 .blood-controls-page .bg-blue-700 {
-  background-color: rgb(var(--dashboard-accent));
+  background-color: rgb(var(--app-accent));
 }
 .blood-controls-page .hover\:bg-blue-700:hover {
-  background-color: rgb(var(--dashboard-accent-hover));
+  background-color: rgb(var(--app-accent-hover));
 }
 .blood-controls-page .focus\:ring-blue-500:focus,
 .blood-controls-page .focus\:border-blue-500:focus {
-  --tw-ring-color: rgb(var(--dashboard-accent) / 0.5);
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  --tw-ring-color: rgb(var(--app-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
 }
 
 /* StatCard / StatChart number styling */
 .blood-controls-page .stat-card-title {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 .blood-controls-page .stat-card-value {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
   font-variant-numeric: tabular-nums;
 }
 .blood-controls-page .stat-chart-title {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 .blood-controls-page .stat-chart-empty {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 .blood-controls-page .dashboard-stat-value {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
   font-variant-numeric: tabular-nums;
 }
 .blood-controls-page .dashboard-stat-muted {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 
 /* Batch wizard: definition listbox options */
 .blood-controls-page .blood-controls-definition-option {
-  background: rgb(var(--dashboard-card));
+  background: rgb(var(--app-card));
   cursor: pointer;
 }
 
 .blood-controls-page .blood-controls-definition-option:hover {
-  background: rgb(var(--dashboard-surface));
+  background: rgb(var(--app-surface));
 }
 
 .blood-controls-page .blood-controls-definition-option-selected {
-  background: rgb(var(--dashboard-accent-muted) / 0.6);
-  border-left: 3px solid rgb(var(--dashboard-accent));
+  background: rgb(var(--app-accent-muted) / 0.6);
+  border-left: 3px solid rgb(var(--app-accent));
 }
 
 .blood-controls-page .blood-controls-definition-option-focused {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: -2px;
 }
 
@@ -424,28 +407,15 @@
   letter-spacing: 0.05em;
   padding: 0.15rem 0.4rem;
   border-radius: 0.25rem;
-  background: rgb(var(--blood-controls-badge-bg));
-  color: rgb(var(--blood-controls-badge));
+  background: rgb(var(--app-badge-bg));
+  color: rgb(var(--app-badge));
 }
 
-/* Modal overlay (portaled to body): re-apply theme for Create definition in wizard */
-.blood-controls-modal-overlay {
-  --dashboard-bg: 248 250 252;
-  --dashboard-surface: 241 245 249;
-  --dashboard-card: 255 255 255;
-  --dashboard-accent: 20 184 166;
-  --dashboard-accent-hover: 13 148 136;
-  --dashboard-accent-muted: 204 251 241;
-  --dashboard-text: 30 41 59;
-  --dashboard-text-muted: 100 116 139;
-  --dashboard-border: 226 232 240;
-  --blood-controls-badge: 190 18 60;
-  --blood-controls-badge-bg: 255 228 230;
-}
+/* Modal overlay (portaled to body) inherits :root tokens. */
 
 .blood-controls-modal-overlay .blood-controls-modal-panel {
-  background: rgb(var(--dashboard-card));
-  border: 1px solid rgb(var(--dashboard-border));
+  background: rgb(var(--app-card));
+  border: 1px solid rgb(var(--app-border));
   border-radius: 0.75rem;
   box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
 }
@@ -453,28 +423,28 @@
 .blood-controls-modal-overlay .blood-controls-modal-panel input:focus,
 .blood-controls-modal-overlay .blood-controls-modal-panel select:focus,
 .blood-controls-modal-overlay .blood-controls-modal-panel textarea:focus {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
   outline: none;
-  box-shadow: 0 0 0 3px rgb(var(--dashboard-accent) / 0.2);
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
 }
 
 .blood-controls-modal-overlay .blood-controls-modal-panel form .flex.justify-end button[type="submit"] {
-  background: rgb(var(--dashboard-accent));
+  background: rgb(var(--app-accent));
   color: white;
   border: none;
 }
 
 .blood-controls-modal-overlay .blood-controls-modal-panel form .flex.justify-end button[type="submit"]:hover:not(:disabled) {
-  background: rgb(var(--dashboard-accent-hover));
+  background: rgb(var(--app-accent-hover));
 }
 
 .blood-controls-modal-overlay .blood-controls-modal-panel form .flex.justify-end button[type="button"] {
-  background: rgb(var(--dashboard-card));
-  color: rgb(var(--dashboard-text));
-  border: 1px solid rgb(var(--dashboard-border));
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
 }
 
 .blood-controls-modal-overlay .blood-controls-modal-panel form .flex.justify-end button[type="button"]:hover {
-  background: rgb(var(--dashboard-surface));
-  border-color: rgb(var(--dashboard-accent) / 0.3);
+  background: rgb(var(--app-surface));
+  border-color: rgb(var(--app-accent) / 0.3);
 }

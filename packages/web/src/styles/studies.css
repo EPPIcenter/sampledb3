@@ -1,25 +1,11 @@
 /**
  * Studies pages – "Modern precision lab" theme
- * Scoped to .studies-page. Reuses same design tokens as dashboard for cohesion.
+ * Scoped to .studies-page. Uses app design tokens (see tokens.css).
  */
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap');
-
 .studies-page {
-  /* Same palette as dashboard: off-white/slate, teal accent, cool grays */
-  --dashboard-bg: 248 250 252;
-  --dashboard-surface: 241 245 249;
-  --dashboard-card: 255 255 255;
-  --dashboard-accent: 20 184 166;
-  --dashboard-accent-hover: 13 148 136;
-  --dashboard-accent-muted: 204 251 241;
-  --dashboard-text: 30 41 59;
-  --dashboard-text-muted: 100 116 139;
-  --dashboard-border: 226 232 240;
-  --dashboard-trend-up: 34 197 94;
-  --dashboard-trend-down: 239 68 68;
-  font-family: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
-  background: linear-gradient(180deg, rgb(var(--dashboard-bg)) 0%, rgb(241 245 249) 100%);
+  font-family: var(--app-font-sans);
+  background: linear-gradient(180deg, rgb(var(--app-bg)) 0%, rgb(var(--app-surface)) 100%);
   min-height: 100%;
   position: relative;
 }
@@ -30,8 +16,8 @@
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgb(var(--dashboard-border) / 0.15) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(var(--dashboard-border) / 0.15) 1px, transparent 1px);
+    linear-gradient(rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px);
   background-size: 24px 24px;
   pointer-events: none;
   z-index: 0;
@@ -40,16 +26,16 @@
 .studies-page h1,
 .studies-page h2,
 .studies-page h3 {
-  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--app-font-display);
   letter-spacing: -0.02em;
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 
 /* Card surface – use .dashboard-card or .studies-card inside .studies-page */
 .studies-page .dashboard-card,
 .studies-page .studies-card {
-  background: rgb(var(--dashboard-card));
-  border: 1px solid rgb(var(--dashboard-border));
+  background: rgb(var(--app-card));
+  border: 1px solid rgb(var(--app-border));
   border-radius: 0.75rem;
   box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
@@ -58,42 +44,42 @@
 .studies-page .dashboard-card:hover,
 .studies-page .studies-card:hover {
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07);
-  border-color: rgb(var(--dashboard-accent) / 0.3);
+  border-color: rgb(var(--app-accent) / 0.3);
 }
 
 /* Section title */
 .studies-page .dashboard-section-title,
 .studies-page .studies-section-title {
-  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--app-font-display);
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 
 /* Accent link */
 .studies-page .dashboard-link,
 .studies-page .studies-link {
-  color: rgb(var(--dashboard-accent));
+  color: rgb(var(--app-accent));
   font-weight: 500;
   transition: color 0.15s ease;
 }
 
 .studies-page .dashboard-link:hover,
 .studies-page .studies-link:hover {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 
 .studies-page .dashboard-link:focus-visible,
 .studies-page .studies-link:focus-visible {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
 /* Only show outline when the card itself is the focus target (e.g. card-as-link), not when a child has focus */
 .studies-page a.dashboard-card:focus-visible,
 .studies-page a.studies-card:focus-visible {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
@@ -104,7 +90,7 @@
 }
 .studies-page .dashboard-card:focus-visible,
 .studies-page .studies-card:focus-visible {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
@@ -138,84 +124,84 @@
 .studies-page input:focus,
 .studies-page select:focus,
 .studies-page textarea:focus {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
   outline: none;
-  box-shadow: 0 0 0 3px rgb(var(--dashboard-accent) / 0.2);
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
 }
 
 .studies-page button:focus-visible,
 .studies-page a:focus-visible {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
 .studies-page .form-input:focus,
 .studies-page .form-select:focus {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
-  box-shadow: 0 0 0 3px rgb(var(--dashboard-accent) / 0.2);
+  border-color: rgb(var(--app-accent) / 0.5);
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
 }
 
 /* Breadcrumb links inside studies-page */
 .studies-page nav[aria-label="Breadcrumb navigation"] a {
-  color: rgb(var(--dashboard-accent));
+  color: rgb(var(--app-accent));
 }
 
 .studies-page nav[aria-label="Breadcrumb navigation"] a:hover {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 
 /* Override blue to teal when inside studies-page */
 .studies-page .bg-blue-50,
 .studies-page .bg-blue-100 {
-  background-color: rgb(var(--dashboard-accent-muted));
+  background-color: rgb(var(--app-accent-muted));
 }
 .studies-page .border-blue-200,
 .studies-page .border-blue-300 {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
 }
 .studies-page .text-blue-600,
 .studies-page .text-blue-700,
 .studies-page .text-blue-800 {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 .studies-page .bg-blue-600,
 .studies-page .bg-blue-700 {
-  background-color: rgb(var(--dashboard-accent));
+  background-color: rgb(var(--app-accent));
 }
 .studies-page .hover\:bg-blue-700:hover {
-  background-color: rgb(var(--dashboard-accent-hover));
+  background-color: rgb(var(--app-accent-hover));
 }
 .studies-page .hover\:text-blue-800:hover,
 .studies-page .hover\:text-blue-900:hover {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 .studies-page .focus\:ring-blue-500:focus,
 .studies-page .focus\:border-blue-500:focus,
 .studies-page .focus-visible\:ring-blue-500:focus-visible {
-  --tw-ring-color: rgb(var(--dashboard-accent) / 0.5);
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  --tw-ring-color: rgb(var(--app-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
 }
 
 /* StatCard / StatChart number styling */
 .studies-page .stat-card-title {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 .studies-page .stat-card-value {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
   font-variant-numeric: tabular-nums;
 }
 .studies-page .stat-chart-title {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 .studies-page .stat-chart-empty {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 .studies-page .dashboard-stat-value {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
   font-variant-numeric: tabular-nums;
 }
 .studies-page .dashboard-stat-muted {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 
 /* Results area: stable min-height to avoid layout jump when result count changes */
@@ -229,10 +215,10 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: linear-gradient(180deg, rgb(var(--dashboard-bg)) 0%, rgb(241 245 249) 100%);
+  background: linear-gradient(180deg, rgb(var(--app-bg)) 0%, rgb(var(--app-surface)) 100%);
   padding-bottom: 0.5rem;
   margin-bottom: 0.5rem;
-  border-bottom: 1px solid rgb(var(--dashboard-border));
+  border-bottom: 1px solid rgb(var(--app-border));
 }
 
 .study-detail-identity {
@@ -262,21 +248,21 @@
   font-size: 0.75rem;
   font-weight: 500;
   border-radius: 9999px;
-  border: 1px solid rgb(var(--dashboard-border));
-  color: rgb(var(--dashboard-text-muted));
-  background: rgb(var(--dashboard-card));
+  border: 1px solid rgb(var(--app-border));
+  color: rgb(var(--app-text-muted));
+  background: rgb(var(--app-card));
 }
 
 .study-detail-badge--accent {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
-  color: rgb(var(--dashboard-accent-hover));
-  background: rgb(var(--dashboard-accent-muted));
+  border-color: rgb(var(--app-accent) / 0.5);
+  color: rgb(var(--app-accent-hover));
+  background: rgb(var(--app-accent-muted));
 }
 
 .study-detail-desc {
   margin-top: 0.5rem;
   font-size: 0.875rem;
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
   line-height: 1.4;
 }
 
@@ -290,7 +276,7 @@
 .study-detail-desc-toggle {
   margin-left: 0.25rem;
   font-weight: 500;
-  color: rgb(var(--dashboard-accent));
+  color: rgb(var(--app-accent));
   cursor: pointer;
   background: none;
   border: none;
@@ -299,7 +285,7 @@
 }
 
 .study-detail-desc-toggle:hover {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
   text-decoration: underline;
 }
 
@@ -322,8 +308,8 @@
   flex-direction: column;
   padding: 0.5rem 0.75rem;
   border-radius: 0.5rem;
-  border: 1px solid rgb(var(--dashboard-border));
-  background: rgb(var(--dashboard-card));
+  border: 1px solid rgb(var(--app-border));
+  background: rgb(var(--app-card));
 }
 
 .study-detail-metric-label {
@@ -331,14 +317,14 @@
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 
 .study-detail-metric-value {
   font-size: 1.125rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
   margin-top: 0.125rem;
 }
 

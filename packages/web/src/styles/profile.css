@@ -1,22 +1,11 @@
 /**
  * Profile page – "Modern precision lab" theme
- * Scoped to .profile-page. Reuses same design tokens as settings/dashboard for cohesion.
+ * Scoped to .profile-page. Uses app design tokens (see tokens.css).
  */
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap');
-
 .profile-page {
-  --dashboard-bg: 248 250 252;
-  --dashboard-surface: 241 245 249;
-  --dashboard-card: 255 255 255;
-  --dashboard-accent: 20 184 166;
-  --dashboard-accent-hover: 13 148 136;
-  --dashboard-accent-muted: 204 251 241;
-  --dashboard-text: 30 41 59;
-  --dashboard-text-muted: 100 116 139;
-  --dashboard-border: 226 232 240;
-  font-family: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
-  background: linear-gradient(180deg, rgb(var(--dashboard-bg)) 0%, rgb(241 245 249) 100%);
+  font-family: var(--app-font-sans);
+  background: linear-gradient(180deg, rgb(var(--app-bg)) 0%, rgb(var(--app-surface)) 100%);
   min-height: 100%;
   position: relative;
 }
@@ -26,8 +15,8 @@
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgb(var(--dashboard-border) / 0.15) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(var(--dashboard-border) / 0.15) 1px, transparent 1px);
+    linear-gradient(rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px);
   background-size: 24px 24px;
   pointer-events: none;
   z-index: 0;
@@ -36,14 +25,14 @@
 .profile-page h1,
 .profile-page h2,
 .profile-page h3 {
-  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--app-font-display);
   letter-spacing: -0.02em;
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 
 .profile-page .profile-card {
-  background: rgb(var(--dashboard-card));
-  border: 1px solid rgb(var(--dashboard-border));
+  background: rgb(var(--app-card));
+  border: 1px solid rgb(var(--app-border));
   border-radius: 0.75rem;
   box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
@@ -51,119 +40,119 @@
 
 .profile-page .profile-card:hover {
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07);
-  border-color: rgb(var(--dashboard-accent) / 0.3);
+  border-color: rgb(var(--app-accent) / 0.3);
 }
 
 .profile-page .profile-description {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
   font-size: 0.875rem;
 }
 
 /* StatCard / StatChart number styling */
 .profile-page .stat-card-title {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 .profile-page .stat-card-value {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
   font-variant-numeric: tabular-nums;
 }
 .profile-page .stat-chart-title {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 .profile-page .stat-chart-empty {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 .profile-page .dashboard-stat-value {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
   font-variant-numeric: tabular-nums;
 }
 .profile-page .dashboard-stat-muted {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 
 .profile-page input:focus,
 .profile-page select:focus,
 .profile-page textarea:focus {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
   outline: none;
-  box-shadow: 0 0 0 3px rgb(var(--dashboard-accent) / 0.2);
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
 }
 
 .profile-page .form-input:focus,
 .profile-page .form-select:focus {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
-  box-shadow: 0 0 0 3px rgb(var(--dashboard-accent) / 0.2);
+  border-color: rgb(var(--app-accent) / 0.5);
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
 }
 
 .profile-page form button[type="submit"]:not(:disabled) {
-  background: rgb(var(--dashboard-accent));
+  background: rgb(var(--app-accent));
   color: white;
   border: none;
   transition: background 0.15s ease;
 }
 
 .profile-page form button[type="submit"]:not(:disabled):hover {
-  background: rgb(var(--dashboard-accent-hover));
+  background: rgb(var(--app-accent-hover));
 }
 
 .profile-page .text-gray-900,
 .profile-page .text-gray-700,
 .profile-page .text-gray-800 {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 
 .profile-page .text-gray-500,
 .profile-page .text-gray-400 {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 
 .profile-page .border-gray-200 {
-  border-color: rgb(var(--dashboard-border));
+  border-color: rgb(var(--app-border));
 }
 
 .profile-page .bg-blue-50,
 .profile-page .bg-blue-100 {
-  background-color: rgb(var(--dashboard-accent-muted));
+  background-color: rgb(var(--app-accent-muted));
 }
 .profile-page .bg-blue-600,
 .profile-page .bg-blue-700 {
-  background-color: rgb(var(--dashboard-accent));
+  background-color: rgb(var(--app-accent));
 }
 .profile-page .hover\:bg-blue-700:hover {
-  background-color: rgb(var(--dashboard-accent-hover));
+  background-color: rgb(var(--app-accent-hover));
 }
 .profile-page .text-blue-600,
 .profile-page .text-blue-700,
 .profile-page .text-blue-800 {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 .profile-page .hover\:text-blue-800:hover {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 .profile-page .border-blue-200,
 .profile-page .border-blue-300 {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
 }
 .profile-page .focus\:ring-blue-500:focus,
 .profile-page .focus\:border-blue-500:focus {
-  --tw-ring-color: rgb(var(--dashboard-accent) / 0.5);
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  --tw-ring-color: rgb(var(--app-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
 }
 
 .profile-page .profile-alert-error {
-  background: rgb(254 242 242);
-  border: 1px solid rgb(254 202 202);
-  color: rgb(153 27 27);
+  background: rgb(var(--app-trend-down) / 0.1);
+  border: 1px solid rgb(var(--app-trend-down) / 0.4);
+  color: rgb(var(--app-trend-down));
 }
 
 .profile-page .profile-alert-success {
-  background: rgb(240 253 244);
-  border: 1px solid rgb(187 247 208);
-  color: rgb(22 101 52);
+  background: rgb(var(--app-trend-up) / 0.1);
+  border: 1px solid rgb(var(--app-trend-up) / 0.4);
+  color: rgb(var(--app-trend-up));
 }
 
 .profile-page .profile-skeleton {
-  background: rgb(var(--dashboard-border) / 0.6);
+  background: rgb(var(--app-border) / 0.6);
   border-radius: 0.25rem;
   animation: profilePulse 1.5s ease-in-out infinite;
 }

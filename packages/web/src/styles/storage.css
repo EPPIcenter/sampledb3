@@ -1,27 +1,11 @@
 /**
  * Storage / Containers & Collections pages – "Modern precision lab" theme
- * Scoped to .storage-page. Reuses same design tokens as dashboard/studies for cohesion.
+ * Scoped to .storage-page. Uses app design tokens (see tokens.css).
  */
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap');
-
 .storage-page {
-  /* Same palette as dashboard/studies: off-white/slate, teal accent, cool grays */
-  --dashboard-bg: 248 250 252;
-  --dashboard-surface: 241 245 249;
-  --dashboard-card: 255 255 255;
-  --dashboard-accent: 20 184 166;
-  --dashboard-accent-hover: 13 148 136;
-  --dashboard-accent-muted: 204 251 241;
-  /* Text on teal tint (bg accent-muted): high contrast, WCAG AA */
-  --dashboard-accent-on-tint: 19 78 74;
-  --dashboard-text: 30 41 59;
-  --dashboard-text-muted: 100 116 139;
-  --dashboard-border: 226 232 240;
-  --dashboard-trend-up: 34 197 94;
-  --dashboard-trend-down: 239 68 68;
-  font-family: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
-  background: linear-gradient(180deg, rgb(var(--dashboard-bg)) 0%, rgb(241 245 249) 100%);
+  font-family: var(--app-font-sans);
+  background: linear-gradient(180deg, rgb(var(--app-bg)) 0%, rgb(var(--app-surface)) 100%);
   min-height: 100%;
   position: relative;
 }
@@ -32,8 +16,8 @@
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgb(var(--dashboard-border) / 0.15) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(var(--dashboard-border) / 0.15) 1px, transparent 1px);
+    linear-gradient(rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px);
   background-size: 24px 24px;
   pointer-events: none;
   z-index: 0;
@@ -42,16 +26,16 @@
 .storage-page h1,
 .storage-page h2,
 .storage-page h3 {
-  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--app-font-display);
   letter-spacing: -0.02em;
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 
 /* Card surface – use .dashboard-card or .storage-card inside .storage-page */
 .storage-page .dashboard-card,
 .storage-page .storage-card {
-  background: rgb(var(--dashboard-card));
-  border: 1px solid rgb(var(--dashboard-border));
+  background: rgb(var(--app-card));
+  border: 1px solid rgb(var(--app-border));
   border-radius: 0.75rem;
   box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
@@ -60,42 +44,42 @@
 .storage-page .dashboard-card:hover,
 .storage-page .storage-card:hover {
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07);
-  border-color: rgb(var(--dashboard-accent) / 0.3);
+  border-color: rgb(var(--app-accent) / 0.3);
 }
 
 /* Section title */
 .storage-page .dashboard-section-title,
 .storage-page .storage-section-title {
-  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--app-font-display);
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 
 /* Accent link */
 .storage-page .dashboard-link,
 .storage-page .storage-link {
-  color: rgb(var(--dashboard-accent));
+  color: rgb(var(--app-accent));
   font-weight: 500;
   transition: color 0.15s ease;
 }
 
 .storage-page .dashboard-link:hover,
 .storage-page .storage-link:hover {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 
 .storage-page .dashboard-link:focus-visible,
 .storage-page .storage-link:focus-visible {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
 /* Only show outline when the card itself is the focus target (e.g. card-as-link), not when a child has focus */
 .storage-page a.dashboard-card:focus-visible,
 .storage-page a.storage-card:focus-visible {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
@@ -106,7 +90,7 @@
 }
 .storage-page .dashboard-card:focus-visible,
 .storage-page .storage-card:focus-visible {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
@@ -140,20 +124,20 @@
 .storage-page input:focus,
 .storage-page select:focus,
 .storage-page textarea:focus {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
   outline: none;
-  box-shadow: 0 0 0 3px rgb(var(--dashboard-accent) / 0.2);
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
 }
 
 /* Radio and checkbox use teal when checked (Export/BarcodeExport format and CSV options) */
 .storage-page input[type="radio"],
 .storage-page input[type="checkbox"] {
-  accent-color: rgb(var(--dashboard-accent));
+  accent-color: rgb(var(--app-accent));
 }
 
 .storage-page button:focus-visible,
 .storage-page a:focus-visible {
-  outline: 2px solid rgb(var(--dashboard-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
@@ -162,27 +146,27 @@
   min-height: 44px;
 }
 .storage-page button.storage-tree-picker-row:hover {
-  background: rgb(var(--dashboard-surface));
-  border-color: rgb(var(--dashboard-border));
+  background: rgb(var(--app-surface));
+  border-color: rgb(var(--app-border));
 }
 .storage-page button.storage-tree-picker-row:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgb(var(--dashboard-accent));
+  box-shadow: 0 0 0 2px rgb(var(--app-accent));
 }
 
 .storage-page .form-input:focus,
 .storage-page .form-select:focus {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
-  box-shadow: 0 0 0 3px rgb(var(--dashboard-accent) / 0.2);
+  border-color: rgb(var(--app-accent) / 0.5);
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
 }
 
 /* Breadcrumb inside storage-page */
 .storage-page nav[aria-label="Breadcrumb navigation"] a {
-  color: rgb(var(--dashboard-accent));
+  color: rgb(var(--app-accent));
 }
 
 .storage-page nav[aria-label="Breadcrumb navigation"] a:hover {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 
 /* Primary (accent) and secondary buttons */
@@ -190,7 +174,7 @@
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   font-weight: 500;
-  background: rgb(var(--dashboard-accent));
+  background: rgb(var(--app-accent));
   color: white;
   border: none;
   cursor: pointer;
@@ -198,29 +182,29 @@
 }
 
 .storage-page .storage-btn-primary:hover {
-  background: rgb(var(--dashboard-accent-hover));
+  background: rgb(var(--app-accent-hover));
 }
 
 .storage-page .storage-btn-secondary {
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   font-weight: 500;
-  background: rgb(var(--dashboard-card));
-  color: rgb(var(--dashboard-text));
-  border: 1px solid rgb(var(--dashboard-border));
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .storage-page .storage-btn-secondary:hover {
-  background: rgb(var(--dashboard-surface));
-  border-color: rgb(var(--dashboard-accent) / 0.3);
+  background: rgb(var(--app-surface));
+  border-color: rgb(var(--app-accent) / 0.3);
 }
 
 /* Collection-type badges: lab-friendly palette */
 .storage-page .storage-badge-plate {
-  background: rgb(var(--dashboard-accent-muted));
-  color: rgb(var(--dashboard-accent-hover));
+  background: rgb(var(--app-accent-muted));
+  color: rgb(var(--app-accent-hover));
   font-size: 0.75rem;
   font-weight: 500;
   padding: 0.125rem 0.5rem;
@@ -228,8 +212,8 @@
 }
 
 .storage-page .storage-badge-cryovial {
-  background: rgb(224 231 255);
-  color: rgb(67 56 202);
+  background: rgb(var(--app-accent-muted) / 0.6);
+  color: rgb(var(--app-accent-hover));
   font-size: 0.75rem;
   font-weight: 500;
   padding: 0.125rem 0.5rem;
@@ -237,8 +221,8 @@
 }
 
 .storage-page .storage-badge-box {
-  background: rgb(220 252 231);
-  color: rgb(22 101 52);
+  background: rgb(var(--app-trend-up) / 0.15);
+  color: rgb(var(--app-trend-up));
   font-size: 0.75rem;
   font-weight: 500;
   padding: 0.125rem 0.5rem;
@@ -246,8 +230,8 @@
 }
 
 .storage-page .storage-badge-bag {
-  background: rgb(254 243 199);
-  color: rgb(161 98 7);
+  background: rgb(var(--app-standard-muted));
+  color: rgb(var(--app-standard));
   font-size: 0.75rem;
   font-weight: 500;
   padding: 0.125rem 0.5rem;
@@ -259,33 +243,33 @@
   font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
   font-size: 1.125rem;
   letter-spacing: 0.05em;
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 
 /* Collection grid (plate/box) when used inside storage theme */
 .storage-page .storage-grid-table th {
-  background: rgb(var(--dashboard-surface));
-  border-color: rgb(var(--dashboard-border));
-  color: rgb(var(--dashboard-text-muted));
+  background: rgb(var(--app-surface));
+  border-color: rgb(var(--app-border));
+  color: rgb(var(--app-text-muted));
 }
 
 .storage-page .storage-grid-table td {
-  border-color: rgb(var(--dashboard-border));
+  border-color: rgb(var(--app-border));
 }
 
 .storage-page .storage-grid-table .storage-grid-cell-empty {
-  background: rgb(var(--dashboard-surface) / 0.5);
+  background: rgb(var(--app-surface) / 0.5);
 }
 
 /* Skeleton pulse color when used inside storage-page */
 .storage-page .storage-skeleton [class*='bg-gray-200'] {
-  background: rgb(var(--dashboard-border)) !important;
+  background: rgb(var(--app-border)) !important;
 }
 
 /* LocationHierarchyStats inner cards when used inside storage-page */
 .storage-page .storage-hierarchy-stats .bg-white.rounded-lg {
-  background: rgb(var(--dashboard-card)) !important;
-  border: 1px solid rgb(var(--dashboard-border));
+  background: rgb(var(--app-card)) !important;
+  border: 1px solid rgb(var(--app-border));
   box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
 }
 
@@ -295,37 +279,37 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
   margin-bottom: 0.75rem;
 }
 
 /* Definition list terms and details – use storage tokens */
 .storage-page .storage-detail-dt {
   font-size: 0.875rem;
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 
 .storage-page .storage-detail-dd {
   font-size: 0.875rem;
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 
 /* Card inner dividers – use with border-b or border-t */
 .storage-page .storage-card-divider {
-  border-color: rgb(var(--dashboard-border));
+  border-color: rgb(var(--app-border));
 }
 
 /* Sub-card (e.g. derivation row inside a storage-card) */
 .storage-page .storage-sub-card {
-  background: rgb(var(--dashboard-surface));
-  border: 1px solid rgb(var(--dashboard-border));
+  background: rgb(var(--app-surface));
+  border: 1px solid rgb(var(--app-border));
   border-radius: 0.5rem;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .storage-page .storage-sub-card:hover {
-  background: rgb(var(--dashboard-surface) / 1.2);
-  border-color: rgb(var(--dashboard-accent) / 0.3);
+  background: rgb(var(--app-surface) / 1.2);
+  border-color: rgb(var(--app-accent) / 0.3);
 }
 
 /* Wizard step indicator – shared by Import, DerivationsBulkImport, CollectionMove, ContainerMove* */
@@ -340,13 +324,13 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
   font-size: 0.875rem;
   font-weight: 500;
 }
 
 .storage-page .storage-step-item--active {
-  color: rgb(var(--dashboard-accent));
+  color: rgb(var(--app-accent));
   font-weight: 600;
 }
 
@@ -357,15 +341,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgb(var(--dashboard-border));
-  color: rgb(var(--dashboard-text-muted));
+  background: rgb(var(--app-border));
+  color: rgb(var(--app-text-muted));
   font-size: 0.875rem;
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .storage-page .storage-step-item--active .storage-step-item__circle {
-  background: rgb(var(--dashboard-accent));
+  background: rgb(var(--app-accent));
   color: white;
 }
 
@@ -373,88 +357,88 @@
   flex: 1;
   height: 2px;
   min-width: 1rem;
-  background: rgb(var(--dashboard-border));
+  background: rgb(var(--app-border));
 }
 
 /* StatCard / StatChart number styling */
 .storage-page .stat-card-title {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 .storage-page .stat-card-value {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
   font-variant-numeric: tabular-nums;
 }
 .storage-page .stat-chart-title {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
 }
 .storage-page .stat-chart-empty {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 .storage-page .dashboard-stat-value {
-  color: rgb(var(--dashboard-text));
+  color: rgb(var(--app-text));
   font-variant-numeric: tabular-nums;
 }
 .storage-page .dashboard-stat-muted {
-  color: rgb(var(--dashboard-text-muted));
+  color: rgb(var(--app-text-muted));
 }
 
 /* Override blue to teal when inside storage-page (LocationTreePicker, LocationPicker, etc.) */
 .storage-page .bg-blue-50,
 .storage-page .bg-blue-100 {
-  background-color: rgb(var(--dashboard-accent-muted));
+  background-color: rgb(var(--app-accent-muted));
 }
 
 .storage-page .border-blue-200,
 .storage-page .border-blue-300,
 .storage-page .border-blue-500 {
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
 }
 
 .storage-page .text-blue-600,
 .storage-page .text-blue-700,
 .storage-page .text-blue-800,
 .storage-page .text-blue-900 {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 
 .storage-page .bg-blue-600,
 .storage-page .bg-blue-700 {
-  background-color: rgb(var(--dashboard-accent));
+  background-color: rgb(var(--app-accent));
 }
 
 .storage-page .hover\:bg-blue-700:hover {
-  background-color: rgb(var(--dashboard-accent-hover));
+  background-color: rgb(var(--app-accent-hover));
 }
 
 .storage-page .hover\:bg-blue-50:hover,
 .storage-page .hover\:border-blue-200:hover,
 .storage-page .hover\:border-blue-300:hover {
-  background-color: rgb(var(--dashboard-accent-muted));
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  background-color: rgb(var(--app-accent-muted));
+  border-color: rgb(var(--app-accent) / 0.5);
 }
 
 .storage-page .hover\:text-blue-800:hover,
 .storage-page .hover\:text-blue-900:hover {
-  color: rgb(var(--dashboard-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 
 .storage-page .focus\:ring-blue-500:focus,
 .storage-page .focus\:border-blue-500:focus,
 .storage-page .focus-visible\:ring-blue-500:focus-visible {
-  --tw-ring-color: rgb(var(--dashboard-accent) / 0.5);
-  border-color: rgb(var(--dashboard-accent) / 0.5);
+  --tw-ring-color: rgb(var(--app-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
 }
 
 .storage-page .border-b-2.border-blue-600 {
-  border-color: rgb(var(--dashboard-accent));
+  border-color: rgb(var(--app-accent));
 }
 
 .storage-page .bg-blue-100.text-blue-800 {
-  background-color: rgb(var(--dashboard-accent-muted));
-  color: rgb(var(--dashboard-accent-hover));
+  background-color: rgb(var(--app-accent-muted));
+  color: rgb(var(--app-accent-hover));
 }
 
 /* File input "Choose file" button: high-contrast text on teal-100 (accent-muted) */
 .storage-page .file-input-accent::file-selector-button {
-  color: rgb(var(--dashboard-accent-on-tint));
+  color: rgb(var(--app-accent-on-tint));
 }

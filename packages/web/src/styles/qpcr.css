@@ -1,27 +1,16 @@
 /**
  * qPCR experiment UI – "Precision lab" theme
- * Scoped to .qpcr-theme wrapper on list, new, and detail pages.
+ * Scoped to .qpcr-theme wrapper on list, new, and detail pages. Uses app design tokens (see tokens.css).
  */
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap');
-
 .qpcr-theme {
-  --qpcr-accent: 20 184 166;
-  --qpcr-accent-hover: 13 148 136;
-  --qpcr-accent-muted: 204 251 241;
-  --qpcr-standard: 245 158 11;
-  --qpcr-standard-muted: 254 243 199;
-  --qpcr-surface: 248 250 252;
-  --qpcr-surface-card: 255 255 255;
-  --qpcr-text: 30 41 59;
-  --qpcr-text-muted: 100 116 139;
-  font-family: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--app-font-sans);
 }
 
 .qpcr-theme h1,
 .qpcr-theme h2,
 .qpcr-theme h3 {
-  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--app-font-display);
   letter-spacing: -0.02em;
 }
 
@@ -29,16 +18,16 @@
 .qpcr-theme .qpcr-input {
   width: 100%;
   padding: 0.5rem 0.75rem;
-  border: 1px solid rgb(226 232 240);
+  border: 1px solid rgb(var(--app-border));
   border-radius: 0.5rem;
-  background: white;
-  color: rgb(30 41 59);
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
   box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 }
 .qpcr-theme .qpcr-input:focus {
   outline: none;
-  border-color: rgb(20 184 166);
-  box-shadow: 0 0 0 2px rgb(20 184 166 / 0.3);
+  border-color: rgb(var(--app-accent));
+  box-shadow: 0 0 0 2px rgb(var(--app-accent) / 0.3);
 }
 
 .qpcr-theme .qpcr-select {
@@ -52,8 +41,8 @@
 }
 .qpcr-theme .qpcr-select:focus {
   outline: none;
-  border-color: rgb(20 184 166);
-  box-shadow: 0 0 0 2px rgb(20 184 166 / 0.3);
+  border-color: rgb(var(--app-accent));
+  box-shadow: 0 0 0 2px rgb(var(--app-accent) / 0.3);
 }
 
 /* Primary CTA */
@@ -65,11 +54,11 @@
   border-radius: 0.5rem;
   font-weight: 500;
   color: white;
-  background-color: rgb(var(--qpcr-accent));
+  background-color: rgb(var(--app-accent));
   transition: background-color 0.15s;
 }
 .qpcr-theme .qpcr-btn-primary:hover:not(:disabled) {
-  background-color: rgb(var(--qpcr-accent-hover));
+  background-color: rgb(var(--app-accent-hover));
 }
 .qpcr-theme .qpcr-btn-primary:disabled {
   opacity: 0.5;
@@ -84,13 +73,13 @@
   padding: 0.625rem 1rem;
   border-radius: 0.5rem;
   font-weight: 500;
-  border: 1px solid rgb(226 232 240);
-  background: white;
-  color: rgb(51 65 85);
+  border: 1px solid rgb(var(--app-border));
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
   transition: background-color 0.15s;
 }
 .qpcr-theme .qpcr-btn-secondary:hover {
-  background: rgb(248 250 252);
+  background: rgb(var(--app-surface));
 }
 
 /* Danger */
@@ -102,13 +91,13 @@
   border-radius: 0.5rem;
   font-size: 0.875rem;
   font-weight: 500;
-  border: 1px solid rgb(254 202 202);
-  background: white;
-  color: rgb(185 28 28);
+  border: 1px solid rgb(var(--app-trend-down) / 0.5);
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-trend-down));
   transition: background-color 0.15s;
 }
 .qpcr-theme .qpcr-btn-danger:hover {
-  background: rgb(254 242 242);
+  background: rgb(var(--app-trend-down) / 0.1);
 }
 .qpcr-theme .qpcr-btn-danger:disabled {
   opacity: 0.5;
@@ -119,38 +108,38 @@
   display: inline-flex;
   align-items: center;
   border-radius: 9999px;
-  background: rgb(254 243 199);
+  background: rgb(var(--app-standard-muted));
   padding: 0.125rem 0.625rem;
   font-size: 0.75rem;
   font-weight: 500;
-  color: rgb(146 64 14);
+  color: rgb(var(--app-standard));
 }
 .qpcr-theme .qpcr-pill-template {
   display: inline-flex;
   align-items: center;
   border-radius: 9999px;
-  background: rgb(204 251 241);
+  background: rgb(var(--app-accent-muted));
   padding: 0.125rem 0.625rem;
   font-size: 0.75rem;
   font-weight: 500;
-  color: rgb(17 94 89);
+  color: rgb(var(--app-accent-hover));
 }
 .qpcr-theme .qpcr-pill-results {
   display: inline-flex;
   align-items: center;
   border-radius: 9999px;
-  background: rgb(209 250 229);
+  background: rgb(var(--app-trend-up) / 0.15);
   padding: 0.125rem 0.625rem;
   font-size: 0.75rem;
   font-weight: 500;
-  color: rgb(6 78 59);
+  color: rgb(var(--app-trend-up));
 }
 
 /* Card surface */
 .qpcr-theme .qpcr-card {
   border-radius: 0.75rem;
-  border: 1px solid rgb(226 232 240 / 0.9);
-  background: white;
+  border: 1px solid rgb(var(--app-border));
+  background: rgb(var(--app-card));
   box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
 }
 
@@ -171,37 +160,37 @@
 
 /* Well selection: selected well gets teal ring and soft tint */
 .qpcr-theme .qpcr-well-plate .qpcr-well--selected {
-  box-shadow: 0 0 0 2px rgb(var(--qpcr-accent));
-  background-color: rgb(var(--qpcr-accent-muted) / 0.5);
+  box-shadow: 0 0 0 2px rgb(var(--app-accent));
+  background-color: rgb(var(--app-accent-muted) / 0.5);
 }
 
 /* Well detail panel: links use teal to match theme */
 .qpcr-theme .qpcr-well-panel a[href].qpcr-well-panel-link {
-  color: rgb(var(--qpcr-accent));
+  color: rgb(var(--app-accent));
   font-weight: 500;
 }
 .qpcr-theme .qpcr-well-panel a[href].qpcr-well-panel-link:hover {
-  color: rgb(var(--qpcr-accent-hover));
+  color: rgb(var(--app-accent-hover));
   text-decoration: underline;
 }
 
 /* Breadcrumb inside qpcr-theme – teal accent and themed container */
 .qpcr-theme nav[aria-label="Breadcrumb navigation"] {
-  background: rgb(var(--qpcr-surface));
-  border: 1px solid rgb(226 232 240);
+  background: rgb(var(--app-bg));
+  border: 1px solid rgb(var(--app-border));
   border-radius: 0.75rem;
 }
 
 .qpcr-theme nav[aria-label="Breadcrumb navigation"] a {
-  color: rgb(var(--qpcr-accent));
+  color: rgb(var(--app-accent));
 }
 
 .qpcr-theme nav[aria-label="Breadcrumb navigation"] a:hover {
-  color: rgb(var(--qpcr-accent-hover));
+  color: rgb(var(--app-accent-hover));
 }
 
 .qpcr-theme nav[aria-label="Breadcrumb navigation"] a:focus-visible {
-  outline: 2px solid rgb(var(--qpcr-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: 2px;
 }
 
@@ -216,25 +205,25 @@
 }
 
 .qpcr-theme .qpcr-table-wrapper thead th {
-  border-bottom: 1px solid rgb(226 232 240);
-  color: rgb(var(--qpcr-text-muted));
+  border-bottom: 1px solid rgb(var(--app-border));
+  color: rgb(var(--app-text-muted));
   font-weight: 500;
 }
 
 .qpcr-theme .qpcr-table-wrapper tbody tr:hover {
-  background-color: rgb(var(--qpcr-accent-muted) / 0.25);
+  background-color: rgb(var(--app-accent-muted) / 0.25);
 }
 
 .qpcr-theme .qpcr-table-wrapper tbody tr:focus-within {
-  outline: 2px solid rgb(var(--qpcr-accent));
+  outline: 2px solid rgb(var(--app-accent));
   outline-offset: -2px;
 }
 
 .qpcr-theme .qpcr-table-wrapper tbody td {
-  border-bottom: 1px solid rgb(241 245 249);
-  color: rgb(var(--qpcr-text));
+  border-bottom: 1px solid rgb(var(--app-border));
+  color: rgb(var(--app-text));
 }
 
 .qpcr-theme .qpcr-table-wrapper tbody tr.bg-blue-50 {
-  background-color: rgb(var(--qpcr-accent-muted) / 0.5);
+  background-color: rgb(var(--app-accent-muted) / 0.5);
 }
