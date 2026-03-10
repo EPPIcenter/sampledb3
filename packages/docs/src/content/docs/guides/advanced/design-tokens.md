@@ -50,10 +50,12 @@ Global form controls (`.form-input`, `.form-select`, `.form-textarea`) use the a
 
 To add a new token or change a value, edit `packages/web/src/styles/tokens.css`. If the token should be available as a Tailwind utility, add the corresponding `--color-*` or `--font-*` entry in the `@theme` block in `index.css`. Do not redefine tokens in page-level CSS; reference the global `--app-*` variables so theme switches only need to update the tokens file.
 
-## Dark mode
+## Themes
 
-The app supports an optional **dark theme**. When dark mode is active, the same token names are used but their values come from an `[data-theme="dark"]` block in `tokens.css`. No component code needs to change: everything that uses `var(--app-*)` or the Tailwind token utilities automatically uses the dark palette.
+The app supports eight **themes**. Each theme uses the same token names; values come from `:root` (light) or from `[data-theme="…"]` blocks in `tokens.css`. No component code needs to change: everything that uses `var(--app-*)` or the Tailwind token utilities automatically follows the active theme.
 
-- **Toggle:** Use the theme control in the bottom-right floating action cluster (hover to expand, then click the sun/moon “Dark” or “Light” button). The choice is stored in `localStorage` under the key `theme` and applied on the next load.
-- **Persistence:** A small script in `index.html` runs before the app and sets `document.documentElement.dataset.theme` from `localStorage`, so the correct theme is applied immediately and avoids a flash of the wrong theme.
-- **Charts:** Dashboard and statistics charts use the `--app-chart-1` … `--app-chart-8` tokens so pie, bar, and line charts stay readable in both themes. See `packages/web/src/lib/chart-colors.ts` for reading these in JavaScript.
+**Theme options:** Light (default), Dark, Sepia (warm, paper-like), Ocean (cool blue), Warm dark (dark with amber tones), High contrast (strong contrast for accessibility), Forest (dark green-toned), Rose (warm soft pink).
+
+- **Theme selector:** Use the theme control in the bottom-right floating action cluster (hover to expand, then click the theme button to open the dropdown). Choose any of the eight themes. You can also change the theme from Settings (Appearance section).
+- **Persistence:** A blocking script in `index.html` runs before the app and sets `document.documentElement.dataset.theme` from `localStorage` for any stored value that is one of the theme ids. That way the correct theme is applied on first paint and avoids a flash of the wrong theme on reload.
+- **Charts:** Dashboard and statistics charts use the `--app-chart-1` … `--app-chart-8` tokens so pie, bar, and line charts stay readable in every theme. See `packages/web/src/lib/chart-colors.ts` for reading these in JavaScript.

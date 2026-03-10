@@ -47,6 +47,8 @@ An analysis-ready configuration might include all relevant data columns, formatt
 
 **Table view configurations** (Data Management, admin only) define presets for which columns appear in the collection table view on plate, box, bag, and sheet detail pages. One preset can be set as the default. Table CSV download exports the current view columns. This is separate from export configurations, which apply only to the Export page and barcode export. New installations get a default "Default" preset at setup. For existing databases upgraded before this feature, run the seed script once (from repo root: `DATABASE_PATH=/path/to/sampledb.sqlite pnpm --filter @sampledb/api run seed-table-view-config`) to add the default table view configuration; the script is idempotent and does nothing if configs already exist.
 
+**Appearance** (Application Settings) lets you choose the application theme: Light, Dark, Sepia, Ocean, Warm dark, High contrast, Forest (dark green), or Rose (warm pink). Your choice is saved and applied on every load. You can also change the theme from the theme control in the bottom-right floating action cluster (hover to expand, then click the theme button to open the dropdown).
+
 Depending on your system configuration, you may see additional settings beyond export and table view configurations. System preferences might include default date formats, display options, or notification settings. User preferences might include interface preferences, display options, or personal settings that customize your experience.
 
 These additional settings vary by system configuration, so check what's available in your instance and configure them according to your preferences and needs.
