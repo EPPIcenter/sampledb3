@@ -189,3 +189,61 @@
   --app-chart-7: 120 113 108;
   --app-chart-8: 253 242 233;
 }
+
+/* Forest theme – dark, green-toned */
+[data-theme="forest"] {
+  --app-bg: 6 24 18;
+  --app-surface: 20 41 32;
+  --app-card: 30 58 46;
+  --app-accent: 74 222 128;
+  --app-accent-hover: 34 197 94;
+  --app-accent-muted: 20 83 45;
+  --app-accent-on-tint: 187 247 208;
+  --app-text: 240 253 244;
+  --app-text-muted: 134 239 172;
+  --app-border: 22 101 52;
+  --app-bg-grid: 22 101 52;
+  --app-trend-up: 74 222 128;
+  --app-trend-down: 248 113 113;
+  --app-badge: 252 165 165;
+  --app-badge-bg: 127 29 29;
+  --app-standard: 253 186 116;
+  --app-standard-muted: 69 26 3;
+  --app-chart-1: 74 222 128;
+  --app-chart-2: 34 197 94;
+  --app-chart-3: 22 163 74;
+  --app-chart-4: 21 128 61;
+  --app-chart-5: 134 239 172;
+  --app-chart-6: 187 247 208;
+  --app-chart-7: 22 101 52;
+  --app-chart-8: 240 253 244;
+}
+
+/* Rose theme – warm, soft rose/pink (light) */
+[data-theme="rose"] {
+  --app-bg: 255 241 242;
+  --app-surface: 254 226 226;
+  --app-card: 255 255 255;
+  --app-accent: 225 29 72;
+  --app-accent-hover: 190 18 60;
+  --app-accent-muted: 254 205 211;
+  --app-accent-on-tint: 190 18 60;
+  --app-text: 136 19 55;
+  --app-text-muted: 157 23 77;
+  --app-border: 253 164 175;
+  --app-bg-grid: 253 164 175;
+  --app-trend-up: 22 163 74;
+  --app-trend-down: 239 68 68;
+  --app-badge: 190 18 60;
+  --app-badge-bg: 255 228 230;
+  --app-standard: 245 158 11;
+  --app-standard-muted: 254 243 199;
+  --app-chart-1: 225 29 72;
+  --app-chart-2: 190 18 60;
+  --app-chart-3: 244 63 94;
+  --app-chart-4: 251 113 133;
+  --app-chart-5: 157 23 77;
+  --app-chart-6: 244 114 182;
+  --app-chart-7: 251 207 232;
+  --app-chart-8: 136 19 55;
+}
