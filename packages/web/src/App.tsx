@@ -83,7 +83,55 @@ function AppContent() {
   const { theme, setTheme } = useTheme()
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const themeMenuRef = useRef<HTMLDivElement>(null)
+  const themeTriggerRef = useRef<HTMLButtonElement>(null)
+  const themeOptionRefs = useRef<(HTMLButtonElement | null)[]>([])
   useClickOutside(themeMenuRef, () => setThemeMenuOpen(false), themeMenuOpen)
+
+  useEffect(() => {
+    if (themeMenuOpen) {
+      const t = setTimeout(() => {
+        const idx = THEME_IDS.indexOf(theme)
+        const el = themeOptionRefs.current[idx]
+        if (el) el.focus()
+      }, 0)
+      return () => clearTimeout(t)
+    }
+  }, [themeMenuOpen, theme])
+
+  const handleThemeMenuKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setThemeMenuOpen(false)
+        themeTriggerRef.current?.focus()
+        e.preventDefault()
+        return
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        const current = themeOptionRefs.current.findIndex((el) => el === document.activeElement)
+        const next = current < 0 ? 0 : (current + 1) % THEME_IDS.length
+        themeOptionRefs.current[next]?.focus()
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        const current = themeOptionRefs.current.findIndex((el) => el === document.activeElement)
+        const next = current <= 0 ? THEME_IDS.length - 1 : current - 1
+        themeOptionRefs.current[next]?.focus()
+        return
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        const current = themeOptionRefs.current.findIndex((el) => el === document.activeElement)
+        if (current >= 0) {
+          setTheme(THEME_IDS[current])
+          setThemeMenuOpen(false)
+          themeTriggerRef.current?.focus()
+        }
+      }
+    },
+    [setTheme]
+  )
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const {
     isHelpModalOpen,
@@ -733,6 +781,7 @@ function AppContent() {
               }}
             >
               <button
+                ref={themeTriggerRef}
                 type="button"
                 onClick={() => setThemeMenuOpen((open) => !open)}
                 className="floating-actions__btn"
@@ -760,6 +809,14 @@ function AppContent() {
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
+                ) : theme === 'forest' ? (
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 20l-5-10 5-10 5 10-5 10z" />
+                  </svg>
+                ) : theme === 'rose' ? (
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                  </svg>
                 ) : (
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -772,13 +829,18 @@ function AppContent() {
                   className="floating-actions__theme-menu"
                   role="listbox"
                   aria-label="Theme"
+                  onKeyDown={handleThemeMenuKeyDown}
                 >
-                  {THEME_IDS.map((id) => (
+                  {THEME_IDS.map((id, index) => (
                     <button
                       key={id}
+                      ref={(el) => {
+                        themeOptionRefs.current[index] = el
+                      }}
                       type="button"
                       role="option"
                       aria-selected={theme === id}
+                      tabIndex={-1}
                       className="floating-actions__theme-option"
                       onClick={() => {
                         setTheme(id)
