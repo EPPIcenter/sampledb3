@@ -8,7 +8,7 @@ import { validatePage, validateLimit } from '../lib/constants'
 import { resolveContainerByBarcode } from '../lib/identifier-resolution'
 import { validateSpecimenData, checkDuplicateSpecimens } from '../lib/validation'
 import { createContainerForSpecimen, validateContainerData, type ContainerData } from '../lib/container-creation'
-import { findExistingStudySpecimen } from '../lib/specimen-helpers'
+import { findExistingStudySpecimen, findExistingControlSpecimen } from '../lib/specimen-helpers'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { resolveCollection } from '../lib/collection-resolution'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
@@ -457,21 +457,41 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
       }, 400)
     }
 
-    // Single transaction: create specimens and containers all-or-nothing (any failure rolls back)
-    const result = await dbInstance.transaction(async (tx) => {
+    // One specimen per unique (subject/control + type + date). Use payload key so dedupe is stable regardless of resolved ID quirks.
+    const payloadKey = (r: (typeof validRows)[number], idx: number): string =>
+      r.spec.sourceType === 'subject'
+        ? `s:${String(r.spec.studyShortCode ?? '')}:${String(r.spec.subjectName ?? '')}:${String(r.spec.specimenTypeName)}:${String(r.spec.collectionDate ?? '')}`
+        : `c:${String(r.validation.resolved.controlBatchId ?? '')}:${String(r.validation.resolved.specimenTypeId)}:${String(r.spec.collectionDate ?? '')}`
+    const orderedPayloadKeys = validRows.map((r, idx) => payloadKey(r, idx))
+    const payloadKeyToFirstIndex = new Map<string, number>()
+    for (let idx = 0; idx < orderedPayloadKeys.length; idx++) {
+      const k = orderedPayloadKeys[idx]
+      if (!payloadKeyToFirstIndex.has(k)) payloadKeyToFirstIndex.set(k, idx)
+    }
+    const uniqueSpecimenOrder: number[] = []
+    const indexToUniqueIndex: number[] = []
+    for (let idx = 0; idx < orderedPayloadKeys.length; idx++) {
+      const first = payloadKeyToFirstIndex.get(orderedPayloadKeys[idx]) ?? idx
+      if (first === idx) uniqueSpecimenOrder.push(idx)
+      indexToUniqueIndex.push(uniqueSpecimenOrder.indexOf(first))
+    }
+
+    // Phase 1: sync transaction to create/get specimens (one per unique key). No await so tx sees own inserts.
+    const specimenRecordsByUniqueIndex: (typeof specimen.$inferSelect)[] = []
+    const syncResult = dbInstance.transaction((tx) => {
       const dbTx = tx as unknown as Database
       let newCount = 0
-      let containersCount = 0
-      const specimensOut: typeof specimen.$inferSelect[] = []
-      for (const { index: i, spec, validation } of validRows) {
+      for (const uniqueIdx of uniqueSpecimenOrder) {
+        const { spec, validation } = validRows[uniqueIdx]
         const studySubjectId = validation.resolved.studySubjectId
-        const existingSpecimen =
+        const existing =
           spec.sourceType === 'subject' && studySubjectId != null
             ? findExistingStudySpecimen(dbTx, studySubjectId, validation.resolved.specimenTypeId, spec.collectionDate)
-            : null
-        let specimenRecord: typeof specimen.$inferSelect
-        if (existingSpecimen) {
-          specimenRecord = existingSpecimen
+            : spec.sourceType === 'control' && validation.resolved.controlBatchId != null
+              ? findExistingControlSpecimen(dbTx, validation.resolved.controlBatchId, validation.resolved.specimenTypeId, spec.collectionDate)
+              : null
+        if (existing) {
+          specimenRecordsByUniqueIndex.push(existing)
         } else {
           const insertResult = tx
             .insert(specimen)
@@ -488,45 +508,53 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
             .returning()
             .get()
           const inserted = Array.isArray(insertResult) ? insertResult[0] : insertResult
-          if (!inserted) {
-            throw new Error('Insert did not return specimen row')
-          }
-          specimenRecord = inserted as typeof specimen.$inferSelect
+          if (!inserted) throw new Error('Insert did not return specimen row')
+          specimenRecordsByUniqueIndex.push(inserted as typeof specimen.$inferSelect)
           newCount += 1
         }
-        specimensOut.push(specimenRecord)
-
-        if (spec.container?.containerType) {
-          const containerData: ContainerData = {
-            containerType: spec.container.containerType,
-            collectionName: spec.container.collectionName,
-            collectionBarcode: spec.container.collectionBarcode,
-            barcode: spec.container.barcode,
-            position: spec.container.position,
-            label: spec.container.label,
-            unitId: spec.container.unitId,
-            totalQuantity: spec.container.totalQuantity,
-            remainingQuantity: spec.container.remainingQuantity,
-            comment: spec.container.comment,
-          }
-          try {
-            const containerResult = await createContainerForSpecimen(
-              specimenRecord.id,
-              containerData,
-              dbTx,
-              user?.id
-            )
-            if (!containerResult.success || !containerResult.containerId) {
-              throw new Error(containerResult.error ?? `Row ${i}: failed to create container`)
-            }
-          } catch (err) {
-            throw new Error(err instanceof Error ? err.message : `Row ${i}: failed to create container`)
-          }
-          containersCount += 1
-        }
       }
-      return { specimens: specimensOut, created: newCount, containersCreated: containersCount }
+      return { newCount }
     })
+
+    // Phase 2: create containers (async) in a second transaction so all-or-nothing
+    const specimensOut: typeof specimen.$inferSelect[] = indexToUniqueIndex.map((ui) => specimenRecordsByUniqueIndex[ui])
+    let containersCount = 0
+    await dbInstance.transaction(async (tx) => {
+      const dbTx = tx as unknown as Database
+      for (let i = 0; i < validRows.length; i++) {
+        const { spec } = validRows[i]
+        const specimenRecord = specimensOut[i]
+        if (!spec.container?.containerType) continue
+        const containerData: ContainerData = {
+          containerType: spec.container.containerType,
+          collectionName: spec.container.collectionName,
+          collectionBarcode: spec.container.collectionBarcode,
+          barcode: spec.container.barcode,
+          position: spec.container.position,
+          label: spec.container.label,
+          unitId: spec.container.unitId,
+          totalQuantity: spec.container.totalQuantity,
+          remainingQuantity: spec.container.remainingQuantity,
+          comment: spec.container.comment,
+        }
+        const containerResult = await createContainerForSpecimen(
+          specimenRecord.id,
+          containerData,
+          dbTx,
+          user?.id
+        )
+        if (!containerResult.success || !containerResult.containerId) {
+          throw new Error(containerResult.error ?? `Row ${i}: failed to create container`)
+        }
+        containersCount += 1
+      }
+    })
+
+    const result = {
+      specimens: specimensOut,
+      created: syncResult.newCount,
+      containersCreated: containersCount,
+    }
 
     return c.json({
       specimens: result.specimens,

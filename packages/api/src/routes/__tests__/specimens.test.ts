@@ -5,6 +5,8 @@ import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/
 import { createAuthRoutes } from '../auth'
 import { createSpecimensRoutes } from '../specimens'
 import { handleRouteError } from '../../lib/error-handler'
+import { setContainerDefaults, clearSettingsCache } from '../../lib/settings'
+import { clearDefaultsCache } from '../../lib/defaults'
 import { setupPasswordRequirements, setupSessionSettings, createTestUser } from '../../__tests__/helpers/auth-helpers'
 import {
   createTestStudy,
@@ -19,7 +21,6 @@ import type { Database } from '../../db/client'
 import {
   specimenTypeContainerType,
   containerTypeUnit,
-  settings,
   cryovialBox,
   micronixPlate,
   specimen,
@@ -121,15 +122,16 @@ describe('Specimens API', () => {
         containerType: 'micronix_tube',
         unitId: testUnit.id,
       })
-      const now = new Date().toISOString()
-      await testDb.insert(settings).values({
-        key: 'container_defaults',
-        value: {
-          cryovial_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
-          micronix_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
-        },
-        userId: null,
+      clearSettingsCache(testDb, 'container_defaults')
+      clearDefaultsCache(testDb)
+      await setContainerDefaults(testDb, {
+        cryovial_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
+        micronix_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
+        static_well: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
       })
+      clearSettingsCache(testDb, 'container_defaults')
+      const now = new Date().toISOString()
       await testDb.insert(cryovialBox).values({
         name: 'BULK-BOX',
         locationId: testLocation.id,
@@ -146,37 +148,42 @@ describe('Specimens API', () => {
     })
 
     it('reuses existing specimen (get-or-create): same subject + type + date twice returns created: 1', async () => {
+      const studyCode = testStudy.shortCode
+      const subjectName = testSubject.name
+      const typeName = testSpecimenType.name
+      const collectionDate = '2024-06-01'
+      const payload = {
+        specimens: [
+          {
+            sourceType: 'subject' as const,
+            studyShortCode: studyCode,
+            subjectName,
+            specimenTypeName: typeName,
+            collectionDate,
+            container: {
+              containerType: 'cryovial_tube' as const,
+              collectionName: 'BULK-BOX',
+              position: 'A01',
+            },
+          },
+          {
+            sourceType: 'subject' as const,
+            studyShortCode: studyCode,
+            subjectName,
+            specimenTypeName: typeName,
+            collectionDate,
+            container: {
+              containerType: 'cryovial_tube' as const,
+              collectionName: 'BULK-BOX',
+              position: 'A02',
+            },
+          },
+        ],
+      }
       const res = await authenticatedRequest(app, '/api/specimens/bulk', {
         method: 'POST',
         cookie,
-        json: {
-          specimens: [
-            {
-              sourceType: 'subject',
-              studyShortCode: 'BLK01',
-              subjectName: 'BULK-SUBJ',
-              specimenTypeName: 'Whole Blood',
-              collectionDate: '2024-06-01',
-              container: {
-                containerType: 'cryovial_tube',
-                collectionName: 'BULK-BOX',
-                position: 'A01',
-              },
-            },
-            {
-              sourceType: 'subject',
-              studyShortCode: 'BLK01',
-              subjectName: 'BULK-SUBJ',
-              specimenTypeName: 'Whole Blood',
-              collectionDate: '2024-06-01',
-              container: {
-                containerType: 'cryovial_tube',
-                collectionName: 'BULK-BOX',
-                position: 'A02',
-              },
-            },
-          ],
-        },
+        json: payload,
       })
       expect(res.status).toBe(201)
       const data = (await res.json()) as {
@@ -278,10 +285,12 @@ describe('Specimens API', () => {
         containerType: 'cryovial_tube',
         unitId: testUnit.id,
       })
-      await testDb.insert(settings).values({
-        key: 'container_defaults',
-        value: { cryovial_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' } },
-        userId: null,
+      clearSettingsCache(testDb, 'container_defaults')
+      await setContainerDefaults(testDb, {
+        cryovial_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
+        micronix_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
+        static_well: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
       })
       await testDb.insert(cryovialBox).values({
         name: 'V-BOX',
@@ -369,10 +378,12 @@ describe('Specimens API', () => {
         containerType: 'micronix_tube',
         unitId: testUnit.id,
       })
-      await testDb.insert(settings).values({
-        key: 'container_defaults',
-        value: { micronix_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' } },
-        userId: null,
+      clearSettingsCache(testDb, 'container_defaults')
+      await setContainerDefaults(testDb, {
+        cryovial_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
+        micronix_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
+        static_well: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
       })
       await testDb.insert(micronixPlate).values({
         name: 'ADD-PLATE',

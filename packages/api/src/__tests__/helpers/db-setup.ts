@@ -12,7 +12,7 @@ export function createTestDatabase(): { db: DrizzleDatabase; sqlite: Database } 
   sqlite.exec('PRAGMA journal_mode = WAL')
 
   const db = drizzle(sqlite, { schema }) as DrizzleDatabase & { _id?: string }
-  db._id = `test-db-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  db._id = `test-db-${crypto.randomUUID()}`
 
   return { db, sqlite }
 }

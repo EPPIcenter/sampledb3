@@ -33,7 +33,12 @@ export async function getDefaultUnit(db: Database, containerType: ContainerType)
     throw new Error('Container defaults are not configured. Please run database initialization.')
   }
 
-  const containerDefaults = defaults[containerType]
+  const containerDefaults = (defaults as Partial<Record<ContainerType, { defaultUnitSymbol: string }>>)[containerType]
+  if (!containerDefaults) {
+    throw new Error(
+      `Container defaults for '${containerType}' are not configured. Ensure settings include this container type.`
+    )
+  }
   const unitSymbol = containerDefaults.defaultUnitSymbol
 
   if (!unitSymbol || !String(unitSymbol).trim()) {
