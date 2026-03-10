@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { settingsApi, type AllSettings } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
+import { useTheme, THEME_IDS, THEME_LABELS } from '../contexts/ThemeContext'
 import InfoTooltip from '../components/InfoTooltip'
 import ContainerDefaultsForm from '../components/ContainerDefaultsForm'
 import ContainerTypeUnitsManager from '../components/ContainerTypeUnitsManager'
@@ -15,7 +16,7 @@ import SkeletonCard from '../components/SkeletonCard'
 import '../styles/settings.css'
 
 type SettingsCategory = 'application' | 'security' | 'data-management'
-type SettingsSection = 'container-defaults' | 'container-type-units' | 'pagination' | 'password' | 'session' | 'export-configurations' | 'table-view-configurations' | 'scanner-configurations'
+type SettingsSection = 'appearance' | 'container-defaults' | 'container-type-units' | 'pagination' | 'password' | 'session' | 'export-configurations' | 'table-view-configurations' | 'scanner-configurations'
 
 interface SettingsStructure {
   id: SettingsCategory
@@ -40,6 +41,11 @@ const settingsStructure: SettingsStructure[] = [
       </svg>
     ),
     sections: [
+      {
+        id: 'appearance',
+        label: 'Appearance',
+        tooltip: 'Choose the application theme (light, dark, sepia, ocean, warm dark, high contrast, forest, or rose). Your choice is saved and applied on every load.',
+      },
       {
         id: 'container-defaults',
         label: 'Container Defaults',
@@ -113,6 +119,7 @@ const settingsStructure: SettingsStructure[] = [
 
 export default function Settings() {
   const { user } = useUser()
+  const { theme, setTheme } = useTheme()
   const isAdmin = user?.role === 'admin'
   const [searchParams, setSearchParams] = useSearchParams()
   
@@ -249,8 +256,31 @@ export default function Settings() {
   }
 
   const renderForm = () => {
+    if (!settings && activeSection !== 'appearance') return null
+    if (activeSection === 'appearance') {
+      return (
+        <div className="space-y-3">
+          <p className="text-sm text-app-text-muted">Select a theme. You can also change it from the theme control in the bottom-right corner of the app.</p>
+          <div className="flex flex-wrap gap-2">
+            {THEME_IDS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTheme(id)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                  theme === id
+                    ? 'bg-app-accent-muted text-app-accent-on-tint border-app-accent'
+                    : 'bg-app-card text-app-text border-app-border hover:border-app-accent/40 hover:text-app-accent-hover'
+                }`}
+              >
+                {THEME_LABELS[id]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )
+    }
     if (!settings) return null
-    
     switch (activeSection) {
       case 'container-defaults':
         return (
