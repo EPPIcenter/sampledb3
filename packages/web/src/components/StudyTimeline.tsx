@@ -10,6 +10,8 @@ import { timeFormat } from 'd3-time-format'
 import { useNavigate } from 'react-router-dom'
 import type { StudyTimelineData } from '../lib/api'
 import { useDateFilter } from '../contexts/DateFilterContext'
+import { useTheme } from '../contexts/ThemeContext'
+import { getAppAxisColors } from '../lib/chart-colors'
 import DateFilterControls from './DateFilterControls'
 
 interface StudyTimelineProps {
@@ -54,6 +56,7 @@ const formatCollectionDate = (dateString: string): string => {
 
 export default function StudyTimeline({ data }: StudyTimelineProps) {
   const navigate = useNavigate()
+  const { theme } = useTheme()
   const { settings, setMinDate, setMaxDate, reset } = useDateFilter()
   const { minDate, maxDate } = settings
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -216,6 +219,8 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
     ctx.save()
     ctx.translate(margin.left, margin.top)
 
+    const axisColors = getAppAxisColors()
+
     // Create scales
     const xScale = scaleLinear()
       .domain([dateRange.min, dateRange.max])
@@ -225,8 +230,8 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
       .domain([-0.5, Math.max(0, filteredSubjects.length - 0.5)])
       .range([height, 0])
 
-    // Draw grid (matching Recharts style)
-    ctx.strokeStyle = '#e5e7eb'
+    // Draw grid (theme-aware)
+    ctx.strokeStyle = axisColors.border
     ctx.lineWidth = 1
     ctx.setLineDash([3, 3])
     
@@ -301,7 +306,7 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
       .call(xAxis)
 
     xAxisG.selectAll('text')
-      .style('fill', '#666')
+      .style('fill', axisColors.text)
       .style('font-size', '12px')
       .attr('transform', 'rotate(-45)')
       .attr('text-anchor', 'end')
@@ -309,13 +314,13 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
       .attr('dy', '0.5em')
 
     xAxisG.selectAll('line, path')
-      .style('stroke', '#e5e7eb')
+      .style('stroke', axisColors.border)
       .style('stroke-width', '1')
 
     xAxisG.append('text')
       .attr('x', width / 2)
       .attr('y', 50)
-      .attr('fill', '#666')
+      .attr('fill', axisColors.text)
       .style('font-size', '14px')
       .style('text-anchor', 'middle')
       .text('Collection Date')
@@ -333,22 +338,22 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
       .call(yAxis)
 
     yAxisG.selectAll('text')
-      .style('fill', '#666')
+      .style('fill', axisColors.text)
       .style('font-size', '12px')
 
     yAxisG.selectAll('line, path')
-      .style('stroke', '#e5e7eb')
+      .style('stroke', axisColors.border)
       .style('stroke-width', '1')
 
     yAxisG.append('text')
       .attr('transform', 'rotate(-90)')
       .attr('y', -80)
       .attr('x', -height / 2)
-      .attr('fill', '#666')
+      .attr('fill', axisColors.text)
       .style('font-size', '14px')
       .style('text-anchor', 'middle')
       .text('Subject')
-  }, [allPoints, dateRange, filteredSubjects, yAxisLabels, seriesData])
+  }, [theme, allPoints, dateRange, filteredSubjects, yAxisLabels, seriesData])
 
   // Handle mouse move for tooltip
   const handleMouseMove = useCallback((event: MouseEvent) => {

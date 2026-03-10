@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
 import { BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { getAppTooltipStyles } from '../lib/chart-colors'
+import { useTheme } from '../contexts/ThemeContext'
 
 interface ChartData {
   name: string
@@ -46,6 +48,9 @@ export default function StatChart({
   showPercentageList = false,
   cardClassName = 'bg-app-card rounded-lg shadow p-6',
 }: StatChartProps) {
+  const { theme } = useTheme()
+  const tooltipStyles = useMemo(() => getAppTooltipStyles(), [theme])
+
   if (data.length === 0) {
     return (
       <div className={cardClassName}>
@@ -163,6 +168,8 @@ export default function StatChart({
           />
           <YAxis />
           <Tooltip
+            contentStyle={tooltipStyles.contentStyle}
+            labelStyle={tooltipStyles.labelStyle}
             formatter={dateKey ? ((value: any) => [value] as [number]) : undefined}
             labelFormatter={dateKey ? (label: any) => {
               const name = dateValueToNameMap.get(label as number)
@@ -189,10 +196,14 @@ export default function StatChart({
               <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
             ))}
           </Pie>
-          <Tooltip formatter={(value: any, name: any) => {
-            const percentage = total > 0 ? (value / total) * 100 : 0
-            return [`${value} (${percentage.toFixed(1)}%)`, name]
-          }} />
+          <Tooltip
+            contentStyle={tooltipStyles.contentStyle}
+            labelStyle={tooltipStyles.labelStyle}
+            formatter={(value: any, name: any) => {
+              const percentage = total > 0 ? (value / total) * 100 : 0
+              return [`${value} (${percentage.toFixed(1)}%)`, name]
+            }}
+          />
         </PieChart>
       )}
       {type === 'line' && (
@@ -210,6 +221,8 @@ export default function StatChart({
           />
           <YAxis />
           <Tooltip
+            contentStyle={tooltipStyles.contentStyle}
+            labelStyle={tooltipStyles.labelStyle}
             formatter={dateKey ? ((value: any) => [value] as [number]) : undefined}
             labelFormatter={dateKey ? (label: any) => {
               const name = dateValueToNameMap.get(label as number)
