@@ -2,6 +2,7 @@ import { ReactElement } from 'react'
 import { act, render, RenderOptions } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, MemoryRouter } from 'react-router-dom'
+import { ThemeProvider } from '../../contexts/ThemeContext'
 import { ToastProvider } from '../../contexts/ToastContext'
 import { UserProvider } from '../../contexts/UserContext'
 
@@ -34,15 +35,19 @@ export async function renderWithProviders(
     const router =
       initialEntries !== undefined ? (
         <MemoryRouter initialEntries={initialEntries}>
-          <UserProvider>
-            <ToastProvider>{children}</ToastProvider>
-          </UserProvider>
+          <ThemeProvider>
+            <UserProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </UserProvider>
+          </ThemeProvider>
         </MemoryRouter>
       ) : (
         <BrowserRouter>
-          <UserProvider>
-            <ToastProvider>{children}</ToastProvider>
-          </UserProvider>
+          <ThemeProvider>
+            <UserProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </UserProvider>
+          </ThemeProvider>
         </BrowserRouter>
       )
     return <QueryClientProvider client={queryClient}>{router}</QueryClientProvider>

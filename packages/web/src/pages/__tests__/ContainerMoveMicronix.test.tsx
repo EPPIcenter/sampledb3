@@ -17,17 +17,26 @@ if (!File.prototype.text) {
 import ContainerMoveMicronix from '../ContainerMoveMicronix'
 import { collectionsApi, locationsApi, scannerConfigurationsApi } from '../../lib/api'
 
-// Mock react-router-dom
+// Mock react-router-dom: stateful so setSearchParams triggers re-renders and get() returns current params.
+let initialSearchParams = new URLSearchParams()
 const mockSetSearchParams = vi.fn()
-const mockGetSearchParams = vi.fn()
 
 vi.mock('react-router-dom', async () => {
-    const actual = await vi.importActual('react-router-dom')
+    const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
+    const React = await import('react')
     return {
         ...actual,
-        useSearchParams: () => [{
-            get: mockGetSearchParams
-        }, mockSetSearchParams]
+        useSearchParams: function useSearchParamsMock() {
+            const [params, setParams] = React.useState(initialSearchParams)
+            const setSearchParams = React.useCallback((updater: (prev: URLSearchParams) => URLSearchParams) => {
+                setParams((prev) => {
+                    const next = updater(new URLSearchParams(prev))
+                    mockSetSearchParams(updater)
+                    return next
+                })
+            }, [])
+            return [params, setSearchParams]
+        },
     }
 })
 
@@ -80,7 +89,7 @@ describe('ContainerMoveMicronix', { timeout: 15000 }, () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
-        mockGetSearchParams.mockReturnValue(null)
+        initialSearchParams = new URLSearchParams()
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
         vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
         vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
@@ -100,6 +109,25 @@ describe('ContainerMoveMicronix', { timeout: 15000 }, () => {
             expect(screen.getByText('Move Micronix Tubes')).toBeInTheDocument()
         })
         expect(screen.getByText('Upload CSV Files')).toBeInTheDocument()
+    })
+
+    it('resets to upload step and updates URL when step=resolve in URL but no files (reload)', async () => {
+        initialSearchParams = new URLSearchParams({ step: 'resolve' })
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
+            data: { configurations: [mockScannerConfig] },
+        } as any)
+
+        await renderWithProviders(<ContainerMoveMicronix />)
+
+        await waitFor(() => {
+            expect(screen.getByText('Upload CSV Files')).toBeInTheDocument()
+        })
+        expect(mockSetSearchParams).toHaveBeenCalledWith(expect.any(Function))
+        const updater = mockSetSearchParams.mock.calls[0][0] as (prev: URLSearchParams) => URLSearchParams
+        const next = updater(new URLSearchParams())
+        expect(next.get('step')).toBe('upload')
     })
 
     it('clears file input value when a file is removed', async () => {
@@ -552,8 +580,13 @@ describe('ContainerMoveMicronix', { timeout: 15000 }, () => {
         }, { timeout: 3000 })
 
         fireEvent.click(screen.getByText('Next: Resolve Containers'))
-        await waitFor(() => expect(mockSetSearchParams).toHaveBeenCalled(), { timeout: 3000 })
+        await waitFor(() => expect(screen.getByText('Resolved Micronix Tubes')).toBeInTheDocument(), { timeout: 3000 })
 
+        fireEvent.click(screen.getByRole('button', { name: /back/i }))
+        await waitFor(() => {
+            const select = container.querySelector('select')
+            expect(select).toBeInTheDocument()
+        }, { timeout: 3000 })
         const select = container.querySelector('select')!
         fireEvent.change(select, { target: { value: 'config-position' } })
 
@@ -955,18 +988,6 @@ describe('ContainerMoveMicronix', { timeout: 15000 }, () => {
     })
 
     it('execute sends only rows with barcode in move payload', async () => {
-        // CSV: MTX123 at A01, empty at A02 → only one move sent. When setSearchParams is called (step=resolve),
-        // update get() so the next render shows resolve step with the files we just set.
-        let currentParams = new URLSearchParams()
-        mockGetSearchParams.mockImplementation((key: string) => currentParams.get(key) ?? null)
-        mockSetSearchParams.mockImplementation((arg: unknown) => {
-            const next =
-                typeof arg === 'function'
-                    ? (arg as (p: URLSearchParams) => URLSearchParams)(currentParams)
-                    : new URLSearchParams()
-            currentParams = next
-        })
-
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
             data: {
                 collections: [
@@ -1262,16 +1283,55 @@ describe('ContainerMoveMicronix', { timeout: 15000 }, () => {
     })
 
     it('sends selected atomic mode in move payload', async () => {
-        mockGetSearchParams.mockImplementation((key: string) => (key === 'step' ? 'resolve' : null))
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
+            data: {
+                collections: [{ id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }],
+            },
+        } as any)
+        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
+            data: {
+                containers: [
+                    {
+                        identifier: { barcode: 'MTX1' },
+                        container: {
+                            containerId: 1,
+                            currentCollectionId: 1,
+                            currentCollectionName: 'PLATE1',
+                            currentCollectionType: 'micronix_plate',
+                            currentPosition: 'A01',
+                            barcode: 'MTX1',
+                        },
+                    },
+                ],
+            },
+        } as any)
         vi.mocked(collectionsApi.moveContainers).mockResolvedValue({
-            data: { success: true, moved: 0 }
+            data: { success: true, moved: 1 },
         } as any)
 
-        await renderWithProviders(<ContainerMoveMicronix />)
+        const csvContent = fullPlateCSV({ A01: 'MTX1' })
+        const file = new File([csvContent], 'PLATE1.csv', { type: 'text/csv' })
+
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input.disabled).toBe(false)
+        })
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: { files: [file] },
+        })
+        await waitFor(() => expect(screen.getByText('PLATE1.csv')).toBeInTheDocument(), { timeout: 3000 })
+        await waitFor(() => {
+            expect(screen.getByText('Next: Resolve Containers')).not.toBeDisabled()
+        }, { timeout: 3000 })
+        fireEvent.click(screen.getByText('Next: Resolve Containers'))
 
         await waitFor(() => {
             expect(screen.getByText('Resolved Micronix Tubes')).toBeInTheDocument()
-        })
+        }, { timeout: 3000 })
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /execute moves/i })).not.toBeDisabled()
+        }, { timeout: 3000 })
 
         const bestEffort = screen.getByRole('radio', { name: /best effort/i })
         fireEvent.click(bestEffort)

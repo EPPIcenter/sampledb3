@@ -17,17 +17,26 @@ if (!File.prototype.text) {
 import ContainerMoveCryovial from '../ContainerMoveCryovial'
 import { collectionsApi, locationsApi } from '../../lib/api'
 
-// Mock react-router-dom
+// Mock react-router-dom: stateful so setSearchParams triggers re-renders and get() returns current params.
+let initialSearchParams = new URLSearchParams()
 const mockSetSearchParams = vi.fn()
-const mockGetSearchParams = vi.fn()
 
 vi.mock('react-router-dom', async () => {
-    const actual = await vi.importActual('react-router-dom')
+    const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
+    const React = await import('react')
     return {
         ...actual,
-        useSearchParams: () => [{
-            get: mockGetSearchParams
-        }, mockSetSearchParams]
+        useSearchParams: function useSearchParamsMock() {
+            const [params, setParams] = React.useState(initialSearchParams)
+            const setSearchParams = React.useCallback((updater: (prev: URLSearchParams) => URLSearchParams) => {
+                setParams((prev) => {
+                    const next = updater(new URLSearchParams(prev))
+                    mockSetSearchParams(updater)
+                    return next
+                })
+            }, [])
+            return [params, setSearchParams]
+        },
     }
 })
 
@@ -51,7 +60,7 @@ vi.mock('../../lib/api', () => ({
 describe('ContainerMoveCryovial', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        mockGetSearchParams.mockReturnValue(null)
+        initialSearchParams = new URLSearchParams()
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
         vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
     })
@@ -69,6 +78,22 @@ describe('ContainerMoveCryovial', () => {
         await waitFor(() => {
             expect(screen.getByText('Upload CSV Files')).toBeInTheDocument()
         })
+    })
+
+    it('resets to upload step and updates URL when step=resolve in URL but no files (reload)', async () => {
+        initialSearchParams = new URLSearchParams({ step: 'resolve' })
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+
+        await renderWithProviders(<ContainerMoveCryovial />)
+
+        await waitFor(() => {
+            expect(screen.getByText('Upload CSV Files')).toBeInTheDocument()
+        })
+        expect(mockSetSearchParams).toHaveBeenCalledWith(expect.any(Function))
+        const updater = mockSetSearchParams.mock.calls[0][0] as (prev: URLSearchParams) => URLSearchParams
+        const next = updater(new URLSearchParams())
+        expect(next.get('step')).toBe('upload')
     })
 
     it('validates empty CSV file', async () => {
@@ -198,7 +223,11 @@ describe('ContainerMoveCryovial', () => {
             expect(collectionsApi.resolveContainers).toHaveBeenCalledTimes(1)
         }, { timeout: 5000 })
 
-        // Change destination box (reopen picker and select BOX2)
+        // Change destination box: go back to upload, reopen picker, select BOX2
+        fireEvent.click(screen.getByRole('button', { name: /^Back$/i }))
+        await waitFor(() => {
+            expect(screen.getByText('Next: Resolve Containers')).toBeInTheDocument()
+        })
         fireEvent.click(screen.getByRole('button', { name: /BOX1/ }))
         await waitFor(() => {
             expect(screen.getByText('Select Cryovial Box')).toBeInTheDocument()
@@ -370,12 +399,52 @@ describe('ContainerMoveCryovial', () => {
     })
 
     it('sends selected atomic mode in move payload', async () => {
-        mockGetSearchParams.mockImplementation((key: string) => (key === 'step' ? 'resolve' : null))
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
+            data: {
+                collections: [
+                    { id: 1, name: 'BOX1', barcode: null, locationId: 1, itemCount: 0, location: { path: '/Loc1' } },
+                ],
+            }
+        } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({
+            data: { locations: [{ id: 1, name: 'Loc1', path: '/Loc1', parentId: null }] }
+        } as any)
+        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
+            data: {
+                containers: [
+                    {
+                        identifier: { sourceCollectionName: 'BOX1', sourcePosition: 'A1' },
+                        container: {
+                            containerId: 2,
+                            currentCollectionId: 1,
+                            currentCollectionName: 'BOX1',
+                            currentCollectionType: 'cryovial_box',
+                            currentPosition: 'A1',
+                        },
+                    },
+                ],
+            }
+        } as any)
         vi.mocked(collectionsApi.moveContainers).mockResolvedValue({
-            data: { success: true, moved: 0 }
+            data: { success: true, moved: 1 }
         } as any)
 
-        await renderWithProviders(<ContainerMoveCryovial />)
+        const csvContent = 'source_collection_name,source_position,target_position\nBOX1,A1,B1'
+        const file = new File([csvContent], 'BOX1.csv', { type: 'text/csv' })
+        Object.defineProperty(file, 'text', { value: async () => csvContent })
+
+        const { container } = await renderWithProviders(<ContainerMoveCryovial />)
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input.disabled).toBe(false)
+        })
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [file] } })
+        await waitFor(() => expect(screen.getByText('BOX1.csv')).toBeInTheDocument())
+        await waitFor(() => {
+            expect(screen.getByText('Next: Resolve Containers')).not.toBeDisabled()
+        }, { timeout: 3000 })
+        fireEvent.click(screen.getByText('Next: Resolve Containers'))
 
         await waitFor(() => {
             expect(screen.getByText('Resolved Cryovial Tubes')).toBeInTheDocument()

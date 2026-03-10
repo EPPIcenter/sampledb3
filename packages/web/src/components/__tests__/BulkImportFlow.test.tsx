@@ -55,12 +55,14 @@ describe('BulkImportFlow', () => {
     expect(validateBtn ?? downloadLink).toBeTruthy()
   })
 
-  it('shows review step with heading and Import when step=review in URL', async () => {
+  it('shows upload step when step=review in URL but no file (resets on reload)', async () => {
     await render(<BulkImportFlow fixedStudyShortCode="ST" />, {
       initialEntries: ['/import?step=review'],
     })
-    expect(screen.getByRole('heading', { name: /review and edit data/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^import$/i })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /validate.*continue/i })).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('heading', { name: /review and edit data/i })).not.toBeInTheDocument()
   })
 
   it('calls specimenTypesApi.getByContainerType when downloading template with container type', async () => {
