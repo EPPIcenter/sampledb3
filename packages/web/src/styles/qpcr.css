@@ -7,6 +7,12 @@
   font-family: var(--app-font-sans);
 }
 
+/* Page background: theme-aware gradient (replaces from-slate-50 to-white) */
+.qpcr-theme.qpcr-page-bg {
+  min-height: 100vh;
+  background: linear-gradient(180deg, rgb(var(--app-bg)) 0%, rgb(var(--app-surface)) 100%);
+}
+
 .qpcr-theme h1,
 .qpcr-theme h2,
 .qpcr-theme h3 {
@@ -33,10 +39,10 @@
 .qpcr-theme .qpcr-select {
   width: 100%;
   padding: 0.5rem 0.75rem;
-  border: 1px solid rgb(226 232 240);
+  border: 1px solid rgb(var(--app-border));
   border-radius: 0.5rem;
-  background: white;
-  color: rgb(30 41 59);
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
   box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 }
 .qpcr-theme .qpcr-select:focus {
@@ -133,6 +139,18 @@
   font-size: 0.75rem;
   font-weight: 500;
   color: rgb(var(--app-trend-up));
+}
+
+/* Fallback pill for unknown status */
+.qpcr-theme .qpcr-pill-unknown {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: rgb(var(--app-surface));
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(var(--app-text-muted));
 }
 
 /* Card surface */

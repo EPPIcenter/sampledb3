@@ -22,7 +22,7 @@ function getStatusPillClass(status: string): string {
     case 'results_uploaded':
       return 'qpcr-pill-results'
     default:
-      return 'inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700'
+      return 'qpcr-pill-unknown'
   }
 }
 
@@ -87,7 +87,7 @@ export default function QpcrExperiments() {
       label: 'Name',
       sortable: true,
       render: (_, row) => (
-        <span className="font-medium text-slate-800">
+        <span className="font-medium text-app-text">
           {row.name?.trim() || `Experiment ${row.id}`}
         </span>
       ),
@@ -107,7 +107,7 @@ export default function QpcrExperiments() {
       label: 'Template',
       sortable: true,
       render: (_, row) => (
-        <span className="text-slate-700">
+        <span className="text-app-text">
           {(TEMPLATE_LABELS as Record<string, string>)[row.templateFormat] ?? row.templateFormat}
         </span>
       ),
@@ -117,7 +117,7 @@ export default function QpcrExperiments() {
       label: 'Plate',
       sortable: true,
       render: (val) => (
-        <span className="text-slate-600">{typeof val === 'string' ? val.trim() || '—' : '—'}</span>
+        <span className="text-app-text-muted">{typeof val === 'string' ? val.trim() || '—' : '—'}</span>
       ),
     },
     {
@@ -128,7 +128,7 @@ export default function QpcrExperiments() {
         const targets = row.targets ?? []
         const names = targets.map((t) => (t.targetName != null ? t.targetName.trim() : '')).filter(Boolean) // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- targetName may be omitted
         return (
-          <span className="text-slate-600">{names.length > 0 ? names.join(', ') : '—'}</span>
+          <span className="text-app-text-muted">{names.length > 0 ? names.join(', ') : '—'}</span>
         )
       },
     },
@@ -138,14 +138,14 @@ export default function QpcrExperiments() {
       sortable: false,
       render: (_, row) => {
         const targets = row.targets ?? []
-        if (targets.length === 0) return <span className="text-slate-400">—</span>
-        if (targets.length > 1) return <span className="text-slate-600">Multiple</span>
+        if (targets.length === 0) return <span className="text-app-text-muted">—</span>
+        if (targets.length > 1) return <span className="text-app-text-muted">Multiple</span>
         const dye =
           row.templateFormat === 'quant_studio'
             ? (targets[0].reporter ?? targets[0].fluorophore)
             : (targets[0].fluorophore ?? targets[0].reporter)
         return (
-          <span className="text-slate-600">{(dye ?? '').trim() || '—'}</span>
+          <span className="text-app-text-muted">{(dye ?? '').trim() || '—'}</span>
         )
       },
     },
@@ -155,9 +155,9 @@ export default function QpcrExperiments() {
       sortable: true,
       render: (_, row) =>
         row.wellCount != null ? (
-          <span className="text-slate-600">{row.wellCount}</span>
+          <span className="text-app-text-muted">{row.wellCount}</span>
         ) : (
-          <span className="text-slate-400">—</span>
+          <span className="text-app-text-muted">—</span>
         ),
     },
     {
@@ -166,9 +166,9 @@ export default function QpcrExperiments() {
       sortable: true,
       render: (_, row) =>
         row.runCount != null ? (
-          <span className="text-slate-600">{row.runCount}</span>
+          <span className="text-app-text-muted">{row.runCount}</span>
         ) : (
-          <span className="text-slate-400">—</span>
+          <span className="text-app-text-muted">—</span>
         ),
     },
     {
@@ -176,7 +176,7 @@ export default function QpcrExperiments() {
       label: 'Last run',
       sortable: true,
       render: (_, row) => (
-        <span className="text-slate-600">{formatShortDate(row.lastRunAt ?? undefined)}</span>
+        <span className="text-app-text-muted">{formatShortDate(row.lastRunAt ?? undefined)}</span>
       ),
     },
     {
@@ -184,7 +184,7 @@ export default function QpcrExperiments() {
       label: 'Created',
       sortable: true,
       render: (val) => (
-        <span className="text-slate-600">{formatShortDate(val as string | null)}</span>
+        <span className="text-app-text-muted">{formatShortDate(val as string | null)}</span>
       ),
     },
     {
@@ -192,30 +192,30 @@ export default function QpcrExperiments() {
       label: 'Updated',
       sortable: true,
       render: (val) => (
-        <span className="text-slate-600">{formatShortDate(val as string | null)}</span>
+        <span className="text-app-text-muted">{formatShortDate(val as string | null)}</span>
       ),
     },
   ]
 
   if (loading && experiments.length === 0) {
     return (
-      <div className="qpcr-theme min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      <div className="qpcr-theme qpcr-page-bg">
         <SkeletonDetailPage sections={1} />
       </div>
     )
   }
 
   return (
-    <div className="qpcr-theme min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="qpcr-theme qpcr-page-bg">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="mb-8">
           <EntityBreadcrumbs items={[{ label: 'qPCR Experiments' }]} />
           <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-semibold text-slate-800 mt-0 mb-2 tracking-tight">
+              <h1 className="text-3xl font-semibold text-app-text mt-0 mb-2 tracking-tight">
                 qPCR Experiments
               </h1>
-              <p className="text-slate-600 max-w-xl">
+              <p className="text-app-text-muted max-w-xl">
                 Create experiments, upload plate layouts, download machine templates, and import run
                 results.
               </p>
@@ -241,7 +241,7 @@ export default function QpcrExperiments() {
           <div className="qpcr-card p-12 text-center" style={{ animationDelay: '0ms' }}>
             <div className="flex flex-col items-center gap-4">
               <div
-                className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"
+                className="flex h-16 w-16 items-center justify-center rounded-2xl bg-app-surface text-app-text-muted"
                 aria-hidden
               >
                 <svg
@@ -259,8 +259,8 @@ export default function QpcrExperiments() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-slate-800">No qPCR experiments yet</h2>
-                <p className="mt-1 text-sm text-slate-600">
+                <h2 className="text-lg font-semibold text-app-text">No qPCR experiments yet</h2>
+                <p className="mt-1 text-sm text-app-text-muted">
                   Create an experiment to define a plate layout, download an instrument template, and
                   import results.
                 </p>
@@ -275,7 +275,7 @@ export default function QpcrExperiments() {
         ) : (
           <>
             <div className="mb-4 flex flex-wrap items-center gap-3">
-              <label htmlFor="qpcr-status-filter" className="text-sm font-medium text-slate-700">
+              <label htmlFor="qpcr-status-filter" className="text-sm font-medium text-app-text">
                 Status
               </label>
               <select

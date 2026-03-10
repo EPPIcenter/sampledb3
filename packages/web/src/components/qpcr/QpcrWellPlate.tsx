@@ -39,8 +39,8 @@ function getWellContentType(well: QpcrExperimentWell | undefined): 'standard' | 
 const WELL_STYLES: Record<'standard' | 'unknown' | 'negative' | 'empty', string> = {
   standard: 'bg-amber-50 border-amber-300/80 text-amber-900',
   unknown: 'bg-app-accent-muted/90 border-app-accent/50/70 text-app-text',
-  negative: 'bg-slate-100/90 border-slate-300/70 text-slate-600',
-  empty: 'bg-slate-50/80 border-slate-200 text-slate-400',
+  negative: 'bg-app-surface border-app-border text-app-text-muted',
+  empty: 'bg-app-surface/80 border-app-border text-app-text-muted',
 }
 
 export interface QpcrWellPlateProps {
@@ -58,7 +58,7 @@ export default function QpcrWellPlate({ wells, selectedWellPosition = null, onWe
 
   return (
     <div className="qpcr-well-plate">
-      <div className="inline-block overflow-x-auto rounded-2xl border-2 border-slate-200 bg-slate-50/50 p-4 shadow-md">
+      <div className="inline-block overflow-x-auto rounded-2xl border-2 border-app-border bg-app-surface/80 p-4 shadow-md">
         <div
           className="grid gap-px"
           style={{ gridTemplateColumns: `auto repeat(${COLS}, minmax(2.25rem, 2.25rem))` }}
@@ -67,14 +67,14 @@ export default function QpcrWellPlate({ wells, selectedWellPosition = null, onWe
           {Array.from({ length: COLS }, (_, i) => (
             <div
               key={i}
-              className="flex min-h-[2.25rem] min-w-[2.25rem] items-center justify-center text-[10px] font-medium text-slate-500"
+              className="flex min-h-[2.25rem] min-w-[2.25rem] items-center justify-center text-[10px] font-medium text-app-text-muted"
             >
               {(i + 1).toString().padStart(2, '0')}
             </div>
           ))}
           {ROWS.map((row) => (
             <React.Fragment key={row}>
-              <div className="flex min-h-[2.25rem] w-6 items-center justify-center pr-1 text-[10px] font-medium text-slate-500">
+              <div className="flex min-h-[2.25rem] w-6 items-center justify-center pr-1 text-[10px] font-medium text-app-text-muted">
                 {row}
               </div>
               {Array.from({ length: COLS }, (_, colIdx) => {
@@ -83,9 +83,9 @@ export default function QpcrWellPlate({ wells, selectedWellPosition = null, onWe
                 const contentType = getWellContentType(well)
                 const label = getWellLabel(well)
                 const isSelected = selectedWellPosition === pos
-                const baseClasses = `flex min-h-[2.25rem] min-w-[2.25rem] items-center justify-center rounded border text-[10px] font-medium truncate px-0.5 transition-[transform,border-color] duration-150 hover:scale-105 hover:border-slate-400 ${WELL_STYLES[contentType]}`
+                const baseClasses = `flex min-h-[2.25rem] min-w-[2.25rem] items-center justify-center rounded border text-[10px] font-medium truncate px-0.5 transition-[transform,border-color] duration-150 hover:scale-105 hover:border-app-border ${WELL_STYLES[contentType]}`
                 const selectedClass = isSelected ? ' qpcr-well--selected' : ''
-                const focusClass = isSelectable ? ' focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1' : ''
+                const focusClass = isSelectable ? ' focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent focus-visible:ring-offset-1' : ''
 
                 const displayLabel =
                   label ? (label.length > 4 ? `${label.slice(0, 3)}…` : label) : contentType === 'negative' ? 'NTC' : well?.barcode ? '…' : ''
@@ -115,7 +115,7 @@ export default function QpcrWellPlate({ wells, selectedWellPosition = null, onWe
           ))}
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap gap-6 text-xs text-slate-600">
+      <div className="mt-4 flex flex-wrap gap-6 text-xs text-app-text-muted">
         <span className="flex items-center gap-2">
           <span className="h-3.5 w-3.5 rounded border border-amber-300/80 bg-amber-50" /> Standard
         </span>
@@ -123,10 +123,10 @@ export default function QpcrWellPlate({ wells, selectedWellPosition = null, onWe
           <span className="h-3.5 w-3.5 rounded border border-app-accent/50/70 bg-app-accent-muted" /> Unknown (study sample)
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded border border-slate-300/70 bg-slate-100" /> Negative (NTC)
+          <span className="h-3.5 w-3.5 rounded border border-app-border bg-app-surface" /> Negative (NTC)
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded border border-slate-200 bg-slate-50" /> Empty
+          <span className="h-3.5 w-3.5 rounded border border-app-border bg-app-surface/80" /> Empty
         </span>
       </div>
     </div>

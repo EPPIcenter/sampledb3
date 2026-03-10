@@ -37,7 +37,7 @@ export default function QpcrExperimentNew() {
   }
 
   return (
-    <div className="qpcr-theme min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="qpcr-theme qpcr-page-bg">
       <div className="container mx-auto px-4 py-8 max-w-3xl">
         <EntityBreadcrumbs
           items={[
@@ -49,7 +49,7 @@ export default function QpcrExperimentNew() {
         <header className="mt-6 mb-8">
           <div className="flex items-start gap-4">
             <div
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-teal-700"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-app-accent-muted text-app-accent-on-tint"
               aria-hidden
             >
               <svg
@@ -67,10 +67,10 @@ export default function QpcrExperimentNew() {
               </svg>
             </div>
             <div className="min-w-0">
-              <h1 className="text-2xl font-semibold text-slate-800 tracking-tight">
+              <h1 className="text-2xl font-semibold text-app-text tracking-tight">
                 New qPCR Experiment
               </h1>
-              <p className="mt-1 text-sm text-slate-600">
+              <p className="mt-1 text-sm text-app-text-muted">
                 Create an experiment, then upload your plate layout to get started.
               </p>
             </div>
@@ -88,7 +88,7 @@ export default function QpcrExperimentNew() {
               </div>
             )}
             <div>
-              <label htmlFor="name" className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label htmlFor="name" className="mb-1.5 block text-sm font-medium text-app-text">
                 Name (optional)
               </label>
               <input

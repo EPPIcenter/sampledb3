@@ -113,7 +113,7 @@ function getStatusPillClass(status: string): string {
     case 'results_uploaded':
       return 'qpcr-pill-results'
     default:
-      return 'inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700'
+      return 'qpcr-pill-unknown'
   }
 }
 
@@ -251,7 +251,7 @@ export default function QpcrExperimentDetail() {
 
   if (loading) {
     return (
-      <div className="qpcr-theme min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      <div className="qpcr-theme qpcr-page-bg">
         <SkeletonDetailPage sections={1} />
       </div>
     )
@@ -259,7 +259,7 @@ export default function QpcrExperimentDetail() {
 
   if (error || !data) {
     return (
-      <div className="qpcr-theme min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      <div className="qpcr-theme qpcr-page-bg">
         <div className="container mx-auto px-4 py-8 max-w-7xl">
           <div className="text-center py-12 text-app-trend-down font-medium">{error ?? 'Experiment not found'}</div>
           <Link to="/qpcr-experiments" className="text-app-accent hover:underline text-sm font-medium">
@@ -471,13 +471,13 @@ export default function QpcrExperimentDetail() {
   }
 
   return (
-    <div className="qpcr-theme min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="qpcr-theme qpcr-page-bg">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="mb-8">
           <EntityBreadcrumbs items={breadcrumbItems} />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold text-slate-800 tracking-tight">
+              <h1 className="text-2xl font-semibold text-app-text tracking-tight">
                 {experiment.name ?? `qPCR Experiment ${experiment.id}`}
               </h1>
               <div className="mt-1.5 flex flex-wrap items-center gap-3 text-sm">
@@ -485,7 +485,7 @@ export default function QpcrExperimentDetail() {
                   {getStatusLabel(experiment.status)}
                 </span>
                 {experiment.plateBarcode && (
-                  <span className="text-slate-500">Plate: {experiment.plateBarcode}</span>
+                  <span className="text-app-text-muted">Plate: {experiment.plateBarcode}</span>
                 )}
               </div>
             </div>
@@ -513,23 +513,23 @@ export default function QpcrExperimentDetail() {
                   <span
                     className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium transition-colors ${
                       isActive
-                        ? 'bg-app-accent-muted0 text-white'
+                        ? 'bg-app-accent-muted text-white'
                         : isPast
-                          ? 'bg-teal-100 text-app-text'
-                          : 'bg-slate-100 text-slate-500'
+                          ? 'bg-app-accent-muted text-app-accent-on-tint'
+                          : 'bg-app-surface text-app-text-muted'
                     }`}
                   >
                     {step.id}
                   </span>
                   <span
                     className={`text-sm font-medium hidden sm:inline ${
-                      isActive ? 'text-slate-800' : isPast ? 'text-slate-600' : 'text-slate-500'
+                      isActive ? 'text-app-text' : isPast ? 'text-app-text-muted' : 'text-app-text-muted'
                     }`}
                   >
                     {step.label}
                   </span>
                   {index < STEPS.length - 1 && (
-                    <span className="h-px w-4 bg-slate-200 sm:w-8" aria-hidden />
+                    <span className="h-px w-4 bg-app-border sm:w-8" aria-hidden />
                   )}
                 </li>
               )
@@ -539,8 +539,8 @@ export default function QpcrExperimentDetail() {
 
         {/* Step 1: Plate layout */}
         <section className="qpcr-card p-6 mb-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-1">1. Plate layout</h2>
-          <p className="text-sm text-slate-600 mb-4">
+          <h2 className="text-lg font-semibold text-app-text mb-1">1. Plate layout</h2>
+          <p className="text-sm text-app-text-muted mb-4">
             Upload a CSV with micronix barcodes and well positions. Use the same scanner configuration as for container move.
           </p>
           {canWrite && (
@@ -552,7 +552,7 @@ export default function QpcrExperimentDetail() {
               )}
               <div className="flex flex-wrap items-end gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Scanner config</label>
+                  <label className="block text-xs font-medium text-app-text-muted mb-1">Scanner config</label>
                   <select
                     value={selectedConfigId ?? ''}
                     onChange={(e) => setSelectedConfigId(e.target.value || null)}
@@ -599,10 +599,10 @@ export default function QpcrExperimentDetail() {
           )}
 
           {hasPlate && (
-            <div className="mt-6 pt-6 border-t border-slate-100 grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-x-6 gap-y-3 items-start">
+            <div className="mt-6 pt-6 border-t border-app-border grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-x-6 gap-y-3 items-start">
               <div className="lg:col-span-2">
-                <h3 className="text-sm font-medium text-slate-700">96-well plate</h3>
-                <p className="text-xs text-slate-500 mt-1">Click a well to view container, specimen, and subject details.</p>
+                <h3 className="text-sm font-medium text-app-text">96-well plate</h3>
+                <p className="text-xs text-app-text-muted mt-1">Click a well to view container, specimen, and subject details.</p>
               </div>
               <div className="shrink-0">
                 <QpcrWellPlate
@@ -634,16 +634,16 @@ export default function QpcrExperimentDetail() {
               </div>
               <div className="qpcr-well-panel qpcr-card min-w-0 lg:min-w-[280px] lg:max-w-md p-4">
                 {selectedWellPosition == null ? (
-                  <p className="text-sm text-slate-500">Click a well to view container, specimen, and subject details.</p>
+                  <p className="text-sm text-app-text-muted">Click a well to view container, specimen, and subject details.</p>
                 ) : (
                   <>
                     <div className="mb-3">
-                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                      <span className="inline-flex items-center rounded-full bg-app-surface px-2.5 py-0.5 text-xs font-medium text-app-text">
                         Well {selectedWellPosition}
                       </span>
                     </div>
                     {wellDetailsLoading && (
-                      <p className="text-sm text-slate-500">Loading…</p>
+                      <p className="text-sm text-app-text-muted">Loading…</p>
                     )}
                     {wellDetailsError && (
                       <p className="text-sm text-app-trend-down rounded-lg bg-app-trend-down/10 px-3 py-2" role="alert">
@@ -652,10 +652,10 @@ export default function QpcrExperimentDetail() {
                     )}
                     {!wellDetailsLoading && !wellDetailsError && wellDetails == null && (
                       <>
-                        <p className="text-sm text-slate-500">No container in this well.</p>
+                        <p className="text-sm text-app-text-muted">No container in this well.</p>
                         {wellsEditable && isSelectedWellEmpty && (
-                          <div className="mt-3 flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
-                            <p className="text-xs font-medium text-slate-500">
+                          <div className="mt-3 flex flex-col gap-2 rounded-lg border border-app-border bg-app-surface/80 p-3">
+                            <p className="text-xs font-medium text-app-text-muted">
                               Type: {isSelectedWellNTC ? 'NTC' : 'Empty'}
                             </p>
                             <div className="flex flex-wrap gap-2">
@@ -682,15 +682,15 @@ export default function QpcrExperimentDetail() {
                     )}
                     {!wellDetailsLoading && !wellDetailsError && wellDetails != null && (
                       <div className="qpcr-reveal flex flex-col gap-4">
-                        <div className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
-                          <span className="text-slate-500 mt-0.5 shrink-0" aria-hidden>
+                        <div className="flex gap-3 rounded-lg border border-app-border bg-app-surface/80 p-3">
+                          <span className="text-app-text-muted mt-0.5 shrink-0" aria-hidden>
                             {wellDetails.container.containerType != null
                               ? getContainerTypeIcon(wellDetails.container.containerType)
                               : null}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium text-slate-500">Container</p>
-                            <p className="text-sm font-medium text-slate-800 truncate">
+                            <p className="text-xs font-medium text-app-text-muted">Container</p>
+                            <p className="text-sm font-medium text-app-text truncate">
                               {wellDetails.container.containerType != null
                                 ? getContainerTypeName(wellDetails.container.containerType)
                                 : '—'}
@@ -699,7 +699,7 @@ export default function QpcrExperimentDetail() {
                               )}
                             </p>
                             {wellDetails.container.collection?.position != null && (
-                              <p className="text-xs text-slate-500">Position: {wellDetails.container.collection.position}</p>
+                              <p className="text-xs text-app-text-muted">Position: {wellDetails.container.collection.position}</p>
                             )}
                             {wellDetails.container.id != null ? ( // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- optional container id
                               <Link
@@ -711,19 +711,19 @@ export default function QpcrExperimentDetail() {
                             ) : null}
                           </div>
                         </div>
-                        <div className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
-                          <span className="text-slate-500 mt-0.5 shrink-0" aria-hidden>
+                        <div className="flex gap-3 rounded-lg border border-app-border bg-app-surface/80 p-3">
+                          <span className="text-app-text-muted mt-0.5 shrink-0" aria-hidden>
                             {wellDetails.specimen?.specimenType?.name != null
                               ? getSpecimenTypeIcon(wellDetails.specimen.specimenType.name)
                               : null}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium text-slate-500">Specimen</p>
-                            <p className="text-sm font-medium text-slate-800 truncate">
+                            <p className="text-xs font-medium text-app-text-muted">Specimen</p>
+                            <p className="text-sm font-medium text-app-text truncate">
                               {wellDetails.specimen?.specimenType?.name != null ? wellDetails.specimen.specimenType.name : '—'}
                             </p>
                             {wellDetails.specimen?.collectionDate != null && (
-                              <p className="text-xs text-slate-500">Collected: {wellDetails.specimen.collectionDate}</p>
+                              <p className="text-xs text-app-text-muted">Collected: {wellDetails.specimen.collectionDate}</p>
                             )}
                             {wellDetails.specimen?.id != null && (
                               <Link
@@ -735,24 +735,24 @@ export default function QpcrExperimentDetail() {
                             )}
                           </div>
                         </div>
-                        <div className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                        <div className="flex gap-3 rounded-lg border border-app-border bg-app-surface/80 p-3">
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium text-slate-500">
+                            <p className="text-xs font-medium text-app-text-muted">
                               {wellDetails.source?.type === 'subject' ? 'Subject' : 'Control'}
                             </p>
-                            <p className="text-sm font-medium text-slate-800 truncate">
+                            <p className="text-sm font-medium text-app-text truncate">
                               {wellDetails.source?.name ?? '—'}
                             </p>
                             { }
                             {/* eslint-disable @typescript-eslint/no-unnecessary-condition -- runtime discriminator for source */}
                             {wellDetails.source?.type === 'subject' && wellDetails.source.study != null && (
-                              <p className="text-xs text-slate-500">
+                              <p className="text-xs text-app-text-muted">
                                 Study: {wellDetails.source.study.code}
                                 {wellDetails.source.study.title != null ? ` — ${wellDetails.source.study.title}` : ''}
                               </p>
                             )}
                             {wellDetails.source?.type === 'control' && wellDetails.source.definition != null && (
-                              <p className="text-xs text-slate-500">{wellDetails.source.definition.name}</p>
+                              <p className="text-xs text-app-text-muted">{wellDetails.source.definition.name}</p>
                             )}
                             {wellDetails.source?.type === 'subject' && wellDetails.source.id != null && (
                               <Link
@@ -784,14 +784,14 @@ export default function QpcrExperimentDetail() {
 
         {/* Step 2: Template */}
         <section className={`qpcr-card p-6 mb-6 ${!hasPlate ? 'opacity-75' : ''}`}>
-          <h2 className="text-lg font-semibold text-slate-800 mb-1">2. Template settings and download</h2>
-          <p className="text-sm text-slate-600 mb-4">
+          <h2 className="text-lg font-semibold text-app-text mb-1">2. Template settings and download</h2>
+          <p className="text-sm text-app-text-muted mb-4">
             Templates use study subject names for samples and parasite density for standard controls. Add one or more targets (multiplex); each target can have its own fluorophore/reporter.
           </p>
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between gap-2 mb-2">
-                <span className="text-xs font-medium text-slate-500">Targets</span>
+                <span className="text-xs font-medium text-app-text-muted">Targets</span>
                 {canWrite && !targetsLocked && (
                   <button type="button" onClick={addTarget} className="qpcr-btn-secondary text-xs py-1.5 px-2">
                     Add target
@@ -800,9 +800,9 @@ export default function QpcrExperimentDetail() {
               </div>
               <ul className="space-y-3">
                 {targets.map((t) => (
-                  <li key={t.key} className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                  <li key={t.key} className="flex flex-wrap items-end gap-3 rounded-lg border border-app-border bg-app-surface/80 p-3">
                     <div className="min-w-[100px] flex-1">
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Target name</label>
+                      <label className="block text-xs font-medium text-app-text-muted mb-1">Target name</label>
                       <input
                         type="text"
                         value={t.targetName}
@@ -814,7 +814,7 @@ export default function QpcrExperimentDetail() {
                       />
                     </div>
                     <div className="min-w-[90px]">
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Fluorophore (Bio-Rad)</label>
+                      <label className="block text-xs font-medium text-app-text-muted mb-1">Fluorophore (Bio-Rad)</label>
                       <select
                         value={t.fluorophore}
                         onChange={(e) => updateTarget(t.key, 'fluorophore', e.target.value)}
@@ -827,7 +827,7 @@ export default function QpcrExperimentDetail() {
                       </select>
                     </div>
                     <div className="min-w-[90px]">
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Reporter (Quant Studio)</label>
+                      <label className="block text-xs font-medium text-app-text-muted mb-1">Reporter (Quant Studio)</label>
                       <select
                         value={t.reporter}
                         onChange={(e) => updateTarget(t.key, 'reporter', e.target.value)}
@@ -852,10 +852,10 @@ export default function QpcrExperimentDetail() {
                   </li>
                 ))}
               </ul>
-              <p className="mt-1 text-xs text-slate-500">Quencher (Quant Studio): SYBR → None, others → NFQ-MGB.</p>
+              <p className="mt-1 text-xs text-app-text-muted">Quencher (Quant Studio): SYBR → None, others → NFQ-MGB.</p>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Instrument type (Quant Studio)</label>
+              <label className="block text-xs font-medium text-app-text-muted mb-1">Instrument type (Quant Studio)</label>
               <input
                 type="text"
                 value={instrumentType}
@@ -884,7 +884,7 @@ export default function QpcrExperimentDetail() {
           )}
           <div className="mt-4 flex flex-wrap gap-3">
             {!hasTargets ? (
-              <span className="text-sm text-slate-500">Add at least one target to download template.</span>
+              <span className="text-sm text-app-text-muted">Add at least one target to download template.</span>
             ) : (
               <>
                 {/* eslint-disable @typescript-eslint/no-unnecessary-condition -- template download button state */}
@@ -906,19 +906,19 @@ export default function QpcrExperimentDetail() {
             )}
           </div>
           {!hasPlate && hasTargets && (
-            <p className="mt-2 text-xs text-slate-500">Upload a plate layout above to enable template download.</p>
+            <p className="mt-2 text-xs text-app-text-muted">Upload a plate layout above to enable template download.</p>
           )}
         </section>
 
         {/* Bridge */}
-        <p className="text-sm text-slate-600 mb-6 py-3 px-4 rounded-xl bg-slate-50 border border-slate-100">
+        <p className="text-sm text-app-text-muted mb-6 py-3 px-4 rounded-xl bg-app-surface border border-app-border">
           <strong>3. Run.</strong> Load the downloaded template on your qPCR instrument and run the assay. Then return here to import results.
         </p>
 
         {/* Step 4: Import results */}
         <section className="qpcr-card p-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-1">4. Import results</h2>
-          <p className="text-sm text-slate-600 mb-4">
+          <h2 className="text-lg font-semibold text-app-text mb-1">4. Import results</h2>
+          <p className="text-sm text-app-text-muted mb-4">
             Upload the result file from your instrument (Bio-Rad CSV or Quant Studio XLS).
           </p>
           {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- feature flag and permission */}
@@ -931,7 +931,7 @@ export default function QpcrExperimentDetail() {
               )}
               <div className="flex flex-wrap items-end gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Instrument</label>
+                  <label className="block text-xs font-medium text-app-text-muted mb-1">Instrument</label>
                   <select
                     ref={instrumentSelectRef}
                     className="qpcr-select w-auto min-w-[180px]"
@@ -976,7 +976,7 @@ export default function QpcrExperimentDetail() {
           )}
           {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- feature flag may be enabled later */}
           {!QPCR_RESULTS_UPLOAD_ENABLED && (
-            <p className="text-sm text-slate-500 rounded-lg bg-slate-50 px-3 py-2">
+            <p className="text-sm text-app-text-muted rounded-lg bg-app-surface px-3 py-2">
               Result import is temporarily unavailable.
             </p>
           )}
