@@ -281,17 +281,24 @@ export default function ControlBatchWizard() {
   })()
 
   const currentStepIndex = steps.findIndex(s => s.id === currentStep)
-  const effectiveStep: WizardStep =
-    currentStepIndex >= 0 ? currentStep : defaultStep
+  const urlStepValid = currentStepIndex >= 0
+  const onContainersOrReviewWithoutData =
+    (currentStep === 'containers' || currentStep === 'review') &&
+    !canProceedToStep('containers')
+  const effectiveStep: WizardStep = !urlStepValid
+    ? defaultStep
+    : onContainersOrReviewWithoutData
+      ? defaultStep
+      : currentStep
 
   useEffect(() => {
-    if (currentStepIndex >= 0) return
+    if (effectiveStep === currentStep) return
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
-      next.set('step', defaultStep)
+      next.set('step', effectiveStep)
       return next
     })
-  }, [currentStepIndex, defaultStep, setSearchParams])
+  }, [effectiveStep, currentStep, setSearchParams])
 
   if (loading) {
     return (

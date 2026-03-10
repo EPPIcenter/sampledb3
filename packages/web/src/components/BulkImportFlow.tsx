@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { subjectsApi, specimensApi, collectionsApi, importsApi, specimenTypesApi, type BulkCombinedAtomicMode } from '../lib/api'
 import { buildBulkImportTemplateContent } from '../lib/bulk-import-csv'
@@ -52,6 +52,18 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
   const [importType, setImportType] = useState<ImportType>('subjects')
   const [containerType, setContainerType] = useState<ContainerType | 'none' | ''>('')
   const [file, setFile] = useState<File | null>(null)
+  const effectiveStep: Step =
+    currentStep !== 'upload' && !file ? 'upload' : currentStep
+
+  useEffect(() => {
+    if (effectiveStep === 'upload' && currentStep !== 'upload') {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('step', 'upload')
+        return next
+      })
+    }
+  }, [effectiveStep, currentStep, setSearchParams])
   const [loading, setLoading] = useState(false)
   const [preview, setPreview] = useState<CSVRow[]>([])
   const [validationErrors, setValidationErrors] = useState<BulkImportValidationError[]>([])
@@ -676,23 +688,23 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         {(importType === 'specimens' || importType === 'combined') && (
           <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
             <div className="storage-step-indicator">
-              <div className={`storage-step-item ${currentStep === 'upload' ? 'storage-step-item--active' : ''}`}>
+              <div className={`storage-step-item ${effectiveStep === 'upload' ? 'storage-step-item--active' : ''}`}>
                 <span className="storage-step-item__circle">1</span>
                 <span>Upload & Validate</span>
               </div>
               <div className="storage-step-connector" />
-              <div className={`storage-step-item ${currentStep === 'collections' ? 'storage-step-item--active' : ''}`}>
+              <div className={`storage-step-item ${effectiveStep === 'collections' ? 'storage-step-item--active' : ''}`}>
                 <span className="storage-step-item__circle">2</span>
-                <span>Create Collections{missingCollections.length === 0 && currentStep === 'upload' ? ' (if needed)' : ''}</span>
+                <span>Create Collections{missingCollections.length === 0 && effectiveStep === 'upload' ? ' (if needed)' : ''}</span>
               </div>
               <div className="storage-step-connector" />
               <div className="storage-step-connector" />
-              <div className={`storage-step-item ${currentStep === 'review' ? 'storage-step-item--active' : ''}`}>
+              <div className={`storage-step-item ${effectiveStep === 'review' ? 'storage-step-item--active' : ''}`}>
                 <span className="storage-step-item__circle">3</span>
                 <span>Review & Edit</span>
               </div>
               <div className="storage-step-connector" />
-              <div className={`storage-step-item ${currentStep === 'import' ? 'storage-step-item--active' : ''}`}>
+              <div className={`storage-step-item ${effectiveStep === 'import' ? 'storage-step-item--active' : ''}`}>
                 <span className="storage-step-item__circle">4</span>
                 <span>Import</span>
               </div>
@@ -701,7 +713,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         )}
 
         <div className="storage-card p-6 storage-reveal storage-reveal-2">
-          {currentStep === 'upload' && (
+          {effectiveStep === 'upload' && (
             <form onSubmit={(e) => { e.preventDefault(); handleValidateAndCheck(); }} className="space-y-6">
               <div>
                 <label htmlFor="import-type" className="block text-sm font-medium text-app-text mb-2">
@@ -895,7 +907,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
             </form>
           )}
 
-          {currentStep === 'collections' && (
+          {effectiveStep === 'collections' && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-xl font-semibold mb-2 text-app-text">Create Missing Collections</h2>
@@ -993,7 +1005,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
             </div>
           )}
 
-          {currentStep === 'review' && (
+          {effectiveStep === 'review' && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-xl font-semibold mb-2 text-app-text">Review and edit data</h2>
@@ -1059,7 +1071,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
             </div>
           )}
 
-          {currentStep === 'import' && (
+          {effectiveStep === 'import' && (
             <div className="space-y-6">
               {validationErrors.length > 0 && (
                 <div className="bg-app-trend-down/10 border border-app-trend-down rounded p-4">

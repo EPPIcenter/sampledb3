@@ -202,6 +202,19 @@ export default function DerivationsBulkImport() {
   const [reviewHeaders, setReviewHeaders] = useState<string[]>([])
   const [reviewRows, setReviewRows] = useState<Record<string, string>[]>([])
 
+  const effectiveStep: UrlStep =
+    currentStep !== 'upload' && !csvContent ? 'upload' : currentStep
+
+  useEffect(() => {
+    if (effectiveStep === 'upload' && currentStep !== 'upload') {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('step', 'upload')
+        return next
+      })
+    }
+  }, [effectiveStep, currentStep, setSearchParams])
+
   // Pure derivation: compute base list from validationResult during render
   const baseMissingCollections = useMemo(() => {
     if (!validationResult?.collections.length) return []
@@ -522,28 +535,28 @@ export default function DerivationsBulkImport() {
         <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
           <div className="storage-step-indicator">
             <div
-              className={`storage-step-item ${currentStep === 'upload' ? 'storage-step-item--active' : ''}`}
+              className={`storage-step-item ${effectiveStep === 'upload' ? 'storage-step-item--active' : ''}`}
             >
               <span className="storage-step-item__circle">1</span>
               <span>Upload</span>
             </div>
             <div className="storage-step-connector" />
             <div
-              className={`storage-step-item ${currentStep === 'collections' ? 'storage-step-item--active' : ''}`}
+              className={`storage-step-item ${effectiveStep === 'collections' ? 'storage-step-item--active' : ''}`}
             >
               <span className="storage-step-item__circle">2</span>
               <span>Collections</span>
             </div>
             <div className="storage-step-connector" />
             <div
-              className={`storage-step-item ${currentStep === 'review' ? 'storage-step-item--active' : ''}`}
+              className={`storage-step-item ${effectiveStep === 'review' ? 'storage-step-item--active' : ''}`}
             >
               <span className="storage-step-item__circle">3</span>
               <span>Review & Edit</span>
             </div>
             <div className="storage-step-connector" />
             <div
-              className={`storage-step-item ${currentStep === 'import' ? 'storage-step-item--active' : ''}`}
+              className={`storage-step-item ${effectiveStep === 'import' ? 'storage-step-item--active' : ''}`}
             >
               <span className="storage-step-item__circle">4</span>
               <span>Import</span>
@@ -558,7 +571,7 @@ export default function DerivationsBulkImport() {
         )}
 
         {/* Step: Upload */}
-        {currentStep === 'upload' && (
+        {effectiveStep === 'upload' && (
           <div className="storage-card p-6 storage-reveal storage-reveal-2">
             <form onSubmit={handleValidateAndContinue} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -979,7 +992,7 @@ export default function DerivationsBulkImport() {
         )}
 
         {/* Step: Collections */}
-        {currentStep === 'collections' && missingCollections.length > 0 && (
+        {effectiveStep === 'collections' && missingCollections.length > 0 && (
           <div className="space-y-6">
             <div className="storage-card p-6 storage-reveal storage-reveal-2">
               <h2 className="storage-section-title text-xl font-semibold mb-2">
@@ -1069,7 +1082,7 @@ export default function DerivationsBulkImport() {
         )}
 
         {/* Step: Review & Edit */}
-        {currentStep === 'review' && reviewHeaders.length > 0 && (
+        {effectiveStep === 'review' && reviewHeaders.length > 0 && (
           <div className="space-y-6">
             <div className="storage-card p-6 storage-reveal storage-reveal-2">
               <h2 className="storage-section-title text-xl font-semibold mb-2">
@@ -1145,7 +1158,7 @@ export default function DerivationsBulkImport() {
         )}
 
         {/* Step: Import (Create derivations or result) */}
-        {currentStep === 'import' && validationResult && (
+        {effectiveStep === 'import' && validationResult && (
           <div className="space-y-6">
             <div className="storage-card p-6 storage-reveal storage-reveal-2">
               <h2 className="storage-section-title text-xl font-semibold mb-4">

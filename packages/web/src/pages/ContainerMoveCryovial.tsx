@@ -59,6 +59,18 @@ export default function ContainerMoveCryovial() {
   const [searchParams, setSearchParams] = useSearchParams()
   const currentStep = (searchParams.get('step') ?? 'upload') as Step
   const [files, setFiles] = useState<FileData[]>([])
+  const effectiveStep: Step =
+    currentStep !== 'upload' && files.length === 0 ? 'upload' : currentStep
+
+  useEffect(() => {
+    if (effectiveStep === 'upload' && currentStep !== 'upload') {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('step', 'upload')
+        return next
+      })
+    }
+  }, [effectiveStep, currentStep, setSearchParams])
   const [loading, setLoading] = useState(false)
   const [availableBoxes, setAvailableBoxes] = useState<CryovialBox[]>([])
   const [locations, setLocations] = useState<Location[]>([])
@@ -587,17 +599,17 @@ export default function ContainerMoveCryovial() {
         {/* Step indicator */}
         <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
           <div className="storage-step-indicator">
-            <div className={`storage-step-item ${currentStep === 'upload' ? 'storage-step-item--active' : ''}`}>
+            <div className={`storage-step-item ${effectiveStep === 'upload' ? 'storage-step-item--active' : ''}`}>
               <span className="storage-step-item__circle">1</span>
               <span>Upload & Configure</span>
             </div>
             <div className="storage-step-connector" />
-            <div className={`storage-step-item ${currentStep === 'resolve' ? 'storage-step-item--active' : ''}`}>
+            <div className={`storage-step-item ${effectiveStep === 'resolve' ? 'storage-step-item--active' : ''}`}>
               <span className="storage-step-item__circle">2</span>
               <span>Resolve</span>
             </div>
             <div className="storage-step-connector" />
-            <div className={`storage-step-item ${currentStep === 'execute' ? 'storage-step-item--active' : ''}`}>
+            <div className={`storage-step-item ${effectiveStep === 'execute' ? 'storage-step-item--active' : ''}`}>
               <span className="storage-step-item__circle">3</span>
               <span>Execute</span>
             </div>
@@ -605,7 +617,7 @@ export default function ContainerMoveCryovial() {
         </div>
 
         {/* Step 1: Upload & Configure */}
-        {currentStep === 'upload' && (
+        {effectiveStep === 'upload' && (
           <>
             <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
               <button
@@ -806,7 +818,7 @@ export default function ContainerMoveCryovial() {
         )}
 
         {/* Step 2: Resolve */}
-        {currentStep === 'resolve' && (
+        {effectiveStep === 'resolve' && (
           <>
             <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
               <h2 className="text-xl font-semibold mb-4">Resolved Cryovial Tubes</h2>
@@ -936,7 +948,7 @@ export default function ContainerMoveCryovial() {
         )}
 
         {/* Step 3: Execute/Results */}
-        {currentStep === 'execute' && moveResult && (
+        {effectiveStep === 'execute' && moveResult && (
           <>
             <div
               className={`border rounded-lg p-6 mb-6 ${
