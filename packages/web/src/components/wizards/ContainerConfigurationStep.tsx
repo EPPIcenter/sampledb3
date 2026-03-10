@@ -956,6 +956,14 @@ export default function ContainerConfigurationStep({
                     collectionLocationId={file.collectionLocationId ?? null}
                     collectionId={file.collectionId}
                     onChange={(updates) => {
+                      const ct = (file.collectionType || collectionType) as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+                      // When CollectionAssignment clears it sends { collectionName: '', collectionLocationId: null, collectionId: undefined }.
+                      // Both collectionName and collectionLocationId branches run; the second must not overwrite the clear with old file values.
+                      const isClear =
+                        updates.collectionName === '' &&
+                        updates.collectionLocationId === null &&
+                        updates.collectionId === undefined
+
                       if (updates.collectionId !== undefined) {
                         handleCSVCollectionConfig(
                           fileIndex,
@@ -963,12 +971,11 @@ export default function ContainerConfigurationStep({
                           updates.collectionId ?? null,
                           updates.collectionName ?? null,
                           file.collectionLocationId ?? null,
-                          (file.collectionType || collectionType) as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box',
+                          ct,
                           file.sheetName || null
                         )
                       }
                       if (updates.collectionName !== undefined && updates.collectionId === undefined) {
-                        const ct = (file.collectionType || collectionType) as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
                         if (updates.collectionName.trim()) {
                           const nameToLookup = updates.collectionName.trim()
                           if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
@@ -1001,10 +1008,10 @@ export default function ContainerConfigurationStep({
                         handleCSVCollectionConfig(
                           fileIndex,
                           selectedContainerType,
-                          file.collectionId ?? null,
-                          file.collectionName ?? null,
+                          isClear ? null : (file.collectionId ?? null),
+                          isClear ? '' : (file.collectionName ?? null),
                           updates.collectionLocationId,
-                          (file.collectionType || collectionType) as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box',
+                          ct,
                           file.sheetName || null
                         )
                       }
