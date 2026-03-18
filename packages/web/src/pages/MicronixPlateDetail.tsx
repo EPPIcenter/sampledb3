@@ -327,7 +327,7 @@ export default function MicronixPlateDetail() {
                   }}
                   data-highlighted-position={isHighlighted ? 'true' : 'false'}
                   className={`h-16 w-16 mx-auto flex flex-col items-center justify-center rounded border text-[10px] px-1 py-1 bg-app-card space-y-0.5 transition-all
-                    ${isHighlighted ? 'ring-4 ring-yellow-400 ring-offset-2 border-yellow-500 shadow-lg bg-yellow-50' : ''}
+                    ${isHighlighted ? 'ring-2 ring-app-accent ring-offset-2 ring-offset-app-bg border-app-accent shadow-md bg-app-accent-muted text-app-accent-on-tint' : ''}
                     ${isClickable ? 'hover:shadow-sm hover:border-app-accent/50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-app-accent' : ''}`}
                   title={title}
                 >

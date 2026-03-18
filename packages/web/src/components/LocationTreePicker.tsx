@@ -162,7 +162,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
     const parts = text.split(new RegExp(`(${searchTerm})`, 'gi'))
     return parts.map((part, i) =>
       part.toLowerCase() === searchTerm.toLowerCase() ? (
-        <mark key={i} className="bg-yellow-200 px-0.5 rounded">
+        <mark key={i} className="rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint">
           {part}
         </mark>
       ) : (

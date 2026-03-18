@@ -245,31 +245,47 @@ export default function SheetDetail() {
                   data-highlighted-position={isHighlighted ? 'true' : 'false'}
                   className={`p-3 rounded-lg border text-left transition-all ${
                     isHighlighted
-                      ? 'ring-4 ring-yellow-400 ring-offset-2 border-yellow-500 shadow-lg bg-yellow-50'
+                      ? 'ring-2 ring-app-accent ring-offset-2 ring-offset-app-bg border-app-accent shadow-md bg-app-accent-muted'
                       : isActive 
                         ? 'border-app-trend-up/30 bg-app-trend-up/10 hover:border-green-400 hover:shadow-md' 
                         : 'border-app-border bg-app-surface hover:border-app-border hover:shadow-md'
                   }`}
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-xs font-mono font-bold text-app-text">
+                    <span
+                      className={`text-xs font-mono font-bold ${isHighlighted ? 'text-app-accent-on-tint' : 'text-app-text'}`}
+                    >
                       {p.position || `#${p.id}`}
                     </span>
-                    <div className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${isActive ? 'bg-green-200 text-app-trend-up' : 'bg-app-surface text-app-text-muted'}`}>
+                    <div
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        isActive
+                          ? 'bg-green-200 text-app-trend-up'
+                          : isHighlighted
+                            ? 'bg-app-accent/25 text-app-accent-on-tint'
+                            : 'bg-app-surface text-app-text-muted'
+                      }`}
+                    >
                       {isActive ? 'IN USE' : 'EMPTY'}
                     </div>
                   </div>
                   {p.barcode && (
-                    <div className="text-[10px] text-app-text-muted mb-1">
+                    <div
+                      className={`text-[10px] mb-1 ${isHighlighted ? 'text-app-accent-on-tint/90' : 'text-app-text-muted'}`}
+                    >
                       Barcode: {p.barcode}
                     </div>
                   )}
                   {p.container?.specimenId && (
-                    <div className="text-xs font-medium text-app-accent mt-2">
+                    <div
+                      className={`text-xs font-medium mt-2 ${isHighlighted ? 'text-app-accent-on-tint' : 'text-app-accent'}`}
+                    >
                       Specimen #{p.container.specimenId}
                     </div>
                   )}
-                  <div className="text-[10px] text-app-text-muted mt-1">
+                  <div
+                    className={`text-[10px] mt-1 ${isHighlighted ? 'text-app-accent-on-tint/80' : 'text-app-text-muted'}`}
+                  >
                     {p.container?.remainingQuantity} spots remaining
                   </div>
                 </button>

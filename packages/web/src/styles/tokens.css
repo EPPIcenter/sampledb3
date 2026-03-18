@@ -43,6 +43,9 @@
   --app-chart-6: 148 163 184;
   --app-chart-7: 203 213 225;
   --app-chart-8: 71 85 105;
+  /* Text selection (::selection) – readable in inputs and body copy */
+  --app-selection-bg: 20 184 166;
+  --app-selection-fg: 19 78 74;
 }
 
 /* Dark theme – same token names, different values */
@@ -72,6 +75,8 @@
   --app-chart-6: 203 213 225;
   --app-chart-7: 100 116 139;
   --app-chart-8: 248 250 252;
+  --app-selection-bg: 45 212 191;
+  --app-selection-fg: 15 23 42;
 }
 
 /* Sepia theme – warm, paper-like, easy on the eyes */
@@ -101,6 +106,8 @@
   --app-chart-6: 148 132 118;
   --app-chart-7: 190 178 166;
   --app-chart-8: 55 48 41;
+  --app-selection-bg: 24 78 74;
+  --app-selection-fg: 255 251 243;
 }
 
 /* High contrast theme – strong contrast for accessibility */
@@ -130,6 +137,8 @@
   --app-chart-6: 128 128 128;
   --app-chart-7: 179 179 179;
   --app-chart-8: 0 0 0;
+  --app-selection-bg: 0 0 0;
+  --app-selection-fg: 255 255 255;
 }
 
 /* Ocean theme – cool blue-grays, blue accent */
@@ -159,6 +168,8 @@
   --app-chart-6: 148 163 184;
   --app-chart-7: 203 213 225;
   --app-chart-8: 12 74 110;
+  --app-selection-bg: 14 165 233;
+  --app-selection-fg: 255 255 255;
 }
 
 /* Warm dark theme – dark with warm amber/brown tones */
@@ -188,6 +199,8 @@
   --app-chart-6: 168 162 158;
   --app-chart-7: 120 113 108;
   --app-chart-8: 253 242 233;
+  --app-selection-bg: 251 191 36;
+  --app-selection-fg: 28 25 23;
 }
 
 /* Forest theme – dark, green-toned */
@@ -217,6 +230,8 @@
   --app-chart-6: 187 247 208;
   --app-chart-7: 22 101 52;
   --app-chart-8: 240 253 244;
+  --app-selection-bg: 74 222 128;
+  --app-selection-fg: 15 23 42;
 }
 
 /* Rose theme – warm, soft rose/pink (light) */
@@ -246,4 +261,6 @@
   --app-chart-6: 244 114 182;
   --app-chart-7: 251 207 232;
   --app-chart-8: 136 19 55;
+  --app-selection-bg: 225 29 72;
+  --app-selection-fg: 255 255 255;
 }

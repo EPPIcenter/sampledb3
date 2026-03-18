@@ -31,10 +31,11 @@ Values are stored as **space-separated RGB** (e.g. `248 250 252`) so you can use
 ## Available tokens
 
 **Surfaces:** `--app-bg`, `--app-surface`, `--app-card`  
-**Accent:** `--app-accent`, `--app-accent-hover`, `--app-accent-muted`, `--app-accent-on-tint`  
+**Accent:** `--app-accent`, `--app-accent-hover`, `--app-accent-muted`, `--app-accent-on-tint` — for search-match chips (plate/box pickers, location tree, command palette), use `bg-app-accent-muted` + `text-app-accent-on-tint` instead of fixed yellow. For strong “focused cell” highlights (e.g. plate/box/sheet grid positions), use `ring-app-accent`, `bg-app-accent-muted`, and `text-app-accent-on-tint` on the cell so labels stay readable in dark themes.  
 **Text:** `--app-text`, `--app-text-muted`  
 **Border:** `--app-border`  
 **Semantic:** `--app-trend-up`, `--app-trend-down`, `--app-badge`, `--app-badge-bg`, `--app-standard`, `--app-standard-muted`  
+**Selection:** `--app-selection-bg`, `--app-selection-fg` — used for `::selection` (highlighted text) so contrast stays readable in every theme, including search fields and inputs on dark backgrounds.  
 **Typography:** `--app-font-sans`, `--app-font-display`, `--app-font-mono`
 
 ## Tailwind utilities

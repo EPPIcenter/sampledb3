@@ -199,11 +199,11 @@ export default function CryovialBoxPicker({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className={`font-medium text-sm ${highlightName ? 'bg-yellow-200' : ''}`}>
+                      <span className={`font-medium text-sm ${highlightName ? 'rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint' : ''}`}>
                         {box.name}
                       </span>
                       {box.barcode && (
-                        <span className={`text-[10px] ml-2 ${highlightBarcode ? 'bg-yellow-200 font-semibold' : 'text-app-text-muted'}`}>
+                        <span className={`text-[10px] ml-2 ${highlightBarcode ? 'rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint font-semibold' : 'text-app-text-muted'}`}>
                           {box.barcode}
                         </span>
                       )}
@@ -277,11 +277,11 @@ export default function CryovialBoxPicker({
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className={`font-medium text-sm ${highlightName ? 'bg-yellow-200' : ''}`}>
+                        <span className={`font-medium text-sm ${highlightName ? 'rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint' : ''}`}>
                           {box.name}
                         </span>
                         {box.barcode && (
-                          <span className={`text-[10px] ml-2 ${highlightBarcode ? 'bg-yellow-200 font-semibold' : 'text-app-text-muted'}`}>
+                          <span className={`text-[10px] ml-2 ${highlightBarcode ? 'rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint font-semibold' : 'text-app-text-muted'}`}>
                             {box.barcode}
                           </span>
                         )}

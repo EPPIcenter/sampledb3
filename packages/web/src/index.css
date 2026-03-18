@@ -155,3 +155,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
   color: rgb(var(--app-text));
 }
+
+/* Theme-aware selection so highlighted text stays readable (e.g. inputs in dark themes) */
+::selection {
+  background-color: rgb(var(--app-selection-bg));
+  color: rgb(var(--app-selection-fg));
+}

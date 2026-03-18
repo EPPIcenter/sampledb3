@@ -122,7 +122,9 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
     return (
       <>
         {text.substring(0, index)}
-        <mark>{text.substring(index, index + query.length)}</mark>
+        <mark className="rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint">
+          {text.substring(index, index + query.length)}
+        </mark>
         {text.substring(index + query.length)}
       </>
     )
