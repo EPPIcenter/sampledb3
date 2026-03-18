@@ -1,7 +1,14 @@
 import { useState, useMemo, useEffect } from 'react'
 import { type Location } from '../lib/api'
 import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
+import type { PlateCandidate } from '../lib/plate-filename-match'
 import ModalPortal from './ModalPortal'
+
+const MATCH_TYPE_LABELS: Record<PlateCandidate['matchType'], string> = {
+  exact: 'Exact match',
+  contains: 'Plate name contains scan text',
+  reverse_contains: 'Scan text contains plate name',
+}
 
 export interface MicronixPlate {
   id: number
@@ -19,6 +26,8 @@ interface MicronixPlatePickerProps {
   onChange: (plateName: string) => void
   disabled?: boolean
   loading?: boolean
+  /** Ordered inference candidates (e.g. from filename/CSV); shown at top when ambiguous. */
+  suggestedPlates?: PlateCandidate[]
 }
 
 export default function MicronixPlatePicker({
@@ -28,10 +37,38 @@ export default function MicronixPlatePicker({
   onChange,
   disabled = false,
   loading = false,
+  suggestedPlates,
 }: MicronixPlatePickerProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
+
+  const suggestedRows = useMemo(() => {
+    if (!suggestedPlates?.length) return []
+    const byId = new Map(plates.map((p) => [p.id, p]))
+    const seen = new Set<number>()
+    const out: Array<{ plate: MicronixPlate; matchType: PlateCandidate['matchType'] }> = []
+    for (const s of suggestedPlates) {
+      if (seen.has(s.id)) continue
+      const p = byId.get(s.id)
+      if (p) {
+        seen.add(s.id)
+        out.push({ plate: p, matchType: s.matchType })
+      }
+    }
+    return out
+  }, [suggestedPlates, plates])
+
+  const showSuggestedSection =
+    suggestedRows.length > 0 && (!value || (suggestedPlates?.length ?? 0) > 1)
+
+  const suggestionRank = useMemo(() => {
+    const m = new Map<number, number>()
+    suggestedPlates?.forEach((s, i) => {
+      if (!m.has(s.id)) m.set(s.id, i)
+    })
+    return m
+  }, [suggestedPlates])
 
   // Map plates by location ID
   const platesByLocation = useMemo(() => {
@@ -115,7 +152,7 @@ export default function MicronixPlatePicker({
   const matchingPlates = useMemo(() => {
     if (!search.trim()) return []
     const searchLower = search.toLowerCase()
-    return plates.filter((plate) => {
+    const filtered = plates.filter((plate) => {
       const nameMatch = plate.name.toLowerCase().includes(searchLower)
       const barcodeMatch = plate.barcode?.toLowerCase().includes(searchLower)
       const locationMatch = plate.locationId != null && (() => {
@@ -129,7 +166,15 @@ export default function MicronixPlatePicker({
       })()
       return nameMatch || barcodeMatch || locationMatch
     })
-  }, [plates, locations, search])
+    const noRank = 1_000_000
+    filtered.sort((a, b) => {
+      const ia = suggestionRank.get(a.id) ?? noRank
+      const ib = suggestionRank.get(b.id) ?? noRank
+      if (ia !== ib) return ia - ib
+      return a.name.localeCompare(b.name)
+    })
+    return filtered
+  }, [plates, locations, search, suggestionRank])
 
   const selectedPlate = plates.find((p) => p.name === value)
 
@@ -262,11 +307,13 @@ export default function MicronixPlatePicker({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className={`font-medium text-sm ${highlightName ? 'bg-yellow-200' : ''}`}>
+                      <span
+                        className={`font-medium text-sm ${highlightName ? 'rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint' : ''}`}
+                      >
                         {plate.name}
                       </span>
                       {plate.barcode && (
-                        <span className={`text-[10px] ml-2 ${highlightBarcode ? 'bg-yellow-200 font-semibold' : 'text-app-text-muted'}`}>
+                        <span className={`text-[10px] ml-2 ${highlightBarcode ? 'rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint font-semibold' : 'text-app-text-muted'}`}>
                           {plate.barcode}
                         </span>
                       )}
@@ -345,11 +392,13 @@ export default function MicronixPlatePicker({
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className={`font-medium text-sm ${highlightName ? 'bg-yellow-200' : ''}`}>
+                        <span
+                        className={`font-medium text-sm ${highlightName ? 'rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint' : ''}`}
+                      >
                           {plate.name}
                         </span>
                         {plate.barcode && (
-                          <span className={`text-[10px] ml-2 ${highlightBarcode ? 'bg-yellow-200 font-semibold' : 'text-app-text-muted'}`}>
+                          <span className={`text-[10px] ml-2 ${highlightBarcode ? 'rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint font-semibold' : 'text-app-text-muted'}`}>
                             {plate.barcode}
                           </span>
                         )}
@@ -430,6 +479,52 @@ export default function MicronixPlatePicker({
                 <div className="p-4 text-sm text-app-text-muted">Loading plates...</div>
               ) : (
                 <div className="p-2">
+                  {showSuggestedSection && !search.trim() && (
+                    <div className="mb-4">
+                      <div className="px-3 py-1.5 bg-app-accent-muted/40 border border-app-accent/25 text-xs font-semibold text-app-text rounded-t-lg">
+                        Suggested from scan
+                      </div>
+                      <div
+                        role="listbox"
+                        aria-label="Suggested plates from scan"
+                        className="border border-t-0 border-app-border rounded-b-lg overflow-hidden divide-y divide-app-border"
+                      >
+                        {suggestedRows.map(({ plate, matchType }) => {
+                          const isSelected = plate.name === value
+                          return (
+                            <button
+                              key={plate.id}
+                              type="button"
+                              role="option"
+                              aria-selected={isSelected}
+                              onClick={() => handleSelect(plate.name)}
+                              className={`w-full text-left px-3 py-3 min-h-[44px] transition-colors ${
+                                isSelected
+                                  ? 'bg-app-accent-muted text-app-accent-hover'
+                                  : 'hover:bg-app-surface text-app-text'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium text-sm">{plate.name}</span>
+                                {plate.barcode && (
+                                  <span className="text-[10px] text-app-text-muted font-mono shrink-0">
+                                    {plate.barcode}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-app-accent-hover font-medium mt-0.5">
+                                {MATCH_TYPE_LABELS[matchType]}
+                              </div>
+                              <div className="text-[10px] text-app-text-muted mt-0.5">
+                                {plate.itemCount} item{plate.itemCount !== 1 ? 's' : ''}
+                                {plate.locationPath ? ` · ${plate.locationPath}` : ''}
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                   {search.trim() && matchingPlates.length > 0 && (
                     <div className="mb-4">
                       <div className="px-3 py-1.5 bg-app-surface border-b border-app-border text-xs font-medium text-app-text-muted sticky top-0 rounded-t-lg">
@@ -459,11 +554,13 @@ export default function MicronixPlatePicker({
                               }`}
                             >
                               <div className="flex items-center justify-between">
-                                <span className={`font-medium text-sm ${highlightName ? 'bg-yellow-200' : ''}`}>
+                                <span
+                        className={`font-medium text-sm ${highlightName ? 'rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint' : ''}`}
+                      >
                                   {plate.name}
                                 </span>
                                 {plate.barcode && (
-                                  <span className={`text-[10px] ml-2 ${highlightBarcode ? 'bg-yellow-200 font-semibold' : 'text-app-text-muted'}`}>
+                                  <span className={`text-[10px] ml-2 ${highlightBarcode ? 'rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint font-semibold' : 'text-app-text-muted'}`}>
                                     {plate.barcode}
                                   </span>
                                 )}

@@ -43,6 +43,9 @@ export interface ScannerConfiguration {
   columnColumn?: string
   skipRows: number
   isDefault?: boolean
+  /** Default: infer plate from CSV filename. `column` uses a repeated header column. */
+  plateNameSource?: 'filename' | 'column'
+  plateNameColumn?: string
 }
 
 export interface ScannerConfigurations {

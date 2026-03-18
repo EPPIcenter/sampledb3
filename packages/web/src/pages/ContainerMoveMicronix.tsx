@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, Link, useNavigate, Navigate } from 'react-router-dom'
 import { collectionsApi, locationsApi, scannerConfigurationsApi, type Location, type ScannerConfiguration } from '../lib/api'
-import { extractPlateStemFromFilename, findPlateCandidatesFromStem, type PlateCandidate } from '../lib/plate-filename-match'
-import { normalizeWellPosition, validateFullPlatePositions } from '../lib/micronix-plate-positions'
+import type { PlateCandidate } from '../lib/plate-filename-match'
+import { inferDestinationPlateForScan } from '../lib/plate-destination-inference'
+import { parseScannerPlateCsv, validateScannerPlateCsv } from '../lib/scanner-plate-csv'
 import MicronixPlatePicker, { type MicronixPlate } from '../components/MicronixPlatePicker'
 import { useUser } from '../contexts/UserContext'
 import '../styles/storage.css'
@@ -147,14 +148,19 @@ export default function ContainerMoveMicronix() {
       for (const fileData of files) {
         try {
           const text = await fileData.file.text()
-          const csvRows = parseCSV(text, config)
-          const validation = validateCSV(csvRows, config)
+          const csvRows = parseScannerPlateCsv(text, config)
+          const validation = validateScannerPlateCsv(csvRows, config)
+          const inference = inferDestinationPlateForScan(fileData.file.name, csvRows, config, availablePlates)
+          const validationErrors = [...validation.errors, ...inference.plateInferenceErrors]
           const preview = csvRows.slice(0, 5)
           updated.push({
             ...fileData,
             csvRows,
-            validationErrors: validation.errors,
+            validationErrors,
             preview,
+            inferredPlateName: inference.inferredPlateName,
+            inferredMatches: inference.inferredMatches,
+            selectedPlateName: inference.selectedPlateName,
             resolvedContainers: [],
             unresolvedContainers: [],
             isResolved: false,
@@ -191,104 +197,6 @@ export default function ContainerMoveMicronix() {
     return <Navigate to="/" replace />
   }
 
-  const buildPosition = (config: ScannerConfiguration, row: CSVRow): string => {
-    if (config.positionType === 'single') {
-      return (row[config.positionColumn!] ?? '').trim() || ''
-    } else {
-      const rowVal = (row[config.rowColumn!] ?? '').trim() || ''
-      const colVal = (row[config.columnColumn!] ?? '').trim() || ''
-      // Always pad column to 2 digits (01-12 for micronix plates)
-      const paddedCol = colVal.padStart(2, '0')
-      return `${rowVal}${paddedCol}`
-    }
-  }
-
-  const parseCSV = (text: string, config: ScannerConfiguration): CSVRow[] => {
-    const lines = text.split('\n').filter(line => line.trim())
-    if (lines.length < 2 + config.skipRows) return []
-
-    // Skip header rows
-    const headerLine = lines[config.skipRows]
-    const headers = headerLine.split(',').map(h => h.trim())
-    const rows: CSVRow[] = []
-
-    // Parse data rows
-    for (let i = config.skipRows + 1; i < lines.length; i++) {
-      const values = lines[i].split(',')
-      const row: CSVRow = {}
-      headers.forEach((header, j) => {
-        row[header] = values[j]?.trim() || ''
-      })
-
-      // Add normalized fields (internal format)
-      row.container_barcode = row[config.barcodeColumn] || ''
-      if (config.positionType === 'single') {
-        row.target_position = row[config.positionColumn!] || ''
-      } else {
-        row.target_position = buildPosition(config, row)
-      }
-
-      rows.push(row)
-    }
-
-    return rows
-  }
-
-  const validateCSV = (rows: CSVRow[], config: ScannerConfiguration): { valid: boolean; errors: ValidationError[] } => {
-    const errors: ValidationError[] = []
-
-    if (rows.length === 0) {
-      return { valid: false, errors: [{ row: 0, error: 'CSV file is empty' }] }
-    }
-
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]
-      // Barcode may be empty (empty well); only position is required
-      if (!row.target_position || row.target_position.trim() === '') {
-        const positionDesc = config.positionType === 'single'
-          ? `Position column "${config.positionColumn}"`
-          : `Row column "${config.rowColumn}" and Column column "${config.columnColumn}"`
-        errors.push({
-          row: i + 1,
-          error: `${positionDesc} is required but missing or empty`,
-        })
-      }
-    }
-
-    // Require all 96 well positions (A01–H12) exactly once, as from scanning software
-    const positionSet = new Set<string>()
-    for (const row of rows) {
-      const pos = row.target_position.trim()
-      if (pos) {
-        const normalized = normalizeWellPosition(pos)
-        if (normalized) positionSet.add(normalized)
-      }
-    }
-    const fullPlate = validateFullPlatePositions(positionSet)
-    if (!fullPlate.valid) {
-      const parts: string[] = [
-        `CSV must list all 96 well positions (A01–H12) exactly once, as produced by scanning software.`,
-        `Found ${positionSet.size} valid position(s).`,
-      ]
-      if (fullPlate.missing && fullPlate.missing.length > 0) {
-        const sample = fullPlate.missing.slice(0, 5).join(', ')
-        const more = fullPlate.missing.length > 5 ? ` and ${fullPlate.missing.length - 5} more` : ''
-        parts.push(`Missing: ${sample}${more}.`)
-      }
-      if (fullPlate.extra && fullPlate.extra.length > 0) {
-        const sample = fullPlate.extra.slice(0, 5).join(', ')
-        const more = fullPlate.extra.length > 5 ? ` and ${fullPlate.extra.length - 5} more` : ''
-        parts.push(`Invalid or duplicate: ${sample}${more}.`)
-      }
-      errors.push({ row: 0, error: parts.join(' ') })
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-    }
-  }
-
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || [])
     if (selectedFiles.length === 0) return
@@ -307,35 +215,22 @@ export default function ContainerMoveMicronix() {
 
       for (const file of selectedFiles) {
         const text = await file.text()
-        const csvRows = parseCSV(text, selectedConfig)
-        const validation = validateCSV(csvRows, selectedConfig)
-        
-        // Get preview (first 5 rows)
+        const csvRows = parseScannerPlateCsv(text, selectedConfig)
+        const validation = validateScannerPlateCsv(csvRows, selectedConfig)
+        const inference = inferDestinationPlateForScan(file.name, csvRows, selectedConfig, availablePlates)
+        const validationErrors = [...validation.errors, ...inference.plateInferenceErrors]
+
         const preview = csvRows.slice(0, 5)
-        
-        // Infer destination plate from filename (same rules as Plate Scan Validation: stem + exact/contains/reverse_contains)
-        const stem = extractPlateStemFromFilename(file.name)
-        const candidates = findPlateCandidatesFromStem(stem, availablePlates)
-        
-        let inferredPlateName: string | null = null
-        let selectedPlateName: string | null = null
-        
-        if (candidates.length === 1) {
-          inferredPlateName = candidates[0].name
-          selectedPlateName = candidates[0].name
-        } else if (candidates.length > 1 || stem) {
-          inferredPlateName = stem || null
-        }
 
         newFiles.push({
           file,
-          inferredPlateName,
-          inferredMatches: candidates,
-          selectedPlateName,
+          inferredPlateName: inference.inferredPlateName,
+          inferredMatches: inference.inferredMatches,
+          selectedPlateName: inference.selectedPlateName,
           csvRows,
           resolvedContainers: [],
           unresolvedContainers: [],
-          validationErrors: validation.errors,
+          validationErrors,
           isResolved: false,
           preview,
         })
@@ -797,7 +692,10 @@ export default function ContainerMoveMicronix() {
                 <div className="space-y-4 text-app-text mt-4">
                   <div>
                     <h3 className="font-semibold text-app-text mb-2">Overview</h3>
-                    <p>Upload one or more CSV files representing plate scans. Each file should be named after the destination plate it represents. The system will infer the destination plate from the filename, or you can select it manually.</p>
+                    <p>
+                      Upload one or more CSV files representing plate scans. Depending on the scanner configuration, the destination plate is inferred from the{' '}
+                      <strong>file name</strong> (after stripping common date suffixes) or from a <strong>CSV column</strong> that repeats the plate name on every row. You can always pick the plate manually.
+                    </p>
                   </div>
 
                   <div>
@@ -897,6 +795,21 @@ export default function ContainerMoveMicronix() {
                   Please select a scanner configuration before uploading files.
                 </p>
               )}
+              {selectedConfigId &&
+                (() => {
+                  const cfg = scannerConfigurations.find((c) => c.id === selectedConfigId)
+                  if (cfg?.plateNameSource === 'column' && cfg.plateNameColumn?.trim()) {
+                    return (
+                      <p className="text-sm text-app-text-muted mb-2 border-l-2 border-app-accent/40 pl-3">
+                        Destination plate is read from column{' '}
+                        <span className="font-mono text-app-accent">{cfg.plateNameColumn.trim()}</span>
+                        . Every row must use the same plate name.
+                      </p>
+                    )
+                  }
+                  return null
+                })()}
+
               <input
                 ref={fileInputRef}
                 type="file"
@@ -933,14 +846,22 @@ export default function ContainerMoveMicronix() {
                           Destination Plate:
                         </label>
                         {fileData.inferredMatches.length === 1 &&
-                          fileData.selectedPlateName === fileData.inferredMatches[0].name && (
-                          <p className="text-xs text-app-trend-up mb-1">✓ Inferred from filename — you can change it below if needed.</p>
-                        )}
+                          fileData.selectedPlateName === fileData.inferredMatches[0].name &&
+                          (() => {
+                            const cfg = scannerConfigurations.find((c) => c.id === selectedConfigId)
+                            const fromCol = cfg?.plateNameSource === 'column' && cfg.plateNameColumn?.trim()
+                            return (
+                              <p className="text-xs text-app-trend-up mb-1">
+                                ✓ Inferred from {fromCol ? `column "${cfg.plateNameColumn!.trim()}"` : 'file name'} — you can change it below if needed.
+                              </p>
+                            )
+                          })()}
                         <MicronixPlatePicker
                           locations={locations}
                           plates={availablePlates}
                           value={fileData.selectedPlateName || undefined}
                           onChange={(plateName) => updateFilePlateSelection(index, plateName)}
+                          suggestedPlates={fileData.inferredMatches}
                         />
                         {fileData.inferredPlateName && !fileData.selectedPlateName && (
                           <p className="text-xs text-app-text-muted mt-1">

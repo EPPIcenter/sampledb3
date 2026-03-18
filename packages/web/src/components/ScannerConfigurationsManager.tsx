@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { scannerConfigurationsApi, type ScannerConfigurations, type ScannerConfiguration } from '../lib/api'
+import { plateNameSourceSummary } from '../lib/plate-destination-inference'
 import { useUser } from '../contexts/UserContext'
 import InfoTooltip from './InfoTooltip'
 
@@ -37,6 +38,8 @@ export default function ScannerConfigurationsManager({
   const [formColumnColumn, setFormColumnColumn] = useState('')
   const [formSkipRows, setFormSkipRows] = useState(0)
   const [formIsDefault, setFormIsDefault] = useState(false)
+  const [formPlateNameSource, setFormPlateNameSource] = useState<'filename' | 'column'>('filename')
+  const [formPlateNameColumn, setFormPlateNameColumn] = useState('')
 
   // Load shared and personal configs separately
   useEffect(() => {
@@ -67,6 +70,8 @@ export default function ScannerConfigurationsManager({
     setFormColumnColumn('')
     setFormSkipRows(0)
     setFormIsDefault(false)
+    setFormPlateNameSource('filename')
+    setFormPlateNameColumn('')
     setEditingIndex(null)
     setShowNewForm(false)
     setError(null)
@@ -95,6 +100,10 @@ export default function ScannerConfigurationsManager({
       setError('Row and column columns are required for combined position type')
       return
     }
+    if (formPlateNameSource === 'column' && !formPlateNameColumn.trim()) {
+      setError('Plate name column is required when plate name source is CSV column')
+      return
+    }
 
     const newConfig: ScannerConfiguration = {
       id: `config-${Date.now()}`,
@@ -106,6 +115,8 @@ export default function ScannerConfigurationsManager({
       columnColumn: formPositionType === 'combined' ? formColumnColumn.trim() : undefined,
       skipRows: formSkipRows,
       isDefault: formIsDefault || currentConfigs.length === 0,
+      plateNameSource: formPlateNameSource === 'column' ? 'column' : undefined,
+      plateNameColumn: formPlateNameSource === 'column' ? formPlateNameColumn.trim() : undefined,
     }
 
     if (activeTab === 'personal') {
@@ -168,6 +179,8 @@ export default function ScannerConfigurationsManager({
     setFormColumnColumn(config.columnColumn || '')
     setFormSkipRows(config.skipRows)
     setFormIsDefault(config.isDefault || false)
+    setFormPlateNameSource(config.plateNameSource === 'column' ? 'column' : 'filename')
+    setFormPlateNameColumn(config.plateNameColumn ?? '')
     setShowNewForm(true)
   }
 
@@ -197,6 +210,10 @@ export default function ScannerConfigurationsManager({
       setError('Row and column columns are required for combined position type')
       return
     }
+    if (formPlateNameSource === 'column' && !formPlateNameColumn.trim()) {
+      setError('Plate name column is required when plate name source is CSV column')
+      return
+    }
 
     const updated = [...currentConfigs]
     const wasDefault = existingConfig.isDefault
@@ -219,6 +236,8 @@ export default function ScannerConfigurationsManager({
       columnColumn: formPositionType === 'combined' ? formColumnColumn.trim() : undefined,
       skipRows: formSkipRows,
       isDefault: formIsDefault,
+      plateNameSource: formPlateNameSource === 'column' ? 'column' : undefined,
+      plateNameColumn: formPlateNameSource === 'column' ? formPlateNameColumn.trim() : undefined,
     }
 
     if (editingType === 'personal') {
@@ -450,6 +469,7 @@ export default function ScannerConfigurationsManager({
                       {config.positionType === 'single' && `, Position: ${config.positionColumn}`}
                       {config.positionType === 'combined' && `, Row: ${config.rowColumn}, Column: ${config.columnColumn}`}
                       {config.skipRows > 0 && `, Skip: ${config.skipRows} rows`}
+                      <span className="text-app-accent"> · {plateNameSourceSummary(config)}</span>
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -629,6 +649,58 @@ export default function ScannerConfigurationsManager({
               </div>
             </>
           )}
+
+          <div className="mb-4 border-l-2 border-app-accent/40 pl-3 space-y-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-medium text-app-text">Destination plate</span>
+              <InfoTooltip text="For micronix container move and validate plate scan: infer which plate the CSV refers to from the file name (after stripping common date suffixes), or from a column that repeats the same plate name on every row. Column mode requires one consistent plate name per file." />
+            </div>
+            <div
+              className="inline-flex rounded-lg border border-app-border p-0.5 bg-app-card"
+              role="group"
+              aria-label="Plate name source"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setFormPlateNameSource('filename')
+                  setFormPlateNameColumn('')
+                }}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  formPlateNameSource === 'filename'
+                    ? 'bg-app-accent-muted text-app-accent'
+                    : 'text-app-text-muted hover:text-app-text'
+                }`}
+              >
+                File name
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormPlateNameSource('column')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  formPlateNameSource === 'column'
+                    ? 'bg-app-accent-muted text-app-accent'
+                    : 'text-app-text-muted hover:text-app-text'
+                }`}
+              >
+                CSV column
+              </button>
+            </div>
+            {formPlateNameSource === 'column' && (
+              <div>
+                <label className="block text-xs font-medium text-app-text-muted mb-1">
+                  Plate name column (header) *
+                </label>
+                <input
+                  type="text"
+                  value={formPlateNameColumn}
+                  onChange={(e) => setFormPlateNameColumn(e.target.value)}
+                  className="w-full max-w-md px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent font-mono text-sm"
+                  placeholder="e.g. PlateName, RackID"
+                />
+              </div>
+            )}
+          </div>
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-app-text mb-2">

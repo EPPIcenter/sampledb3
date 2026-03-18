@@ -1748,6 +1748,8 @@ export interface ScannerConfiguration {
   columnColumn?: string
   skipRows: number
   isDefault?: boolean
+  plateNameSource?: 'filename' | 'column'
+  plateNameColumn?: string
 }
 
 export interface ScannerConfigurations {

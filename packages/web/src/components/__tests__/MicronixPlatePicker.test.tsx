@@ -43,6 +43,14 @@ const mockPlates: MicronixPlate[] = [
     itemCount: 0,
     locationPath: 'Freezer A / Shelf 1',
   },
+  {
+    id: 103,
+    name: 'PLATE-003-OTHER',
+    barcode: 'BC003',
+    locationId: 2,
+    itemCount: 5,
+    locationPath: 'Freezer A / Shelf 1',
+  },
 ]
 
 describe('MicronixPlatePicker', () => {
@@ -121,5 +129,51 @@ describe('MicronixPlatePicker', () => {
     fireEvent.click(plateOption)
     expect(onChange).toHaveBeenCalledWith('PLATE-001')
     expect(screen.queryByRole('heading', { name: 'Select Micronix Plate' })).not.toBeInTheDocument()
+  })
+
+  it('shows Suggested from scan in inference order when multiple suggestions and no value', async () => {
+    await render(
+      <MicronixPlatePicker
+        locations={mockLocations}
+        plates={mockPlates}
+        onChange={vi.fn()}
+        suggestedPlates={[
+          { id: 102, name: 'PLATE-002', matchType: 'contains' },
+          { id: 101, name: 'PLATE-001', matchType: 'contains' },
+        ]}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /select target plate/i }))
+    await screen.findByRole('heading', { name: 'Select Micronix Plate' })
+    const suggested = screen.getByRole('listbox', { name: /suggested plates from scan/i })
+    const options = within(suggested).getAllByRole('option')
+    expect(options).toHaveLength(2)
+    expect(options[0]).toHaveAccessibleName(/PLATE-002/i)
+    expect(options[1]).toHaveAccessibleName(/PLATE-001/i)
+  })
+
+  it('when searching, lists suggested plates before other matches', async () => {
+    await render(
+      <MicronixPlatePicker
+        locations={mockLocations}
+        plates={mockPlates}
+        onChange={vi.fn()}
+        suggestedPlates={[
+          { id: 102, name: 'PLATE-002', matchType: 'contains' },
+          { id: 101, name: 'PLATE-001', matchType: 'contains' },
+        ]}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /select target plate/i }))
+    await screen.findByRole('heading', { name: 'Select Micronix Plate' })
+    fireEvent.change(screen.getByPlaceholderText(/search by location/i), {
+      target: { value: 'PLATE' },
+    })
+    await screen.findByText('Matching plates')
+    const listbox = screen.getByRole('listbox', { name: /plate list/i })
+    const options = within(listbox).getAllByRole('option')
+    expect(options[0]).toHaveAccessibleName(/PLATE-002/i)
+    expect(options[1]).toHaveAccessibleName(/PLATE-001/i)
+    expect(options[options.length - 1]).toHaveAccessibleName(/PLATE-003-OTHER/i)
   })
 })

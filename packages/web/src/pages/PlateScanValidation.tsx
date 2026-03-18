@@ -8,6 +8,8 @@ import {
   type InferenceReport,
 } from '../lib/api'
 import { extractPlateStemFromFilename, findPlateCandidatesFromStem } from '../lib/plate-filename-match'
+import { parseScannerPlateCsv } from '../lib/scanner-plate-csv'
+import { inferDestinationPlateForScan } from '../lib/plate-destination-inference'
 import '../styles/storage.css'
 
 
@@ -139,6 +141,40 @@ function downloadInferenceReport(report: InferenceReport): void {
 
 type PlateMode = 'select_plate' | 'infer_plate'
 
+function applyPlateInferenceForValidation(
+  text: string,
+  fileName: string,
+  configId: string | null,
+  configs: ScannerConfiguration[],
+  plateList: Array<{ id: number; name: string }>
+): { error: string | null; candidateRows: Array<{ id: number; name: string; matchType: string }> } {
+  const config = configId ? configs.find((c) => c.id === configId) : undefined
+  if (!config) {
+    const stem = extractPlateStemFromFilename(fileName)
+    const cands = findPlateCandidatesFromStem(stem, plateList)
+    return {
+      error: null,
+      candidateRows: cands.map((c) => ({ id: c.id, name: c.name, matchType: c.matchType })),
+    }
+  }
+  const rows = parseScannerPlateCsv(text, config)
+  const inference = inferDestinationPlateForScan(fileName, rows, config, plateList)
+  if (inference.plateInferenceErrors.length > 0) {
+    return {
+      error: inference.plateInferenceErrors.map((e) => e.error).join(' '),
+      candidateRows: [],
+    }
+  }
+  return {
+    error: null,
+    candidateRows: inference.inferredMatches.map((c) => ({
+      id: c.id,
+      name: c.name,
+      matchType: c.matchType,
+    })),
+  }
+}
+
 export default function PlateScanValidation() {
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [csvText, setCsvText] = useState<string>('')
@@ -179,6 +215,29 @@ export default function PlateScanValidation() {
     })
   }, [])
 
+  useEffect(() => {
+    if (!csvText || !csvFile || !selectedConfigId || scannerConfigurations.length === 0) return
+    const list = plates.map((p) => ({ id: p.id, name: p.name }))
+    const { error: inferErr, candidateRows } = applyPlateInferenceForValidation(
+      csvText,
+      csvFile.name,
+      selectedConfigId,
+      scannerConfigurations,
+      list
+    )
+    if (inferErr) {
+      setError(inferErr)
+      setCandidates([])
+      if (plateMode === 'infer_plate') setSelectedPlateId(null)
+      return
+    }
+    setCandidates(candidateRows)
+    if (plateMode === 'infer_plate') {
+      const single = candidateRows.length === 1 ? candidateRows[0].id : null
+      setSelectedPlateId(single)
+    }
+  }, [selectedConfigId, csvText, csvFile, scannerConfigurations, plates, plateMode])
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     setResult(null)
@@ -194,12 +253,23 @@ export default function PlateScanValidation() {
     const text = await file.text()
     setCsvFile(file)
     setCsvText(text)
-    const stem = extractPlateStemFromFilename(file.name)
     const list = plates.map((p) => ({ id: p.id, name: p.name }))
-    const cands = findPlateCandidatesFromStem(stem, list)
-    setCandidates(cands.map((c) => ({ id: c.id, name: c.name, matchType: c.matchType })))
-    if (cands.length === 1) {
-      setSelectedPlateId(cands[0].id)
+    const { error: inferErr, candidateRows } = applyPlateInferenceForValidation(
+      text,
+      file.name,
+      selectedConfigId,
+      scannerConfigurations,
+      list
+    )
+    if (inferErr) {
+      setError(inferErr)
+      setCandidates([])
+      setSelectedPlateId(null)
+      return
+    }
+    setCandidates(candidateRows)
+    if (candidateRows.length === 1) {
+      setSelectedPlateId(candidateRows[0].id)
     } else {
       setSelectedPlateId(null)
     }
@@ -278,7 +348,7 @@ export default function PlateScanValidation() {
           </nav>
           <h1 className="text-2xl font-bold text-app-text">Validate Plate Scan</h1>
           <p className="text-app-text-muted mt-1">
-            Upload a scanned plate CSV and compare it to a micronix plate in the database. The filename can include dates or times; the system will suggest a plate from the name.
+            Upload a scanned plate CSV and compare it to a micronix plate. Plate suggestions use the scanner configuration: either the file name (dates/times stripped) or a column that repeats the plate name on each row.
           </p>
         </div>
 
@@ -323,7 +393,12 @@ export default function PlateScanValidation() {
                   {csvFile.name}
                   {candidates.length > 0 && !inferMode && (
                     <span className="ml-2">
-                      — {candidates.length} plate{candidates.length !== 1 ? 's' : ''} suggested from filename
+                      — {candidates.length} plate{candidates.length !== 1 ? 's' : ''} suggested (
+                      {selectedConfigId &&
+                      scannerConfigurations.find((c) => c.id === selectedConfigId)?.plateNameSource === 'column'
+                        ? 'CSV column'
+                        : 'file name'}
+                      )
                     </span>
                   )}
                 </p>
@@ -409,7 +484,12 @@ export default function PlateScanValidation() {
                   <>
                     {suggestedFiltered.length > 0 && (
                       <div className="px-3 py-1.5 bg-app-surface border-b border-app-border text-xs font-medium text-app-text-muted sticky top-0">
-                        Suggested from filename
+                        Suggested (
+                        {selectedConfigId &&
+                        scannerConfigurations.find((c) => c.id === selectedConfigId)?.plateNameSource === 'column'
+                          ? 'column'
+                          : 'file name'}
+                        )
                       </div>
                     )}
                     {suggestedFiltered.map((p) => (

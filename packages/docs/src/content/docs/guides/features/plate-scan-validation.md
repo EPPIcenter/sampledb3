@@ -22,14 +22,14 @@ Validation is read-only: it does not change any data.
 ## Upload and configure
 
 1. **Scanner configuration**  
-   Choose the scanner configuration that matches your CSV format (column names for barcode and position, row/column vs single position column, and how many header rows to skip). The same configurations used for container move and qPCR plate upload are available. You can manage them in **Settings → Scanner configurations**.
+   Choose the scanner configuration that matches your CSV format (column names for barcode and position, row/column vs single position column, how many header rows to skip, and optionally whether the **destination plate** is inferred from the **file name** or a **CSV column** that repeats the plate name). The same configurations are used for container move and qPCR plate upload. Manage them in **Settings → Scanner configurations**.
 
 2. **CSV file**  
    Upload the scanned plate CSV. The file should have a barcode column and a position column (or separate row and column columns), as defined by the selected scanner configuration.
 
 3. **Plate**  
    Choose how to identify the plate:
-   - **I know the plate**: Select the micronix plate in the database to compare against. If the filename (without `.csv`) looks like a plate name, the system suggests one or more matching plates. Filenames often include dates or times (e.g. `PLATE1_2024-01-15.csv`); the system strips common date/time suffixes and uses the remaining stem to suggest plates. You can confirm the suggested plate or pick another from the list.
+   - **I know the plate**: Select the micronix plate in the database to compare against. The system suggests plates from the file name (after stripping common date/time suffixes) or from a configured CSV column—the same rules as micronix container move. You can confirm a suggestion or pick another from the list.
    - **Infer plate from scan**: Use this when you do not know the plate name. The system infers the plate from the barcodes in the scan: all scanned tubes must belong to the same plate in the database. When inference succeeds, the result shows the inferred plate name and the same comparison (match/mismatch/missing/extra) as when you select a plate. When the system **cannot** infer a single plate—for example the scan has no barcodes (you get an error message), or it has unknown barcodes (not in the database), or tubes from more than one plate—you see a **detailed inference report** instead of a single error. The report lists unknown barcodes (if any) and a per-plate breakdown: for each plate that appears in the scan, how many tubes are from that plate and how many of those are in their expected position on that plate. You can download this report as CSV.
 
 4. **Validate**  
@@ -68,7 +68,7 @@ Plate suggestion from the filename works best when the filename starts with or c
 - Strips common date/time suffixes (e.g. `_2024-01-15`, `_20240115`, `_143000`).
 - Uses the remaining stem to find plates by exact name (case-insensitive), or by "contains" (plate name contains stem, or stem contains plate name).
 
-If one plate matches, it is auto-selected. If multiple match, you choose from the list. If none match, you can still pick any plate manually.
+A **unique exact** match on the stem is auto-selected even if longer plate names also contain the stem. If there is no unique exact match but exactly one partial match exists, that plate is auto-selected. If several plates match, you choose from the list. If none match, you can still pick any plate manually.
 
 ## Related workflows
 
