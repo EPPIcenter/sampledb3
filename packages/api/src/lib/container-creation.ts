@@ -10,13 +10,16 @@ import {
   staticWell,
   sheet,
   specimen,
+  box,
+  bag,
 } from '../db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } from './defaults'
 import { validateUnitForContainerType, validateContainerTypeForSpecimenType } from './validation'
 import {
   resolveCollection,
 } from './collection-resolution'
+import { utcNow } from './datetime'
 
 type DatabaseOrTransaction =
   | Database
@@ -145,7 +148,7 @@ async function createMicronixTube(
     const defaultTotalQty = await getDefaultTotalQuantity(dbForValidation, 'micronix_tube')
     const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'micronix_tube')
 
-    const now = new Date().toISOString()
+    const now = utcNow()
     const inserted = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
@@ -200,7 +203,7 @@ async function createCryovialTube(
     const defaultTotalQty = await getDefaultTotalQuantity(dbForValidation, 'cryovial_tube')
     const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'cryovial_tube')
 
-    const now = new Date().toISOString()
+    const now = utcNow()
     const inserted = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
@@ -231,6 +234,9 @@ async function createCryovialTube(
 
 /**
  * Create paper container
+ *
+ * For paper: collectionName = box (or bag) name, label = sheet name within that box/bag.
+ * The function resolves the box, then finds or creates the sheet inside it.
  */
 async function createPaper(
   specimenId: number,
@@ -240,14 +246,50 @@ async function createPaper(
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
     const dbForValidation = database as unknown as Database
-    // Resolve sheet
-    const sheetRecord = await database.select({ id: sheet.id }).from(sheet).where(eq(sheet.name, data.collectionName!)).get()
-    if (!sheetRecord) return { success: false, error: 'Sheet not found' }
+
+    // Resolve box by collectionName
+    const boxRecord = await database.select({ id: box.id }).from(box).where(eq(box.name, data.collectionName!)).get()
+    const bagRecord = !boxRecord
+      ? await database.select({ id: bag.id }).from(bag).where(eq(bag.name, data.collectionName!)).get()
+      : null
+    if (!boxRecord && !bagRecord) {
+      return { success: false, error: `Collection (box/bag) not found: ${data.collectionName}` }
+    }
+
+    // Find or create sheet by label within the resolved box/bag
+    const sheetName = data.label!
+    let sheetRecord: { id: number } | undefined
+    if (boxRecord) {
+      sheetRecord = await database
+        .select({ id: sheet.id })
+        .from(sheet)
+        .where(and(eq(sheet.name, sheetName), eq(sheet.boxId, boxRecord.id)))
+        .get()
+    } else {
+      sheetRecord = await database
+        .select({ id: sheet.id })
+        .from(sheet)
+        .where(and(eq(sheet.name, sheetName), eq(sheet.bagId, bagRecord!.id)))
+        .get()
+    }
+
+    if (!sheetRecord) {
+      const now = utcNow()
+      const [newSheet] = await database.insert(sheet).values({
+        name: sheetName,
+        boxId: boxRecord?.id ?? null,
+        bagId: bagRecord?.id ?? null,
+        created: now,
+        lastUpdated: now,
+        createdBy: userId,
+        updatedBy: userId,
+      }).returning()
+      sheetRecord = { id: newSheet.id }
+    }
 
     const defaultUnitId = await getDefaultUnit(dbForValidation, 'paper')
     const finalUnitId = data.unitId || defaultUnitId
 
-    // Validate unit is allowed for container type
     const unitValidation = await validateUnitForContainerType(dbForValidation, 'paper', finalUnitId)
     if (!unitValidation.valid) {
       return { success: false, error: unitValidation.error }
@@ -256,7 +298,7 @@ async function createPaper(
     const defaultTotalQty = await getDefaultTotalQuantity(dbForValidation, 'paper')
     const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'paper')
 
-    const now = new Date().toISOString()
+    const now = utcNow()
     const inserted = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
@@ -311,7 +353,7 @@ async function createStaticWell(
     const defaultTotalQty = await getDefaultTotalQuantity(dbForValidation, 'static_well')
     const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'static_well')
 
-    const now = new Date().toISOString()
+    const now = utcNow()
     const inserted = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,

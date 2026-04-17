@@ -1,7 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import type { Database } from '../../db/client'
-import { validateContainerData } from '../container-creation'
+import { validateContainerData, createContainerForSpecimen } from '../container-creation'
+import {
+  createTestSpecimenType,
+  createTestStorageType,
+  createTestLocation,
+  createTestUnit,
+  createTestControlDefinition,
+} from '../../__tests__/helpers/factories'
+import { setContainerDefaults } from '../settings'
+import {
+  specimenTypeContainerType,
+  containerTypeUnit,
+  controlBatch,
+  box as boxTable,
+  sheet as sheetTable,
+  paper as paperTable,
+  specimen,
+  storageContainer,
+} from '../../db/schema'
+import { eq, sql } from 'drizzle-orm'
+import { utcNow } from '../datetime'
 
 describe('container-creation', () => {
   let testDb: Database
@@ -112,6 +132,135 @@ describe('container-creation', () => {
         expect(result.valid).toBe(false)
         expect(result.error).toContain('Position')
       })
+    })
+  })
+
+  describe('createContainerForSpecimen (paper)', () => {
+    it('creates paper container by resolving box from collectionName and sheet from label', async () => {
+      const unit = await createTestUnit(testDb, { symbol: 'spots', name: 'DBS spots', category: 'count' })
+      await setContainerDefaults(testDb, {
+        paper: { totalQuantity: 100, remainingQuantity: 100, defaultUnitSymbol: 'spots' },
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+        cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+        static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+      })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'paper', unitId: unit.id })
+
+      const specType = await createTestSpecimenType(testDb, { name: 'DBS' })
+      const now = utcNow()
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: specType.id,
+        containerType: 'paper',
+        created: now,
+      })
+
+      const storageType = await createTestStorageType(testDb, { name: 'Room Temp' })
+      const loc = await createTestLocation(testDb, { name: 'Reextraction', storageTypeId: String(storageType.id) })
+
+      const [boxRecord] = await testDb.insert(boxTable).values({
+        name: 'TestBox',
+        locationId: loc.id,
+        created: now,
+        lastUpdated: now,
+      }).returning()
+
+      const [sheetRecord] = await testDb.insert(sheetTable).values({
+        name: 'Sheet2',
+        boxId: boxRecord.id,
+        created: now,
+        lastUpdated: now,
+      }).returning()
+
+      const definition = await createTestControlDefinition(testDb, { name: 'DefPaper1' })
+      const [batch] = await testDb.insert(controlBatch).values({
+        controlDefinitionId: definition.id,
+        name: 'Batch-Paper1',
+        created: now,
+        lastUpdated: now,
+      }).returning()
+
+      const [spec] = await testDb.insert(specimen).values({
+        specimenTypeId: specType.id,
+        controlBatchId: batch.id,
+        collectionDate: '2026-04-01',
+      }).returning()
+
+      const result = await createContainerForSpecimen(spec.id, {
+        containerType: 'paper',
+        collectionName: 'TestBox',
+        label: 'Sheet2',
+      }, testDb)
+
+      expect(result.success).toBe(true)
+      expect(result.containerId).toBeDefined()
+
+      const paperRecord = await testDb
+        .select()
+        .from(paperTable)
+        .where(eq(paperTable.id, result.containerId!))
+        .get()
+      expect(paperRecord).toBeDefined()
+      expect(paperRecord!.sheetId).toBe(sheetRecord.id)
+    })
+
+    it('creates a new sheet when label does not match existing sheet in box', async () => {
+      const unit = await createTestUnit(testDb, { symbol: 'spots', name: 'DBS spots', category: 'count' })
+      await setContainerDefaults(testDb, {
+        paper: { totalQuantity: 100, remainingQuantity: 100, defaultUnitSymbol: 'spots' },
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+        cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+        static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+      })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'paper', unitId: unit.id })
+
+      const specType = await createTestSpecimenType(testDb, { name: 'DBS' })
+      const now = utcNow()
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: specType.id,
+        containerType: 'paper',
+        created: now,
+      })
+
+      const storageType = await createTestStorageType(testDb, { name: 'Room Temp' })
+      const loc = await createTestLocation(testDb, { name: 'Storage', storageTypeId: String(storageType.id) })
+
+      const [boxRecord] = await testDb.insert(boxTable).values({
+        name: 'BoxForNewSheet',
+        locationId: loc.id,
+        created: now,
+        lastUpdated: now,
+      }).returning()
+
+      const definition = await createTestControlDefinition(testDb, { name: 'DefPaper2' })
+      const [batch] = await testDb.insert(controlBatch).values({
+        controlDefinitionId: definition.id,
+        name: 'Batch-Paper2',
+        created: now,
+        lastUpdated: now,
+      }).returning()
+
+      const [spec] = await testDb.insert(specimen).values({
+        specimenTypeId: specType.id,
+        controlBatchId: batch.id,
+        collectionDate: '2026-04-01',
+      }).returning()
+
+      const result = await createContainerForSpecimen(spec.id, {
+        containerType: 'paper',
+        collectionName: 'BoxForNewSheet',
+        label: 'BrandNewSheet',
+      }, testDb)
+
+      expect(result.success).toBe(true)
+      expect(result.containerId).toBeDefined()
+
+      const newSheet = await testDb
+        .select()
+        .from(sheetTable)
+        .where(eq(sheetTable.name, 'BrandNewSheet'))
+        .get()
+      expect(newSheet).toBeDefined()
+      expect(newSheet!.boxId).toBe(boxRecord.id)
     })
   })
 })
