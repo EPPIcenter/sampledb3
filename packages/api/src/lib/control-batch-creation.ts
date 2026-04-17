@@ -20,6 +20,7 @@ import { eq, and, sql } from 'drizzle-orm'
 import { getDefaultUnit } from './defaults'
 import { validateContainerTypeForSpecimenType, validateUnitForContainerType, validateControlBatchName, generateUniqueBatchName } from './validation'
 import { findExistingControlSpecimen } from './specimen-helpers'
+import { utcNow } from './datetime'
 import type { ContainerType } from './container-creation'
 
 export interface CreateBatchWithSpecimensRequest {
@@ -76,7 +77,7 @@ async function getOrCreateCollection(
   barcode: string | undefined,
   tx: any
 ): Promise<number> {
-  // Check if collection exists
+  // Collection names are globally unique per the DB schema (UNIQUE constraint on name)
   if (type === 'box') {
     const existing = await tx.select().from(box).where(eq(box.name, name)).get()
     if (existing) return existing.id
@@ -92,7 +93,7 @@ async function getOrCreateCollection(
   }
 
   // Create new collection
-  const now = new Date().toISOString()
+  const now = utcNow()
   if (type === 'box') {
     const [newBox] = await tx.insert(box).values({
       name,
@@ -163,210 +164,6 @@ async function getUnitIdBySymbol(database: Database, symbol: string, containerTy
   
   // Fallback to default unit
   return await getDefaultUnit(database, containerType)
-}
-
-/**
- * Create container for specimen
- */
-async function createContainer(
-  specimenId: number,
-  specimenTypeId: number,
-  containerData: {
-    type: 'paper' | 'cryovial_tube' | 'micronix_tube'
-    collectionId?: number
-    collectionName?: string
-    collectionLocationId?: number
-    collectionType?: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-    containerBarcode?: string
-    position?: string
-    quantity?: number
-    unitSymbol?: string
-    sheetName?: string
-  },
-  collectionMap: Map<string, number>,
-  tx: any
-): Promise<number> {
-  // Validate container type is allowed for specimen type
-  const containerTypeValidation = await validateContainerTypeForSpecimenType(tx, specimenTypeId, containerData.type)
-  if (!containerTypeValidation.valid) {
-    throw new Error(containerTypeValidation.error || 'Container type validation failed')
-  }
-
-  // Get unit
-  const unitId = containerData.unitSymbol
-    ? await getUnitIdBySymbol(tx, containerData.unitSymbol, containerData.type)
-    : await getDefaultUnit(tx, containerData.type)
-
-  // Validate unit is allowed for container type
-  const unitValidation = await validateUnitForContainerType(tx, containerData.type, unitId)
-  if (!unitValidation.valid) {
-    throw new Error(unitValidation.error || 'Unit validation failed')
-  }
-
-  // Create storage container
-  const [container] = await tx.insert(storageContainer).values({
-    specimenId,
-    totalQuantity: containerData.quantity ?? 1.0,
-    remainingQuantity: containerData.quantity ?? 1.0,
-    unitId,
-  }).returning()
-
-  const containerId = container.id
-
-  // Create specific container type
-  if (containerData.type === 'paper') {
-    // Need to get or create sheet
-    let sheetId: number
-    let boxId: number | null = null
-    let bagId: number | null = null
-
-    if (containerData.collectionId) {
-      // Check if it's a box or bag
-      const boxRecord = await tx.select().from(box).where(eq(box.id, containerData.collectionId)).get()
-      const bagRecord = await tx.select().from(bag).where(eq(bag.id, containerData.collectionId)).get()
-      
-      if (boxRecord) {
-        boxId = containerData.collectionId
-      } else if (bagRecord) {
-        bagId = containerData.collectionId
-      } else {
-        throw new Error(`Collection ${containerData.collectionId} is not a box or bag`)
-      }
-    } else if (containerData.collectionName && containerData.collectionLocationId) {
-      // Determine if box or bag based on collectionType or default to box
-      const isBag = containerData.collectionType === 'bag'
-      const key = isBag 
-        ? `bag-${containerData.collectionName}-${containerData.collectionLocationId}`
-        : `box-${containerData.collectionName}-${containerData.collectionLocationId}`
-      
-      if (collectionMap.has(key)) {
-        if (isBag) {
-          bagId = collectionMap.get(key)!
-        } else {
-          boxId = collectionMap.get(key)!
-        }
-      } else {
-        // Try to find existing
-        const existingBox = await tx.select().from(box).where(eq(box.name, containerData.collectionName)).get()
-        const existingBag = await tx.select().from(bag).where(eq(bag.name, containerData.collectionName)).get()
-        
-        if (existingBox && !isBag) {
-          boxId = existingBox.id
-          if (boxId !== null) {
-            collectionMap.set(key, boxId)
-          }
-        } else if (existingBag && isBag) {
-          bagId = existingBag.id
-          if (bagId !== null) {
-            collectionMap.set(key, bagId)
-          }
-        } else if (!existingBox && !existingBag) {
-          // Create new collection
-          const collectionId = await getOrCreateCollection(
-            isBag ? 'bag' : 'box',
-            containerData.collectionName,
-            containerData.collectionLocationId,
-            undefined,
-            tx
-          )
-          collectionMap.set(key, collectionId)
-          if (isBag) {
-            bagId = collectionId
-          } else {
-            boxId = collectionId
-          }
-        } else {
-          throw new Error(`Collection ${containerData.collectionName} exists but is wrong type (expected ${isBag ? 'bag' : 'box'})`)
-        }
-      }
-    } else {
-      throw new Error('Collection information required for paper containers')
-    }
-
-    // Find or create sheet
-    if (containerData.sheetName) {
-      // Look for sheet by name within the box/bag
-      const existingSheet = await tx
-        .select()
-        .from(sheet)
-        .where(
-          and(
-            eq(sheet.name, containerData.sheetName),
-            boxId ? eq(sheet.boxId, boxId) : eq(sheet.bagId, bagId!)
-          )
-        )
-        .get()
-
-      if (existingSheet) {
-        sheetId = existingSheet.id
-      } else {
-        // Create new sheet with specified name
-        const [newSheet] = await tx.insert(sheet).values({
-          name: containerData.sheetName,
-          boxId,
-          bagId,
-          created: sql`current_timestamp`,
-          lastUpdated: sql`current_timestamp`,
-        }).returning()
-        sheetId = newSheet.id
-      }
-    } else {
-      throw new Error('Sheet name is required for paper containers')
-    }
-
-    await tx.insert(paper).values({
-      id: containerId,
-      sheetId,
-      barcode: containerData.containerBarcode || null,
-      position: normalizePosition(containerData.position),
-    })
-  } else if (containerData.type === 'cryovial_tube') {
-    let collectionId: number
-    if (containerData.collectionId) {
-      collectionId = containerData.collectionId
-    } else if (containerData.collectionName && containerData.collectionLocationId) {
-      const key = `cryovial_box-${containerData.collectionName}-${containerData.collectionLocationId}`
-      if (collectionMap.has(key)) {
-        collectionId = collectionMap.get(key)!
-      } else {
-        collectionId = await getOrCreateCollection('cryovial_box', containerData.collectionName, containerData.collectionLocationId, undefined, tx)
-        collectionMap.set(key, collectionId)
-      }
-    } else {
-      throw new Error('Collection information required for cryovial tubes')
-    }
-
-    await tx.insert(cryovialTube).values({
-      id: containerId,
-      collectionId,
-      barcode: containerData.containerBarcode || null,
-      position: normalizePosition(containerData.position),
-    })
-  } else {
-    let collectionId: number
-    if (containerData.collectionId) {
-      collectionId = containerData.collectionId
-    } else if (containerData.collectionName && containerData.collectionLocationId) {
-      const key = `micronix_plate-${containerData.collectionName}-${containerData.collectionLocationId}`
-      if (collectionMap.has(key)) {
-        collectionId = collectionMap.get(key)!
-      } else {
-        collectionId = await getOrCreateCollection('micronix_plate', containerData.collectionName, containerData.collectionLocationId, undefined, tx)
-        collectionMap.set(key, collectionId)
-      }
-    } else {
-      throw new Error('Collection information required for micronix tubes')
-    }
-
-    await tx.insert(micronixTube).values({
-      id: containerId,
-      collectionId,
-      barcode: containerData.containerBarcode || null,
-      position: normalizePosition(containerData.position),
-    })
-  }
-
-  return containerId
 }
 
 /**
@@ -619,7 +416,7 @@ function createContainerSync(
         }
       } else {
         // Create collection
-        const now = new Date().toISOString()
+        const now = utcNow()
         let newCollectionId: number
         if (isBag) {
           const bagResult = tx.insert(bag).values({
@@ -693,7 +490,7 @@ function createContainerSync(
       if (collectionMap.has(key) && collectionMap.get(key)! !== -1) {
         finalCollectionId = collectionMap.get(key)!
       } else {
-        const now = new Date().toISOString()
+        const now = utcNow()
         const boxResult = tx.insert(cryovialBox).values({
           name: collectionName,
           locationId: collectionLocationId,
@@ -722,7 +519,7 @@ function createContainerSync(
       if (collectionMap.has(key) && collectionMap.get(key)! !== -1) {
         finalCollectionId = collectionMap.get(key)!
       } else {
-        const now = new Date().toISOString()
+        const now = utcNow()
         const plateResult = tx.insert(micronixPlate).values({
           name: collectionName,
           locationId: collectionLocationId,
@@ -803,11 +600,10 @@ export async function createBatchWithSpecimens(
   }
   const specimensToCreate = Array.from(mergedSpecimens.values())
 
-  // Prepare collections
+  // Prepare collections (names are globally unique per DB schema)
   if (data.createCollections) {
     for (const coll of data.createCollections) {
       const key = `${coll.type}-${coll.name}-${coll.locationId}`
-      // Check if exists
       let collectionId: number | undefined
       if (coll.type === 'box') {
         const existing = await database.select().from(box).where(eq(box.name, coll.name)).get()
@@ -887,7 +683,7 @@ export async function createBatchWithSpecimens(
         const coll = data.createCollections[i]
         const key = `${coll.type}-${coll.name}-${coll.locationId}`
         if (collectionMap.get(key) === -1) {
-          const now = new Date().toISOString()
+          const now = utcNow()
           let collectionId: number
           if (coll.type === 'box') {
             const boxResult = tx.insert(box).values({
@@ -1084,11 +880,10 @@ export async function addSpecimensToBatch(
   }
   const addSpecimensToCreate = Array.from(addMergedSpecimens.values())
 
-  // Prepare collections
+  // Prepare collections (names are globally unique per DB schema)
   if (data.createCollections) {
     for (const coll of data.createCollections) {
       const key = `${coll.type}-${coll.name}-${coll.locationId}`
-      // Check if exists
       let collectionId: number | undefined
       if (coll.type === 'box') {
         const existing = await database.select().from(box).where(eq(box.name, coll.name)).get()
@@ -1168,7 +963,7 @@ export async function addSpecimensToBatch(
         const coll = data.createCollections[i]
         const key = `${coll.type}-${coll.name}-${coll.locationId}`
         if (collectionMap.get(key) === -1) {
-          const now = new Date().toISOString()
+          const now = utcNow()
           let collectionId: number
           if (coll.type === 'box') {
             const boxResult = tx.insert(box).values({
