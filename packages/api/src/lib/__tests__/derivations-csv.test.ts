@@ -22,6 +22,7 @@ import {
   createTestMicronixPlate,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
+import { utcNow } from '../datetime'
 
 describe('derivations-csv', () => {
   describe('parseCsv', () => {
@@ -201,7 +202,7 @@ describe('derivations-csv', () => {
     })
 
     it('uses default unit for child container when CSV has no unit_symbol column', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
       await setContainerDefaults(testDb, {
         micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },

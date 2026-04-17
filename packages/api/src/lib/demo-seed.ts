@@ -31,6 +31,7 @@ import {
 import { runBulkCombinedImport } from './bulk-combined-import'
 import { createBatchWithSpecimens } from './control-batch-creation'
 import { createDerivation } from './derivations'
+import { utcNow } from './datetime'
 import { controlDefinition, box, sheet, micronixPlate, strain } from '../db/schema'
 
 // Demo defaults (aligned with packages/web setup-defaults, inlined to avoid cross-package deps)
@@ -75,7 +76,7 @@ export async function runDemoSeed(
   options: DemoSeedOptions = {}
 ): Promise<DemoSeedResult> {
   const adminPassword = options.adminPassword ?? 'DemoAdmin1!'
-  const now = new Date().toISOString()
+  const now = utcNow()
 
   // Safety: refuse if already initialized
   const userCount = await database.select({ count: sql<number>`count(*)` }).from(users).get()

@@ -19,6 +19,7 @@ import {
 import { storageContainer } from '../../db/schema'
 import { micronixTube } from '../../db/schema'
 import type { Database } from '../../db/client'
+import { utcNow } from '../datetime'
 
 describe('container-move', () => {
   let testDb: Database
@@ -83,7 +84,7 @@ describe('container-move', () => {
       const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
       const specimen = await createTestSpecimen(testDb, specimenType.id)
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [container] = await testDb
         .insert(storageContainer)
         .values({
@@ -125,7 +126,7 @@ describe('container-move', () => {
       const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
       const specimen = await createTestSpecimen(testDb, specimenType.id)
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [container] = await testDb
         .insert(storageContainer)
         .values({
@@ -164,7 +165,7 @@ describe('container-move', () => {
       const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
       const specimen = await createTestSpecimen(testDb, specimenType.id)
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [container] = await testDb
         .insert(storageContainer)
         .values({
@@ -213,7 +214,7 @@ describe('container-move', () => {
       const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
       const specimen = await createTestSpecimen(testDb, specimenType.id)
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [container] = await testDb
         .insert(storageContainer)
         .values({
@@ -256,7 +257,7 @@ describe('container-move', () => {
       const specimenA = await createTestSpecimen(testDb, specimenType.id)
       const specimenB = await createTestSpecimen(testDb, specimenType.id)
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      const now = new Date().toISOString()
+      const now = utcNow()
 
       const [containerA] = await testDb
         .insert(storageContainer)
@@ -319,7 +320,7 @@ describe('container-move', () => {
       const specimenType = await createTestSpecimenType(testDb, { name: 'BloodAtomic' })
       const specimen = await createTestSpecimen(testDb, specimenType.id)
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      const now = new Date().toISOString()
+      const now = utcNow()
 
       const [container] = await testDb
         .insert(storageContainer)
@@ -365,7 +366,7 @@ describe('container-move', () => {
       const specimenType = await createTestSpecimenType(testDb, { name: 'BloodBestEffort' })
       const specimen = await createTestSpecimen(testDb, specimenType.id)
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      const now = new Date().toISOString()
+      const now = utcNow()
 
       const [container] = await testDb
         .insert(storageContainer)

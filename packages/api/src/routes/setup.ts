@@ -15,6 +15,7 @@ import {
   DEFAULT_TABLE_VIEW_CONFIGURATIONS,
 } from '../lib/settings'
 import type { Database } from '../db/client'
+import { utcNow } from '../lib/datetime'
 // Note: Defaults are only used in the frontend Setup.tsx
 // Backend requires all data to be provided via the API
 
@@ -71,7 +72,7 @@ const initSchema = z.object({
       }
 
       // 1. Create Admin User
-      const createdAt = new Date().toISOString()
+      const createdAt = utcNow()
       const passwordHash = await bcrypt.hash(adminPassword, 10)
       await database.insert(users).values({
         id: 1,
@@ -83,7 +84,7 @@ const initSchema = z.object({
         approvedAt: createdAt, // Setup admin is immediately approved
       })
 
-      const now = new Date().toISOString()
+      const now = utcNow()
 
       // 2. Storage Types (must be created first for location references)
       if (!storageTypes || storageTypes.length === 0) {

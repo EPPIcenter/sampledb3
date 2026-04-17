@@ -17,6 +17,7 @@ import {
 } from '../lib/location-helpers'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
 
 /**
  * Create locations routes with database injection
@@ -316,7 +317,7 @@ locations.post('/', adminMiddleware, async (c) => {
       throw new ValidationError('Location with this name already exists under the same parent')
     }
 
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     const result = await database
       .insert(location)
@@ -453,7 +454,7 @@ locations.put('/:id', adminMiddleware, async (c) => {
 
     // Build update object
     const updateData: any = {
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: utcNow(),
     }
     if (data.parentId !== undefined) updateData.parentId = data.parentId ?? null
     if (data.name !== undefined) updateData.name = data.name

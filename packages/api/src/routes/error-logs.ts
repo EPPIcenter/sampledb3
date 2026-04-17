@@ -7,6 +7,7 @@ import { handleRouteError } from '../lib/error-handler'
 import { eq, and, desc, sql, like, or } from 'drizzle-orm'
 import { createAdminMiddleware, createAuthMiddleware, createOptionalAuthMiddleware } from '../middleware/auth'
 import { rateLimit } from '../middleware/rate-limit'
+import { utcNow } from '../lib/datetime'
 
 // Schema for frontend error submission
 const frontendErrorSchema = z.object({
@@ -229,7 +230,7 @@ export function createErrorLogsRoutes(database: Database): Hono {
         .update(errorLogs)
         .set({
           resolved: true,
-          resolvedAt: new Date().toISOString(),
+          resolvedAt: utcNow(),
           resolvedBy: user.id,
         })
         .where(eq(errorLogs.id, id))

@@ -5,6 +5,7 @@ import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/
 import { createAuthRoutes } from '../auth'
 import { createCollectionsRoutes } from '../collections'
 import { handleRouteError } from '../../lib/error-handler'
+import { utcNow } from '../../lib/datetime'
 import type { Database } from '../../db/client'
 import {
   setupPasswordRequirements,
@@ -214,7 +215,7 @@ describe('Collections API', () => {
       const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
       const specimen = await createTestSpecimen(testDb, specimenType.id)
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      const now = new Date().toISOString()
+      const now = utcNow()
 
       const [c1] = await testDb.insert(storageContainer).values({
         specimenId: specimen.id,
@@ -291,7 +292,7 @@ describe('Collections API', () => {
         canContainCollections: true,
         path: '/Freezer A',
       })
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb.insert(box).values({
         name: 'ResolveTestBox',
         locationId: loc.id,

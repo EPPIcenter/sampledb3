@@ -31,6 +31,7 @@ import {
 } from '../../db/schema'
 import { createSubjectsRoutes } from '../subjects'
 import { handleRouteError } from '../../lib/error-handler'
+import { utcNow } from '../../lib/datetime'
 
 interface SubjectWithSpecimensResponse {
   subject: {
@@ -214,7 +215,7 @@ describe('Subjects with Specimens API', () => {
 
     it('should create new subject with cryovial tube container', async () => {
       // Create cryovial box collection
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [cryovialBoxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -268,7 +269,7 @@ describe('Subjects with Specimens API', () => {
 
     it('should create new subject with micronix tube container', async () => {
       // Create micronix plate collection
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [micronixPlateRecord] = await testDb
         .insert(micronixPlate)
         .values({
@@ -316,7 +317,7 @@ describe('Subjects with Specimens API', () => {
 
     it('should create new subject with paper container', async () => {
       // Create box and sheet
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(box)
         .values({
@@ -373,7 +374,7 @@ describe('Subjects with Specimens API', () => {
 
     it('should create new subject with static well container', async () => {
       // Create micronix plate
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [plateRecord] = await testDb
         .insert(micronixPlate)
         .values({
@@ -419,7 +420,7 @@ describe('Subjects with Specimens API', () => {
 
     it('should create new subject with multiple specimens and containers', async () => {
       // Create collections
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -494,7 +495,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       // Create collection
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -541,12 +542,12 @@ describe('Subjects with Specimens API', () => {
       await testDb.insert(specimen).values({
         studySubjectId: existingSubject.id,
         specimenTypeId: testSpecimenType.id,
-        created: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
+        created: utcNow(),
+        lastUpdated: utcNow(),
       })
 
       // Create collection
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(cryovialBox).values({
         name: 'BOX-005',
         locationId: testLocation.id,
@@ -690,7 +691,7 @@ describe('Subjects with Specimens API', () => {
 
     it('should rollback on duplicate container barcode', async () => {
       // Create existing micronix tube with barcode
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [plateRecord] = await testDb
         .insert(micronixPlate)
         .values({
@@ -770,7 +771,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for in-payload duplicate barcode', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(micronixPlate).values({
         name: 'PLATE-DUP-BARCODE',
         locationId: testLocation.id,
@@ -813,7 +814,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for position already used in plate', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [plateRecord] = await testDb
         .insert(micronixPlate)
         .values({
@@ -884,7 +885,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for in-payload duplicate position', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(micronixPlate).values({
         name: 'PLATE-DUP-POS',
         locationId: testLocation.id,
@@ -927,7 +928,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for in-payload duplicate cryovial tube barcode', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(cryovialBox).values({
         name: 'BOX-CRYO-DUP-BARCODE',
         locationId: testLocation.id,
@@ -970,7 +971,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for cryovial tube barcode already in DB', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -1040,7 +1041,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for in-payload duplicate cryovial tube position', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(cryovialBox).values({
         name: 'BOX-CRYO-DUP-POS',
         locationId: testLocation.id,
@@ -1081,7 +1082,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for cryovial tube position already used in box', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -1152,7 +1153,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for in-payload duplicate static well position', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(micronixPlate).values({
         name: 'PLATE-STATIC-DUP',
         locationId: testLocation.id,
@@ -1193,7 +1194,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for static well position already used in plate', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [plateRecord] = await testDb
         .insert(micronixPlate)
         .values({
@@ -1263,7 +1264,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for static well conflicting with existing micronix tube position', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [plateRecord] = await testDb
         .insert(micronixPlate)
         .values({
@@ -1336,7 +1337,7 @@ describe('Subjects with Specimens API', () => {
   describe('Collection Handling Tests', () => {
     it('should use existing collection', async () => {
       // Create existing collection
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -1484,7 +1485,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should include container information in response', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -1527,7 +1528,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should include summary counts', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -1575,7 +1576,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should reuse existing specimen (get-or-create) and only create container on second call', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(cryovialBox).values({
         name: 'BOX-DEDUP',
         locationId: testLocation.id,

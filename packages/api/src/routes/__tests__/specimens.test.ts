@@ -5,6 +5,7 @@ import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/
 import { createAuthRoutes } from '../auth'
 import { createSpecimensRoutes } from '../specimens'
 import { handleRouteError } from '../../lib/error-handler'
+import { utcNow } from '../../lib/datetime'
 import { setContainerDefaults, clearSettingsCache } from '../../lib/settings'
 import { clearDefaultsCache } from '../../lib/defaults'
 import { setupPasswordRequirements, setupSessionSettings, createTestUser } from '../../__tests__/helpers/auth-helpers'
@@ -131,7 +132,7 @@ describe('Specimens API', () => {
         static_well: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'uL' },
       })
       clearSettingsCache(testDb, 'container_defaults')
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(cryovialBox).values({
         name: 'BULK-BOX',
         locationId: testLocation.id,
@@ -295,8 +296,8 @@ describe('Specimens API', () => {
       await testDb.insert(cryovialBox).values({
         name: 'V-BOX',
         locationId: testLocation.id,
-        created: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
+        created: utcNow(),
+        lastUpdated: utcNow(),
       })
     })
 
@@ -356,7 +357,7 @@ describe('Specimens API', () => {
     let testSpecimenType: Awaited<ReturnType<typeof createTestSpecimenType>>
     let testLocation: Awaited<ReturnType<typeof createTestLocation>>
     let testSpecimen: Awaited<ReturnType<typeof createTestSpecimen>>
-    const now = new Date().toISOString()
+    const now = utcNow()
 
     beforeEach(async () => {
       testStudy = await createTestStudy(testDb, { title: 'Add Container Study', shortCode: 'ADD01' })

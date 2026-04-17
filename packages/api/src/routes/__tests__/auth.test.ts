@@ -3,6 +3,7 @@ import { createTestClient, loginAndGetCookie, authenticatedRequest, extractSessi
 import { Hono } from 'hono'
 import { createAuthRoutes } from '../auth'
 import { handleRouteError } from '../../lib/error-handler'
+import { utcNow } from '../../lib/datetime'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import { users, sessions } from '../../db/schema'
 import { eq } from 'drizzle-orm'
@@ -137,7 +138,7 @@ describe('Auth API', () => {
   describe('POST /api/auth/login', () => {
     beforeEach(async () => {
       // Create a test user (approved so they can log in)
-      const createdAt = new Date().toISOString()
+      const createdAt = utcNow()
       const passwordHash = await bcrypt.hash('password123', 10)
       await testDb.insert(users).values({
         email: 'login@example.com',

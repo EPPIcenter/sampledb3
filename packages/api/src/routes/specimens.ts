@@ -14,6 +14,7 @@ import { resolveCollection } from '../lib/collection-resolution'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { containerSchema, containerSchemaRequired, containerSchemaWithLocation } from '../lib/schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
 
 /**
  * Create specimens routes with database injection
@@ -308,7 +309,7 @@ specimens.post('/', memberMiddleware, async (c) => {
       throw new ValidationError(validation.error || 'Invalid specimen data')
     }
     
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     const insertData: any = {
       studySubjectId: validation.resolved.studySubjectId,
@@ -384,7 +385,7 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
     }
     
     const errors: Array<{ index: number; error: string }> = []
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     
     // Phase 1: validate all rows (async)

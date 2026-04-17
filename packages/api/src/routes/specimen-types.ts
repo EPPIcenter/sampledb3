@@ -16,6 +16,7 @@ import { z } from 'zod'
 import { parseId } from '../lib/common-validators'
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -166,7 +167,7 @@ async function checkContainerTypeInUse(
  * Set created and lastUpdated timestamps on create
  */
 function onCreateDefaults() {
-  const now = new Date().toISOString()
+  const now = utcNow()
   return {
     created: now,
     lastUpdated: now,
@@ -178,7 +179,7 @@ function onCreateDefaults() {
  */
 function onUpdateDefaults() {
   return {
-    lastUpdated: new Date().toISOString(),
+    lastUpdated: utcNow(),
   }
 }
 

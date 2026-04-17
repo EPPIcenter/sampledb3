@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid'
 import type { Hono } from 'hono'
 import { testClient } from 'hono/testing'
 import { eq, and, isNull } from 'drizzle-orm'
+import { utcNow } from '../../lib/datetime'
 
 export interface CreateTestUserOptions {
   email: string
@@ -29,7 +30,7 @@ export async function createTestUser(
 ) {
   const passwordHash = await bcrypt.hash(options.password || 'password123', 10)
   
-  const createdAt = new Date().toISOString()
+  const createdAt = utcNow()
   const approvedAt = options.approvedAt !== undefined ? options.approvedAt : createdAt
   const [user] = await db.insert(users).values({
     email: options.email,

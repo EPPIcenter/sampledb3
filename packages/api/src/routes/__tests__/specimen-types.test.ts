@@ -10,6 +10,7 @@ import { z } from 'zod'
 import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
 import type { ErrorResponse } from '../../__tests__/helpers/test-types'
 import { handleRouteError } from '../../lib/error-handler'
+import { utcNow } from '../../lib/datetime'
 
 describe('Specimen Types API', () => {
   let app: Hono
@@ -69,7 +70,7 @@ describe('Specimen Types API', () => {
     }
 
     function onCreateDefaults() {
-      const now = new Date().toISOString()
+      const now = utcNow()
       return {
         created: now,
         lastUpdated: now,
@@ -78,7 +79,7 @@ describe('Specimen Types API', () => {
 
     function onUpdateDefaults() {
       return {
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: utcNow(),
       }
     }
 
@@ -358,8 +359,8 @@ describe('Specimen Types API', () => {
       const created = await getResponseData<SpecimenType>(createRes)
       const originalUpdated = created.lastUpdated
 
-      // Wait a bit to ensure timestamp difference
-      await new Promise(resolve => setTimeout(resolve, 10))
+      // utcNow() is second-resolution; wait past a second boundary so lastUpdated changes
+      await new Promise(resolve => setTimeout(resolve, 1100))
 
       const updateRes = await authenticatedRequest(app, `/api/specimen-types/${created.id}`, {
         method: 'PUT',

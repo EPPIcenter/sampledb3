@@ -5,6 +5,7 @@ import type { Database } from '../../db/client'
 import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { createSetupRoutes } from '../setup'
 import { handleRouteError } from '../../lib/error-handler'
+import { utcNow } from '../../lib/datetime'
 import { users, unit, specimenType, storageType, location, containerTypeUnit, specimenTypeContainerType } from '../../db/schema'
 
 describe('Setup Route', () => {
@@ -195,7 +196,7 @@ describe('Setup Route', () => {
         email: 'existing@test.com',
         passwordHash: 'hash',
         role: 'admin',
-        createdAt: new Date().toISOString(),
+        createdAt: utcNow(),
       })
 
       const setupData = {

@@ -21,6 +21,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { resolveCollection, type CollectionType } from '../lib/collection-resolution'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { getDefaultUnit } from './defaults'
+import { utcNow } from './datetime'
 
 export type DerivationType = string
 
@@ -122,8 +123,8 @@ async function findOrCreateDerivedSpecimen(
       controlBatchId: parentSpecimen.controlBatchId,
       specimenTypeId: type.id,
       collectionDate: parentSpecimen.collectionDate || null,
-      created: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
+      created: utcNow(),
+      lastUpdated: utcNow(),
     })
     .returning()
 
@@ -188,7 +189,7 @@ async function adjustParentQuantity(
     .update(storageContainer)
     .set({
       remainingQuantity: newRemaining,
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: utcNow(),
     })
     .where(eq(storageContainer.id, parent.id))
     .returning()
@@ -248,7 +249,7 @@ export async function createDerivation(
     collectionId = resolved
   }
 
-  const now = new Date().toISOString()
+  const now = utcNow()
   const [child] = await database
     .insert(storageContainer)
     .values({

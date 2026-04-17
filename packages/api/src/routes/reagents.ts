@@ -5,6 +5,7 @@ import { eq, and, lte } from 'drizzle-orm'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
 
 /**
  * Create reagents routes with database injection
@@ -139,7 +140,7 @@ reagents.patch('/:id', memberMiddleware, async (c) => {
       .update(reagent)
       .set({
         ...data,
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: utcNow(),
         updatedBy: user?.id,
       })
       .where(eq(reagent.id, id))

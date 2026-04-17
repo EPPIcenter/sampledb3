@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import type { CollectionInfo } from '../types/collections'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
 
 /**
  * Create containers routes with database injection
@@ -386,7 +387,7 @@ containers.patch('/:id', memberMiddleware, async (c) => {
       .update(storageContainer)
       .set({
         ...updateData,
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: utcNow(),
         updatedBy: user?.id,
       })
       .where(eq(storageContainer.id, id))

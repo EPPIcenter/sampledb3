@@ -5,6 +5,7 @@ import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/
 import { createAuthRoutes } from '../auth'
 import { createDataAuditRoutes } from '../data-audit'
 import { handleRouteError } from '../../lib/error-handler'
+import { utcNow } from '../../lib/datetime'
 import type { Database } from '../../db/client'
 import {
   setupPasswordRequirements,
@@ -370,7 +371,7 @@ describe('Data audit API', () => {
     it('includes sheets with missing box or bag in report', async () => {
       const storageType = await createTestStorageType(testDb, { name: 'Shelf', description: '' })
       const loc = await createTestLocation(testDb, { name: 'LocBox', storageTypeId: String(storageType.id), canContainCollections: true })
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [b] = await testDb.insert(box).values({ name: 'BoxOrphan', locationId: loc.id, created: now, lastUpdated: now }).returning()
       const [s] = await testDb.insert(sheet).values({ name: 'SheetOrphan', boxId: b!.id, created: now, lastUpdated: now }).returning()
       await testDb.delete(box).where(eq(box.id, b!.id))
@@ -391,7 +392,7 @@ describe('Data audit API', () => {
       const studyRec = await createTestStudy(testDb, { title: 'StudyOrphan', shortCode: 'SO' })
       const subject = await createTestStudySubject(testDb, { studyId: studyRec.id, name: 'SubjOrphan' })
       const specType = await createTestSpecimenType(testDb, { name: 'STSpec' })
-      const [spec] = await testDb.insert(specimen).values({ specimenTypeId: specType.id, studySubjectId: subject.id, created: new Date().toISOString(), lastUpdated: new Date().toISOString() }).returning()
+      const [spec] = await testDb.insert(specimen).values({ specimenTypeId: specType.id, studySubjectId: subject.id, created: utcNow(), lastUpdated: utcNow() }).returning()
       await testDb.delete(studySubject).where(eq(studySubject.id, subject.id))
 
       const app = createApp()
@@ -432,11 +433,11 @@ describe('Data audit API', () => {
       const specType = await createTestSpecimenType(testDb, { name: 'STDer' })
       const spec = await createTestSpecimen(testDb, specType.id)
       const unit = await createTestUnit(testDb, { symbol: 'uL-der', name: 'microliter der', category: 'volume' })
-      const [parent] = await testDb.insert(storageContainer).values({ specimenId: spec.id, unitId: unit.id, totalQuantity: 1, remainingQuantity: 1, created: new Date().toISOString(), lastUpdated: new Date().toISOString() }).returning()
-      const [child] = await testDb.insert(storageContainer).values({ specimenId: spec.id, unitId: unit.id, totalQuantity: 1, remainingQuantity: 1, created: new Date().toISOString(), lastUpdated: new Date().toISOString() }).returning()
+      const [parent] = await testDb.insert(storageContainer).values({ specimenId: spec.id, unitId: unit.id, totalQuantity: 1, remainingQuantity: 1, created: utcNow(), lastUpdated: utcNow() }).returning()
+      const [child] = await testDb.insert(storageContainer).values({ specimenId: spec.id, unitId: unit.id, totalQuantity: 1, remainingQuantity: 1, created: utcNow(), lastUpdated: utcNow() }).returning()
       await testDb.insert(micronixTube).values({ id: parent!.id, collectionId: plateP.id, barcode: 'BpDer', position: null })
       await testDb.insert(micronixTube).values({ id: child!.id, collectionId: plateC.id, barcode: 'BcDer', position: null })
-      const [der] = await testDb.insert(containerDerivation).values({ parentContainerId: parent!.id, childContainerId: child!.id, derivationType: 'aliquot', created: new Date().toISOString() }).returning()
+      const [der] = await testDb.insert(containerDerivation).values({ parentContainerId: parent!.id, childContainerId: child!.id, derivationType: 'aliquot', created: utcNow() }).returning()
       await testDb.delete(storageContainer).where(eq(storageContainer.id, parent!.id))
 
       const app = createApp()
@@ -473,7 +474,7 @@ describe('Data audit API', () => {
     it('does not report duplicate cryovial barcodes as integrity issues', async () => {
       const storageType = await createTestStorageType(testDb, { name: 'Shelf', description: '' })
       const loc = await createTestLocation(testDb, { name: 'LocDup', storageTypeId: String(storageType.id), canContainCollections: true })
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [cvBox1] = await testDb.insert(cryovialBox).values({ name: `CryoDup1-${Date.now()}`, locationId: loc.id, created: now, lastUpdated: now }).returning()
       const [cvBox2] = await testDb.insert(cryovialBox).values({ name: `CryoDup2-${Date.now()}`, locationId: loc.id, created: now, lastUpdated: now }).returning()
       const specType = await createTestSpecimenType(testDb, { name: 'STDup' })

@@ -28,6 +28,7 @@ import { resolveCollection, resolveCollectionByName, getCollectionLocation } fro
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
+import { utcNow } from '../lib/datetime'
 import { validatePlateScan, inferPlateOrGetReport } from '../lib/plate-scan-validation'
 
 /**
@@ -586,7 +587,7 @@ collections.post('/plates/micronix', memberMiddleware, async (c) => {
     const existing = await database.select().from(micronixPlate).where(eq(micronixPlate.name, data.name)).get()
     if (existing) return c.json({ error: 'Plate with this name already exists' }, 400)
     
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     const [newPlate] = await database.insert(micronixPlate).values({
       ...data,
@@ -634,7 +635,7 @@ collections.post('/boxes/cryovial', memberMiddleware, async (c) => {
     const existing = await database.select().from(cryovialBox).where(eq(cryovialBox.name, data.name)).get()
     if (existing) return c.json({ error: 'Cryovial box with this name already exists' }, 400)
     
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     const [newBox] = await database.insert(cryovialBox).values({
       ...data,
@@ -681,7 +682,7 @@ collections.post('/boxes', memberMiddleware, async (c) => {
     const existing = await database.select().from(box).where(eq(box.name, data.name)).get()
     if (existing) return c.json({ error: 'Box with this name already exists' }, 400)
     
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     const [newBox] = await database.insert(box).values({
       ...data,
@@ -727,7 +728,7 @@ collections.post('/bags', memberMiddleware, async (c) => {
     const existing = await database.select().from(bag).where(eq(bag.name, data.name)).get()
     if (existing) return c.json({ error: 'Bag with this name already exists' }, 400)
     
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     const [newBag] = await database.insert(bag).values({
       ...data,

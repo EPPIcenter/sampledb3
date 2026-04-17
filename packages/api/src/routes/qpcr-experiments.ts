@@ -25,6 +25,7 @@ import { getScannerConfigurationById } from '../lib/settings'
 import type { ScannerConfiguration } from '../lib/settings'
 import { resolveMicronixBarcodesToContainers } from '../lib/export-helpers'
 import { normalizeWellPosition, parsePlateCSV, validateWellPosition } from '../lib/plate-csv'
+import { utcNow } from '../lib/datetime'
 
 type WellSource =
   | { type: 'subject'; id: number; name: string; study: { id: number; title: string; code: string } }
@@ -205,7 +206,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       const body = await c.req.json()
       const data = createSchema.parse(body)
       const user = c.get('user') as { id: number } | undefined
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [inserted] = await database
         .insert(qpcrExperiment)
         .values({
@@ -331,7 +332,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       }
       const user = c.get('user') as { id: number } | undefined
       const updates: Partial<typeof qpcrExperiment.$inferInsert> = {
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: utcNow(),
         updatedBy: user?.id ?? null,
       }
       if (data.name !== undefined) updates.name = data.name
@@ -510,7 +511,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         })
       }
 
-      const now = new Date().toISOString()
+      const now = utcNow()
       const userId = (c.get('user') as { id: number } | undefined)?.id ?? null
       await database.delete(qpcrExperimentWell).where(eq(qpcrExperimentWell.qpcrExperimentId, id))
       if (wellsToInsert.length > 0) {
@@ -688,7 +689,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         parseResult = await parseQuantStudioXls(buffer, data.fileName)
       }
 
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [runRow] = await database
         .insert(qpcrRun)
         .values({

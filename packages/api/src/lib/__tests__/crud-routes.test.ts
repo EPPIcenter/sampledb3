@@ -8,6 +8,7 @@ import { tag, storageContainer, storageContainerTag } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import type { Database } from '../../db/client'
+import { utcNow } from '../datetime'
 import { createTestTag, createTestStorageContainer, createTestSpecimenType, createTestSpecimen, createTestUnit } from '../../__tests__/helpers/factories'
 import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
 import type { ErrorResponse, SuccessResponse, ValidationErrorResponse } from '../../__tests__/helpers/test-types'
@@ -726,7 +727,7 @@ describe('createCrudRoutes Factory', () => {
       const testTag = await createTestTag(testDb, { name: 'Test' })
 
       const onUpdateDefaults = () => ({
-        updatedAt: new Date().toISOString(),
+        updatedAt: utcNow(),
       })
 
       const routes = createCrudRoutes({

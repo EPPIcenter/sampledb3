@@ -30,6 +30,7 @@ import {
   validateUnitForContainerType,
 } from './validation'
 import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } from './defaults'
+import { utcNow } from './datetime'
 import { resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
 import { ValidationError } from './error-handler'
 
@@ -540,7 +541,7 @@ export async function runOneSubjectWithSpecimens(
     payload.subjectName,
     payload.specimens
   )
-  const now = new Date().toISOString()
+  const now = utcNow()
   return database.transaction((tx) => {
     return createSubjectWithSpecimensInTx(tx, prepared, userId, now)
   })
@@ -637,7 +638,7 @@ export async function runBulkCombinedImport(
     allPrepared.push(prepared)
   }
 
-  const now = new Date().toISOString()
+  const now = utcNow()
   const fullResults = await database.transaction(async (tx) => {
     for (let i = 0; i < allPrepared.length; i++) {
       await revalidatePreparedSubjectInTx(tx, allPrepared[i], i)

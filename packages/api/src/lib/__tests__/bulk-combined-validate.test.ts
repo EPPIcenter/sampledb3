@@ -12,6 +12,7 @@ import { setContainerDefaults } from '../settings'
 import { validateBulkCombinedPayload } from '../bulk-combined-validate'
 import { specimenTypeContainerType, containerTypeUnit } from '../../db/schema'
 import type { Database } from '../../db/client'
+import { utcNow } from '../datetime'
 describe('bulk-combined-validate', () => {
   let testDb: Database
   let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
@@ -112,7 +113,7 @@ describe('bulk-combined-validate', () => {
     it('returns invalid when micronix container has no plate/box identifier and no collectionLocationId', async () => {
       const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
       const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(specimenTypeContainerType).values({
         specimenTypeId: specimenType.id,
         containerType: 'micronix_tube',
@@ -167,7 +168,7 @@ describe('bulk-combined-validate', () => {
         canContainCollections: true,
       })
       const plate = await createTestMicronixPlate(testDb, { name: 'Plate1', locationId: loc.id })
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(specimenTypeContainerType).values({
         specimenTypeId: specimenType.id,
         containerType: 'micronix_tube',
@@ -217,7 +218,7 @@ describe('bulk-combined-validate', () => {
         canContainCollections: true,
       })
       const plate = await createTestMicronixPlate(testDb, { name: 'Plate1', locationId: loc.id })
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(specimenTypeContainerType).values({
         specimenTypeId: specimenType.id,
         containerType: 'micronix_tube',

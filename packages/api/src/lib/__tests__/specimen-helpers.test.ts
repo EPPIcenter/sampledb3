@@ -8,6 +8,7 @@ import {
 import { specimen } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { findExistingStudySpecimen, findExistingControlSpecimen } from '../specimen-helpers'
+import { utcNow } from '../datetime'
 import { createTestControlDefinition, createTestControlBatch } from '../../__tests__/helpers/factories'
 
 describe('specimen-helpers', () => {
@@ -56,7 +57,7 @@ describe('specimen-helpers', () => {
         name: 'S2',
       })
       const specType = await createTestSpecimenType(testDb, { name: 'Plasma' })
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [inserted] = await testDb
         .insert(specimen)
         .values({
@@ -88,7 +89,7 @@ describe('specimen-helpers', () => {
         name: 'S3',
       })
       const specType = await createTestSpecimenType(testDb, { name: 'Serum' })
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(specimen).values({
         studySubjectId: subject.id,
         specimenTypeId: specType.id,
@@ -116,7 +117,7 @@ describe('specimen-helpers', () => {
         name: 'S4',
       })
       const specType = await createTestSpecimenType(testDb, { name: 'DNA' })
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [inserted] = await testDb
         .insert(specimen)
         .values({
@@ -165,7 +166,7 @@ describe('specimen-helpers', () => {
       const def = await createTestControlDefinition(testDb, { name: 'Pos', controlType: 'plasma_positive' })
       const batch = await createTestControlBatch(testDb, def.id, { name: 'Batch 2' })
       const specType = await createTestSpecimenType(testDb, { name: 'Plasma' })
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [inserted] = await testDb
         .insert(specimen)
         .values({
@@ -191,7 +192,7 @@ describe('specimen-helpers', () => {
       const def = await createTestControlDefinition(testDb, { name: 'Blood', controlType: 'blood' })
       const batch = await createTestControlBatch(testDb, def.id, { name: 'Batch 3' })
       const specType = await createTestSpecimenType(testDb, { name: 'Whole Blood' })
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [inserted] = await testDb
         .insert(specimen)
         .values({

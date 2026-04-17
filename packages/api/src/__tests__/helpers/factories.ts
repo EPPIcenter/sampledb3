@@ -1,5 +1,6 @@
 import type { Database } from '../../db/client'
 import { tag, storageType, specimenType, strain, storageContainer, location, controlDefinition, specimen, unit, study, studySubject, controlBatch, micronixPlate } from '../../db/schema'
+import { utcNow } from '../../lib/datetime'
 
 /**
  * Test data factories for creating test entities
@@ -44,7 +45,7 @@ export async function createTestStorageType(db: Database, data: TestStorageType)
  * Create a test specimen type
  */
 export async function createTestSpecimenType(db: Database, data: TestSpecimenType) {
-  const now = new Date().toISOString()
+  const now = utcNow()
   const [result] = await db.insert(specimenType).values({
     ...data,
     created: now,
@@ -118,7 +119,7 @@ export async function createTestMicronixPlate(db: Database, data: {
   locationId: number
   barcode?: string | null
 }) {
-  const now = new Date().toISOString()
+  const now = utcNow()
   const [result] = await db.insert(micronixPlate).values({
     name: data.name,
     locationId: data.locationId,
@@ -140,7 +141,7 @@ export async function createTestLocation(db: Database, data: {
   canContainCollections?: boolean
   path?: string
 }) {
-  const now = new Date().toISOString()
+  const now = utcNow()
   const insertResult = await db.insert(location).values({
     name: data.name,
     parentId: data.parentId ?? null,
@@ -164,7 +165,7 @@ export async function createTestControlDefinition(db: Database, data?: {
   controlType?: 'blood' | 'plasma_positive' | 'plasma_negative' | 'antibody' | 'extraction' | 'negative'
   properties?: any
 }) {
-  const now = new Date().toISOString()
+  const now = utcNow()
   const [result] = await db.insert(controlDefinition).values({
     name: data?.name || `Control ${Date.now()}`,
     controlType: data?.controlType || 'blood',
@@ -182,7 +183,7 @@ export async function createTestControlDefinition(db: Database, data?: {
  * Create a test study
  */
 export async function createTestStudy(db: Database, data: { title: string, shortCode: string, leadPerson?: string }) {
-  const now = new Date().toISOString()
+  const now = utcNow()
   const [result] = await db.insert(study).values({
     ...data,
     isLongitudinal: false,
@@ -197,7 +198,7 @@ export async function createTestStudy(db: Database, data: { title: string, short
  * Create a test study subject
  */
 export async function createTestStudySubject(db: Database, data: { studyId: number, name: string }) {
-  const now = new Date().toISOString()
+  const now = utcNow()
   const [result] = await db.insert(studySubject).values({
     ...data,
     created: now,
@@ -214,7 +215,7 @@ export async function createTestSpecimen(
   specimenTypeId: number,
   options: { studySubjectId?: number; controlBatchId?: number } = {}
 ) {
-  const now = new Date().toISOString()
+  const now = utcNow()
   let { studySubjectId, controlBatchId } = options
 
   // Default to study subject if neither provided
@@ -248,7 +249,7 @@ export async function createTestControlBatch(
   controlDefinitionId: number,
   data?: { name?: string; productionDate?: string; properties?: any }
 ) {
-  const now = new Date().toISOString()
+  const now = utcNow()
   const [result] = await db.insert(controlBatch).values({
     controlDefinitionId,
     name: data?.name || `Batch ${Date.now()}`,

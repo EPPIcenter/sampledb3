@@ -18,6 +18,7 @@ import {
 import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
 
 /**
  * Create derivations routes with database injection
@@ -58,7 +59,7 @@ async function createCollectionIfNeeded(database: Database, input: z.infer<typeo
 
   const name = input.collectionName
   const locationId = input.collectionLocationId
-  const now = new Date().toISOString()
+  const now = utcNow()
 
   switch (input.collectionType) {
     case 'micronix_plate': {

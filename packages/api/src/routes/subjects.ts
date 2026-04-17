@@ -35,6 +35,7 @@ import { resolveCollectionByName } from '../lib/collection-resolution'
 import type { ContainerData } from '../lib/container-creation'
 import { findExistingStudySpecimen } from '../lib/specimen-helpers'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import { utcNow } from '../lib/datetime'
 
 // Extended container data type for this endpoint (includes collectionLocationId)
 interface ExtendedContainerData extends ContainerData {
@@ -684,7 +685,7 @@ subjects.post('/', memberMiddleware, async (c) => {
     }
     
     const trimmedName = data.name.trim()
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     
     const [newSubject] = await dbInstance
@@ -789,7 +790,7 @@ subjects.post('/bulk', memberMiddleware, async (c) => {
     }
     
     // Insert all subjects in a single transaction (all-or-nothing)
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     const insertedSubjects = await dbInstance.transaction((tx) => {
       const out: typeof studySubject.$inferSelect[] = []
@@ -1248,7 +1249,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
     let result
     try {
       result = await dbInstance.transaction((tx) => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       
       // Get or create subject
       let subjectId: number
@@ -1705,7 +1706,7 @@ subjects.post('/:targetId/merge', memberMiddleware, async (c) => {
     // Process merge in a transaction
     const user = c.get('user')
     const result = await dbInstance.transaction((tx) => {
-      const now = new Date().toISOString()
+      const now = utcNow()
 
       // Statistics (declared inside transaction)
       let specimensTransferred = 0
@@ -1890,7 +1891,7 @@ subjects.put('/:id', memberMiddleware, async (c) => {
       .update(studySubject)
       .set({
         name: trimmedName,
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: utcNow(),
         updatedBy: user?.id,
       })
       .where(eq(studySubject.id, id))

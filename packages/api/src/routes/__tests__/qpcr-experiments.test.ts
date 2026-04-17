@@ -8,6 +8,7 @@ import type { Database } from '../../db/client'
 import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
 import { handleRouteError } from '../../lib/error-handler'
+import { utcNow } from '../../lib/datetime'
 import { qpcrExperiment, qpcrExperimentTarget, qpcrExperimentWell } from '../../db/schema'
 
 describe('qPCR Experiments Template', () => {
@@ -80,8 +81,8 @@ describe('qPCR Experiments Template', () => {
           name: 'Template test',
           templateFormat: 'biorad',
           status: 'setup',
-          created: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
+          created: utcNow(),
+          lastUpdated: utcNow(),
         })
         .returning()
       if (!exp) throw new Error('Insert failed')
@@ -143,8 +144,8 @@ describe('qPCR Experiments Template', () => {
           name: 'Barcode template test',
           templateFormat: 'biorad',
           status: 'setup',
-          created: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
+          created: utcNow(),
+          lastUpdated: utcNow(),
         })
         .returning()
       if (!exp) throw new Error('Insert failed')
@@ -199,8 +200,8 @@ describe('qPCR Experiments Template', () => {
           name: 'No targets',
           templateFormat: 'biorad',
           status: 'in_progress',
-          created: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
+          created: utcNow(),
+          lastUpdated: utcNow(),
         })
         .returning()
       if (!exp) throw new Error('Insert failed')
@@ -231,8 +232,8 @@ describe('qPCR Experiments Template', () => {
           name: 'Wells patch test',
           templateFormat: 'biorad',
           status: 'in_progress',
-          created: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
+          created: utcNow(),
+          lastUpdated: utcNow(),
         })
         .returning()
       if (!exp) throw new Error('Insert failed')
@@ -266,8 +267,8 @@ describe('qPCR Experiments Template', () => {
           name: 'Wells patch empty',
           templateFormat: 'biorad',
           status: 'in_progress',
-          created: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
+          created: utcNow(),
+          lastUpdated: utcNow(),
         })
         .returning()
       if (!exp) throw new Error('Insert failed')
@@ -296,8 +297,8 @@ describe('qPCR Experiments Template', () => {
           name: 'Wells bulk NTC',
           templateFormat: 'biorad',
           status: 'in_progress',
-          created: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
+          created: utcNow(),
+          lastUpdated: utcNow(),
         })
         .returning()
       if (!exp) throw new Error('Insert failed')
@@ -329,8 +330,8 @@ describe('qPCR Experiments Template', () => {
           name: 'Wells reject filled',
           templateFormat: 'biorad',
           status: 'in_progress',
-          created: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
+          created: utcNow(),
+          lastUpdated: utcNow(),
         })
         .returning()
       if (!exp) throw new Error('Insert failed')
@@ -361,8 +362,8 @@ describe('qPCR Experiments Template', () => {
           name: 'Wells locked',
           templateFormat: 'biorad',
           status: 'results_uploaded',
-          created: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
+          created: utcNow(),
+          lastUpdated: utcNow(),
         })
         .returning()
       if (!exp) throw new Error('Insert failed')
@@ -386,8 +387,8 @@ describe('qPCR Experiments Template', () => {
           name: 'Wells invalid pos',
           templateFormat: 'biorad',
           status: 'in_progress',
-          created: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
+          created: utcNow(),
+          lastUpdated: utcNow(),
         })
         .returning()
       if (!exp) throw new Error('Insert failed')

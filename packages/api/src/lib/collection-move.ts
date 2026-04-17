@@ -9,6 +9,7 @@ import {
 import { eq, and } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
 import { resolveCollectionByName, resolveCollectionByBarcode, type CollectionType } from './collection-resolution'
+import { utcNow } from './datetime'
 
 export type MoveableCollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
 
@@ -517,7 +518,7 @@ export async function executeCollectionMoves(
 
     // Execute moves in transaction
     await database.transaction(async (tx) => {
-      const now = new Date().toISOString()
+      const now = utcNow()
 
       for (const { collectionInfo, targetLocationId } of validMoves) {
         switch (collectionInfo.collectionType) {

@@ -19,6 +19,7 @@ import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from '../lib/error-handler'
 import { createAuthMiddleware, createMemberMiddleware, createAdminMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
 
 /** Short code prefix for tutorial namespace. Any study whose short code starts with this (case-insensitive) may be deleted by any authenticated user. */
 const TUTORIAL_SHORT_CODE_PREFIX = 'TUT'
@@ -745,8 +746,8 @@ studies.post('/', memberMiddleware, async (c) => {
       .insert(study)
       .values({
         ...data,
-        created: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
+        created: utcNow(),
+        lastUpdated: utcNow(),
         createdBy: user?.id,
         updatedBy: user?.id,
       })
@@ -824,7 +825,7 @@ studies.put('/:id', memberMiddleware, async (c) => {
       .update(study)
       .set({
         ...data,
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: utcNow(),
         updatedBy: user?.id,
       })
       .where(eq(study.id, id))

@@ -10,6 +10,7 @@ import { getPasswordRequirements, getSessionSettings } from '../lib/settings'
 import { createAuthMiddleware, createAdminMiddleware } from '../middleware/auth'
 import { rateLimit } from '../middleware/rate-limit'
 import { handleRouteError } from '../lib/error-handler'
+import { utcNow } from '../lib/datetime'
 
 export function createAuthRoutes(database: Database, settingsDb?: Database) {
   const auth = new Hono()
@@ -105,7 +106,7 @@ auth.post('/login', rateLimit(10, 60 * 1000), async (c) => {
     // Update last login
     await database
       .update(users)
-      .set({ lastLogin: new Date().toISOString() })
+      .set({ lastLogin: utcNow() })
       .where(eq(users.id, user.id))
 
     setCookie(c, 'session_id', sessionId, {
@@ -177,7 +178,7 @@ auth.post('/self-register', rateLimit(5, 60 * 1000), async (c) => {
     }
 
     const passwordHash = await bcrypt.hash(data.password, 10)
-    const createdAt = new Date().toISOString()
+    const createdAt = utcNow()
 
     const [user] = await database
       .insert(users)
@@ -283,7 +284,7 @@ auth.post('/register', adminMiddleware, async (c) => {
 
     // Hash password
     const passwordHash = await bcrypt.hash(data.password, 10)
-    const createdAt = new Date().toISOString()
+    const createdAt = utcNow()
 
     // Create user (admin-created users are immediately approved)
     const [user] = await database
@@ -603,7 +604,7 @@ auth.post('/switch', authMiddleware, async (c) => {
     // Update last login
     await database
       .update(users)
-      .set({ lastLogin: new Date().toISOString() })
+      .set({ lastLogin: utcNow() })
       .where(eq(users.id, targetUser.id))
     
     setCookie(c, 'session_id', newSessionId, {
@@ -763,7 +764,7 @@ auth.patch('/users/:id/approve', adminMiddleware, async (c) => {
       return c.json({ error: 'User not found' }, 404)
     }
 
-    const approvedAt = new Date().toISOString()
+    const approvedAt = utcNow()
     await database
       .update(users)
       .set({ approvedAt })
@@ -880,7 +881,7 @@ auth.delete('/users/:id', adminMiddleware, async (c) => {
     }
 
     // Soft delete: set deletedAt timestamp
-    const deletedAt = new Date().toISOString()
+    const deletedAt = utcNow()
     const softDeleted = await database
       .update(users)
       .set({ deletedAt })

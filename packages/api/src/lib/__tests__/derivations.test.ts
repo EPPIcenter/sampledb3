@@ -14,6 +14,7 @@ import { specimenTypeContainerType } from '../../db/schema'
 import { storageContainer } from '../../db/schema'
 import { micronixTube } from '../../db/schema'
 import type { Database } from '../../db/client'
+import { utcNow } from '../datetime'
 
 describe('derivations', () => {
   let testDb: Database
@@ -53,7 +54,7 @@ describe('derivations', () => {
       const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
       const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
       const plate = await createTestMicronixPlate(testDb, { name: 'Plate1', locationId: location.id })
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [container] = await testDb
         .insert(storageContainer)
         .values({
@@ -94,7 +95,7 @@ describe('derivations', () => {
         static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
       })
       const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
-      const now = new Date().toISOString()
+      const now = utcNow()
       await testDb.insert(specimenTypeContainerType).values({
         specimenTypeId: specimenType.id,
         containerType: 'micronix_tube',

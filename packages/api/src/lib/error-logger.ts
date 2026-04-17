@@ -1,6 +1,7 @@
 import type { Database } from '../db/client'
 import { errorLogs } from '../db/schema'
 import { lt, sql } from 'drizzle-orm'
+import { utcNow } from './datetime'
 
 export interface ErrorLogContext {
   userId?: number
@@ -96,7 +97,7 @@ export async function logError(
     // Insert error log - await to ensure it completes, but don't let failures block
     try {
       await db.insert(errorLogs).values({
-        timestamp: new Date().toISOString(),
+        timestamp: utcNow(),
         source,
         level,
         message: message || errorDetails.message,
