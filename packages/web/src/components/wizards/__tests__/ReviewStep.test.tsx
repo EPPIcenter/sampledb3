@@ -220,6 +220,140 @@ describe('ReviewStep multi-batch CSV', () => {
   })
 })
 
+describe('ReviewStep multi-batch CSV createCollections', () => {
+  const compositionStrains: CompositionStrains = [{ id: 1, percentage: 100 }]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSuggestBatchName.mockResolvedValue({ data: { name: 'Suggested Batch' } })
+    mockCreateBatchWithSpecimens.mockResolvedValue({ data: { batch: { id: 103 } } })
+  })
+
+  it('passes createCollections when CSV file has collectionName but no collectionId', async () => {
+    const def5000: ControlDefinition = {
+      id: 10,
+      name: 'Def 5000',
+      controlType: 'blood',
+      created: '',
+      lastUpdated: '',
+      targetDensity: 5000,
+      unitSymbol: 'µL',
+    }
+    const csvFiles: CSVFileData[] = [
+      makeCsvFile({
+        collectionId: undefined,
+        collectionName: 'New Box',
+        collectionLocationId: 42,
+        collectionType: 'box',
+        containerType: 'paper',
+        sheetName: 'Sheet 1',
+        rows: [
+          { specimen_type_name: 'Whole Blood', density: 5000 },
+        ],
+      }),
+    ]
+    const compositionDefinitions: ControlDefinition[] = [def5000]
+
+    const onSuccess = vi.fn()
+    render(
+      <ReviewStep
+        batchInfo={makeBatchInfo()}
+        compositionStrains={compositionStrains}
+        compositionDefinitions={compositionDefinitions}
+        specimenTypes={[]}
+        csvFiles={csvFiles}
+        onBack={() => {}}
+        onCancel={() => {}}
+        onSuccess={onSuccess}
+        isAddMode={false}
+      />
+    )
+
+    const submitBtn = screen.getByRole('button', { name: /Create Batch/i })
+    expect(submitBtn).not.toBeDisabled()
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(mockCreateBatchWithSpecimens).toHaveBeenCalledTimes(1)
+    })
+    const payload = mockCreateBatchWithSpecimens.mock.calls[0][0]
+    expect(payload.createCollections).toEqual([
+      { type: 'box', name: 'New Box', locationId: 42 },
+    ])
+  })
+})
+
+describe('ReviewStep single-batch submitting state', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSuggestBatchName.mockResolvedValue({ data: { name: 'Suggested Batch' } })
+  })
+
+  it('re-enables submit button after API error', async () => {
+    mockCreateBatchWithSpecimens.mockRejectedValueOnce(new Error('Server error'))
+
+    render(
+      <ReviewStep
+        batchInfo={makeBatchInfo({ controlDefinitionId: 1, name: 'Batch 1' })}
+        specimenTypes={[{
+          id: 'st1',
+          specimenTypeId: 1,
+          specimenTypeName: 'Whole Blood',
+          containerType: 'cryovial_tube',
+          containers: [{ id: 'c1', quantity: 1, unitSymbol: 'µL', position: 'A1' }],
+        }]}
+        csvFiles={[]}
+        onBack={() => {}}
+        onCancel={() => {}}
+        onSuccess={() => {}}
+        isAddMode={false}
+      />
+    )
+
+    const submitBtn = screen.getByRole('button', { name: /Create Batch/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(submitBtn).not.toBeDisabled()
+    })
+  })
+
+  it('re-enables submit button when onSuccess callback throws', async () => {
+    mockCreateBatchWithSpecimens.mockResolvedValueOnce({ data: { batch: { id: 200 } } })
+
+    const onSuccess = vi.fn(() => { throw new Error('Navigation failed') })
+
+    render(
+      <ReviewStep
+        batchInfo={makeBatchInfo({ controlDefinitionId: 1, name: 'Batch 1' })}
+        specimenTypes={[{
+          id: 'st1',
+          specimenTypeId: 1,
+          specimenTypeName: 'Whole Blood',
+          containerType: 'cryovial_tube',
+          containers: [{ id: 'c1', quantity: 1, unitSymbol: 'µL', position: 'A1' }],
+        }]}
+        csvFiles={[]}
+        onBack={() => {}}
+        onCancel={() => {}}
+        onSuccess={onSuccess}
+        isAddMode={false}
+      />
+    )
+
+    const submitBtn = screen.getByRole('button', { name: /Create Batch/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(onSuccess).toHaveBeenCalled()
+    })
+
+    await waitFor(() => {
+      expect(submitBtn).not.toBeDisabled()
+    })
+  })
+})
+
 describe('ReviewStep CSV unit fallback', () => {
   beforeEach(() => {
     vi.clearAllMocks()

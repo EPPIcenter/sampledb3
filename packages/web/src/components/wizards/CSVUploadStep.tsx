@@ -372,7 +372,8 @@ export default function CSVUploadStep({
           onClick={onNext}
           disabled={
             csvFiles.length === 0 ||
-            csvFiles.some(f => f.errors.length > 0)
+            csvFiles.some(f => f.errors.length > 0) ||
+            (showProductionDateField && !batchInfo.productionDate)
           }
           className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
         >

@@ -72,6 +72,26 @@ export interface CSVFileData {
   errors: Array<{ row: number; field?: string; error: string }>
 }
 
+export function canProceedToReview(
+  specimenTypes: SpecimenTypeConfig[],
+  csvFiles: CSVFileData[],
+): boolean {
+  const hasManual = specimenTypes.length > 0
+  const hasCsv = csvFiles.length > 0
+  if (!hasManual && !hasCsv) return false
+  const manualOk = !hasManual || specimenTypes.every(st => st.containers.length > 0)
+  const csvOk = !hasCsv || csvFiles.every(f => {
+    const collectionOk =
+      f.collectionId != null ||
+      (!!f.collectionName && f.collectionLocationId != null && !!f.collectionType)
+    const paperNeedsSheet = f.containerType === 'paper'
+      ? (!!(f.sheetName?.trim()) || (f.rows.length > 0 && f.rows.every(r => !!(r.sheet_name?.trim()))))
+      : true
+    return collectionOk && paperNeedsSheet
+  })
+  return manualOk && csvOk
+}
+
 export default function ControlBatchWizard() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
@@ -238,17 +258,7 @@ export default function ControlBatchWizard() {
       case 'containers':
         return specimenTypes.length > 0 || csvFiles.length > 0
       case 'review':
-        return (specimenTypes.length > 0 || csvFiles.length > 0) &&
-               (specimenTypes.every(st => st.containers.length > 0) || 
-                csvFiles.every(f => {
-                  const collectionOk =
-                    f.collectionId != null ||
-                    (!!f.collectionName && f.collectionLocationId != null && !!f.collectionType)
-                  const paperNeedsSheet = f.containerType === 'paper'
-                    ? (!!(f.sheetName?.trim()) || (f.rows.length > 0 && f.rows.every(r => !!(r.sheet_name?.trim()))))
-                    : true
-                  return collectionOk && paperNeedsSheet
-                }))
+        return canProceedToReview(specimenTypes, csvFiles)
       default:
         return false
     }

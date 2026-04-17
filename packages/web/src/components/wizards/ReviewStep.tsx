@@ -188,6 +188,16 @@ export default function ReviewStep({
           specimenTypeName,
           containers,
         }))
+        const createCollections: Array<{ type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'; name: string; locationId: number }> = []
+        if (file.collectionName && file.collectionLocationId != null && !file.collectionId) {
+          createCollections.push({
+            type: file.collectionType || (file.containerType === 'paper' ? 'box' :
+                  file.containerType === 'cryovial_tube' ? 'cryovial_box' :
+                  'micronix_plate'),
+            name: file.collectionName,
+            locationId: file.collectionLocationId,
+          })
+        }
         const res = await controlsApi.createBatchWithSpecimens({
           batch: {
             controlDefinitionId: definitionId,
@@ -195,7 +205,7 @@ export default function ReviewStep({
             productionDate,
           },
           specimens,
-          createCollections: [],
+          createCollections,
         })
         const batchId = (res.data as { batch?: { id?: number } }).batch?.id
         if (batchId != null) lastBatchId = batchId
@@ -391,6 +401,7 @@ export default function ReviewStep({
     } catch (err: any) {
       console.error('Failed to create batch:', err)
       setError(err.response?.data?.error || 'Failed to create batch and specimens')
+    } finally {
       setSubmitting(false)
     }
   }

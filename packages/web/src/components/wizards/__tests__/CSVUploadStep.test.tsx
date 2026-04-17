@@ -148,4 +148,60 @@ describe('CSVUploadStep', () => {
     )
     expect(screen.queryByLabelText(/Production date/i)).not.toBeInTheDocument()
   })
+
+  it('disables Next when showProductionDate is true but production date is empty', async () => {
+    const onNext = vi.fn()
+    function Wrapper() {
+      const [csvFiles, setCsvFiles] = useState<CSVFileData[]>([{
+        filename: 'test.csv',
+        rows: [{ specimen_type_name: 'Blood' }],
+        errors: [],
+      }])
+      return (
+        <CSVUploadStep
+          csvFiles={csvFiles}
+          onChange={setCsvFiles}
+          availableSpecimenTypes={defaultSpecimenTypes}
+          onNext={onNext}
+          onBack={vi.fn()}
+          onCancel={vi.fn()}
+          showProductionDate
+          batchInfo={{ productionDate: '' }}
+          onBatchInfoChange={vi.fn()}
+        />
+      )
+    }
+    await render(<Wrapper />)
+
+    const nextButton = screen.getByRole('button', { name: /Next: Configure Containers/i })
+    expect(nextButton).toBeDisabled()
+  })
+
+  it('enables Next when showProductionDate is true and production date is filled', async () => {
+    const onNext = vi.fn()
+    function Wrapper() {
+      const [csvFiles, setCsvFiles] = useState<CSVFileData[]>([{
+        filename: 'test.csv',
+        rows: [{ specimen_type_name: 'Blood' }],
+        errors: [],
+      }])
+      return (
+        <CSVUploadStep
+          csvFiles={csvFiles}
+          onChange={setCsvFiles}
+          availableSpecimenTypes={defaultSpecimenTypes}
+          onNext={onNext}
+          onBack={vi.fn()}
+          onCancel={vi.fn()}
+          showProductionDate
+          batchInfo={{ productionDate: '2026-04-01' }}
+          onBatchInfoChange={vi.fn()}
+        />
+      )
+    }
+    await render(<Wrapper />)
+
+    const nextButton = screen.getByRole('button', { name: /Next: Configure Containers/i })
+    expect(nextButton).not.toBeDisabled()
+  })
 })

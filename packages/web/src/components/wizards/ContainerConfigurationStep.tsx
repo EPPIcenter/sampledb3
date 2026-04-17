@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import LocationPicker from '../LocationPicker'
 import SheetCard from './SheetCard'
 import CollectionAssignment from './CollectionAssignment'
 import type { CollectionAssignmentChange } from './CollectionAssignment'
