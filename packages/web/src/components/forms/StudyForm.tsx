@@ -8,13 +8,14 @@ import UserBadge from '../UserBadge'
 interface StudyFormProps {
   study?: Study
   onSuccess?: () => void
+  onCancel: () => void
 }
 
 function isTutorialNamespace(shortCode: string): boolean {
   return shortCode.trim().toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX)
 }
 
-export default function StudyForm({ study, onSuccess }: StudyFormProps) {
+export default function StudyForm({ study, onSuccess, onCancel }: StudyFormProps) {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -163,7 +164,7 @@ export default function StudyForm({ study, onSuccess }: StudyFormProps) {
       <div className="flex justify-end space-x-4">
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          onClick={onCancel}
           className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
         >
           Cancel

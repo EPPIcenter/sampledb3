@@ -33,6 +33,8 @@ vi.mock('react-router-dom', async () => {
 })
 
 describe('ControlDefinitionForm', () => {
+  const noopCancel = () => {}
+
   beforeEach(() => {
     vi.clearAllMocks()
     mockCreate.mockResolvedValue({ data: { control: { id: 1, name: 'Def 1', targetDensity: 100 } } })
@@ -47,14 +49,14 @@ describe('ControlDefinitionForm', () => {
   })
 
   it('shows Create and Cancel buttons', async () => {
-    await render(<ControlDefinitionForm />)
+    await render(<ControlDefinitionForm onCancel={noopCancel} />)
     expect(screen.getByRole('button', { name: /create/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument()
   })
 
   it('calls create and onSuccess with single definition when only one density is provided', async () => {
     const onSuccess = vi.fn()
-    await render(<ControlDefinitionForm onSuccess={onSuccess} />)
+    await render(<ControlDefinitionForm onCancel={noopCancel} onSuccess={onSuccess} />)
     const user = userEvent.setup()
     const densityInput = screen.getByLabelText(/target density/i)
     await user.clear(densityInput)
@@ -69,7 +71,7 @@ describe('ControlDefinitionForm', () => {
 
   it('calls createDefinitionsBulk and onSuccess with array when multiple densities are provided', async () => {
     const onSuccess = vi.fn()
-    await render(<ControlDefinitionForm onSuccess={onSuccess} />)
+    await render(<ControlDefinitionForm onCancel={noopCancel} onSuccess={onSuccess} />)
     const user = userEvent.setup()
     const densityInput = screen.getByLabelText(/target density/i)
     await user.clear(densityInput)
@@ -99,7 +101,7 @@ describe('ControlDefinitionForm', () => {
   })
 
   it('create mode shows strain composition section first', async () => {
-    await render(<ControlDefinitionForm />)
+    await render(<ControlDefinitionForm onCancel={noopCancel} />)
     const section = screen.getByRole('heading', { name: /strain composition/i })
     expect(section).toBeInTheDocument()
     const densitySection = screen.getByRole('heading', { name: /target densities/i })
@@ -109,7 +111,7 @@ describe('ControlDefinitionForm', () => {
   })
 
   it('create mode shows one density input and Add density button', async () => {
-    await render(<ControlDefinitionForm />)
+    await render(<ControlDefinitionForm onCancel={noopCancel} />)
     expect(screen.getByLabelText(/target density/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /add density/i })).toBeInTheDocument()
   })
@@ -125,7 +127,7 @@ describe('ControlDefinitionForm', () => {
       created: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
     }
-    await render(<ControlDefinitionForm controlDefinition={def} />)
+    await render(<ControlDefinitionForm controlDefinition={def} onCancel={noopCancel} />)
     expect(screen.getByLabelText(/target density/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /add density/i })).not.toBeInTheDocument()
   })
@@ -137,7 +139,7 @@ describe('ControlDefinitionForm', () => {
       .mockResolvedValueOnce({ data: { suggestedName: '100_StrainA', exists: false } })
       .mockResolvedValueOnce({ data: { suggestedName: '500_StrainA', exists: false } })
     const onSuccess = vi.fn()
-    await render(<ControlDefinitionForm onSuccess={onSuccess} />)
+    await render(<ControlDefinitionForm onCancel={noopCancel} onSuccess={onSuccess} />)
     const user = userEvent.setup()
     const densityInput = screen.getByLabelText(/target density/i)
     await user.clear(densityInput)

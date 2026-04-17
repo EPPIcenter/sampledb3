@@ -313,7 +313,7 @@ export default function StudyDetail() {
             >
               Overview
             </button>
-            {study.isLongitudinal && (
+            {(study.isLongitudinal || (!timelineLoading && timeline?.dateRange != null)) && (
               <button
                 onClick={() => setActiveTab('timeline')}
                 className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
@@ -370,7 +370,7 @@ export default function StudyDetail() {
         </div>
       )}
 
-      {activeTab === 'timeline' && study.isLongitudinal && (
+      {activeTab === 'timeline' && (study.isLongitudinal || timeline?.dateRange != null) && (
         <div>
           {timelineLoading ? (
             <div className="text-center py-8" style={{ color: 'rgb(var(--app-text-muted))' }}>Loading timeline...</div>
@@ -510,6 +510,7 @@ export default function StudyDetail() {
             </div>
             <StudyForm
               study={study}
+              onCancel={() => setEditStudyModalOpen(false)}
               onSuccess={() => {
                 setEditStudyModalOpen(false)
                 loadStudy()

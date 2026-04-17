@@ -659,7 +659,7 @@ export default function StudyTimeline({ data }: StudyTimelineProps) {
             <p className="text-xs text-app-text-muted">
               {formatCollectionDate(tooltip.point.collectionDate)}
             </p>
-            <p className="text-xs text-app-text-muted mt-1">Specimen #{tooltip.point.specimenId}</p>
+            <p className="text-xs text-app-text-muted mt-1">Click to view specimen</p>
           </div>
         )}
       </div>

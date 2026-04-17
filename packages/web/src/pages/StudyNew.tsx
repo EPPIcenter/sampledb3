@@ -1,10 +1,11 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import StudyForm from '../components/forms/StudyForm'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import { useUser } from '../contexts/UserContext'
 import '../styles/studies.css'
 
 export default function StudyNew() {
+  const navigate = useNavigate()
   const { canWrite } = useUser()
 
   if (!canWrite) {
@@ -25,7 +26,7 @@ export default function StudyNew() {
         </div>
 
         <div className="dashboard-card rounded-xl p-6 max-w-2xl mx-auto">
-          <StudyForm />
+          <StudyForm onCancel={() => navigate('/studies')} />
         </div>
       </div>
     </div>

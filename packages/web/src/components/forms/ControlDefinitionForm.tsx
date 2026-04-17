@@ -6,7 +6,7 @@ import { useModifierHotkey } from '../../hooks/useHotkey'
 interface ControlDefinitionFormProps {
   controlDefinition?: ControlDefinition
   onSuccess?: (control?: ControlDefinition | ControlDefinition[]) => void
-  onCancel?: () => void
+  onCancel: () => void
 }
 
 interface StrainInput {
@@ -249,6 +249,8 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
       setFormData((prev) => ({ ...prev, name: response.data.suggestedName }))
       if (response.data.exists && response.data.existingDefinition) {
         setError(`A control definition with this combination already exists: "${response.data.existingDefinition.name}"`)
+      } else {
+        setError((prev) => prev?.startsWith('A control definition with this combination') ? null : prev)
       }
     } catch (err) {
       console.error('Failed to generate name:', err)
@@ -276,6 +278,8 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
       }
       if (response.data.exists && response.data.existingDefinition) {
         setError(`A control definition with this combination already exists: "${response.data.existingDefinition.name}"`)
+      } else {
+        setError((prev) => prev?.startsWith('A control definition with this combination') ? null : prev)
       }
     } catch (err) {
       console.error('Failed to generate name:', err)
@@ -677,7 +681,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
         <div className="flex justify-end space-x-4">
           <button
             type="button"
-            onClick={() => (onCancel ? onCancel() : navigate(-1))}
+            onClick={onCancel}
             className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface"
           >
             Cancel
