@@ -170,9 +170,9 @@ export default function MicronixPlateDetail() {
   const breadcrumbItems = [
     { label: 'Locations', to: '/locations' },
     plate.location?.id != null
-      ? { label: plate.locationPath || `Location #${plate.location.id}`, to: `/locations/${plate.location.id}` }
+      ? { label: plate.locationPath, to: `/locations/${plate.location.id}` }
       : undefined,
-    { label: `Micronix Plate ${plate.name || `#${plate.id}`}` },
+    { label: `Micronix Plate ${plate.name}` },
   ].filter(Boolean) as Array<{ label: string; to?: string }>
 
   return (
@@ -181,7 +181,7 @@ export default function MicronixPlateDetail() {
       <div className="mb-6 storage-reveal storage-reveal-1">
         <EntityBreadcrumbs items={breadcrumbItems} />
         <h1 className="text-3xl font-bold">
-          Micronix Plate {plate.name || `#${plate.id}`}
+          Micronix Plate {plate.name}
         </h1>
         {plate.barcode && (
           <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>Barcode: {plate.barcode}</p>
@@ -314,7 +314,7 @@ export default function MicronixPlateDetail() {
               if (entry.position) tooltipParts.push(`Position: ${entry.position}`)
               if (entry.barcode) tooltipParts.push(`Barcode: ${entry.barcode}`)
               if (subjectName) tooltipParts.push(`${source?.type === 'subject' ? 'Subject' : 'Control'}: ${subjectName}`)
-              if (specimenId) tooltipParts.push(`Specimen: #${specimenId}`)
+              if (entry.container?.specimenTypeName) tooltipParts.push(`Specimen type: ${entry.container.specimenTypeName}`)
               if (stateName) tooltipParts.push(`State: ${stateName}`)
               if (statusName) tooltipParts.push(`Status: ${statusName}`)
               const title = tooltipParts.join(' • ')
@@ -352,9 +352,9 @@ export default function MicronixPlateDetail() {
                   <div className="font-mono truncate w-full text-center text-[8px]">
                     {entry.barcode || ''}
                   </div>
-                  {specimenId && (
+                  {(subjectName || entry.container?.specimenTypeName) && (
                     <span className="text-app-accent underline text-[9px] truncate max-w-full">
-                      {subjectName || `Spec #${specimenId}`}
+                      {subjectName || entry.container.specimenTypeName}
                     </span>
                   )}
                 </button>

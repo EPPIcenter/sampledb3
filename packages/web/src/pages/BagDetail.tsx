@@ -123,9 +123,9 @@ export default function BagDetail() {
   const breadcrumbItems = [
     { label: 'Locations', to: '/locations' },
     bag.location?.id
-      ? { label: bag.locationPath || `Location #${bag.location.id}`, to: `/locations/${bag.location.id}` }
+      ? { label: bag.locationPath, to: `/locations/${bag.location.id}` }
       : undefined,
-    { label: `Bag ${bag.name || `#${bag.id}`}` },
+    { label: `Bag ${bag.name}` },
   ].filter(Boolean) as Array<{ label: string; to?: string }>
 
   // Calculate statistics
@@ -154,7 +154,7 @@ export default function BagDetail() {
       <div className="mb-4 storage-reveal storage-reveal-1">
         <EntityBreadcrumbs items={breadcrumbItems} />
         <h1 className="text-2xl font-bold">
-          Bag {bag.name || `#${bag.id}`}
+          Bag {bag.name}
         </h1>
         {bag.locationPath && (
           <p className="mt-1 text-xs font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>{bag.locationPath}</p>
@@ -279,9 +279,11 @@ export default function BagDetail() {
               {isExpanded && (
                 <div className="p-3">
                   <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5">
-                    {sheet.papers?.map((p: any) => {
+                    {sheet.papers?.map((p: any, pIdx: number) => {
                       const hasContainer = !!p.container
                       const isClickable = hasContainer && !!p.id
+                      const source = p.container?.source
+                      const cardLabel = p.barcode || source?.name || p.container?.specimenTypeName || `Spot ${pIdx + 1}`
                       
                       return (
                         <button
@@ -299,13 +301,8 @@ export default function BagDetail() {
                         >
                           <div className="min-w-0 flex-1">
                             <div className="font-medium text-[10px] text-app-text truncate">
-                              {p.position ? `Pos: ${p.position}` : `#${p.id}`}
+                              {p.position ? `Pos: ${p.position}` : cardLabel}
                             </div>
-                            {p.container?.specimenId && (
-                              <div className="text-[9px] text-app-text-muted truncate">
-                                Spec: {p.container.specimenId}
-                              </div>
-                            )}
                           </div>
                           <div className="flex flex-col items-end gap-0.5 flex-shrink-0 ml-1">
                             <div className={`px-1 py-0.5 rounded text-[8px] font-bold ${p.container?.remainingQuantity > 0 ? 'bg-app-trend-up/10 text-app-trend-up' : 'bg-app-trend-down/10 text-app-trend-down'}`}>

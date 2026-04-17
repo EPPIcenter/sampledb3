@@ -117,10 +117,10 @@ export default function SheetDetail() {
   const breadcrumbItems = [
     { label: 'Locations', to: '/locations' },
     sheet.location?.id
-      ? { label: sheet.locationPath || `Location #${sheet.location.id}`, to: `/locations/${sheet.location.id}` }
+      ? { label: sheet.locationPath, to: `/locations/${sheet.location.id}` }
       : undefined,
-    sheet.bag ? { label: sheet.bag.name || `Bag #${sheet.bag.id}`, to: `/collections/bags/${sheet.bag.id}` } : undefined,
-    sheet.box ? { label: sheet.box.name || `Box #${sheet.box.id}`, to: `/collections/boxes/${sheet.box.id}` } : undefined,
+    sheet.bag ? { label: sheet.bag.name, to: `/collections/bags/${sheet.bag.id}` } : undefined,
+    sheet.box ? { label: sheet.box.name, to: `/collections/boxes/${sheet.box.id}` } : undefined,
     { label: `Sheet: ${sheet.name}` },
   ].filter(Boolean) as Array<{ label: string; to?: string }>
 
@@ -210,12 +210,14 @@ export default function SheetDetail() {
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {papers.map((p: any) => {
-              const hasContainer = !!p.container
+            {papers.map((p: any, index: number) => {
               const isActive = p.container?.remainingQuantity > 0
+              const source = p.container?.source
+              const sourceName = source?.name ?? null
+              const specimenTypeName = p.container?.specimenTypeName ?? null
+              const cardTitle = p.barcode || sourceName || specimenTypeName || `Spot ${index + 1}`
+              const subtitle = p.barcode && sourceName ? sourceName : specimenTypeName
               
-              // Check if this paper should be highlighted
-              // Normalize positions for comparison (trim whitespace, handle null/undefined)
               const normalizePos = (pos: string | null | undefined) => {
                 if (!pos) return null
                 return pos.toString().trim().toUpperCase()
@@ -224,18 +226,9 @@ export default function SheetDetail() {
               const normalizedTarget = normalizePos(targetPosition)
               const normalizedPaper = normalizePos(p.position)
               
-              // Try multiple matching strategies
               const isHighlighted = (targetPosition || targetContainerId) && (
-                // 1. Direct normalized position match (case-insensitive, trimmed)
                 (normalizedTarget && normalizedPaper && normalizedTarget === normalizedPaper) ||
-                // 2. Match by ID if target is #ID format
-                (targetPosition && targetPosition.trim().startsWith('#') && targetPosition.trim() === `#${p.id}`) ||
-                // 3. Match if paper has no position but target matches the ID format
-                (!p.position && normalizedTarget === `#${p.id}`.toUpperCase()) ||
-                // 4. Match by container ID (fallback when position is missing)
-                (targetContainerId && targetContainerId === String(p.id)) ||
-                // 5. If position is null/empty, try matching by container ID from position param
-                (!p.position && targetPosition && !normalizedTarget?.startsWith('#') && targetPosition.trim() === String(p.id))
+                (targetContainerId && targetContainerId === String(p.id))
               )
               
               return (
@@ -253,12 +246,12 @@ export default function SheetDetail() {
                 >
                   <div className="flex justify-between items-start mb-1">
                     <span
-                      className={`text-xs font-mono font-bold ${isHighlighted ? 'text-app-accent-on-tint' : 'text-app-text'}`}
+                      className={`text-xs font-mono font-bold truncate ${isHighlighted ? 'text-app-accent-on-tint' : 'text-app-text'}`}
                     >
-                      {p.position || `#${p.id}`}
+                      {p.position || cardTitle}
                     </span>
                     <div
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ml-2 ${
                         isActive
                           ? 'bg-green-200 text-app-trend-up'
                           : isHighlighted
@@ -269,18 +262,11 @@ export default function SheetDetail() {
                       {isActive ? 'IN USE' : 'EMPTY'}
                     </div>
                   </div>
-                  {p.barcode && (
-                    <div
-                      className={`text-[10px] mb-1 ${isHighlighted ? 'text-app-accent-on-tint/90' : 'text-app-text-muted'}`}
-                    >
-                      Barcode: {p.barcode}
-                    </div>
-                  )}
-                  {p.container?.specimenId && (
+                  {subtitle && (
                     <div
                       className={`text-xs font-medium mt-2 ${isHighlighted ? 'text-app-accent-on-tint' : 'text-app-accent'}`}
                     >
-                      Specimen #{p.container.specimenId}
+                      {subtitle}
                     </div>
                   )}
                   <div

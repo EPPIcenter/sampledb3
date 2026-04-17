@@ -178,9 +178,9 @@ export default function CryovialBoxDetail() {
   const breadcrumbItems = [
     { label: 'Locations', to: '/locations' },
     box.location?.id
-      ? { label: box.locationPath || `Location #${box.location.id}`, to: `/locations/${box.location.id}` }
+      ? { label: box.locationPath, to: `/locations/${box.location.id}` }
       : undefined,
-    { label: `Cryovial Box ${box.name || `#${box.id}`}` },
+    { label: `Cryovial Box ${box.name}` },
   ].filter(Boolean) as Array<{ label: string; to?: string }>
 
   return (
@@ -189,7 +189,7 @@ export default function CryovialBoxDetail() {
       <div className="mb-6 storage-reveal storage-reveal-1">
         <EntityBreadcrumbs items={breadcrumbItems} />
         <h1 className="text-3xl font-bold">
-          Cryovial Box {box.name || `#${box.id}`}
+          Cryovial Box {box.name}
         </h1>
         {box.barcode && (
           <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>Barcode: {box.barcode}</p>
@@ -328,7 +328,7 @@ export default function CryovialBoxDetail() {
               if (entry.barcode) tooltipParts.push(`Barcode: ${entry.barcode}`)
               tooltipParts.push(`Type: ${label}`)
               tooltipParts.push(`${source?.type === 'subject' ? 'Subject' : 'Control'}: ${subjectName}`)
-              if (specimenId) tooltipParts.push(`Specimen: #${specimenId}`)
+              if (entry.container?.specimenTypeName) tooltipParts.push(`Specimen type: ${entry.container.specimenTypeName}`)
               if (stateName) tooltipParts.push(`State: ${stateName}`)
               if (statusName) tooltipParts.push(`Status: ${statusName}`)
               const title = tooltipParts.join(' • ')
@@ -366,9 +366,9 @@ export default function CryovialBoxDetail() {
                   <div className="font-mono truncate w-full text-center text-[8px]">
                     {entry.barcode || label}
                   </div>
-                  {specimenId && (
+                  {(subjectName || entry.container?.specimenTypeName) && (
                     <span className="text-app-accent underline text-[9px] truncate max-w-full">
-                      {subjectName || `Spec #${specimenId}`}
+                      {subjectName || entry.container.specimenTypeName}
                     </span>
                   )}
                 </button>
