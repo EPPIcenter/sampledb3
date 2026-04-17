@@ -1,4 +1,4 @@
-import { useState, useRef, ReactNode } from 'react'
+import { useState, useRef, useLayoutEffect, useCallback, ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
 
@@ -68,6 +68,39 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
       return next
     })
   }
+
+  const navRef = useRef<HTMLElement>(null)
+  const [fadeTop, setFadeTop] = useState(false)
+  const [fadeBottom, setFadeBottom] = useState(false)
+
+  const updateNavScrollFades = useCallback(() => {
+    const el = navRef.current
+    if (!el) return
+    const epsilon = 1
+    const { scrollTop, scrollHeight, clientHeight } = el
+    if (scrollHeight <= clientHeight + epsilon) {
+      setFadeTop(false)
+      setFadeBottom(false)
+      return
+    }
+    setFadeTop(scrollTop > epsilon)
+    setFadeBottom(scrollTop + clientHeight < scrollHeight - epsilon)
+  }, [])
+
+  useLayoutEffect(() => {
+    const el = navRef.current
+    if (!el) return
+    updateNavScrollFades()
+    const ro = new ResizeObserver(() => {
+      updateNavScrollFades()
+    })
+    ro.observe(el)
+    el.addEventListener('scroll', updateNavScrollFades, { passive: true })
+    return () => {
+      ro.disconnect()
+      el.removeEventListener('scroll', updateNavScrollFades)
+    }
+  }, [updateNavScrollFades, expandedItems, location.pathname])
 
   const toggleItem = (itemKey: string) => {
     setExpandedItems((prev) => {
@@ -527,7 +560,7 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
       <aside
         className={`
           app-sidebar
-          fixed top-0 left-0 h-full w-52 overflow-y-auto z-50
+          fixed top-0 left-0 h-full w-52 overflow-hidden z-50
           transform transition-transform duration-300 ease-in-out
           lg:translate-x-0 lg:z-auto
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -552,9 +585,23 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
           </div>
 
           {/* Navigation */}
-          <nav className="app-sidebar__nav">
-            {sections.map((section, index) => renderSection(section, index))}
-          </nav>
+          <div className="app-sidebar__nav-wrap">
+            <div
+              className={`app-sidebar__nav-fade app-sidebar__nav-fade--top ${fadeTop ? 'app-sidebar__nav-fade--visible' : ''}`}
+              aria-hidden="true"
+            />
+            <nav
+              ref={navRef}
+              className="app-sidebar__nav"
+              aria-label="Main"
+            >
+              {sections.map((section, index) => renderSection(section, index))}
+            </nav>
+            <div
+              className={`app-sidebar__nav-fade app-sidebar__nav-fade--bottom ${fadeBottom ? 'app-sidebar__nav-fade--visible' : ''}`}
+              aria-hidden="true"
+            />
+          </div>
 
           {/* EPPIcenter Footer */}
           <div className="app-sidebar__footer">
