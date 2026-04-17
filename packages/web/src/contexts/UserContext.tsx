@@ -1,28 +1,13 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
+import { useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
 import { authApi, type User } from '../lib/api'
 import { addRecentUser } from '../lib/localUserHistory'
+import { UserContext } from './user-context-instance'
 
 // Run refresh once per app load; cache result for remounts (e.g. Strict Mode)
 let userDidInit = false
 let userCachedUser: User | null = null
 let userCachedLoading = true
 let userCachedError: string | null = null
-
-interface UserContextType {
-  user: User | null
-  loading: boolean
-  error: string | null
-  refreshUser: () => Promise<void>
-  switchUser: (userId: number, password: string) => Promise<void>
-  setUser: (user: User | null) => void
-  canWrite: boolean
-  canManageReferenceData: boolean
-  isAdmin: boolean
-  isMember: boolean
-  isViewer: boolean
-}
-
-const UserContext = createContext<UserContextType | undefined>(undefined)
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)

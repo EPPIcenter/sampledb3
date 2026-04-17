@@ -1,27 +1,16 @@
 import {
-  createContext,
   useCallback,
   useContext,
   useLayoutEffect,
   useState,
   type ReactNode,
 } from 'react'
+import { ThemeContext, type ThemeContextValue } from './theme-context-instance'
+import { THEME_IDS, type Theme } from './theme-types'
+
+export { THEME_IDS, THEME_LABELS, type Theme } from './theme-types'
 
 const STORAGE_KEY = 'theme'
-
-export const THEME_IDS = ['light', 'dark', 'sepia', 'ocean', 'warm-dark', 'high-contrast', 'forest', 'rose'] as const
-export type Theme = (typeof THEME_IDS)[number]
-
-export const THEME_LABELS: Record<Theme, string> = {
-  light: 'Light',
-  dark: 'Dark',
-  sepia: 'Sepia',
-  ocean: 'Ocean',
-  'warm-dark': 'Warm dark',
-  'high-contrast': 'High contrast',
-  forest: 'Forest',
-  rose: 'Rose',
-}
 
 function getInitialTheme(): Theme {
   if (typeof document === 'undefined') return 'light'
@@ -31,14 +20,6 @@ function getInitialTheme(): Theme {
   if (dataTheme && THEME_IDS.includes(dataTheme as Theme)) return dataTheme as Theme
   return 'light'
 }
-
-interface ThemeContextValue {
-  theme: Theme
-  setTheme: (theme: Theme) => void
-  toggleTheme: () => void
-}
-
-const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme)

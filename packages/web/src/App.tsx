@@ -62,7 +62,7 @@ import AuthGuard from './components/AuthGuard'
 import AdminGuard from './components/AdminGuard'
 import { DateFilterProvider } from './contexts/DateFilterContext'
 import { HotkeyProvider, useHotkeyContext } from './contexts/HotkeyContext'
-import { UserProvider } from './contexts/UserContext'
+import { UserProvider, useUser } from './contexts/UserContext'
 import { ThemeProvider, useTheme, THEME_IDS, THEME_LABELS } from './contexts/ThemeContext'
 import { useClickOutside } from './hooks/useClickOutside'
 import HotkeyHelpModal from './components/HotkeyHelpModal'
@@ -75,7 +75,6 @@ import { Command } from './lib/commands'
 import { formatHotkey, getModifierKey, isMac } from './lib/hotkeys'
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import { exportApi } from './lib/api'
-import { useUser } from './contexts/UserContext'
 function AppContent() {
   const navigate = useNavigate()
   const location = useLocation()
