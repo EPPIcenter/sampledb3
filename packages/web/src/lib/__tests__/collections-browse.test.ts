@@ -80,4 +80,42 @@ describe('filterCollections', () => {
     expect(filterCollections(allTypes, 'alpha', 'micronix_plate')).toHaveLength(1)
     expect(filterCollections(allTypes, 'alpha', 'bag')).toHaveLength(0)
   })
+
+  it('sorts exact name match first, then prefix, then contains', () => {
+    const collections: CollectionListItem[] = [
+      mockCollection(10, 'box10', 'box'),
+      mockCollection(11, 'box100', 'box'),
+      mockCollection(12, 'mybox1', 'box'),
+      mockCollection(1, 'box1', 'box'),
+      mockCollection(13, 'box11', 'box'),
+    ]
+    const result = filterCollections(collections, 'box1', 'all')
+    expect(result.map((c) => c.name)).toEqual([
+      'box1',     // exact
+      'box10',    // prefix
+      'box100',   // prefix
+      'box11',    // prefix
+      'mybox1',   // contains
+    ])
+  })
+
+  it('sorts case-insensitively and puts exact match first', () => {
+    const collections: CollectionListItem[] = [
+      mockCollection(2, 'PlateAlpha', 'micronix_plate'),
+      mockCollection(1, 'plate1', 'micronix_plate'),
+      mockCollection(3, 'MyPlate1', 'micronix_plate'),
+    ]
+    const result = filterCollections(collections, 'Plate1', 'all')
+    expect(result[0].name).toBe('plate1')
+  })
+
+  it('preserves original order when search is empty', () => {
+    const collections: CollectionListItem[] = [
+      mockCollection(3, 'Zebra', 'box'),
+      mockCollection(1, 'Alpha', 'box'),
+      mockCollection(2, 'Middle', 'box'),
+    ]
+    const result = filterCollections(collections, '', 'all')
+    expect(result.map((c) => c.name)).toEqual(['Zebra', 'Alpha', 'Middle'])
+  })
 })
