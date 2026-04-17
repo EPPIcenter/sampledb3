@@ -20,6 +20,10 @@ export default function ControlBatchDetail() {
   const [error, setError] = useState<string | null>(null)
   const [createSpecimenModalOpen, setCreateSpecimenModalOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editProductionDate, setEditProductionDate] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -63,6 +67,49 @@ export default function ControlBatchDetail() {
       console.error('Failed to delete batch:', err)
       alert(err.response?.data?.error || 'Failed to delete batch. It may be in use.')
       setDeleting(false)
+    }
+  }
+
+  const handleDeleteSpecimen = async (specimenId: number) => {
+    if (!summaryData) return
+    if (!window.confirm('Are you sure you want to delete this specimen and all its containers? This action cannot be undone.')) return
+    try {
+      await controlsApi.deleteSpecimenFromBatch(summaryData.batch.id, specimenId)
+      await loadSummary()
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to delete specimen')
+    }
+  }
+
+  const handleStartEdit = () => {
+    if (!summaryData) return
+    setEditName(summaryData.batch.name)
+    setEditProductionDate(summaryData.batch.productionDate || '')
+    setEditing(true)
+  }
+
+  const handleCancelEdit = () => {
+    setEditing(false)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!summaryData) return
+    setSaving(true)
+    try {
+      const updates: { name?: string; productionDate?: string } = {}
+      if (editName !== summaryData.batch.name) updates.name = editName
+      if (editProductionDate !== (summaryData.batch.productionDate || '')) updates.productionDate = editProductionDate
+      if (Object.keys(updates).length === 0) {
+        setEditing(false)
+        return
+      }
+      await controlsApi.updateBatch(summaryData.batch.id, updates)
+      setEditing(false)
+      await loadSummary()
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to update batch')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -167,24 +214,60 @@ export default function ControlBatchDetail() {
           />
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold">{batch.name}</h1>
-              {definition && (
-                <div className="flex items-center gap-2 mt-1">
-                  <span style={{ color: 'rgb(var(--app-text-muted))' }}>Definition:</span>
-                  <Link to={`/blood-controls/${definition.id}`} className="dashboard-link font-medium">{definition.name}</Link>
-                  <span className={getTypeBadgeClass(definition.controlType)}>
-                    {definition.controlType.replace('_', ' ')}
-                  </span>
+              {editing ? (
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="text-2xl font-bold bg-app-surface border border-app-border rounded px-2 py-1"
+                    style={{ color: 'rgb(var(--app-text))' }}
+                    autoFocus
+                  />
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>Production Date:</label>
+                    <input
+                      type="date"
+                      value={editProductionDate}
+                      onChange={(e) => setEditProductionDate(e.target.value)}
+                      className="text-sm bg-app-surface border border-app-border rounded px-2 py-1"
+                      style={{ color: 'rgb(var(--app-text))' }}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={handleSaveEdit} disabled={saving || !editName.trim()} className="blood-controls-btn-primary px-3 py-1 text-sm">
+                      {saving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button onClick={handleCancelEdit} disabled={saving} className="blood-controls-btn-secondary px-3 py-1 text-sm">
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-              )}
-              {batch.productionDate && (
-                <p className="text-sm mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
-                  Production Date: {new Date(batch.productionDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
-                </p>
+              ) : (
+                <>
+                  <h1 className="text-3xl font-bold">{batch.name}</h1>
+                  {definition && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span style={{ color: 'rgb(var(--app-text-muted))' }}>Definition:</span>
+                      <Link to={`/blood-controls/${definition.id}`} className="dashboard-link font-medium">{definition.name}</Link>
+                      <span className={getTypeBadgeClass(definition.controlType)}>
+                        {definition.controlType.replace('_', ' ')}
+                      </span>
+                    </div>
+                  )}
+                  {batch.productionDate && (
+                    <p className="text-sm mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                      Production Date: {new Date(batch.productionDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                  )}
+                </>
               )}
             </div>
-            {canWrite && (
+            {canWrite && !editing && (
               <div className="flex space-x-3">
+                <button onClick={handleStartEdit} className="blood-controls-btn-secondary px-4 py-2">
+                  Edit
+                </button>
                 <button onClick={() => navigate(`/blood-controls/batches/${batch.id}/add-specimens`)} className="blood-controls-btn-primary px-4 py-2">
                   Add Specimens
                 </button>
@@ -280,6 +363,26 @@ export default function ControlBatchDetail() {
                 </div>
                 <div className="p-4">
                   <SimpleTimeline specimens={specimens} />
+                  {canWrite && (
+                    <div className="mt-4 pt-4 border-t space-y-2" style={{ borderColor: 'rgb(var(--app-border))' }}>
+                      <p className="text-xs font-medium" style={{ color: 'rgb(var(--app-text-muted))' }}>Remove specimens</p>
+                      {specimens.map((s) => (
+                        <div key={s.id} className="flex items-center justify-between text-sm py-1">
+                          <span style={{ color: 'rgb(var(--app-text))' }}>
+                            {s.specimenTypeName || `Specimen #${s.id}`}
+                            {s.collectionDate && <span className="ml-2 text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>{s.collectionDate}</span>}
+                          </span>
+                          <button
+                            onClick={() => handleDeleteSpecimen(s.id)}
+                            className="text-xs px-2 py-0.5 rounded hover:opacity-80"
+                            style={{ color: 'rgb(var(--app-trend-down))', border: '1px solid rgb(var(--app-trend-down) / 0.3)' }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

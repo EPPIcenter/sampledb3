@@ -28,6 +28,7 @@ import { generateControlDefinitionName, generateUniqueControlDefinitionName } fr
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
 import type { BloodControlProperties } from '../types/properties'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
 
 /**
  * Create controls routes with database injection
@@ -179,6 +180,62 @@ controls.get('/batches/:id', authMiddleware, async (c) => {
   if (!result) throw new NotFoundError('Blood control batch', id)
 
   return c.json({ batch: result.batch })
+})
+
+// Update batch (rename, change production date, etc.)
+controls.patch('/batches/:id', memberMiddleware, async (c) => {
+  const id = parseInt(c.req.param('id'))
+  if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
+
+  try {
+    const batchWithDefinition = await dbInstance
+      .select({ batch: controlBatch, definition: controlDefinition })
+      .from(controlBatch)
+      .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
+      .where(and(eq(controlBatch.id, id), eq(controlDefinition.controlType, 'blood')))
+      .get()
+
+    if (!batchWithDefinition) {
+      return c.json({ error: 'Blood control batch not found' }, 404)
+    }
+
+    const body = await c.req.json()
+    const schema = z.object({
+      name: z.string().min(1).max(255).optional(),
+      productionDate: z.string().optional(),
+      properties: z.record(z.string(), z.any()).optional(),
+    })
+    const data = schema.parse(body)
+
+    if (data.name) {
+      const validation = await validateControlBatchName(dbInstance, data.name, id)
+      if (!validation.valid) {
+        return c.json({ error: validation.error, suggestion: validation.suggestion }, 400)
+      }
+    }
+
+    const user = c.get('user')
+    const updates: Record<string, unknown> = {
+      lastUpdated: utcNow(),
+      updatedBy: user?.id,
+    }
+    if (data.name !== undefined) updates.name = data.name
+    if (data.productionDate !== undefined) updates.productionDate = data.productionDate
+    if (data.properties !== undefined) updates.properties = data.properties
+
+    const [updated] = await dbInstance
+      .update(controlBatch)
+      .set(updates)
+      .where(eq(controlBatch.id, id))
+      .returning()
+
+    return c.json({ batch: updated })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    return handleRouteError(error, c)
+  }
 })
 
 // Delete batch and all associated data
@@ -2013,6 +2070,51 @@ controls.post('/batches/:id/specimens/bulk', memberMiddleware, async (c) => {
   } catch (error: any) {
     console.error('Error adding specimens to batch:', error)
     return c.json({ error: error.message || 'Failed to add specimens to batch' }, 500)
+  }
+})
+
+// Delete a single specimen from a batch
+controls.delete('/batches/:batchId/specimens/:specimenId', memberMiddleware, async (c) => {
+  const batchId = parseInt(c.req.param('batchId'))
+  const specimenId = parseInt(c.req.param('specimenId'))
+  if (isNaN(batchId) || isNaN(specimenId)) return c.json({ error: 'Invalid ID' }, 400)
+
+  try {
+    const spec = await dbInstance
+      .select()
+      .from(specimen)
+      .where(and(eq(specimen.id, specimenId), eq(specimen.controlBatchId, batchId)))
+      .get()
+
+    if (!spec) {
+      return c.json({ error: 'Specimen not found in this batch' }, 404)
+    }
+
+    await dbInstance.transaction((tx) => {
+      const containerRows = tx
+        .select({ id: storageContainer.id })
+        .from(storageContainer)
+        .where(eq(storageContainer.specimenId, specimenId))
+        .all()
+      const containerIds = containerRows.map(r => r.id)
+
+      if (containerIds.length > 0) {
+        for (const cId of containerIds) {
+          tx.delete(storageContainerTag).where(eq(storageContainerTag.storageContainerId, cId)).run()
+          tx.delete(micronixTube).where(eq(micronixTube.id, cId)).run()
+          tx.delete(cryovialTube).where(eq(cryovialTube.id, cId)).run()
+          tx.delete(paper).where(eq(paper.id, cId)).run()
+          tx.delete(staticWell).where(eq(staticWell.id, cId)).run()
+        }
+        tx.delete(storageContainer).where(eq(storageContainer.specimenId, specimenId)).run()
+      }
+
+      tx.delete(specimen).where(eq(specimen.id, specimenId)).run()
+    })
+
+    return c.json({ message: 'Specimen deleted successfully' })
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 

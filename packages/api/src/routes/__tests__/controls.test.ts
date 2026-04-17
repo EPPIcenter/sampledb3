@@ -461,6 +461,170 @@ describe('Controls API', () => {
     })
   })
 
+  describe(`PATCH ${BASE}/batches/:id`, () => {
+    it('returns 200 and updates batch name', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Strain Patch' })
+      const definition = await createTestControlDefinition(testDb, {
+        name: 'DefPatch',
+        properties: {
+          strains: [{ id: strain.id, name: 'Strain Patch', percentage: 100 }],
+          targetDensity: 500,
+        },
+      })
+      const app = createApp()
+      const createRes = await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: { name: 'Original Name', productionDate: '2026-04-01' },
+      })
+      expect(createRes.status).toBe(201)
+      const { batch } = (await createRes.json()) as { batch: { id: number } }
+
+      const patchRes = await authenticatedRequest(app, `${BASE}/batches/${batch.id}`, {
+        method: 'PATCH',
+        cookie: cookieHeader,
+        json: { name: 'Updated Name' },
+      })
+      expect(patchRes.status).toBe(200)
+      const patchData = (await patchRes.json()) as { batch: { id: number; name: string } }
+      expect(patchData.batch.name).toBe('Updated Name')
+    })
+
+    it('returns 200 and updates production date', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Strain Date' })
+      const definition = await createTestControlDefinition(testDb, {
+        name: 'DefDate',
+        properties: {
+          strains: [{ id: strain.id, name: 'Strain Date', percentage: 100 }],
+          targetDensity: 600,
+        },
+      })
+      const app = createApp()
+      const createRes = await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: { name: 'BatchDate', productionDate: '2026-01-01' },
+      })
+      expect(createRes.status).toBe(201)
+      const { batch } = (await createRes.json()) as { batch: { id: number } }
+
+      const patchRes = await authenticatedRequest(app, `${BASE}/batches/${batch.id}`, {
+        method: 'PATCH',
+        cookie: cookieHeader,
+        json: { productionDate: '2026-06-15' },
+      })
+      expect(patchRes.status).toBe(200)
+      const patchData = (await patchRes.json()) as { batch: { id: number; productionDate: string } }
+      expect(patchData.batch.productionDate).toBe('2026-06-15')
+    })
+
+    it('returns 400 when name already exists', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Strain Dup' })
+      const definition = await createTestControlDefinition(testDb, {
+        name: 'DefDup',
+        properties: {
+          strains: [{ id: strain.id, name: 'Strain Dup', percentage: 100 }],
+          targetDensity: 700,
+        },
+      })
+      const app = createApp()
+      await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: { name: 'Existing Batch', productionDate: '2026-04-01' },
+      })
+      const createRes = await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: { name: 'Second Batch', productionDate: '2026-04-02' },
+      })
+      expect(createRes.status).toBe(201)
+      const { batch } = (await createRes.json()) as { batch: { id: number } }
+
+      const patchRes = await authenticatedRequest(app, `${BASE}/batches/${batch.id}`, {
+        method: 'PATCH',
+        cookie: cookieHeader,
+        json: { name: 'Existing Batch' },
+      })
+      expect(patchRes.status).toBe(400)
+    })
+
+    it('returns 404 for non-existent batch', async () => {
+      const app = createApp()
+      const res = await authenticatedRequest(app, `${BASE}/batches/99999`, {
+        method: 'PATCH',
+        cookie: cookieHeader,
+        json: { name: 'Ghost Batch' },
+      })
+      expect(res.status).toBe(404)
+    })
+  })
+
+  describe(`DELETE ${BASE}/batches/:batchId/specimens/:specimenId`, () => {
+    it('returns 200 and deletes the specimen from the batch', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Strain Del' })
+      const definition = await createTestControlDefinition(testDb, {
+        name: 'DefDel',
+        properties: {
+          strains: [{ id: strain.id, name: 'Strain Del', percentage: 100 }],
+          targetDensity: 800,
+        },
+      })
+      const app = createApp()
+      const createRes = await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: { name: 'BatchDel', productionDate: '2026-04-01' },
+      })
+      expect(createRes.status).toBe(201)
+      const { batch } = (await createRes.json()) as { batch: { id: number } }
+
+      const { specimen, controlBatch: controlBatchTable } = await import('../../db/schema')
+      const { eq } = await import('drizzle-orm')
+      const { createTestSpecimenType } = await import('../../__tests__/helpers/factories')
+      const specType = await createTestSpecimenType(testDb, { name: 'Blood Del' })
+      const [spec] = await testDb.insert(specimen).values({
+        controlBatchId: batch.id,
+        specimenTypeId: specType.id,
+        collectionDate: '2026-04-01',
+      }).returning()
+
+      const delRes = await authenticatedRequest(app, `${BASE}/batches/${batch.id}/specimens/${spec.id}`, {
+        method: 'DELETE',
+        cookie: cookieHeader,
+      })
+      expect(delRes.status).toBe(200)
+
+      const remaining = await testDb.select().from(specimen).where(eq(specimen.id, spec.id)).get()
+      expect(remaining).toBeUndefined()
+    })
+
+    it('returns 404 when specimen does not belong to the batch', async () => {
+      const strain = await createTestStrain(testDb, { name: 'Strain NotBelong' })
+      const definition = await createTestControlDefinition(testDb, {
+        name: 'DefNotBelong',
+        properties: {
+          strains: [{ id: strain.id, name: 'Strain NotBelong', percentage: 100 }],
+          targetDensity: 900,
+        },
+      })
+      const app = createApp()
+      const createRes = await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: { name: 'BatchNotBelong', productionDate: '2026-04-01' },
+      })
+      expect(createRes.status).toBe(201)
+      const { batch } = (await createRes.json()) as { batch: { id: number } }
+
+      const delRes = await authenticatedRequest(app, `${BASE}/batches/${batch.id}/specimens/99999`, {
+        method: 'DELETE',
+        cookie: cookieHeader,
+      })
+      expect(delRes.status).toBe(404)
+    })
+  })
+
   describe(`POST ${BASE}`, () => {
     it('returns 201 when creating a control definition with valid payload', async () => {
       const strain = await createTestStrain(testDb, { name: 'Strain A' })

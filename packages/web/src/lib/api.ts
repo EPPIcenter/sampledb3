@@ -825,6 +825,8 @@ export const controlsApi = {
     }>
   }) => api.post<{ specimens: Array<{ id: number; specimenTypeName: string; containerCount: number; containerIds: number[] }>; createdCollections: Array<{ type: string; id: number; name: string }> }>(`/blood-controls/batches/${batchId}/specimens/bulk`, data),
   validateCSV: (data: { csvText: string }) => api.post<{ valid: boolean; errors: Array<{ row: number; field?: string; error: string }>; preview: Array<Record<string, any>> }>('/blood-controls/batches/validate-csv', data),
+  updateBatch: (id: number, data: { name?: string; productionDate?: string; properties?: Record<string, any> }) => api.patch<{ batch: ControlBatch }>(`/blood-controls/batches/${id}`, data),
+  deleteSpecimenFromBatch: (batchId: number, specimenId: number) => api.delete<{ message: string }>(`/blood-controls/batches/${batchId}/specimens/${specimenId}`),
   deleteBatch: (id: number) => api.delete<{ message: string }>(`/blood-controls/batches/${id}`),
 }
 
