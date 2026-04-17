@@ -3,7 +3,9 @@ title: Deployment
 description: Deploy SampleDB with Docker, docker-compose, or fly.io
 ---
 
-SampleDB can be deployed using Docker. Backups are **external** to the application—you run them on your own schedule (cron, systemd, GitHub Actions, etc.).
+SampleDB can be deployed using Docker or fly.io. Backups are **external** to the application—you run them on your own schedule (cron, systemd timer, etc.).
+
+**Where to run production:** For most labs, **Docker Compose on a dedicated host** with a bind-mounted database path is the simplest way to get reliable file access for backups. **fly.io** works for a single machine + volume; backups often run from another machine piping `fly ssh console` into restic. See [Backup and restore](/docs/guides/advanced/backup-and-restore/) for comparison, restore runbook, and restore drills.
 
 ## Docker
 
@@ -84,11 +86,13 @@ The app must be running. Refresh the browser to see the demo data. See [Generati
 
 ## Backup
 
-Backup is **fully external** to the app. You choose the schedule (cron, systemd timer, GitHub Actions, etc.) and run restic (or any backup tool).
+Backup is **fully external** to the app. Versioned automation lives under **`ops/backup/`** (the repo root `scripts/` folder is gitignored for local scripts).
+
+Full runbook, systemd/cron examples, and quarterly restore drills: [Backup and restore](/docs/guides/advanced/backup-and-restore/).
 
 ### Backup script
 
-The repo includes `scripts/backup-db-restic.sh`. It uses SQLite's `.backup stdout` (SQLite 3.34+) and pipes to restic for deduplication.
+The repo includes `ops/backup/backup-db-restic.sh`. It runs SQLite’s online `.backup` into a **temporary file** under `$TMPDIR`, then streams that file into `restic backup --stdin` so restores always see `sampledb.sqlite`. Ensure `$TMPDIR` has free space ≥ database size during the run.
 
 **Requirements:** `restic`, `sqlite3` (3.34+), and env vars: `DATABASE_PATH`, `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`.
 
@@ -98,21 +102,21 @@ The repo includes `scripts/backup-db-restic.sh`. It uses SQLite's `.backup stdou
 
 ```bash
 export DATABASE_PATH=${HOST_DATA_DIR:-./data}/sampledb.sqlite
-source scripts/backup.env  # or set RESTIC_* manually
-./scripts/backup-db-restic.sh
+set -a && source ops/backup/backup.env && set +a   # copy from backup.env.example first
+./ops/backup/backup-db-restic.sh
 ```
 
 **docker-compose with named volume** (if you changed docker-compose to use a named volume instead):
 
 ```bash
-docker exec sampledb sqlite3 /data/sampledb.sqlite .backup stdout | \
+docker exec sampledb sh -c 'f=$(mktemp) && sqlite3 /data/sampledb.sqlite ".backup $f" && cat "$f" && rm -f "$f"' | \
   restic backup --stdin --stdin-filename sampledb.sqlite --tag sampledb ...
 ```
 
 **fly.io:**
 
 ```bash
-fly ssh console -C "sqlite3 /data/sampledb.sqlite .backup stdout" | \
+fly ssh console -C 'f=$(mktemp) && sqlite3 /data/sampledb.sqlite ".backup $f" && cat "$f" && rm -f "$f"' | \
   restic backup --stdin --stdin-filename sampledb.sqlite --tag sampledb ...
 ```
 
@@ -122,20 +126,22 @@ fly ssh console -C "sqlite3 /data/sampledb.sqlite .backup stdout" | \
 - **AWS S3:** `RESTIC_REPOSITORY=s3:s3.amazonaws.com/my-bucket/sampledb` + `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`
 - **S3-compatible (MinIO, Spaces, B2):** `RESTIC_REPOSITORY=s3:https://host:port/bucket/sampledb` + AWS-style env vars
 
-See `scripts/backup.env.example` for a template.
+See `ops/backup/backup.env.example` for a template.
 
 ### Restore
 
+See [Backup and restore — Restore runbook](/docs/guides/advanced/backup-and-restore/#restore-runbook). Short form:
+
 ```bash
 restic restore latest --tag sampledb --target /tmp/restore
-cp /tmp/restore/sampledb.sqlite /path/to/restored.db
+# restored file: /tmp/restore/sampledb.sqlite
 ```
 
 Stop the app, replace the database file, then restart.
 
 ### Retention
 
-Run after each backup (or on a separate schedule):
+Set `RUN_RESTIC_FORGET=1` in `backup.env` to run forget after each successful backup, or on a separate schedule:
 
 ```bash
 restic forget --tag sampledb --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune

@@ -110,13 +110,10 @@ See `fly.toml` for a reference configuration. Run `fly launch --no-deploy`, crea
 
 ## Backup
 
-Backup is **external** to the app. Use `scripts/backup-db-restic.sh` with restic; run it from cron, systemd, or GitHub Actions.
+Backup is **external** to the app. Use [`ops/backup/backup-db-restic.sh`](ops/backup/backup-db-restic.sh) with restic; run it from cron or systemd on the host (or pipe from Docker/Fly). See [Backup and restore](packages/docs/src/content/docs/guides/advanced/backup-and-restore.md) in the docs.
 
-- **Bind mount** (default `./data:/data`): Run the script with `DATABASE_PATH=./data/sampledb.sqlite` (or `$HOST_DATA_DIR/sampledb.sqlite` if you overrode `HOST_DATA_DIR`)
-- **Named volume**: Use `docker exec sampledb sqlite3 /data/sampledb.sqlite .backup stdout | restic backup ...`
-- **fly.io**: Use `fly ssh console -C "sqlite3 /data/sampledb.sqlite .backup stdout" | restic backup ...`
-
-See `scripts/backup.env.example` and the Deployment guide in `packages/docs` for details.
+- **Bind mount** (default `./data:/data`): `DATABASE_PATH=$HOST_DATA_DIR/sampledb.sqlite` (or `./data/sampledb.sqlite`) plus `ops/backup/backup.env` from [`ops/backup/backup.env.example`](ops/backup/backup.env.example)
+- **Named volume / fly.io**: pipe a temp-file backup (see [Deployment](packages/docs/src/content/docs/guides/advanced/deployment.md#backup)) or use the host script when the DB file is bind-mounted
 
 ## License
 
