@@ -1,82 +1,53 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
-/**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
- */
-// import dotenv from 'dotenv';
-// import path from 'path';
-// dotenv.config({ path: path.resolve(__dirname, '.env') });
+import { fileURLToPath } from 'url';
 
-/**
- * See https://playwright.dev/docs/test-configuration.
- */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '../..');
+const e2eDatabasePath = path.join(repoRoot, 'sampledb_e2e.sqlite');
+
+const isCi = !!process.env.CI;
+const useAllBrowsers = process.env.PLAYWRIGHT_BROWSERS === 'all';
+
+/** Fresh DB so global-setup seed matches E2E_ADMIN_* credentials (CI always; local opt-in via E2E_FRESH_DB=1) */
+const wantFreshDb = isCi || process.env.E2E_FRESH_DB === '1';
+const webServerCommand = wantFreshDb
+  ? `rm -f "${e2eDatabasePath}" && bun run dev:e2e`
+  : 'bun run dev:e2e';
+
 export default defineConfig({
   testDir: './tests',
-  timeout: 15000,
-  /* Run tests in files in parallel */
+  globalSetup: path.join(__dirname, 'global-setup.ts'),
+  timeout: 30_000,
+  expect: { timeout: 10_000 },
   fullyParallel: true,
-  /* Fail the build on CI if you accidentally left test.only in the source code. */
-  forbidOnly: !!process.env.CI,
-  /* Retry on CI only */
-  retries: process.env.CI ? 2 : 0,
-  /* Run browser projects in parallel (e.g. chromium, firefox, webkit at once). */
-  workers: process.env.CI ? 3 : undefined,
-  /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
-  /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
+  forbidOnly: isCi,
+  retries: isCi ? 2 : 0,
+  workers: isCi ? 1 : undefined,
+  reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    /* Base URL to use in actions like `await page.goto('')`. */
     baseURL: 'http://localhost:5173',
-
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+    /** Set `E2E_SCREENSHOTS=0` to skip (faster local runs). Otherwise captures after each test. */
+    screenshot: process.env.E2E_SCREENSHOTS === '0' ? 'off' : 'on',
   },
-
-  /* Configure projects for major browsers */
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
-
-    /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
-
-    /* Test against branded browsers. */
-    // {
-    //   name: 'Microsoft Edge',
-    //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    // },
-    // {
-    //   name: 'Google Chrome',
-    //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    // },
-  ],
-
-  /* Run your local dev server before starting the tests */
+  projects:
+    useAllBrowsers && !isCi
+      ? [
+          { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+          { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+          { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+        ]
+      : [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    cwd: path.resolve(__dirname, '../..'),
-    command: 'DATABASE_PATH=./sampledb_e2e.sqlite bun run dev:production',
+    cwd: repoRoot,
+    command: webServerCommand,
+    env: {
+      ...process.env,
+      DATABASE_PATH: e2eDatabasePath,
+    },
     url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !isCi,
     timeout: 120_000,
   },
 });

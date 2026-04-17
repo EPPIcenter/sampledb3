@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "dev:production": "DATABASE_PATH=../../sampledb_database.sqlite bun --watch src/index.ts",
+    "dev:production": "sh -c 'export DATABASE_PATH=\"${DATABASE_PATH:-$PWD/../../sampledb_database.sqlite}\"; exec bun --watch src/index.ts'",
     "build": "tsc && tsc-alias",
     "start": "bun dist/index.js",
     "typecheck": "tsc --noEmit",
