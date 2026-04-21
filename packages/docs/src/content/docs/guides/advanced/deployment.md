@@ -11,7 +11,10 @@ SampleDB can be deployed using Docker or fly.io. Backups are **external** to the
 
 ### Build and run
 
+Optional: copy `.env.example` from the repo root to `.env` and adjust variables; `docker compose` reads `.env` automatically.
+
 ```bash
+cp .env.example .env   # optional
 docker compose up -d
 ```
 
