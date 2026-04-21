@@ -4,7 +4,7 @@ A modern LIMS built with Hono (TypeScript API) + React for tracking samples, exp
 
 ## Architecture
 
-- **API**: Hono server with SQLite (better-sqlite3) and Drizzle ORM
+- **API**: Hono server with SQLite (`bun:sqlite`) and Drizzle ORM
 - **Frontend**: React + Vite + Tailwind CSS
 - **Database**: SQLite with polymorphic source model
 
@@ -12,33 +12,37 @@ A modern LIMS built with Hono (TypeScript API) + React for tracking samples, exp
 
 ### Prerequisites
 
-- Node.js >= 20.0.0
-- pnpm
+- [Bun](https://bun.sh) >= 1.0.0
 
 ### Setup
 
 ```bash
+# Optional: choose which SQLite file the API uses (Bun loads .env.local automatically)
+cp .env.local.example .env.local
+# Uncomment and set DATABASE_PATH if you want a non-default DB, e.g.:
+# DATABASE_PATH=./sampledb_database.sqlite
+
 # Install dependencies
-pnpm install
+bun install
 
 # Run API server (port 3000)
-pnpm dev:api
+bun run dev:api
 
 # Run web frontend (port 5173)
-pnpm dev:web
+bun run dev:web
 
-# Or run both in parallel
-pnpm dev
+# Or run API + web + docs in parallel
+bun run dev
 ```
 
 ### Build
 
 ```bash
 # Build all packages
-pnpm build
+bun run build
 
-# Start production server
-pnpm start
+# Start production server (built API serving static web/docs)
+bun run start
 ```
 
 ## Project Structure
@@ -49,36 +53,32 @@ sampledb/
 │   ├── api/          # Hono API server
 │   └── web/          # React frontend
 ├── sampledb_dev.sqlite        # Default empty dev database (for testing setup)
-└── sampledb_database.sqlite  # Production database (use with DATABASE_PATH)
+└── sampledb_database.sqlite  # Optional: point DATABASE_PATH here for real data
 ```
 
 ## Environment Variables
 
-- `DATABASE_PATH` - Path to SQLite database (default: `./sampledb_dev.sqlite`)
-  - For development/testing: Uses empty `sampledb_dev.sqlite` by default (allows testing setup flow)
-  - For production data: Set `DATABASE_PATH=sampledb_database.sqlite` to use production database
-- `PORT` - API server port (default: `3000`)
-- `NODE_ENV` - `production` or `development`
+- `DATABASE_PATH` — Path to SQLite database (default: `./sampledb_dev.sqlite` when unset)
+  - For development/testing: leave unset to use empty `sampledb_dev.sqlite` (allows testing setup flow)
+  - For production data locally: set in `.env.local`, e.g. `DATABASE_PATH=./sampledb_database.sqlite`
+- `PORT` — API server port (default: `3000`)
+- `NODE_ENV` — `production` or `development`
 
 ## Testing
 
-- **Run all tests**: `pnpm test` (API + web)
-- **API**: `pnpm --filter @sampledb/api test` (Bun). Coverage: `pnpm --filter @sampledb/api test:coverage` (Bun built-in; report in `packages/api/coverage/`). Target 90% lines; see `packages/api/src/__tests__/README.md`.
-- **Web**: `pnpm --filter @sampledb/web test` (Vitest). Coverage: `pnpm --filter @sampledb/web test:coverage`. Coverage excludes `src/lib/api.ts` and `src/**/*.css` so the 90% target applies to testable code. Thresholds in `packages/web/vitest.config.ts` can be raised in steps toward 90%.
+- **Unit tests (API + web)**: `bun run test`
+- **End-to-end (Playwright)**: `bun run test:e2e`
+- **API**: `bun --filter @sampledb/api test` (Bun). Coverage: `bun --filter @sampledb/api test:coverage` (report in `packages/api/coverage/`). Target 90% lines; see `packages/api/src/__tests__/README.md`.
+- **Web**: `bun --filter @sampledb/web test` (Vitest). Coverage: `bun --filter @sampledb/web test:coverage`. Coverage excludes `src/lib/api.ts` and `src/**/*.css` so the 90% target applies to testable code. Thresholds in `packages/web/vitest.config.ts` can be raised in steps toward 90%.
 
 ## Database Configuration
 
-By default, the application uses an empty development database (`sampledb_dev.sqlite`) which is perfect for testing the setup functionality. To use the production database with real data:
+By default the app uses an empty development database (`sampledb_dev.sqlite`). To use another file (e.g. a production snapshot), add it to `.env.local`:
 
 ```bash
-# Use production database (API only)
-pnpm dev:api:production
-
-# Use production database (API + Web)
-pnpm dev:production
-
-# Or with environment variable
-DATABASE_PATH=sampledb_database.sqlite pnpm dev:api
+cp .env.local.example .env.local
+# Edit .env.local and set DATABASE_PATH=./sampledb_database.sqlite
+bun run dev
 ```
 
 ## Deployment
@@ -86,13 +86,13 @@ DATABASE_PATH=sampledb_database.sqlite pnpm dev:api
 ### Docker
 
 ```bash
-cp example.env .env   # optional, edit as needed
+cp .env.example .env   # optional, edit as needed
 docker compose up -d
 ```
 
 The app runs on port 3000. See `packages/docs` for full deployment and backup documentation.
 
-**Deployment configuration** — see `example.env`. Copy to `.env` and edit. Variables:
+**Deployment configuration** — see `.env.example`. Copy to `.env` and edit. Variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
