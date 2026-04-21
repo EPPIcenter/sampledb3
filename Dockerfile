@@ -41,4 +41,6 @@ ENV NODE_ENV=production
 ENV PORT=3000
 EXPOSE 3000
 
-CMD ["bun", "run", "packages/api/dist/index.js"]
+# Run the API `start` script (same as root `bun run start`); avoid root workspace filter because e2e is not copied into the image.
+WORKDIR /app/packages/api
+CMD ["bun", "run", "start"]
