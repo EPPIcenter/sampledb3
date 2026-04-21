@@ -2,6 +2,7 @@ services:
   demo-seed:
     build: .
     container_name: sampledb-demo-seed
+    profiles: ["demo-seed"]
     entrypoint: ["sh", "-c", "cd /app/packages/api && bun run demo:seed"]
     environment:
       DATABASE_PATH: ${DATABASE_PATH:-/data/sampledb.sqlite}
