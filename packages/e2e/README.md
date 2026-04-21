@@ -30,7 +30,7 @@ To skip screenshots for a faster local run: `E2E_SCREENSHOTS=0 bun run test:e2e`
 
 ## Run tests
 
-From the repo root (starts `dev:e2e` — API + web only — and runs Playwright):
+From the repo root (starts API + web dev servers in parallel, then runs Playwright):
 
 ```bash
 bun run test:e2e

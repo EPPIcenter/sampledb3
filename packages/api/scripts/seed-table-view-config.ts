@@ -5,7 +5,7 @@
  * Idempotent: does nothing if table_view_configurations already exist.
  *
  * Usage (from repo root):
- *   DATABASE_PATH=/path/to/sampledb.sqlite pnpm --filter @sampledb/api run seed-table-view-config
+ *   DATABASE_PATH=/path/to/sampledb.sqlite bun --filter @sampledb/api run seed-table-view-config
  *
  * Or from packages/api:
  *   DATABASE_PATH=/path/to/sampledb.sqlite bun run scripts/seed-table-view-config.ts

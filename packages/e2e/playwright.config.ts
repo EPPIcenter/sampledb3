@@ -12,8 +12,8 @@ const useAllBrowsers = process.env.PLAYWRIGHT_BROWSERS === 'all';
 /** Fresh DB so global-setup seed matches E2E_ADMIN_* credentials (CI always; local opt-in via E2E_FRESH_DB=1) */
 const wantFreshDb = isCi || process.env.E2E_FRESH_DB === '1';
 const webServerCommand = wantFreshDb
-  ? `rm -f "${e2eDatabasePath}" && bun run dev:e2e`
-  : 'bun run dev:e2e';
+  ? `rm -f "${e2eDatabasePath}" && bun --filter @sampledb/api --filter @sampledb/web --parallel dev`
+  : `bun --filter @sampledb/api --filter @sampledb/web --parallel dev`;
 
 export default defineConfig({
   testDir: './tests',
