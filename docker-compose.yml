@@ -1,6 +1,6 @@
 services:
   demo-seed:
-    build: .
+    image: ghcr.io/eppicenter/sampledb3:1.0.0
     container_name: sampledb-demo-seed
     profiles: ["demo-seed"]
     entrypoint: ["sh", "-c", "cd /app/packages/api && bun dist/lib/demo-seed.js"]
@@ -10,7 +10,7 @@ services:
       - ${HOST_DATA_DIR:-./data}:/data
 
   sampledb:
-    build: .
+    image: ghcr.io/eppicenter/sampledb3:1.0.0
     container_name: sampledb
     ports:
       - "${PORT:-3000}:3000"
