@@ -17,7 +17,7 @@ A modern LIMS built with Hono (TypeScript API) + React for tracking samples, exp
 ### Setup
 
 ```bash
-# Optional: choose which SQLite file the API uses (Bun loads .env.local automatically)
+# Optional: choose which SQLite file the API uses (see Environment Variables below)
 cp .env.local.example .env.local
 # Uncomment and set DATABASE_PATH if you want a non-default DB, e.g.:
 # DATABASE_PATH=./sampledb_database.sqlite
@@ -57,6 +57,8 @@ sampledb/
 ```
 
 ## Environment Variables
+
+Put local overrides in **`.env.local`** (gitignored) at the repo root. Bun’s automatic `.env` loading does **not** apply root files to workspace packages when using `bun --filter` ([bun#10358](https://github.com/oven-sh/bun/issues/10358)), so root scripts such as `bun run dev` pass **`--env-file=.env`** and **`--env-file=.env.local`** explicitly. Missing files are ignored.
 
 - `DATABASE_PATH` — Path to SQLite database (default: `./sampledb_dev.sqlite` when unset)
   - For development/testing: leave unset to use empty `sampledb_dev.sqlite` (allows testing setup flow)

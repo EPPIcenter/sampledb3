@@ -1,6 +1,7 @@
 node_modules
 packages/*/node_modules
-packages/e2e
+packages/e2e/*
+!packages/e2e/package.json
 *.sqlite
 .git
 .gitignore

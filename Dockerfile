@@ -2,13 +2,19 @@
 # Stage 1: Dependencies
 FROM oven/bun:1-alpine AS deps
 WORKDIR /app
-COPY package.json ./
-# Restrict workspaces to api, web, and docs (exclude e2e)
-RUN bun -e "const p=require('./package.json'); p.workspaces=['packages/api','packages/web','packages/docs']; require('fs').writeFileSync('./package.json', JSON.stringify(p, null, 2))"
+# Copy the lockfile so the image installs the exact same dependency
+# versions that pass typecheck locally; otherwise `bun install` resolves
+# fresh and may pull in newer minor releases (e.g. hono) whose stricter
+# types break the build.
+COPY package.json bun.lock ./
 COPY packages/api/package.json packages/api/
 COPY packages/web/package.json packages/web/
 COPY packages/docs/package.json packages/docs/
-RUN bun install
+COPY packages/e2e/package.json packages/e2e/
+# --ignore-scripts skips postinstalls (e.g. @playwright/test in the e2e
+# workspace tries to download browsers, which fails on alpine and isn't
+# needed for the api/web/docs build).
+RUN bun install --frozen-lockfile --ignore-scripts
 
 # Stage 2: Build
 FROM oven/bun:1-alpine AS build

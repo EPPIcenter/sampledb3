@@ -4,21 +4,21 @@
   "private": true,
   "description": "Laboratory Information Management System for sample tracking, experiment management, and SRA submissions",
   "scripts": {
-    "dev": "bun --filter '*' --parallel dev",
-    "dev:api": "bun --filter @sampledb/api dev",
-    "dev:web": "bun --filter @sampledb/web dev",
-    "dev:docs": "bun --filter @sampledb/docs dev",
+    "dev": "bun --env-file=.env --env-file=.env.local --filter '*' --parallel dev",
+    "dev:api": "bun --env-file=.env --env-file=.env.local --filter @sampledb/api dev",
+    "dev:web": "bun --env-file=.env --env-file=.env.local --filter @sampledb/web dev",
+    "dev:docs": "bun --env-file=.env --env-file=.env.local --filter @sampledb/docs dev",
     "build": "bun --filter '*' build",
     "build:api": "bun --filter @sampledb/api build",
     "build:web": "bun --filter @sampledb/web build",
     "build:docs": "bun --filter @sampledb/docs build",
-    "start": "bun --filter @sampledb/api start",
+    "start": "bun --env-file=.env --env-file=.env.local --filter @sampledb/api start",
     "lint": "bun --filter '*' lint",
     "typecheck": "bun --filter '*' typecheck",
-    "test": "bun run --filter @sampledb/api test && bun run --filter @sampledb/web test",
-    "test:coverage": "bun run --filter @sampledb/api test:coverage && bun run --filter @sampledb/web test:coverage",
+    "test": "bun --env-file=.env --env-file=.env.local run --filter @sampledb/api test && bun --env-file=.env --env-file=.env.local run --filter @sampledb/web test",
+    "test:coverage": "bun --env-file=.env --env-file=.env.local run --filter @sampledb/api test:coverage && bun --env-file=.env --env-file=.env.local run --filter @sampledb/web test:coverage",
     "test:e2e": "bun --filter @sampledb/e2e test",
-    "demo:seed": "bun --filter @sampledb/api demo:seed"
+    "demo:seed": "bun --env-file=.env --env-file=.env.local --filter @sampledb/api demo:seed"
   },
   "keywords": [
     "lims",
@@ -38,5 +38,9 @@
     "packages/docs",
     "packages/e2e"
   ],
-  "dependencies": {}
+  "dependencies": {
+    "@hono/zod-openapi": "^1.3.0",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.14"
+  }
 }

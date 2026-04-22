@@ -1,7 +1,7 @@
 import { Database as SQLiteDatabase } from 'bun:sqlite'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import * as schema from './schema'
-import { join, resolve } from 'path'
+import { isAbsolute, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import { existsSync, readFileSync } from 'fs'
@@ -9,17 +9,12 @@ import { existsSync, readFileSync } from 'fs'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-// Find project root by looking for root package.json
-function findProjectRoot(): string {
-  // If DATABASE_PATH is set, use its directory as project root
-  if (process.env.DATABASE_PATH) {
-    // Resolve relative paths from current working directory
-    const dbPath = process.env.DATABASE_PATH.startsWith('/')
-      ? process.env.DATABASE_PATH
-      : resolve(process.cwd(), process.env.DATABASE_PATH)
-    return dirname(dbPath)
-  }
-
+/**
+ * Repo root (package name `sampledb`). Used to resolve relative DATABASE_PATH —
+ * `bun --filter @sampledb/api dev` runs with cwd `packages/api`, so paths must
+ * not be resolved with `process.cwd()` alone.
+ */
+function getMonorepoRoot(): string {
   // Try multiple strategies to find the project root
   const strategies = [
     // Strategy 1: Go up from current file location (works for both src and dist)
@@ -87,6 +82,10 @@ function findProjectRoot(): string {
   return resolve(__dirname, '../../..')
 }
 
+function resolveDatabaseFilePath(relativeOrAbsolute: string): string {
+  return isAbsolute(relativeOrAbsolute) ? relativeOrAbsolute : resolve(getMonorepoRoot(), relativeOrAbsolute)
+}
+
 /**
  * Create a database connection instance
  * @param dbPath - Optional database path. If not provided, uses DATABASE_PATH env var or default dev database
@@ -97,24 +96,18 @@ export function createDatabase(dbPath?: string): { db: ReturnType<typeof drizzle
   let resolvedPath: string
 
   if (dbPath) {
-    // If path is provided, resolve it (absolute or relative to cwd)
-    resolvedPath = dbPath.startsWith('/')
-      ? dbPath
-      : resolve(process.cwd(), dbPath)
+    resolvedPath = resolveDatabaseFilePath(dbPath)
   } else if (process.env.DATABASE_PATH) {
-    // If DATABASE_PATH is set, resolve it (absolute or relative to cwd)
-    resolvedPath = process.env.DATABASE_PATH.startsWith('/')
-      ? process.env.DATABASE_PATH
-      : resolve(process.cwd(), process.env.DATABASE_PATH)
+    resolvedPath = resolveDatabaseFilePath(process.env.DATABASE_PATH)
   } else {
     // Default: use empty dev database in project root
     // This allows testing setup functionality with a fresh empty database
-    const projectRoot = findProjectRoot()
-    resolvedPath = resolve(projectRoot, 'sampledb_dev.sqlite')
+    resolvedPath = resolve(getMonorepoRoot(), 'sampledb_dev.sqlite')
   }
 
   if (process.env.NODE_ENV !== 'production') {
-    console.log(`📁 Project root: ${findProjectRoot()}`)
+    console.log(`📁 Monorepo root: ${getMonorepoRoot()}`)
+    console.log(`📁 process.cwd(): ${process.cwd()}`)
     console.log(`📁 Connecting to database at: ${resolvedPath}`)
     console.log(`📁 Database exists: ${existsSync(resolvedPath)}`)
     console.log(`📁 DATABASE_PATH env: ${process.env.DATABASE_PATH || 'not set (using default: sampledb_dev.sqlite)'}`)
