@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState, useRef } from 'react'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import api from '../lib/api'
 import type { Specimen } from '../lib/api'
@@ -51,10 +51,31 @@ export default function SpecimenDetail() {
   const containersQuery = useContainersForSpecimen(id)
   const [sourceInfo, setSourceInfo] = useState<SourceInfo | null>(null)
   const [addContainerModalOpen, setAddContainerModalOpen] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const hasProcessedAddContainer = useRef(false)
+  const prevSpecimenRouteId = useRef(id)
 
   const specimen = specimenQuery.data ?? null
   const containers = (containersQuery.data ?? []) as Container[]
   const loading = specimenQuery.isLoading || containersQuery.isLoading
+
+  if (id !== prevSpecimenRouteId.current) {
+    prevSpecimenRouteId.current = id
+    hasProcessedAddContainer.current = false
+  }
+
+  useEffect(() => {
+    const add = searchParams.get('addContainer')
+    if (add === 'true' && !hasProcessedAddContainer.current) {
+      hasProcessedAddContainer.current = true
+      setAddContainerModalOpen(true)
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('addContainer')
+        return next
+      })
+    }
+  }, [searchParams, setSearchParams])
 
   // Load source information when specimen is available (subject or control batch)
   useEffect(() => {

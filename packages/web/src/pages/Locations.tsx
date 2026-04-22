@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { locationsApi, searchApi, type LocationHierarchyStats, type CollectionSearchResult } from '../lib/api'
 import { getRootLocations, getLocationChildren, getLocationDescendants, getLocationAncestors, getLocationLabel } from '../lib/location-tree'
@@ -43,6 +43,7 @@ interface SelectedNode {
 
 export default function Locations() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { canManageReferenceData } = useUser()
   const canEdit = canManageReferenceData
   const searchRef = useRef<HTMLDivElement>(null)
@@ -143,6 +144,33 @@ export default function Locations() {
   useEffect(() => {
     loadLocations(false) // Initial load, don't preserve state
   }, [loadLocations])
+
+  // Command palette: /locations?createLocation=true&parentId=…
+  useEffect(() => {
+    if (!canEdit || loading) return
+    if (searchParams.get('createLocation') !== 'true') return
+
+    const parentIdStr = searchParams.get('parentId')
+    setEditingLocation(null)
+    if (parentIdStr) {
+      const pid = parseInt(parentIdStr, 10)
+      if (!Number.isNaN(pid)) {
+        const parentLocation = locations.find((l) => l.id === pid) ?? null
+        setFormParentId(pid)
+        setFormParentLocation(parentLocation)
+      }
+    } else {
+      setFormParentId(null)
+      setFormParentLocation(null)
+    }
+    setShowFormModal(true)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('createLocation')
+      next.delete('parentId')
+      return next
+    })
+  }, [canEdit, loading, searchParams, setSearchParams, locations])
 
   // Define ensureLocationLoaded before useEffects that use it
   const ensureLocationLoaded = useCallback(async (locationId: number) => {

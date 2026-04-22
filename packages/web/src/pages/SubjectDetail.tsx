@@ -23,6 +23,7 @@ export default function SubjectDetail() {
   const [editSubjectModalOpen, setEditSubjectModalOpen] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const hasProcessedCreateSpecimen = useRef(false)
+  const hasProcessedEditSubject = useRef(false)
   const prevIdRef = useRef(id)
 
   useEffect(() => {
@@ -35,6 +36,7 @@ export default function SubjectDetail() {
   if (id !== prevIdRef.current) {
     prevIdRef.current = id
     hasProcessedCreateSpecimen.current = false
+    hasProcessedEditSubject.current = false
   }
 
   // Check for createSpecimen query param and open modal (only once per mount)
@@ -47,6 +49,19 @@ export default function SubjectDetail() {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
         next.delete('createSpecimen')
+        return next
+      })
+    }
+  }, [searchParams, setSearchParams])
+
+  useEffect(() => {
+    const editSubject = searchParams.get('editSubject')
+    if (editSubject === 'true' && !hasProcessedEditSubject.current) {
+      hasProcessedEditSubject.current = true
+      setEditSubjectModalOpen(true)
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('editSubject')
         return next
       })
     }

@@ -49,6 +49,8 @@ export default function StudyDetail() {
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- URL param may be missing
   const activeTab = (searchParams.get('tab') as 'overview' | 'timeline' | 'subjects') || 'overview'
   const hasProcessedCreateSubject = useRef(false)
+  const hasProcessedEditStudy = useRef(false)
+  const hasProcessedDeleteStudy = useRef(false)
   const prevIdRef = useRef(id)
   const searchInputRef = useRef<HTMLInputElement>(null)
   useFocusSearchOnSlash(searchInputRef)
@@ -67,6 +69,8 @@ export default function StudyDetail() {
   if (id !== prevIdRef.current) {
     prevIdRef.current = id
     hasProcessedCreateSubject.current = false
+    hasProcessedEditStudy.current = false
+    hasProcessedDeleteStudy.current = false
   }
 
   // Check for createSubject query param and open modal (only once per mount)
@@ -79,6 +83,33 @@ export default function StudyDetail() {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
         next.delete('createSubject')
+        return next
+      })
+    }
+  }, [searchParams, setSearchParams])
+
+  // Open edit / delete modals from command palette query params (once per navigation)
+  useEffect(() => {
+    const editStudy = searchParams.get('editStudy')
+    if (editStudy === 'true' && !hasProcessedEditStudy.current) {
+      hasProcessedEditStudy.current = true
+      setEditStudyModalOpen(true)
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('editStudy')
+        return next
+      })
+    }
+  }, [searchParams, setSearchParams])
+
+  useEffect(() => {
+    const deleteStudy = searchParams.get('deleteStudy')
+    if (deleteStudy === 'true' && !hasProcessedDeleteStudy.current) {
+      hasProcessedDeleteStudy.current = true
+      setDeleteModalOpen(true)
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('deleteStudy')
         return next
       })
     }

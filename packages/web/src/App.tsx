@@ -71,14 +71,14 @@ import SearchModal from './components/SearchModal'
 import { ToastContainer } from './components/Toast'
 import { useHotkey, useModifierHotkey, useModifierShiftHotkey } from './hooks/useHotkey'
 import { useBrowserShortcutBlocker } from './hooks/useBrowserShortcutBlocker'
-import { Command } from './lib/commands'
+import { useCommands } from './lib/command-registry/registry'
 import { formatHotkey, getModifierKey, isMac } from './lib/hotkeys'
-import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { exportApi } from './lib/api'
 function AppContent() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { canWrite, isAdmin } = useUser()
+  const { canWrite, isAdmin, canManageReferenceData, refreshUser } = useUser()
   const { theme, setTheme } = useTheme()
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const themeMenuRef = useRef<HTMLDivElement>(null)
@@ -171,7 +171,7 @@ function AppContent() {
   }
 
   // Helper function to export specimens
-  const handleExportSpecimens = async () => {
+  const handleExportSpecimens = useCallback(async () => {
     try {
       const response = await exportApi.specimens()
       const blob = response.data as Blob
@@ -181,10 +181,10 @@ function AppContent() {
       console.error('Failed to export specimens:', error)
       alert('Failed to export specimens. Please try again.')
     }
-  }
+  }, [])
 
   // Helper function to export inventory
-  const handleExportInventory = async () => {
+  const handleExportInventory = useCallback(async () => {
     try {
       const response = await exportApi.inventory()
       const blob = response.data as Blob
@@ -194,7 +194,7 @@ function AppContent() {
       console.error('Failed to export inventory:', error)
       alert('Failed to export inventory. Please try again.')
     }
-  }
+  }, [])
 
   // Helper function to clear filters based on current page
   const handleClearFilters = useCallback(() => {
@@ -205,313 +205,21 @@ function AppContent() {
     }
   }, [navigate, location.pathname])
 
-  // Build commands based on current route
-  const commands = useMemo<Command[]>(() => {
-    const baseCommands: Command[] = [
-      // Navigation commands (available everywhere)
-      {
-        id: 'nav-dashboard',
-        label: 'Go to Dashboard',
-        category: 'Navigation',
-        keywords: ['dashboard', 'home', 'main'],
-        action: () => navigate('/'),
-      },
-      {
-        id: 'nav-studies',
-        label: 'Go to Studies',
-        category: 'Navigation',
-        keywords: ['studies', 'study'],
-        action: () => navigate('/studies'),
-      },
-      {
-        id: 'nav-specimens',
-        label: 'Go to Specimens',
-        category: 'Navigation',
-        keywords: ['specimens', 'specimen'],
-        action: () => navigate('/specimens'),
-      },
-      {
-        id: 'nav-statistics',
-        label: 'Go to Statistics',
-        category: 'Navigation',
-        keywords: ['statistics', 'stats'],
-        action: () => navigate('/statistics'),
-      },
-      {
-        id: 'nav-locations',
-        label: 'Go to Locations',
-        category: 'Navigation',
-        keywords: ['locations', 'location'],
-        action: () => navigate('/locations'),
-      },
-      {
-        id: 'nav-collections',
-        label: 'Go to Collections',
-        category: 'Navigation',
-        keywords: ['collections', 'collection', 'plates', 'boxes', 'bags'],
-        action: () => navigate('/collections'),
-      },
-      ...(canWrite ? [{
-        id: 'nav-import',
-        label: 'Go to Import',
-        category: 'Navigation',
-        keywords: ['import'],
-        action: () => navigate('/import'),
-      }] : []),
-      {
-        id: 'nav-controls',
-        label: 'Go to Blood Controls',
-        category: 'Navigation',
-        keywords: ['controls', 'control', 'blood controls'],
-        action: () => navigate('/blood-controls'),
-      },
-      {
-        id: 'nav-derivations',
-        label: 'Go to Derivations',
-        category: 'Navigation',
-        keywords: ['derivations', 'derivation'],
-        action: () => navigate('/derivations'),
-      },
-      {
-        id: 'nav-profile',
-        label: 'Go to My Profile',
-        category: 'Navigation',
-        keywords: ['profile', 'my profile', 'account'],
-        action: () => navigate('/profile'),
-      },
-      {
-        id: 'nav-settings',
-        label: 'Go to Application Settings',
-        category: 'Navigation',
-        keywords: ['settings', 'setting', 'application'],
-        action: () => navigate('/settings'),
-      },
-      {
-        id: 'nav-reference-data',
-        label: 'Go to Reference Data',
-        category: 'Navigation',
-        keywords: ['reference data', 'reference'],
-        action: () => navigate('/reference-data'),
-      },
-      {
-        id: 'nav-docs',
-        label: 'Open Documentation',
-        category: 'Navigation',
-        keywords: ['documentation', 'docs', 'help', 'guide', 'manual'],
-        action: () => { window.location.href = '/docs' },
-      },
-      // Export commands
-      {
-        id: 'export-barcodes',
-        label: 'Export by Barcodes',
-        category: 'Export',
-        keywords: ['barcode', 'export', 'scan'],
-        action: () => navigate('/barcode-export'),
-      },
-      {
-        id: 'export-specimens',
-        label: 'Export Specimens',
-        category: 'Export',
-        keywords: ['export specimens', 'specimen csv', 'download specimens'],
-        action: handleExportSpecimens,
-      },
-      {
-        id: 'export-inventory',
-        label: 'Export Inventory',
-        category: 'Export',
-        keywords: ['export inventory', 'inventory csv', 'download inventory'],
-        action: handleExportInventory,
-      },
-      // Bulk Operations commands
-      ...(canWrite ? [
-        {
-          id: 'move-micronix',
-          label: 'Move Micronix Containers',
-          category: 'Bulk Operations',
-          keywords: ['move micronix', 'container move micronix'],
-          action: () => navigate('/container-move/micronix'),
-        },
-        {
-          id: 'move-cryovial',
-          label: 'Move Cryovial Containers',
-          category: 'Bulk Operations',
-          keywords: ['move cryovial', 'container move cryovial'],
-          action: () => navigate('/container-move/cryovial'),
-        },
-        {
-          id: 'move-papers',
-          label: 'Move Papers',
-          category: 'Bulk Operations',
-          keywords: ['move papers', 'container move papers'],
-          action: () => navigate('/container-move/papers'),
-        },
-        {
-          id: 'move-collections',
-          label: 'Move Collections',
-          category: 'Bulk Operations',
-          keywords: ['move collections', 'collection move'],
-          action: () => navigate('/collection-move'),
-        },
-      ] : []),
-      // Actions commands
-      {
-        id: 'open-search',
-        label: 'Open Search',
-        category: 'Actions',
-        keywords: ['search', 'find', 'lookup'],
-        action: () => openSearchModal(),
-      },
-      // Admin Navigation commands (conditional on admin role)
-      ...(isAdmin ? [
-        {
-          id: 'nav-admin-dashboard',
-          label: 'Go to Admin Dashboard',
-          category: 'Navigation',
-          keywords: ['admin', 'dashboard', 'admin dashboard'],
-          action: () => navigate('/admin'),
-        },
-        {
-          id: 'nav-admin-users',
-          label: 'Go to User Management',
-          category: 'Navigation',
-          keywords: ['admin', 'users', 'user management', 'manage users'],
-          action: () => navigate('/admin/users'),
-        },
-        {
-          id: 'nav-admin-settings',
-          label: 'Go to System Settings',
-          category: 'Navigation',
-          keywords: ['admin', 'system settings', 'admin settings'],
-          action: () => navigate('/admin/settings'),
-        },
-        {
-          id: 'nav-admin-statistics',
-          label: 'Go to System Statistics',
-          category: 'Navigation',
-          keywords: ['admin', 'system statistics', 'admin statistics'],
-          action: () => navigate('/admin/statistics'),
-        },
-        {
-          id: 'nav-admin-error-logs',
-          label: 'Go to Error Logs',
-          category: 'Navigation',
-          keywords: ['admin', 'error logs', 'logs', 'errors'],
-          action: () => navigate('/admin/error-logs'),
-        },
-        {
-          id: 'create-location',
-          label: 'Create Location',
-          category: 'Create',
-          keywords: ['create location', 'add location', 'new location'],
-          action: () => navigate('/locations'),
-        },
-      ] : []),
-    ]
-
-    // Context-specific commands
-    const contextCommands: Command[] = []
-
-    // Create commands available on Dashboard, Studies page, or Study Detail
-    if (
-      location.pathname === '/' ||
-      location.pathname === '/studies' ||
-      location.pathname.startsWith('/studies/')
-    ) {
-      contextCommands.push({
-        id: 'create-study',
-        label: 'Create New Study',
-        category: 'Create',
-        keywords: ['new study', 'create study', 'add study'],
-        action: () => navigate('/studies/new'),
-        context: ['/', '/studies'],
-      })
-    }
-
-    // Create commands available on Dashboard, Specimens page, or Subject Detail
-    if (
-      location.pathname === '/' ||
-      location.pathname === '/specimens' ||
-      location.pathname.startsWith('/subjects/')
-    ) {
-      contextCommands.push({
-        id: 'create-specimen',
-        label: 'Create New Specimen',
-        category: 'Create',
-        keywords: ['new specimen', 'create specimen', 'add specimen'],
-        action: () => navigate('/specimens/new'),
-        context: ['/', '/specimens'],
-      })
-    }
-
-    // Create subject command on Study Detail page
-    if (location.pathname.startsWith('/studies/') && !location.pathname.endsWith('/new')) {
-      const studyId = location.pathname.split('/')[2]
-      contextCommands.push({
-        id: 'create-subject',
-        label: 'Create New Subject',
-        category: 'Create',
-        keywords: ['new subject', 'create subject', 'add subject'],
-        action: () => {
-          // Navigate to study detail with query param to trigger subject creation modal
-          navigate(`/studies/${studyId}?createSubject=true`)
-        },
-        context: [`/studies/${studyId}`],
-      })
-    }
-
-    // Create specimen command on Subject Detail page
-    if (location.pathname.startsWith('/subjects/')) {
-      const subjectId = location.pathname.split('/')[2]
-      contextCommands.push({
-        id: 'create-specimen-subject',
-        label: 'Create New Specimen for Subject',
-        category: 'Create',
-        keywords: ['new specimen', 'create specimen', 'add specimen'],
-        action: () => {
-          // Navigate to subject detail with query param to trigger specimen creation modal
-          navigate(`/subjects/${subjectId}?createSpecimen=true`)
-        },
-        context: [`/subjects/${subjectId}`],
-      })
-    }
-
-    // Export Current Study command on Study Detail page
-    if (location.pathname.startsWith('/studies/') && !location.pathname.endsWith('/new')) {
-      const studyId = location.pathname.split('/')[2]
-      contextCommands.push({
-        id: 'export-current-study',
-        label: 'Export Current Study',
-        category: 'Export',
-        keywords: ['export', 'download', 'csv', 'excel', 'export study'],
-        action: () => {
-          navigate(`/export?study=${studyId}`)
-        },
-        context: [`/studies/${studyId}`],
-      })
-    }
-
-    // Clear Filters command (context-specific, only show when filters are active)
-    if (
-      location.pathname === '/specimens' ||
-      location.pathname === '/studies' ||
-      location.pathname === '/statistics'
-    ) {
-      // Check if there are active filters in URL params
-      const hasActiveFilters = location.search && location.search.length > 0
-      if (hasActiveFilters) {
-        contextCommands.push({
-          id: 'clear-filters',
-          label: 'Clear Filters',
-          category: 'Actions',
-          keywords: ['clear filters', 'reset filters', 'remove filters'],
-          action: handleClearFilters,
-          context: ['/specimens', '/studies', '/statistics'],
-        })
-      }
-    }
-
-    return [...baseCommands, ...contextCommands]
-  }, [navigate, location.pathname, location.search, openSearchModal, canWrite, isAdmin, handleClearFilters])
+  const commands = useCommands({
+    navigate,
+    location,
+    canWrite,
+    isAdmin,
+    canManageReferenceData,
+    theme,
+    setTheme,
+    toggleHelpModal,
+    openSearchModal,
+    refreshUser,
+    handleExportSpecimens,
+    handleExportInventory,
+    handleClearFilters,
+  })
 
   // Command palette (cmd+shift+k)
   useModifierShiftHotkey('k', () => {
@@ -680,7 +388,7 @@ function AppContent() {
       {!isLoginPage && !isSetupPage && !isRegisterPage && (
         <div 
           data-floating-buttons="true"
-          className="floating-actions group fixed right-6 bottom-6 z-50 p-2 -m-2"
+          className={`floating-actions group fixed right-6 bottom-6 z-50 p-2 -m-2 ${isButtonsExpanded ? 'is-open' : ''}`}
           onMouseEnter={() => {
             // Clear any pending collapse
             if (collapseTimeoutRef.current) {
@@ -711,15 +419,11 @@ function AppContent() {
 
           {/* Expanded buttons - visible on hover, positioned to the left */}
           <div 
-            className={`absolute right-full bottom-0 mr-1 floating-actions__expanded transition-all duration-300 ease-out ${
-              isButtonsExpanded 
-                ? 'opacity-100 translate-x-0 pointer-events-auto' 
-                : 'opacity-0 translate-x-2 pointer-events-none'
-            }`}
+            className="absolute right-full bottom-0 mr-1 floating-actions__expanded"
           >
             {/* User Switcher */}
             <div 
-              className="transform transition-all duration-300"
+              className="floating-actions__dock-child transform transition-all duration-[220ms] ease-out"
               style={{ 
                 transitionDelay: isButtonsExpanded ? '0ms' : '0ms',
                 opacity: isButtonsExpanded ? 1 : 0,
@@ -733,11 +437,11 @@ function AppContent() {
             <button
               type="button"
               onClick={openCommandPalette}
-              className="floating-actions__btn"
+              className="floating-actions__dock-child floating-actions__btn transition-all duration-[220ms] ease-out"
               style={{ 
                 transitionDelay: isButtonsExpanded ? '50ms' : '0ms',
                 opacity: isButtonsExpanded ? 1 : 0,
-                transform: isButtonsExpanded ? 'translateX(0)' : 'translateX(8px)'
+                transform: isButtonsExpanded ? 'translateX(0)' : 'translateX(8px)',
               }}
               aria-label="Open command palette"
             >
@@ -753,11 +457,11 @@ function AppContent() {
             <button
               type="button"
               onClick={openSearchModal}
-              className="floating-actions__btn"
+              className="floating-actions__dock-child floating-actions__btn transition-all duration-[220ms] ease-out"
               style={{
                 transitionDelay: isButtonsExpanded ? '100ms' : '0ms',
                 opacity: isButtonsExpanded ? 1 : 0,
-                transform: isButtonsExpanded ? 'translateX(0)' : 'translateX(8px)'
+                transform: isButtonsExpanded ? 'translateX(0)' : 'translateX(8px)',
               }}
               aria-label="Open search"
             >
@@ -772,18 +476,18 @@ function AppContent() {
             {/* Theme selector */}
             <div
               ref={themeMenuRef}
-              className="floating-actions__theme-wrap"
+              className="floating-actions__dock-child floating-actions__theme-wrap transition-all duration-[220ms] ease-out"
               style={{
                 transitionDelay: isButtonsExpanded ? '150ms' : '0ms',
                 opacity: isButtonsExpanded ? 1 : 0,
-                transform: isButtonsExpanded ? 'translateX(0)' : 'translateX(8px)'
+                transform: isButtonsExpanded ? 'translateX(0)' : 'translateX(8px)',
               }}
             >
               <button
                 ref={themeTriggerRef}
                 type="button"
                 onClick={() => setThemeMenuOpen((open) => !open)}
-                className="floating-actions__btn"
+                className="floating-actions__btn transition-all duration-[220ms] ease-out"
                 aria-label="Choose theme"
                 aria-expanded={themeMenuOpen}
                 aria-haspopup="listbox"

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useHotkey } from '../hooks/useHotkey'
-import { Command, filterCommands, groupCommandsByCategory } from '../lib/commands'
+import { Command, filterCommands, getOrderedCategorySections } from '../lib/commands'
 import ModalPortal from './ModalPortal'
 
 interface CommandPaletteProps {
@@ -31,15 +31,15 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
     return filterCommands(commands, query, location.pathname)
   }, [commands, query, location.pathname])
 
-  // Group filtered commands by category
-  const groupedCommands = useMemo(() => {
-    return groupCommandsByCategory(filteredCommands)
+  // Group filtered commands by fixed category order (skips empty groups)
+  const orderedSections = useMemo(() => {
+    return getOrderedCategorySections(filteredCommands)
   }, [filteredCommands])
 
   // Flatten commands for keyboard navigation (DOM order = grouped order)
   const flatCommands = useMemo(() => {
-    return Object.values(groupedCommands).flat()
-  }, [groupedCommands])
+    return orderedSections.flatMap((s) => s.commands)
+  }, [orderedSections])
 
   // Reset selection when query changes (during render to avoid extra pass)
   if (query !== prevQueryRef.current) {
@@ -164,14 +164,14 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
             className="palette-results"
             onMouseMove={() => { ignoreMouseEnterRef.current = false }}
           >
-            {Object.keys(groupedCommands).length === 0 ? (
+            {orderedSections.length === 0 ? (
               <div className="palette-empty">
                 <p>No commands found</p>
                 <p>Try a different search term</p>
               </div>
             ) : (
               <div className="space-y-4">
-                {Object.entries(groupedCommands).map(([category, categoryCommands]) => (
+                {orderedSections.map(({ category, commands: categoryCommands }) => (
                   <div key={category}>
                     <h4 className="palette-group-title">{category}</h4>
                     <div className="palette-list">
@@ -200,11 +200,16 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
                                   <div className="palette-item__subtitle">{command.description}</div>
                                 )}
                               </div>
-                              {command.icon && (
-                                <div className="ml-4 flex-shrink-0 opacity-60 [&_svg]:w-5 [&_svg]:h-5">
-                                  {command.icon}
-                                </div>
-                              )}
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {command.shortcut && (
+                                  <kbd className="palette-kbd palette-kbd--inline">{command.shortcut}</kbd>
+                                )}
+                                {command.icon && (
+                                  <div className="opacity-60 [&_svg]:w-5 [&_svg]:h-5">
+                                    {command.icon}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </button>
                         )
