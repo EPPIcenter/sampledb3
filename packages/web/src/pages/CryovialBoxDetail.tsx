@@ -3,14 +3,25 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { collectionsApi } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import CollectionGrid from '../components/CollectionGrid'
+import CollectionTableWithExport from '../components/CollectionTableWithExport'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import {
+  COLLECTION_GRID_TABLE_COLUMNS,
+  COLLECTION_GRID_TABLE_ROW_KEYS,
+  buildCollectionTableRow,
+  getTableColumnsFromExportConfig,
+  type CollectionTableEntry,
+} from '../lib/collection-table-columns'
+import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
+import { Link } from 'react-router-dom'
+import '../styles/storage.css'
 
 function statusColor(name: string): string {
   const key = name.toLowerCase()
-  if (key.includes('active') || key.includes('in use') || key.includes('in-use')) return 'bg-green-500'
-  if (key.includes('used')) return 'bg-blue-500'
+  if (key.includes('active') || key.includes('in use') || key.includes('in-use')) return 'bg-app-trend-up/100'
+  if (key.includes('used')) return 'bg-app-accent-muted0'
   if (key.includes('archived')) return 'bg-yellow-500'
-  if (key.includes('discard') || key.includes('destroy')) return 'bg-red-500'
+  if (key.includes('discard') || key.includes('destroy')) return 'bg-app-trend-down/100'
   return 'bg-gray-400'
 }
 
@@ -20,7 +31,14 @@ export default function CryovialBoxDetail() {
   const [searchParams] = useSearchParams()
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
-  
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
+  const {
+    configurations: viewConfigurations,
+    selectedConfigId,
+    setSelectedConfigId,
+    loading: loadingConfigs,
+  } = useTableViewConfigurations()
+
   // Get target position from URL query params
   const targetPosition = searchParams.get('position')
 
@@ -96,22 +114,61 @@ export default function CryovialBoxDetail() {
     return Array.from(labels).sort()
   }, [data])
 
-  if (loading) {
-    return <SkeletonDetailPage sections={1} />
-  }
+  const tableRows = useMemo(() => {
+    if (!layout || !data?.positions) return []
+    const positions = data.positions as Record<string, (CollectionTableEntry & { kind?: string })[]>
+    const box = data?.box
+    const context = box
+      ? { collectionName: box.name ?? undefined, locationPath: box.locationPath ?? undefined }
+      : undefined
+    const rows: ReturnType<typeof buildCollectionTableRow>[] = []
+    layout.rows.forEach((row) => {
+      layout.cols.forEach((col) => {
+        const key = `${row}${col.padStart(2, '0')}`
+        const entries = positions[key] ?? []
+        entries.forEach((entry) => {
+          rows.push(
+            buildCollectionTableRow({
+              position: entry.position,
+              barcode: entry.barcode,
+              containerType: entry.kind ?? undefined,
+              container: entry.container ?? undefined,
+              context,
+            })
+          )
+        })
+      })
+    })
+    return rows
+  }, [data, layout])
 
-  if (!data?.box) {
+  const tableColumns = useMemo(() => {
+     
+    if (viewMode !== 'table' || loadingConfigs || viewConfigurations.length === 0) {
+      return COLLECTION_GRID_TABLE_COLUMNS
+    }
+    const config = viewConfigurations.find((c) => c.name === selectedConfigId)
+    const configKeys = config?.columns ?? []
+    const resolved = getTableColumnsFromExportConfig(configKeys, COLLECTION_GRID_TABLE_ROW_KEYS)
+    return resolved.length > 0 ? resolved : COLLECTION_GRID_TABLE_COLUMNS
+  }, [viewMode, loadingConfigs, viewConfigurations, selectedConfigId])
+
+  if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8">Loading...</div>
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <SkeletonDetailPage sections={1} />
+        </div>
       </div>
     )
   }
 
   if (!data?.box) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8 text-red-600">Cryovial box not found</div>
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <div className="text-center py-8 text-app-trend-down">Cryovial box not found</div>
+        </div>
       </div>
     )
   }
@@ -121,33 +178,85 @@ export default function CryovialBoxDetail() {
   const breadcrumbItems = [
     { label: 'Locations', to: '/locations' },
     box.location?.id
-      ? { label: box.locationPath || `Location #${box.location.id}`, to: `/locations/${box.location.id}` }
+      ? { label: box.locationPath, to: `/locations/${box.location.id}` }
       : undefined,
-    { label: `Cryovial Box ${box.name || `#${box.id}`}` },
+    { label: `Cryovial Box ${box.name}` },
   ].filter(Boolean) as Array<{ label: string; to?: string }>
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+      <div className="mb-6 storage-reveal storage-reveal-1">
         <EntityBreadcrumbs items={breadcrumbItems} />
-        <h1 className="text-3xl font-bold text-gray-900">
-          Cryovial Box {box.name || `#${box.id}`}
+        <h1 className="text-3xl font-bold">
+          Cryovial Box {box.name}
         </h1>
         {box.barcode && (
-          <p className="mt-1 text-sm text-gray-600 font-mono">Barcode: {box.barcode}</p>
+          <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>Barcode: {box.barcode}</p>
         )}
         {box.locationPath && (
-          <p className="mt-1 text-sm text-gray-600 font-mono">{box.locationPath}</p>
+          <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>{box.locationPath}</p>
         )}
       </div>
 
       {layout && (
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex items-start justify-between mb-3 gap-4">
-            <h2 className="text-lg font-semibold text-gray-900">Box Layout</h2>
-            {legend.length > 0 && (
-              <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-600">
-                <span className="font-semibold text-gray-700">Legend:</span>
+        <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-2">
+          <div className="flex items-start justify-between mb-3 gap-4 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-semibold storage-section-title">Box Layout</h2>
+              <div className="flex rounded-md border border-app-border overflow-hidden" role="group" aria-label="View mode">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'grid' ? 'bg-app-surface border-app-border' : 'bg-app-card hover:bg-app-surface'} border-r border-app-border`}
+                  aria-pressed={viewMode === 'grid'}
+                >
+                  Grid
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('table')}
+                  className={`px-2 py-1 text-xs font-medium ${viewMode === 'table' ? 'bg-app-surface border-app-border' : 'bg-app-card hover:bg-app-surface'}`}
+                  aria-pressed={viewMode === 'table'}
+                >
+                  Table
+                </button>
+              </div>
+              {viewMode === 'table' && (
+                <div className="flex items-center gap-2">
+                  <label htmlFor="cryovial-box-table-column-config" className="text-xs font-medium text-app-text-muted whitespace-nowrap">
+                    Columns:
+                  </label>
+                  {loadingConfigs ? (
+                    <span className="text-xs text-app-text-muted">Loading…</span>
+                  ) : viewConfigurations.length === 0 ? (
+                    <span className="text-xs text-app-text-muted">
+                      <Link to="/settings?category=data-management&section=table-view-configurations" className="underline">
+                        Add in Settings
+                      </Link>
+                    </span>
+                  ) : (
+                    <select
+                      id="cryovial-box-table-column-config"
+                      value={selectedConfigId}
+                      onChange={(e) => setSelectedConfigId(e.target.value)}
+                      className="text-xs border border-app-border rounded px-2 py-1 bg-app-card min-w-[140px]"
+                      style={{ color: 'rgb(var(--app-text))' }}
+                      aria-label="Column configuration for table view"
+                    >
+                      {viewConfigurations.map((config) => (
+                        <option key={config.name} value={config.name}>
+                          {config.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+            </div>
+            {legend.length > 0 && viewMode === 'grid' && (
+              <div className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                <span className="font-semibold" style={{ color: 'rgb(var(--app-text))' }}>Legend:</span>
                 {legend.map((name) => (
                   <span key={name} className="inline-flex items-center gap-1">
                     <span
@@ -161,7 +270,9 @@ export default function CryovialBoxDetail() {
               </div>
             )}
           </div>
+          {viewMode === 'grid' && (
           <CollectionGrid
+            theme="storage"
             rows={layout.rows}
             columns={layout.cols}
             getKey={(row, col) => `${row}${col.padStart(2, '0')}`}
@@ -173,7 +284,7 @@ export default function CryovialBoxDetail() {
               const entries: any[] = Array.isArray(value) ? value : value ? [value as any] : []
               if (entries.length === 0) {
                 return (
-                  <div className="h-16 w-16 mx-auto flex items-center justify-center rounded border border-dashed border-gray-100 text-[11px] text-gray-300">
+                  <div className="h-16 w-16 mx-auto flex items-center justify-center rounded border border-dashed border-app-border text-[11px] text-app-border">
                     Empty
                   </div>
                 )
@@ -215,9 +326,9 @@ export default function CryovialBoxDetail() {
               const tooltipParts: string[] = []
               if (entry.position) tooltipParts.push(`Position: ${entry.position}`)
               if (entry.barcode) tooltipParts.push(`Barcode: ${entry.barcode}`)
-              if (label) tooltipParts.push(`Type: ${label}`)
-              if (subjectName) tooltipParts.push(`${source?.type === 'subject' ? 'Subject' : 'Control'}: ${subjectName}`)
-              if (specimenId) tooltipParts.push(`Specimen: #${specimenId}`)
+              tooltipParts.push(`Type: ${label}`)
+              tooltipParts.push(`${source?.type === 'subject' ? 'Subject' : 'Control'}: ${subjectName}`)
+              if (entry.container?.specimenTypeName) tooltipParts.push(`Specimen type: ${entry.container.specimenTypeName}`)
               if (stateName) tooltipParts.push(`State: ${stateName}`)
               if (statusName) tooltipParts.push(`Status: ${statusName}`)
               const title = tooltipParts.join(' • ')
@@ -229,9 +340,9 @@ export default function CryovialBoxDetail() {
                     if (containerId) navigate(`/containers/${containerId}`)
                   }}
                   data-highlighted-position={isHighlighted ? 'true' : 'false'}
-                  className={`h-16 w-16 mx-auto flex flex-col items-center justify-center rounded border text-[10px] px-1 py-1 bg-white space-y-0.5 transition-all
-                    ${isHighlighted ? 'ring-4 ring-yellow-400 ring-offset-2 border-yellow-500 shadow-lg bg-yellow-50' : ''}
-                    ${isClickable ? 'hover:border-blue-300 hover:shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400' : ''}`}
+                  className={`h-16 w-16 mx-auto flex flex-col items-center justify-center rounded border text-[10px] px-1 py-1 bg-app-card space-y-0.5 transition-all
+                    ${isHighlighted ? 'ring-2 ring-app-accent ring-offset-2 ring-offset-app-bg border-app-accent shadow-md bg-app-accent-muted text-app-accent-on-tint' : ''}
+                    ${isClickable ? 'hover:border-app-accent/50 hover:shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-app-accent' : ''}`}
                   title={title}
                 >
                   {hasContainer && (
@@ -246,7 +357,7 @@ export default function CryovialBoxDetail() {
                       )}
                       {statusName && (
                         <span
-                          className={`inline-block w-2 h-2 rounded-full ${statusName === 'In Use' ? 'bg-green-500' : 'bg-red-500'}`}
+                          className={`inline-block w-2 h-2 rounded-full ${statusName === 'In Use' ? 'bg-app-trend-up/100' : 'bg-app-trend-down/100'}`}
                           title={statusName}
                         />
                       )}
@@ -255,17 +366,26 @@ export default function CryovialBoxDetail() {
                   <div className="font-mono truncate w-full text-center text-[8px]">
                     {entry.barcode || label}
                   </div>
-                  {specimenId && (
-                    <span className="text-blue-600 underline text-[9px] truncate max-w-full">
-                      {subjectName || `Spec #${specimenId}`}
+                  {(subjectName || entry.container?.specimenTypeName) && (
+                    <span className="text-app-accent underline text-[9px] truncate max-w-full">
+                      {subjectName || entry.container.specimenTypeName}
                     </span>
                   )}
                 </button>
               )
             }}
           />
+          )}
+          {viewMode === 'table' && (
+            <CollectionTableWithExport
+              columns={tableColumns}
+              rows={tableRows}
+              exportFilename={`cryovial-box-${box.name || 'unnamed'}.csv`}
+            />
+          )}
         </div>
       )}
+      </div>
     </div>
   )
 }

@@ -33,13 +33,18 @@ export async function getDefaultUnit(db: Database, containerType: ContainerType)
     throw new Error('Container defaults are not configured. Please run database initialization.')
   }
 
-  const containerDefaults = defaults[containerType]
-  if (!containerDefaults || !containerDefaults.defaultUnitSymbol) {
-    throw new Error(`Default unit symbol not configured for container type '${containerType}'. Please update settings.`)
+  const containerDefaults = (defaults as Partial<Record<ContainerType, { defaultUnitSymbol: string }>>)[containerType]
+  if (!containerDefaults) {
+    throw new Error(
+      `Container defaults for '${containerType}' are not configured. Ensure settings include this container type.`
+    )
+  }
+  const unitSymbol = containerDefaults.defaultUnitSymbol
+
+  if (!unitSymbol || !String(unitSymbol).trim()) {
+    throw new Error(`Default unit symbol not configured for container type '${containerType}'`)
   }
 
-  const unitSymbol = containerDefaults.defaultUnitSymbol
-  
   const unitRecord = await db
     .select()
     .from(unit)
@@ -65,9 +70,6 @@ export async function getDefaultTotalQuantity(db: Database, containerType: Conta
   if (!defaults) {
     throw new Error('Container defaults are not configured. Please run database initialization.')
   }
-  if (!defaults[containerType]) {
-    throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
-  }
   return defaults[containerType].totalQuantity
 }
 
@@ -80,9 +82,6 @@ export async function getDefaultRemainingQuantity(db: Database, containerType: C
   const defaults = await getContainerDefaults(db)
   if (!defaults) {
     throw new Error('Container defaults are not configured. Please run database initialization.')
-  }
-  if (!defaults[containerType]) {
-    throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
   }
   return defaults[containerType].remainingQuantity
 }

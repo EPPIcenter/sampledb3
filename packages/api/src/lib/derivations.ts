@@ -1,4 +1,7 @@
 import type { Database } from '../db/client'
+import type { ExtractTablesWithRelations } from 'drizzle-orm'
+import type { SQLiteTransaction } from 'drizzle-orm/sqlite-core'
+import type * as schema from '../db/schema'
 import {
   containerDerivation,
   cryovialBox,
@@ -18,6 +21,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { resolveCollection, type CollectionType } from '../lib/collection-resolution'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { getDefaultUnit } from './defaults'
+import { utcNow } from './datetime'
 
 export type DerivationType = string
 
@@ -57,7 +61,7 @@ export interface CreateDerivationResult {
 }
 
 async function findOrCreateDerivedSpecimen(
-  database: Database,
+  database: DatabaseOrTransaction,
   parentSpecimenId: number,
   specimenTypeName: string,
 ): Promise<number> {
@@ -119,16 +123,18 @@ async function findOrCreateDerivedSpecimen(
       controlBatchId: parentSpecimen.controlBatchId,
       specimenTypeId: type.id,
       collectionDate: parentSpecimen.collectionDate || null,
-      created: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
+      created: utcNow(),
+      lastUpdated: utcNow(),
     })
     .returning()
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+  if (!created) throw new Error('Insert did not return specimen row')
   return created.id
 }
 
 async function resolveUnitIdForChild(
-  database: Database,
+  database: DatabaseOrTransaction,
   containerType: CreateDerivationInput['containerType'],
   unitSymbol?: string,
 ): Promise<number> {
@@ -146,11 +152,11 @@ async function resolveUnitIdForChild(
   }
 
   // Use the default unit for the child container type
-  return await getDefaultUnit(database, containerType)
+  return await getDefaultUnit(database as Database, containerType)
 }
 
 async function adjustParentQuantity(
-  database: Database,
+  database: DatabaseOrTransaction,
   parent: typeof storageContainer.$inferSelect,
   quantityUsed?: number,
   reduceParentQuantity?: boolean,
@@ -177,13 +183,13 @@ async function adjustParentQuantity(
     })
   }
 
-  const newRemaining = Math.max(0, (parent.remainingQuantity ?? 0) - quantityUsed)
+  const newRemaining = Math.max(0, parent.remainingQuantity - quantityUsed)
 
   const [updated] = await database
     .update(storageContainer)
     .set({
       remainingQuantity: newRemaining,
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: utcNow(),
     })
     .where(eq(storageContainer.id, parent.id))
     .returning()
@@ -191,8 +197,10 @@ async function adjustParentQuantity(
   return { updatedParent: updated, warnings }
 }
 
+type DatabaseOrTransaction = Database | SQLiteTransaction<'sync', void, typeof schema, ExtractTablesWithRelations<typeof schema>>
+
 export async function createDerivation(
-  database: Database,
+  database: DatabaseOrTransaction,
   input: CreateDerivationInput,
 ): Promise<CreateDerivationResult> {
   const parent = await database
@@ -219,7 +227,7 @@ export async function createDerivation(
   }
 
   const containerTypeValidation = await validateContainerTypeForSpecimenType(
-    database,
+    database as Database,
     specType.id,
     input.containerType
   )
@@ -234,14 +242,14 @@ export async function createDerivation(
   // Resolve collection if only name/type provided
   let collectionId = input.collectionId
   if (!collectionId && input.collectionName && input.collectionType) {
-    const resolved = await resolveCollection(input.collectionName, input.collectionType as CollectionType, database)
+    const resolved = await resolveCollection(input.collectionName, input.collectionType as CollectionType, database as Database)
     if (!resolved) {
       throw new Error(`Collection '${input.collectionName}' (${input.collectionType}) not found`)
     }
     collectionId = resolved
   }
 
-  const now = new Date().toISOString()
+  const now = utcNow()
   const [child] = await database
     .insert(storageContainer)
     .values({

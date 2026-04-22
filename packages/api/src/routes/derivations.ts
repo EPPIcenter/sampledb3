@@ -17,6 +17,9 @@ import {
 } from '../db/schema'
 import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create derivations routes with database injection
@@ -24,6 +27,8 @@ import { createDerivation } from '../lib/derivations'
  */
 export function createDerivationsRoutes(database: Database): Hono {
   const derivations = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
 const createDerivationSchema = z.object({
   derivationType: z.string(),
@@ -55,7 +60,7 @@ async function createCollectionIfNeeded(database: Database, input: z.infer<typeo
 
   const name = input.collectionName
   const locationId = input.collectionLocationId
-  const now = new Date().toISOString()
+  const now = utcNow()
 
   switch (input.collectionType) {
     case 'micronix_plate': {
@@ -172,9 +177,9 @@ async function createCollectionIfNeeded(database: Database, input: z.infer<typeo
 }
 
 // Create derivation from parent container
-derivations.post('/containers/:id/derive', async (c) => {
+derivations.post('/containers/:id/derive', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
     }
@@ -201,9 +206,9 @@ derivations.post('/containers/:id/derive', async (c) => {
 })
 
 // List derivations from a parent container
-derivations.get('/containers/:id/derivations', async (c) => {
+derivations.get('/containers/:id/derivations', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
     }
@@ -233,9 +238,9 @@ derivations.get('/containers/:id/derivations', async (c) => {
 })
 
 // Get derivation source for a child container, or original source if not derived
-derivations.get('/containers/:id/source', async (c) => {
+derivations.get('/containers/:id/source', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
     }
@@ -366,9 +371,9 @@ derivations.get('/containers/:id/source', async (c) => {
 })
 
 // Simple derivation chain: ancestors and direct descendants
-derivations.get('/containers/:id/derivation-chain', async (c) => {
+derivations.get('/containers/:id/derivation-chain', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
     }
@@ -376,11 +381,12 @@ derivations.get('/containers/:id/derivation-chain', async (c) => {
     // Ancestors: walk up via parent_container_id
     const ancestors: any[] = []
     let currentId: number | null = id
-    while (true) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- currentId can become null when walking up the chain
+    while (currentId !== null) {
       const record = await database
         .select()
         .from(containerDerivation)
-        .where(eq(containerDerivation.childContainerId, currentId!))
+        .where(eq(containerDerivation.childContainerId, currentId))
         .get()
       if (!record) break
 
@@ -430,9 +436,9 @@ derivations.get('/containers/:id/derivation-chain', async (c) => {
 })
 
 // Update derivation metadata
-derivations.patch('/derivations/:id', async (c) => {
+derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid derivation ID' }, 400)
     }
@@ -457,10 +463,10 @@ derivations.patch('/derivations/:id', async (c) => {
       .where(eq(containerDerivation.id, id))
       .returning()
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
     if (!updated) {
       return c.json({ error: 'Derivation not found' }, 404)
     }
-
     return c.json({ derivation: updated })
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -472,9 +478,9 @@ derivations.patch('/derivations/:id', async (c) => {
 })
 
 // Delete derivation (relationship only)
-derivations.delete('/derivations/:id', async (c) => {
+derivations.delete('/derivations/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid derivation ID' }, 400)
     }
@@ -489,10 +495,14 @@ derivations.delete('/derivations/:id', async (c) => {
       return c.json({ error: 'Derivation not found' }, 404)
     }
 
-    await database
+    const deleted = await database
       .delete(containerDerivation)
       .where(eq(containerDerivation.id, id))
+      .returning()
 
+    if (deleted.length === 0) {
+      return c.json({ error: 'Derivation not found' }, 404)
+    }
     return c.json({ message: 'Derivation deleted' })
   } catch (error: any) {
     console.error('Error deleting derivation:', error)

@@ -3,6 +3,7 @@ import { users, specimenType, unit, storageType, location, strain, specimenTypeC
 import { sql, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
+import { rateLimit } from '../middleware/rate-limit'
 import {
   setContainerDefaults,
   setPaginationSettings,
@@ -10,8 +11,11 @@ import {
   setSessionSettings,
   setExportConfigurations,
   setScannerConfigurations,
+  setTableViewConfigurations,
+  DEFAULT_TABLE_VIEW_CONFIGURATIONS,
 } from '../lib/settings'
 import type { Database } from '../db/client'
+import { utcNow } from '../lib/datetime'
 // Note: Defaults are only used in the frontend Setup.tsx
 // Backend requires all data to be provided via the API
 
@@ -46,7 +50,8 @@ const initSchema = z.object({
     strains: z.array(z.object({ name: z.string(), description: z.string().optional() })).optional()
 })
 
-  setupRoutes.post('/initialize', async (c) => {
+  // Rate limit initialization to prevent abuse (5 attempts per minute per IP)
+  setupRoutes.post('/initialize', rateLimit(5, 60 * 1000), async (c) => {
     try {
       const body = await c.req.json()
       const {
@@ -67,6 +72,7 @@ const initSchema = z.object({
       }
 
       // 1. Create Admin User
+      const createdAt = utcNow()
       const passwordHash = await bcrypt.hash(adminPassword, 10)
       await database.insert(users).values({
         id: 1,
@@ -74,10 +80,11 @@ const initSchema = z.object({
         email: adminEmail,
         passwordHash,
         role: 'admin',
-        createdAt: new Date().toISOString()
+        createdAt,
+        approvedAt: createdAt, // Setup admin is immediately approved
       })
 
-      const now = new Date().toISOString()
+      const now = utcNow()
 
       // 2. Storage Types (must be created first for location references)
       if (!storageTypes || storageTypes.length === 0) {
@@ -97,7 +104,7 @@ const initSchema = z.object({
               name: s.name,
               description: s.description
             }).returning()
-            if (result && result.length > 0 && result[0]) {
+            if (result.length > 0 && result[0]) {
               storageTypeMap.set(s.name, result[0].id)
             }
           }
@@ -347,6 +354,8 @@ const initSchema = z.object({
         ],
       })
 
+      await setTableViewConfigurations(database, DEFAULT_TABLE_VIEW_CONFIGURATIONS)
+
       // Comprehensive validation - ensure all critical data was created
       const specimenTypeCount = await database.select({ count: sql<number>`count(*)` }).from(specimenType).get()
       const unitCount = await database.select({ count: sql<number>`count(*)` }).from(unit).get()
@@ -357,12 +366,13 @@ const initSchema = z.object({
       
       const validationErrors: string[] = []
       
-      if ((specimenTypeCount?.count || 0) === 0) {
+      if (specimenTypeCount!.count === 0) {
         validationErrors.push('No specimen types were created')
       }
       if ((unitCount?.count || 0) === 0) {
         validationErrors.push('No units were created')
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- count can be undefined before first query
       if (storageTypes && storageTypes.length > 0 && (storageTypeCount?.count || 0) === 0) {
         validationErrors.push('No storage types were created')
       }

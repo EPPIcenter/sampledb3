@@ -1,7 +1,33 @@
-import { useState, useEffect, useRef } from 'react'
-import LocationPicker from '../LocationPicker'
-import { collectionsApi } from '../../lib/api'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import SheetCard from './SheetCard'
+import CollectionAssignment from './CollectionAssignment'
+import type { CollectionAssignmentChange } from './CollectionAssignment'
+import type { CollectionOption } from '../CollectionSelectOrCreate'
+import { collectionsApi, settingsApi, type Unit } from '../../lib/api'
+import { uniqueSheetNamesFromRows } from '../../lib/control-batch-csv'
 import type { SpecimenTypeConfig, CSVFileData, ContainerConfig } from '../../pages/ControlBatchWizard'
+
+/** Group paper containers by sheetId */
+function groupContainersBySheet(
+  specimenTypes: SpecimenTypeConfig[]
+): Map<string, Map<string, ContainerConfig[]>> {
+  const result = new Map<string, Map<string, ContainerConfig[]>>()
+  for (const st of specimenTypes) {
+    if (st.containerType !== 'paper') continue
+    const sheetsMap = new Map<string, ContainerConfig[]>()
+    for (const c of st.containers) {
+      const sheetId = (c as ContainerConfig & { sheetId?: string }).sheetId ?? 'unassigned'
+      if (!sheetsMap.has(sheetId)) {
+        sheetsMap.set(sheetId, [])
+      }
+      sheetsMap.get(sheetId)!.push(c)
+    }
+    if (sheetsMap.size > 0) {
+      result.set(st.id, sheetsMap)
+    }
+  }
+  return result
+}
 
 interface ContainerConfigurationStepProps {
   specimenTypes: SpecimenTypeConfig[]
@@ -28,48 +54,128 @@ export default function ContainerConfigurationStep({
   const [existingCollections, setExistingCollections] = useState<{
     boxes: Map<string, { id: number; locationId: number }>
     bags: Map<string, { id: number; locationId: number }>
-  }>({ boxes: new Map(), bags: new Map() })
+    micronix_plate: Map<string, { id: number; locationId: number }>
+    cryovial_box: Map<string, { id: number; locationId: number }>
+  }>({ boxes: new Map(), bags: new Map(), micronix_plate: new Map(), cryovial_box: new Map() })
+  /** Collection options by type (id, name, locationPath) for unified select/create. */
+  const [collectionOptionsByType, setCollectionOptionsByType] = useState<{
+    box: CollectionOption[]
+    bag: CollectionOption[]
+    micronix_plate: CollectionOption[]
+    cryovial_box: CollectionOption[]
+  }>({ box: [], bag: [], micronix_plate: [], cryovial_box: [] })
   const [loadingCollections, setLoadingCollections] = useState(false)
+  const [unitsByContainerType, setUnitsByContainerType] = useState<Record<string, Unit[]>>({})
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const existingCollectionsRef = useRef(existingCollections)
-  
-  // Keep ref in sync with state
-  useEffect(() => {
-    existingCollectionsRef.current = existingCollections
-  }, [existingCollections])
+  existingCollectionsRef.current = existingCollections
 
-  // Load existing boxes and bags on mount
+  // Load allowed units for each container type present in specimen types (manual entry)
+  const containerTypesInUse = useMemo(
+    () => Array.from(new Set(specimenTypes.map((st) => st.containerType))),
+    [specimenTypes]
+  )
+  useEffect(() => {
+    const typesToLoad = containerTypesInUse.filter((ct) => {
+      const units = unitsByContainerType[ct]
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- units undefined until fetch completes
+      return !units || units.length === 0
+    })
+    if (typesToLoad.length === 0) return
+    let cancelled = false
+    const load = async () => {
+      const results = await Promise.allSettled(
+        typesToLoad.map(async (ct) => {
+          const res = await settingsApi.getContainerTypeUnits(ct)
+          return { ct, units: res.data.units } as const
+        })
+      )
+      if (cancelled) return
+      setUnitsByContainerType((prev) => {
+        const next = { ...prev }
+        for (const r of results) {
+          if (r.status === 'fulfilled') {
+            next[r.value.ct] = r.value.units
+          }
+        }
+        return next
+      })
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [containerTypesInUse, unitsByContainerType])
+
+  // Load all collection types on mount (for id lookup and for name search)
   useEffect(() => {
     const loadCollections = async () => {
       try {
         setLoadingCollections(true)
-        const [boxesRes, bagsRes] = await Promise.all([
+        const [boxesRes, bagsRes, platesRes, cryovialRes] = await Promise.all([
           collectionsApi.listCollectionsByType('box'),
           collectionsApi.listCollectionsByType('bag'),
+          collectionsApi.listCollectionsByType('micronix_plate'),
+          collectionsApi.listCollectionsByType('cryovial_box'),
         ])
-        
+
         const boxesMap = new Map<string, { id: number; locationId: number }>()
-        boxesRes.data.collections?.forEach((box: any) => {
-          if (box.name && box.locationId) {
-            boxesMap.set(box.name, { id: box.id, locationId: box.locationId })
+        const boxOptions: CollectionOption[] = []
+        boxesRes.data.collections.forEach((box: { id: number; name?: string; locationId?: number | null; location?: { path: string | null } | null }) => {
+          if (box.name) {
+            if (box.locationId != null) {
+              boxesMap.set(box.name, { id: box.id, locationId: box.locationId })
+            }
+            boxOptions.push({ id: box.id, name: box.name, locationPath: box.location?.path ?? null })
           }
         })
-        
+
         const bagsMap = new Map<string, { id: number; locationId: number }>()
-        bagsRes.data.collections?.forEach((bag: any) => {
-          if (bag.name && bag.locationId) {
-            bagsMap.set(bag.name, { id: bag.id, locationId: bag.locationId })
+        const bagOptions: CollectionOption[] = []
+        bagsRes.data.collections.forEach((bag: { id: number; name?: string; locationId?: number | null; location?: { path: string | null } | null }) => {
+          if (bag.name) {
+            if (bag.locationId != null) {
+              bagsMap.set(bag.name, { id: bag.id, locationId: bag.locationId })
+            }
+            bagOptions.push({ id: bag.id, name: bag.name, locationPath: bag.location?.path ?? null })
           }
         })
-        
-        setExistingCollections({ boxes: boxesMap, bags: bagsMap })
+
+        const platesMap = new Map<string, { id: number; locationId: number }>()
+        const plateOptions: CollectionOption[] = []
+        platesRes.data.collections.forEach((p: { id: number; name?: string; locationId?: number | null; location?: { path: string | null } | null }) => {
+          if (p.name) {
+            if (p.locationId != null) {
+              platesMap.set(p.name, { id: p.id, locationId: p.locationId })
+            }
+            plateOptions.push({ id: p.id, name: p.name, locationPath: p.location?.path ?? null })
+          }
+        })
+        const cryovialMap = new Map<string, { id: number; locationId: number }>()
+        const cryovialOptions: CollectionOption[] = []
+        cryovialRes.data.collections.forEach((c: { id: number; name?: string; locationId?: number | null; location?: { path: string | null } | null }) => {
+          if (c.name) {
+            if (c.locationId != null) {
+              cryovialMap.set(c.name, { id: c.id, locationId: c.locationId })
+            }
+            cryovialOptions.push({ id: c.id, name: c.name, locationPath: c.location?.path ?? null })
+          }
+        })
+
+        setExistingCollections({ boxes: boxesMap, bags: bagsMap, micronix_plate: platesMap, cryovial_box: cryovialMap })
+        setCollectionOptionsByType({
+          box: boxOptions.sort((a, b) => a.name.localeCompare(b.name)),
+          bag: bagOptions.sort((a, b) => a.name.localeCompare(b.name)),
+          micronix_plate: plateOptions.sort((a, b) => a.name.localeCompare(b.name)),
+          cryovial_box: cryovialOptions.sort((a, b) => a.name.localeCompare(b.name)),
+        })
       } catch (error) {
         console.error('Failed to load collections:', error)
       } finally {
         setLoadingCollections(false)
       }
     }
-    
+
     loadCollections()
   }, [])
 
@@ -82,11 +188,28 @@ export default function ContainerConfigurationStep({
     }
   }, [])
 
+  const getCollectionFromMaps = (
+    name: string,
+    collectionType: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+  ): { id: number; locationId: number } | undefined => {
+    const current = existingCollectionsRef.current
+    switch (collectionType) {
+      case 'box':
+        return current.boxes.get(name)
+      case 'bag':
+        return current.bags.get(name)
+      case 'micronix_plate':
+        return current.micronix_plate.get(name)
+      case 'cryovial_box':
+        return current.cryovial_box.get(name)
+    }
+  }
+
   const handleCollectionNameChange = (
     specimenTypeId: string,
     containerIds: string[],
     newName: string,
-    collectionType: 'box' | 'bag'
+    collectionType: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
   ) => {
     // Clear existing debounce timer
     if (debounceTimerRef.current) {
@@ -115,30 +238,23 @@ export default function ContainerConfigurationStep({
     const nameToLookup = newName.trim()
     const originalName = newName // Preserve original (may have whitespace)
     debounceTimerRef.current = setTimeout(() => {
-      // Use the latest existingCollections from ref to avoid stale closure
-      const currentCollections = existingCollectionsRef.current
-      const collection = collectionType === 'box' 
-        ? currentCollections.boxes.get(nameToLookup)
-        : currentCollections.bags.get(nameToLookup)
-      
+      const collection = getCollectionFromMaps(nameToLookup, collectionType)
+
       if (collection) {
         // Collection exists - auto-populate location and set collectionId
-        // Preserve the original collectionName (as user typed it)
         containerIds.forEach(containerId => {
           updateContainer(specimenTypeId, containerId, {
-            collectionName: originalName, // Preserve the original name (may have whitespace)
+            collectionName: originalName,
             collectionLocationId: collection.locationId,
             collectionId: collection.id,
           })
         })
       } else {
         // Collection doesn't exist - clear collectionId, allow location to be edited
-        // Preserve the original collectionName (as user typed it)
         containerIds.forEach(containerId => {
           updateContainer(specimenTypeId, containerId, {
-            collectionName: originalName, // Preserve the original name
+            collectionName: originalName,
             collectionId: undefined,
-            // Don't clear locationId - user might have set it manually
           })
         })
       }
@@ -152,23 +268,10 @@ export default function ContainerConfigurationStep({
     return 'box'
   }
 
-  const getCollectionLabel = (containerType: string, collectionType?: string): string => {
-    if (containerType === 'cryovial_tube') return 'Cryovial Box Name'
-    if (containerType === 'micronix_tube') return 'Plate Name'
-    if (containerType === 'paper') {
-      return collectionType === 'bag' ? 'Bag Name' : 'Box Name'
-    }
-    return 'Collection Name'
-  }
-
-  const getCollectionPlaceholder = (containerType: string, collectionType?: string): string => {
-    if (containerType === 'cryovial_tube') return 'Enter cryovial box name'
-    if (containerType === 'micronix_tube') return 'Enter plate name'
-    if (containerType === 'paper') {
-      return collectionType === 'bag' ? 'Enter bag name' : 'Enter box name'
-    }
-    return 'Enter collection name'
-  }
+  const sheetsBySpecimen = useMemo(
+    () => groupContainersBySheet(specimenTypes),
+    [specimenTypes]
+  )
 
   const handleCSVCollectionConfig = async (
     fileIndex: number,
@@ -177,7 +280,8 @@ export default function ContainerConfigurationStep({
     collectionName: string | null,
     collectionLocationId: number | null,
     collectionType: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box',
-    sheetName?: string | null
+    sheetName?: string | null,
+    containerTypeInferred?: boolean
   ) => {
     const updatedFiles = [...csvFiles]
     updatedFiles[fileIndex] = {
@@ -188,94 +292,16 @@ export default function ContainerConfigurationStep({
       collectionLocationId: collectionLocationId || undefined,
       collectionType,
       sheetName: sheetName || undefined,
+      ...(containerTypeInferred !== undefined && { containerTypeInferred }),
     }
     onChangeCsvFiles(updatedFiles)
   }
 
-  const handleCreateCollection = async (
-    fileIndex: number,
-    name: string,
-    locationId: number,
-    collectionType: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-  ) => {
-    try {
-      let response
-      if (collectionType === 'box') {
-        response = await collectionsApi.createBox({ name, locationId })
-      } else if (collectionType === 'bag') {
-        response = await collectionsApi.createBag({ name, locationId })
-      } else if (collectionType === 'micronix_plate') {
-        response = await collectionsApi.createMicronixPlate({ name, locationId })
-      } else {
-        response = await collectionsApi.createCryovialBox({ name, locationId })
-      }
-
-      const collectionId = ('plate' in response.data && response.data.plate?.id) || 
-                          ('box' in response.data && response.data.box?.id) || 
-                          ('bag' in response.data && response.data.bag?.id) || undefined
-      
-      const updatedFiles = [...csvFiles]
-      updatedFiles[fileIndex] = {
-        ...updatedFiles[fileIndex],
-        collectionId: typeof collectionId === 'number' ? collectionId : undefined,
-        collectionName: name,
-        collectionLocationId: locationId,
-      }
-      onChangeCsvFiles(updatedFiles)
-    } catch (error: unknown) {
-      console.error('Failed to create collection:', error)
-      const errorMessage = typeof error === 'object' && error !== null && 'response' in error
-        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to create collection'
-        : 'Failed to create collection'
-      alert(errorMessage)
-    }
-  }
-
-  const handleCreateCollectionForSpecimenType = async (
-    specimenTypeId: string,
-    name: string,
-    locationId: number,
-    collectionType: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-  ) => {
-    try {
-      let response
-      if (collectionType === 'box') {
-        response = await collectionsApi.createBox({ name, locationId })
-      } else if (collectionType === 'bag') {
-        response = await collectionsApi.createBag({ name, locationId })
-      } else if (collectionType === 'micronix_plate') {
-        response = await collectionsApi.createMicronixPlate({ name, locationId })
-      } else {
-        response = await collectionsApi.createCryovialBox({ name, locationId })
-      }
-
-      const collectionId = ('plate' in response.data && response.data.plate?.id) || 
-                          ('box' in response.data && response.data.box?.id) || 
-                          ('bag' in response.data && response.data.bag?.id) || undefined
-      
-      // Update all containers for this specimen type with the collection ID
-      const updated = specimenTypes.map(st => {
-        if (st.id === specimenTypeId) {
-          return {
-            ...st,
-            containers: st.containers.map(c => ({
-              ...c,
-              collectionId: typeof collectionId === 'number' ? collectionId : undefined,
-              collectionName: name,
-              collectionLocationId: locationId,
-            })),
-          }
-        }
-        return st
-      })
-      onChangeSpecimenTypes(updated)
-    } catch (error: unknown) {
-      console.error('Failed to create collection:', error)
-      const errorMessage = typeof error === 'object' && error !== null && 'response' in error
-        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to create collection'
-        : 'Failed to create collection'
-      alert(errorMessage)
-    }
+  const defaultUnitForContainerType = (containerType: string): string => {
+    const units = unitsByContainerType[containerType]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- units undefined until fetch completes
+    if (units && units.length) return units[0]!.symbol
+    return containerType === 'paper' ? 'spots' : 'µL'
   }
 
   const addContainerToSpecimenType = (specimenTypeId: string) => {
@@ -284,7 +310,7 @@ export default function ContainerConfigurationStep({
         const newContainer: ContainerConfig = {
           id: `c-${Date.now()}-${Math.random()}`,
           quantity: 1,
-          unitSymbol: st.containerType === 'paper' ? 'spots' : 'µL',
+          unitSymbol: defaultUnitForContainerType(st.containerType),
         }
         return {
           ...st,
@@ -303,7 +329,7 @@ export default function ContainerConfigurationStep({
         const newContainer: ContainerConfig = {
           id: `c-${Date.now()}-${Math.random()}`,
           quantity: 1,
-          unitSymbol: 'spots',
+          unitSymbol: defaultUnitForContainerType('paper'),
           sheetName: '', // Empty initially, user will fill it
           sheetId, // Track which sheet this paper belongs to
         }
@@ -325,7 +351,7 @@ export default function ContainerConfigurationStep({
         const newContainer: ContainerConfig = {
           id: `c-${Date.now()}-${Math.random()}`,
           quantity: 1,
-          unitSymbol: 'spots',
+          unitSymbol: defaultUnitForContainerType('paper'),
           sheetName: sheetContainer?.sheetName || '',
           sheetId, // Same sheet ID
           collectionType: sheetContainer?.collectionType,
@@ -388,11 +414,19 @@ export default function ContainerConfigurationStep({
     // Check manual specimen types have containers
     const manualValid = specimenTypes.every(st => st.containers.length > 0)
     
-    // Check CSV files have collection assigned and sheet name if paper
+    // CSV files with rows must have category inferred (paper or tube) and type set (tube = user picks cryovial/micronix)
+    const csvContainerTypeValid = csvFiles.every(f =>
+      f.rows.length === 0 ||
+      (f.containerTypeInferred === true && f.containerType != null) ||
+      (f.containerCategoryInferred === 'tube' && (f.containerType === 'cryovial_tube' || f.containerType === 'micronix_tube'))
+    )
+    
+    // Check CSV files have collection assigned and sheet name(s) if paper (per-row sheet_name or per-file sheetName)
     const csvValid = csvFiles.every(f => {
       const hasCollection = f.collectionId || (f.collectionName && f.collectionLocationId)
       if (f.containerType === 'paper') {
-        return hasCollection && !!f.sheetName
+        const hasSheetNames = !!f.sheetName?.trim() || (f.rows?.length > 0 && f.rows.every(r => !!(r.sheet_name?.trim()))) // eslint-disable-line @typescript-eslint/no-unnecessary-condition
+        return hasCollection && hasSheetNames
       }
       return hasCollection
     })
@@ -403,30 +437,31 @@ export default function ContainerConfigurationStep({
       return st.containers.every(c => !!c.sheetName)
     })
     
-    return (specimenTypes.length === 0 || (manualValid && manualPaperValid)) && (csvFiles.length === 0 || csvValid)
+    return (specimenTypes.length === 0 || (manualValid && manualPaperValid)) && (csvFiles.length === 0 || (csvContainerTypeValid && csvValid))
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Configure Containers</h2>
-        <p className="text-sm text-gray-600 mb-6">
+        <h2 className="blood-controls-section-title text-xl font-semibold mb-4">
+          Configure Containers
+        </h2>
+        <p className="text-sm mb-6" style={{ color: 'rgb(var(--app-text-muted))' }}>
           Configure containers for each specimen type and assign collections for CSV files.
         </p>
       </div>
 
       {/* Tabs */}
       {(specimenTypes.length > 0 && csvFiles.length > 0) && (
-        <div className="border-b border-gray-200">
-          <nav className="flex -mb-px">
+        <div className="border-b" style={{ borderColor: 'rgb(var(--app-border))' }}>
+          <nav className="flex -mb-px blood-controls-tabs">
             <button
               type="button"
               onClick={() => setActiveTab('manual')}
               className={`px-4 py-2 text-sm font-medium border-b-2 ${
-                activeTab === 'manual'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                activeTab === 'manual' ? 'blood-controls-tab-active' : ''
               }`}
+              aria-selected={activeTab === 'manual'}
             >
               Manual Entry ({specimenTypes.length})
             </button>
@@ -434,10 +469,9 @@ export default function ContainerConfigurationStep({
               type="button"
               onClick={() => setActiveTab('csv')}
               className={`px-4 py-2 text-sm font-medium border-b-2 ${
-                activeTab === 'csv'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                activeTab === 'csv' ? 'blood-controls-tab-active' : ''
               }`}
+              aria-selected={activeTab === 'csv'}
             >
               CSV Files ({csvFiles.length})
             </button>
@@ -449,19 +483,30 @@ export default function ContainerConfigurationStep({
       {(activeTab === 'manual' || csvFiles.length === 0) && specimenTypes.length > 0 && (
         <div className="space-y-6">
           {specimenTypes.map((st) => (
-            <div key={st.id} className="border border-gray-200 rounded-lg p-4">
+            <div
+              key={st.id}
+              className="dashboard-card rounded-lg p-6"
+              style={{ borderColor: 'rgb(var(--app-border))' }}
+            >
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="font-semibold text-gray-900">{st.specimenTypeName}</h3>
-                  <p className="text-sm text-gray-500">
-                    Container type: {st.containerType === 'paper' ? 'DBS Sheet' : st.containerType === 'cryovial_tube' ? 'Cryovial' : 'Micronix'}
+                  <h3 className="font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
+                    {st.specimenTypeName}
+                  </h3>
+                  <p className="text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                    Container type:{' '}
+                    {st.containerType === 'paper'
+                      ? 'DBS Sheet'
+                      : st.containerType === 'cryovial_tube'
+                        ? 'Cryovial'
+                        : 'Micronix'}
                   </p>
                 </div>
                 {st.containerType === 'paper' ? (
                   <button
                     type="button"
                     onClick={() => addSheetToSpecimenType(st.id)}
-                    className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    className="blood-controls-btn-primary px-3 py-1.5 text-sm"
                   >
                     Add Sheet
                   </button>
@@ -469,7 +514,7 @@ export default function ContainerConfigurationStep({
                   <button
                     type="button"
                     onClick={() => addContainerToSpecimenType(st.id)}
-                    className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    className="blood-controls-btn-primary px-3 py-1.5 text-sm"
                   >
                     Add Container
                   </button>
@@ -478,326 +523,245 @@ export default function ContainerConfigurationStep({
 
               {st.containers.length > 0 ? (
                 st.containerType === 'paper' ? (
-                  // Paper containers: Group by sheet ID, then show box/bag assignment per sheet
-                  (() => {
-                    // Group containers by sheetId
-                    const sheetsMap = new Map<string, typeof st.containers>()
-                    st.containers.forEach(c => {
-                      const sheetId = (c as any).sheetId || 'unassigned'
-                      if (!sheetsMap.has(sheetId)) {
-                        sheetsMap.set(sheetId, [])
-                      }
-                      sheetsMap.get(sheetId)!.push(c)
-                    })
-                    
-                    return (
-                      <div className="space-y-4">
-                        {Array.from(sheetsMap.entries()).map(([sheetId, containers]) => {
-                          const sheetName = containers[0]?.sheetName || ''
-                          return (
-                            <div key={sheetId} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex-1">
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Sheet Name *
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={sheetName}
-                                    onChange={(e) => {
-                                      const newSheetName = e.target.value
-                                      containers.forEach(c => {
-                                        updateContainer(st.id, c.id, { sheetName: newSheetName })
-                                      })
-                                    }}
-                                    placeholder="Enter sheet name"
-                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                  />
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => removeSheet(st.id, sheetId)}
-                                  className="ml-3 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 hover:border-red-300 transition-colors"
-                                  title="Remove this sheet and all its papers"
-                                >
-                                  Remove Sheet
-                                </button>
-                              </div>
-                              
-                              {/* Papers in this sheet */}
-                              <div className="mb-3">
-                                <div className="flex items-center justify-between mb-2">
-                                  <label className="block text-xs text-gray-600">
-                                    Papers in this sheet ({containers.length})
-                                  </label>
-                                  <button
-                                    type="button"
-                                    onClick={() => addPaperToSheet(st.id, sheetId)}
-                                    className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
-                                  >
-                                    + Add Paper
-                                  </button>
-                                </div>
-                                <div className="space-y-2">
-                                  {containers.map((container) => (
-                                    <div key={container.id} className="grid grid-cols-4 gap-2 items-center bg-white p-2 rounded border border-gray-200">
-                                      <input
-                                        type="text"
-                                        placeholder="Barcode"
-                                        value={container.barcode || ''}
-                                        onChange={(e) => updateContainer(st.id, container.id, { barcode: e.target.value })}
-                                        className="px-2 py-1 border border-gray-300 rounded text-sm"
-                                      />
-                                      <input
-                                        type="text"
-                                        placeholder="Position"
-                                        value={container.position || ''}
-                                        onChange={(e) => updateContainer(st.id, container.id, { position: e.target.value })}
-                                        className="px-2 py-1 border border-gray-300 rounded text-sm"
-                                      />
-                                      <input
-                                        type="number"
-                                        placeholder="Quantity"
-                                        value={container.quantity || ''}
-                                        onChange={(e) => updateContainer(st.id, container.id, { quantity: parseFloat(e.target.value) || 0 })}
-                                        className="px-2 py-1 border border-gray-300 rounded text-sm"
-                                      />
-                                      <div className="flex gap-2">
-                                        <input
-                                          type="text"
-                                          placeholder="Unit"
-                                          value={container.unitSymbol || ''}
-                                          onChange={(e) => updateContainer(st.id, container.id, { unitSymbol: e.target.value })}
-                                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                                        />
-                                      <button
-                                        type="button"
-                                        onClick={() => removeContainer(st.id, container.id)}
-                                        className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded hover:bg-red-100 hover:border-red-300 transition-colors"
-                                        title="Remove this paper"
-                                      >
-                                        ×
-                                      </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                              
-                              {/* Box/Bag assignment for this sheet */}
-                              <div className="mt-3 pt-3 border-t border-gray-300">
-                                <h5 className="text-xs font-medium text-gray-700 mb-2">Place Sheet in:</h5>
-                                <div className="mb-3">
-                                  <label className="block text-xs text-gray-600 mb-1">Collection Type</label>
-                                  <select
-                                    value={containers[0]?.collectionType || 'box'}
-                                    onChange={(e) => {
-                                      const type = e.target.value as 'bag' | 'box'
-                                      containers.forEach(c => {
-                                        updateContainer(st.id, c.id, { collectionType: type })
-                                      })
-                                    }}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                  >
-                                    <option value="box">Box</option>
-                                    <option value="bag">Bag</option>
-                                  </select>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="block text-xs text-gray-600 mb-1">
-                                      {getCollectionLabel('paper', containers[0]?.collectionType)}
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={containers[0]?.collectionName || ''}
-                                      onChange={(e) => {
-                                        const name = e.target.value
-                                        const collectionType = (containers[0]?.collectionType || 'box') as 'box' | 'bag'
-                                        const containerIds = containers.map(c => c.id)
-                                        handleCollectionNameChange(st.id, containerIds, name, collectionType)
-                                      }}
-                                      placeholder={getCollectionPlaceholder('paper', containers[0]?.collectionType)}
-                                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs text-gray-600 mb-1">Location</label>
-                                    <LocationPicker
-                                      value={containers[0]?.collectionLocationId || null}
-                                      onChange={(locationId) => {
-                                        containers.forEach(c => {
-                                          updateContainer(st.id, c.id, { collectionLocationId: locationId || undefined })
-                                        })
-                                      }}
-                                      disabled={!!containers[0]?.collectionId}
-                                    />
-                                    {containers[0]?.collectionId && (
-                                      <p className="text-xs text-gray-500 mt-1">
-                                        Location from existing {containers[0]?.collectionType === 'bag' ? 'bag' : 'box'}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                                {containers[0]?.collectionName && containers[0]?.collectionLocationId && !containers[0]?.collectionId && (
-                                  <div className="mt-3">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const firstContainer = containers[0]
-                                        if (firstContainer?.collectionName && firstContainer?.collectionLocationId) {
-                                          handleCreateCollectionForSpecimenType(
-                                            st.id,
-                                            firstContainer.collectionName,
-                                            firstContainer.collectionLocationId,
-                                            firstContainer.collectionType || 'box'
-                                          )
-                                        }
-                                      }}
-                                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-                                    >
-                                      Create {containers[0]?.collectionType === 'bag' ? 'Bag' : 'Box'}
-                                    </button>
-                                  </div>
-                                )}
-                                {containers[0]?.collectionId && (
-                                  <div className="mt-3 bg-green-50 border border-green-200 rounded p-2">
-                                    <p className="text-xs text-green-800">
-                                      ✓ Sheet will be placed in: {containers[0]?.collectionName}
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
-                  })()
+                  <div className="space-y-4">
+                    {(() => {
+                      const sheetsMap = sheetsBySpecimen.get(st.id)
+                      if (!sheetsMap) return null
+                      return Array.from(sheetsMap.entries()).map(([sheetId, containers]) => (
+                        <SheetCard
+                          key={sheetId}
+                          sheetId={sheetId}
+                          containers={containers}
+                          specimenTypeId={st.id}
+                          onUpdateSheetName={(name) => {
+                            containers.forEach((c) =>
+                              updateContainer(st.id, c.id, { sheetName: name })
+                            )
+                          }}
+                          onUpdateContainer={updateContainer}
+                          onRemoveSheet={() => removeSheet(st.id, sheetId)}
+                          onAddPaper={() => addPaperToSheet(st.id, sheetId)}
+                          onRemoveContainer={removeContainer}
+                          onCollectionChange={(updates: CollectionAssignmentChange) => {
+                            if (updates.collectionId !== undefined) {
+                              containers.forEach((c) =>
+                                updateContainer(st.id, c.id, {
+                                  collectionId: updates.collectionId,
+                                  collectionName: updates.collectionName,
+                                })
+                              )
+                            }
+                            if (updates.collectionName !== undefined && updates.collectionId === undefined) {
+                              const collectionType =
+                                (containers[0]?.collectionType ?? 'box') as 'box' | 'bag'
+                              handleCollectionNameChange(
+                                st.id,
+                                containers.map((c) => c.id),
+                                updates.collectionName,
+                                collectionType
+                              )
+                            }
+                            if (updates.collectionType !== undefined) {
+                              containers.forEach((c) =>
+                                updateContainer(st.id, c.id, {
+                                  collectionType: updates.collectionType,
+                                })
+                              )
+                            }
+                            if (updates.collectionLocationId !== undefined) {
+                              containers.forEach((c) =>
+                                updateContainer(st.id, c.id, {
+                                  collectionLocationId:
+                                    updates.collectionLocationId ?? undefined,
+                                })
+                              )
+                            }
+                          }}
+                          existingCollections={existingCollections}
+                          collectionOptions={{
+                            box: collectionOptionsByType.box,
+                            bag: collectionOptionsByType.bag,
+                          }}
+                          allowedUnits={unitsByContainerType['paper'] ?? []}
+                        />
+                      ))
+                    })()}
+                  </div>
                 ) : (
-                  // Non-paper containers: Show as before
-                  <div className="space-y-2">
-                    {st.containers.map((container) => (
-                      <div key={container.id} className="grid grid-cols-5 gap-2 items-center bg-gray-50 p-2 rounded">
-                        <input
-                          type="text"
-                          placeholder="Position"
-                          value={container.position || ''}
-                          onChange={(e) => updateContainer(st.id, container.id, { position: e.target.value })}
-                          className="px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Barcode"
-                          value={container.barcode || ''}
-                          onChange={(e) => updateContainer(st.id, container.id, { barcode: e.target.value })}
-                          className="px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
-                        <input
-                          type="number"
-                          placeholder="Quantity"
-                          value={container.quantity || ''}
-                          onChange={(e) => updateContainer(st.id, container.id, { quantity: parseFloat(e.target.value) || 0 })}
-                          className="px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Unit"
-                          value={container.unitSymbol || ''}
-                          onChange={(e) => updateContainer(st.id, container.id, { unitSymbol: e.target.value })}
-                          className="px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeContainer(st.id, container.id)}
-                          className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded hover:bg-red-100 hover:border-red-300 transition-colors"
-                          title="Remove this container"
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      {st.containers.map((container) => (
+                        <div
+                          key={container.id}
+                          className="grid grid-cols-5 gap-2 items-center p-2 rounded"
+                          style={{ backgroundColor: 'rgb(var(--app-surface))' }}
                         >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )
-              ) : (
-                <p className="text-sm text-gray-500 italic">No containers added yet</p>
-              )}
-
-              {/* Collection assignment for non-paper containers */}
-              {st.containers.length > 0 && st.containerType !== 'paper' && (
-                <div className="mt-4 pt-4 border-t">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Assign to Collection</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        {getCollectionLabel(st.containerType, st.containers[0]?.collectionType)}
-                      </label>
-                      <input
-                        type="text"
-                        value={st.containers[0]?.collectionName || ''}
-                        onChange={(e) => {
-                          const name = e.target.value
-                          const collectionType = (st.containers[0]?.collectionType || getCollectionType(st.containerType)) as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-                          if (collectionType === 'box' || collectionType === 'bag') {
-                            const containerIds = st.containers.map(c => c.id)
-                            handleCollectionNameChange(st.id, containerIds, name, collectionType)
-                          } else {
-                            st.containers.forEach(c => {
-                              updateContainer(st.id, c.id, { collectionName: name })
-                            })
+                          <input
+                            type="text"
+                            placeholder="Position"
+                            value={container.position || ''}
+                            onChange={(e) =>
+                              updateContainer(st.id, container.id, {
+                                position: e.target.value,
+                              })
+                            }
+                            className="px-2 py-1 border border-app-border rounded text-sm bg-app-card text-app-text"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Barcode"
+                            value={container.barcode || ''}
+                            onChange={(e) =>
+                              updateContainer(st.id, container.id, {
+                                barcode: e.target.value,
+                              })
+                            }
+                            className="px-2 py-1 border border-app-border rounded text-sm bg-app-card text-app-text"
+                          />
+                          <input
+                            type="number"
+                            placeholder="Quantity"
+                            value={container.quantity ?? ''} // eslint-disable-line @typescript-eslint/no-unnecessary-condition
+                            onChange={(e) =>
+                              updateContainer(st.id, container.id, {
+                                quantity: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                            className="px-2 py-1 border border-app-border rounded text-sm bg-app-card text-app-text"
+                          />
+                          {(() => {
+                            const tubeUnits = unitsByContainerType[st.containerType]
+                            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- tubeUnits undefined until fetch completes
+                            return tubeUnits && tubeUnits.length ? (
+                            <select
+                              aria-label="Unit"
+                              value={
+                                container.unitSymbol &&
+                                tubeUnits.some((u) => u.symbol === container.unitSymbol)
+                                  ? container.unitSymbol
+                                  : tubeUnits[0]!.symbol
+                              }
+                              onChange={(e) =>
+                                updateContainer(st.id, container.id, {
+                                  unitSymbol: e.target.value,
+                                })
+                              }
+                              className="px-2 py-1 border border-app-border rounded text-sm bg-app-card text-app-text"
+                            >
+                              {tubeUnits.map((u) => (
+                                <option key={u.id} value={u.symbol}>
+                                  {u.symbol}
+                                  {u.name ? ` (${u.name})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            ) : (
+                            <input
+                              type="text"
+                              placeholder="Unit"
+                              value={container.unitSymbol || ''}
+                              onChange={(e) =>
+                                updateContainer(st.id, container.id, {
+                                  unitSymbol: e.target.value,
+                                })
+                              }
+                              className="px-2 py-1 border border-app-border rounded text-sm bg-app-card text-app-text"
+                            />
+                            ); })()}
+                          <button
+                            type="button"
+                            onClick={() => removeContainer(st.id, container.id)}
+                            className="blood-controls-btn-danger px-2 py-1 text-xs"
+                            title="Remove this container"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="pt-4 border-t" style={{ borderColor: 'rgb(var(--app-border))' }}>
+                      <h4 className="blood-controls-filter-label mb-2">
+                        Assign to Collection
+                      </h4>
+                      <CollectionAssignment
+                        containerType={st.containerType}
+                        collectionType={
+                          (st.containers[0]?.collectionType ||
+                            getCollectionType(st.containerType)) as
+                            | 'box'
+                            | 'bag'
+                            | 'micronix_plate'
+                            | 'cryovial_box'
+                        }
+                        collectionName={st.containers[0]?.collectionName ?? ''}
+                        collectionLocationId={
+                          st.containers[0]?.collectionLocationId ?? null
+                        }
+                        collectionId={st.containers[0]?.collectionId}
+                        onChange={(updates: CollectionAssignmentChange) => {
+                          if (updates.collectionId !== undefined) {
+                            st.containers.forEach((c) =>
+                              updateContainer(st.id, c.id, {
+                                collectionId: updates.collectionId,
+                                collectionName: updates.collectionName,
+                              })
+                            )
                           }
-                        }}
-                        placeholder={getCollectionPlaceholder(st.containerType, st.containers[0]?.collectionType)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Location</label>
-                      <LocationPicker
-                        value={st.containers[0]?.collectionLocationId || null}
-                        onChange={(locationId) => {
-                          st.containers.forEach(c => {
-                            updateContainer(st.id, c.id, { collectionLocationId: locationId || undefined })
-                          })
-                        }}
-                        disabled={!!st.containers[0]?.collectionId && (st.containers[0]?.collectionType === 'box' || st.containers[0]?.collectionType === 'bag')}
-                      />
-                      {st.containers[0]?.collectionId && (st.containers[0]?.collectionType === 'box' || st.containers[0]?.collectionType === 'bag') && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Location from existing {st.containers[0]?.collectionType === 'bag' ? 'bag' : 'box'}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {st.containers[0]?.collectionName && st.containers[0]?.collectionLocationId && !st.containers[0]?.collectionId && (
-                    <div className="mt-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const firstContainer = st.containers[0]
-                          if (firstContainer?.collectionName && firstContainer?.collectionLocationId) {
-                            handleCreateCollectionForSpecimenType(
+                          if (updates.collectionName !== undefined && updates.collectionId === undefined) {
+                            const ct =
+                              (st.containers[0]?.collectionType ||
+                                getCollectionType(st.containerType)) as
+                                | 'box'
+                                | 'bag'
+                                | 'micronix_plate'
+                                | 'cryovial_box'
+                            handleCollectionNameChange(
                               st.id,
-                              firstContainer.collectionName,
-                              firstContainer.collectionLocationId,
-                              firstContainer.collectionType || getCollectionType(st.containerType)
+                              st.containers.map((c) => c.id),
+                              updates.collectionName,
+                              ct
+                            )
+                          }
+                          if (updates.collectionType !== undefined) {
+                            st.containers.forEach((c) =>
+                              updateContainer(st.id, c.id, {
+                                collectionType: updates.collectionType,
+                              })
+                            )
+                          }
+                          if (updates.collectionLocationId !== undefined) {
+                            st.containers.forEach((c) =>
+                              updateContainer(st.id, c.id, {
+                                collectionLocationId:
+                                  updates.collectionLocationId ?? undefined,
+                              })
                             )
                           }
                         }}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-                      >
-                        Create Collection
-                      </button>
+                        showCollectionTypeSelector={false}
+                        successMessageVariant="collection"
+                        collectionOptions={
+                          collectionOptionsByType[
+                            (st.containers[0]?.collectionType ||
+                              getCollectionType(st.containerType)) as
+                              | 'box'
+                              | 'bag'
+                              | 'micronix_plate'
+                              | 'cryovial_box'
+                          ]
+                        }
+                        allowCreateCollection
+                      />
                     </div>
-                  )}
-                  {st.containers[0]?.collectionId && (
-                    <div className="mt-3 bg-green-50 border border-green-200 rounded p-2">
-                      <p className="text-xs text-green-800">
-                        ✓ Assigned to collection: {st.containers[0]?.collectionName}
-                      </p>
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )
+              ) : (
+                <p
+                  className="text-sm italic"
+                  style={{ color: 'rgb(var(--app-text-muted))' }}
+                >
+                  No containers added yet
+                </p>
               )}
             </div>
           ))}
@@ -808,76 +772,133 @@ export default function ContainerConfigurationStep({
       {(activeTab === 'csv' || specimenTypes.length === 0) && csvFiles.length > 0 && (
         <div className="space-y-6">
           {csvFiles.map((file, fileIndex) => {
-            const selectedContainerType = file.containerType || 'paper'
+            const selectedContainerType = file.containerType || (file.containerCategoryInferred === 'tube' ? 'cryovial_tube' : 'paper')
             const collectionType = getCollectionType(selectedContainerType)
             const needsBoxOrBag = selectedContainerType === 'paper'
+            const cannotInferContainerType = file.rows.length > 0 && !file.containerTypeInferred && file.containerCategoryInferred !== 'tube'
+            const isTubeTemplate = file.containerCategoryInferred === 'tube'
 
             return (
-              <div key={fileIndex} className="border border-gray-200 rounded-lg p-4">
+              <div
+                key={fileIndex}
+                className="dashboard-card rounded-lg p-6"
+                style={{ borderColor: 'rgb(var(--app-border))' }}
+              >
                 <div className="mb-4">
-                  <h3 className="font-semibold text-gray-900">{file.filename}</h3>
-                  <p className="text-sm text-gray-500">
+                  <h3 className="font-semibold text-app-text">{file.filename}</h3>
+                  <p className="text-sm text-app-text-muted">
                     {file.rows.length} containers, {new Set(file.rows.map(r => r.specimen_type_name)).size} specimen type(s)
                   </p>
                 </div>
 
-                {/* Container type selection */}
+                {cannotInferContainerType ? (
+                  <div className="mb-4 p-3 rounded-lg bg-app-trend-down/10 border border-app-trend-down" role="alert">
+                    <p className="text-sm text-app-trend-down font-medium">Container type could not be inferred from this CSV.</p>
+                    <p className="text-sm text-app-trend-down mt-1">
+                      Re-upload using a template with <code className="px-1 py-0.5 rounded bg-app-trend-down/20">sheet_name</code> (DBS) or <code className="px-1 py-0.5 rounded bg-app-trend-down/20">position</code> (tubes). Remove this file and upload again from the previous step.
+                    </p>
+                  </div>
+                ) : (
+                <>
+                {/* Container type: read-only when paper inferred; dropdown (Cryovial/Micronix only) when tube template */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Container Type *
                   </label>
-                  <select
-                    value={selectedContainerType}
-                    onChange={(e) => {
-                      const type = e.target.value as 'paper' | 'cryovial_tube' | 'micronix_tube'
-                      handleCSVCollectionConfig(
-                        fileIndex,
-                        type,
-                        null,
-                        null,
-                        null,
-                        getCollectionType(type),
-                        type === 'paper' ? file.sheetName || null : null
-                      )
-                    }}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    <option value="paper">DBS Sheet (Paper)</option>
-                    <option value="cryovial_tube">Cryovial</option>
-                    <option value="micronix_tube">Micronix Tube</option>
-                  </select>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {file.containerTypeInferred ? (
+                      <>
+                        <span className="block px-3 py-2 border border-app-border rounded-lg text-sm bg-app-surface text-app-text">
+                          DBS Sheet (Paper)
+                        </span>
+                        <span className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                          (inferred from CSV)
+                        </span>
+                      </>
+                    ) : isTubeTemplate ? (
+                      <>
+                        <select
+                          value={selectedContainerType}
+                          onChange={(e) => {
+                            const type = e.target.value as 'cryovial_tube' | 'micronix_tube'
+                            handleCSVCollectionConfig(
+                              fileIndex,
+                              type,
+                              file.collectionId ?? null,
+                              file.collectionName ?? null,
+                              file.collectionLocationId ?? null,
+                              getCollectionType(type),
+                              file.sheetName || null,
+                              false
+                            )
+                          }}
+                          className="block px-3 py-2 border border-app-border rounded-lg text-sm"
+                        >
+                          <option value="cryovial_tube">Cryovial</option>
+                          <option value="micronix_tube">Micronix Tube</option>
+                        </select>
+                        <span className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                          (tube template – choose type)
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
 
-                {/* Sheet name for paper containers */}
-                {selectedContainerType === 'paper' && (
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Sheet Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={file.sheetName || ''}
-                      onChange={(e) => {
-                        handleCSVCollectionConfig(
-                          fileIndex,
-                          selectedContainerType,
-                          file.collectionId || null,
-                          file.collectionName || null,
-                          file.collectionLocationId || null,
-                          file.collectionType || collectionType,
-                          e.target.value
-                        )
-                      }}
-                      placeholder="Enter sheet name"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    />
-                  </div>
-                )}
+                {/* Sheet name for paper containers: show inferred from CSV (read-only) or editable field when no sheet_name column */}
+                {selectedContainerType === 'paper' && (() => {
+                  const names = uniqueSheetNamesFromRows(file.rows)
+                  if (names.length === 1) {
+                    return (
+                      <div className="mb-4">
+                        <p className="text-sm text-app-text">
+                          Sheet name: <strong>{file.sheetName || names[0]}</strong> <span className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>(from CSV)</span>
+                        </p>
+                      </div>
+                    )
+                  }
+                  if (names.length > 1) {
+                    return (
+                      <div className="mb-4">
+                        <p className="text-sm text-app-text">
+                          Sheet names from CSV: <strong>{names.join(', ')}</strong>
+                        </p>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-app-text mb-2">
+                        Sheet name (if one sheet for whole file)
+                      </label>
+                      <p className="text-xs mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                        Add a <code className="px-1 py-0.5 rounded bg-app-surface">sheet_name</code> column to your CSV to put papers on multiple sheets, or enter one name below. All sheets go into the collection (box/bag) below.
+                      </p>
+                      <input
+                        type="text"
+                        value={file.sheetName || ''}
+                        onChange={(e) => {
+                          handleCSVCollectionConfig(
+                            fileIndex,
+                            selectedContainerType,
+                            file.collectionId || null,
+                            file.collectionName || null,
+                            file.collectionLocationId || null,
+                            file.collectionType || collectionType,
+                            e.target.value
+                          )
+                        }}
+                        placeholder="e.g. Sheet1"
+                        className="block w-full px-3 py-2 border border-app-border rounded-lg text-sm bg-app-card text-app-text"
+                      />
+                    </div>
+                  )
+                })()}
 
                 {/* Collection assignment */}
                 {needsBoxOrBag && (
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-app-text mb-2">
                       Collection Type
                     </label>
                     <select
@@ -894,7 +915,7 @@ export default function ContainerConfigurationStep({
                           file.sheetName || null
                         )
                       }}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      className="block w-full px-3 py-2 border border-app-border rounded-lg text-sm bg-app-card text-app-text"
                     >
                       <option value="box">Box</option>
                       <option value="bag">Bag</option>
@@ -902,140 +923,124 @@ export default function ContainerConfigurationStep({
                   </div>
                 )}
 
-                {file.collectionId ? (
-                  <div className="bg-green-50 border border-green-200 rounded p-3">
-                    <p className="text-sm text-green-800">
+                {file.collectionId && file.collectionName && (
+                  <div className="flex items-center justify-between gap-2 bg-app-trend-up/10 border border-app-trend-up/30 rounded p-3 mb-2">
+                    <p className="text-sm text-app-trend-up">
                       ✓ Assigned to collection: {file.collectionName}
                     </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCSVCollectionConfig(
+                          fileIndex,
+                          selectedContainerType,
+                          null,
+                          '',
+                          null,
+                          file.collectionType || collectionType,
+                          file.sheetName || null
+                        )
+                      }
+                      className="text-sm text-app-trend-up underline hover:no-underline shrink-0"
+                    >
+                      Clear
+                    </button>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Collection Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={file.collectionName || ''}
-                        onChange={(e) => {
-                          const name = e.target.value
-                          const collectionTypeValue: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box' = (file.collectionType || collectionType) as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-                          
-                          // Update name immediately
+                )}
+                <div className="space-y-4">
+                  <CollectionAssignment
+                    containerType={selectedContainerType}
+                    collectionType={(file.collectionType || collectionType) as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'}
+                    collectionName={file.collectionName || ''}
+                    collectionLocationId={file.collectionLocationId ?? null}
+                    collectionId={file.collectionId}
+                    onChange={(updates) => {
+                      const ct = (file.collectionType || collectionType) as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+                      // When CollectionAssignment clears it sends { collectionName: '', collectionLocationId: null, collectionId: undefined }.
+                      // Both collectionName and collectionLocationId branches run; the second must not overwrite the clear with old file values.
+                      const isClear =
+                        updates.collectionName === '' &&
+                        updates.collectionLocationId === null &&
+                        updates.collectionId === undefined
+
+                      if (updates.collectionId !== undefined) {
+                        handleCSVCollectionConfig(
+                          fileIndex,
+                          selectedContainerType,
+                          updates.collectionId ?? null,
+                          updates.collectionName ?? null,
+                          file.collectionLocationId ?? null,
+                          ct,
+                          file.sheetName || null
+                        )
+                      }
+                      if (updates.collectionName !== undefined && updates.collectionId === undefined) {
+                        if (updates.collectionName.trim()) {
+                          const nameToLookup = updates.collectionName.trim()
+                          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+                          debounceTimerRef.current = setTimeout(() => {
+                            const c = getCollectionFromMaps(nameToLookup, ct)
+                            handleCSVCollectionConfig(
+                              fileIndex,
+                              selectedContainerType,
+                              c?.id ?? null,
+                              updates.collectionName ?? null,
+                              c?.locationId ?? file.collectionLocationId ?? null,
+                              ct,
+                              file.sheetName || null
+                            )
+                          }, 500)
+                        } else {
+                          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
                           handleCSVCollectionConfig(
                             fileIndex,
                             selectedContainerType,
                             null,
-                            name,
-                            file.collectionLocationId || null,
-                            file.collectionType || collectionType,
+                            updates.collectionName ?? '',
+                            null,
+                            ct,
                             file.sheetName || null
                           )
-                          
-                          // Handle empty name - clear collectionId
-                          if (!name.trim() && (collectionType === 'box' || collectionType === 'bag')) {
-                            if (debounceTimerRef.current) {
-                              clearTimeout(debounceTimerRef.current)
-                            }
-                            handleCSVCollectionConfig(
-                              fileIndex,
-                              selectedContainerType,
-                              null,
-                              name, // Preserve empty string
-                              null, // Clear location
-                              collectionType,
-                              file.sheetName || null
-                            )
-                            return
-                          }
-                          
-                          // Auto-populate location if collection exists
-                          if ((collectionType === 'box' || collectionType === 'bag') && name.trim()) {
-                            if (debounceTimerRef.current) {
-                              clearTimeout(debounceTimerRef.current)
-                            }
-                            
-                            debounceTimerRef.current = setTimeout(() => {
-                              const nameToLookup = name.trim()
-                              const currentCollections = existingCollectionsRef.current
-                              const collection = collectionType === 'box'
-                                ? currentCollections.boxes.get(nameToLookup)
-                                : currentCollections.bags.get(nameToLookup)
-                              
-                              if (collection) {
-                                handleCSVCollectionConfig(
-                                  fileIndex,
-                                  selectedContainerType,
-                                  collection.id,
-                                  name, // Preserve the name (may have whitespace)
-                                  collection.locationId,
-                                  collectionType,
-                                  file.sheetName || null
-                                )
-                              } else {
-                                handleCSVCollectionConfig(
-                                  fileIndex,
-                                  selectedContainerType,
-                                  null,
-                                  name, // Preserve the name
-                                  file.collectionLocationId || null,
-                                  collectionType,
-                                  file.sheetName || null
-                                )
-                              }
-                            }, 500)
-                          }
-                        }}
-                        placeholder="Enter collection name"
-                        className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Location *
-                      </label>
-                      <LocationPicker
-                        value={file.collectionLocationId || null}
-                        onChange={(locationId) => {
-                          handleCSVCollectionConfig(
-                            fileIndex,
-                            selectedContainerType,
-                            file.collectionId || null,
-                            file.collectionName || null,
-                            locationId,
-                            file.collectionType || collectionType,
-                            file.sheetName || null
-                          )
-                        }}
-                        disabled={!!file.collectionId && (file.collectionType === 'box' || file.collectionType === 'bag')}
-                      />
-                      {file.collectionId && (file.collectionType === 'box' || file.collectionType === 'bag') && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Location from existing {file.collectionType === 'bag' ? 'bag' : 'box'}
-                        </p>
-                      )}
-                    </div>
-
-                    {file.collectionName && file.collectionLocationId && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (file.collectionName && file.collectionLocationId) {
-                            handleCreateCollection(
-                              fileIndex,
-                              file.collectionName,
-                              file.collectionLocationId,
-                              file.collectionType || collectionType
-                            )
-                          }
-                        }}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                      >
-                        Create Collection
-                      </button>
-                    )}
+                        }
+                      }
+                      if (updates.collectionLocationId !== undefined) {
+                        handleCSVCollectionConfig(
+                          fileIndex,
+                          selectedContainerType,
+                          isClear ? null : (file.collectionId ?? null),
+                          isClear ? '' : (file.collectionName ?? null),
+                          updates.collectionLocationId,
+                          ct,
+                          file.sheetName || null
+                        )
+                      }
+                      if (updates.collectionType !== undefined) {
+                        handleCSVCollectionConfig(
+                          fileIndex,
+                          selectedContainerType,
+                          file.collectionId ?? null,
+                          file.collectionName ?? null,
+                          file.collectionLocationId ?? null,
+                          updates.collectionType,
+                          file.sheetName || null
+                        )
+                      }
+                    }}
+                    showCollectionTypeSelector={needsBoxOrBag}
+                    successMessageVariant="collection"
+                    collectionOptions={
+                      collectionOptionsByType[
+                        (file.collectionType || collectionType) as
+                          | 'box'
+                          | 'bag'
+                          | 'micronix_plate'
+                          | 'cryovial_box'
+                      ]
+                    }
+                    allowCreateCollection
+                  />
                   </div>
+                </>
                 )}
               </div>
             )
@@ -1043,26 +1048,21 @@ export default function ContainerConfigurationStep({
         </div>
       )}
 
-      <div className="flex justify-end gap-3 pt-4 border-t">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-        >
+      <div
+        className="flex justify-end gap-3 pt-4 border-t"
+        style={{ borderColor: 'rgb(var(--app-border))' }}
+      >
+        <button type="button" onClick={onCancel} className="blood-controls-btn-secondary px-4 py-2">
           Cancel
         </button>
-        <button
-          type="button"
-          onClick={onBack}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-        >
+        <button type="button" onClick={onBack} className="blood-controls-btn-secondary px-4 py-2">
           Back
         </button>
         <button
           type="button"
           onClick={onNext}
           disabled={!canProceed()}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="blood-controls-btn-primary px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Next: Review
         </button>

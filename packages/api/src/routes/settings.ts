@@ -3,7 +3,9 @@ import { z } from 'zod'
 import type { Database } from '../db/client'
 import { unit, containerTypeUnit } from '../db/schema'
 import { eq, inArray, and } from 'drizzle-orm'
-import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { UnauthorizedError, handleRouteError } from '../lib/error-handler'
+import { clearDefaultsCache } from '../lib/defaults'
 import {
   getContainerDefaults,
   setContainerDefaults,
@@ -22,6 +24,8 @@ import {
   getSharedScannerConfigurations,
   getPersonalScannerConfigurations,
   setScannerConfigurations,
+  getTableViewConfigurations,
+  setTableViewConfigurations,
   clearSettingsCache,
   type ContainerDefaults,
   type PaginationSettings,
@@ -29,12 +33,15 @@ import {
   type SessionSettings,
   type ExportConfigurations,
   type ScannerConfigurations,
+  type TableViewConfigurations,
 } from '../lib/settings'
+import { requireParam } from '../lib/common-validators'
 
 export function createSettingsRoutes(database: Database) {
   const settings = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const adminMiddleware = createAdminMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
   // GET /api/settings - Get all settings (user-aware)
   settings.get('/', authMiddleware, async (c) => {
@@ -42,13 +49,14 @@ export function createSettingsRoutes(database: Database) {
       const user = c.get('user')
       const userId = user?.id
 
-      const [containerDefaults, paginationSettings, passwordRequirements, sessionSettings, exportConfigurations, scannerConfigurations] = await Promise.all([
+      const [containerDefaults, paginationSettings, passwordRequirements, sessionSettings, exportConfigurations, scannerConfigurations, tableViewConfigurations] = await Promise.all([
         getContainerDefaults(database),
         getPaginationSettings(database, userId),
         getPasswordRequirements(database),
         getSessionSettings(database),
         getExportConfigurations(database, userId),
         getScannerConfigurations(database, userId),
+        getTableViewConfigurations(database),
       ])
 
     return c.json({
@@ -58,6 +66,7 @@ export function createSettingsRoutes(database: Database) {
       session_settings: sessionSettings,
       export_configurations: exportConfigurations,
       scanner_configurations: scannerConfigurations,
+      table_view_configurations: tableViewConfigurations,
     })
   } catch (error: unknown) {
     return c.json({ error: 'Internal server error' }, 500)
@@ -65,7 +74,7 @@ export function createSettingsRoutes(database: Database) {
 })
 
   // GET /api/settings/units - Get all available units
-  settings.get('/units', async (c) => {
+  settings.get('/units', authMiddleware, async (c) => {
     try {
       const units = await database
         .select({
@@ -86,7 +95,7 @@ export function createSettingsRoutes(database: Database) {
   // GET /api/settings/:key - Get specific setting (user-aware)
   settings.get('/:key', authMiddleware, async (c) => {
     try {
-      const key = c.req.param('key')
+      const key = requireParam(c, 'key')
       const user = c.get('user')
       const userId = user?.id
 
@@ -109,6 +118,9 @@ export function createSettingsRoutes(database: Database) {
           break
         case 'scanner_configurations':
           value = await getScannerConfigurations(database, userId)
+          break
+        case 'table_view_configurations':
+          value = await getTableViewConfigurations(database)
           break
         default:
           return c.json({ error: 'Invalid setting key' }, 400)
@@ -193,12 +205,20 @@ const scannerConfigurationsSchema = z.object({
   })),
 })
 
+const tableViewConfigurationsSchema = z.object({
+  configurations: z.array(z.object({
+    name: z.string().min(1),
+    columns: z.array(z.string()).min(1),
+    isDefault: z.boolean().optional(),
+  })),
+})
+
   // PUT /api/settings/:key - Update a specific setting
   // Admin users can set system-wide (userId = null) or user-specific settings
   // Non-admin users can only set their own user-specific settings (for allowed keys)
-  settings.put('/:key', authMiddleware, async (c) => {
+  settings.put('/:key', memberMiddleware, async (c) => {
   try {
-    const key = c.req.param('key')
+    const key = requireParam(c, 'key')
     const body = await c.req.json()
     const user = c.get('user')
     const userId = user?.id
@@ -212,7 +232,7 @@ const scannerConfigurationsSchema = z.object({
     delete actualBody.userId // Remove userId from body before validation
 
     // Admin-only settings
-    const adminOnlyKeys = ['container_defaults', 'password_requirements', 'session_settings']
+    const adminOnlyKeys = ['container_defaults', 'password_requirements', 'session_settings', 'table_view_configurations']
     if (adminOnlyKeys.includes(key) && !isAdmin) {
       return c.json({ error: 'Forbidden: Admin access required' }, 403)
     }
@@ -250,6 +270,7 @@ const scannerConfigurationsSchema = z.object({
         
         await setContainerDefaults(database, validated as ContainerDefaults)
         clearSettingsCache(database, 'container_defaults')
+        clearDefaultsCache(database)
         return c.json({ key, value: validated })
       }
       case 'pagination_settings': {
@@ -282,6 +303,12 @@ const scannerConfigurationsSchema = z.object({
         clearSettingsCache(database, 'scanner_configurations', targetUserId)
         return c.json({ key, value: validated, userId: targetUserId })
       }
+      case 'table_view_configurations': {
+        const validated = tableViewConfigurationsSchema.parse(actualBody)
+        await setTableViewConfigurations(database, validated as TableViewConfigurations)
+        clearSettingsCache(database, 'table_view_configurations')
+        return c.json({ key, value: validated })
+      }
       default:
         return c.json({ error: 'Invalid setting key' }, 400)
     }
@@ -303,12 +330,12 @@ const scannerConfigurationsSchema = z.object({
   // DELETE /api/settings/:key/user - Reset user-specific setting to system default
   settings.delete('/:key/user', authMiddleware, async (c) => {
     try {
-      const key = c.req.param('key')
+      const key = requireParam(c, 'key')
       const user = c.get('user')
       const userId = user?.id
 
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
 
       // Only allow resetting user-specific settings (not system settings)
@@ -322,8 +349,10 @@ const scannerConfigurationsSchema = z.object({
     
     return c.json({ success: true, message: 'Setting reset to system default' })
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    return c.json({ error: 'Internal server error', details: errorMessage }, 500)
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Validation error', details: error.issues }, 400)
+    }
+    return handleRouteError(error, c)
   }
 })
 
@@ -345,22 +374,25 @@ const scannerConfigurationsSchema = z.object({
       const user = c.get('user')
       const userId = user?.id
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
       const configs = await getPersonalExportConfigurations(database, userId)
       return c.json(configs || { configurations: [] })
     } catch (error: unknown) {
-      return c.json({ error: 'Internal server error' }, 500)
+      if (error instanceof z.ZodError) {
+        return c.json({ error: 'Validation error', details: error.issues }, 400)
+      }
+      return handleRouteError(error, c)
     }
   })
 
   // POST /api/settings/export-configurations/personal - Create user personal export config
-  settings.post('/export-configurations/personal', authMiddleware, async (c) => {
+  settings.post('/export-configurations/personal', memberMiddleware, async (c) => {
     try {
       const user = c.get('user')
       const userId = user?.id
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
 
       const body = await c.req.json()
@@ -383,17 +415,17 @@ const scannerConfigurationsSchema = z.object({
         details: error.issues 
       }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
   // PUT /api/settings/export-configurations/personal - Update user personal export configs
-  settings.put('/export-configurations/personal', authMiddleware, async (c) => {
+  settings.put('/export-configurations/personal', memberMiddleware, async (c) => {
     try {
       const user = c.get('user')
       const userId = user?.id
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
 
       const validated = exportConfigurationsSchema.parse(await c.req.json())
@@ -408,7 +440,7 @@ const scannerConfigurationsSchema = z.object({
         details: error.issues 
       }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -428,22 +460,25 @@ const scannerConfigurationsSchema = z.object({
       const user = c.get('user')
       const userId = user?.id
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
       const configs = await getPersonalScannerConfigurations(database, userId)
       return c.json(configs || { configurations: [] })
     } catch (error: unknown) {
-      return c.json({ error: 'Internal server error' }, 500)
+      if (error instanceof z.ZodError) {
+        return c.json({ error: 'Validation error', details: error.issues }, 400)
+      }
+      return handleRouteError(error, c)
     }
   })
 
   // POST /api/settings/scanner-configurations/personal - Create user personal scanner config
-  settings.post('/scanner-configurations/personal', authMiddleware, async (c) => {
+  settings.post('/scanner-configurations/personal', memberMiddleware, async (c) => {
     try {
       const user = c.get('user')
       const userId = user?.id
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
 
       const body = await c.req.json()
@@ -466,17 +501,17 @@ const scannerConfigurationsSchema = z.object({
         details: error.issues 
       }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
   // PUT /api/settings/scanner-configurations/personal - Update user personal scanner configs
-  settings.put('/scanner-configurations/personal', authMiddleware, async (c) => {
+  settings.put('/scanner-configurations/personal', memberMiddleware, async (c) => {
     try {
       const user = c.get('user')
       const userId = user?.id
       if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401)
+        throw new UnauthorizedError('User not authenticated')
       }
 
       const validated = scannerConfigurationsSchema.parse(await c.req.json())
@@ -491,7 +526,7 @@ const scannerConfigurationsSchema = z.object({
         details: error.issues 
       }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -502,7 +537,7 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
   // GET /api/settings/container-types/:containerType/units - Get allowed units for a container type
   settings.get('/container-types/:containerType/units', async (c) => {
     try {
-      const containerType = c.req.param('containerType')
+      const containerType = requireParam(c, 'containerType')
       
       if (!containerTypeSchema.safeParse(containerType).success) {
         return c.json({ error: 'Invalid container type' }, 400)
@@ -529,7 +564,7 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
   // POST /api/settings/container-types/:containerType/units - Add allowed unit for a container type (admin only)
   settings.post('/container-types/:containerType/units', adminMiddleware, async (c) => {
     try {
-      const containerType = c.req.param('containerType')
+      const containerType = requireParam(c, 'containerType')
       
       if (!containerTypeSchema.safeParse(containerType).success) {
         return c.json({ error: 'Invalid container type' }, 400)
@@ -562,8 +597,8 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
   // DELETE /api/settings/container-types/:containerType/units/:unitId - Remove allowed unit (admin only)
   settings.delete('/container-types/:containerType/units/:unitId', adminMiddleware, async (c) => {
     try {
-      const containerType = c.req.param('containerType')
-      const unitId = parseInt(c.req.param('unitId'))
+      const containerType = requireParam(c, 'containerType')
+      const unitId = parseInt(requireParam(c, 'unitId'))
       
       if (!containerTypeSchema.safeParse(containerType).success) {
         return c.json({ error: 'Invalid container type' }, 400)
@@ -573,7 +608,7 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
         return c.json({ error: 'Invalid unit ID' }, 400)
       }
 
-      await database
+      const deleted = await database
         .delete(containerTypeUnit)
         .where(
           and(
@@ -581,7 +616,11 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
             eq(containerTypeUnit.unitId, unitId)
           )
         )
+        .returning()
 
+      if (deleted.length === 0) {
+        return c.json({ error: 'Unit association not found' }, 404)
+      }
       return c.json({ success: true })
     } catch (error) {
       console.error('Error removing unit:', error)
@@ -590,9 +629,9 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
   })
 
   // GET /api/settings/units/container-types/:containerType - Get all units allowed for a container type (alias for above)
-  settings.get('/units/container-types/:containerType', async (c) => {
+  settings.get('/units/container-types/:containerType', authMiddleware, async (c) => {
     try {
-      const containerType = c.req.param('containerType')
+      const containerType = requireParam(c, 'containerType')
       
       if (!containerTypeSchema.safeParse(containerType).success) {
         return c.json({ error: 'Invalid container type' }, 400)

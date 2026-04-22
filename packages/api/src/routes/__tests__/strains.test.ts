@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest, createAuthenticatedClientWrapper } from '../../__tests__/helpers/test-client'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import { createTestStrain } from '../../__tests__/helpers/factories'
 import type { Database } from '../../db/client'
@@ -9,6 +9,7 @@ import { strain } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
+import { handleRouteError } from '../../lib/error-handler'
 
 describe('Strains API', () => {
   let testDb: Database
@@ -63,15 +64,29 @@ describe('Strains API', () => {
     }
   })
 
+  function createApp(): Hono {
+    const app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
+    app.onError((err, c) => handleRouteError(err, c))
+    app.route('/api/strains', strainsRoutes)
+    return app
+  }
+
   describe('GET /strains', () => {
     it('should return empty array when no strains exist', async () => {
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
+      const app = createApp()
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
-      const res = await client.api.strains.$get()
+      const res = await authenticatedRequest(app, '/api/strains', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data).toEqual([])
     })
 
@@ -79,13 +94,14 @@ describe('Strains API', () => {
       await createTestStrain(testDb, { name: 'Strain A', description: 'Description A' })
       await createTestStrain(testDb, { name: 'Strain B' })
 
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
+      const app = createApp()
 
-      const res = await client.api.strains.$get()
+      const res = await authenticatedRequest(app, '/api/strains', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data).toHaveLength(2)
       expect(data[0].name).toBe('Strain A')
     })
@@ -93,9 +109,9 @@ describe('Strains API', () => {
 
   describe('POST /strains', () => {
     it('should create a new strain', async () => {
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
+      const app = createApp()
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, '/api/strains', {
         method: 'POST',
@@ -107,7 +123,7 @@ describe('Strains API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data.name).toBe('New Strain')
       expect(data.description).toBe('Test description')
     })
@@ -115,9 +131,9 @@ describe('Strains API', () => {
     it('should reject duplicate names', async () => {
       await createTestStrain(testDb, { name: 'Existing Strain' })
 
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
+      const app = createApp()
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, '/api/strains', {
         method: 'POST',
@@ -128,7 +144,7 @@ describe('Strains API', () => {
       })
 
       expect(res.status).toBe(409)
-      const data = await res.json()
+      const data = await res.json() as any
       expect(data.error).toContain('already exists')
     })
   })
@@ -137,16 +153,15 @@ describe('Strains API', () => {
     it('should return strain by ID', async () => {
       const testStrain = await createTestStrain(testDb, { name: 'Test Strain' })
 
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
+      const app = createApp()
 
-      const res = await client.api.strains[':id'].$get({
-        param: { id: String(testStrain.id) },
+      const res = await authenticatedRequest(app, `/api/strains/${testStrain.id}`, {
+        method: 'GET',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data.id).toBe(testStrain.id)
       expect(data.name).toBe('Test Strain')
     })
@@ -156,9 +171,9 @@ describe('Strains API', () => {
     it('should update strain', async () => {
       const testStrain = await createTestStrain(testDb, { name: 'Original' })
 
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
+      const app = createApp()
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, `/api/strains/${testStrain.id}`, {
         method: 'PUT',
@@ -170,7 +185,7 @@ describe('Strains API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as any
       expect(data.name).toBe('Updated')
     })
   })
@@ -179,9 +194,9 @@ describe('Strains API', () => {
     it('should delete strain when not in use', async () => {
       const testStrain = await createTestStrain(testDb, { name: 'Safe to Delete' })
 
-      const app = new Hono()
-      app.route('/api/strains', strainsRoutes)
-      const client = createTestClient(app) as any
+      const app = createApp()
+      const baseClient = createTestClient(app) as any
+      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
 
       const res = await authenticatedRequest(app, `/api/strains/${testStrain.id}`, {
         method: 'DELETE',

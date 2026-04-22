@@ -5,6 +5,8 @@ description: Move entire collections between locations
 
 Collection move allows you to relocate entire collections (plates, boxes, bags) from one storage location to another. This is essential when you're reorganizing storage, moving to new freezers, consolidating locations, or making any changes to your physical storage infrastructure. Unlike moving individual containers, collection move relocates everything in a collection at once, which is much more efficient when entire plates or boxes need to move.
 
+The Collection Move wizard and other storage-related pages use a consistent "modern precision lab" visual theme aligned with the rest of the app; behavior is unchanged.
+
 The system tracks where collections are stored through location assignments, and updating these assignments when collections move physically ensures your records stay accurate. This accuracy is important because it helps you find samples when you need them and maintains proper inventory records.
 
 ## Understanding Collection Movement
@@ -35,9 +37,18 @@ Navigate to the Collection Move section (if available in your navigation) to acc
 
 You can identify collections in several ways. By ID works if you know the collection IDs, which you can find on collection detail pages. By Name lets you enter collection names, and you can optionally specify a location to help the system find the right collection if names aren't unique. By Barcode works if your collections have barcodes, and again you can optionally specify a location.
 
-Once you've identified the collections you want to move, you'll select a destination location. In bulk operations, all selected collections move to the same destination location, which is efficient when you're moving everything to a new freezer or storage area.
+Once you've identified the collections you want to move, you'll select a destination location. In bulk operations, all selected collections move to the same destination location, which is efficient when you're moving everything to a new freezer or storage area. The move flow shows each location’s **storage type** (e.g. -80°C, room temp) and optional **description** in the tree and on the review step, so you can confirm you’re moving to the right kind of storage before confirming.
 
 The system validates that all collections exist, that the destination location is valid and can contain collections, and that you have permission to perform the moves. Once validation passes, you can execute the moves, and the system will update all location assignments in one operation.
+
+### Atomicity Modes for Bulk Moves
+
+Bulk collection move supports two atomicity modes:
+
+- **All-or-nothing** (default): if any row is invalid, no collections are moved.
+- **Best effort**: valid rows are moved in one transaction while invalid rows are returned as errors.
+
+If your workflow requires strict consistency, use the default all-or-nothing mode. Use best effort when you want to move valid rows immediately and fix failed rows afterward.
 
 ## CSV-Based Bulk Movement
 
@@ -83,4 +94,4 @@ If a movement operation fails, there could be several causes. The collection mig
 
 ## What's Next?
 
-Now that you understand collection movement, you might want to learn about [Location Management](/guides/workflows/locations/) to organize your storage hierarchy, explore [Container Movement](/guides/bulk-operations/container-movement/) to move individual containers, or review [Container Management](/guides/workflows/containers/) to understand how collections work.
+Now that you understand collection movement, you might want to learn about [Location Management](/docs/guides/workflows/locations/) to organize your storage hierarchy, explore [Container Movement](/docs/guides/bulk-operations/container-movement/) to move individual containers, or review [Container Management](/docs/guides/workflows/containers/) to understand how collections work.

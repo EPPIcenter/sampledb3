@@ -7,11 +7,15 @@ import { useDateFilter, defaultMinDate } from '../contexts/DateFilterContext'
 interface StudyStatsProps {
   summary: StudySummary['summary']
   timelineData?: StudyTimelineData
+  /** Optional class for StatCard wrappers (e.g. dashboard-card p-6 for studies/dashboard theme) */
+  statCardClassName?: string
+  /** Optional class for StatChart card wrappers (e.g. dashboard-card p-6) */
+  cardClassName?: string
 }
 
 type BinSize = 'day' | 'week' | 'month' | 'quarter' | 'year'
 
-export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
+export default function StudyStats({ summary, timelineData, statCardClassName, cardClassName }: StudyStatsProps) {
   const { settings } = useDateFilter()
   const { minDate, maxDate } = settings
   const [binSize, setBinSize] = useState<BinSize>('day')
@@ -112,6 +116,13 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
     }
   }
 
+  // Check if date filtering is reducing the specimen count
+  const isFilteringSpecimens = useMemo(() => {
+    if (!filteredData || !timelineData) return false
+    // Show warning if filtered count differs from unfiltered count
+    return filteredData.length !== summary.totalSpecimens
+  }, [filteredData, timelineData, summary.totalSpecimens])
+
   // Recalculate stats if we have filtered data
   const displaySummary = useMemo(() => {
     if (!filteredData) {
@@ -149,21 +160,19 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
     // Collection timeline - keep as daily (will be binned later in collectionTimelineData)
     // When we have filteredData, recreate timeline from filtered dates
     // Otherwise, use the original summary timeline
-    const collectionTimeline = filteredData
-      ? collectionDates.reduce((acc, date) => {
-          const dateOnly = date.split('T')[0]
-          const existing = acc.find(x => x.date === dateOnly)
-          if (existing) {
-            existing.count += 1
-          } else {
-            acc.push({ date: dateOnly, count: 1 })
-          }
-          return acc
-        }, [] as Array<{ date: string; count: number }>)
-          .sort((a, b) => a.date.localeCompare(b.date))
-      : (summary.collectionTimeline || [])
+    const collectionTimeline = collectionDates.reduce((acc, date) => {
+      const dateOnly = date.split('T')[0]
+      const idx = acc.findIndex(x => x.date === dateOnly)
+      if (idx >= 0) {
+        acc[idx].count += 1
+      } else {
+        acc.push({ date: dateOnly, count: 1 })
+      }
+      return acc
+    }, [] as Array<{ date: string; count: number }>).sort((a, b) => a.date.localeCompare(b.date))
 
-    // Calculate unique subjects
+    // Calculate unique subjects with filtered specimens (for display purposes only)
+    // Note: totalSubjects should always be the total enrolled subjects, not filtered
     const uniqueSubjectIds = timelineData
       ? new Set(
           timelineData.subjects
@@ -182,14 +191,16 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
         )
       : new Set<number>()
 
-    const totalSubjects = uniqueSubjectIds.size
     const totalSpecimens = filteredData.length
+    // Always use the original totalSubjects from summary - date filters should not affect total enrolled subjects
+    const totalSubjects = summary.totalSubjects
 
     return {
       ...summary,
       totalSubjects,
       totalSpecimens,
-      averageSpecimensPerSubject: totalSubjects > 0 ? totalSpecimens / totalSubjects : 0,
+      // Use unfiltered total specimens for average calculation
+      averageSpecimensPerSubject: totalSubjects > 0 ? summary.totalSpecimens / totalSubjects : 0,
       specimenTypes: Object.entries(specimenTypeCounts).map(([name, count]) => ({
         name,
         count,
@@ -315,33 +326,39 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
           title="Total Subjects"
           value={displaySummary.totalSubjects.toLocaleString()}
           subtitle="Enrolled participants"
+          className={statCardClassName}
         />
         <StatCard
           title="Total Specimens"
           value={displaySummary.totalSpecimens.toLocaleString()}
           subtitle="Collected samples"
+          unfilteredValue={summary.totalSpecimens}
+          showUnfilteredWarning={isFilteringSpecimens}
+          className={statCardClassName}
         />
         <StatCard
           title="Total Containers"
           value={displaySummary.totalContainers.toLocaleString()}
           subtitle="Storage containers"
+          className={statCardClassName}
         />
         <StatCard
           title="Avg per Subject"
           value={displaySummary.averageSpecimensPerSubject.toFixed(1)}
           subtitle="Specimens per participant"
+          className={statCardClassName}
         />
       </div>
 
       {/* Study Duration and Date Range */}
       {(displaySummary.collectionDateRange || displaySummary.studyDurationDays !== null) && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Study Period</h3>
+        <div className={cardClassName ?? 'bg-app-card rounded-lg shadow p-6'}>
+          <h3 className="text-lg font-semibold mb-4 dashboard-stat-value">Study Period</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {displaySummary.collectionDateRange && (
               <div>
-                <p className="text-sm text-gray-500 mb-1">Collection Date Range</p>
-                <p className="text-gray-900 font-medium">
+                <p className="text-sm dashboard-stat-muted mb-1">Collection Date Range</p>
+                <p className="dashboard-stat-value font-medium">
                   {new Date(displaySummary.collectionDateRange.earliest).toLocaleDateString('en-US', {
                     month: 'long',
                     day: 'numeric',
@@ -358,8 +375,8 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
             )}
             {displaySummary.studyDurationDays !== null && (
               <div>
-                <p className="text-sm text-gray-500 mb-1">Study Duration</p>
-                <p className="text-gray-900 font-medium">
+                <p className="text-sm dashboard-stat-muted mb-1">Study Duration</p>
+                <p className="dashboard-stat-value font-medium">
                   {displaySummary.studyDurationDays} {displaySummary.studyDurationDays === 1 ? 'day' : 'days'}
                 </p>
               </div>
@@ -377,6 +394,7 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
             title="Specimens by Type"
             labelThreshold={5}
             showPercentageList={true}
+            cardClassName={cardClassName}
           />
         )}
         {containerTypeChartData.length > 0 && (
@@ -384,21 +402,22 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
             type="bar"
             data={containerTypeChartData}
             title="Containers by Type"
+            cardClassName={cardClassName}
           />
         )}
       </div>
 
       {/* Bin Size Selector - Above Histograms */}
       {(collectionTimelineData.collection.length > 0 || collectionTimelineData.enrollment.length > 0) && (
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className={cardClassName ? cardClassName.replace('p-6', 'p-4') : 'bg-app-card rounded-lg shadow p-4'}>
           <div className="flex items-center gap-4">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-app-text">
               Histogram Bin Size:
             </label>
             <select
               value={binSize}
               onChange={(e) => setBinSize(e.target.value as BinSize)}
-              className="px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
             >
               <option value="day">Daily</option>
               <option value="week">Weekly</option>
@@ -420,6 +439,7 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
             xKey="name"
             yKey="value"
             dateKey="dateValue"
+            cardClassName={cardClassName}
           />
         )}
         {collectionTimelineData.enrollment.length > 0 && (
@@ -430,6 +450,7 @@ export default function StudyStats({ summary, timelineData }: StudyStatsProps) {
             xKey="name"
             yKey="value"
             dateKey="dateValue"
+            cardClassName={cardClassName}
           />
         )}
       </div>

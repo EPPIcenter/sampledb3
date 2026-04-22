@@ -131,4 +131,4 @@ Ensure team members understand how to use the system correctly. Share best pract
 
 ## What's Next?
 
-Now that you understand best practices, you might want to review [Common Issues](/guides/troubleshooting/common-issues/) to see how these practices prevent problems, check [CSV File Guidelines](/guides/troubleshooting/csv-guidelines/) for detailed import requirements, or explore the feature guides to learn more about specific capabilities.
+Now that you understand best practices, you might want to review [Common Issues](/docs/guides/troubleshooting/common-issues/) to see how these practices prevent problems, check [CSV File Guidelines](/docs/guides/troubleshooting/csv-guidelines/) for detailed import requirements, or explore the feature guides to learn more about specific capabilities.

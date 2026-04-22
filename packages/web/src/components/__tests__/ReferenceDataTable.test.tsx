@@ -12,15 +12,20 @@ const mockUser = {
   role: 'admin' as const,
 }
 
-vi.mock('../../contexts/UserContext', () => ({
-  useUser: () => ({
-    user: mockUser,
-    setUser: vi.fn(),
-    refreshUser: vi.fn(),
-    loading: false,
-    error: null,
-  }),
-}))
+vi.mock('../../contexts/UserContext', async () => {
+  const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')
+  return {
+    ...actual,
+    useUser: () => ({
+      user: mockUser,
+      setUser: vi.fn(),
+      refreshUser: vi.fn(),
+      loading: false,
+      error: null,
+      canManageReferenceData: true,
+    }),
+  }
+})
 
 interface TestItem {
   id: number
@@ -44,11 +49,11 @@ describe('ReferenceDataTable', () => {
     { id: 3, name: 'Item 3', value: 30 },
   ]
 
-  it('should render table with data', () => {
+  it('should render table with data', async () => {
     const onEdit = vi.fn()
     const onDelete = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataTable
         data={testData}
         columns={columns}
@@ -69,7 +74,7 @@ describe('ReferenceDataTable', () => {
     const onEdit = vi.fn()
     const onDelete = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataTable
         data={testData}
         columns={columns}
@@ -92,7 +97,7 @@ describe('ReferenceDataTable', () => {
     // Mock window.confirm
     window.confirm = vi.fn(() => true)
 
-    render(
+    await render(
       <ReferenceDataTable
         data={testData}
         columns={columns}
@@ -109,11 +114,11 @@ describe('ReferenceDataTable', () => {
     })
   })
 
-  it('should filter data when search is provided', () => {
+  it('should filter data when search is provided', async () => {
     const onEdit = vi.fn()
     const onDelete = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataTable
         data={testData}
         columns={columns}
@@ -128,11 +133,11 @@ describe('ReferenceDataTable', () => {
     expect(screen.queryByText('Item 3')).not.toBeInTheDocument()
   })
 
-  it('should show empty message when no data', () => {
+  it('should show empty message when no data', async () => {
     const onEdit = vi.fn()
     const onDelete = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataTable
         data={[]}
         columns={columns}
@@ -145,11 +150,11 @@ describe('ReferenceDataTable', () => {
     expect(screen.getByText('No items found')).toBeInTheDocument()
   })
 
-  it('should show loading state', () => {
+  it('should show loading state', async () => {
     const onEdit = vi.fn()
     const onDelete = vi.fn()
 
-    const { container } = render(
+    const { container } = await render(
       <ReferenceDataTable
         data={[]}
         columns={columns}
@@ -164,7 +169,7 @@ describe('ReferenceDataTable', () => {
     expect(skeleton).toBeInTheDocument()
   })
 
-  it('should use custom render function for columns', () => {
+  it('should use custom render function for columns', async () => {
     const columnsWithRender = [
       { key: 'name' as const, label: 'Name' },
       {
@@ -177,7 +182,7 @@ describe('ReferenceDataTable', () => {
     const onEdit = vi.fn()
     const onDelete = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataTable
         data={testData}
         columns={columnsWithRender}
@@ -190,11 +195,11 @@ describe('ReferenceDataTable', () => {
     expect(screen.getByText('$20')).toBeInTheDocument()
   })
 
-  it('should disable client filter when disableClientFilter is true', () => {
+  it('should disable client filter when disableClientFilter is true', async () => {
     const onEdit = vi.fn()
     const onDelete = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataTable
         data={testData}
         columns={columns}

@@ -21,11 +21,11 @@ describe('ReferenceDataForm', () => {
     vi.clearAllMocks()
   })
 
-  it('should render form with fields', () => {
+  it('should render form with fields', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     const onCancel = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataForm
         item={null}
         fields={fields as any}
@@ -41,7 +41,7 @@ describe('ReferenceDataForm', () => {
     expect(screen.getByLabelText(/^Value/)).toBeInTheDocument()
   })
 
-  it('should populate form when editing existing item', () => {
+  it('should populate form when editing existing item', async () => {
     const item: TestItem = {
       id: 1,
       name: 'Existing Item',
@@ -52,7 +52,7 @@ describe('ReferenceDataForm', () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     const onCancel = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataForm
         item={item}
         fields={fields as any}
@@ -72,7 +72,7 @@ describe('ReferenceDataForm', () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     const onCancel = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataForm
         item={null}
         fields={fields as any}
@@ -133,7 +133,7 @@ describe('ReferenceDataForm', () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     const onCancel = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataForm
         item={null}
         fields={fields as any}
@@ -165,7 +165,7 @@ describe('ReferenceDataForm', () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     const onCancel = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataForm
         item={null}
         fields={fieldsWithOptions as any}
@@ -186,7 +186,7 @@ describe('ReferenceDataForm', () => {
     const onSave = vi.fn().mockRejectedValue(new Error('Save failed'))
     const onCancel = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataForm
         item={null}
         fields={fields as any}
@@ -214,7 +214,7 @@ describe('ReferenceDataForm', () => {
     )
     const onCancel = vi.fn()
 
-    render(
+    await render(
       <ReferenceDataForm
         item={null}
         fields={fields as any}

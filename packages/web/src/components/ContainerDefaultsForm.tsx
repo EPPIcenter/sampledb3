@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { settingsApi, type ContainerDefaults, type Unit } from '../lib/api'
 import InfoTooltip from './InfoTooltip'
 
@@ -101,64 +101,53 @@ export default function ContainerDefaultsForm({
     loadUnits()
   }, [])
 
-  useEffect(() => {
-    // Only initialize form data once units are loaded
-    // data can be null (meaning no settings exist yet) or an object
-    if (!loadingUnits && units.length > 0) {
+  const prevInitRef = useRef<{ dataKey: string; unitsKey: string }>({ dataKey: '', unitsKey: '' })
+
+  // Initialize form when units and data are ready (during render to avoid Effect chain)
+  if (!loadingUnits && units.length > 0) {
+    const dataKey = data === null ? 'null' : JSON.stringify(data)
+    const unitsKey = units.map((u) => u.symbol).join(',')
+    if (dataKey !== prevInitRef.current.dataKey || unitsKey !== prevInitRef.current.unitsKey) {
+      prevInitRef.current = { dataKey, unitsKey }
       if (data) {
-        // Data exists - use it with validation
-        const unitSymbols = new Set(units.map(u => u.symbol))
+        const unitSymbols = new Set(units.map((u) => u.symbol))
         const warnings: string[] = []
-        
         const getSafe = (preferred: string, containerType: string, savedSymbol?: string) => {
-          // If saved symbol exists and is valid, use it
-          if (savedSymbol && unitSymbols.has(savedSymbol)) {
-            return savedSymbol
-          }
-          // Otherwise, use fallback logic with warnings
+          if (savedSymbol && unitSymbols.has(savedSymbol)) return savedSymbol
           return getSafeUnitSymbol(preferred, containerType, units, unitSymbols, warnings)
         }
-        
         const safeData: ContainerDefaults = {
           micronix_tube: {
-            totalQuantity: data.micronix_tube?.totalQuantity ?? 1.0,
-            remainingQuantity: data.micronix_tube?.remainingQuantity ?? 1.0,
-            defaultUnitSymbol: getSafe('items', 'Micronix Tube', data.micronix_tube?.defaultUnitSymbol),
+            totalQuantity: data.micronix_tube.totalQuantity,
+            remainingQuantity: data.micronix_tube.remainingQuantity,
+            defaultUnitSymbol: getSafe('items', 'Micronix Tube', data.micronix_tube.defaultUnitSymbol),
           },
           cryovial_tube: {
-            totalQuantity: data.cryovial_tube?.totalQuantity ?? 1.0,
-            remainingQuantity: data.cryovial_tube?.remainingQuantity ?? 1.0,
-            defaultUnitSymbol: getSafe('items', 'Cryovial Tube', data.cryovial_tube?.defaultUnitSymbol),
+            totalQuantity: data.cryovial_tube.totalQuantity,
+            remainingQuantity: data.cryovial_tube.remainingQuantity,
+            defaultUnitSymbol: getSafe('items', 'Cryovial Tube', data.cryovial_tube.defaultUnitSymbol),
           },
           paper: {
-            totalQuantity: data.paper?.totalQuantity ?? 1.0,
-            remainingQuantity: data.paper?.remainingQuantity ?? 1.0,
-            defaultUnitSymbol: getSafe('spots', 'Paper', data.paper?.defaultUnitSymbol),
+            totalQuantity: data.paper.totalQuantity,
+            remainingQuantity: data.paper.remainingQuantity,
+            defaultUnitSymbol: getSafe('spots', 'Paper', data.paper.defaultUnitSymbol),
           },
           static_well: {
-            totalQuantity: data.static_well?.totalQuantity ?? 1.0,
-            remainingQuantity: data.static_well?.remainingQuantity ?? 1.0,
-            defaultUnitSymbol: getSafe('spots', 'Static Well', data.static_well?.defaultUnitSymbol),
+            totalQuantity: data.static_well.totalQuantity,
+            remainingQuantity: data.static_well.remainingQuantity,
+            defaultUnitSymbol: getSafe('spots', 'Static Well', data.static_well.defaultUnitSymbol),
           },
         }
-        
-        // Set warnings if any fallbacks were used
-        if (warnings.length > 0) {
-          setFallbackWarnings(warnings)
-        } else {
-          setFallbackWarnings([])
-        }
-        
+        setFallbackWarnings(warnings.length > 0 ? warnings : [])
         setFormData(safeData)
         setSavedFormData(safeData)
       } else {
-        // No data - use safe defaults with validated unit symbols
         const defaultData = getDefaultFormData(units)
         setFormData(defaultData)
         setSavedFormData(defaultData)
       }
     }
-  }, [data, units, loadingUnits])
+  }
 
   const loadUnits = async () => {
     try {
@@ -175,9 +164,13 @@ export default function ContainerDefaultsForm({
         containerTypes.map(async (containerType) => {
           try {
             const response = await settingsApi.getContainerTypeUnits(containerType)
-            allowed[containerType] = response.data.units || []
+            allowed[containerType] = response.data.units
           } catch (err) {
+            const message = err instanceof Error ? err.message : String(err)
             console.error(`Failed to load allowed units for ${containerType}:`, err)
+            setUnitsError((prev) =>
+              prev ? `${prev} Failed to load units for ${containerType}: ${message}.` : `Failed to load units for ${containerType}: ${message}.`
+            )
             allowed[containerType] = []
           }
         })
@@ -256,11 +249,11 @@ export default function ContainerDefaultsForm({
     return (
       <div className="space-y-3">
         <div className="mb-2">
-          <p className="text-xs text-gray-600">
+          <p className="text-xs text-app-text-muted">
             Default quantity values and unit symbols pre-filled when creating new containers. <InfoTooltip text="These values are pre-filled but can be changed during container creation." />
           </p>
         </div>
-        <div className="text-center py-8 text-sm text-gray-500">
+        <div className="text-center py-8 text-sm text-app-text-muted">
           Loading settings...
         </div>
       </div>
@@ -270,18 +263,18 @@ export default function ContainerDefaultsForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="mb-2">
-        <p className="text-xs text-gray-600">
-          Default quantity values pre-filled when creating new containers. Default units are configured in <a href="/settings?category=application&section=container-type-units" className="text-blue-600 hover:text-blue-800 underline">Container Type Units</a> settings. <InfoTooltip text="These values are pre-filled but can be changed during container creation." />
+        <p className="text-xs text-app-text-muted">
+          Default quantity values pre-filled when creating new containers. Default units are configured in <a href="/settings?category=application&section=container-type-units" className="text-app-accent hover:text-app-accent-hover underline">Container Type Units</a> settings. <InfoTooltip text="These values are pre-filled but can be changed during container creation." />
         </p>
       </div>
 
       {unitsError && (
-        <div className="rounded-md bg-red-50 border border-red-200 p-3">
+        <div className="rounded-md bg-app-trend-down/10 border border-app-trend-down p-3">
           <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5 text-app-trend-down" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-sm font-medium text-red-800">
+            <p className="text-sm font-medium text-app-trend-down">
               {unitsError}. Please refresh the page or contact support if the problem persists.
             </p>
           </div>
@@ -324,23 +317,23 @@ export default function ContainerDefaultsForm({
         </div>
       )}
 
-      <div className="border border-gray-200 rounded-md overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="border border-app-border rounded-md overflow-hidden">
+        <table className="min-w-full divide-y divide-app-border">
+          <thead className="bg-app-surface">
             <tr>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Container Type</th>
-              <th className="px-3 py-2 text-right text-xs font-medium text-gray-700">Total Quantity</th>
-              <th className="px-3 py-2 text-right text-xs font-medium text-gray-700">Remaining Quantity</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
+              <th className="px-3 py-2 text-left text-xs font-medium text-app-text">Container Type</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-app-text">Total Quantity</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-app-text">Remaining Quantity</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-app-text">
                 Default Unit
                 <InfoTooltip text="Default unit is configured in Container Type Units settings" />
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-app-card divide-y divide-app-border">
             {containerTypes.map((container) => (
-              <tr key={container.key} className="hover:bg-gray-50">
-                <td className="px-3 py-2 text-xs text-gray-900 align-middle">{container.label}</td>
+              <tr key={container.key} className="hover:bg-app-surface">
+                <td className="px-3 py-2 text-xs text-app-text align-middle">{container.label}</td>
                 <td className="px-3 py-2 text-right align-middle">
                   <div className="flex justify-end">
                     <input
@@ -351,7 +344,7 @@ export default function ContainerDefaultsForm({
                       onChange={(e) =>
                         handleChange(container.key, 'totalQuantity', e.target.value)
                       }
-                      className="w-20 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 text-right"
+                      className="w-20 px-2 py-1 text-xs border border-app-border rounded focus:ring-app-accent focus:border-app-accent text-right"
                       required
                     />
                   </div>
@@ -366,7 +359,7 @@ export default function ContainerDefaultsForm({
                       onChange={(e) =>
                         handleChange(container.key, 'remainingQuantity', e.target.value)
                       }
-                      className="w-20 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 text-right"
+                      className="w-20 px-2 py-1 text-xs border border-app-border rounded focus:ring-app-accent focus:border-app-accent text-right"
                       required
                     />
                   </div>
@@ -375,25 +368,25 @@ export default function ContainerDefaultsForm({
                   <div className="flex items-center gap-2">
                     {formData[container.key].defaultUnitSymbol ? (
                       <>
-                        <span className="text-xs font-medium text-gray-900">
+                        <span className="text-xs font-medium text-app-text">
                           {formData[container.key].defaultUnitSymbol}
                         </span>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-app-text-muted">
                           ({units.find(u => u.symbol === formData[container.key].defaultUnitSymbol)?.name || 'Unknown'})
                         </span>
                       </>
                     ) : (
-                      <span className="text-xs text-gray-400 italic">Not set</span>
+                      <span className="text-xs text-app-text-muted italic">Not set</span>
                     )}
                     <a
                       href="/settings?category=application&section=container-type-units"
-                      className="text-xs text-blue-600 hover:text-blue-800 underline ml-2"
+                      className="text-xs text-app-accent hover:text-app-accent-hover underline ml-2"
                     >
                       Configure
                     </a>
                   </div>
                   {validationErrors[container.key] && (
-                    <p className="text-xs text-red-600 mt-1">{validationErrors[container.key]}</p>
+                    <p className="text-xs text-app-trend-down mt-1">{validationErrors[container.key]}</p>
                   )}
                 </td>
               </tr>
@@ -408,8 +401,8 @@ export default function ContainerDefaultsForm({
           disabled={saving || !hasUnsavedChanges || unitsError !== null}
           className={`px-3 py-1.5 text-xs rounded transition-all ${
             hasUnsavedChanges && !unitsError
-              ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              ? 'bg-app-accent text-white hover:bg-app-accent-hover shadow-md'
+              : 'bg-app-surface text-app-text-muted cursor-not-allowed'
           } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {saving ? (

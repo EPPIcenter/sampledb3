@@ -23,7 +23,7 @@ import {
 import { eq, and, or, inArray, gte, lte, sql } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
 import { resolveSubjectsByStudyGrouped } from './identifier-resolution'
-import { getExportConfigurationByName, getDefaultExportConfiguration } from './settings'
+import { getDefaultExportConfiguration } from './settings'
 
 type StudyType = InferSelectModel<typeof study>
 
@@ -77,6 +77,12 @@ export interface ContainerExportData {
   last_updated: string
 }
 
+export interface CSVExportOptions {
+  delimiter?: string  // Default: ','
+  includeBOM?: boolean  // Default: true
+  lineEnding?: 'LF' | 'CRLF'  // Default: 'CRLF'
+}
+
 // Helper to build location path string
 function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | undefined {
   if (!loc) return undefined
@@ -118,7 +124,7 @@ export async function buildContainerQuery(database: Database, filters: ExportFil
   }
 
   if (filteredSubjectIds.length === 0) {
-    throw new Error(`No subjects found for study '${filters.study}'${filters.subject_ids && filters.subject_ids.length > 0 ? ' matching the specified subject IDs' : ''}`)
+    return { containers: [], study: studyRecord, specimens: [] }
   }
 
   // Build conditions for specimen query
@@ -293,7 +299,8 @@ export async function buildContainerQueryByMicronixBarcodes(
   }
 
   // Get specimens for these containers
-  const specimenIds = [...new Set(containers.map(c => c.specimenId).filter(id => id !== null) as number[])]
+  // specimenId can be null from DB; filter to numbers only
+  const specimenIds = [...new Set(containers.map(c => c.specimenId).filter((id): id is number => typeof id === 'number'))]
   if (specimenIds.length === 0) {
     return { containers, specimens: [], studies: [], subjectToStudyMap: new Map() }
   }
@@ -705,11 +712,12 @@ export async function enrichContainerData(
       label,
       collection_name: collectionName,
       state: '',
-      status: container.remainingQuantity === null || container.remainingQuantity === undefined
-        ? 'Unknown'
-        : container.remainingQuantity > 0
-        ? 'In Use'
-        : 'Exhausted',
+      status:
+        container.remainingQuantity == null
+          ? 'Unknown'
+          : container.remainingQuantity > 0
+            ? 'In Use'
+            : 'Exhausted',
       comment: container.comment || undefined,
       specimen_id: spec.id,
       specimen_type: specimenTypeMap.get(spec.specimenTypeId) || '',
@@ -782,41 +790,291 @@ export async function filterContainersByType(
   return Array.from(matchingIds)
 }
 
+// Helper function to format simple CSV data (for simple endpoints)
+export function formatSimpleCSV(
+  headers: string[],
+  rows: any[][],
+  options?: CSVExportOptions
+): string {
+  // Set defaults for CSV options
+  const delimiter = options?.delimiter ?? ','
+  const includeBOM = options?.includeBOM ?? true
+  const lineEnding = options?.lineEnding ?? 'CRLF'
+  const newline = lineEnding === 'CRLF' ? '\r\n' : '\n'
+
+  // Define date fields that should be date-only (YYYY-MM-DD)
+  const dateOnlyFields = new Set(['collection_date'])
+  
+  // Define timestamp fields that should be full ISO 8601 datetime
+  const timestampFields = new Set(['created', 'last_updated'])
+  
+  // Define fields that should NEVER be formatted as text (these are actual numbers)
+  const numericFields = new Set([
+    'count',
+    'target_density',
+    'remaining_quantity',
+  ])
+  
+  // Define fields that should ALWAYS be formatted as text (IDs, codes, etc.)
+  const alwaysTextFields = new Set([
+    'id',
+    'subject_id',
+    'control_batch_id',
+    'specimen_type',
+  ])
+
+  // Helper function to format a cell value
+  const formatCellValue = (header: string, value: any): string => {
+    if (value === null || value === undefined || value === '') {
+      return ''
+    }
+
+    // Format dates
+    if (dateOnlyFields.has(header)) {
+      // User-facing dates: ISO 8601 date format (YYYY-MM-DD) only
+      if (typeof value === 'string') {
+        // If already in YYYY-MM-DD format, use directly
+        if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+          return value
+        }
+        // If in ISO datetime format (YYYY-MM-DDTHH:mm:ss or YYYY-MM-DDTHH:mm:ssZ), extract date part
+        // This avoids timezone conversion issues that could shift the date
+        const isoDateMatch = value.match(/^(\d{4}-\d{2}-\d{2})(T|\s|$)/)
+        if (isoDateMatch) {
+          return isoDateMatch[1]
+        }
+        // Otherwise parse and format (handles other date formats)
+        const date = new Date(value)
+        if (!isNaN(date.getTime())) {
+          return date.toISOString().split('T')[0]
+        }
+      } else if (value instanceof Date) {
+        return value.toISOString().split('T')[0]
+      }
+      return String(value)
+    } else if (timestampFields.has(header)) {
+      // System-generated timestamps: Full ISO 8601 datetime
+      if (typeof value === 'string') {
+        const date = new Date(value)
+        if (!isNaN(date.getTime())) {
+          return date.toISOString()
+        }
+      } else if (value instanceof Date) {
+        return value.toISOString()
+      }
+      return String(value)
+    }
+
+    // Format as string
+    const stringValue = String(value)
+    
+    // Skip text formatting for numeric fields
+    if (numericFields.has(header)) {
+      return stringValue
+    }
+    
+    // Always format these fields as text
+    if (alwaysTextFields.has(header)) {
+      // If it looks like a number (all digits), format for Excel to preserve leading zeros
+      if (/^\d+$/.test(stringValue)) {
+        return `="${stringValue}"`
+      }
+      // Otherwise, return as-is (will be quoted later)
+      return stringValue
+    }
+    
+    // For other fields, check if they look like numbers that should be preserved as text
+    // This handles cases where IDs or codes might be numeric but should remain as text
+    if (/^\d+$/.test(stringValue) && stringValue.length > 0) {
+      // Format as text to preserve leading zeros and prevent Excel from converting to numbers
+      return `="${stringValue}"`
+    }
+    
+    return stringValue
+  }
+
+  // Format rows
+  const formattedRows = rows.map(row =>
+    headers.map((header, index) => formatCellValue(header, row[index]))
+  )
+
+  // Escape and quote cells
+  const escapeCell = (cell: string): string => {
+    // If already formatted as Excel text (="..."), we need to escape quotes inside
+    // and wrap the entire cell in CSV quotes
+    if (cell.startsWith('="') && cell.endsWith('"')) {
+      // Escape any quotes inside the Excel-formatted value
+      // The cell is ="value", we need to escape quotes in "value" part
+      const innerValue = cell.slice(2, -1) // Remove =" and trailing " to get the inner value
+      const escaped = innerValue.replace(/"/g, '""')
+      // Wrap the entire Excel-formatted cell in CSV quotes
+      // ="value" becomes "=""value"""
+      // We need: opening CSV quote + = + opening Excel quote (escaped) + value + closing Excel quote + escaped CSV quote + closing CSV quote
+      return '"=""' + escaped + '"""'
+    }
+    // Regular cell - escape quotes and wrap in quotes
+    return `"${cell.replace(/"/g, '""')}"`
+  }
+
+  const csvRows = [
+    headers.map(escapeCell).join(delimiter),
+    ...formattedRows.map(row => row.map(escapeCell).join(delimiter))
+  ]
+
+  const csvContent = csvRows.join(newline)
+  
+  // Add UTF-8 BOM if requested
+  return includeBOM ? '\uFEFF' + csvContent : csvContent
+}
+
 // Format as CSV
-export async function formatAsCSV(database: Database, data: ContainerExportData[], configName?: string): Promise<string> {
+export async function formatAsCSV(
+  database: Database,
+  data: ContainerExportData[],
+  columns?: string[],
+  options?: CSVExportOptions,
+  userId?: number | null
+): Promise<string> {
   if (data.length === 0) {
     return ''
+  }
+
+  // Set defaults for CSV options
+  const delimiter = options?.delimiter ?? ','
+  const includeBOM = options?.includeBOM ?? true
+  const lineEnding = options?.lineEnding ?? 'CRLF'
+  const newline = lineEnding === 'CRLF' ? '\r\n' : '\n'
+
+  // Define date fields that should be date-only (YYYY-MM-DD)
+  const dateOnlyFields = new Set(['collection_date'])
+  
+  // Define timestamp fields that should be full ISO 8601 datetime
+  const timestampFields = new Set(['created', 'last_updated'])
+  
+  // Define fields that should NEVER be formatted as text (these are actual numbers)
+  const numericFields = new Set([
+    'target_density',
+    'remaining_quantity',
+  ])
+  
+  // Define fields that should ALWAYS be formatted as text (IDs, codes, etc.)
+  const alwaysTextFields = new Set([
+    'barcode',
+    'position',
+    'container_id',
+    'specimen_id',
+    'subject_id',
+    'study_code',
+    'control_batch_id',
+    'location_id',
+    'study_id',
+    'label',
+    'subject_name',
+    'control_batch_name',
+    'control_definition_name',
+    'specimen_type',
+    'container_type',
+    'state',
+    'status',
+    'comment',
+    'collection_name',
+    'location_path',
+    'location_name',
+    'study_title',
+    'study_lead_person',
+    'control_type',
+    'target_density_unit',
+    'strain_composition',
+  ])
+
+  // Helper function to format a cell value
+  const formatCellValue = (header: string, value: any): string => {
+    if (value === null || value === undefined) {
+      return ''
+    }
+
+    // Format dates
+    if (dateOnlyFields.has(header)) {
+      // User-facing dates: ISO 8601 date format (YYYY-MM-DD) only
+      if (typeof value === 'string') {
+        // If already in YYYY-MM-DD format, use directly
+        if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+          return value
+        }
+        // If in ISO datetime format (YYYY-MM-DDTHH:mm:ss or YYYY-MM-DDTHH:mm:ssZ), extract date part
+        // This avoids timezone conversion issues that could shift the date
+        const isoDateMatch = value.match(/^(\d{4}-\d{2}-\d{2})(T|\s|$)/)
+        if (isoDateMatch) {
+          return isoDateMatch[1]
+        }
+        // Otherwise parse and format (handles other date formats)
+        const date = new Date(value)
+        if (!isNaN(date.getTime())) {
+          return date.toISOString().split('T')[0]
+        }
+      } else if (value instanceof Date) {
+        return value.toISOString().split('T')[0]
+      }
+      return String(value)
+    } else if (timestampFields.has(header)) {
+      // System-generated timestamps: Full ISO 8601 datetime
+      if (typeof value === 'string') {
+        const date = new Date(value)
+        if (!isNaN(date.getTime())) {
+          return date.toISOString()
+        }
+      } else if (value instanceof Date) {
+        return value.toISOString()
+      }
+      return String(value)
+    }
+
+    // Format as string
+    const stringValue = String(value)
+    
+    // Skip text formatting for numeric fields
+    if (numericFields.has(header)) {
+      return stringValue
+    }
+    
+    // Always format these fields as text
+    if (alwaysTextFields.has(header)) {
+      // If it looks like a number (all digits), format for Excel to preserve leading zeros
+      if (/^\d+$/.test(stringValue)) {
+        return `="${stringValue}"`
+      }
+      // Otherwise, return as-is (will be quoted later)
+      return stringValue
+    }
+    
+    // For other fields, check if they look like numbers that should be preserved as text
+    // This handles cases where IDs or codes might be numeric but should remain as text
+    if (/^\d+$/.test(stringValue) && stringValue.length > 0) {
+      // Format as text to preserve leading zeros and prevent Excel from converting to numbers
+      return `="${stringValue}"`
+    }
+    
+    return stringValue
   }
 
   let headers: string[]
   const availableKeys = Object.keys(data[0])
 
-  // Try to get named configuration first
-  if (configName) {
-    const namedConfig = await getExportConfigurationByName(database, configName)
-    if (namedConfig && namedConfig.columns && namedConfig.columns.length > 0) {
-      headers = namedConfig.columns.filter(col => availableKeys.includes(col))
-      if (headers.length > 0) {
-        // Use named config columns
-      } else {
-        // Named config has no valid columns, fall through to default
-        headers = availableKeys
-      }
-    } else {
-      // Named config not found, fall through to default
+  // If columns are explicitly provided, use them
+  if (columns && columns.length > 0) {
+    headers = columns.filter(col => availableKeys.includes(col))
+    if (headers.length === 0) {
+      // No valid columns provided, fall back to all columns
       headers = availableKeys
     }
   } else {
-    // No config name specified, use default configuration
-    const defaultConfig = await getDefaultExportConfiguration(database)
-    if (defaultConfig && defaultConfig.columns && defaultConfig.columns.length > 0) {
-      headers = defaultConfig.columns.filter(col => availableKeys.includes(col))
-      // If no valid columns, fall back to all columns
-      if (headers.length === 0) {
-        headers = availableKeys
-      }
+    // No columns specified, use default configuration
+    const defaultConfig = await getDefaultExportConfiguration(database, userId)
+    const defaultColumns = defaultConfig?.columns ?? []
+    if (defaultColumns.length > 0) {
+      headers = defaultColumns.filter(col => availableKeys.includes(col))
+      if (headers.length === 0) headers = availableKeys
     } else {
-      // No configuration, use all columns in default order
       headers = availableKeys
     }
   }
@@ -824,16 +1082,37 @@ export async function formatAsCSV(database: Database, data: ContainerExportData[
   const rows = data.map(row => 
     headers.map(header => {
       const value = (row as any)[header]
-      return value !== null && value !== undefined ? String(value) : ''
+      return formatCellValue(header, value)
     })
   )
 
+  // Escape and quote cells
+  const escapeCell = (cell: string): string => {
+    // If already formatted as Excel text (="..."), we need to escape quotes inside
+    // and wrap the entire cell in CSV quotes
+    if (cell.startsWith('="') && cell.endsWith('"')) {
+      // Escape any quotes inside the Excel-formatted value
+      // The cell is ="value", we need to escape quotes in "value" part
+      const innerValue = cell.slice(2, -1) // Remove =" and trailing " to get the inner value
+      const escaped = innerValue.replace(/"/g, '""')
+      // Wrap the entire Excel-formatted cell in CSV quotes
+      // ="value" becomes "=""value"""
+      // We need: opening CSV quote + = + opening Excel quote (escaped) + value + closing Excel quote + escaped CSV quote + closing CSV quote
+      return '"=""' + escaped + '"""'
+    }
+    // Regular cell - escape quotes and wrap in quotes
+    return `"${cell.replace(/"/g, '""')}"`
+  }
+
   const csvRows = [
-    headers.join(','),
-    ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    headers.map(escapeCell).join(delimiter),
+    ...rows.map(row => row.map(escapeCell).join(delimiter))
   ]
 
-  return csvRows.join('\n')
+  const csvContent = csvRows.join(newline)
+  
+  // Add UTF-8 BOM if requested
+  return includeBOM ? '\uFEFF' + csvContent : csvContent
 }
 
 // Format as JSON
@@ -842,7 +1121,8 @@ export async function formatAsJSON(
   data: ContainerExportData[],
   filters: ExportFilters,
   study: StudyType,
-  configName?: string
+  columns?: string[],
+  userId?: number | null
 ): Promise<{
   export_metadata: {
     study: string
@@ -855,28 +1135,25 @@ export async function formatAsJSON(
 }> {
   let filteredData = data
 
-  // Apply column filtering if config is specified
-  if (configName) {
-    const namedConfig = await getExportConfigurationByName(database, configName)
-    if (namedConfig && namedConfig.columns && namedConfig.columns.length > 0) {
-      const availableKeys = Object.keys(data[0] || {})
-      const validColumns = namedConfig.columns.filter(col => availableKeys.includes(col))
-      if (validColumns.length > 0) {
-        filteredData = data.map(row => {
-          const filtered: any = {}
-          for (const col of validColumns) {
-            filtered[col] = (row as any)[col]
-          }
-          return filtered as ContainerExportData
-        })
-      }
+  // If columns are explicitly provided, use them
+  if (columns && columns.length > 0) {
+    const availableKeys = Object.keys(data[0] || {})
+    const validColumns = columns.filter(col => availableKeys.includes(col))
+    if (validColumns.length > 0) {
+      filteredData = data.map(row => {
+        const filtered: any = {}
+        for (const col of validColumns) {
+          filtered[col] = (row as any)[col]
+        }
+        return filtered as ContainerExportData
+      })
     }
   } else {
-    // Use default configuration
-    const defaultConfig = await getDefaultExportConfiguration(database)
-    if (defaultConfig && defaultConfig.columns && defaultConfig.columns.length > 0) {
+    const defaultConfig = await getDefaultExportConfiguration(database, userId)
+    const defaultColumns = defaultConfig?.columns ?? []
+    if (defaultColumns.length > 0) {
       const availableKeys = Object.keys(data[0] || {})
-      const validColumns = defaultConfig.columns.filter(col => availableKeys.includes(col))
+      const validColumns = defaultColumns.filter(col => availableKeys.includes(col))
       if (validColumns.length > 0) {
         filteredData = data.map(row => {
           const filtered: any = {}
@@ -902,7 +1179,12 @@ export async function formatAsJSON(
 }
 
 // Format as Excel (XLSX)
-export async function formatAsExcel(database: Database, data: ContainerExportData[], configName?: string): Promise<Buffer> {
+export async function formatAsExcel(
+  database: Database,
+  data: ContainerExportData[],
+  columns?: string[],
+  userId?: number | null
+): Promise<Buffer> {
   // Dynamic import to avoid loading xlsx if not needed
   const XLSX = await import('xlsx')
   
@@ -916,30 +1198,20 @@ export async function formatAsExcel(database: Database, data: ContainerExportDat
   let headers: string[]
   const availableKeys = Object.keys(data[0])
 
-  // Try to get named configuration first
-  if (configName) {
-    const namedConfig = await getExportConfigurationByName(database, configName)
-    if (namedConfig && namedConfig.columns && namedConfig.columns.length > 0) {
-      headers = namedConfig.columns.filter(col => availableKeys.includes(col))
-      if (headers.length === 0) {
-        // Named config has no valid columns, fall through to default
-        headers = availableKeys
-      }
-    } else {
-      // Named config not found, fall through to default
+  // If columns are explicitly provided, use them
+  if (columns && columns.length > 0) {
+    headers = columns.filter(col => availableKeys.includes(col))
+    if (headers.length === 0) {
+      // No valid columns provided, fall back to all columns
       headers = availableKeys
     }
   } else {
-    // No config name specified, use default configuration
-    const defaultConfig = await getDefaultExportConfiguration(database)
-    if (defaultConfig && defaultConfig.columns && defaultConfig.columns.length > 0) {
-      headers = defaultConfig.columns.filter(col => availableKeys.includes(col))
-      // If no valid columns, fall back to all columns
-      if (headers.length === 0) {
-        headers = availableKeys
-      }
+    const defaultConfig = await getDefaultExportConfiguration(database, userId)
+    const defaultColumns = defaultConfig?.columns ?? []
+    if (defaultColumns.length > 0) {
+      headers = defaultColumns.filter(col => availableKeys.includes(col))
+      if (headers.length === 0) headers = availableKeys
     } else {
-      // No configuration, use all columns in default order
       headers = availableKeys
     }
   }

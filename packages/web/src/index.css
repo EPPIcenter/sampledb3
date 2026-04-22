@@ -1,16 +1,148 @@
+@import './styles/tokens.css';
 @import "tailwindcss";
+
+@theme {
+  /* App design tokens → Tailwind utilities (e.g. bg-app-bg, text-app-accent, ring-app-accent) */
+  --color-app-bg: rgb(var(--app-bg));
+  --color-app-surface: rgb(var(--app-surface));
+  --color-app-card: rgb(var(--app-card));
+  --color-app-accent: rgb(var(--app-accent));
+  --color-app-accent-hover: rgb(var(--app-accent-hover));
+  --color-app-accent-muted: rgb(var(--app-accent-muted));
+  --color-app-accent-on-tint: rgb(var(--app-accent-on-tint));
+  --color-app-text: rgb(var(--app-text));
+  --color-app-text-muted: rgb(var(--app-text-muted));
+  --color-app-border: rgb(var(--app-border));
+  --color-app-trend-up: rgb(var(--app-trend-up));
+  --color-app-trend-down: rgb(var(--app-trend-down));
+  --color-app-badge: rgb(var(--app-badge));
+  --color-app-badge-bg: rgb(var(--app-badge-bg));
+  --color-app-standard: rgb(var(--app-standard));
+  --color-app-standard-muted: rgb(var(--app-standard-muted));
+  --font-sans: var(--app-font-sans);
+  --font-display: var(--app-font-display);
+  --font-mono: var(--app-font-mono);
+}
 
 @layer components {
   .form-input {
-    @apply w-full px-3 py-2 border border-gray-100 rounded-lg shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+    @apply w-full px-3 py-2 border border-app-border rounded-lg shadow-sm bg-app-card text-app-text focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-app-accent;
   }
 
   .form-select {
-    @apply w-full px-3 py-2 border border-gray-100 rounded-lg shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+    @apply w-full px-3 py-2 border border-app-border rounded-lg shadow-sm bg-app-card text-app-text focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-app-accent;
   }
 
   .form-textarea {
-    @apply w-full px-3 py-2 border border-gray-100 rounded-lg shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+    @apply w-full px-3 py-2 border border-app-border rounded-lg shadow-sm bg-app-card text-app-text focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-app-accent;
+  }
+
+  /* Native file input – consistent "Choose file" button (teal accent app-wide) */
+  .file-input-accent {
+    display: block;
+    width: 100%;
+    font-size: 0.875rem;
+    color: rgb(var(--app-text-muted));
+  }
+  .file-input-accent::file-selector-button {
+    margin-right: 1rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    border: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    background: rgb(var(--app-accent-muted));
+    color: rgb(var(--app-accent-on-tint));
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .file-input-accent::file-selector-button:hover {
+    background: rgb(var(--app-accent) / 0.25);
+  }
+  .file-input-accent:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .file-input-accent:disabled::file-selector-button {
+    cursor: not-allowed;
+  }
+
+  /* Trigger button/link that opens file picker – high-contrast teal (teal-900 on teal-100 when used as button) */
+  .file-input-trigger {
+    font-weight: 500;
+    color: rgb(var(--app-accent-on-tint));
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s ease;
+  }
+  .file-input-trigger:hover {
+    color: rgb(var(--app-accent-hover));
+  }
+
+  /* Label used as "Choose file" button (wraps hidden input) – high-contrast teal on teal-100 */
+  .file-input-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    border: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    background: rgb(var(--app-accent-muted));
+    color: rgb(var(--app-accent-on-tint));
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .file-input-label:hover {
+    background: rgb(var(--app-accent) / 0.25);
+  }
+  .file-input-label:focus-within {
+    outline: 2px solid rgb(var(--app-accent));
+    outline-offset: 2px;
+  }
+
+  /* Numeric stat value: tabular-nums for alignment (color set by theme CSS when inside themed page) */
+  .dashboard-stat-value {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Shared themed patterns (Phase 6) – use var(--app-*) so pages can use .app-card, .app-section-title, .app-link without duplicating rules */
+  .app-card {
+    background: rgb(var(--app-card));
+    border: 1px solid rgb(var(--app-border));
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .app-card:hover {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07);
+  }
+  .app-section-title {
+    font-family: var(--app-font-display);
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: rgb(var(--app-text));
+  }
+  .app-link {
+    color: rgb(var(--app-accent));
+    font-weight: 500;
+    transition: color 0.15s ease;
+  }
+  .app-link:hover {
+    color: rgb(var(--app-accent-hover));
+  }
+  .app-link:focus-visible {
+    outline: 2px solid rgb(var(--app-accent));
+    outline-offset: 2px;
+  }
+
+  /* Skeleton / loading placeholders – theme-aware */
+  .app-skeleton-bar {
+    background: rgb(var(--app-border) / 0.6);
   }
 }
 
@@ -21,5 +153,11 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: #111827; /* text-gray-900 */
+  color: rgb(var(--app-text));
+}
+
+/* Theme-aware selection so highlighted text stays readable (e.g. inputs in dark themes) */
+::selection {
+  background-color: rgb(var(--app-selection-bg));
+  color: rgb(var(--app-selection-fg));
 }

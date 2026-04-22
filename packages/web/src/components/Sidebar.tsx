@@ -1,12 +1,14 @@
-import { useState, useEffect, ReactNode } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import UserSwitcher from './UserSwitcher'
-import { authApi } from '../lib/api'
+import { useState, useRef, useLayoutEffect, useCallback, ReactNode } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
 
 interface NavItem {
   label: string
   to?: string
+  /** External URL (opens in new tab). Use instead of `to` for external links. */
+  href?: string
+  /** Run on click instead of navigating. Use for actions like "Start tutorial". */
+  action?: () => void
   icon: ReactNode
   children?: NavItem[]
 }
@@ -23,8 +25,7 @@ interface SidebarProps {
 
 export default function Sidebar({ isMobileOpen = false, onMobileClose }: SidebarProps) {
   const location = useLocation()
-  const navigate = useNavigate()
-  const { refreshUser, user } = useUser()
+  const { user, canWrite } = useUser()
   
   // Initialize expanded items - check if any child routes are active
   const getInitialExpandedItems = () => {
@@ -40,36 +41,66 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
     if (path.startsWith('/container-move/')) {
       expanded.add('move-containers')
     }
+    if (path.startsWith('/qpcr-experiments')) {
+      expanded.add('qpcr-experiments')
+    }
     
     return expanded
   }
   
   const [expandedItems, setExpandedItems] = useState<Set<string>>(getInitialExpandedItems())
-  
-  // Update expanded items when location changes
-  useEffect(() => {
-    const path = location.pathname
+  const prevPathRef = useRef(location.pathname)
+
+  // Update expanded items when location changes (adjust during render)
+  if (prevPathRef.current !== location.pathname) {
+    prevPathRef.current = location.pathname
     setExpandedItems((prev) => {
       const next = new Set(prev)
-      
-      // Auto-expand if on export routes
-      if (path === '/export' || path === '/barcode-export') {
+      if (location.pathname === '/export' || location.pathname === '/barcode-export') {
         next.add('export')
       }
-      
-      // Auto-expand if on move containers routes
-      if (path.startsWith('/container-move/')) {
+      if (location.pathname.startsWith('/container-move/')) {
         next.add('move-containers')
       }
-      
-      // Auto-expand if on derivations routes
-      if (path.startsWith('/derivations')) {
-        // Could expand a derivations section if we add sub-items later
+      if (location.pathname.startsWith('/qpcr-experiments')) {
+        next.add('qpcr-experiments')
       }
-      
       return next
     })
-  }, [location.pathname])
+  }
+
+  const navRef = useRef<HTMLElement>(null)
+  const [fadeTop, setFadeTop] = useState(false)
+  const [fadeBottom, setFadeBottom] = useState(false)
+
+  const updateNavScrollFades = useCallback(() => {
+    const el = navRef.current
+    if (!el) return
+    const epsilon = 1
+    const { scrollTop, scrollHeight, clientHeight } = el
+    if (scrollHeight <= clientHeight + epsilon) {
+      setFadeTop(false)
+      setFadeBottom(false)
+      return
+    }
+    setFadeTop(scrollTop > epsilon)
+    setFadeBottom(scrollTop + clientHeight < scrollHeight - epsilon)
+  }, [])
+
+  useLayoutEffect(() => {
+    const el = navRef.current
+    if (!el) return
+    updateNavScrollFades()
+    const ro = new ResizeObserver(() => {
+      updateNavScrollFades()
+    })
+    ro.observe(el)
+    el.addEventListener('scroll', updateNavScrollFades, { passive: true })
+    return () => {
+      ro.disconnect()
+      el.removeEventListener('scroll', updateNavScrollFades)
+    }
+  }, [updateNavScrollFades, expandedItems, location.pathname])
 
   const toggleItem = (itemKey: string) => {
     setExpandedItems((prev) => {
@@ -146,6 +177,15 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
           ),
         },
         {
+          label: 'Collections',
+          to: '/collections',
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+            </svg>
+          ),
+        },
+        {
           label: 'Blood Controls',
           to: '/blood-controls',
           icon: (
@@ -155,11 +195,11 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
           ),
         },
         {
-          label: 'Derivations',
-          to: '/derivations',
+          label: 'qPCR Experiments',
+          to: '/qpcr-experiments',
           icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           ),
         },
@@ -168,7 +208,7 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
     {
       title: 'Operations',
       items: [
-        {
+        ...(canWrite ? [{
           label: 'Import',
           to: '/import',
           icon: (
@@ -176,7 +216,7 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
           ),
-        },
+        }] : []),
         {
           label: 'Export',
           icon: (
@@ -205,51 +245,71 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
             },
           ],
         },
+        ...(canWrite ? [
+          {
+            label: 'Move Containers',
+            icon: (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            ),
+            children: [
+              {
+                label: 'Move Micronix Tubes',
+                to: '/container-move/micronix',
+                icon: (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                ),
+              },
+              {
+                label: 'Move Cryovial Tubes',
+                to: '/container-move/cryovial',
+                icon: (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                ),
+              },
+              {
+                label: 'Move Papers',
+                to: '/container-move/papers',
+                icon: (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                ),
+              },
+            ],
+          },
+          {
+            label: 'Move Collections',
+            icon: (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            ),
+            to: '/collection-move',
+          },
+          {
+            label: 'Validate Plate Scan',
+            to: '/plate-scan-validation',
+            icon: (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+            ),
+          },
+        ] : []),
         {
-          label: 'Move Containers',
-          icon: (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-            </svg>
-          ),
-          children: [
-            {
-              label: 'Move Micronix Tubes',
-              to: '/container-move/micronix',
-              icon: (
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-              ),
-            },
-            {
-              label: 'Move Cryovial Tubes',
-              to: '/container-move/cryovial',
-              icon: (
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-              ),
-            },
-            {
-              label: 'Move Papers',
-              to: '/container-move/papers',
-              icon: (
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-              ),
-            },
-          ],
-        },
-        {
-          label: 'Move Collections',
+          label: 'Derivations',
+          to: '/derivations',
           icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           ),
-          to: '/collection-move',
         },
       ],
     },
@@ -295,6 +355,15 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Documentation',
+          href: '/docs',
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
           ),
         },
@@ -344,6 +413,24 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
             </svg>
           ),
         },
+        {
+          label: 'Error Logs',
+          to: '/admin/error-logs',
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Data Integrity',
+          to: '/admin/data-integrity',
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+          ),
+        },
       ],
     })
   }
@@ -359,21 +446,14 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
       return (
         <div key={itemKeyValue}>
           <button
+            type="button"
             onClick={() => toggleItem(itemKeyValue)}
-            className={`
-              w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors
-              ${itemActive
-                ? 'bg-blue-50 text-blue-700'
-                : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-              }
-            `}
+            className={`app-sidebar__link-button ${itemActive ? 'app-sidebar__link-button--active' : ''}`}
           >
-            <div className="flex items-center gap-2">
-              <span className={`${itemActive ? 'text-blue-600' : 'text-gray-500'} flex-shrink-0`}>{item.icon}</span>
-              <span className="truncate">{item.label}</span>
-            </div>
+            <span className="app-sidebar__link-icon">{item.icon}</span>
+            <span className="app-sidebar__link-text">{item.label}</span>
             <svg
-              className={`w-3 h-3 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''} ${itemActive ? 'text-blue-600' : 'text-gray-400'}`}
+              className={`app-sidebar__chevron ${isExpanded ? 'app-sidebar__chevron--open' : ''}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -382,7 +462,7 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
             </svg>
           </button>
           {isExpanded && (
-            <div className="space-y-0.5 mt-0.5 ml-1">
+            <div className="app-sidebar__children">
               {item.children!.map((child) => renderNavItem(child, true, `${itemKeyValue}-${child.label.toLowerCase().replace(/\s+/g, '-')}`))}
             </div>
           )}
@@ -390,42 +470,75 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
       )
     }
 
-    if (!item.to) return null
+    if (!item.to && !item.href && !item.action) return null
 
     const active = childActive
+
+    if (item.action) {
+      return (
+        <button
+          key={itemKeyValue}
+          type="button"
+          onClick={() => {
+            item.action!()
+            if (onMobileClose) {
+              onMobileClose()
+            }
+          }}
+          className={`app-sidebar__link-button ${isSubItem ? 'app-sidebar__link-button--sub' : ''}`}
+        >
+          <span className="app-sidebar__link-icon">{item.icon}</span>
+          <span className="app-sidebar__link-text">{item.label}</span>
+        </button>
+      )
+    }
+
+    if (item.href) {
+      return (
+        <a
+          key={itemKeyValue}
+          href={item.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => {
+            if (onMobileClose) {
+              onMobileClose()
+            }
+          }}
+          className={`app-sidebar__link ${isSubItem ? 'app-sidebar__link--sub' : ''}`}
+        >
+          <span className="app-sidebar__link-icon">{item.icon}</span>
+          <span className="app-sidebar__link-text">{item.label}</span>
+        </a>
+      )
+    }
+
     return (
       <Link
         key={itemKeyValue}
-        to={item.to}
+        to={item.to!}
         onClick={() => {
           if (onMobileClose) {
             onMobileClose()
           }
         }}
-        className={`
-          flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors
-          ${active
-            ? 'bg-blue-50 text-blue-700'
-            : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-          }
-          ${isSubItem ? 'ml-1' : ''}
-        `}
+        className={`app-sidebar__link ${active ? 'app-sidebar__link--active' : ''} ${isSubItem ? 'app-sidebar__link--sub' : ''}`}
       >
-        <span className={`${active ? 'text-blue-600' : 'text-gray-500'} flex-shrink-0`}>{item.icon}</span>
-        <span className="truncate">{item.label}</span>
+        <span className="app-sidebar__link-icon">{item.icon}</span>
+        <span className="app-sidebar__link-text">{item.label}</span>
       </Link>
     )
   }
 
   const renderSection = (section: NavSection, sectionIndex: number) => {
     return (
-      <div key={section.title || `section-${sectionIndex}`} className="mb-4">
+      <div key={section.title || `section-${sectionIndex}`} className="app-sidebar__section">
         {section.title && (
-          <div className="px-2 py-1 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+          <div className="app-sidebar__section-title">
             {section.title}
           </div>
         )}
-        <div className="space-y-0.5">
+        <div className="app-sidebar__section-items">
           {section.items.map((item) => renderNavItem(item))}
         </div>
       </div>
@@ -437,31 +550,32 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
       {/* Mobile overlay */}
       {isMobileOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="app-sidebar__overlay"
           onClick={onMobileClose}
+          aria-hidden="true"
         />
       )}
 
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 h-full bg-white border-r border-gray-200 z-50
-          w-52 overflow-y-auto
+          app-sidebar
+          fixed top-0 left-0 h-full w-52 overflow-hidden z-50
           transform transition-transform duration-300 ease-in-out
           lg:translate-x-0 lg:z-auto
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
       >
-        <div className="flex flex-col h-full">
+        <div className="app-sidebar__inner">
           {/* Logo */}
-          <div className="flex items-center justify-between h-12 px-3 border-b border-gray-200">
-            <Link to="/" className="flex items-center gap-2 text-lg font-bold text-blue-600" onClick={onMobileClose}>
+          <div className="app-sidebar__header">
+            <Link to="/" className="app-sidebar__logo" onClick={onMobileClose}>
               <img src="/icon.png" alt="SampleDB" className="h-8 w-auto" />
               <span>SampleDB</span>
             </Link>
             <button
               onClick={onMobileClose}
-              className="lg:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              className="app-sidebar__close lg:hidden"
               aria-label="Close menu"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -471,36 +585,31 @@ export default function Sidebar({ isMobileOpen = false, onMobileClose }: Sidebar
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-2 py-3">
-            {sections.map((section, index) => renderSection(section, index))}
-          </nav>
-
-          {/* User Switcher */}
-          <div className="px-2 py-3 border-t border-gray-200 space-y-2">
-            <UserSwitcher />
-            <button
-              onClick={async () => {
-                try {
-                  await authApi.logout()
-                  await refreshUser()
-                  navigate('/login')
-                } catch (err) {
-                  console.error('Logout failed:', err)
-                }
-              }}
-              className="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-left"
+          <div className="app-sidebar__nav-wrap">
+            <div
+              className={`app-sidebar__nav-fade app-sidebar__nav-fade--top ${fadeTop ? 'app-sidebar__nav-fade--visible' : ''}`}
+              aria-hidden="true"
+            />
+            <nav
+              ref={navRef}
+              className="app-sidebar__nav"
+              aria-label="Main"
             >
-              Sign Out
-            </button>
+              {sections.map((section, index) => renderSection(section, index))}
+            </nav>
+            <div
+              className={`app-sidebar__nav-fade app-sidebar__nav-fade--bottom ${fadeBottom ? 'app-sidebar__nav-fade--visible' : ''}`}
+              aria-hidden="true"
+            />
           </div>
 
           {/* EPPIcenter Footer */}
-          <div className="px-3 py-3 border-t border-gray-200">
+          <div className="app-sidebar__footer">
             <a
               href="https://eppicenter.ucsf.edu"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center opacity-60 hover:opacity-100 transition-opacity"
+              className="app-sidebar__footer-link"
               title="EPPIcenter - UCSF"
             >
               <img

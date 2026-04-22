@@ -5,6 +5,8 @@ import starlight from '@astrojs/starlight';
 // https://astro.build/config
 export default defineConfig({
 	site: 'https://docs.example.com',
+	base: '/docs',
+	trailingSlash: 'always',
 	integrations: [
 		starlight({
 			title: 'SampleDB User Guide',
@@ -26,7 +28,7 @@ export default defineConfig({
 					attrs: {
 						rel: 'icon',
 						type: 'image/x-icon',
-						href: '/favicon.ico',
+						href: '/docs/favicon.ico',
 					},
 				},
 				{
@@ -34,14 +36,14 @@ export default defineConfig({
 					attrs: {
 						rel: 'icon',
 						type: 'image/png',
-						href: '/icon.png',
+						href: '/docs/icon.png',
 					},
 				},
 				{
 					tag: 'link',
 					attrs: {
 						rel: 'apple-touch-icon',
-						href: '/icon.png',
+						href: '/docs/icon.png',
 					},
 				},
 			],
@@ -49,68 +51,36 @@ export default defineConfig({
 				{
 					label: 'Introduction',
 					items: [
-						{ label: 'Welcome', link: '/' },
+						{ label: 'Welcome', slug: '' },
 					],
 				},
 				{
 					label: 'Getting Started',
-					items: [
-						{ label: 'Initial Setup', link: '/guides/getting-started/setup/' },
-						{ label: 'Dashboard Overview', link: '/guides/getting-started/dashboard/' },
-					],
+					autogenerate: { directory: 'guides/getting-started' },
 				},
 				{
 					label: 'Core Workflows',
-					items: [
-						{ label: 'Studies Management', link: '/guides/workflows/studies/' },
-						{ label: 'Subjects & Specimens', link: '/guides/workflows/subjects-specimens/' },
-						{ label: 'Container Management', link: '/guides/workflows/containers/' },
-						{ label: 'Location Management', link: '/guides/workflows/locations/' },
-					],
+					autogenerate: { directory: 'guides/workflows' },
 				},
 				{
 					label: 'Bulk Operations',
-					items: [
-						{ label: 'Bulk Import', link: '/guides/bulk-operations/import/' },
-						{ label: 'Bulk Export', link: '/guides/bulk-operations/export/' },
-						{ label: 'Container Movement', link: '/guides/bulk-operations/container-movement/' },
-					],
+					autogenerate: { directory: 'guides/bulk-operations' },
 				},
 				{
 					label: 'Specialized Features',
-					items: [
-						{ label: 'Blood Controls', link: '/guides/features/blood-controls/' },
-						{ label: 'Derivations', link: '/guides/features/derivations/' },
-						{ label: 'Collection Move', link: '/guides/features/collection-move/' },
-					],
+					autogenerate: { directory: 'guides/features' },
 				},
 				{
 					label: 'Reference Data',
-					items: [
-						{ label: 'Overview', link: '/guides/reference-data/overview/' },
-						{ label: 'Specimen Types', link: '/guides/reference-data/specimen-types/' },
-						{ label: 'Units', link: '/guides/reference-data/units/' },
-						{ label: 'Storage Types', link: '/guides/reference-data/storage-types/' },
-						{ label: 'Locations', link: '/guides/reference-data/locations-ref/' },
-						{ label: 'Other Reference Data', link: '/guides/reference-data/other/' },
-					],
+					autogenerate: { directory: 'guides/reference-data' },
 				},
 				{
 					label: 'Advanced Topics',
-					items: [
-						{ label: 'Barcode Export', link: '/guides/advanced/barcode-export/' },
-						{ label: 'Statistics', link: '/guides/advanced/statistics/' },
-						{ label: 'Search Functionality', link: '/guides/advanced/search/' },
-						{ label: 'Application Settings', link: '/guides/advanced/settings/' },
-					],
+					autogenerate: { directory: 'guides/advanced' },
 				},
 				{
 					label: 'Troubleshooting',
-					items: [
-						{ label: 'Common Issues', link: '/guides/troubleshooting/common-issues/' },
-						{ label: 'Best Practices', link: '/guides/troubleshooting/best-practices/' },
-						{ label: 'CSV Guidelines', link: '/guides/troubleshooting/csv-guidelines/' },
-					],
+					autogenerate: { directory: 'guides/troubleshooting' },
 				},
 			],
 		}),

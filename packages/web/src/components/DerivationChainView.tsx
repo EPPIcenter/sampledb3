@@ -38,24 +38,24 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg border border-gray-100 p-6">
-        <div className="text-center text-gray-500">Loading derivation chain...</div>
+      <div className="bg-app-card rounded-lg border border-app-border p-6">
+        <div className="text-center text-app-text-muted">Loading derivation chain...</div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="bg-white rounded-lg border border-gray-100 p-6">
-        <div className="text-center text-red-600">{error}</div>
+      <div className="bg-app-card rounded-lg border border-app-border p-6">
+        <div className="text-center text-app-trend-down">{error}</div>
       </div>
     )
   }
 
   if (!chain) {
     return (
-      <div className="bg-white rounded-lg border border-gray-100 p-6">
-        <div className="text-center text-gray-500">No derivation chain found</div>
+      <div className="bg-app-card rounded-lg border border-app-border p-6">
+        <div className="text-center text-app-text-muted">No derivation chain found</div>
       </div>
     )
   }
@@ -63,13 +63,13 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
   const { ancestors, descendants, current } = chain
 
   return (
-    <div className="bg-white rounded-lg border border-gray-100 p-6">
+    <div className="bg-app-card rounded-lg border border-app-border p-6">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Derivation Chain</h2>
+        <h2 className="text-xl font-bold text-app-text">Derivation Chain</h2>
         {onClose && (
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-app-text-muted hover:text-app-text transition-colors"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -82,40 +82,40 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
         {/* Ancestors (parents) */}
         {ancestors.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">
+            <h3 className="text-sm font-semibold text-app-text mb-3 uppercase tracking-wide">
               Ancestors ({ancestors.length})
             </h3>
             <div className="space-y-3">
               {ancestors.map((item, idx) => (
                 <div key={item.derivation.id} className="flex items-center gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-xs font-medium text-gray-600">
+                  <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-app-surface rounded-full text-xs font-medium text-app-text-muted">
                     {ancestors.length - idx}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       {getContainerTypeIcon(item.container?.containerType)}
-                      <span className="font-medium text-gray-900">
+                      <span className="font-medium text-app-text">
                         {getContainerTypeName(item.container?.containerType)}
                       </span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-app-text-muted">
                         ({item.derivation.derivationType})
                       </span>
                     </div>
                     {item.container?.collection?.barcode && (
-                      <div className="text-xs text-gray-600 font-mono">
+                      <div className="text-xs text-app-text-muted font-mono">
                         {item.container.collection.barcode}
                       </div>
                     )}
                   </div>
                   <button
                     onClick={() => navigate(`/containers/${item.container.id}`)}
-                    className="text-sm text-blue-600 hover:text-blue-800 hover:underline flex-shrink-0"
+                    className="text-sm text-app-accent hover:text-app-accent-hover hover:underline flex-shrink-0"
                   >
                     View →
                   </button>
                 </div>
               ))}
-              <div className="flex items-center gap-2 text-gray-400 ml-4">
+              <div className="flex items-center gap-2 text-app-text-muted ml-4">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -126,27 +126,27 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
         )}
 
         {/* Current Container */}
-        <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+        <div className="bg-app-accent-muted border-2 border-app-accent rounded-lg p-4">
           <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-blue-600 rounded-full text-xs font-medium text-white">
+            <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-app-accent rounded-full text-xs font-medium text-white">
               C
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 {getContainerTypeIcon(current?.containerType)}
-                <span className="font-semibold text-gray-900">
+                <span className="font-semibold text-app-text">
                   {getContainerTypeName(current?.containerType)} (Current)
                 </span>
               </div>
               {current?.collection?.barcode && (
-                <div className="text-xs text-gray-600 font-mono">
+                <div className="text-xs text-app-text-muted font-mono">
                   {current.collection.barcode}
                 </div>
               )}
             </div>
             <button
               onClick={() => navigate(`/containers/${current.id}`)}
-              className="text-sm text-blue-600 hover:text-blue-800 hover:underline flex-shrink-0"
+              className="text-sm text-app-accent hover:text-app-accent-hover hover:underline flex-shrink-0"
             >
               View →
             </button>
@@ -156,45 +156,45 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
         {/* Descendants (children) */}
         {descendants.length > 0 && (
           <div>
-            <div className="flex items-center gap-2 text-gray-400 mb-3">
+            <div className="flex items-center gap-2 text-app-text-muted mb-3">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
               <span className="text-xs">derived to</span>
             </div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">
+            <h3 className="text-sm font-semibold text-app-text mb-3 uppercase tracking-wide">
               Descendants ({descendants.length})
             </h3>
             <div className="space-y-3">
               {descendants.map((item, idx) => (
                 <div key={item.derivation.id} className="flex items-center gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-xs font-medium text-gray-600">
+                  <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-app-surface rounded-full text-xs font-medium text-app-text-muted">
                     {idx + 1}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       {getContainerTypeIcon(item.container?.containerType)}
-                      <span className="font-medium text-gray-900">
+                      <span className="font-medium text-app-text">
                         {getContainerTypeName(item.container?.containerType)}
                       </span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-app-text-muted">
                         ({item.derivation.derivationType})
                       </span>
                     </div>
                     {item.container?.collection?.barcode && (
-                      <div className="text-xs text-gray-600 font-mono">
+                      <div className="text-xs text-app-text-muted font-mono">
                         {item.container.collection.barcode}
                       </div>
                     )}
                     {item.derivation.derivationDate && (
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-app-text-muted">
                         {new Date(item.derivation.derivationDate).toLocaleDateString()}
                       </div>
                     )}
                   </div>
                   <button
                     onClick={() => navigate(`/containers/${item.container.id}`)}
-                    className="text-sm text-blue-600 hover:text-blue-800 hover:underline flex-shrink-0"
+                    className="text-sm text-app-accent hover:text-app-accent-hover hover:underline flex-shrink-0"
                   >
                     View →
                   </button>
@@ -205,7 +205,7 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
         )}
 
         {ancestors.length === 0 && descendants.length === 0 && (
-          <div className="text-center text-gray-500 py-8">
+          <div className="text-center text-app-text-muted py-8">
             This container has no derivation relationships.
           </div>
         )}

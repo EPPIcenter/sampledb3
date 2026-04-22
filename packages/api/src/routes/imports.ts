@@ -2,6 +2,11 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { Database } from '../db/client'
 import { importDerivationsFromCsv, validateDerivationsCsv, type BulkDerivationSettings } from '../lib/derivations-csv'
+import { runBulkCombinedImport, type ExtendedContainerData } from '../lib/bulk-combined-import'
+import { validateBulkCombinedPayload } from '../lib/bulk-combined-validate'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { handleRouteError } from '../lib/error-handler'
+import { containerSchemaWithLocation } from '../lib/schemas'
 
 /**
  * Create imports routes with database injection
@@ -9,6 +14,8 @@ import { importDerivationsFromCsv, validateDerivationsCsv, type BulkDerivationSe
  */
 export function createImportsRoutes(database: Database): Hono {
   const imports = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
 const bulkDerivationSettingsSchema = z.object({
   derivationType: z.string(),
@@ -26,7 +33,7 @@ const bulkDerivationSettingsSchema = z.object({
 
 // Bulk import container derivations from CSV
 // Expects JSON body: { csv: string, dryRun?: boolean, settings?: BulkDerivationSettings }
-imports.post('/derivations-csv', async (c) => {
+imports.post('/derivations-csv', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -36,23 +43,19 @@ imports.post('/derivations-csv', async (c) => {
     })
     const data = schema.parse(body)
 
-    const result = await importDerivationsFromCsv(database, data.csv, { 
+    const result = await importDerivationsFromCsv(database, data.csv, {
       dryRun: data.dryRun,
       settings: data.settings,
     })
     return c.json(result)
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error importing derivations CSV:', error)
-    return c.json({ error: 'Failed to import derivations CSV', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
 // Validate derivations CSV without importing
 // Expects JSON body: { csv: string, settings?: BulkDerivationSettings }
-imports.post('/derivations-csv/validate', async (c) => {
+imports.post('/derivations-csv/validate', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -63,12 +66,114 @@ imports.post('/derivations-csv/validate', async (c) => {
 
     const result = await validateDerivationsCsv(database, data.csv, data.settings)
     return c.json(result)
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
+// Bulk combined import (subjects + specimens + containers) with configurable atomicity
+// Body: { studyShortCode, atomicMode: 'full_file' | 'per_subject', createCollections?: [...], subjects: [...] }
+imports.post('/bulk-combined', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      studyShortCode: z.string().min(1),
+      atomicMode: z.enum(['full_file', 'per_subject']),
+      createCollections: z.array(z.object({
+        type: z.enum(['box', 'bag', 'micronix_plate', 'cryovial_box']),
+        name: z.string().min(1),
+        locationId: z.number().int(),
+        barcode: z.string().optional(),
+      })).optional(),
+      subjects: z.array(z.object({
+        subjectName: z.string().min(1),
+        specimens: z.array(z.object({
+          specimenTypeName: z.string().min(1),
+          collectionDate: z.string().optional(),
+          container: containerSchemaWithLocation,
+        })),
+      })),
+    })
+    const data = schema.parse(body)
+    if (data.subjects.length === 0) {
+      return c.json({ error: 'No subjects provided' }, 400)
     }
-    console.error('Error validating derivations CSV:', error)
-    return c.json({ error: 'Failed to validate derivations CSV', details: error.message }, 500)
+    const user = c.get('user')
+    const result = await runBulkCombinedImport(database, {
+      studyShortCode: data.studyShortCode,
+      atomicMode: data.atomicMode,
+      createCollections: data.createCollections,
+      subjects: data.subjects.map((s) => ({
+        subjectName: s.subjectName,
+        specimens: s.specimens.map((sp) => ({
+          specimenTypeName: sp.specimenTypeName,
+          collectionDate: sp.collectionDate,
+          container: sp.container as ExtendedContainerData | undefined,
+        })),
+      })),
+    }, user?.id)
+    return c.json({
+      summary: result.summary,
+      results: result.results.map((r) => ({
+        subject: r.subject,
+        subjectCreated: r.subjectCreated,
+        specimens: r.specimens.map((s) => ({
+          ...s.specimen,
+          containerCreated: s.containerCreated,
+          containerId: s.containerId,
+        })),
+      })),
+      errors: result.errors,
+    }, 201)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
+// Validate bulk-combined payload without importing (same body as POST /bulk-combined; specimens may include optional rowIndex)
+imports.post('/bulk-combined/validate', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      studyShortCode: z.string().min(1),
+      atomicMode: z.enum(['full_file', 'per_subject']),
+      createCollections: z.array(z.object({
+        type: z.enum(['box', 'bag', 'micronix_plate', 'cryovial_box']),
+        name: z.string().min(1),
+        locationId: z.number().int(),
+        barcode: z.string().optional(),
+      })).optional(),
+      subjects: z.array(z.object({
+        subjectName: z.string().min(1),
+        specimens: z.array(z.object({
+          specimenTypeName: z.string().min(1),
+          collectionDate: z.string().optional(),
+          container: containerSchemaWithLocation,
+          rowIndex: z.number().int().optional(),
+        })),
+      })),
+    })
+    const data = schema.parse(body)
+    if (data.subjects.length === 0) {
+      return c.json({ error: 'No subjects provided' }, 400)
+    }
+    const result = await validateBulkCombinedPayload(database, {
+      studyShortCode: data.studyShortCode,
+      atomicMode: data.atomicMode,
+      createCollections: data.createCollections,
+      subjects: data.subjects.map((s) => ({
+        subjectName: s.subjectName,
+        specimens: s.specimens.map((sp) => ({
+          specimenTypeName: sp.specimenTypeName,
+          collectionDate: sp.collectionDate,
+          container: sp.container as ExtendedContainerData | undefined,
+          rowIndex: sp.rowIndex,
+        })),
+      })),
+    })
+    return c.json(result)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 

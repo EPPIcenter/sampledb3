@@ -9,7 +9,13 @@ Statistics update automatically as data is added to the system, giving you real-
 
 ## Accessing Statistics
 
-Navigate to Statistics in the sidebar to access the comprehensive statistics and reporting interface. The page is organized into sections that cover different aspects of your data, making it easy to find the information you need.
+Navigate to Statistics in the sidebar to access the comprehensive statistics and reporting interface. The page uses the same "modern precision lab" visual theme as the Dashboard and storage pages for a consistent experience. The layout is organized as follows:
+
+- **Controls at the top**: A collapsible **Filters** panel lets you filter by study, source type, specimen type, container type, tags, collection or creation date range, and location. These filters apply to all statistics on the page.
+- **Filter chips**: When filters are applied, removable chips appear below the filter panel so you can see active filters at a glance and remove one filter (or clear all) without opening the panel.
+- **Key metrics**: Four summary cards show total specimens, total containers, storage locations, and container types in use (in that order).
+- **Timeline chart display**: Below the summary cards, a "Timeline chart display" card contains bin size (daily, weekly, monthly, quarterly, yearly), minimum date, and time-range presets (Last 30 days, Last 6 months, This year, All time). These options apply only to the Collection Timeline and Creation Timeline charts in the Specimen and Container sections below.
+- **Three sections**: Specimen Overview, Container Overview, and Storage Utilization. Each section has a short summary line and charts (pie and bar) for that domain. If your current filters return no data, a single empty-state message with a "Clear filters" action is shown instead of empty charts.
 
 ## Understanding System-Wide Metrics
 
@@ -63,4 +69,4 @@ Share statistics with your team to keep everyone informed about system status an
 
 ## What's Next?
 
-Now that you understand statistics and reporting, you might want to explore [Bulk Export](/guides/bulk-operations/export/) to export data based on statistics, check out [Dashboard Overview](/guides/getting-started/dashboard/) to see how statistics appear on the dashboard, or review [Location Management](/guides/workflows/locations/) to understand how storage statistics relate to your location hierarchy.
+Now that you understand statistics and reporting, you might want to explore [Bulk Export](/docs/guides/bulk-operations/export/) to export data based on statistics, check out [Dashboard Overview](/docs/guides/getting-started/dashboard/) to see how statistics appear on the dashboard, or review [Location Management](/docs/guides/workflows/locations/) to understand how storage statistics relate to your location hierarchy.

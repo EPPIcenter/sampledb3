@@ -13,6 +13,8 @@ interface StudyCardProps {
   summary?: StudySummaryData | null
   loading?: boolean
   onLoadSummary?: () => void
+  /** When 'list', description is always visible; when 'grid', description is in a collapsible. */
+  variant?: 'grid' | 'list'
 }
 
 // Calculate study duration from date range
@@ -55,7 +57,7 @@ const ChevronDownIcon = () => (
   </svg>
 )
 
-export default function StudyCard({ study, summary, loading, onLoadSummary }: StudyCardProps) {
+export default function StudyCard({ study, summary, loading, onLoadSummary, variant = 'grid' }: StudyCardProps) {
   const [expanded, setExpanded] = useState(false)
 
   const formatDate = (dateString: string) => {
@@ -80,7 +82,8 @@ export default function StudyCard({ study, summary, loading, onLoadSummary }: St
 
   return (
     <div 
-      className="bg-white rounded-lg shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200 flex flex-col h-full"
+      className="studies-card rounded-xl flex flex-col h-full border-l-4"
+      style={{ borderLeftColor: 'rgb(var(--app-accent))' }}
       onClick={() => {
         if (!expanded && onLoadSummary && !summary && !loading) {
           onLoadSummary()
@@ -93,13 +96,16 @@ export default function StudyCard({ study, summary, loading, onLoadSummary }: St
           <Link
             to={`/studies/${study.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="flex-1 min-w-0 group"
+            className="flex-1 min-w-0 group studies-link"
           >
-            <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2">
+            <h3 className="text-lg font-semibold line-clamp-2 transition-colors group-hover:opacity-80" style={{ color: 'rgb(var(--app-text))' }}>
               {study.title}
             </h3>
           </Link>
-          <span className="ml-3 px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded whitespace-nowrap flex-shrink-0">
+          <span
+            className="ml-3 px-2 py-1 text-xs font-medium rounded whitespace-nowrap flex-shrink-0"
+            style={{ backgroundColor: 'rgb(var(--app-accent-muted))', color: 'rgb(var(--app-accent-hover))' }}
+          >
             {study.shortCode}
           </span>
         </div>
@@ -110,12 +116,15 @@ export default function StudyCard({ study, summary, loading, onLoadSummary }: St
             className={`px-2 py-1 text-xs font-medium rounded ${
               study.isLongitudinal
                 ? 'bg-purple-100 text-purple-800'
-                : 'bg-green-100 text-green-800'
+                : 'bg-emerald-100 text-emerald-800'
             }`}
           >
             {study.isLongitudinal ? 'Longitudinal' : 'Cross-sectional'}
           </span>
-          <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
+          <span
+            className="px-2 py-1 text-xs font-medium rounded"
+            style={{ backgroundColor: 'rgb(var(--app-surface))', color: 'rgb(var(--app-text-muted))' }}
+          >
             {study.leadPerson}
           </span>
         </div>
@@ -125,51 +134,51 @@ export default function StudyCard({ study, summary, loading, onLoadSummary }: St
       <div className="px-5 pb-3 flex-1">
         {loading ? (
           <div className="space-y-3">
-            <div className="h-12 bg-gray-100 rounded animate-pulse"></div>
-            <div className="h-12 bg-gray-100 rounded animate-pulse"></div>
+            <div className="h-12 rounded animate-pulse" style={{ backgroundColor: 'rgb(var(--app-border) / 0.5)' }}></div>
+            <div className="h-12 rounded animate-pulse" style={{ backgroundColor: 'rgb(var(--app-border) / 0.5)' }}></div>
           </div>
         ) : summary ? (
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2">
-              <div className="text-gray-500">
+              <div style={{ color: 'rgb(var(--app-text-muted))' }}>
                 <UsersIcon />
               </div>
               <div className="min-w-0">
-                <div className="text-xs text-gray-500">Subjects</div>
-                <div className="text-sm font-semibold text-gray-900">
+                <div className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>Subjects</div>
+                <div className="text-sm font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
                   {summary.totalSubjects.toLocaleString()}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div className="text-gray-500">
+              <div style={{ color: 'rgb(var(--app-text-muted))' }}>
                 <BeakerIcon />
               </div>
               <div className="min-w-0">
-                <div className="text-xs text-gray-500">Specimens</div>
-                <div className="text-sm font-semibold text-gray-900">
+                <div className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>Specimens</div>
+                <div className="text-sm font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
                   {summary.totalSpecimens.toLocaleString()}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div className="text-gray-500">
+              <div style={{ color: 'rgb(var(--app-text-muted))' }}>
                 <ContainerIcon />
               </div>
               <div className="min-w-0">
-                <div className="text-xs text-gray-500">Containers</div>
-                <div className="text-sm font-semibold text-gray-900">
+                <div className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>Containers</div>
+                <div className="text-sm font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
                   {summary.totalContainers.toLocaleString()}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div className="text-gray-500">
+              <div style={{ color: 'rgb(var(--app-text-muted))' }}>
                 <BeakerIcon />
               </div>
               <div className="min-w-0">
-                <div className="text-xs text-gray-500">Avg/Subject</div>
-                <div className="text-sm font-semibold text-gray-900">
+                <div className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>Avg/Subject</div>
+                <div className="text-sm font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
                   {summary.averageSpecimensPerSubject !== undefined
                     ? summary.averageSpecimensPerSubject.toFixed(1)
                     : summary.totalSubjects > 0
@@ -180,27 +189,27 @@ export default function StudyCard({ study, summary, loading, onLoadSummary }: St
             </div>
           </div>
         ) : (
-          <div className="text-xs text-gray-400 italic">Hover or click to load statistics</div>
+          <div className="text-xs italic" style={{ color: 'rgb(var(--app-text-muted))' }}>Hover or click to load statistics</div>
         )}
       </div>
 
       {/* Metadata Section */}
       {(summary || study.description) && (
-        <div className="px-5 py-3 border-t border-gray-100">
+        <div className="px-5 py-3 border-t" style={{ borderColor: 'rgb(var(--app-border))' }}>
           {summary?.collectionDateRange && (
             <div className="flex items-start gap-2 mb-2">
-              <div className="text-gray-400 mt-0.5">
+              <div className="mt-0.5" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 <CalendarIcon />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs text-gray-500">Collection Period</div>
-                <div className="text-xs text-gray-700">
+                <div className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>Collection Period</div>
+                <div className="text-xs" style={{ color: 'rgb(var(--app-text))' }}>
                   {formatDateRange(summary.collectionDateRange)}
                 </div>
                 {(() => {
                   const duration = summary.studyDurationDays ?? calculateDuration(summary.collectionDateRange)
                   return duration !== null && (
-                    <div className="text-xs text-gray-500 mt-0.5">
+                    <div className="text-xs mt-0.5" style={{ color: 'rgb(var(--app-text-muted))' }}>
                       Duration: {formatDuration(duration)}
                     </div>
                   )
@@ -211,36 +220,46 @@ export default function StudyCard({ study, summary, loading, onLoadSummary }: St
           
           {study.description && (
             <div className="mt-2">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setExpanded(!expanded)
-                }}
-                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
-              >
-                <span>Description</span>
-                <ChevronDownIcon />
-              </button>
-              {expanded && (
-                <p className="text-xs text-gray-600 mt-1 line-clamp-3">{study.description}</p>
+              {variant === 'list' ? (
+                <>
+                  <div className="text-xs mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>Description</div>
+                  <p className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>{study.description}</p>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setExpanded(!expanded)
+                    }}
+                    className="flex items-center gap-1 text-xs studies-link"
+                  >
+                    <span>Description</span>
+                    <ChevronDownIcon />
+                  </button>
+                  {expanded && (
+                    <p className="text-xs mt-1 line-clamp-3" style={{ color: 'rgb(var(--app-text-muted))' }}>{study.description}</p>
+                  )}
+                </>
               )}
             </div>
           )}
 
           {summary?.topSpecimenTypes && summary.topSpecimenTypes.length > 0 && (
             <div className="mt-2">
-              <div className="text-xs text-gray-500 mb-1">Top Specimen Types</div>
+              <div className="text-xs mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>Top Specimen Types</div>
               <div className="flex flex-wrap gap-1">
                 {summary.topSpecimenTypes.slice(0, 3).map((type, idx) => (
                   <span
                     key={idx}
-                    className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-700 rounded"
+                    className="px-1.5 py-0.5 text-xs rounded"
+                    style={{ backgroundColor: 'rgb(var(--app-surface))', color: 'rgb(var(--app-text))' }}
                   >
                     {type.name} ({type.count})
                   </span>
                 ))}
                 {summary.topSpecimenTypes.length > 3 && (
-                  <span className="px-1.5 py-0.5 text-xs text-gray-500">
+                  <span className="px-1.5 py-0.5 text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
                     +{summary.topSpecimenTypes.length - 3} more
                   </span>
                 )}
@@ -251,13 +270,13 @@ export default function StudyCard({ study, summary, loading, onLoadSummary }: St
       )}
 
       {/* Footer */}
-      <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 rounded-b-lg">
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>Updated {new Date(study.lastUpdated).toLocaleDateString()}</span>
+      <div className="px-5 py-3 border-t rounded-b-xl mt-auto" style={{ borderColor: 'rgb(var(--app-border))', backgroundColor: 'rgb(var(--app-surface))' }}>
+        <div className="flex items-center justify-between text-xs">
+          <span style={{ color: 'rgb(var(--app-text-muted))' }}>Updated {new Date(study.lastUpdated).toLocaleDateString()}</span>
           <Link
             to={`/studies/${study.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="text-blue-600 hover:text-blue-700 font-medium"
+            className="studies-link font-medium"
           >
             View Details →
           </Link>

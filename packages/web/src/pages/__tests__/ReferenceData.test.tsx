@@ -91,15 +91,20 @@ const mockUser = {
   role: 'admin' as const,
 }
 
-vi.mock('../../contexts/UserContext', () => ({
-  useUser: () => ({
-    user: mockUser,
-    setUser: vi.fn(),
-    refreshUser: vi.fn(),
-    loading: false,
-    error: null,
-  }),
-}))
+vi.mock('../../contexts/UserContext', async () => {
+  const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')
+  return {
+    ...actual,
+    useUser: () => ({
+      user: mockUser,
+      setUser: vi.fn(),
+      refreshUser: vi.fn(),
+      loading: false,
+      error: null,
+      canManageReferenceData: true,
+    }),
+  }
+})
 
 describe('ReferenceData Page', () => {
   beforeEach(() => {
@@ -108,7 +113,7 @@ describe('ReferenceData Page', () => {
 
   describe('Tab Switching', () => {
     it('should render with default tab (specimen-types)', async () => {
-      render(<ReferenceData />)
+      await render(<ReferenceData />)
 
       await waitFor(() => {
         expect(screen.getByText('Reference Data Management')).toBeInTheDocument()
@@ -119,7 +124,7 @@ describe('ReferenceData Page', () => {
     it('should switch tabs when tab button is clicked', async () => {
       const user = userEvent.setup()
       
-      render(<ReferenceData />)
+      await render(<ReferenceData />)
 
       const statesTab = screen.getByText('States')
       await user.click(statesTab)
@@ -130,13 +135,8 @@ describe('ReferenceData Page', () => {
   })
 
   describe('Data Loading', () => {
-    it('should load data for specimen-types tab', async () => {
-      // This test is simplified - the actual data loading is complex
-      // and would require mocking the entire config system
-      // For now, we'll just verify the page renders
-      render(<ReferenceData />)
-
-      // Just verify the page renders - data loading is tested in integration
+    it('renders specimen-types tab with Reference Data Management heading', async () => {
+      await render(<ReferenceData />)
       await waitFor(() => {
         expect(screen.getByText('Reference Data Management')).toBeInTheDocument()
       })
@@ -147,7 +147,7 @@ describe('ReferenceData Page', () => {
     it('should open form when Add New button is clicked', async () => {
       const user = userEvent.setup()
       
-      render(<ReferenceData />)
+      await render(<ReferenceData />)
 
       const addButton = screen.getByText('Add New')
       await user.click(addButton)
@@ -162,7 +162,7 @@ describe('ReferenceData Page', () => {
     it('should close form when cancel is clicked', async () => {
       const user = userEvent.setup()
       
-      render(<ReferenceData />)
+      await render(<ReferenceData />)
 
       const addButton = screen.getByText('Add New')
       await user.click(addButton)
@@ -180,29 +180,12 @@ describe('ReferenceData Page', () => {
     })
   })
 
-  describe('Locations Tab (with pagination and search)', () => {
-    it('should show pagination for locations tab', async () => {
+  describe('Locations Tab', () => {
+    it('renders locations tab when clicked', async () => {
       const user = userEvent.setup()
-      render(<ReferenceData />)
-
-      // Switch to locations tab
+      await render(<ReferenceData />)
       const locationsTab = screen.getByText('Locations')
       await user.click(locationsTab)
-
-      // Just verify tab switching works - pagination rendering is complex
-      expect(locationsTab).toBeInTheDocument()
-    })
-
-    it('should handle search for locations', async () => {
-      const user = userEvent.setup()
-      
-      render(<ReferenceData />)
-
-      // Switch to locations tab
-      const locationsTab = screen.getByText('Locations')
-      await user.click(locationsTab)
-
-      // Verify tab switched - search input rendering is tested in component tests
       expect(locationsTab).toBeInTheDocument()
     })
   })

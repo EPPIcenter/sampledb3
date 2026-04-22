@@ -1,11 +1,16 @@
-import { useEffect, useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState, useRef } from 'react'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import api from '../lib/api'
-import { specimensApi, type Specimen } from '../lib/api'
+import type { Specimen } from '../lib/api'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
+import AddContainerForSpecimenModal from '../components/AddContainerForSpecimenModal'
 import { getSpecimenTypeIcon, getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import { useModifierHotkey, useHotkey } from '../hooks/useHotkey'
+import { useUser } from '../contexts/UserContext'
+import { useSpecimen, useContainersForSpecimen, specimenKeys } from '../hooks/useSpecimens'
+import '../styles/subject-specimen.css'
 
 interface Container {
   id: number
@@ -39,82 +44,106 @@ interface SourceInfo {
 export default function SpecimenDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [specimen, setSpecimen] = useState<Specimen | null>(null)
-  const [containers, setContainers] = useState<Container[]>([])
+  const queryClient = useQueryClient()
+  const { canWrite } = useUser()
+  const specimenId = id != null ? parseInt(id, 10) : NaN
+  const specimenQuery = useSpecimen(specimenId)
+  const containersQuery = useContainersForSpecimen(id)
   const [sourceInfo, setSourceInfo] = useState<SourceInfo | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [addContainerModalOpen, setAddContainerModalOpen] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const hasProcessedAddContainer = useRef(false)
+  const prevSpecimenRouteId = useRef(id)
+
+  const specimen = specimenQuery.data ?? null
+  const containers = (containersQuery.data ?? []) as Container[]
+  const loading = specimenQuery.isLoading || containersQuery.isLoading
+
+  if (id !== prevSpecimenRouteId.current) {
+    prevSpecimenRouteId.current = id
+    hasProcessedAddContainer.current = false
+  }
 
   useEffect(() => {
-    if (id) {
-      loadSpecimen()
-      loadContainers()
+    const add = searchParams.get('addContainer')
+    if (add === 'true' && !hasProcessedAddContainer.current) {
+      hasProcessedAddContainer.current = true
+      setAddContainerModalOpen(true)
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('addContainer')
+        return next
+      })
     }
-  }, [id])
+  }, [searchParams, setSearchParams])
 
-  const loadSpecimen = async () => {
-    try {
-      const response = await specimensApi.get(parseInt(id!))
-      const specData = response.specimen
-      setSpecimen(specData)
-      
-      // Load source information
-      if (specData.studySubjectId) {
-        try {
-          const subjectResponse = await api.get(`/subjects/${specData.studySubjectId}`)
-          if (subjectResponse.data.subject) {
-            const studyResponse = await api.get(`/studies/${subjectResponse.data.subject.studyId}`)
+  // Load source information when specimen is available (subject or control batch)
+  useEffect(() => {
+    if (!specimen) {
+      setSourceInfo(null)
+      return
+    }
+    if (specimen.studySubjectId) {
+      let cancelled = false
+      api.get(`/subjects/${specimen.studySubjectId}`).then((subjectResponse) => {
+        if (cancelled) return
+        const subject = subjectResponse.data?.subject
+        if (!subject) return
+        api.get(`/studies/${subject.studyId}`).then((studyResponse) => {
+          if (cancelled) return
+          const study = studyResponse.data?.study
+          if (study) {
             setSourceInfo({
               type: 'subject',
-              id: specData.studySubjectId,
-              name: subjectResponse.data.subject.name,
+              id: specimen.studySubjectId!,
+              name: subject.name,
               study: {
-                id: studyResponse.data.study.id,
-                title: studyResponse.data.study.title,
-                code: studyResponse.data.study.shortCode,
+                id: study.id,
+                title: study.title,
+                code: study.shortCode,
               },
             })
           }
-        } catch (e) {
-          console.error('Failed to load subject source info:', e)
-        }
-      } else if (specData.controlBatchId) {
-        try {
-          const batchResponse = await api.get(`/blood-controls/batches/${specData.controlBatchId}`)
-          if (batchResponse.data.batch) {
-            const batch = batchResponse.data.batch
-            const defResponse = await api.get(`/blood-controls/${batch.controlDefinitionId}`)
-            setSourceInfo({
-              type: 'control',
-              id: specData.controlBatchId,
-              name: batch.name,
-              definition: defResponse.data.control ? {
-                id: defResponse.data.control.id,
-                name: defResponse.data.control.name,
-              } : undefined
-            })
-          }
-        } catch (e) {
-          console.error('Failed to load control source info:', e)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load specimen:', error)
-    }
-  }
-
-  const loadContainers = async () => {
-    try {
-      // Find containers for this specimen
-      const response = await api.get('/containers', {
-        params: { specimen_id: id },
+        }).catch((e) => {
+          if (!cancelled) console.error('Failed to load study source info:', e)
+        })
+      }).catch((e) => {
+        if (!cancelled) console.error('Failed to load subject source info:', e)
       })
-      setContainers(response.data.containers || [])
-    } catch (error) {
-      console.error('Failed to load containers:', error)
-    } finally {
-      setLoading(false)
+      return () => { cancelled = true }
     }
-  }
+    if (specimen.controlBatchId) {
+      let cancelled = false
+      api.get(`/blood-controls/batches/${specimen.controlBatchId}`).then((batchResponse) => {
+        if (cancelled) return
+        const batch = batchResponse.data?.batch
+        if (!batch) return
+        api.get(`/blood-controls/${batch.controlDefinitionId}`).then((defResponse) => {
+          if (cancelled) return
+          const control = defResponse.data?.control
+          setSourceInfo({
+            type: 'control',
+            id: specimen.controlBatchId!,
+            name: batch.name,
+            definition: control ? { id: control.id, name: control.name } : undefined,
+          })
+        }).catch((e) => {
+          if (!cancelled) console.error('Failed to load control definition:', e)
+        })
+      }).catch((e) => {
+        if (!cancelled) console.error('Failed to load control source info:', e)
+      })
+      return () => { cancelled = true }
+    }
+    setSourceInfo(null)
+  }, [specimen])
+
+  // Close Add container modal on Escape
+  useHotkey('escape', () => {
+    if (addContainerModalOpen) {
+      setAddContainerModalOpen(false)
+    }
+  }, { enabled: addContainerModalOpen, enableOnFormTags: true })
 
   // Hotkeys
   // Backspace or Cmd/Ctrl+[ to go back
@@ -140,8 +169,10 @@ export default function SpecimenDetail() {
 
   if (!specimen) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8 text-red-600">Specimen not found</div>
+      <div className="subject-specimen-page">
+        <div className="container mx-auto px-4 py-8 relative z-[1]">
+          <div className="text-center py-8 text-app-trend-down">Specimen not found</div>
+        </div>
       </div>
     )
   }
@@ -180,130 +211,140 @@ export default function SpecimenDetail() {
   })
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <EntityBreadcrumbs items={breadcrumbItems} />
-        <div className="flex items-center gap-3 mt-2">
-          {specimen.specimenType && (
-            <span className="text-gray-600">{getSpecimenTypeIcon(specimen.specimenType.name)}</span>
-          )}
-          <h1 className="text-3xl font-bold text-gray-900">
-            {specimen.specimenType ? `${specimen.specimenType.name} Specimen` : 'Specimen'}
-          </h1>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-base font-semibold mb-3 text-gray-900">Details</h2>
-          <dl className="space-y-1.5">
+    <div className="subject-specimen-page">
+      <div className="container mx-auto px-4 py-8 relative z-[1]">
+        <div className="mb-6 subject-specimen-reveal subject-specimen-reveal-1">
+          <EntityBreadcrumbs items={breadcrumbItems} />
+          <div className="flex items-center gap-3 mt-2">
             {specimen.specimenType && (
-              <div>
-                <dt className="text-xs font-medium text-gray-500">Type</dt>
-                <dd className="text-sm text-gray-900 flex items-center gap-1.5">
-                  <span>{getSpecimenTypeIcon(specimen.specimenType.name)}</span>
-                  <span>{specimen.specimenType.name}</span>
-                </dd>
-              </div>
+              <span className="text-[rgb(var(--app-accent))]">{getSpecimenTypeIcon(specimen.specimenType.name)}</span>
             )}
-            <div>
-              <dt className="text-xs font-medium text-gray-500">Source Type</dt>
-              <dd className="text-sm capitalize text-gray-900">{specimen.studySubjectId ? 'subject' : specimen.controlBatchId ? 'control' : 'unknown'}</dd>
-            </div>
-            {specimen.collectionDate && (
-              <div>
-                <dt className="text-xs font-medium text-gray-500">Collection Date</dt>
-                <dd className="text-sm text-gray-900">{new Date(specimen.collectionDate).toLocaleDateString()}</dd>
-              </div>
-            )}
-            <div>
-              <dt className="text-xs font-medium text-gray-500">Created</dt>
-              <dd className="text-sm text-gray-900">{new Date(specimen.created).toLocaleDateString()}</dd>
-            </div>
-          </dl>
+            <h1 className="text-3xl font-bold">
+              {specimen.specimenType ? `${specimen.specimenType.name} Specimen` : 'Specimen'}
+            </h1>
+          </div>
         </div>
 
-        {sourceInfo && (
-          <div className="bg-white rounded-lg shadow p-4">
-            <h2 className="text-base font-semibold mb-3 text-gray-900">Source</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 subject-specimen-reveal subject-specimen-reveal-2">
+          <div className="dashboard-card p-4">
+            <h2 className="dashboard-section-title text-base mb-3">Details</h2>
             <dl className="space-y-1.5">
-              <div>
-                <dt className="text-xs font-medium text-gray-500">Type</dt>
-                <dd className="text-sm capitalize text-gray-900">{sourceInfo.type}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-gray-500">Name</dt>
-                <dd className="text-sm text-gray-900">
-                  {sourceInfo.type === 'subject' ? (
-                    <Link to={`/subjects/${sourceInfo.id}`} className="text-blue-600 hover:underline">
-                      {sourceInfo.name}
-                    </Link>
-                  ) : sourceInfo.type === 'control' ? (
-                    <Link to={`/blood-controls/batches/${sourceInfo.id}`} className="text-blue-600 hover:underline">
-                      {sourceInfo.name}
-                    </Link>
-                  ) : (
-                    sourceInfo.name
-                  )}
-                </dd>
-              </div>
-              {sourceInfo.type === 'subject' && sourceInfo.study && (
+              {specimen.specimenType && (
                 <div>
-                  <dt className="text-xs font-medium text-gray-500">Study</dt>
-                  <dd className="text-sm text-gray-900">
-                    <Link to={`/studies/${sourceInfo.study.id}`} className="text-blue-600 hover:underline">
-                      {sourceInfo.study.title} ({sourceInfo.study.code})
-                    </Link>
+                  <dt className="text-xs font-medium text-[rgb(var(--app-text-muted))]">Type</dt>
+                  <dd className="text-sm flex items-center gap-1.5 text-[rgb(var(--app-text))]">
+                    <span className="text-[rgb(var(--app-accent))]">{getSpecimenTypeIcon(specimen.specimenType.name)}</span>
+                    <span>{specimen.specimenType.name}</span>
                   </dd>
                 </div>
               )}
-              {sourceInfo.type === 'control' && sourceInfo.definition && (
+              <div>
+                <dt className="text-xs font-medium text-[rgb(var(--app-text-muted))]">Source Type</dt>
+                <dd className="text-sm capitalize text-[rgb(var(--app-text))]">{specimen.studySubjectId ? 'subject' : specimen.controlBatchId ? 'control' : 'unknown'}</dd>
+              </div>
+              {specimen.collectionDate && (
                 <div>
-                  <dt className="text-xs font-medium text-gray-500">Control Definition</dt>
-                  <dd className="text-sm text-gray-900">
-                    <Link to={`/blood-controls/${sourceInfo.definition.id}`} className="text-blue-600 hover:underline">
-                      {sourceInfo.definition.name}
-                    </Link>
-                  </dd>
+                  <dt className="text-xs font-medium text-[rgb(var(--app-text-muted))]">Collection Date</dt>
+                  <dd className="text-sm text-[rgb(var(--app-text))]">{new Date(specimen.collectionDate).toLocaleDateString()}</dd>
                 </div>
               )}
+              <div>
+                <dt className="text-xs font-medium text-[rgb(var(--app-text-muted))]">Created</dt>
+                <dd className="text-sm text-[rgb(var(--app-text))]">{new Date(specimen.created).toLocaleDateString()}</dd>
+              </div>
             </dl>
           </div>
-        )}
-      </div>
 
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-4 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900">Containers</h2>
-        </div>
-        <div className="p-4">
-          {containers.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 text-sm">
-              No containers found for this specimen
+          {sourceInfo && (
+            <div className="dashboard-card p-4">
+              <h2 className="dashboard-section-title text-base mb-3">Source</h2>
+              <dl className="space-y-1.5">
+                <div>
+                  <dt className="text-xs font-medium text-[rgb(var(--app-text-muted))]">Type</dt>
+                  <dd className="text-sm capitalize text-[rgb(var(--app-text))]">{sourceInfo.type}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-[rgb(var(--app-text-muted))]">Name</dt>
+                  <dd className="text-sm text-[rgb(var(--app-text))]">
+                    {sourceInfo.type === 'subject' ? (
+                      <Link to={`/subjects/${sourceInfo.id}`} className="dashboard-link hover:underline">
+                        {sourceInfo.name}
+                      </Link>
+                    ) : sourceInfo.type === 'control' ? (
+                      <Link to={`/blood-controls/batches/${sourceInfo.id}`} className="dashboard-link hover:underline">
+                        {sourceInfo.name}
+                      </Link>
+                    ) : (
+                      sourceInfo.name
+                    )}
+                  </dd>
+                </div>
+                {sourceInfo.type === 'subject' && sourceInfo.study && (
+                  <div>
+                    <dt className="text-xs font-medium text-[rgb(var(--app-text-muted))]">Study</dt>
+                    <dd className="text-sm text-[rgb(var(--app-text))]">
+                      <Link to={`/studies/${sourceInfo.study.id}`} className="dashboard-link hover:underline">
+                        {sourceInfo.study.title} ({sourceInfo.study.code})
+                      </Link>
+                    </dd>
+                  </div>
+                )}
+                {sourceInfo.type === 'control' && sourceInfo.definition && (
+                  <div>
+                    <dt className="text-xs font-medium text-[rgb(var(--app-text-muted))]">Control Definition</dt>
+                    <dd className="text-sm text-[rgb(var(--app-text))]">
+                      <Link to={`/blood-controls/${sourceInfo.definition.id}`} className="dashboard-link hover:underline">
+                        {sourceInfo.definition.name}
+                      </Link>
+                    </dd>
+                  </div>
+                )}
+              </dl>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {containers.map((container) => (
-                <Link
-                  key={container.id}
-                  to={`/containers/${container.id}`}
-                  className="block p-4 border border-gray-100 rounded-lg hover:bg-gray-50 hover:border-gray-200 transition-colors"
-                >
+          )}
+        </div>
+
+        <div className="dashboard-card subject-specimen-reveal subject-specimen-reveal-3">
+          <div className="p-4 border-b border-[rgb(var(--app-border))] flex items-center justify-between gap-3">
+            <h2 className="dashboard-section-title">Containers</h2>
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => setAddContainerModalOpen(true)}
+                className="subject-specimen-btn-secondary text-sm"
+              >
+                Add container
+              </button>
+            )}
+          </div>
+          <div className="p-4">
+            {containers.length === 0 ? (
+              <div className="text-center py-8 text-sm text-[rgb(var(--app-text-muted))]">
+                No containers found for this specimen
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {containers.map((container) => (
+                  <Link
+                    key={container.id}
+                    to={`/containers/${container.id}`}
+                    className="studies-card block p-4 transition-colors no-underline"
+                  >
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       {container.containerType && (
-                        <span className="text-gray-600 flex-shrink-0">
+                        <span className="text-[rgb(var(--app-accent))] flex-shrink-0">
                           {getContainerTypeIcon(container.containerType)}
                         </span>
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900 truncate">
+                        <p className="text-sm font-medium text-[rgb(var(--app-text))] truncate">
                           {container.containerType ? getContainerTypeName(container.containerType) : 'Container'}
                         </p>
                       </div>
                     </div>
                     <svg
-                      className="h-4 w-4 text-gray-400 flex-shrink-0"
+                      className="h-4 w-4 text-[rgb(var(--app-text-muted))] flex-shrink-0"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -319,14 +360,14 @@ export default function SpecimenDetail() {
                   
                   <div className="flex flex-wrap items-center gap-1.5 mb-2">
                     {/* Note: container.state is deprecated - states are no longer used */}
-                    <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${container.remainingQuantity > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${container.remainingQuantity > 0 ? 'bg-app-trend-up/10 text-app-trend-up' : 'bg-app-trend-down/10 text-app-trend-down'}`}>
                       {container.remainingQuantity > 0 ? 'In Use' : 'Exhausted'}
                     </span>
                   </div>
 
                   {container.locationPath && (
-                    <div className="flex items-center text-xs text-gray-600 mb-1.5">
-                      <svg className="w-3.5 h-3.5 mr-1 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="flex items-center text-xs text-[rgb(var(--app-text-muted))] mb-1.5">
+                      <svg className="w-3.5 h-3.5 mr-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
@@ -334,8 +375,8 @@ export default function SpecimenDetail() {
                     </div>
                   )}
                   {container.location && !container.locationPath && (
-                    <div className="flex items-center text-xs text-gray-600 mb-1.5">
-                      <svg className="w-3.5 h-3.5 mr-1 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="flex items-center text-xs text-[rgb(var(--app-text-muted))] mb-1.5">
+                      <svg className="w-3.5 h-3.5 mr-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
@@ -346,7 +387,7 @@ export default function SpecimenDetail() {
                   )}
                   
                   {(container.micronixTube || container.cryovialTube) && (
-                    <div className="text-xs text-gray-500 mt-1.5">
+                    <div className="text-xs text-[rgb(var(--app-text-muted))] mt-1.5">
                       {container.micronixTube && (
                         <span className="truncate block">
                           Plate: {container.micronixTube.plateName || `#${container.micronixTube.plateId}`}
@@ -361,11 +402,28 @@ export default function SpecimenDetail() {
                       )}
                     </div>
                   )}
+                  {container.comment && (
+                    <div className="mt-2 pt-2 border-t border-[rgb(var(--app-border))]">
+                      <span className="text-xs font-medium text-[rgb(var(--app-text-muted))] block mb-0.5">Notes</span>
+                      <p className="text-xs text-[rgb(var(--app-text))] whitespace-pre-wrap break-words mt-0">{container.comment}</p>
+                    </div>
+                  )}
                 </Link>
               ))}
             </div>
           )}
+          </div>
         </div>
+
+        <AddContainerForSpecimenModal
+          isOpen={addContainerModalOpen}
+          onClose={() => setAddContainerModalOpen(false)}
+          specimenId={specimen.id}
+          specimenTypeId={specimen.specimenTypeId}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: specimenKeys.containers(id!) })
+          }}
+        />
       </div>
     </div>
   )

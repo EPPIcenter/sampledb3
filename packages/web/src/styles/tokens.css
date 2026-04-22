@@ -1,0 +1,266 @@
+/**
+ * App design tokens – single source of truth for theme.
+ * Import this once (e.g. from index.css). All themed CSS should use var(--app-*).
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap');
+
+:root {
+  /* Surfaces */
+  --app-bg: 248 250 252;
+  --app-surface: 241 245 249;
+  --app-card: 255 255 255;
+  /* Accent */
+  --app-accent: 20 184 166;
+  --app-accent-hover: 13 148 136;
+  --app-accent-muted: 204 251 241;
+  --app-accent-on-tint: 19 78 74;
+  /* Text */
+  --app-text: 30 41 59;
+  --app-text-muted: 100 116 139;
+  /* Border */
+  --app-border: 226 232 240;
+  /* Background grid (subtle pattern); high-contrast uses light grid for readability */
+  --app-bg-grid: 226 232 240;
+  /* Semantic */
+  --app-trend-up: 34 197 94;
+  --app-trend-down: 239 68 68;
+  --app-badge: 190 18 60;
+  --app-badge-bg: 255 228 230;
+  /* qPCR / optional */
+  --app-standard: 245 158 11;
+  --app-standard-muted: 254 243 199;
+  /* Typography */
+  --app-font-sans: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
+  --app-font-display: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --app-font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
+  /* Chart palette (dashboard/charts) */
+  --app-chart-1: 20 184 166;
+  --app-chart-2: 13 148 136;
+  --app-chart-3: 45 212 191;
+  --app-chart-4: 94 234 212;
+  --app-chart-5: 100 116 139;
+  --app-chart-6: 148 163 184;
+  --app-chart-7: 203 213 225;
+  --app-chart-8: 71 85 105;
+  /* Text selection (::selection) – readable in inputs and body copy */
+  --app-selection-bg: 20 184 166;
+  --app-selection-fg: 19 78 74;
+}
+
+/* Dark theme – same token names, different values */
+[data-theme="dark"] {
+  --app-bg: 15 23 42;
+  --app-surface: 30 41 59;
+  --app-card: 51 65 85;
+  --app-accent: 45 212 191;
+  --app-accent-hover: 94 234 212;
+  --app-accent-muted: 19 78 74;
+  --app-accent-on-tint: 204 251 241;
+  --app-text: 248 250 252;
+  --app-text-muted: 148 163 184;
+  --app-border: 71 85 105;
+  --app-bg-grid: 71 85 105;
+  --app-trend-up: 74 222 128;
+  --app-trend-down: 248 113 113;
+  --app-badge: 252 165 165;
+  --app-badge-bg: 127 29 29;
+  --app-standard: 253 186 116;
+  --app-standard-muted: 69 26 3;
+  --app-chart-1: 45 212 191;
+  --app-chart-2: 94 234 212;
+  --app-chart-3: 20 184 166;
+  --app-chart-4: 13 148 136;
+  --app-chart-5: 148 163 184;
+  --app-chart-6: 203 213 225;
+  --app-chart-7: 100 116 139;
+  --app-chart-8: 248 250 252;
+  --app-selection-bg: 45 212 191;
+  --app-selection-fg: 15 23 42;
+}
+
+/* Sepia theme – warm, paper-like, easy on the eyes */
+[data-theme="sepia"] {
+  --app-bg: 250 247 237;
+  --app-surface: 245 238 224;
+  --app-card: 255 251 243;
+  --app-accent: 24 78 74;
+  --app-accent-hover: 15 58 55;
+  --app-accent-muted: 204 231 229;
+  --app-accent-on-tint: 19 78 74;
+  --app-text: 55 48 41;
+  --app-text-muted: 115 99 87;
+  --app-border: 214 204 190;
+  --app-bg-grid: 214 204 190;
+  --app-trend-up: 22 101 52;
+  --app-trend-down: 185 28 28;
+  --app-badge: 190 18 60;
+  --app-badge-bg: 254 226 226;
+  --app-standard: 161 98 7;
+  --app-standard-muted: 254 243 199;
+  --app-chart-1: 24 78 74;
+  --app-chart-2: 15 58 55;
+  --app-chart-3: 45 112 108;
+  --app-chart-4: 94 140 137;
+  --app-chart-5: 115 99 87;
+  --app-chart-6: 148 132 118;
+  --app-chart-7: 190 178 166;
+  --app-chart-8: 55 48 41;
+  --app-selection-bg: 24 78 74;
+  --app-selection-fg: 255 251 243;
+}
+
+/* High contrast theme – strong contrast for accessibility */
+[data-theme="high-contrast"] {
+  --app-bg: 255 255 255;
+  --app-surface: 240 240 240;
+  --app-card: 255 255 255;
+  --app-accent: 0 102 204;
+  --app-accent-hover: 0 82 180;
+  --app-accent-muted: 204 228 255;
+  --app-accent-on-tint: 0 51 102;
+  --app-text: 0 0 0;
+  --app-text-muted: 77 77 77;
+  --app-border: 0 0 0;
+  --app-bg-grid: 220 220 220;
+  --app-trend-up: 0 128 0;
+  --app-trend-down: 204 0 0;
+  --app-badge: 180 0 0;
+  --app-badge-bg: 255 220 220;
+  --app-standard: 153 77 0;
+  --app-standard-muted: 255 235 205;
+  --app-chart-1: 0 102 204;
+  --app-chart-2: 0 82 180;
+  --app-chart-3: 51 133 255;
+  --app-chart-4: 102 163 255;
+  --app-chart-5: 77 77 77;
+  --app-chart-6: 128 128 128;
+  --app-chart-7: 179 179 179;
+  --app-chart-8: 0 0 0;
+  --app-selection-bg: 0 0 0;
+  --app-selection-fg: 255 255 255;
+}
+
+/* Ocean theme – cool blue-grays, blue accent */
+[data-theme="ocean"] {
+  --app-bg: 240 247 253;
+  --app-surface: 224 242 254;
+  --app-card: 255 255 255;
+  --app-accent: 14 165 233;
+  --app-accent-hover: 2 132 199;
+  --app-accent-muted: 224 242 254;
+  --app-accent-on-tint: 12 74 110;
+  --app-text: 12 74 110;
+  --app-text-muted: 71 85 105;
+  --app-border: 186 230 253;
+  --app-bg-grid: 186 230 253;
+  --app-trend-up: 22 163 74;
+  --app-trend-down: 239 68 68;
+  --app-badge: 190 18 60;
+  --app-badge-bg: 255 228 230;
+  --app-standard: 245 158 11;
+  --app-standard-muted: 254 243 199;
+  --app-chart-1: 14 165 233;
+  --app-chart-2: 2 132 199;
+  --app-chart-3: 56 189 248;
+  --app-chart-4: 125 211 252;
+  --app-chart-5: 100 116 139;
+  --app-chart-6: 148 163 184;
+  --app-chart-7: 203 213 225;
+  --app-chart-8: 12 74 110;
+  --app-selection-bg: 14 165 233;
+  --app-selection-fg: 255 255 255;
+}
+
+/* Warm dark theme – dark with warm amber/brown tones */
+[data-theme="warm-dark"] {
+  --app-bg: 28 25 23;
+  --app-surface: 41 37 36;
+  --app-card: 68 64 60;
+  --app-accent: 251 191 36;
+  --app-accent-hover: 245 158 11;
+  --app-accent-muted: 69 26 3;
+  --app-accent-on-tint: 120 53 15;
+  --app-text: 253 242 233;
+  --app-text-muted: 214 211 209;
+  --app-border: 87 83 78;
+  --app-bg-grid: 87 83 78;
+  --app-trend-up: 134 239 172;
+  --app-trend-down: 252 165 165;
+  --app-badge: 252 165 165;
+  --app-badge-bg: 127 29 29;
+  --app-standard: 253 186 116;
+  --app-standard-muted: 69 26 3;
+  --app-chart-1: 251 191 36;
+  --app-chart-2: 245 158 11;
+  --app-chart-3: 217 119 6;
+  --app-chart-4: 180 83 9;
+  --app-chart-5: 214 211 209;
+  --app-chart-6: 168 162 158;
+  --app-chart-7: 120 113 108;
+  --app-chart-8: 253 242 233;
+  --app-selection-bg: 251 191 36;
+  --app-selection-fg: 28 25 23;
+}
+
+/* Forest theme – dark, green-toned */
+[data-theme="forest"] {
+  --app-bg: 6 24 18;
+  --app-surface: 20 41 32;
+  --app-card: 30 58 46;
+  --app-accent: 74 222 128;
+  --app-accent-hover: 34 197 94;
+  --app-accent-muted: 20 83 45;
+  --app-accent-on-tint: 187 247 208;
+  --app-text: 240 253 244;
+  --app-text-muted: 134 239 172;
+  --app-border: 22 101 52;
+  --app-bg-grid: 22 101 52;
+  --app-trend-up: 74 222 128;
+  --app-trend-down: 248 113 113;
+  --app-badge: 252 165 165;
+  --app-badge-bg: 127 29 29;
+  --app-standard: 253 186 116;
+  --app-standard-muted: 69 26 3;
+  --app-chart-1: 74 222 128;
+  --app-chart-2: 34 197 94;
+  --app-chart-3: 22 163 74;
+  --app-chart-4: 21 128 61;
+  --app-chart-5: 134 239 172;
+  --app-chart-6: 187 247 208;
+  --app-chart-7: 22 101 52;
+  --app-chart-8: 240 253 244;
+  --app-selection-bg: 74 222 128;
+  --app-selection-fg: 15 23 42;
+}
+
+/* Rose theme – warm, soft rose/pink (light) */
+[data-theme="rose"] {
+  --app-bg: 255 241 242;
+  --app-surface: 254 226 226;
+  --app-card: 255 255 255;
+  --app-accent: 225 29 72;
+  --app-accent-hover: 190 18 60;
+  --app-accent-muted: 254 205 211;
+  --app-accent-on-tint: 190 18 60;
+  --app-text: 136 19 55;
+  --app-text-muted: 157 23 77;
+  --app-border: 253 164 175;
+  --app-bg-grid: 253 164 175;
+  --app-trend-up: 22 163 74;
+  --app-trend-down: 239 68 68;
+  --app-badge: 190 18 60;
+  --app-badge-bg: 255 228 230;
+  --app-standard: 245 158 11;
+  --app-standard-muted: 254 243 199;
+  --app-chart-1: 225 29 72;
+  --app-chart-2: 190 18 60;
+  --app-chart-3: 244 63 94;
+  --app-chart-4: 251 113 133;
+  --app-chart-5: 157 23 77;
+  --app-chart-6: 244 114 182;
+  --app-chart-7: 251 207 232;
+  --app-chart-8: 136 19 55;
+  --app-selection-bg: 225 29 72;
+  --app-selection-fg: 255 255 255;
+}

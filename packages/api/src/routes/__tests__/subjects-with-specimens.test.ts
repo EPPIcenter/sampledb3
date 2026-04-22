@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient } from '../../__tests__/helpers/test-client'
+import { createTestClient, loginAndGetCookie, createAuthenticatedClientWrapper, authenticatedRequest } from '../../__tests__/helpers/test-client'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
+import { createAuthRoutes } from '../auth'
+import { setupPasswordRequirements, setupSessionSettings, createTestUser } from '../../__tests__/helpers/auth-helpers'
 import {
   createTestStudy,
   createTestStudySubject,
@@ -28,6 +30,35 @@ import {
   settings,
 } from '../../db/schema'
 import { createSubjectsRoutes } from '../subjects'
+import { handleRouteError } from '../../lib/error-handler'
+import { utcNow } from '../../lib/datetime'
+
+interface SubjectWithSpecimensResponse {
+  subject: {
+    id: number
+    name: string
+    [key: string]: unknown
+  }
+  subjectCreated: boolean
+  specimens: Array<{
+    id: number
+    containerCreated: boolean
+    containerId?: number
+    [key: string]: unknown
+  }>
+  summary: {
+    subjectsCreated: number
+    subjectsUpdated: number
+    specimensCreated: number
+    containersCreated: number
+  }
+}
+
+interface ErrorResponse {
+  error: string
+  specimenIndex?: number
+  [key: string]: unknown
+}
 
 describe('Subjects with Specimens API', () => {
   let app: Hono
@@ -38,6 +69,7 @@ describe('Subjects with Specimens API', () => {
   let testLocation: any
   let testUnit: any
   let testStorageType: any
+  let cookieHeader: string
 
   beforeEach(async () => {
     const setup = await setupTestDatabase()
@@ -139,10 +171,32 @@ describe('Subjects with Specimens API', () => {
       } as any,
     })
 
+    // Setup required settings for auth to work
+    await setupPasswordRequirements(testDb, 8)
+    await setupSessionSettings(testDb, 604800)
+
+    // Create a test user for authentication
+    await createTestUser(testDb, {
+      email: 'test@example.com',
+      name: 'Test User',
+      password: 'password123',
+      role: 'member',
+    })
+
     // Create subjects routes with test database
     const subjectsRoutes = createSubjectsRoutes(testDb)
+    const authRoutes = createAuthRoutes(testDb, testDb)
     app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
+    app.onError((err, c) => handleRouteError(err, c))
     app.route('/api/subjects', subjectsRoutes)
+    app.route('/api/auth', authRoutes)
+    
+    // Login to get session cookie
+    cookieHeader = await loginAndGetCookie(app, 'test@example.com', 'password123')
   })
 
   afterEach(() => {
@@ -151,10 +205,17 @@ describe('Subjects with Specimens API', () => {
     }
   })
 
+  // Helper to create authenticated client - available to all tests
+  function createAuthClient() {
+    const baseClient = createTestClient(app)
+    return createAuthenticatedClientWrapper(baseClient, cookieHeader)
+  }
+
   describe('Creating New Subjects with Specimens and Containers', () => {
+
     it('should create new subject with cryovial tube container', async () => {
       // Create cryovial box collection
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [cryovialBoxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -165,8 +226,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-001',
@@ -185,7 +247,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.subjectCreated).toBe(true)
       expect(data.subject.name).toBe('SUBJ-001')
       expect(data.specimens).toHaveLength(1)
@@ -207,7 +269,7 @@ describe('Subjects with Specimens API', () => {
 
     it('should create new subject with micronix tube container', async () => {
       // Create micronix plate collection
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [micronixPlateRecord] = await testDb
         .insert(micronixPlate)
         .values({
@@ -218,8 +280,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-002',
@@ -238,7 +301,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.specimens[0].containerCreated).toBe(true)
       
       // Verify container
@@ -254,7 +317,7 @@ describe('Subjects with Specimens API', () => {
 
     it('should create new subject with paper container', async () => {
       // Create box and sheet
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(box)
         .values({
@@ -276,8 +339,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-003',
@@ -296,7 +360,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.specimens[0].containerCreated).toBe(true)
       
       // Verify container
@@ -310,7 +374,7 @@ describe('Subjects with Specimens API', () => {
 
     it('should create new subject with static well container', async () => {
       // Create micronix plate
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [plateRecord] = await testDb
         .insert(micronixPlate)
         .values({
@@ -321,8 +385,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-004',
@@ -340,7 +405,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.specimens[0].containerCreated).toBe(true)
       
       // Verify container
@@ -355,7 +420,7 @@ describe('Subjects with Specimens API', () => {
 
     it('should create new subject with multiple specimens and containers', async () => {
       // Create collections
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -376,8 +441,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-005',
@@ -411,7 +477,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.specimens).toHaveLength(3)
       expect(data.specimens[0].containerCreated).toBe(true)
       expect(data.specimens[1].containerCreated).toBe(true)
@@ -429,7 +495,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       // Create collection
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -440,8 +506,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'EXISTING-SUBJ',
@@ -459,14 +526,14 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.subjectCreated).toBe(false)
       expect(data.subject.id).toBe(existingSubject.id)
       expect(data.specimens[0].containerCreated).toBe(true)
     })
 
-    it('should add multiple specimens to existing subject', async () => {
-      // Create existing subject with 2 specimens
+    it('should add multiple specimens to existing subject (get-or-create: one specimen, three containers)', async () => {
+      // Create existing subject with one specimen (Whole Blood, no collection date)
       const existingSubject = await createTestStudySubject(testDb, {
         studyId: testStudy.id,
         name: 'SUBJ-WITH-SPECS',
@@ -475,31 +542,23 @@ describe('Subjects with Specimens API', () => {
       await testDb.insert(specimen).values({
         studySubjectId: existingSubject.id,
         specimenTypeId: testSpecimenType.id,
-        created: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
-      })
-
-      await testDb.insert(specimen).values({
-        studySubjectId: existingSubject.id,
-        specimenTypeId: testSpecimenType.id,
-        created: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
+        created: utcNow(),
+        lastUpdated: utcNow(),
       })
 
       // Create collection
-      const now = new Date().toISOString()
-      const [boxRecord] = await testDb
-        .insert(cryovialBox)
-        .values({
-          name: 'BOX-005',
-          locationId: testLocation.id,
-          created: now,
-          lastUpdated: now,
-        })
-        .returning()
+      const now = utcNow()
+      await testDb.insert(cryovialBox).values({
+        name: 'BOX-005',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      // Same subject + type + no date: all three rows reuse the existing specimen, only containers are created
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-WITH-SPECS',
@@ -533,23 +592,24 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
-      expect(data.summary.specimensCreated).toBe(3)
+      const data = await res.json() as SubjectWithSpecimensResponse
+      expect(data.summary.specimensCreated).toBe(0)
       expect(data.summary.containersCreated).toBe(3)
 
-      // Verify all specimens exist
+      // One specimen total (existing one reused for all three container rows)
       const allSpecimens = await testDb
         .select()
         .from(specimen)
         .where(eq(specimen.studySubjectId, existingSubject.id))
-      expect(allSpecimens.length).toBe(5) // 2 existing + 3 new
+      expect(allSpecimens.length).toBe(1)
     })
   })
 
   describe('Transaction Rollback Tests', () => {
     it('should rollback on invalid specimen type', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERROR',
@@ -571,9 +631,37 @@ describe('Subjects with Specimens API', () => {
       expect(subjects.length).toBe(0)
     })
 
+    it('rejects micronix tube without position', async () => {
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-NO-POS',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube',
+                collectionName: 'PLATE-001',
+                barcode: 'MTX-NOPOS',
+                // position omitted - should fail
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const body = await res.json() as ErrorResponse
+      expect(body.error).toContain('Position')
+      const subjects = await testDb.select().from(studySubject).where(eq(studySubject.name, 'SUBJ-NO-POS'))
+      expect(subjects.length).toBe(0)
+    })
+
     it('should rollback on container creation failure', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERROR-2',
@@ -583,6 +671,7 @@ describe('Subjects with Specimens API', () => {
               container: {
                 containerType: 'cryovial_tube',
                 collectionName: 'NON-EXISTENT-BOX',
+                position: 'A01',
                 // No collectionLocationId - should fail
               },
             },
@@ -602,7 +691,7 @@ describe('Subjects with Specimens API', () => {
 
     it('should rollback on duplicate container barcode', async () => {
       // Create existing micronix tube with barcode
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [plateRecord] = await testDb
         .insert(micronixPlate)
         .values({
@@ -648,8 +737,9 @@ describe('Subjects with Specimens API', () => {
       })
 
       // Try to create another with same barcode
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NEW',
@@ -667,7 +757,10 @@ describe('Subjects with Specimens API', () => {
         },
       })
 
-      expect(res.status).toBe(500) // Transaction error
+      expect(res.status).toBe(400) // Barcode conflict returns validation error
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain("Barcode 'MTX-DUPLICATE' already exists")
+      expect(data.specimenIndex).toBe(0)
       
       // Verify new subject was not created
       const subjects = await testDb
@@ -676,12 +769,575 @@ describe('Subjects with Specimens API', () => {
         .where(eq(studySubject.name, 'SUBJ-NEW'))
       expect(subjects.length).toBe(0)
     })
+
+    it('should return 400 for in-payload duplicate barcode', async () => {
+      const now = utcNow()
+      await testDb.insert(micronixPlate).values({
+        name: 'PLATE-DUP-BARCODE',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-DUP-BARCODE',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube',
+                collectionName: 'PLATE-DUP-BARCODE',
+                barcode: 'MTX-SAME',
+                position: 'A01',
+              },
+            },
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube',
+                collectionName: 'PLATE-DUP-BARCODE',
+                barcode: 'MTX-SAME', // Same barcode again!
+                position: 'A02',
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('used more than once')
+      expect(data.error).toContain('MTX-SAME')
+      expect(data.specimenIndex).toBe(1)
+    })
+
+    it('should return 400 for position already used in plate', async () => {
+      const now = utcNow()
+      const [plateRecord] = await testDb
+        .insert(micronixPlate)
+        .values({
+          name: 'PLATE-POS',
+          locationId: testLocation.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const subject = await createTestStudySubject(testDb, {
+        studyId: testStudy.id,
+        name: 'SUBJ-POS',
+      })
+      const [spec] = await testDb
+        .insert(specimen)
+        .values({
+          studySubjectId: subject.id,
+          specimenTypeId: testSpecimenType.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: spec.id,
+          unitId: testUnit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      await testDb.insert(micronixTube).values({
+        id: container.id,
+        collectionId: plateRecord.id,
+        barcode: 'MTX-POS-EXISTING',
+        position: 'B01',
+      })
+
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-NEW-POS',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube',
+                collectionName: 'PLATE-POS',
+                barcode: 'MTX-POS-NEW',
+                position: 'B01', // Already used!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('Position B01')
+      expect(data.error).toContain('already used')
+      expect(data.specimenIndex).toBe(0)
+    })
+
+    it('should return 400 for in-payload duplicate position', async () => {
+      const now = utcNow()
+      await testDb.insert(micronixPlate).values({
+        name: 'PLATE-DUP-POS',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-DUP-POS',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube',
+                collectionName: 'PLATE-DUP-POS',
+                barcode: 'MTX-UNIQ-1',
+                position: 'C01',
+              },
+            },
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube',
+                collectionName: 'PLATE-DUP-POS',
+                barcode: 'MTX-UNIQ-2',
+                position: 'C01', // Same position!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('used more than once')
+      expect(data.error).toContain('C01')
+      expect(data.specimenIndex).toBe(1)
+    })
+
+    it('should return 400 for in-payload duplicate cryovial tube barcode', async () => {
+      const now = utcNow()
+      await testDb.insert(cryovialBox).values({
+        name: 'BOX-CRYO-DUP-BARCODE',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-CRYO-DUP-BARCODE',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-CRYO-DUP-BARCODE',
+                barcode: 'CRYO-SAME',
+                position: 'A01',
+              },
+            },
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-CRYO-DUP-BARCODE',
+                barcode: 'CRYO-SAME',
+                position: 'A02',
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('used more than once')
+      expect(data.error).toContain('CRYO-SAME')
+      expect(data.specimenIndex).toBe(1)
+    })
+
+    it('should return 400 for cryovial tube barcode already in DB', async () => {
+      const now = utcNow()
+      const [boxRecord] = await testDb
+        .insert(cryovialBox)
+        .values({
+          name: 'BOX-CRYO-BARCODE',
+          locationId: testLocation.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const subject = await createTestStudySubject(testDb, {
+        studyId: testStudy.id,
+        name: 'SUBJ-CRYO-BARCODE',
+      })
+      const [spec] = await testDb
+        .insert(specimen)
+        .values({
+          studySubjectId: subject.id,
+          specimenTypeId: testSpecimenType.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: spec.id,
+          unitId: testUnit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      await testDb.insert(cryovialTube).values({
+        id: container.id,
+        collectionId: boxRecord.id,
+        barcode: 'CRYO-DUPLICATE',
+        position: 'A01',
+      })
+
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-NEW-CRYO',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-CRYO-BARCODE',
+                barcode: 'CRYO-DUPLICATE',
+                position: 'A02',
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain("Barcode 'CRYO-DUPLICATE' already exists")
+      expect(data.specimenIndex).toBe(0)
+    })
+
+    it('should return 400 for in-payload duplicate cryovial tube position', async () => {
+      const now = utcNow()
+      await testDb.insert(cryovialBox).values({
+        name: 'BOX-CRYO-DUP-POS',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-CRYO-DUP-POS',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-CRYO-DUP-POS',
+                position: 'G07',
+              },
+            },
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-CRYO-DUP-POS',
+                position: 'G07', // Same position!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('used more than once')
+      expect(data.error).toContain('G07')
+      expect(data.specimenIndex).toBe(1)
+    })
+
+    it('should return 400 for cryovial tube position already used in box', async () => {
+      const now = utcNow()
+      const [boxRecord] = await testDb
+        .insert(cryovialBox)
+        .values({
+          name: 'BOX-CRYO-POS',
+          locationId: testLocation.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const subject = await createTestStudySubject(testDb, {
+        studyId: testStudy.id,
+        name: 'SUBJ-CRYO-POS',
+      })
+      const [spec] = await testDb
+        .insert(specimen)
+        .values({
+          studySubjectId: subject.id,
+          specimenTypeId: testSpecimenType.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: spec.id,
+          unitId: testUnit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      await testDb.insert(cryovialTube).values({
+        id: container.id,
+        collectionId: boxRecord.id,
+        barcode: null,
+        position: 'D05',
+      })
+
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-NEW-CRYO-POS',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-CRYO-POS',
+                position: 'D05', // Already used!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('Position D05')
+      expect(data.error).toContain('already used')
+      expect(data.error).toContain('box')
+      expect(data.specimenIndex).toBe(0)
+    })
+
+    it('should return 400 for in-payload duplicate static well position', async () => {
+      const now = utcNow()
+      await testDb.insert(micronixPlate).values({
+        name: 'PLATE-STATIC-DUP',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-STATIC-DUP-POS',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'static_well',
+                collectionName: 'PLATE-STATIC-DUP',
+                position: 'H12',
+              },
+            },
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'static_well',
+                collectionName: 'PLATE-STATIC-DUP',
+                position: 'H12', // Same position!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('used more than once')
+      expect(data.error).toContain('H12')
+      expect(data.specimenIndex).toBe(1)
+    })
+
+    it('should return 400 for static well position already used in plate', async () => {
+      const now = utcNow()
+      const [plateRecord] = await testDb
+        .insert(micronixPlate)
+        .values({
+          name: 'PLATE-STATIC',
+          locationId: testLocation.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const subject = await createTestStudySubject(testDb, {
+        studyId: testStudy.id,
+        name: 'SUBJ-STATIC',
+      })
+      const [spec] = await testDb
+        .insert(specimen)
+        .values({
+          studySubjectId: subject.id,
+          specimenTypeId: testSpecimenType.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: spec.id,
+          unitId: testUnit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      await testDb.insert(staticWell).values({
+        id: container.id,
+        collectionId: plateRecord.id,
+        position: 'E03',
+      })
+
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-NEW-STATIC',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'static_well',
+                collectionName: 'PLATE-STATIC',
+                position: 'E03', // Already used by static well!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('Position E03')
+      expect(data.error).toContain('already used')
+      expect(data.error).toContain('plate')
+      expect(data.specimenIndex).toBe(0)
+    })
+
+    it('should return 400 for static well conflicting with existing micronix tube position', async () => {
+      const now = utcNow()
+      const [plateRecord] = await testDb
+        .insert(micronixPlate)
+        .values({
+          name: 'PLATE-MIXED',
+          locationId: testLocation.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const subject = await createTestStudySubject(testDb, {
+        studyId: testStudy.id,
+        name: 'SUBJ-MIXED',
+      })
+      const [spec] = await testDb
+        .insert(specimen)
+        .values({
+          studySubjectId: subject.id,
+          specimenTypeId: testSpecimenType.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: spec.id,
+          unitId: testUnit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      await testDb.insert(micronixTube).values({
+        id: container.id,
+        collectionId: plateRecord.id,
+        barcode: 'MTX-F01',
+        position: 'F01',
+      })
+
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'SUBJ-NEW-MIXED',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'static_well',
+                collectionName: 'PLATE-MIXED',
+                position: 'F01', // Already used by micronix tube!
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('Position F01')
+      expect(data.error).toContain('already used')
+      expect(data.specimenIndex).toBe(0)
+    })
   })
 
   describe('Collection Handling Tests', () => {
     it('should use existing collection', async () => {
       // Create existing collection
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -692,8 +1348,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-EXISTING-COLL',
@@ -711,7 +1368,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       
       // Verify container uses existing collection
       const container = await testDb
@@ -723,8 +1380,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should create collection if location provided', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NEW-COLL',
@@ -754,8 +1412,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should fail gracefully on missing collection without location', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-MISSING-COLL',
@@ -765,6 +1424,7 @@ describe('Subjects with Specimens API', () => {
               container: {
                 containerType: 'cryovial_tube',
                 collectionName: 'MISSING-BOX',
+                position: 'A01',
                 // No collectionLocationId
               },
             },
@@ -773,7 +1433,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('not found')
     })
   })
@@ -781,8 +1441,9 @@ describe('Subjects with Specimens API', () => {
   describe('Response Format Tests', () => {
     it('should include subjectCreated flag', async () => {
       // Test new subject
-      const client = createTestClient(app) as any
-      const res1 = await client.api.subjects['with-specimens'].$post({
+      const res1 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'NEW-SUBJ-FLAG',
@@ -795,7 +1456,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res1.status).toBe(201)
-      const data1 = await res1.json()
+      const data1 = await res1.json() as SubjectWithSpecimensResponse
       expect(data1.subjectCreated).toBe(true)
 
       // Test existing subject
@@ -804,7 +1465,9 @@ describe('Subjects with Specimens API', () => {
         name: 'EXISTING-SUBJ-FLAG',
       })
 
-      const res2 = await client.api.subjects['with-specimens'].$post({
+      const res2 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'EXISTING-SUBJ-FLAG',
@@ -817,12 +1480,12 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res2.status).toBe(201)
-      const data2 = await res2.json()
+      const data2 = await res2.json() as SubjectWithSpecimensResponse
       expect(data2.subjectCreated).toBe(false)
     })
 
     it('should include container information in response', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -833,8 +1496,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-RESPONSE',
@@ -856,7 +1520,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.specimens[0].containerCreated).toBe(true)
       expect(data.specimens[0].containerId).toBeDefined()
       expect(data.specimens[1].containerCreated).toBe(false)
@@ -864,7 +1528,7 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should include summary counts', async () => {
-      const now = new Date().toISOString()
+      const now = utcNow()
       const [boxRecord] = await testDb
         .insert(cryovialBox)
         .values({
@@ -875,8 +1539,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-SUMMARY',
@@ -902,18 +1567,88 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.summary.subjectsCreated).toBe(1)
       expect(data.summary.subjectsUpdated).toBe(0)
-      expect(data.summary.specimensCreated).toBe(2)
+      // Same subject + type + no collection date: one specimen, two containers (get-or-create)
+      expect(data.summary.specimensCreated).toBe(1)
       expect(data.summary.containersCreated).toBe(2)
+    })
+
+    it('should reuse existing specimen (get-or-create) and only create container on second call', async () => {
+      const now = utcNow()
+      await testDb.insert(cryovialBox).values({
+        name: 'BOX-DEDUP',
+        locationId: testLocation.id,
+        created: now,
+        lastUpdated: now,
+      })
+
+      // First call: create subject + specimen with container
+      const res1 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'DEDUP-SUBJ',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              collectionDate: '2024-01-15',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-DEDUP',
+                position: 'A01',
+              },
+            },
+          ],
+        },
+      })
+      expect(res1.status).toBe(201)
+      const data1 = (await res1.json()) as SubjectWithSpecimensResponse
+      expect(data1.summary.specimensCreated).toBe(1)
+      expect(data1.summary.containersCreated).toBe(1)
+      const subjectId = data1.subject.id
+
+      // Second call: same study, subject, type, collection date — reuse specimen, add container only
+      const res2 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
+        json: {
+          studyShortCode: 'TEST01',
+          subjectName: 'DEDUP-SUBJ',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              collectionDate: '2024-01-15',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BOX-DEDUP',
+                position: 'A02',
+              },
+            },
+          ],
+        },
+      })
+      expect(res2.status).toBe(201)
+      const data2 = (await res2.json()) as SubjectWithSpecimensResponse
+      expect(data2.summary.specimensCreated).toBe(0)
+      expect(data2.summary.containersCreated).toBe(1)
+
+      // Subject should have exactly one specimen (not duplicated)
+      const specimensForSubject = await testDb
+        .select({ id: specimen.id })
+        .from(specimen)
+        .where(eq(specimen.studySubjectId, subjectId))
+      expect(specimensForSubject).toHaveLength(1)
     })
   })
 
   describe('Validation Error Tests', () => {
     it('should return 400 for invalid study short code', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'INVALID',
           subjectName: 'SUBJ',
@@ -929,8 +1664,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for invalid specimen type name', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ',
@@ -943,16 +1679,16 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('not found')
       expect(data.specimenIndex).toBe(0)
     })
 
     it('should return 400 for missing required container fields', async () => {
-      const client = createTestClient(app) as any
-      
       // Test cryovial without collection
-      const res1 = await client.api.subjects['with-specimens'].$post({
+      const res1 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERR-1',
@@ -970,7 +1706,9 @@ describe('Subjects with Specimens API', () => {
       expect(res1.status).toBe(400)
 
       // Test micronix without barcode
-      const res2 = await client.api.subjects['with-specimens'].$post({
+      const res2 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERR-2',
@@ -989,7 +1727,9 @@ describe('Subjects with Specimens API', () => {
       expect(res2.status).toBe(400)
 
       // Test paper without label
-      const res3 = await client.api.subjects['with-specimens'].$post({
+      const res3 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERR-3',
@@ -1011,8 +1751,9 @@ describe('Subjects with Specimens API', () => {
 
   describe('Edge Cases', () => {
     it('should handle empty specimens array', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-EMPTY',
@@ -1021,15 +1762,16 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.subjectCreated).toBe(true)
       expect(data.specimens).toHaveLength(0)
       expect(data.summary.specimensCreated).toBe(0)
     })
 
     it('should handle specimens without containers', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NO-CONTAINERS',
@@ -1045,7 +1787,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.specimens).toHaveLength(2)
       expect(data.specimens[0].containerCreated).toBe(false)
       expect(data.specimens[1].containerCreated).toBe(false)
@@ -1053,8 +1795,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should handle subject name with whitespace', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.subjects['with-specimens'].$post({
+      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+        method: 'POST',
+        cookie: cookieHeader,
         json: {
           studyShortCode: 'TEST01',
           subjectName: '  SUBJ-WHITESPACE  ',
@@ -1067,7 +1810,7 @@ describe('Subjects with Specimens API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as SubjectWithSpecimensResponse
       expect(data.subject.name).toBe('SUBJ-WHITESPACE') // Trimmed
     })
   })

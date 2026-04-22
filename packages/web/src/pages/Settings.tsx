@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { settingsApi, type AllSettings } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
+import { useTheme, THEME_IDS, THEME_LABELS } from '../contexts/ThemeContext'
 import InfoTooltip from '../components/InfoTooltip'
 import ContainerDefaultsForm from '../components/ContainerDefaultsForm'
 import ContainerTypeUnitsManager from '../components/ContainerTypeUnitsManager'
@@ -9,11 +10,13 @@ import PaginationSettingsForm from '../components/PaginationSettingsForm'
 import PasswordRequirementsForm from '../components/PasswordRequirementsForm'
 import SessionSettingsForm from '../components/SessionSettingsForm'
 import ExportConfigurationsManager from '../components/ExportConfigurationsManager'
+import TableViewConfigurationsManager from '../components/TableViewConfigurationsManager'
 import ScannerConfigurationsManager from '../components/ScannerConfigurationsManager'
 import SkeletonCard from '../components/SkeletonCard'
+import '../styles/settings.css'
 
 type SettingsCategory = 'application' | 'security' | 'data-management'
-type SettingsSection = 'container-defaults' | 'container-type-units' | 'pagination' | 'password' | 'session' | 'export-configurations' | 'scanner-configurations'
+type SettingsSection = 'appearance' | 'container-defaults' | 'container-type-units' | 'pagination' | 'password' | 'session' | 'export-configurations' | 'table-view-configurations' | 'scanner-configurations'
 
 interface SettingsStructure {
   id: SettingsCategory
@@ -38,6 +41,11 @@ const settingsStructure: SettingsStructure[] = [
       </svg>
     ),
     sections: [
+      {
+        id: 'appearance',
+        label: 'Appearance',
+        tooltip: 'Choose the application theme (light, dark, sepia, ocean, warm dark, high contrast, forest, or rose). Your choice is saved and applied on every load.',
+      },
       {
         id: 'container-defaults',
         label: 'Container Defaults',
@@ -95,6 +103,12 @@ const settingsStructure: SettingsStructure[] = [
         tooltip: 'Create and manage multiple named export configurations for different export scenarios',
       },
       {
+        id: 'table-view-configurations',
+        label: 'Table View Configurations',
+        tooltip: 'Presets for which columns appear in collection table views (plates, boxes, bags, sheets). Table CSV download exports the current view.',
+        adminOnly: true,
+      },
+      {
         id: 'scanner-configurations',
         label: 'Scanner Configurations',
         tooltip: 'Create and manage scanner configurations for parsing CSV files from different plate scanning devices',
@@ -105,6 +119,7 @@ const settingsStructure: SettingsStructure[] = [
 
 export default function Settings() {
   const { user } = useUser()
+  const { theme, setTheme } = useTheme()
   const isAdmin = user?.role === 'admin'
   const [searchParams, setSearchParams] = useSearchParams()
   
@@ -155,12 +170,13 @@ export default function Settings() {
   const [expandedCategories, setExpandedCategories] = useState<Set<SettingsCategory>>(
     new Set([initial.category])
   )
-  
-  // Update active category/section when URL params change
-  useEffect(() => {
-    const category = searchParams.get('category') as SettingsCategory | null
-    const section = searchParams.get('section') as SettingsSection | null
-    
+  const prevParamsRef = useRef({ category: categoryParam, section: sectionParam })
+
+  // Update active category/section when URL params change (adjust during render)
+  const category = searchParams.get('category') as SettingsCategory | null
+  const section = searchParams.get('section') as SettingsSection | null
+  if (category !== prevParamsRef.current.category || section !== prevParamsRef.current.section) {
+    prevParamsRef.current = { category, section }
     if (category && section) {
       const categoryData = filteredSettingsStructure.find(c => c.id === category)
       if (categoryData && categoryData.sections.some(s => s.id === section)) {
@@ -168,13 +184,12 @@ export default function Settings() {
         setActiveSection(section)
         setExpandedCategories(prev => new Set([...prev, category]))
       } else {
-        // If trying to access admin-only section, redirect to first available
-        const initial = getInitialCategoryAndSection()
-        setSearchParams({ category: initial.category, section: initial.section }, { replace: true })
+        const initialSection = getInitialCategoryAndSection()
+        setSearchParams({ category: initialSection.category, section: initialSection.section }, { replace: true })
       }
     }
-  }, [searchParams, filteredSettingsStructure, getInitialCategoryAndSection, setSearchParams])
-  
+  }
+
   const handleSectionChange = (category: SettingsCategory, section: SettingsSection) => {
     setActiveCategory(category)
     setActiveSection(section)
@@ -208,16 +223,20 @@ export default function Settings() {
     loadSettings()
   }, [])
 
-  const loadSettings = async () => {
-    setLoading(true)
-    setError(null)
+  const loadSettings = async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const res = await settingsApi.getAll()
       setSettings(res.data)
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load settings')
     } finally {
-      setLoading(false)
+      if (showLoading) {
+        setLoading(false)
+      }
     }
   }
 
@@ -237,8 +256,31 @@ export default function Settings() {
   }
 
   const renderForm = () => {
+    if (!settings && activeSection !== 'appearance') return null
+    if (activeSection === 'appearance') {
+      return (
+        <div className="space-y-3">
+          <p className="text-sm text-app-text-muted">Select a theme. You can also change it from the theme control in the bottom-right corner of the app.</p>
+          <div className="flex flex-wrap gap-2">
+            {THEME_IDS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTheme(id)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                  theme === id
+                    ? 'bg-app-accent-muted text-app-accent-on-tint border-app-accent'
+                    : 'bg-app-card text-app-text border-app-border hover:border-app-accent/40 hover:text-app-accent-hover'
+                }`}
+              >
+                {THEME_LABELS[id]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )
+    }
     if (!settings) return null
-    
     switch (activeSection) {
       case 'container-defaults':
         return (
@@ -316,6 +358,19 @@ export default function Settings() {
             }}
           />
         )
+      case 'table-view-configurations':
+        return (
+          <TableViewConfigurationsManager
+            data={settings.table_view_configurations}
+            onSave={handleSave}
+            onError={(err) => setError(err)}
+            onSuccess={() => {
+              setSuccess('Table view configurations saved successfully')
+              setTimeout(() => setSuccess(null), 3000)
+              loadSettings(false)
+            }}
+          />
+        )
       case 'scanner-configurations':
         return (
           <ScannerConfigurationsManager
@@ -325,7 +380,7 @@ export default function Settings() {
             onSuccess={() => {
               setSuccess('Scanner configurations saved successfully')
               setTimeout(() => setSuccess(null), 3000)
-              loadSettings()
+              loadSettings(false)
             }}
           />
         )
@@ -336,26 +391,32 @@ export default function Settings() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-4">
-        <div className="mb-3">
-          <div className="h-8 bg-gray-200 rounded w-64 mb-2 animate-pulse"></div>
-        </div>
-        <div className="flex gap-6">
-          <div className="w-60 bg-white rounded-lg shadow p-4">
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i}>
-                  <div className="h-5 bg-gray-200 rounded w-32 mb-2 animate-pulse"></div>
-                  <div className="ml-4 space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
-                    <div className="h-4 bg-gray-200 rounded w-28 animate-pulse"></div>
-                  </div>
-                </div>
-              ))}
-            </div>
+      <div className="settings-page">
+        <div className="container mx-auto px-4 py-4 relative z-10">
+          <div className="mb-3 settings-reveal settings-reveal-1">
+            <div className="settings-skeleton h-8 w-64 mb-2" />
           </div>
-          <div className="flex-1 bg-white rounded-lg shadow p-4">
-            <SkeletonCard height="h-96" />
+          <div className="flex gap-6">
+            <aside className="w-60 flex-shrink-0 settings-card settings-reveal settings-reveal-2">
+              <div className="p-4">
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i}>
+                      <div className="settings-skeleton h-5 w-32 mb-2" />
+                      <div className="ml-4 space-y-2">
+                        <div className="settings-skeleton h-4 w-24" />
+                        <div className="settings-skeleton h-4 w-28" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </aside>
+            <div className="flex-1 min-w-0 settings-card settings-reveal settings-reveal-3">
+              <div className="p-4">
+                <SkeletonCard height="h-96" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -364,8 +425,10 @@ export default function Settings() {
 
   if (!settings) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center text-red-600">Failed to load settings</div>
+      <div className="settings-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <div className="text-center text-app-trend-down">Failed to load settings</div>
+        </div>
       </div>
     )
   }
@@ -374,45 +437,48 @@ export default function Settings() {
   const activeSectionData = activeCategoryData?.sections.find(s => s.id === activeSection)
 
   return (
-    <div className="container mx-auto px-4 py-4">
-      <div className="mb-3">
-        <h1 className="text-2xl font-bold text-gray-900">Application Settings</h1>
-      </div>
-
-      {error && (
-        <div className="mb-2 rounded-md bg-red-50 p-2">
-          <p className="text-xs font-medium text-red-800">{error}</p>
+    <div className="settings-page">
+      <div className="container mx-auto px-4 py-4 relative z-10">
+        <div className="mb-3 settings-reveal settings-reveal-1">
+          <h1 className="text-2xl font-bold">Application Settings</h1>
+          <p className="settings-description mt-0.5">
+            Configure application, security, and data preferences.
+            {' '}
+            <a href="/docs/guides/advanced/settings/" className="text-app-accent hover:text-app-accent-hover hover:underline">
+              Settings guide
+            </a>
+          </p>
         </div>
-      )}
 
-      {success && (
-        <div className="mb-2 rounded-md bg-green-50 p-2">
-          <p className="text-xs font-medium text-green-800">{success}</p>
-        </div>
-      )}
+        {error && (
+          <div className="mb-2 rounded-md p-2 settings-alert-error settings-reveal settings-reveal-2">
+            <p className="text-xs font-medium">{error}</p>
+          </div>
+        )}
 
-      <div className="flex gap-6">
-        {/* Sidebar Navigation */}
-        <aside className="w-60 flex-shrink-0">
-          <div className="bg-white rounded-lg shadow border border-gray-200">
+        {success && (
+          <div className="mb-2 rounded-md p-2 settings-alert-success settings-reveal settings-reveal-2">
+            <p className="text-xs font-medium">{success}</p>
+          </div>
+        )}
+
+        <div className="flex gap-6">
+          {/* Sidebar Navigation */}
+          <aside className="w-60 flex-shrink-0 settings-card settings-reveal settings-reveal-3">
             <nav className="p-2">
               {filteredSettingsStructure.map((category) => {
                 const isExpanded = expandedCategories.has(category.id)
                 const isActiveCategory = activeCategory === category.id
-                
+
                 return (
                   <div key={category.id} className="mb-1">
-                    {/* Category Header */}
                     <button
+                      type="button"
                       onClick={() => toggleCategory(category.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                        isActiveCategory
-                          ? 'bg-blue-50 text-blue-700'
-                          : 'text-gray-700 hover:bg-gray-50'
-                      }`}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md settings-nav-category ${isActiveCategory ? 'settings-nav-category-active' : ''}`}
                     >
                       <div className="flex items-center gap-2">
-                        <span className="text-gray-500">{category.icon}</span>
+                        <span className="opacity-80">{category.icon}</span>
                         <span>{category.label}</span>
                       </div>
                       <svg
@@ -420,30 +486,26 @@ export default function Settings() {
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </button>
-                    
-                    {/* Category Sections */}
+
                     {isExpanded && (
                       <div className="ml-4 mt-1 space-y-0.5">
                         {category.sections.map((section) => {
                           const isActive = activeCategory === category.id && activeSection === section.id
-                          
                           return (
-              <button
+                            <button
+                              type="button"
                               key={section.id}
                               onClick={() => handleSectionChange(category.id, section.id)}
-                              className={`w-full flex items-center justify-between px-3 py-1.5 text-xs rounded-md transition-colors ${
-                                isActive
-                                  ? 'bg-blue-100 text-blue-700 border-l-2 border-blue-600'
-                                  : 'text-gray-600 hover:bg-gray-50'
-                              }`}
+                              className={`w-full flex items-center justify-between px-3 py-1.5 text-xs rounded-md border-l-2 border-transparent settings-nav-section ${isActive ? 'settings-nav-section-active' : ''}`}
                             >
                               <span>{section.label}</span>
                               <InfoTooltip text={section.tooltip} />
-              </button>
+                            </button>
                           )
                         })}
                       </div>
@@ -451,18 +513,16 @@ export default function Settings() {
                   </div>
                 )
               })}
-          </nav>
-        </div>
-        </aside>
+            </nav>
+          </aside>
 
-        {/* Main Content Area */}
-        <div className="flex-1 min-w-0">
-          <div className="bg-white rounded-lg shadow border border-gray-200">
-        <div className="p-4">
+          {/* Main Content Area */}
+          <div className="flex-1 min-w-0 settings-card settings-reveal settings-reveal-4">
+            <div className="p-4">
               {activeSectionData && (
                 <div className="mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">{activeSectionData.label}</h2>
-                  <p className="text-xs text-gray-500 mt-1">{activeSectionData.tooltip}</p>
+                  <h2 className="settings-section-title">{activeSectionData.label}</h2>
+                  <p className="settings-description mt-1">{activeSectionData.tooltip}</p>
                 </div>
               )}
               {renderForm()}

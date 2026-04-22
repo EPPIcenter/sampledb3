@@ -16,7 +16,9 @@ import {
   getLocationHierarchyStats,
 } from '../lib/location-helpers'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
-import { createAdminMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create locations routes with database injection
@@ -25,10 +27,11 @@ import { createAdminMiddleware } from '../middleware/auth'
  */
 export function createLocationsRoutes(database: Database, sqliteDatabase: SQLiteDatabase): Hono {
   const locations = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
   const adminMiddleware = createAdminMiddleware(database)
 
 // List all locations
-locations.get('/', async (c) => {
+locations.get('/', authMiddleware, async (c) => {
   try {
     const search = c.req.query('search')
     // Make pagination optional: if neither page nor limit is provided, return all locations
@@ -116,8 +119,8 @@ locations.get('/', async (c) => {
 })
 
 // Get location by ID
-locations.get('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'))
+locations.get('/:id', authMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
   
   if (isNaN(id)) {
     return c.json({ error: 'Invalid location ID' }, 400)
@@ -315,7 +318,7 @@ locations.post('/', adminMiddleware, async (c) => {
       throw new ValidationError('Location with this name already exists under the same parent')
     }
 
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     const result = await database
       .insert(location)
@@ -323,8 +326,8 @@ locations.post('/', adminMiddleware, async (c) => {
         parentId: data.parentId ?? null,
         name: data.name,
         storageTypeId: data.parentId === null ? data.storageTypeId : null, // Only set for root locations
-        description: data.description ?? null,
-        canContainCollections: data.canContainCollections ?? false,
+        description: data.description,
+        canContainCollections: data.canContainCollections,
         created: now,
         lastUpdated: now,
         createdBy: user?.id,
@@ -356,7 +359,7 @@ locations.post('/', adminMiddleware, async (c) => {
 
 // Update location
 locations.put('/:id', adminMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   
   if (isNaN(id)) {
     return c.json({ error: 'Invalid location ID' }, 400)
@@ -408,7 +411,7 @@ locations.put('/:id', adminMiddleware, async (c) => {
 
     // Validate parent if being changed
     if (data.parentId !== undefined) {
-      const validationError = await validateLocationHierarchy(data.parentId ?? null, id)
+      const validationError = await validateLocationHierarchy(database, sqliteDatabase, data.parentId ?? null, id)
       if (validationError) {
         return c.json({ error: validationError }, 400)
       }
@@ -452,7 +455,7 @@ locations.put('/:id', adminMiddleware, async (c) => {
 
     // Build update object
     const updateData: any = {
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: utcNow(),
     }
     if (data.parentId !== undefined) updateData.parentId = data.parentId ?? null
     if (data.name !== undefined) updateData.name = data.name
@@ -494,7 +497,7 @@ locations.put('/:id', adminMiddleware, async (c) => {
 
 // Delete location
 locations.delete('/:id', adminMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   
   if (isNaN(id)) {
     return c.json({ error: 'Invalid location ID' }, 400)

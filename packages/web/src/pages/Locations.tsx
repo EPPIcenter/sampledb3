@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+
 import { locationsApi, searchApi, type LocationHierarchyStats, type CollectionSearchResult } from '../lib/api'
 import { getRootLocations, getLocationChildren, getLocationDescendants, getLocationAncestors, getLocationLabel } from '../lib/location-tree'
 import SkeletonCard from '../components/SkeletonCard'
 import LocationDetailsSkeleton from '../components/LocationDetailsSkeleton'
 import LocationForm from '../components/LocationForm'
 import LocationHierarchyStatsDisplay from '../components/LocationHierarchyStats'
+import ModalPortal from '../components/ModalPortal'
 import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
+import { useUser } from '../contexts/UserContext'
+import { useFocusSearchOnSlash } from '../hooks/useHotkey'
+import { useClickOutside } from '../hooks/useClickOutside'
+import '../styles/storage.css'
 
 interface Location {
   id: number
@@ -37,10 +43,14 @@ interface SelectedNode {
 
 export default function Locations() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { canManageReferenceData } = useUser()
+  const canEdit = canManageReferenceData
   const searchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const treeRef = useRef<HTMLDivElement>(null)
   const selectedNodeRef = useRef<HTMLButtonElement>(null)
+  useFocusSearchOnSlash(inputRef)
 
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,7 +59,7 @@ export default function Locations() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
   const [locationDetailsCache, setLocationDetailsCache] = useState<
-    Record<number, { location: Location; contents: LocationContents; hierarchyStats?: LocationHierarchyStats }>
+    Partial<Record<number, { location: Location; contents: LocationContents; hierarchyStats?: LocationHierarchyStats }>>
   >({})
   const [loadingSelection, setLoadingSelection] = useState(false)
   
@@ -135,9 +145,36 @@ export default function Locations() {
     loadLocations(false) // Initial load, don't preserve state
   }, [loadLocations])
 
+  // Command palette: /locations?createLocation=true&parentId=…
+  useEffect(() => {
+    if (!canEdit || loading) return
+    if (searchParams.get('createLocation') !== 'true') return
+
+    const parentIdStr = searchParams.get('parentId')
+    setEditingLocation(null)
+    if (parentIdStr) {
+      const pid = parseInt(parentIdStr, 10)
+      if (!Number.isNaN(pid)) {
+        const parentLocation = locations.find((l) => l.id === pid) ?? null
+        setFormParentId(pid)
+        setFormParentLocation(parentLocation)
+      }
+    } else {
+      setFormParentId(null)
+      setFormParentLocation(null)
+    }
+    setShowFormModal(true)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('createLocation')
+      next.delete('parentId')
+      return next
+    })
+  }, [canEdit, loading, searchParams, setSearchParams, locations])
+
   // Define ensureLocationLoaded before useEffects that use it
   const ensureLocationLoaded = useCallback(async (locationId: number) => {
-    // If already cached, don't show loading state
+    // Skip fetch if we already have this location in cache (Record index can be undefined)
     if (locationDetailsCache[locationId]) return
     
     // Set loading state immediately to trigger skeleton
@@ -146,9 +183,9 @@ export default function Locations() {
       const response = await locationsApi.get(locationId)
       setLocationDetailsCache((prev) => ({
         ...prev,
-        [locationId]: {
+          [locationId]: {
           location: response.data.location as Location,
-          contents: (response.data.contents || {}) as LocationContents,
+          contents: response.data.contents as LocationContents,
           hierarchyStats: response.data.hierarchyStats as LocationHierarchyStats | undefined,
         },
       }))
@@ -172,10 +209,12 @@ export default function Locations() {
 
   // Scroll selected node into view when it changes
   useEffect(() => {
-    if (selectedNodeRef.current && treeRef.current) {
+    const nodeRef = selectedNodeRef.current
+    const tree = treeRef.current
+    if (nodeRef && tree) {
       // Small delay to ensure DOM is updated
       setTimeout(() => {
-        selectedNodeRef.current?.scrollIntoView({
+        nodeRef.scrollIntoView({
           behavior: 'smooth',
           block: 'center',
           inline: 'nearest',
@@ -184,18 +223,7 @@ export default function Locations() {
     }
   }, [selectedNode])
 
-  
-  // Collection search effect
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setIsSearchOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  useClickOutside(searchRef, () => setIsSearchOpen(false), isSearchOpen)
 
   useEffect(() => {
     if (search.length >= 1) {
@@ -215,7 +243,7 @@ export default function Locations() {
       setSearchLoading(true)
       const response = await searchApi.search(searchQuery, 'collection')
       // Filter to only collection types (micronix_plate, cryovial_box, box, bag)
-      const collectionResults = (response.data.results || []).filter(
+      const collectionResults = response.data.results.filter(
         (r): r is CollectionSearchResult =>
           r.type === 'micronix_plate' || r.type === 'cryovial_box' || r.type === 'box' || r.type === 'bag'
       )
@@ -342,10 +370,7 @@ export default function Locations() {
   // Handle delete confirmation
   const handleDeleteClick = async (location: Location, e: React.MouseEvent) => {
     e.stopPropagation()
-    // Ensure location details are loaded for delete confirmation
-    if (!locationDetailsCache[location.id]) {
-      await ensureLocationLoaded(location.id)
-    }
+    await ensureLocationLoaded(location.id)
     setDeletingLocationId(location.id)
   }
 
@@ -437,17 +462,18 @@ export default function Locations() {
     }
 
     return (
-      <div key={loc.id} className={depth > 0 ? 'ml-3 border-l border-gray-100 pl-2 mt-1' : 'mb-2'}>
+      <div key={loc.id} className={depth > 0 ? 'ml-3 border-l pl-2 mt-1' : 'mb-2'} style={{ borderColor: 'rgb(var(--app-border))' }}>
         <div className="group flex items-center gap-0.5">
           <button
             ref={isSelected ? selectedNodeRef : null}
             type="button"
             onClick={handleNodeClick}
-            className={`flex items-center flex-1 min-w-0 px-1.5 py-0.5 rounded text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors ${
+            className={`flex items-center flex-1 min-w-0 px-1.5 py-0.5 rounded text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--app-accent))] transition-colors ${
               isSelected
-                ? 'bg-blue-50 border border-blue-200 shadow-sm'
-                : 'hover:bg-gray-50 border border-transparent'
+                ? 'border shadow-sm'
+                : 'border border-transparent hover:bg-[rgb(var(--app-surface))]'
             }`}
+            style={isSelected ? { backgroundColor: 'rgb(var(--app-accent-muted))', borderColor: 'rgb(var(--app-accent) / 0.4)' } : undefined}
           >
             <div className="flex items-center flex-1">
               {children.length > 0 && (
@@ -457,7 +483,8 @@ export default function Locations() {
                     e.stopPropagation()
                     toggleExpanded(loc.id)
                   }}
-                  className="w-3 h-3 mr-1.5 text-gray-500 flex-shrink-0 hover:text-gray-700"
+                  className="w-3 h-3 mr-1.5 flex-shrink-0 rounded hover:bg-[rgb(var(--app-accent)/0.15)]"
+                  style={{ color: 'rgb(var(--app-text-muted))' }}
                 >
                   {isExpanded ? '▾' : '▸'}
                 </button>
@@ -465,35 +492,37 @@ export default function Locations() {
               {children.length === 0 && <span className="w-3 h-3 mr-1.5"></span>}
               <div className="text-left flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <p className="text-gray-900 truncate">
+                  <p className="truncate" style={{ color: 'rgb(var(--app-text))' }}>
                     {getLocationLabel(loc)}
                   </p>
                   {loc.canContainCollections && (
                     <LocationCapabilityBadge canContainCollections={true} size="sm" />
                   )}
                   {children.length > 0 && (
-                    <span className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: 'rgb(var(--app-text-muted))', backgroundColor: 'rgb(var(--app-surface))' }}>
                       {children.length} child{children.length !== 1 ? 'ren' : ''}
                     </span>
                   )}
                 </div>
                 {loc.description && (
-                  <p className="text-[11px] text-gray-500 truncate">
+                  <p className="text-[11px] truncate" style={{ color: 'rgb(var(--app-text-muted))' }}>
                     {loc.description}
                   </p>
                 )}
                 {loc.path && (
-                  <p className="text-[10px] text-gray-400 font-mono break-words">
+                  <p className="text-[10px] font-mono break-words" style={{ color: 'rgb(var(--app-text-muted))' }}>
                     {loc.path}
                   </p>
                 )}
                 {/* Show cached container count if available */}
-                {locationDetailsCache[loc.id]?.hierarchyStats && (() => {
-                  const stats = locationDetailsCache[loc.id].hierarchyStats!
+                {(() => {
+                  const cached = locationDetailsCache[loc.id]
+                  const stats = cached?.hierarchyStats
+                  if (!stats) return null
                   const directTotal = stats.directContainers.micronix + stats.directContainers.cryovial + stats.directContainers.boxes + stats.directContainers.bags
                   if (directTotal > 0) {
                     return (
-                      <p className="text-[10px] text-blue-600 font-medium mt-0.5">
+                      <p className="text-[10px] font-medium mt-0.5" style={{ color: 'rgb(var(--app-accent))' }}>
                         {directTotal} container{directTotal !== 1 ? 's' : ''}
                       </p>
                     )
@@ -503,41 +532,45 @@ export default function Locations() {
               </div>
             </div>
           </button>
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-            <button
-              type="button"
-              onClick={(e) => handleAddChild(loc.id, e)}
-              className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-              title="Add child location"
-              disabled={mutationLoading}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={(e) => handleEdit(loc, e)}
-              className="p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-              title="Edit location"
-              disabled={mutationLoading}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={(e) => handleDeleteClick(loc, e)}
-              className="p-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-              title="Delete location"
-              disabled={mutationLoading}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          </div>
+          {canEdit && (
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+              <button
+                type="button"
+                onClick={(e) => handleAddChild(loc.id, e)}
+                className="p-0.5 rounded hover:bg-[rgb(var(--app-accent-muted))]"
+                style={{ color: 'rgb(var(--app-text-muted))' }}
+                title="Add child location"
+                disabled={mutationLoading}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleEdit(loc, e)}
+                className="p-0.5 rounded hover:bg-[rgb(var(--app-accent-muted))]"
+                style={{ color: 'rgb(var(--app-text-muted))' }}
+                title="Edit location"
+                disabled={mutationLoading}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleDeleteClick(loc, e)}
+                className="p-0.5 text-app-text-muted hover:text-app-trend-down hover:bg-app-trend-down/10 rounded"
+                title="Delete location"
+                disabled={mutationLoading}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
 
         {children.length > 0 && isExpanded && (
@@ -553,7 +586,7 @@ export default function Locations() {
     const rootLocations = getRootLocations(locations)
     
     if (rootLocations.length === 0) {
-      return <p className="text-xs text-gray-500">No locations available.</p>
+      return <p className="text-xs text-app-text-muted">No locations available.</p>
     }
 
     return (
@@ -566,39 +599,23 @@ export default function Locations() {
   const renderSummaryAndPreview = () => {
     if (!selectedNode) {
       return (
-        <div className="text-gray-500 text-center py-16">
+        <div className="text-center py-16" style={{ color: 'rgb(var(--app-text-muted))' }}>
           Select a location or node in the tree to see details.
         </div>
       )
     }
 
     if (!selectedDetails) {
-      return <LocationDetailsSkeleton />
+      return <LocationDetailsSkeleton className="storage-skeleton" />
     }
 
     const { location, contents, hierarchyStats } = selectedDetails
-    
-    // If we don't have location data, show skeleton
-    if (!location) {
-      return <LocationDetailsSkeleton />
-    }
-    
-    // Critical check: Ensure the location ID matches the selected node
-    // This prevents showing stale data from a previous selection
+
     if (location.id !== selectedNode.locationId) {
       return <LocationDetailsSkeleton />
     }
-    
-    // If we're missing critical data (contents or hierarchyStats), show skeleton
-    // This ensures we don't show partial data with wrong badges or stale information
-    // Only render the actual content when we have complete cached data
-    if (contents === null || hierarchyStats === undefined) {
-      return <LocationDetailsSkeleton />
-    }
-    
-    // At this point we have complete data for the correct location, so we can safely render everything
 
-    const c = contents || {}
+    const c = contents
     const stats = {
       micronix: c.micronixPlates?.length || 0,
       cryovial: c.cryovialBoxes?.length || 0,
@@ -608,32 +625,62 @@ export default function Locations() {
 
     const displayPath = location.path || location.name
 
+    const collectionCards: Array<{ type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'; id: number; name: string; barcode?: string | null; itemCount?: number }> = []
+    c.micronixPlates?.forEach((plate: { id: number; name: string; barcode?: string | null; itemCount?: number }) => {
+      collectionCards.push({ type: 'micronix_plate', id: plate.id, name: plate.name, barcode: plate.barcode, itemCount: plate.itemCount })
+    })
+    c.cryovialBoxes?.forEach((box: { id: number; name: string; barcode?: string | null; itemCount?: number }) => {
+      collectionCards.push({ type: 'cryovial_box', id: box.id, name: box.name, barcode: box.barcode, itemCount: box.itemCount })
+    })
+    c.boxes?.forEach((box: { id: number; name: string; itemCount?: number }) => {
+      collectionCards.push({ type: 'box', id: box.id, name: box.name, itemCount: box.itemCount })
+    })
+    c.bags?.forEach((bag: { id: number; name: string; itemCount?: number }) => {
+      collectionCards.push({ type: 'bag', id: bag.id, name: bag.name, itemCount: bag.itemCount })
+    })
+
+    const getCollectionUrl = (type: string, id: number) => {
+      if (type === 'micronix_plate') return `/collections/micronix-plates/${id}`
+      if (type === 'cryovial_box') return `/collections/cryovial-boxes/${id}`
+      if (type === 'box') return `/collections/boxes/${id}`
+      if (type === 'bag') return `/collections/bags/${id}`
+      return '#'
+    }
+
+    const getBadgeClass = (type: string) => {
+      if (type === 'micronix_plate') return 'storage-badge-plate'
+      if (type === 'cryovial_box') return 'storage-badge-cryovial'
+      if (type === 'box') return 'storage-badge-box'
+      if (type === 'bag') return 'storage-badge-bag'
+      return 'storage-badge-plate'
+    }
+
     return (
       <div className="space-y-4">
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="storage-card p-6">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-xl font-semibold text-gray-900">
+                <h2 className="text-xl font-semibold storage-section-title">
                   Location preview
                 </h2>
                 <LocationCapabilityBadge canContainCollections={location.canContainCollections} />
               </div>
-              <p className="text-sm text-gray-600 font-mono">
+              <p className="text-sm font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 {displayPath}
               </p>
-              <p className="mt-2 text-sm text-gray-700">
+              <p className="mt-2 text-sm" style={{ color: 'rgb(var(--app-text))' }}>
                 Type:{' '}
                 <span className="font-medium">
                   {location.effectiveStorageTypeName || location.storageTypeName || location.storageTypeId || 'N/A'}
                 </span>
               </p>
               {location.description && (
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
                   {location.description}
                 </p>
               )}
-              <p className="mt-2 text-xs text-gray-500">
+              <p className="mt-2 text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 Created{' '}
                 {new Date(location.created).toLocaleDateString()} • Last
                 updated{' '}
@@ -644,7 +691,7 @@ export default function Locations() {
               <button
                 type="button"
                 onClick={() => navigate(`/locations/${location.id}`)}
-                className="inline-flex items-center px-3 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+                className="storage-btn-primary inline-flex items-center px-3 py-2 text-sm font-medium"
               >
                 Open full details
               </button>
@@ -652,21 +699,22 @@ export default function Locations() {
           </div>
         </div>
 
-        {/* Hierarchy Statistics */}
+        {/* Hierarchy Statistics (optional from API) */}
         {hierarchyStats && (
           <LocationHierarchyStatsDisplay
             stats={hierarchyStats}
             locationName={location.name}
             canContainCollections={location.canContainCollections}
+            className="storage-hierarchy-stats"
           />
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-sm font-medium text-gray-500 mb-1">
+          <div className="storage-card p-4">
+            <h3 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
               Storage units
             </h3>
-            <p className="text-2xl font-bold text-blue-600">
+            <p className="text-2xl font-bold" style={{ color: 'rgb(var(--app-accent))' }}>
               {(
                 stats.micronix +
                 stats.cryovial +
@@ -674,16 +722,16 @@ export default function Locations() {
                 stats.bags
               ).toLocaleString()}
             </p>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
               Plates, boxes and bags
             </p>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-sm font-medium text-gray-500 mb-1">
+          <div className="storage-card p-4">
+            <h3 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
               Container types
             </h3>
-            <ul className="text-xs text-gray-700 space-y-1">
+            <ul className="text-xs space-y-1" style={{ color: 'rgb(var(--app-text))' }}>
               <li>Micronix plates: {stats.micronix}</li>
               <li>Cryovial boxes: {stats.cryovial}</li>
               <li>Boxes: {stats.boxes}</li>
@@ -691,11 +739,11 @@ export default function Locations() {
             </ul>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-sm font-medium text-gray-500 mb-1">
+          <div className="storage-card p-4">
+            <h3 className="text-sm font-medium mb-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
               Status
             </h3>
-            <p className="text-sm text-gray-700">
+            <p className="text-sm" style={{ color: 'rgb(var(--app-text))' }}>
               {stats.micronix +
                 stats.cryovial +
                 stats.boxes +
@@ -707,104 +755,43 @@ export default function Locations() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="storage-card p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
+            <h3 className="text-lg font-semibold storage-section-title">
               Contents preview
             </h3>
           </div>
 
-          {Object.values(stats).every((v) => v === 0) ? (
-            <div className="text-gray-500 text-center py-8">
+          {collectionCards.length === 0 ? (
+            <div className="text-center py-8" style={{ color: 'rgb(var(--app-text-muted))' }}>
               No contents found for this location.
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              {stats.micronix > 0 && (
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">
-                    Micronix plates ({stats.micronix})
-                  </h4>
-                  <ul className="space-y-1 text-gray-700">
-                    {c.micronixPlates?.slice(0, 5).map((plate: any) => (
-                      <li key={plate.id}>
-                        {plate.name}{' '}
-                        {plate.barcode && (
-                          <span className="text-xs text-gray-500">
-                            ({plate.barcode})
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                    {stats.micronix > 5 && (
-                      <li className="text-xs text-gray-500">
-                        +{stats.micronix - 5} more
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              )}
-
-              {stats.cryovial > 0 && (
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">
-                    Cryovial boxes ({stats.cryovial})
-                  </h4>
-                  <ul className="space-y-1 text-gray-700">
-                    {c.cryovialBoxes?.slice(0, 5).map((box: any) => (
-                      <li key={box.id}>
-                        {box.name}{' '}
-                        {box.barcode && (
-                          <span className="text-xs text-gray-500">
-                            ({box.barcode})
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                    {stats.cryovial > 5 && (
-                      <li className="text-xs text-gray-500">
-                        +{stats.cryovial - 5} more
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              )}
-
-              {stats.boxes > 0 && (
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">
-                    Boxes ({stats.boxes})
-                  </h4>
-                  <ul className="space-y-1 text-gray-700">
-                    {c.boxes?.slice(0, 5).map((box: any) => (
-                      <li key={box.id}>{box.name}</li>
-                    ))}
-                    {stats.boxes > 5 && (
-                      <li className="text-xs text-gray-500">
-                        +{stats.boxes - 5} more
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              )}
-
-              {stats.bags > 0 && (
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">
-                    Bags ({stats.bags})
-                  </h4>
-                  <ul className="space-y-1 text-gray-700">
-                    {c.bags?.slice(0, 5).map((bag: any) => (
-                      <li key={bag.id}>{bag.name}</li>
-                    ))}
-                    {stats.bags > 5 && (
-                      <li className="text-xs text-gray-500">
-                        +{stats.bags - 5} more
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {collectionCards.map((item) => (
+                <Link
+                  key={`${item.type}-${item.id}`}
+                  to={getCollectionUrl(item.type, item.id)}
+                  className="storage-card block p-4 hover:no-underline transition-colors"
+                >
+                  <span className={getBadgeClass(item.type)}>
+                    {item.type.replace('_', ' ')}
+                  </span>
+                  <p className="font-medium mt-1.5 truncate" style={{ color: 'rgb(var(--app-text))' }}>
+                    {item.name}
+                  </p>
+                  {item.barcode && (
+                    <p className="text-xs font-mono mt-0.5" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                      {item.barcode}
+                    </p>
+                  )}
+                  {item.itemCount != null && (
+                    <p className="text-xs mt-0.5" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                      {item.itemCount} item{item.itemCount !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </Link>
+              ))}
             </div>
           )}
         </div>
@@ -813,25 +800,25 @@ export default function Locations() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+      <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 storage-reveal storage-reveal-1">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Storage Locations</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Browse all storage roots, levels, and locations. Select a node to see an
-            information-dense preview of its contents.
+          <h1 className="text-3xl font-bold">Storage Locations</h1>
+          <p className="text-sm mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
+            Browse all storage roots, levels, and locations. Select a node to see an information-dense preview of its contents.
           </p>
         </div>
         <div className="flex gap-3">
-          <div className="bg-white rounded-lg shadow px-3 py-2 text-right">
-            <div className="text-[11px] text-gray-500">Locations</div>
-            <div className="text-lg font-semibold text-blue-600">
+          <div className="storage-card px-4 py-3 text-right">
+            <div className="text-[11px]" style={{ color: 'rgb(var(--app-text-muted))' }}>Locations</div>
+            <div className="text-lg font-semibold" style={{ color: 'rgb(var(--app-accent))' }}>
               {globalStats.totalLocations.toLocaleString()}
             </div>
           </div>
-          <div className="bg-white rounded-lg shadow px-3 py-2 text-right">
-            <div className="text-[11px] text-gray-500">Storage roots</div>
-            <div className="text-lg font-semibold text-green-600">
+          <div className="storage-card px-4 py-3 text-right">
+            <div className="text-[11px]" style={{ color: 'rgb(var(--app-text-muted))' }}>Storage roots</div>
+            <div className="text-lg font-semibold" style={{ color: 'rgb(var(--app-accent))' }}>
               {globalStats.distinctRoots.toLocaleString()}
             </div>
           </div>
@@ -839,9 +826,10 @@ export default function Locations() {
       </div>
 
       {/* Collection Search Bar */}
-      <div className="mb-6">
-        <div className="bg-white rounded-lg shadow p-4">
-          <label htmlFor="locations-search" className="block text-sm font-medium text-gray-700 mb-2">
+      <div className="relative z-20">
+        <div className="mb-6 storage-reveal storage-reveal-2">
+          <div className="storage-card p-4">
+          <label htmlFor="locations-search" className="block text-sm font-medium mb-2" style={{ color: 'rgb(var(--app-text))' }}>
             Search Collections
           </label>
           <div ref={searchRef} className="relative w-full">
@@ -862,7 +850,8 @@ export default function Locations() {
                 aria-controls="collection-search-results"
               />
               <svg
-                className="absolute left-4 top-4 h-5 w-5 text-gray-400"
+                className="absolute left-4 top-4 h-5 w-5"
+                style={{ color: 'rgb(var(--app-text-muted))' }}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -876,7 +865,7 @@ export default function Locations() {
               </svg>
               {searchLoading && (
                 <div className="absolute right-4 top-4">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-transparent border-t-current" style={{ borderTopColor: 'rgb(var(--app-accent))' }}></div>
                 </div>
               )}
               {isSearchOpen && collectionResults.length > 0 && (
@@ -884,33 +873,34 @@ export default function Locations() {
                   id="collection-search-results"
                   role="listbox"
                   aria-label="Collection search results"
-                  className="absolute z-[9999] w-full top-full mt-1 bg-white border border-gray-100 rounded-lg shadow-lg max-h-96 overflow-y-auto"
+                  className="absolute z-[9999] w-full top-full mt-1 storage-card max-h-96 overflow-y-auto"
                 >
                   {collectionResults.map((result, index) => (
                     <button
                       key={`${result.type}-${result.id}-${index}`}
                       onClick={() => handleSelectCollection(result)}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 border-b border-gray-100 last:border-b-0"
+                      className="w-full px-4 py-3 text-left hover:bg-[rgb(var(--app-surface))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--app-accent))] border-b last:border-b-0"
+                      style={{ borderColor: 'rgb(var(--app-border))' }}
                       role="option"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <div className="flex items-center space-x-2">
-                            <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                              result.type === 'micronix_plate' ? 'bg-blue-100 text-blue-800' :
-                              result.type === 'cryovial_box' ? 'bg-purple-100 text-purple-800' :
-                              result.type === 'box' ? 'bg-green-100 text-green-800' :
-                              result.type === 'bag' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
+                            <span className={
+                              result.type === 'micronix_plate' ? 'storage-badge-plate' :
+                              result.type === 'cryovial_box' ? 'storage-badge-cryovial' :
+                              result.type === 'box' ? 'storage-badge-box' :
+                              'storage-badge-bag'
+                            }>
                               {result.type.replace('_', ' ')}
                             </span>
-                            <p className="font-medium text-gray-900">{result.title}</p>
+                            <p className="font-medium" style={{ color: 'rgb(var(--app-text))' }}>{result.title}</p>
                           </div>
-                          <p className="text-sm text-gray-500 mt-1">{result.subtitle}</p>
+                          <p className="text-sm mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>{result.subtitle}</p>
                         </div>
                         <svg
-                          className="h-5 w-5 text-gray-400"
+                          className="h-5 w-5"
+                          style={{ color: 'rgb(var(--app-text-muted))' }}
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -929,53 +919,72 @@ export default function Locations() {
               )}
 
               {isSearchOpen && search.length >= 1 && !searchLoading && collectionResults.length === 0 && (
-                <div className="absolute z-[9999] w-full top-full mt-1 bg-white border border-gray-100 rounded-lg shadow-lg p-4 text-center text-gray-500">
+                <div className="absolute z-[9999] w-full top-full mt-1 storage-card p-4 text-center" style={{ color: 'rgb(var(--app-text-muted))' }}>
                   No collections found
                 </div>
               )}
             </div>
           </div>
         </div>
+        </div>
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="h-6 bg-gray-200 rounded w-32 mb-4 animate-pulse"></div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 storage-reveal storage-reveal-3">
+          <div className="storage-card p-4">
+            <div className="h-6 rounded w-32 mb-4 animate-pulse" style={{ backgroundColor: 'rgb(var(--app-border))' }}></div>
             <div className="space-y-2">
               {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="h-8 bg-gray-200 rounded animate-pulse"></div>
+                <div key={i} className="h-8 rounded animate-pulse" style={{ backgroundColor: 'rgb(var(--app-border))' }}></div>
               ))}
             </div>
           </div>
           <div className="lg:col-span-2 space-y-4">
-            <SkeletonCard height="h-48" />
-            <SkeletonCard height="h-24" />
+            <SkeletonCard height="h-48" className="storage-card" />
+            <SkeletonCard height="h-24" className="storage-card" />
           </div>
         </div>
       ) : locations.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-          No locations have been configured yet.
+        <div className="storage-card p-8 text-center">
+          <p className="mb-6" style={{ color: 'rgb(var(--app-text-muted))' }}>
+            No locations have been configured yet.
+          </p>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleAddRoot}
+              disabled={mutationLoading}
+              className="storage-btn-primary inline-flex items-center px-6 py-3 text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Create first location"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create first location
+            </button>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div ref={treeRef} className="bg-white rounded-lg shadow p-3 max-h-[640px] overflow-y-auto overflow-x-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 storage-reveal storage-reveal-3">
+          <div ref={treeRef} className="storage-card p-3 max-h-[640px] overflow-y-auto overflow-x-hidden">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-gray-900">
+              <h2 className="text-sm font-semibold storage-section-title">
                 Storage tree
               </h2>
-              <button
-                type="button"
-                onClick={handleAddRoot}
-                disabled={mutationLoading}
-                className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Add root location"
-              >
-                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add Root
-              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={handleAddRoot}
+                  disabled={mutationLoading}
+                  className="storage-btn-secondary inline-flex items-center px-2 py-1 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Add root location"
+                >
+                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Root
+                </button>
+              )}
             </div>
             {renderTree()}
           </div>
@@ -988,7 +997,7 @@ export default function Locations() {
 
       {/* Success Message */}
       {successMessage && (
-        <div className="fixed bottom-4 right-4 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg shadow-lg z-50">
+        <div className="fixed bottom-4 right-4 bg-app-trend-up/10 border border-app-trend-up/30 text-app-trend-up px-4 py-3 rounded-lg shadow-lg z-50">
           <div className="flex items-center">
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1023,19 +1032,20 @@ export default function Locations() {
           : false
 
         return (
-          <div className="fixed inset-0 z-[100] overflow-y-auto">
-            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-              {/* Background overlay */}
-              <div
-                className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-                onClick={handleDeleteCancel}
-              />
+          <ModalPortal>
+            <div className="fixed inset-0 z-[100] overflow-y-auto">
+              <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                {/* Background overlay */}
+                <div
+                  className="fixed inset-0 bg-black/40 backdrop-blur-md"
+                  onClick={handleDeleteCancel}
+                />
               
               {/* Modal panel */}
-              <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full" onClick={(e) => e.stopPropagation()}>
-                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Delete Location</h2>
-                <p className="text-sm text-gray-700 mb-4">
+              <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full" onClick={(e) => e.stopPropagation()}>
+                <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <h2 className="text-xl font-semibold text-app-text mb-4">Delete Location</h2>
+                <p className="text-sm text-app-text mb-4">
                   Are you sure you want to delete <strong>{locationToDelete?.name}</strong>?
                 </p>
                 {hasChildren && (
@@ -1051,13 +1061,13 @@ export default function Locations() {
                   </div>
                 )}
                 {!hasChildren && !hasContents && (
-                  <p className="text-sm text-gray-600 mb-4">This action cannot be undone.</p>
+                  <p className="text-sm text-app-text-muted mb-4">This action cannot be undone.</p>
                 )}
                 <div className="flex justify-end space-x-3">
                   <button
                     type="button"
                     onClick={handleDeleteCancel}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface disabled:opacity-50"
                     disabled={mutationLoading}
                   >
                     Cancel
@@ -1066,7 +1076,7 @@ export default function Locations() {
                     type="button"
                     onClick={handleDeleteConfirm}
                     disabled={mutationLoading || hasChildren || hasContents}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-app-trend-down text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {mutationLoading ? 'Deleting...' : 'Delete'}
                   </button>
@@ -1075,8 +1085,10 @@ export default function Locations() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )
       })()}
+      </div>
     </div>
   )
 }

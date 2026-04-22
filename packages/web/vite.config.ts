@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
+  appType: 'spa', // SPA fallback: serve index.html for client routes on reload (dev + preview)
   plugins: [react()],
   resolve: {
     alias: {

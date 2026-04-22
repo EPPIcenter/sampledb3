@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { exportConfigurationsApi, type ExportConfigurations, type ExportConfiguration } from '../lib/api'
+import {
+  EXPORT_ENTRY_COLUMNS,
+  DEFAULT_EXPORT_COLUMN_KEYS,
+  getExportColumnLabel,
+} from '../lib/export-columns'
 import { useUser } from '../contexts/UserContext'
 import InfoTooltip from './InfoTooltip'
 
@@ -9,40 +14,6 @@ interface ExportConfigurationsManagerProps {
   onError?: (error: string) => void
   onSuccess?: () => void
 }
-
-// All available export columns with their display names
-const AVAILABLE_COLUMNS = [
-  { key: 'container_id', label: 'Container ID' },
-  { key: 'container_type', label: 'Container Type' },
-  { key: 'barcode', label: 'Barcode' },
-  { key: 'position', label: 'Position' },
-  { key: 'label', label: 'Container Name' },
-  { key: 'collection_name', label: 'Collection Name' },
-  { key: 'status', label: 'Status' },
-  { key: 'comment', label: 'Comment' },
-  { key: 'specimen_id', label: 'Specimen ID' },
-  { key: 'specimen_type', label: 'Specimen Type' },
-  { key: 'collection_date', label: 'Collection Date' },
-  { key: 'subject_id', label: 'Subject ID' },
-  { key: 'subject_name', label: 'Subject Name' },
-  { key: 'control_batch_id', label: 'Control Batch ID' },
-  { key: 'control_batch_name', label: 'Control Batch Name' },
-  { key: 'control_definition_name', label: 'Control Definition Name' },
-  { key: 'control_type', label: 'Control Type' },
-  { key: 'target_density', label: 'Target Density' },
-  { key: 'target_density_unit', label: 'Target Density Unit' },
-  { key: 'strain_composition', label: 'Strain Composition' },
-  { key: 'study_id', label: 'Study ID' },
-  { key: 'study_code', label: 'Study Code' },
-  { key: 'study_title', label: 'Study Title' },
-  { key: 'study_lead_person', label: 'Study Lead Person' },
-  { key: 'location_path', label: 'Location Path' },
-  { key: 'created', label: 'Created' },
-  { key: 'last_updated', label: 'Last Updated' },
-]
-
-// Default column order (all columns)
-const DEFAULT_COLUMNS = AVAILABLE_COLUMNS.map(col => col.key)
 
 export default function ExportConfigurationsManager({
   data,
@@ -55,13 +26,12 @@ export default function ExportConfigurationsManager({
   const [sharedConfigurations, setSharedConfigurations] = useState<ExportConfiguration[]>([])
   const [personalConfigurations, setPersonalConfigurations] = useState<ExportConfiguration[]>([])
   const [activeTab, setActiveTab] = useState<'shared' | 'personal'>('shared')
-  const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingType, setEditingType] = useState<'shared' | 'personal' | null>(null)
   const [newConfigName, setNewConfigName] = useState('')
-  const [newConfigColumns, setNewConfigColumns] = useState<string[]>(DEFAULT_COLUMNS)
+  const [newConfigColumns, setNewConfigColumns] = useState<string[]>(DEFAULT_EXPORT_COLUMN_KEYS)
   const [showNewForm, setShowNewForm] = useState(false)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
@@ -78,8 +48,8 @@ export default function ExportConfigurationsManager({
           exportConfigurationsApi.getShared(),
           exportConfigurationsApi.getPersonal().catch(() => ({ data: { configurations: [] } })),
         ])
-        setSharedConfigurations(sharedRes.data?.configurations || [])
-        setPersonalConfigurations(personalRes.data?.configurations || [])
+        setSharedConfigurations(sharedRes.data.configurations)
+        setPersonalConfigurations(personalRes.data.configurations)
       } catch (err: any) {
         setError(err.response?.data?.error || 'Failed to load configurations')
       } finally {
@@ -88,27 +58,6 @@ export default function ExportConfigurationsManager({
     }
     loadConfigs()
   }, [])
-
-  const handleSave = async () => {
-    setSaving(true)
-    setError(null)
-    try {
-      if (activeTab === 'shared' && isAdmin) {
-        // Save shared configs (system-wide)
-        await exportConfigurationsApi.update({ configurations: sharedConfigurations }, null)
-      } else {
-        // Save personal configs
-        await exportConfigurationsApi.updatePersonal({ configurations: personalConfigurations })
-      }
-      onSuccess?.()
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.error || 'Failed to save export configurations'
-      setError(errorMsg)
-      onError?.(errorMsg)
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const handleAdd = async () => {
     if (!newConfigName.trim()) {
@@ -146,17 +95,22 @@ export default function ExportConfigurationsManager({
         return
       }
     } else {
-      // For shared, just update local state (admin will save)
-      if (newConfig.isDefault) {
-        const updated = currentConfigs.map(c => ({ ...c, isDefault: false }))
-        setSharedConfigurations([...updated, newConfig])
-      } else {
-        setSharedConfigurations([...currentConfigs, newConfig])
+      // For shared, persist immediately (same as personal)
+      try {
+        const updated = newConfig.isDefault 
+          ? [...currentConfigs.map(c => ({ ...c, isDefault: false })), newConfig]
+          : [...currentConfigs, newConfig]
+        await exportConfigurationsApi.update({ configurations: updated }, null)
+        setSharedConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to create configuration')
+        return
       }
     }
 
     setNewConfigName('')
-    setNewConfigColumns(DEFAULT_COLUMNS)
+    setNewConfigColumns(DEFAULT_EXPORT_COLUMN_KEYS)
     setShowNewForm(false)
     setError(null)
   }
@@ -198,7 +152,6 @@ export default function ExportConfigurationsManager({
     }
 
     if (editingType === 'personal') {
-      // Save personal config immediately
       try {
         await exportConfigurationsApi.updatePersonal({ configurations: updated })
         setPersonalConfigurations(updated)
@@ -208,14 +161,20 @@ export default function ExportConfigurationsManager({
         return
       }
     } else {
-      // For shared, just update local state (admin will save)
-      setSharedConfigurations(updated)
+      try {
+        await exportConfigurationsApi.update({ configurations: updated }, null)
+        setSharedConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to update configuration')
+        return
+      }
     }
 
     setEditingIndex(null)
     setEditingType(null)
     setNewConfigName('')
-    setNewConfigColumns(DEFAULT_COLUMNS)
+    setNewConfigColumns(DEFAULT_EXPORT_COLUMN_KEYS)
     setShowNewForm(false)
     setError(null)
   }
@@ -228,14 +187,13 @@ export default function ExportConfigurationsManager({
       return
     }
 
+    const updated = configs.filter((_, i) => i !== index)
+    if (configs[index].isDefault && updated.length > 0) {
+      updated[0].isDefault = true
+    }
+
     if (type === 'personal') {
-      // Delete personal config immediately
       try {
-        const updated = configs.filter((_, i) => i !== index)
-        // If we deleted the default, make the first one default
-        if (configs[index].isDefault && updated.length > 0) {
-          updated[0].isDefault = true
-        }
         await exportConfigurationsApi.updatePersonal({ configurations: updated })
         setPersonalConfigurations(updated)
         onSuccess?.()
@@ -243,26 +201,39 @@ export default function ExportConfigurationsManager({
         setError(err.response?.data?.error || 'Failed to delete configuration')
       }
     } else {
-      // For shared, just update local state (admin will save)
-      const updated = configs.filter((_, i) => i !== index)
-      if (configs[index].isDefault && updated.length > 0) {
-        updated[0].isDefault = true
+      try {
+        await exportConfigurationsApi.update({ configurations: updated }, null)
+        setSharedConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to delete configuration')
       }
-      setSharedConfigurations(updated)
     }
   }
 
-  const handleSetDefault = (index: number, type: 'shared' | 'personal') => {
+  const handleSetDefault = async (index: number, type: 'shared' | 'personal') => {
     const configs = type === 'shared' ? sharedConfigurations : personalConfigurations
     const updated = configs.map((c, i) => ({
       ...c,
       isDefault: i === index,
     }))
-    
+
     if (type === 'shared') {
-      setSharedConfigurations(updated)
+      try {
+        await exportConfigurationsApi.update({ configurations: updated }, null)
+        setSharedConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to set default configuration')
+      }
     } else {
-      setPersonalConfigurations(updated)
+      try {
+        await exportConfigurationsApi.updatePersonal({ configurations: updated })
+        setPersonalConfigurations(updated)
+        onSuccess?.()
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to set default configuration')
+      }
     }
   }
 
@@ -386,16 +357,7 @@ export default function ExportConfigurationsManager({
   }, [])
 
   const getColumnLabel = (key: string) => {
-    return AVAILABLE_COLUMNS.find(col => col.key === key)?.label || key
-  }
-
-  const hasUnsavedChanges = () => {
-    if (activeTab === 'shared' && isAdmin) {
-      // For shared configs, check if there are unsaved changes
-      // This is a simplified check - in production you'd want to compare with original loaded state
-      return false // Will be handled by save button visibility
-    }
-    return false // Personal configs are saved immediately
+    return getExportColumnLabel(key)
   }
 
   const currentConfigurations = activeTab === 'shared' ? sharedConfigurations : personalConfigurations
@@ -403,27 +365,14 @@ export default function ExportConfigurationsManager({
   return (
     <div className="space-y-4">
       {error && (
-        <div className="rounded-md bg-red-50 p-2">
-          <p className="text-xs font-medium text-red-800">{error}</p>
-        </div>
-      )}
-
-      {hasUnsavedChanges() && (
-        <div className="rounded-md bg-yellow-50 border border-yellow-200 p-3">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <p className="text-sm font-medium text-yellow-800">
-              You have unsaved changes. Don't forget to click "Save Changes" to apply your configuration.
-            </p>
-          </div>
+        <div className="rounded-md bg-app-trend-down/10 p-2">
+          <p className="text-xs font-medium text-app-trend-down">{error}</p>
         </div>
       )}
 
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
-          <label className="text-sm font-medium text-gray-700">
+          <label className="text-sm font-medium text-app-text">
             Export Configurations
           </label>
           <InfoTooltip text="Create and manage multiple named export configurations. Shared configurations are available to all users. Personal configurations are only visible to you. Each configuration defines which columns appear in exports and their order." />
@@ -436,10 +385,10 @@ export default function ExportConfigurationsManager({
               setEditingIndex(null)
               setEditingType(null)
               setNewConfigName('')
-              setNewConfigColumns(DEFAULT_COLUMNS)
+              setNewConfigColumns(DEFAULT_EXPORT_COLUMN_KEYS)
               setError(null)
             }}
-            className="text-sm text-blue-600 hover:text-blue-800"
+            className="text-sm text-app-accent hover:text-app-accent-hover"
           >
             + Add Personal Configuration
           </button>
@@ -452,10 +401,10 @@ export default function ExportConfigurationsManager({
               setEditingIndex(null)
               setEditingType(null)
               setNewConfigName('')
-              setNewConfigColumns(DEFAULT_COLUMNS)
+              setNewConfigColumns(DEFAULT_EXPORT_COLUMN_KEYS)
               setError(null)
             }}
-            className="text-sm text-blue-600 hover:text-blue-800"
+            className="text-sm text-app-accent hover:text-app-accent-hover"
           >
             + Add Shared Configuration
           </button>
@@ -463,19 +412,19 @@ export default function ExportConfigurationsManager({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-200 mb-4">
+      <div className="flex gap-2 border-b border-app-border mb-4">
         <button
           type="button"
           onClick={() => setActiveTab('shared')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'shared'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-app-accent text-app-accent'
+              : 'border-transparent text-app-text-muted hover:text-app-text'
           }`}
         >
           Shared Configurations
           {sharedConfigurations.length > 0 && (
-            <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+            <span className="ml-2 text-xs bg-app-surface text-app-text-muted px-2 py-0.5 rounded-full">
               {sharedConfigurations.length}
             </span>
           )}
@@ -485,13 +434,13 @@ export default function ExportConfigurationsManager({
           onClick={() => setActiveTab('personal')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'personal'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-app-accent text-app-accent'
+              : 'border-transparent text-app-text-muted hover:text-app-text'
           }`}
         >
           My Configurations
           {personalConfigurations.length > 0 && (
-            <span className="ml-2 text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
+            <span className="ml-2 text-xs bg-app-accent-muted text-app-accent-hover px-2 py-0.5 rounded-full">
               {personalConfigurations.length}
             </span>
           )}
@@ -499,7 +448,7 @@ export default function ExportConfigurationsManager({
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-gray-500">Loading configurations...</div>
+        <div className="text-center py-8 text-app-text-muted">Loading configurations...</div>
       ) : (
         <>
           {/* Existing Configurations */}
@@ -509,29 +458,29 @@ export default function ExportConfigurationsManager({
                 key={index}
                 className={`border rounded-lg p-3 ${
                   activeTab === 'shared' 
-                    ? 'border-gray-200 bg-gray-50' 
-                    : 'border-blue-200 bg-blue-50'
+                    ? 'border-app-border bg-app-surface' 
+                    : 'border-app-accent bg-app-accent-muted'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     {activeTab === 'shared' && (
-                      <span className="text-xs font-medium text-gray-600 bg-gray-200 px-2 py-1 rounded">
+                      <span className="text-xs font-medium text-app-text-muted bg-app-surface px-2 py-1 rounded">
                         Shared
                       </span>
                     )}
                     {activeTab === 'personal' && (
-                      <span className="text-xs font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                      <span className="text-xs font-medium text-app-accent-hover bg-app-accent-muted px-2 py-1 rounded">
                         Personal
                       </span>
                     )}
                     {config.isDefault && (
-                      <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                      <span className="text-xs font-medium text-app-accent-hover bg-app-accent-muted px-2 py-1 rounded">
                         Default
                       </span>
                     )}
-                    <span className="text-sm font-medium text-gray-900">{config.name}</span>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-sm font-medium text-app-text">{config.name}</span>
+                    <span className="text-xs text-app-text-muted">
                       ({config.columns.length} column{config.columns.length !== 1 ? 's' : ''})
                     </span>
                   </div>
@@ -539,8 +488,10 @@ export default function ExportConfigurationsManager({
                     {!config.isDefault && (
                       <button
                         type="button"
-                        onClick={() => handleSetDefault(index, activeTab)}
-                        className="text-xs text-blue-600 hover:text-blue-800"
+                        onClick={async () => {
+                          await handleSetDefault(index, activeTab)
+                        }}
+                        className="text-xs text-app-accent hover:text-app-accent-hover"
                       >
                         Set as Default
                       </button>
@@ -550,14 +501,14 @@ export default function ExportConfigurationsManager({
                         <button
                           type="button"
                           onClick={() => handleEdit(index, 'shared')}
-                          className="text-xs text-gray-600 hover:text-gray-800"
+                          className="text-xs text-app-text-muted hover:text-app-text"
                         >
                           Edit
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDelete(index, 'shared')}
-                          className="text-xs text-red-600 hover:text-red-800"
+                          className="text-xs text-app-trend-down hover:text-app-trend-down/80"
                         >
                           Delete
                         </button>
@@ -568,28 +519,28 @@ export default function ExportConfigurationsManager({
                         <button
                           type="button"
                           onClick={() => handleEdit(index, 'personal')}
-                          className="text-xs text-gray-600 hover:text-gray-800"
+                          className="text-xs text-app-text-muted hover:text-app-text"
                         >
                           Edit
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDelete(index, 'personal')}
-                          className="text-xs text-red-600 hover:text-red-800"
+                          className="text-xs text-app-trend-down hover:text-app-trend-down/80"
                         >
                           Delete
                         </button>
                       </>
                     )}
                     {activeTab === 'shared' && !isAdmin && (
-                      <span className="text-xs text-gray-400 italic">Read-only</span>
+                      <span className="text-xs text-app-text-muted italic">Read-only</span>
                     )}
                   </div>
                 </div>
               </div>
             ))}
             {currentConfigurations.length === 0 && !showNewForm && (
-              <div className="text-sm text-gray-500 italic text-center py-4">
+              <div className="text-sm text-app-text-muted italic text-center py-4">
                 {activeTab === 'shared' 
                   ? 'No shared configurations available.'
                   : 'No personal configurations yet. Click "Add Personal Configuration" to create one.'}
@@ -601,27 +552,27 @@ export default function ExportConfigurationsManager({
 
       {/* New/Edit Form */}
       {showNewForm && (
-        <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+        <div className="border border-app-border rounded-lg p-4 bg-app-surface">
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-app-text mb-2">
               Configuration Name
             </label>
             <input
               type="text"
               value={newConfigName}
               onChange={(e) => setNewConfigName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
               placeholder="e.g., Basic Export, Detailed Export"
             />
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-app-text mb-2">
               Selected Columns (in order) - Drag to reorder
             </label>
             <div 
               ref={scrollContainerRef}
-              className="border border-gray-200 rounded-lg p-2 bg-white max-h-96 overflow-y-auto"
+              className="border border-app-border rounded-lg p-2 bg-app-card max-h-96 overflow-y-auto"
             >
               {newConfigColumns.map((columnKey, idx) => (
                 <div
@@ -634,15 +585,15 @@ export default function ExportConfigurationsManager({
                   onDragEnd={handleDragEnd}
                   className={`flex items-center justify-between p-2 rounded cursor-move transition-colors ${
                     draggedIndex === idx
-                      ? 'opacity-50 bg-gray-100'
+                      ? 'opacity-50 bg-app-surface'
                       : dragOverIndex === idx
-                      ? 'bg-blue-50 border-2 border-blue-300 border-dashed'
-                      : 'hover:bg-gray-50'
+                      ? 'bg-app-accent-muted border-2 border-app-accent border-dashed'
+                      : 'hover:bg-app-surface'
                   }`}
                 >
                   <div className="flex items-center gap-2 flex-1">
                     <svg
-                      className="w-4 h-4 text-gray-400"
+                      className="w-4 h-4 text-app-text-muted"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -654,15 +605,15 @@ export default function ExportConfigurationsManager({
                         d="M4 8h16M4 16h16"
                       />
                     </svg>
-                    <span className="text-xs text-gray-500 w-6">{idx + 1}.</span>
-                    <span className="text-sm text-gray-700">{getColumnLabel(columnKey)}</span>
+                    <span className="text-xs text-app-text-muted w-6">{idx + 1}.</span>
+                    <span className="text-sm text-app-text">{getColumnLabel(columnKey)}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     {idx > 0 && (
                       <button
                         type="button"
                         onClick={() => handleMoveColumn(idx, idx - 1)}
-                        className="p-1 text-gray-400 hover:text-gray-600"
+                        className="p-1 text-app-text-muted hover:text-app-text"
                         title="Move up"
                         onMouseDown={(e) => e.stopPropagation()}
                       >
@@ -675,7 +626,7 @@ export default function ExportConfigurationsManager({
                       <button
                         type="button"
                         onClick={() => handleMoveColumn(idx, idx + 1)}
-                        className="p-1 text-gray-400 hover:text-gray-600"
+                        className="p-1 text-app-text-muted hover:text-app-text"
                         title="Move down"
                         onMouseDown={(e) => e.stopPropagation()}
                       >
@@ -687,7 +638,7 @@ export default function ExportConfigurationsManager({
                     <button
                       type="button"
                       onClick={() => handleToggleColumn(columnKey)}
-                      className="p-1 text-red-400 hover:text-red-600"
+                      className="p-1 text-app-trend-down hover:text-app-trend-down/80"
                       title="Remove"
                       onMouseDown={(e) => e.stopPropagation()}
                     >
@@ -702,23 +653,23 @@ export default function ExportConfigurationsManager({
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-app-text mb-2">
               Available Columns (not selected)
             </label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto border border-gray-200 rounded p-2 bg-white">
-              {AVAILABLE_COLUMNS.filter(col => !newConfigColumns.includes(col.key)).map(column => (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto border border-app-border rounded p-2 bg-app-card">
+              {EXPORT_ENTRY_COLUMNS.filter(col => !newConfigColumns.includes(col.key)).map(column => (
                 <button
                   key={column.key}
                   type="button"
                   onClick={() => handleToggleColumn(column.key)}
-                  className="text-left p-2 text-sm border border-gray-200 rounded hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                  className="text-left p-2 text-sm border border-app-border rounded hover:bg-app-accent-muted hover:border-app-accent transition-colors"
                 >
-                  <div className="font-medium text-gray-700">{column.label}</div>
-                  <div className="text-xs text-gray-400">{column.key}</div>
+                  <div className="font-medium text-app-text">{column.label}</div>
+                  <div className="text-xs text-app-text-muted">{column.key}</div>
                 </button>
               ))}
-              {AVAILABLE_COLUMNS.filter(col => !newConfigColumns.includes(col.key)).length === 0 && (
-                <div className="text-xs text-gray-500 italic">All columns are selected</div>
+              {EXPORT_ENTRY_COLUMNS.filter(col => !newConfigColumns.includes(col.key)).length === 0 && (
+                <div className="text-xs text-app-text-muted italic">All columns are selected</div>
               )}
             </div>
           </div>
@@ -730,35 +681,21 @@ export default function ExportConfigurationsManager({
                 setShowNewForm(false)
                 setEditingIndex(null)
                 setNewConfigName('')
-                setNewConfigColumns(DEFAULT_COLUMNS)
+                setNewConfigColumns(DEFAULT_EXPORT_COLUMN_KEYS)
                 setError(null)
               }}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="px-4 py-2 text-sm font-medium text-app-text bg-app-card border border-app-border rounded-lg hover:bg-app-surface"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={editingIndex !== null ? handleUpdate : handleAdd}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+              className="px-4 py-2 text-sm font-medium text-white bg-app-accent rounded-lg hover:bg-app-accent-hover"
             >
-              {editingIndex !== null ? 'Update' : activeTab === 'personal' ? 'Create' : 'Add'}
+              {editingIndex !== null ? 'Save' : activeTab === 'personal' ? 'Create' : 'Add'}
             </button>
           </div>
-        </div>
-      )}
-
-      {/* Save Button - Only for shared configs (admin) */}
-      {activeTab === 'shared' && isAdmin && sharedConfigurations.length > 0 && (
-        <div className="flex justify-end pt-2">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            {saving ? 'Saving...' : 'Save Shared Configurations'}
-          </button>
         </div>
       )}
     </div>

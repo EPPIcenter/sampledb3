@@ -1,11 +1,15 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { studiesApi, type Study, type StudySummaryBasic } from '../lib/api'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import StudyCard from '../components/StudyCard'
 import StudyCardSkeleton from '../components/StudyCardSkeleton'
 import { getModifierKey } from '../lib/hotkeys'
+import { useUser } from '../contexts/UserContext'
+import { useFocusSearchOnSlash } from '../hooks/useHotkey'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import '../styles/studies.css'
 
-type ViewMode = 'grid' | 'list' | 'compact'
+type ViewMode = 'grid' | 'list'
 type SortOption = 'title' | 'date' | 'subjects' | 'specimens' | 'containers' | 'lead'
 type FilterType = 'all' | 'longitudinal' | 'cross-sectional'
 
@@ -16,7 +20,10 @@ interface StudyWithSummary extends Study {
 
 export default function Studies() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { canWrite } = useUser()
   const [studies, setStudies] = useState<StudyWithSummary[]>([])
+  const showDeletedMessage = searchParams.get('deleted') === '1'
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [search, setSearch] = useState('')
@@ -26,7 +33,8 @@ export default function Studies() {
   const [hasMore, setHasMore] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem('studies-view-mode')
-    return (saved as ViewMode) || 'grid'
+    const mode = saved === 'grid' || saved === 'list' ? saved : 'grid'
+    return mode
   })
   const [sortBy, setSortBy] = useState<SortOption>('date')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
@@ -42,6 +50,8 @@ export default function Studies() {
   const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  useFocusSearchOnSlash(searchInputRef)
+  const debouncedSearch = useDebouncedValue(search, 350)
 
   // Load all unique lead persons on mount
   useEffect(() => {
@@ -49,7 +59,7 @@ export default function Studies() {
       try {
         // Fetch all studies to get all unique lead persons
         const response = await studiesApi.list(undefined, { page: 1, limit: 10000 })
-        const allStudies = response.studies || []
+        const allStudies = response.studies
         const leads = new Set(allStudies.map(s => s.leadPerson).filter(Boolean))
         setAllLeadPersons(Array.from(leads).sort())
       } catch (error) {
@@ -59,38 +69,43 @@ export default function Studies() {
     loadAllLeadPersons()
   }, [])
 
-  // Check if we have active filters (client-side filtering)
+  // Check if we have active filters (debounced search so list/API only react after user pauses typing)
   const hasActiveFilters = useMemo(() => {
-    return search !== '' || filterType !== 'all' || filterLead !== ''
-  }, [search, filterType, filterLead])
+    return debouncedSearch !== '' || filterType !== 'all' || filterLead !== ''
+  }, [debouncedSearch, filterType, filterLead])
 
-  // Load studies list - reset and load first page when filters change
-  useEffect(() => {
+  const prevFiltersRef = useRef([debouncedSearch, filterType, filterLead])
+  const prevFilters = prevFiltersRef.current
+  if (prevFilters[0] !== debouncedSearch || prevFilters[1] !== filterType || prevFilters[2] !== filterLead) {
+    prevFiltersRef.current = [debouncedSearch, filterType, filterLead]
     setPage(1)
     setClientPage(1)
     setStudies([])
     setHasMore(true)
+  }
+
+  // Load studies when filters change (state reset is done during render above)
+  useEffect(() => {
     if (!hasActiveFilters) {
-      loadStudies(true)
+      loadStudies(true, debouncedSearch)
     } else {
-      // When filters are active, load all studies for client-side filtering
-      loadAllStudies()
+      loadAllStudies(debouncedSearch)
     }
-  }, [search, filterType, filterLead, hasActiveFilters])
+  }, [debouncedSearch, filterType, filterLead, hasActiveFilters])
 
   // Load more studies when page changes (infinite scroll)
   useEffect(() => {
     if (!hasActiveFilters && page > 1 && !loading && hasMore) {
-      loadStudies(false)
+      loadStudies(false, '')
     }
   }, [page, hasActiveFilters, loading, hasMore])
 
-  // Save view mode preference
-  useEffect(() => {
-    localStorage.setItem('studies-view-mode', viewMode)
-  }, [viewMode])
+  const setViewModeAndPersist = (mode: ViewMode) => {
+    setViewMode(mode)
+    localStorage.setItem('studies-view-mode', mode)
+  }
 
-  const loadStudies = async (reset: boolean = false) => {
+  const loadStudies = async (reset: boolean = false, searchTerm: string = '') => {
     try {
       if (reset) {
       setLoading(true)
@@ -98,8 +113,8 @@ export default function Studies() {
         setLoadingMore(true)
       }
       
-      const response = await studiesApi.list(search || undefined, { page, limit })
-      const studiesList = response.studies || []
+      const response = await studiesApi.list(searchTerm || undefined, { page, limit })
+      const studiesList = response.studies
       
       if (studiesList.length === 0) {
         setHasMore(false)
@@ -143,12 +158,12 @@ export default function Studies() {
     }
   }
 
-  const loadAllStudies = async () => {
+  const loadAllStudies = async (searchTerm: string = '') => {
     try {
       setLoading(true)
       // Load all studies when filters are active (we'll paginate client-side)
-      const response = await studiesApi.list(search || undefined, { page: 1, limit: 10000 })
-      const studiesList = response.studies || []
+      const response = await studiesApi.list(searchTerm || undefined, { page: 1, limit: 10000 })
+      const studiesList = response.studies
       
       // Merge with cached summaries
       const studiesWithSummaries = studiesList.map(study => ({
@@ -186,7 +201,7 @@ export default function Studies() {
 
     try {
       const response = await studiesApi.getSummaries(idsToLoad)
-      const summaries = response.summaries || []
+      const summaries = response.summaries
       
       // Update cache
       setSummaryCache(prev => {
@@ -245,8 +260,9 @@ export default function Studies() {
       { rootMargin: '100px' } // Start loading 100px before card enters viewport
     )
 
-    // Observe all card elements
+    // Observe all card elements (refs may be unset before mount)
     cardRefs.current.forEach((element, studyId) => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- refs may be null
       if (element && summaryObserverRef.current) {
         summaryObserverRef.current.observe(element)
       }
@@ -269,6 +285,7 @@ export default function Studies() {
       observerRef.current = new IntersectionObserver(
         (entries) => {
           entries.forEach(entry => {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- guard for load
             if (entry.isIntersecting && hasMore && !loadingMore) {
               setPage(prev => prev + 1)
             }
@@ -289,13 +306,13 @@ export default function Studies() {
     }
   }, [hasMore, loading, loadingMore, hasActiveFilters])
 
-  // Filter and sort studies
+  // Filter and sort studies (use debounced search so list only updates after user pauses typing)
   const filteredAndSortedStudies = useMemo(() => {
     let filtered = [...studies]
 
     // Apply search filter
-    if (search) {
-      const searchLower = search.toLowerCase()
+    if (debouncedSearch) {
+      const searchLower = debouncedSearch.toLowerCase()
       filtered = filtered.filter(study =>
         study.title.toLowerCase().includes(searchLower) ||
         study.shortCode.toLowerCase().includes(searchLower) ||
@@ -346,7 +363,7 @@ export default function Studies() {
     })
 
     return filtered
-  }, [studies, search, filterType, filterLead, sortBy, sortDirection])
+  }, [studies, debouncedSearch, filterType, filterLead, sortBy, sortDirection])
 
   // For filtered results, show all (no pagination needed with infinite scroll)
   const displayStudies = useMemo(() => {
@@ -365,18 +382,39 @@ export default function Studies() {
 
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="studies-page min-h-screen">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+      {showDeletedMessage && (
+        <div className="mb-4 flex items-center justify-between rounded-lg border px-4 py-3 studies-reveal studies-reveal-1"
+          style={{ backgroundColor: 'rgb(var(--app-accent-muted))', borderColor: 'rgb(var(--app-accent) / 0.4)', color: 'rgb(var(--app-accent-hover))' }}
+        >
+          <p className="text-sm font-medium">Study deleted successfully.</p>
+          <button
+            type="button"
+            onClick={() => setSearchParams((prev) => {
+              const next = new URLSearchParams(prev)
+              next.delete('deleted')
+              return next
+            })}
+            className="font-medium hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 rounded"
+            style={{ color: 'rgb(var(--app-accent-hover))' }}
+            aria-label="Dismiss"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <div>
-        <h1 className="text-3xl font-bold text-gray-900">Studies</h1>
+            <h1 className="text-3xl font-bold studies-reveal studies-reveal-1" style={{ color: 'rgb(var(--app-text))' }}>Studies</h1>
             {displayTotal > 0 && (
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm mt-1 studies-reveal studies-reveal-2" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 {hasActiveFilters ? (
                   <>
                     {filteredTotal} of {total} {total === 1 ? 'study' : 'studies'}
-                    {hasActiveFilters && ' (filtered)'}
+                    {' (filtered)'}
                   </>
                 ) : (
                   <>
@@ -386,72 +424,89 @@ export default function Studies() {
               </p>
             )}
           </div>
-          <Link
-            to="/studies/new"
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap transition-colors inline-flex items-center justify-center"
-          >
-            New Study
-          </Link>
+          { }
+          {canWrite && (
+            <Link
+              to="/studies/new"
+              className="px-4 py-2 text-white rounded-lg font-medium whitespace-nowrap transition-colors inline-flex items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 studies-reveal studies-reveal-2"
+              style={{ backgroundColor: 'rgb(var(--app-accent))' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgb(var(--app-accent-hover))'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgb(var(--app-accent))'
+              }}
+            >
+              New Study
+            </Link>
+          )}
         </div>
+        {!canWrite && (
+          <div className="mb-4 rounded-lg border p-3 flex items-center gap-2 studies-reveal studies-reveal-3"
+            style={{ backgroundColor: 'rgb(var(--app-surface))', borderColor: 'rgb(var(--app-border))' }}
+          >
+            <svg className="w-5 h-5 flex-shrink-0" style={{ color: 'rgb(var(--app-accent))' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm font-medium" style={{ color: 'rgb(var(--app-text))' }}>
+              You have view-only access. Contact an administrator or member to create or modify studies.
+            </p>
+          </div>
+        )}
 
         {/* Search and Filters */}
-        <div className="space-y-4">
-          {/* Search Bar */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1">
-              <label htmlFor="studies-search" className="sr-only">
-                Search studies
-              </label>
-              <input
-                ref={searchInputRef}
-                id="studies-search"
-                type="text"
-                placeholder="Search by title, code, lead person, or description..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
-                }}
-                className="form-input"
-              />
+        <div className="space-y-4 studies-reveal studies-reveal-4">
+          <div className="dashboard-card p-4 rounded-xl">
+            {/* Search Bar */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+              <div className="flex-1">
+                <label htmlFor="studies-search" className="sr-only">
+                  Search studies
+                </label>
+                <input
+                  ref={searchInputRef}
+                  id="studies-search"
+                  type="text"
+                  placeholder="Search by title, code, lead person, or description..."
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value)
+                  }}
+                  className="form-input w-full rounded-lg border px-3 py-2 text-sm"
+                  style={{ borderColor: 'rgb(var(--app-border))' }}
+                />
+              </div>
             </div>
-          </div>
 
           {/* Filters and Controls */}
           <div className="flex flex-wrap items-center gap-3">
             {/* View Toggle */}
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            <div className="flex items-center gap-1 rounded-lg p-1 border"
+              style={{ backgroundColor: 'rgb(var(--app-surface))', borderColor: 'rgb(var(--app-border))' }}
+            >
               <button
-                onClick={() => setViewMode('grid')}
-                className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
+                onClick={() => setViewModeAndPersist('grid')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
                   viewMode === 'grid'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'shadow-sm text-white'
+                    : 'hover:border-[rgb(var(--app-accent)/0.3)]'
                 }`}
+                style={viewMode === 'grid' ? { backgroundColor: 'rgb(var(--app-accent))' } : { color: 'rgb(var(--app-text-muted))' }}
                 title="Grid view"
               >
                 Grid
               </button>
               <button
-                onClick={() => setViewMode('list')}
-                className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
+                onClick={() => setViewModeAndPersist('list')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
                   viewMode === 'list'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'shadow-sm text-white'
+                    : 'hover:border-[rgb(var(--app-accent)/0.3)]'
                 }`}
+                style={viewMode === 'list' ? { backgroundColor: 'rgb(var(--app-accent))' } : { color: 'rgb(var(--app-text-muted))' }}
                 title="List view"
               >
                 List
-              </button>
-              <button
-                onClick={() => setViewMode('compact')}
-                className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
-                  viewMode === 'compact'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-                title="Compact view"
-              >
-                Compact
               </button>
             </div>
 
@@ -462,16 +517,16 @@ export default function Studies() {
                 onChange={(e) => {
                   const newSort = e.target.value as SortOption
                   setSortBy(newSort)
-                  // Set default direction based on sort type
                   if (newSort === 'date') {
-                    setSortDirection('desc') // Newest first for date
+                    setSortDirection('desc')
                   } else if (newSort === 'title' || newSort === 'lead') {
-                    setSortDirection('asc') // A-Z for text
+                    setSortDirection('asc')
                   } else {
-                    setSortDirection('desc') // Highest first for numbers
+                    setSortDirection('desc')
                   }
                 }}
-                className="form-select text-sm"
+                className="form-select text-sm rounded-lg border px-3 py-2"
+                style={{ borderColor: 'rgb(var(--app-border))' }}
               >
                 <option value="title">Sort by Title</option>
                 <option value="date">Sort by Date</option>
@@ -482,7 +537,8 @@ export default function Studies() {
               </select>
               <button
                 onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
-                className="px-3 py-2 border border-gray-100 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm flex items-center gap-1.5 transition-colors"
+                className="px-3 py-2 border rounded-lg text-sm flex items-center gap-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+                style={{ borderColor: 'rgb(var(--app-border))' }}
                 title={`Sort ${sortDirection === 'asc' ? 'Ascending' : 'Descending'}`}
               >
                 {sortDirection === 'asc' ? (
@@ -509,7 +565,8 @@ export default function Studies() {
               onChange={(e) => {
                 setFilterType(e.target.value as FilterType)
               }}
-              className="form-select text-sm"
+              className="form-select text-sm rounded-lg border px-3 py-2"
+              style={{ borderColor: 'rgb(var(--app-border))' }}
             >
               <option value="all">All Types</option>
               <option value="longitudinal">Longitudinal</option>
@@ -523,7 +580,8 @@ export default function Studies() {
                 onChange={(e) => {
                   setFilterLead(e.target.value)
                 }}
-                className="form-select text-sm"
+                className="form-select text-sm rounded-lg border px-3 py-2"
+                style={{ borderColor: 'rgb(var(--app-border))' }}
               >
                 <option value="">All Lead Persons</option>
                 {allLeadPersons.map(lead => (
@@ -540,43 +598,51 @@ export default function Studies() {
                   setFilterLead('')
                   setSearch('')
                 }}
-                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 underline"
+                className="px-3 py-2 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 rounded"
+                style={{ color: 'rgb(var(--app-accent))' }}
               >
                 Clear filters
               </button>
             )}
           </div>
+          </div>
         </div>
       </div>
 
-      {/* Content */}
+      {/* Content – min-height container to avoid layout jump when result count changes */}
+      <div className="studies-results">
       {loading ? (
         <div className={`grid gap-4 ${
-          viewMode === 'grid' 
-            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-            : viewMode === 'list'
+          viewMode === 'list'
             ? 'grid-cols-1'
-            : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6'
+            : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
         }`}>
           {[...Array(8)].map((_, i) => (
             <StudyCardSkeleton key={i} />
           ))}
         </div>
       ) : filteredAndSortedStudies.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-lg border border-gray-100">
-          <p className="text-gray-500 text-lg">No studies found</p>
+        <div className="dashboard-card text-center py-12 rounded-xl">
+          <p className="text-lg font-medium" style={{ color: 'rgb(var(--app-text))' }}>No studies found</p>
           {(search || filterType !== 'all' || filterLead) && (
-            <p className="text-gray-400 text-sm mt-2">Try adjusting your filters</p>
+            <p className="text-sm mt-2" style={{ color: 'rgb(var(--app-text-muted))' }}>Try adjusting your filters</p>
+          )}
+          {canWrite && (
+            <Link
+              to="/studies/new"
+              className="inline-block mt-4 px-4 py-2 rounded-lg font-medium text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{ backgroundColor: 'rgb(var(--app-accent))' }}
+            >
+              Create a study
+            </Link>
           )}
         </div>
       ) : (
         <>
           <div className={`grid gap-4 ${
-            viewMode === 'grid' 
-              ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-              : viewMode === 'list'
+            viewMode === 'list'
               ? 'grid-cols-1'
-              : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6'
+              : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
           }`}>
             {displayStudies.map((study) => (
               <div
@@ -589,13 +655,13 @@ export default function Studies() {
                   }
                 }}
                 data-study-id={study.id}
-                className={viewMode === 'compact' ? 'min-h-[200px]' : ''}
               >
                 <StudyCard
                   study={study}
                   summary={study.summary}
                   loading={study.summaryLoading || loadingSummaries.has(study.id)}
                   onLoadSummary={() => handleLoadSummary(study.id)}
+                  variant={viewMode}
                 />
               </div>
             ))}
@@ -607,7 +673,7 @@ export default function Studies() {
               <div ref={loadMoreRef} className="h-10" />
               {loadingMore && (
                 <div className="flex justify-center items-center py-8">
-                  <div className="flex items-center gap-3 text-gray-500">
+                  <div className="flex items-center gap-3" style={{ color: 'rgb(var(--app-text-muted))' }}>
                     <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -617,7 +683,7 @@ export default function Studies() {
                 </div>
               )}
               {!hasMore && studies.length > 0 && (
-                <div className="text-center py-8 text-gray-500 text-sm">
+                <div className="text-center py-8 text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
                   No more studies to load
                 </div>
               )}
@@ -625,6 +691,8 @@ export default function Studies() {
           )}
         </>
       )}
+      </div>
+      </div>
     </div>
   )
 }

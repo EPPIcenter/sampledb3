@@ -1,4 +1,9 @@
 import type { Database } from '../db/client'
+import type { ExtractTablesWithRelations } from 'drizzle-orm'
+import type { SQLiteTransaction } from 'drizzle-orm/sqlite-core'
+import type * as schema from '../db/schema'
+
+type DatabaseOrTransaction = Database | SQLiteTransaction<'sync', void, typeof schema, ExtractTablesWithRelations<typeof schema>>
 import {
   containerDerivation,
   controlBatch,
@@ -16,11 +21,32 @@ import {
 import { and, eq, sql } from 'drizzle-orm'
 import { createDerivation, type CreateDerivationInput } from './derivations'
 
+/**
+ * Map technical DB/constraint errors to messages that are clear for non-technical users.
+ */
+function toUserFriendlyDerivationError(rawMessage: string): string {
+  const m = rawMessage
+  if (
+    m.includes('UNIQUE constraint failed') &&
+    (m.includes('micronix_tube') || m.includes('cryovial_tube')) &&
+    (m.includes('position') && m.includes('collection_id'))
+  ) {
+    return 'That position (e.g. A01) is already used in that plate or box. Each position in a collection must be used only once. Use a different position or a different collection name.'
+  }
+  if (m.includes('UNIQUE constraint failed') && m.includes('container_barcode')) {
+    return 'That barcode is already used for another container. Use a different barcode. Barcodes are scanned and provided by you; the system does not assign them.'
+  }
+  if (m.includes('FOREIGN KEY constraint failed') || m.includes('NOT NULL constraint failed')) {
+    return 'A required value is missing or does not match existing data (e.g. parent container, collection, or specimen type). Check your CSV and try again.'
+  }
+  return rawMessage
+}
+
 export interface BulkDerivationSettings {
-  // Required fields (must be same for all rows, cannot be overridden in CSV)
+  // When set, same for all rows; when empty string, column must be in CSV (per row)
   derivationType: string
   specimenTypeName: string
-  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper'
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | ''
   protocol: string
   derivationDate: string
   
@@ -63,7 +89,9 @@ export interface DerivationCsvRow {
   derivation_date?: string
   protocol?: string
   notes?: string
-  collection_name?: string
+  plate_name?: string
+  box_name?: string
+  bag_name?: string
   collection_barcode?: string
   container_barcode?: string
   position?: string
@@ -78,6 +106,12 @@ export interface DerivationCsvResultRow {
   parentContainerId?: number
   childContainerId?: number
   collectionStatus?: 'existing' | 'will_be_created'
+  /** User-facing summary: derivation type name */
+  derivationTypeName?: string
+  /** User-facing summary: parent container/source (e.g. barcode, or box · position) */
+  parentSummary?: string
+  /** User-facing summary: child placement (e.g. collection · position) */
+  childSummary?: string
 }
 
 export interface CollectionStatus {
@@ -116,6 +150,58 @@ function parseNumber(value?: string): number | undefined {
   if (value == null || value.trim() === '') return undefined
   const n = Number(value)
   return Number.isNaN(n) ? undefined : n
+}
+
+/** Build a short user-facing label for the parent (no internal IDs). */
+function buildParentSummary(row: DerivationCsvRow): string {
+  const b = (row.parent_container_barcode ?? '').trim()
+  const box = (row.parent_box_barcode ?? '').trim()
+  const pos = (row.parent_position ?? '').trim()
+  if (b) return b
+  if (box && pos) return `${box} · ${pos}`
+  const study = (row.parent_study_short_code ?? '').trim()
+  const subj = (row.parent_subject_name ?? '').trim()
+  const spec = (row.parent_specimen_type_name ?? '').trim()
+  const date = (row.parent_collection_date ?? '').trim()
+  if (study || subj || spec || date) {
+    return [study, subj, spec, date].filter(Boolean).join(' · ')
+  }
+  const ctrl = (row.parent_control_batch_name ?? row.parent_control_batch_id ?? '').trim()
+  if (ctrl) return ctrl
+  return 'Parent'
+}
+
+/** Build a short user-facing label for the child placement (no internal IDs). */
+function buildChildSummary(row: DerivationCsvRow): string {
+  const containerType = row.container_type || 'micronix_tube'
+  const name = (getCollectionNameForType(row, containerType) ?? '').trim()
+  const barcode = (row.collection_barcode ?? '').trim()
+  const pos = (row.position ?? '').trim()
+  const parts: string[] = []
+  if (name) parts.push(name)
+  else if (barcode) parts.push(barcode)
+  if (pos) parts.push(pos)
+  if (parts.length) return parts.join(' · ')
+  const cb = (row.container_barcode ?? '').trim()
+  if (cb) return `Barcode ${cb}`
+  return 'Child'
+}
+
+function getCollectionNameForType(
+  row: DerivationCsvRow,
+  containerType: DerivationCsvRow['container_type'] | 'micronix_tube',
+): string | undefined {
+  if (containerType === 'cryovial_tube') return row.box_name
+  if (containerType === 'paper') return row.bag_name
+  return row.plate_name
+}
+
+function getCollectionNameLabelForType(
+  containerType: DerivationCsvRow['container_type'] | 'micronix_tube',
+): string {
+  if (containerType === 'cryovial_tube') return 'box_name'
+  if (containerType === 'paper') return 'bag_name'
+  return 'plate_name'
 }
 
 // Extremely small CSV parser: handles commas and quoted fields
@@ -162,7 +248,7 @@ export function parseCsv(text: string): DerivationCsvRow[] {
   return rows
 }
 
-async function resolveParentContainerId(database: Database, row: DerivationCsvRow): Promise<number> {
+async function resolveParentContainerId(database: DatabaseOrTransaction, row: DerivationCsvRow): Promise<number> {
   // 1. Explicit ID
   const explicitId = parseNumber(row.parent_container_id)
   if (explicitId) {
@@ -443,7 +529,7 @@ async function resolveParentContainerId(database: Database, row: DerivationCsvRo
 }
 
 async function resolveCollectionId(
-  database: Database,
+  database: DatabaseOrTransaction,
   containerType: DerivationCsvRow['container_type'],
   collectionName?: string,
   collectionBarcode?: string,
@@ -512,6 +598,10 @@ export async function validateDerivationsCsv(
   const rows = parseCsv(text)
   const validationRows: ValidationResult['rows'] = []
   const collectionsMap = new Map<string, CollectionStatus>()
+  /** Track (collectionKey, position) to catch duplicate position in same collection within the CSV */
+  const seenCollectionPosition = new Set<string>()
+  /** Track micronix container_barcode to catch duplicates within the CSV */
+  const seenMicronixBarcode = new Set<string>()
   let validCount = 0
   let invalidCount = 0
   let warningCount = 0
@@ -557,6 +647,21 @@ export async function validateDerivationsCsv(
           invalidCount++
           continue
         }
+      }
+
+      const containerType = row.container_type || settings?.containerType || 'micronix_tube'
+      const collectionName = getCollectionNameForType(row, containerType)
+      if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && !collectionName && !row.collection_barcode) {
+        validationRow.error = `${getCollectionNameLabelForType(containerType)} or collection_barcode is required for ${containerType} derivations`
+        validationRows.push(validationRow)
+        invalidCount++
+        continue
+      }
+      if (containerType === 'paper' && !collectionName) {
+        validationRow.error = 'bag_name is required for paper derivations'
+        validationRows.push(validationRow)
+        invalidCount++
+        continue
       }
 
       // Resolve parent container
@@ -619,20 +724,102 @@ export async function validateDerivationsCsv(
       }
 
       // Resolve collection and track status
-      const containerType = row.container_type || settings?.containerType || 'micronix_tube'
       const collectionInfo = await resolveCollectionId(
         database,
         containerType,
-        row.collection_name,
+        collectionName,
         row.collection_barcode,
       )
       validationRow.collectionStatus = collectionInfo.status
 
+      // For tube types, validate position and check for duplicate (existing collection or within CSV)
+      if (containerType === 'micronix_tube' || containerType === 'cryovial_tube') {
+        const position = (row.position ?? '').toString().trim()
+        if (!position) {
+          validationRow.error = 'position is required for each row when deriving to a plate or box'
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        const collectionKey = `${collectionName || ''}_${row.collection_barcode || ''}_${containerType}`
+        const positionKey = `${collectionKey}\t${position}`
+
+        // Check if position is already used in an existing collection
+        if (collectionInfo.id !== undefined) {
+          if (containerType === 'micronix_tube') {
+            const existing = await database
+              .select({ id: micronixTube.id })
+              .from(micronixTube)
+              .where(and(eq(micronixTube.collectionId, collectionInfo.id), eq(micronixTube.position, position)))
+              .get()
+            if (existing) {
+              validationRow.error = 'That position is already used in that plate. Each position in a plate can only be used once. Use a different position or a different plate.'
+              validationRows.push(validationRow)
+              invalidCount++
+              continue
+            }
+          } else {
+            const existing = await database
+              .select({ id: cryovialTube.id })
+              .from(cryovialTube)
+              .where(and(eq(cryovialTube.collectionId, collectionInfo.id), eq(cryovialTube.position, position)))
+              .get()
+            if (existing) {
+              validationRow.error = 'That position is already used in that box. Each position in a box can only be used once. Use a different position or a different box.'
+              validationRows.push(validationRow)
+              invalidCount++
+              continue
+            }
+          }
+        }
+
+        // Check for duplicate (collection + position) within the CSV
+        if (seenCollectionPosition.has(positionKey)) {
+          validationRow.error = 'This position in this plate or box is used more than once in your file. Each position can only be used once.'
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        seenCollectionPosition.add(positionKey)
+      }
+
+      // For micronix tubes, container_barcode is required (barcodes are scanned and provided externally)
+      if (containerType === 'micronix_tube') {
+        const barcode = (row.container_barcode ?? '').toString().trim()
+        if (!barcode) {
+          validationRow.error =
+            'container_barcode is required for micronix tube derivations. Barcodes are scanned and provided by you; the system does not assign them.'
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        if (seenMicronixBarcode.has(barcode)) {
+          validationRow.error =
+            'That micronix barcode is used more than once in your file. Each barcode must be unique.'
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        const existingTube = await database
+          .select({ id: micronixTube.id })
+          .from(micronixTube)
+          .where(eq(micronixTube.barcode, barcode))
+          .get()
+        if (existingTube) {
+          validationRow.error =
+            'That barcode is already used for another container. Use a different barcode. Barcodes are scanned and provided by you; the system does not assign them.'
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        seenMicronixBarcode.add(barcode)
+      }
+
       // Track unique collections
-      const collectionKey = `${row.collection_name || ''}_${row.collection_barcode || ''}_${containerType}`
-      if (!collectionsMap.has(collectionKey) && (row.collection_name || row.collection_barcode)) {
+      const collectionKey = `${collectionName || ''}_${row.collection_barcode || ''}_${containerType}`
+      if (!collectionsMap.has(collectionKey) && (collectionName || row.collection_barcode)) {
         collectionsMap.set(collectionKey, {
-          name: row.collection_name,
+          name: collectionName,
           barcode: row.collection_barcode,
           status: collectionInfo.status,
           containerType: containerType as 'micronix_tube' | 'cryovial_tube' | 'paper',
@@ -709,7 +896,7 @@ export async function importDerivationsFromCsv(
             const collectionInfo = await resolveCollectionId(
               tx,
               row.container_type || settings?.containerType || 'micronix_tube',
-              row.collection_name,
+              getCollectionNameForType(row, row.container_type || settings?.containerType || 'micronix_tube'),
               row.collection_barcode,
             )
 
@@ -734,6 +921,9 @@ export async function importDerivationsFromCsv(
             }
 
             const result = await createDerivation(tx, input)
+            const derivationTypeName = ((settings?.derivationType || row.derivation_type) ?? '').trim() || undefined
+            const parentSummary = buildParentSummary(row)
+            const childSummary = buildChildSummary(row)
 
             results.push({
               index: i,
@@ -743,6 +933,9 @@ export async function importDerivationsFromCsv(
               childContainerId: result.childContainer.id,
               warnings: result.warnings.map(w => w.message),
               collectionStatus: collectionInfo.status,
+              derivationTypeName,
+              parentSummary,
+              childSummary,
             })
           } catch (error: unknown) {
             // Track which row failed and throw to trigger rollback
@@ -755,21 +948,24 @@ export async function importDerivationsFromCsv(
     } catch (error: unknown) {
       // Transaction failed and rolled back - return error for failed row
       // All other rows are marked as not processed (transaction rolled back)
-      if (failedRowIndex !== null) {
+      // failedRowIndex is set in the inner catch before rethrow; control flow narrows it to number here
+      const idx = failedRowIndex as number | null
+      if (idx !== null) {
         const transactionErrorMessage = transactionError instanceof Error ? transactionError.message : String(transactionError || 'Unknown error')
         const errorMessage = error instanceof Error ? error.message : String(error)
-        const finalMessage = transactionErrorMessage !== 'null' && transactionErrorMessage !== 'Unknown error' ? transactionErrorMessage : errorMessage
+        const rawMessage = transactionErrorMessage !== 'null' && transactionErrorMessage !== 'Unknown error' ? transactionErrorMessage : errorMessage
+        const friendlyMessage = toUserFriendlyDerivationError(rawMessage)
         results.push({
-          index: failedRowIndex,
+          index: idx,
           success: false,
-          error: `Row ${failedRowIndex + 1}: ${finalMessage}. All changes rolled back (all-or-nothing transaction).`,
+          error: `Row ${idx + 1}: ${friendlyMessage} No derivations were created; please fix the error and try again.`,
         })
         // Mark all previous rows as failed due to transaction rollback
-        for (let i = 0; i < failedRowIndex; i++) {
+        for (let i = 0; i < idx; i++) {
           results[i] = {
             index: i,
             success: false,
-            error: `Transaction rolled back due to error in row ${failedRowIndex + 1}`,
+            error: `Stopped at row ${idx + 1}. No derivations were created.`,
           }
         }
       } else {
@@ -778,47 +974,39 @@ export async function importDerivationsFromCsv(
       }
     }
   } else {
-    // Dry run: can return partial results
+    // Dry run: validation only, no DB writes
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
       try {
         const parentContainerId = await resolveParentContainerId(database, row)
+        const containerType = (settings?.containerType || row.container_type || 'micronix_tube') as 'micronix_tube' | 'cryovial_tube' | 'paper'
         const collectionInfo = await resolveCollectionId(
           database,
           row.container_type || settings?.containerType || 'micronix_tube',
-          row.collection_name,
+          getCollectionNameForType(row, row.container_type || settings?.containerType || 'micronix_tube'),
           row.collection_barcode,
         )
 
-        // Use settings for required fields, allow CSV override for defaults
-        const input: CreateDerivationInput = {
-          parentContainerId,
-          derivationType: settings?.derivationType || row.derivation_type!,
-          specimenTypeName: settings?.specimenTypeName || row.specimen_type_name!,
-          containerType: (settings?.containerType || row.container_type!) as 'micronix_tube' | 'cryovial_tube' | 'paper',
-          quantity: row.quantity ? parseNumber(row.quantity) : settings?.quantity,
-          unitSymbol: row.unit_symbol || settings?.unitSymbol,
-          quantityUsed: row.quantity_used ? parseNumber(row.quantity_used) : settings?.quantityUsed,
-          reduceParentQuantity: row.reduce_parent_quantity !== undefined 
-            ? parseBoolean(row.reduce_parent_quantity) 
-            : settings?.reduceParentQuantity,
-          derivationDate: settings?.derivationDate || row.derivation_date!,
-          protocol: settings?.protocol || row.protocol!,
-          notes: row.notes,
-          collectionId: collectionInfo.id,
-          containerBarcode: row.container_barcode,
-          position: row.position,
+        if (collectionInfo.id === undefined && (containerType === 'micronix_tube' || containerType === 'cryovial_tube')) {
+          results.push({
+            index: i,
+            success: false,
+            error: `collectionId is required for ${containerType} derivations`,
+          })
+          continue
         }
-
-        const result = await createDerivation(database, input)
+        if (collectionInfo.id === undefined && containerType === 'paper') {
+          results.push({
+            index: i,
+            success: false,
+            error: 'collectionId (sheetId) is required for paper derivations',
+          })
+          continue
+        }
 
         results.push({
           index: i,
           success: true,
-          derivationId: result.derivation.id,
-          parentContainerId,
-          childContainerId: result.childContainer.id,
-          warnings: result.warnings.map(w => w.message),
           collectionStatus: collectionInfo.status,
         })
       } catch (error: unknown) {

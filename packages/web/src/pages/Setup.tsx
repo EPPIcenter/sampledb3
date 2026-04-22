@@ -90,7 +90,7 @@ export default function Setup() {
             }
 
             await setupApi.initialize(payload)
-            navigate('/')
+            navigate('/login', { state: { fromSetup: true } })
         } catch (err: any) {
             setError(err.response?.data?.error || err.message || 'Setup failed')
             setLoading(false)
@@ -110,17 +110,17 @@ export default function Setup() {
     const isStep3Valid = storageTypes.length > 0
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col py-12 sm:px-6 lg:px-8">
+        <div className="min-h-screen bg-app-surface flex flex-col py-12 sm:px-6 lg:px-8">
             <div className="sm:mx-auto sm:w-full sm:max-w-md">
-                <h2 className="text-center text-3xl font-extrabold text-gray-900">
+                <h2 className="text-center text-3xl font-extrabold text-app-text">
                     Welcome to SampleDB
                 </h2>
                 <div className="mt-2 flex justify-center space-x-2">
                     {[1, 2, 3, 4].map(i => (
-                        <div key={i} className={`h-2 w-8 rounded ${step >= i ? 'bg-blue-600' : 'bg-gray-200'}`} />
+                        <div key={i} className={`h-2 w-8 rounded ${step >= i ? 'bg-app-accent' : 'bg-app-surface'}`} />
                     ))}
                 </div>
-                <p className="mt-2 text-center text-sm text-gray-600">
+                <p className="mt-2 text-center text-sm text-app-text-muted">
                     Step {step} of 4: {
                         step === 1 ? 'Admin Account' :
                             step === 2 ? 'Core Definitions' :
@@ -128,21 +128,26 @@ export default function Setup() {
                                     'Biology (Optional)'
                     }
                 </p>
+                <p className="mt-1 text-center text-sm">
+                  <a href="/docs/guides/getting-started/setup/" className="text-app-accent hover:text-app-accent-hover hover:underline">
+                    Setup guide
+                  </a>
+                </p>
             </div>
 
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-4xl">
-                <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+                <div className="bg-app-card py-8 px-4 shadow sm:rounded-lg sm:px-10">
 
                     {error && (
-                        <div className="mb-4 rounded-md bg-red-50 p-4">
-                            <h3 className="text-sm font-medium text-red-800">{error}</h3>
+                        <div className="mb-4 rounded-md bg-app-trend-down/10 p-4">
+                            <h3 className="text-sm font-medium text-app-trend-down">{error}</h3>
                         </div>
                     )}
 
                     {/* STEP 1: ADMIN */}
                     {step === 1 && (
                         <div className="space-y-4 max-w-md mx-auto">
-                            <h3 className="text-lg font-medium text-gray-900">Create Administrator</h3>
+                            <h3 className="text-lg font-medium text-app-text">Create Administrator</h3>
                             <Input label="Full Name" name="name" value={adminData.name} onChange={(v: string) => setAdminData({ ...adminData, name: v })} required />
                             <Input label="Email Address" name="email" type="email" value={adminData.email} onChange={(v: string) => setAdminData({ ...adminData, email: v })} required />
                             <Input label="Password" name="password" type="password" value={adminData.password} onChange={(v: string) => setAdminData({ ...adminData, password: v })} required minLength={8} />
@@ -170,8 +175,8 @@ export default function Setup() {
                                     { name: 'category', placeholder: 'Category (e.g. volume)', width: 'w-32' },
                                 ]}
                             />
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                <p className="text-sm text-blue-800">
+                            <div className="bg-app-accent-muted border border-app-accent rounded-lg p-4">
+                                <p className="text-sm text-app-accent-hover">
                                     <strong>Note:</strong> Container status is automatically determined by remaining quantity. 
                                     Containers with remaining quantity &gt; 0 are "In Use", otherwise "Exhausted".
                                 </p>
@@ -194,41 +199,41 @@ export default function Setup() {
                             />
 
                             <div className="border-t pt-6">
-                                <h3 className="text-lg font-medium text-gray-900">Root Locations</h3>
-                                <p className="text-sm text-gray-500 mb-4">Define your top-level locations (Buildings, Rooms, or major Freezers).</p>
+                                <h3 className="text-lg font-medium text-app-text">Root Locations</h3>
+                                <p className="text-sm text-app-text-muted mb-4">Define your top-level locations (Buildings, Rooms, or major Freezers).</p>
 
                                 {locations.length === 0 && (
-                                    <div className="text-sm text-gray-500 italic mb-4">No locations defined. You can add them later.</div>
+                                    <div className="text-sm text-app-text-muted italic mb-4">No locations defined. You can add them later.</div>
                                 )}
 
                                 <ul className="space-y-2 mb-4">
                                     {locations.map((loc, idx) => (
-                                        <li key={idx} className="flex gap-2 items-center bg-gray-50 p-2 rounded">
+                                        <li key={idx} className="flex gap-2 items-center bg-app-surface p-2 rounded">
                                             <span className="font-medium flex-1">{loc.name}</span>
-                                            <span className="text-sm text-gray-600 bg-gray-200 px-2 rounded">{loc.storageTypeId || 'N/A'}</span>
-                                            <span className="text-sm text-gray-500">{loc.description}</span>
-                                            <button onClick={() => setLocations(locations.filter((_, i) => i !== idx))} className="text-red-600 hover:text-red-800 font-bold px-2">
+                                            <span className="text-sm text-app-text-muted bg-app-surface px-2 rounded">{loc.storageTypeId || 'N/A'}</span>
+                                            <span className="text-sm text-app-text-muted">{loc.description}</span>
+                                            <button onClick={() => setLocations(locations.filter((_, i) => i !== idx))} className="text-app-trend-down hover:text-app-trend-down/80 font-bold px-2">
                                                 ×
                                             </button>
                                         </li>
                                     ))}
                                 </ul>
 
-                                <div className="flex gap-2 items-end bg-gray-50 p-3 rounded border">
+                                <div className="flex gap-2 items-end bg-app-surface p-3 rounded border">
                                     <div className="flex-1">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
-                                        <input id="newLocName" className="w-full text-sm border-gray-300 rounded-md" placeholder="e.g. Lab 101" />
+                                        <label className="block text-xs font-medium text-app-text mb-1">Name</label>
+                                        <input id="newLocName" className="w-full text-sm border-app-border rounded-md" placeholder="e.g. Lab 101" />
                                     </div>
                                     <div className="w-1/3">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
-                                        <select id="newLocType" className="w-full text-sm border-gray-300 rounded-md">
+                                        <label className="block text-xs font-medium text-app-text mb-1">Type</label>
+                                        <select id="newLocType" className="w-full text-sm border-app-border rounded-md">
                                             <option value="">Select Type...</option>
                                             {storageTypes.map(st => <option key={st.name} value={st.name}>{st.name}</option>)}
                                         </select>
                                     </div>
                                     <button
                                         type="button"
-                                        className="mb-[1px] inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                                        className="mb-[1px] inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-app-accent hover:bg-app-accent-hover"
                                         onClick={(e) => {
                                             const nameInput = document.getElementById('newLocName') as HTMLInputElement
                                             const typeInput = document.getElementById('newLocType') as HTMLSelectElement
@@ -268,9 +273,9 @@ export default function Setup() {
                     )}
 
                     {/* NAVIGATION */}
-                    <div className="mt-8 flex justify-between border-t border-gray-200 pt-5">
+                    <div className="mt-8 flex justify-between border-t border-app-border pt-5">
                         {step > 1 ? (
-                            <button onClick={prevStep} className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            <button onClick={prevStep} className="bg-app-card py-2 px-4 border border-app-border rounded-md shadow-sm text-sm font-medium text-app-text hover:bg-app-surface">
                                 Back
                             </button>
                         ) : <div></div>}
@@ -283,7 +288,7 @@ export default function Setup() {
                                     (step === 2 && !isStep2Valid) ||
                                     (step === 3 && !isStep3Valid)
                                 }
-                                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-app-accent hover:bg-app-accent-hover disabled:opacity-50"
                             >
                                 Next
                             </button>
@@ -291,7 +296,7 @@ export default function Setup() {
                             <button
                                 onClick={handleSubmit}
                                 disabled={loading}
-                                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-app-trend-up hover:bg-app-trend-up/90 disabled:opacity-50"
                             >
                                 {loading ? 'Initializing...' : 'Finish Setup'}
                             </button>
@@ -351,13 +356,13 @@ function SpecimenTypeEditor({ title, description, items, onUpdate }: {
 
     return (
         <div>
-            <h4 className="text-sm font-bold text-gray-900">{title}</h4>
-            <p className="text-xs text-gray-500 mb-2">{description}</p>
+            <h4 className="text-sm font-bold text-app-text">{title}</h4>
+            <p className="text-xs text-app-text-muted mb-2">{description}</p>
 
             <ul ref={listRef} className="space-y-1.5 mb-3 max-h-80 overflow-y-auto">
-                {items.length === 0 && <li className="text-xs text-gray-400 italic py-2">No items defined</li>}
+                {items.length === 0 && <li className="text-xs text-app-text-muted italic py-2">No items defined</li>}
                 {items.map((item, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-sm p-1.5 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100">
+                    <li key={idx} className="flex items-center gap-2 text-sm p-1.5 bg-app-surface rounded border border-app-border hover:bg-app-surface">
                         <span className="font-medium min-w-[140px]">{item.name}</span>
                         <div className="flex-1 flex flex-wrap gap-1 items-center">
                             {CONTAINER_TYPES.map(ct => {
@@ -369,8 +374,8 @@ function SpecimenTypeEditor({ title, description, items, onUpdate }: {
                                         onClick={() => handleToggleContainerType(idx, ct.value)}
                                         className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium transition-colors ${
                                             isSelected
-                                                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                                : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                                ? 'bg-app-accent text-white hover:bg-app-accent-hover'
+                                                : 'bg-app-surface text-app-text-muted hover:bg-app-surface'
                                         }`}
                                         title={isSelected ? 'Click to remove' : 'Click to add'}
                                     >
@@ -381,7 +386,7 @@ function SpecimenTypeEditor({ title, description, items, onUpdate }: {
                         </div>
                         <button 
                             onClick={() => onUpdate(items.filter((_, i) => i !== idx))} 
-                            className="text-gray-400 hover:text-red-600 font-bold px-1.5 text-lg leading-none"
+                            className="text-app-text-muted hover:text-app-trend-down font-bold px-1.5 text-lg leading-none"
                             title="Remove"
                         >
                             ×
@@ -393,7 +398,7 @@ function SpecimenTypeEditor({ title, description, items, onUpdate }: {
             <div className="border-t pt-2 space-y-2">
                 <div className="flex gap-2 items-center">
                     <input
-                        className="flex-1 text-xs border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 p-1.5 shadow-sm"
+                        className="flex-1 text-xs border-app-border rounded focus:ring-app-accent focus:border-app-accent p-1.5 shadow-sm"
                         placeholder="Specimen type name (e.g. Blood)"
                         value={newItem.name}
                         onChange={e => setNewItem({ ...newItem, name: e.target.value })}
@@ -402,14 +407,14 @@ function SpecimenTypeEditor({ title, description, items, onUpdate }: {
                     <button
                         onClick={handleAdd}
                         disabled={!newItem.name}
-                        className="p-1.5 border border-transparent rounded bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50 font-bold px-2 text-sm"
+                        className="p-1.5 border border-transparent rounded bg-app-accent-muted text-app-accent-hover hover:bg-app-accent-muted/80 disabled:opacity-50 font-bold px-2 text-sm"
                     >
                         +
                     </button>
                 </div>
                 {newItem.name && (
                     <div className="flex flex-wrap gap-1.5 pl-1">
-                        <span className="text-xs text-gray-500 self-center mr-1">Containers:</span>
+                        <span className="text-xs text-app-text-muted self-center mr-1">Containers:</span>
                         {CONTAINER_TYPES.map(ct => {
                             const isSelected = (newItem.containerTypes || []).includes(ct.value)
                             return (
@@ -419,8 +424,8 @@ function SpecimenTypeEditor({ title, description, items, onUpdate }: {
                                     onClick={() => handleToggleContainerType(null, ct.value)}
                                     className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium transition-colors ${
                                         isSelected
-                                            ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                            : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                            ? 'bg-app-accent text-white hover:bg-app-accent-hover'
+                                            : 'bg-app-surface text-app-text-muted hover:bg-app-surface'
                                     }`}
                                 >
                                     {ct.label}
@@ -438,10 +443,10 @@ function Input({ label, onChange, ...props }: any) {
     const inputId = props.id || props.name || `input-${label.toLowerCase().replace(/\s+/g, '-')}`
     return (
         <div>
-            <label htmlFor={inputId} className="block text-sm font-medium text-gray-700">{label}</label>
+            <label htmlFor={inputId} className="block text-sm font-medium text-app-text">{label}</label>
             <input 
                 id={inputId} 
-                className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
+                className="mt-1 appearance-none block w-full px-3 py-2 border border-app-border rounded-md shadow-sm focus:ring-app-accent focus:border-app-accent sm:text-sm" 
                 onChange={(e) => onChange?.(e.target.value)}
                 {...props} 
             />
@@ -482,19 +487,19 @@ function ListEditor({ title, description, items, onUpdate, fields }: {
 
     return (
         <div>
-            <h4 className="text-sm font-bold text-gray-900">{title}</h4>
-            <p className="text-xs text-gray-500 mb-2">{description}</p>
+            <h4 className="text-sm font-bold text-app-text">{title}</h4>
+            <p className="text-xs text-app-text-muted mb-2">{description}</p>
 
             <ul ref={listRef} className="space-y-2 mb-3 max-h-48 overflow-y-auto">
-                {items.length === 0 && <li className="text-xs text-gray-400 italic">No items defined</li>}
+                {items.length === 0 && <li className="text-xs text-app-text-muted italic">No items defined</li>}
                 {items.map((item, idx) => (
-                    <li key={idx} className="flex gap-2 items-center text-sm p-1 bg-gray-50 rounded border border-gray-100">
+                    <li key={idx} className="flex gap-2 items-center text-sm p-1 bg-app-surface rounded border border-app-border">
                         {fields.map(f => (
                             <span key={f.name} className={`${f.width || 'flex-1'} truncate px-1`} title={item[f.name]}>
                                 {item[f.name]}
                             </span>
                         ))}
-                        <button onClick={() => onUpdate(items.filter((_, i) => i !== idx))} className="text-gray-400 hover:text-red-600 font-bold px-2">
+                        <button onClick={() => onUpdate(items.filter((_, i) => i !== idx))} className="text-app-text-muted hover:text-app-trend-down font-bold px-2">
                             ×
                         </button>
                     </li>
@@ -505,7 +510,7 @@ function ListEditor({ title, description, items, onUpdate, fields }: {
                 {fields.map(f => (
                     <input
                         key={f.name}
-                        className={`${f.width || 'flex-1'} text-xs border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 p-1.5 shadow-sm`}
+                        className={`${f.width || 'flex-1'} text-xs border-app-border rounded focus:ring-app-accent focus:border-app-accent p-1.5 shadow-sm`}
                         placeholder={f.placeholder || f.name}
                         value={newItem[f.name] || ''}
                         onChange={e => handleChange(f.name, e.target.value)}
@@ -515,7 +520,7 @@ function ListEditor({ title, description, items, onUpdate, fields }: {
                 <button
                     onClick={handleAdd}
                     disabled={!newItem[fields[0].name]}
-                    className="p-1.5 border border-transparent rounded bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50 font-bold px-2"
+                    className="p-1.5 border border-transparent rounded bg-app-accent-muted text-app-accent-hover hover:bg-app-accent-muted/80 disabled:opacity-50 font-bold px-2"
                 >
                     +
                 </button>
@@ -608,32 +613,32 @@ function CompositionEditor({ strains, onAdd }: { strains: StrainItem[], onAdd: (
     const isTotalValid = Math.abs(totalPercentage - 100) < 0.01
 
     return (
-        <div className="space-y-3 border border-gray-300 rounded p-3 bg-white">
+        <div className="space-y-3 border border-app-border rounded p-3 bg-app-card">
             <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Composition Label</label>
+                <label className="block text-xs font-medium text-app-text mb-1">Composition Label</label>
                 <input
                     type="text"
                     value={label}
                     onChange={e => setLabel(e.target.value)}
                     placeholder="e.g. Mixed Strain Control"
-                    className="w-full text-sm border-gray-300 rounded-md p-1.5"
+                    className="w-full text-sm border-app-border rounded-md p-1.5"
                 />
             </div>
             
             {/* Display added strains */}
             {compositionStrains.length > 0 && (
                 <div className="space-y-2">
-                    <div className="text-xs font-medium text-gray-700">Strains in Composition:</div>
-                    <ul className="space-y-1 max-h-32 overflow-y-auto bg-gray-50 rounded p-2">
+                    <div className="text-xs font-medium text-app-text">Strains in Composition:</div>
+                    <ul className="space-y-1 max-h-32 overflow-y-auto bg-app-surface rounded p-2">
                         {compositionStrains.map((cs, idx) => (
-                            <li key={idx} className="flex items-center justify-between text-xs bg-white p-2 rounded border border-gray-200">
+                            <li key={idx} className="flex items-center justify-between text-xs bg-app-card p-2 rounded border border-app-border">
                                 <span className="flex-1">
                                     <span className="font-medium">{cs.strainName}</span>
-                                    <span className="text-gray-600 ml-2">{cs.percentage}%</span>
+                                    <span className="text-app-text-muted ml-2">{cs.percentage}%</span>
                                 </span>
                                 <button
                                     onClick={() => handleRemoveStrain(cs.strainName)}
-                                    className="text-red-600 hover:text-red-800 font-bold px-2"
+                                    className="text-app-trend-down hover:text-app-trend-down/80 font-bold px-2"
                                     title="Remove strain"
                                 >
                                     ×
@@ -641,7 +646,7 @@ function CompositionEditor({ strains, onAdd }: { strains: StrainItem[], onAdd: (
                             </li>
                         ))}
                     </ul>
-                    <div className={`text-xs font-medium ${isTotalValid ? 'text-green-600' : 'text-red-600'}`}>
+                    <div className={`text-xs font-medium ${isTotalValid ? 'text-app-trend-up' : 'text-app-trend-down'}`}>
                         Total: {totalPercentage.toFixed(2)}% {isTotalValid ? '✓' : `(need ${(100 - totalPercentage).toFixed(2)}% more)`}
                     </div>
                 </div>
@@ -649,12 +654,12 @@ function CompositionEditor({ strains, onAdd }: { strains: StrainItem[], onAdd: (
             
             {/* Add strain form */}
             <div className="space-y-2 border-t pt-2">
-                <div className="text-xs font-medium text-gray-700">Add Strain:</div>
+                <div className="text-xs font-medium text-app-text">Add Strain:</div>
                 <div className="flex gap-2">
                     <select
                         value={selectedStrain}
                         onChange={e => setSelectedStrain(e.target.value)}
-                        className="flex-1 text-sm border-gray-300 rounded-md p-1.5"
+                        className="flex-1 text-sm border-app-border rounded-md p-1.5"
                         disabled={availableStrains.length === 0}
                     >
                         <option value="">
@@ -676,13 +681,13 @@ function CompositionEditor({ strains, onAdd }: { strains: StrainItem[], onAdd: (
                         min="0"
                         max="100"
                         step="0.1"
-                        className="w-24 text-sm border-gray-300 rounded-md p-1.5"
+                        className="w-24 text-sm border-app-border rounded-md p-1.5"
                         disabled={!selectedStrain}
                     />
                     <button
                         onClick={handleAddStrain}
                         disabled={!selectedStrain || !percentage || availableStrains.length === 0}
-                        className="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50"
+                        className="px-3 py-1.5 text-xs bg-app-accent-muted text-app-accent-hover rounded hover:bg-blue-200 disabled:opacity-50"
                     >
                         Add
                     </button>
@@ -692,7 +697,7 @@ function CompositionEditor({ strains, onAdd }: { strains: StrainItem[], onAdd: (
             <button
                 onClick={handleAddComposition}
                 disabled={!label || compositionStrains.length === 0 || !isTotalValid}
-                className="w-full px-3 py-2 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
+                className="w-full px-3 py-2 text-sm bg-app-trend-up/10 text-app-trend-up rounded hover:bg-app-trend-up/20 disabled:opacity-50"
             >
                 Add Composition
             </button>

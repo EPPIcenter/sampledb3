@@ -125,6 +125,8 @@ The default configuration includes all available columns, which is comprehensive
 
 Configurations are managed in Settings, where you can create new ones, edit existing ones, set defaults, and delete ones you no longer need. Once you've set up configurations for your common export needs, using them becomes second nature.
 
+Collection detail pages (micronix plates, cryovial boxes, boxes, bags, and sheets) have a **table view** with a "Columns" dropdown. Table view uses **table view configurations** (separate from export configurations), managed in Settings under Data Management → Table View Configurations. The table shows only columns defined in the selected preset. **Table CSV download** exports the current view—the same columns and rows you see on screen—so you can quickly grab a snapshot without using the main Export page. Export configurations are used only for the Export page, Barcode Export, and Export modal.
+
 ## Troubleshooting Export Issues
 
 If your export doesn't find any containers, there are several possible causes. The subjects might not exist in the system, or they might not have any containers yet. Your filters might be too restrictive, excluding all containers. Or the date tolerance might be too strict if you're using collection dates.
@@ -147,4 +149,4 @@ Save your export configurations for common use cases so you don't have to recrea
 
 ## What's Next?
 
-Now that you understand bulk export, you might want to explore [Bulk Import](/guides/bulk-operations/import/) to learn how to bring data into the system, check out [Settings](/guides/advanced/settings/) to configure export settings, or review the [CSV File Guidelines](/guides/troubleshooting/csv-guidelines/) to ensure your subject list CSV is formatted correctly.
+Now that you understand bulk export, you might want to explore [Bulk Import](/docs/guides/bulk-operations/import/) to learn how to bring data into the system, check out [Settings](/docs/guides/advanced/settings/) to configure export settings, or review the [CSV File Guidelines](/docs/guides/troubleshooting/csv-guidelines/) to ensure your subject list CSV is formatted correctly.

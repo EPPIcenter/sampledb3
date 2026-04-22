@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { Database } from '../db/client'
 import { specimen, study, studySubject, micronixTube, cryovialTube, micronixPlate, cryovialBox, box, bag, location, controlBatch, controlDefinition, type Location } from '../db/schema'
 import { eq, or, like, sql } from 'drizzle-orm'
+import { createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create search routes with database injection
@@ -9,9 +10,10 @@ import { eq, or, like, sql } from 'drizzle-orm'
  */
 export function createSearchRoutes(database: Database): Hono {
   const search = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
 // Unified search endpoint
-search.get('/', async (c) => {
+search.get('/', authMiddleware, async (c) => {
   try {
     const query = c.req.query('q')
     const type = c.req.query('type') // 'specimen', 'container', 'study', 'subject', or 'all'
@@ -387,7 +389,7 @@ search.get('/', async (c) => {
           id: batch.id,
           title: batch.name,
           subtitle: `Definition: ${batch.definitionName || 'N/A'}`,
-          url: `/controls/batches/${batch.id}`,
+          url: `/blood-controls/batches/${batch.id}`,
           data: batch,
         })
       }

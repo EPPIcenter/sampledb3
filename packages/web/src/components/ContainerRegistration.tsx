@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react'
-import CollectionPicker, { type CollectionType } from './CollectionPicker'
-import LocationPicker from './LocationPicker'
-import api, { settingsApi, type Unit, type ContainerDefaults } from '../lib/api'
+import { useState, useEffect, useRef } from 'react'
+import CollectionSelectOrCreate, {
+  type CollectionOption,
+  type CollectionSelectValue,
+  type CollectionType,
+} from './CollectionSelectOrCreate'
+import { collectionsApi, settingsApi, type Unit, type ContainerDefaults } from '../lib/api'
 
 export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
@@ -15,11 +18,23 @@ export interface ContainerData {
   statusId?: number
   comment?: string
   unitId?: number
+  totalQuantity?: number
+  remainingQuantity?: number
 }
 
+const CONTAINER_TYPE_OPTIONS: { value: ContainerType; label: string }[] = [
+  { value: 'micronix_tube', label: 'Micronix Tube' },
+  { value: 'cryovial_tube', label: 'Cryovial Tube' },
+  { value: 'paper', label: 'Paper' },
+  { value: 'static_well', label: 'Static Well' },
+]
+
 interface ContainerRegistrationProps {
+  /** When 'hidden', component returns null. Parent should clear its container value when passing mode='hidden'. */
   mode: 'required' | 'optional' | 'hidden'
   containerType?: ContainerType
+  /** When set, only these container types are shown in the type dropdown (e.g. from specimen type's allowed types). */
+  allowedContainerTypes?: string[]
   defaultValue?: ContainerData
   onChange: (data: ContainerData | null) => void
   onValidationChange?: (isValid: boolean) => void
@@ -28,6 +43,7 @@ interface ContainerRegistrationProps {
 export default function ContainerRegistration({
   mode,
   containerType: initialContainerType,
+  allowedContainerTypes = [],
   defaultValue,
   onChange,
   onValidationChange,
@@ -43,77 +59,19 @@ export default function ContainerRegistration({
     label: defaultValue?.label || '',
     comment: defaultValue?.comment || '',
     unitId: defaultValue?.unitId,
+    totalQuantity: defaultValue?.totalQuantity,
+    remainingQuantity: defaultValue?.remainingQuantity,
   })
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
-  const [showCreateCollection, setShowCreateCollection] = useState(false)
-  const [newCollectionName, setNewCollectionName] = useState('')
-  const [newCollectionLocationId, setNewCollectionLocationId] = useState<number | null>(null)
   const [units, setUnits] = useState<Unit[]>([])
   const [defaultUnitSymbol, setDefaultUnitSymbol] = useState<string | null>(null)
+  const [defaultQuantityDisplay, setDefaultQuantityDisplay] = useState<{ totalQuantity: number; remainingQuantity: number } | null>(null)
   const [selectedUnitId, setSelectedUnitId] = useState<number | undefined>(defaultValue?.unitId)
   const [unitsError, setUnitsError] = useState<string | null>(null)
   const [defaultUnitError, setDefaultUnitError] = useState<string | null>(null)
-
-  useEffect(() => {
-    loadUnits()
-    loadDefaultUnit()
-  }, [containerType])
-
-  const loadUnits = async () => {
-    try {
-      setUnitsError(null)
-      // Load units filtered by container type
-      const res = await settingsApi.getContainerTypeUnits(containerType)
-      setUnits(res.data.units || [])
-    } catch (err: any) {
-      const errorMessage = err?.response?.data?.error || err?.message || 'Failed to load units for this container type'
-      setUnitsError(errorMessage)
-      setUnits([])
-      console.error('Failed to load units:', err)
-      // Don't fallback - show error to user instead
-    }
-  }
-
-  const loadDefaultUnit = async () => {
-    try {
-      setDefaultUnitError(null)
-      const res = await settingsApi.get('container_defaults')
-      const defaults = res.data.value as ContainerDefaults | null
-      if (defaults && defaults[containerType]) {
-        const symbol = defaults[containerType].defaultUnitSymbol
-        setDefaultUnitSymbol(symbol)
-        // Find unit ID for default symbol if no unit is currently selected
-        if (!selectedUnitId && !defaultValue?.unitId) {
-          const resUnits = await settingsApi.getUnits()
-          const defaultUnit = resUnits.data.find(u => u.symbol === symbol)
-          if (defaultUnit) {
-            setSelectedUnitId(defaultUnit.id)
-          }
-        }
-      }
-    } catch (err: any) {
-      const errorMessage = err?.response?.data?.error || err?.message || 'Failed to load default unit settings'
-      setDefaultUnitError(errorMessage)
-      console.error('Failed to load default unit:', err)
-      // Show warning but don't block form usage
-    }
-  }
-
-  useEffect(() => {
-    if (mode === 'hidden') {
-      onChange(null)
-      return
-    }
-
-    if (!enabled && mode === 'optional') {
-      onChange(null)
-      if (onValidationChange) onValidationChange(true)
-      return
-    }
-
-    updateContainerData()
-  }, [enabled, containerType, formData, mode, selectedUnitId])
-
+  const [collectionOptions, setCollectionOptions] = useState<CollectionOption[]>([])
+  const [collectionSelectedId, setCollectionSelectedId] = useState<number | undefined>(undefined)
+  const [collectionLocationPath, setCollectionLocationPath] = useState<string | null>(null)
 
   const getCollectionType = (): CollectionType => {
     switch (containerType) {
@@ -128,6 +86,122 @@ export default function ContainerRegistration({
         return 'box'
     }
   }
+
+  const effectiveCollectionType = getCollectionType()
+
+  // When allowed types are restricted and current type is not allowed, reset to first allowed
+  useEffect(() => {
+    if (allowedContainerTypes.length > 0 && !allowedContainerTypes.includes(containerType)) {
+      const first = allowedContainerTypes[0] as ContainerType
+      setContainerType(first)
+      setFormData((prev) => ({ ...prev, containerType: first }))
+    }
+  }, [allowedContainerTypes])
+
+  useEffect(() => {
+    const cancelled = { current: false }
+    loadUnits()
+    const run = async () => {
+      try {
+        setDefaultUnitError(null)
+        const res = await settingsApi.get('container_defaults')
+        if (cancelled.current) return
+        const defaults = res.data.value as ContainerDefaults | null
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime check for container type in defaults
+        if (defaults && defaults[containerType]) {
+          const typeDefaults = defaults[containerType]
+          setDefaultUnitSymbol(typeDefaults.defaultUnitSymbol)
+          setDefaultQuantityDisplay({
+            totalQuantity: typeDefaults.totalQuantity,
+            remainingQuantity: typeDefaults.remainingQuantity,
+          })
+          if (!selectedUnitId && !defaultValue?.unitId) {
+            const resUnits = await settingsApi.getUnits()
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- effect cleanup can set cancelled.current between awaits
+            if (cancelled.current) return
+            const defaultUnit = resUnits.data.find((u: Unit) => u.symbol === typeDefaults.defaultUnitSymbol)
+            if (defaultUnit) setSelectedUnitId(defaultUnit.id)
+          }
+        } else {
+          setDefaultQuantityDisplay(null)
+        }
+      } catch (err: unknown) {
+        if (cancelled.current) return
+        const errorMessage = err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : null
+        setDefaultUnitError(errorMessage || (err instanceof Error ? err.message : 'Failed to load default unit settings'))
+        setDefaultQuantityDisplay(null)
+        console.error('Failed to load default unit:', err)
+      }
+    }
+    run()
+    return () => {
+      cancelled.current = true
+    }
+  }, [containerType])
+
+  useEffect(() => {
+    const type = effectiveCollectionType
+    setCollectionSelectedId(undefined)
+    setCollectionLocationPath(null)
+    if (type !== 'micronix_plate' && type !== 'cryovial_box' && type !== 'box') return
+    let cancelled = false
+    collectionsApi.listCollectionsByType(type).then((res) => {
+      if (cancelled) return
+      const options: CollectionOption[] = res.data.collections.map(
+        (c: { id: number; name: string; location?: { path: string | null } | null }) => ({
+          id: c.id,
+          name: c.name,
+          locationPath: c.location?.path ?? null,
+        })
+      )
+      setCollectionOptions(options)
+    }).catch(() => {
+      if (!cancelled) setCollectionOptions([])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [effectiveCollectionType])
+
+  const loadUnits = async () => {
+    try {
+      setUnitsError(null)
+      // Load units filtered by container type
+      const res = await settingsApi.getContainerTypeUnits(containerType)
+      setUnits(res.data.units)
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.error ?? err?.message ?? 'Failed to load units for this container type'
+      setUnitsError(errorMessage)
+      setUnits([])
+      console.error('Failed to load units:', err)
+      // Don't fallback - show error to user instead
+    }
+  }
+
+  const isInitialMount = useRef(true)
+  // When container type or unit changes (after mount), clear quantity fields so placeholder (default) text shows again
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+    setFormData((prev) => ({
+      ...prev,
+      totalQuantity: undefined,
+      remainingQuantity: undefined,
+    }))
+  }, [containerType, selectedUnitId])
+
+  // Sync derived container data to parent when form state changes. Do not notify parent
+  // with null here: mode === 'hidden' is the parent's responsibility; optional unchecked
+  // is handled in the checkbox handler below.
+  useEffect(() => {
+    if (mode === 'hidden') return
+    if (!enabled && mode === 'optional') return
+    updateContainerData()
+  }, [enabled, containerType, formData, mode, selectedUnitId])
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
@@ -185,26 +259,33 @@ export default function ContainerRegistration({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Container Registration</h3>
+        <h3 className="text-lg font-semibold text-app-text">Container Registration</h3>
         {mode === 'optional' && (
           <label className="flex items-center space-x-2 cursor-pointer">
             <input
               type="checkbox"
               checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              onChange={(e) => {
+                const checked = e.target.checked
+                setEnabled(checked)
+                if (!checked) {
+                  onChange(null)
+                  onValidationChange?.(true)
+                }
+              }}
+              className="h-4 w-4 text-app-accent focus:ring-app-accent border-app-border rounded"
             />
-            <span className="text-sm text-gray-700">Add Container</span>
+            <span className="text-sm text-app-text">Add Container</span>
           </label>
         )}
       </div>
 
       {enabled && (
-        <div className="space-y-4 bg-gray-50/50 p-5 rounded-lg border border-gray-200/60">
+        <div className="space-y-4 bg-app-surface/50 p-5 rounded-lg border border-app-border/60">
           {/* Container Type Selector */}
           {!initialContainerType && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-app-text mb-2">
                 Container Type *
               </label>
               <select
@@ -215,116 +296,70 @@ export default function ContainerRegistration({
                 }}
                 className="form-select"
               >
-                <option value="micronix_tube">Micronix Tube</option>
-                <option value="cryovial_tube">Cryovial Tube</option>
-                <option value="paper">Paper</option>
-                <option value="static_well">Static Well</option>
+                {(allowedContainerTypes.length > 0
+                  ? CONTAINER_TYPE_OPTIONS.filter((t) => allowedContainerTypes.includes(t.value))
+                  : CONTAINER_TYPE_OPTIONS
+                ).map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
               </select>
+              {allowedContainerTypes.length > 0 && (
+                <p className="text-xs text-app-text-muted mt-1">
+                  Allowed for this specimen type: {allowedContainerTypes.map((ct) => CONTAINER_TYPE_OPTIONS.find((t) => t.value === ct)?.label ?? ct).join(', ')}
+                </p>
+              )}
             </div>
           )}
 
           <div className="space-y-4">
               {/* Collection Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Collection ({getCollectionType() === 'micronix_plate' ? 'Plate' : 'Box'}) *
-                </label>
-                <CollectionPicker
-                  collectionType={getCollectionType()}
-                  value={formData.collectionName || formData.collectionBarcode || ''}
-                  onChange={(value) => {
-                    // Try to determine if it's a name or barcode
-                    // For now, treat as name
-                    handleFieldChange('collectionName', value)
+                <CollectionSelectOrCreate
+                  collectionType={effectiveCollectionType}
+                  collections={collectionOptions}
+                  value={
+                    formData.collectionName
+                      ? (collectionSelectedId != null
+                          ? {
+                              id: collectionSelectedId,
+                              name: formData.collectionName,
+                              locationPath: collectionLocationPath ?? undefined,
+                            }
+                          : { name: formData.collectionName, id: undefined, locationPath: undefined })
+                      : null
+                  }
+                  onChange={(v: CollectionSelectValue | null) => {
+                    if (v == null) {
+                      handleFieldChange('collectionName', '')
+                      handleFieldChange('collectionBarcode', '')
+                      setCollectionSelectedId(undefined)
+                      setCollectionLocationPath(null)
+                      return
+                    }
+                    handleFieldChange('collectionName', v.name)
                     handleFieldChange('collectionBarcode', '')
+                    setCollectionSelectedId(v.id)
+                    setCollectionLocationPath(v.locationPath ?? null)
                   }}
-                  allowCreate={true}
-                  onCreateClick={() => setShowCreateCollection(true)}
+                  allowCreate
+                  label={`Collection (${effectiveCollectionType === 'micronix_plate' ? 'Plate' : 'Box'}) *`}
+                  placeholder={
+                    effectiveCollectionType === 'micronix_plate'
+                      ? 'Type to search or enter plate name'
+                      : 'Type to search or enter box name'
+                  }
                 />
                 {validationErrors.collection && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.collection}</p>
+                  <p className="mt-1 text-sm text-app-trend-down">{validationErrors.collection}</p>
                 )}
               </div>
-
-              {/* Create Collection Modal */}
-              {showCreateCollection && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center">
-                  <div
-                    className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-                    onClick={() => setShowCreateCollection(false)}
-                  />
-                  <div className="relative z-10 w-full max-w-2xl mx-4 bg-white rounded-lg shadow-xl p-6 max-h-[90vh] overflow-y-auto">
-                    <h3 className="text-lg font-semibold mb-4 text-gray-900">
-                      Create {getCollectionType() === 'micronix_plate' ? 'Micronix Plate' : 'Cryovial Box'}
-                    </h3>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={newCollectionName}
-                          onChange={(e) => setNewCollectionName(e.target.value)}
-                          className="form-input"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Location *
-                        </label>
-                        <LocationPicker
-                          value={newCollectionLocationId}
-                          onChange={setNewCollectionLocationId}
-                        />
-                      </div>
-                      <div className="flex justify-end space-x-3">
-                        <button
-                          type="button"
-                          onClick={() => setShowCreateCollection(false)}
-                          className="px-4 py-2 border border-gray-100 rounded-lg text-gray-700 hover:bg-gray-50"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (!newCollectionName || !newCollectionLocationId) return
-
-                            try {
-                              const endpoint = getCollectionType() === 'micronix_plate'
-                                ? '/collections/plates/micronix'
-                                : '/collections/boxes/cryovial'
-
-                              const response = await api.post(endpoint, {
-                                name: newCollectionName,
-                                locationId: newCollectionLocationId,
-                              })
-
-                              handleFieldChange('collectionName', response.data.plate?.name || response.data.box?.name || newCollectionName)
-                              setShowCreateCollection(false)
-                              setNewCollectionName('')
-                              setNewCollectionLocationId(null)
-                            } catch (error: any) {
-                              console.error('Failed to create collection:', error)
-                              alert(error.response?.data?.error || 'Failed to create collection')
-                            }
-                          }}
-                          disabled={!newCollectionName || !newCollectionLocationId}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          Create
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Container-specific fields */}
               {containerType === 'micronix_tube' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Barcode * (Globally Unique)
                   </label>
                   <input
@@ -332,17 +367,17 @@ export default function ContainerRegistration({
                     value={formData.barcode || ''}
                     onChange={(e) => handleFieldChange('barcode', e.target.value)}
                     placeholder="Enter barcode"
-                    className={`form-input ${validationErrors.barcode ? 'border-red-300' : ''}`}
+                    className={`form-input ${validationErrors.barcode ? 'border-app-trend-down' : ''}`}
                   />
                   {validationErrors.barcode && (
-                    <p className="mt-1 text-sm text-red-600">{validationErrors.barcode}</p>
+                    <p className="mt-1 text-sm text-app-trend-down">{validationErrors.barcode}</p>
                   )}
                 </div>
               )}
 
               {containerType === 'cryovial_tube' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Barcode (Optional)
                   </label>
                   <input
@@ -357,7 +392,7 @@ export default function ContainerRegistration({
 
               {(containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'static_well') && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Position {containerType === 'micronix_tube' || containerType === 'cryovial_tube' ? '*' : '(Optional)'}
                   </label>
                   <input
@@ -365,17 +400,17 @@ export default function ContainerRegistration({
                     value={formData.position || ''}
                     onChange={(e) => handleFieldChange('position', e.target.value)}
                     placeholder="e.g., A01, B12"
-                    className={`form-input ${validationErrors.position ? 'border-red-300' : ''}`}
+                    className={`form-input ${validationErrors.position ? 'border-app-trend-down' : ''}`}
                   />
                   {validationErrors.position && (
-                    <p className="mt-1 text-sm text-red-600">{validationErrors.position}</p>
+                    <p className="mt-1 text-sm text-app-trend-down">{validationErrors.position}</p>
                   )}
                 </div>
               )}
 
               {containerType === 'paper' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-app-text mb-2">
                     Label *
                   </label>
                   <input
@@ -383,26 +418,26 @@ export default function ContainerRegistration({
                     value={formData.label || ''}
                     onChange={(e) => handleFieldChange('label', e.target.value)}
                     placeholder="Enter label"
-                    className={`form-input ${validationErrors.label ? 'border-red-300' : ''}`}
+                    className={`form-input ${validationErrors.label ? 'border-app-trend-down' : ''}`}
                   />
                   {validationErrors.label && (
-                    <p className="mt-1 text-sm text-red-600">{validationErrors.label}</p>
+                    <p className="mt-1 text-sm text-app-trend-down">{validationErrors.label}</p>
                   )}
                 </div>
               )}
 
               {/* Unit Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Unit (Optional)
                 </label>
                 {unitsError && (
-                  <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                  <div className="mb-2 p-2 bg-app-trend-down/10 border border-app-trend-down rounded text-sm text-app-trend-down">
                     {unitsError}
                   </div>
                 )}
                 {defaultUnitError && (
-                  <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-700">
+                  <div className="mb-2 p-2 bg-app-surface border border-app-border rounded text-sm text-app-text">
                     Warning: {defaultUnitError}
                   </div>
                 )}
@@ -422,14 +457,55 @@ export default function ContainerRegistration({
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-app-text-muted">
                   Select a unit to override the default. If not specified, the default unit for this container type will be used.
                 </p>
               </div>
 
+              {/* Optional quantity */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-app-text mb-2">
+                    Total quantity (optional)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={formData.totalQuantity ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      handleFieldChange('totalQuantity', v === '' ? undefined : Number(v))
+                    }}
+                    className="form-input"
+                    placeholder={defaultQuantityDisplay != null ? String(defaultQuantityDisplay.totalQuantity) : 'Use default'}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-app-text mb-2">
+                    Remaining quantity (optional)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={formData.remainingQuantity ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      handleFieldChange('remainingQuantity', v === '' ? undefined : Number(v))
+                    }}
+                    className="form-input"
+                    placeholder={defaultQuantityDisplay != null ? String(defaultQuantityDisplay.remainingQuantity) : 'Use default'}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-app-text-muted -mt-2">
+                Leave blank to use the default quantities for this container type.
+              </p>
+
               {/* Optional comment */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-app-text mb-2">
                   Comment (Optional)
                 </label>
                 <textarea

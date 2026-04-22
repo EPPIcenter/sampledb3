@@ -33,9 +33,9 @@ Once you've filled in the form, click "Create Study" to save it. You'll be redir
 
 ## Exploring the Study Detail Page
 
-After creating a study, the study detail page becomes your central hub for everything related to that study. At the top, you'll see all the study information you entered: the title, short code, description, lead person, creation date, last update date, and whether it's marked as longitudinal.
+After creating a study, the study detail page becomes your central hub for everything related to that study. The top of the page uses a **sticky header** that stays visible as you scroll: study identity (title, short code, lead person, and a "Longitudinal" badge when applicable), an optional one-line description with "Show more" for longer text, and a **key metrics bar** showing at a glance the number of subjects, specimens, containers, and average specimens per subject. Primary actions (Create Subject, Export Data) appear here, with "More actions" for Edit study and Merge subjects, and a Delete study option when permitted. No API or workflow changes are required—the same data and actions are available in a more streamlined layout.
 
-Below the basic information, you'll find study statistics that give you a quick overview of the study's scope. These include the total number of subjects enrolled, total specimens collected, total containers associated with those specimens, the date range of collections (earliest and latest), and a breakdown showing how many of each specimen type have been collected. These statistics update automatically as you add more data, giving you a real-time view of your study's progress.
+Below the header, you'll find study statistics that give you a quick overview of the study's scope. These include the total number of subjects enrolled, total specimens collected, total containers associated with those specimens, the date range of collections (earliest and latest), and a breakdown showing how many of each specimen type have been collected. These statistics update automatically as you add more data, giving you a real-time view of your study's progress.
 
 The page also provides several actions you can take. You can add a new subject directly from the study page, edit the study details (though remember, the longitudinal flag cannot be changed), or browse all subjects in the study.
 
@@ -85,4 +85,4 @@ This becomes especially helpful as your laboratory accumulates more studies over
 
 ## What's Next?
 
-Now that you understand how studies work, you might want to learn about [Subjects & Specimens](/guides/workflows/subjects-specimens/) to start adding data to your study. If you have many subjects to add, consider using [Bulk Import](/guides/bulk-operations/import/) to add them efficiently. And when you're ready to export data, the [Bulk Export](/guides/bulk-operations/export/) guide shows you how to generate reports for your studies.
+Now that you understand how studies work, you might want to learn about [Subjects & Specimens](/docs/guides/workflows/subjects-specimens/) to start adding data to your study. If you have many subjects to add, consider using [Bulk Import](/docs/guides/bulk-operations/import/) to add them efficiently. And when you're ready to export data, the [Bulk Export](/docs/guides/bulk-operations/export/) guide shows you how to generate reports for your studies.

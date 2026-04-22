@@ -5,6 +5,8 @@ description: Organize your storage infrastructure with hierarchical locations
 
 Locations represent your physical storage infrastructure—the freezers, rooms, buildings, and other places where your collections are actually stored. SampleDB uses a hierarchical location system that mirrors your laboratory's physical organization, making it easy to track where samples are stored and to find them when you need them.
 
+The Locations page and related storage pages (location detail, collection detail, container detail, and move wizards) use a consistent "modern precision lab" visual theme aligned with the rest of the app; behavior is unchanged.
+
 The location hierarchy works like a tree, with parent locations containing child locations, creating a structure that matches how your lab is actually organized. This might be Building → Room → Freezer → Shelf, or Freezer → Rack → Shelf → Drawer, or any structure that makes sense for your physical layout. The flexibility of this system means you can organize locations in whatever way matches your laboratory's actual storage setup.
 
 ## Understanding How Location Hierarchies Work
@@ -17,7 +19,7 @@ This hierarchy serves several important purposes. It helps you organize storage 
 
 ## The Components of Your Location System
 
-Root locations are your top-level storage units. These are created during the initial setup process or later through the Reference Data section. They represent the highest level of your storage organization—whether that's buildings, major freezers, or rooms depends on your lab's structure.
+Root locations are your top-level storage units. These are created during the initial setup process or later through the Locations page or Admin → Location Management. They represent the highest level of your storage organization—whether that's buildings, major freezers, or rooms depends on your lab's structure.
 
 Child locations are nested under parent locations, creating the hierarchy. You can nest locations as deeply as needed—rooms under buildings, freezers under rooms, shelves under freezers, drawers under shelves, and so on. There's no limit to how many levels you can create, though most labs find that three to five levels provide enough detail without becoming unwieldy.
 
@@ -25,19 +27,21 @@ Each location can have a storage type assigned to it, which helps categorize the
 
 ## Creating Your Location Hierarchy
 
-You can create locations from two main places: the Locations page, which provides a visual tree interface, or the Reference Data section, which offers a list-based approach. Both access the same data, so you can use whichever interface feels more natural for the task at hand.
+Only administrators can create or modify locations. You can create locations from two places: the main **Locations** page (Browse Data → Locations) or **Admin → Location Management**. Both use the same tree-based interface and access the same data.
 
 ### Using the Locations Page
 
-The Locations page shows a tree view of all your locations, making it easy to see the hierarchy and understand how locations relate to each other. To add a location, navigate to the Locations section in the sidebar, then use the location tree to find where you want to add the new location. You can click "Add Location" or right-click on a parent location to add a child.
+The Locations page shows a tree view of all your locations, making it easy to see the hierarchy and understand how locations relate to each other. When there are no locations yet, administrators see a "Create first location" button to add the initial root location.
 
-When you open the location creation form, you'll need to provide a name for the location. This should be something clear and descriptive—"Freezer A" is better than just "A", and "Shelf 1" is clearer than "1". You'll select a parent location from the tree, which determines where this location fits in your hierarchy. You can optionally assign a storage type to help categorize the location, and add a description if you need to provide additional context.
+To add a root location, click **Add Root** in the tree header. To add a child location, hover over a parent in the tree and click the plus (+) icon that appears.
 
-Once you've filled in the form, click "Create" and the location will be added to your hierarchy. The tree view will update to show the new location in its proper place.
+When you open the location creation form, you'll need to provide a name for the location. This should be something clear and descriptive—"Freezer A" is better than just "A", and "Shelf 1" is clearer than "1". For root locations, you must select a storage type (e.g. "-80°C Freezer"); child locations inherit the storage type from their parent. You can optionally add a description and choose whether the location can contain collections (plates, boxes, bags).
 
-### Using Reference Data
+Once you've filled in the form, click **Create** and the location will be added to your hierarchy. The tree view will update to show the new location in its proper place.
 
-The Reference Data section provides an alternative interface for location management, which some people find more efficient for administrative tasks. Navigate to Reference Data → Locations, and you'll see a list of all locations. Click "Add Location" to create a new one, and you'll see the same form as in the Locations page. This interface is particularly useful when you need to add many locations at once or when you prefer working with lists rather than trees.
+### Using Admin → Location Management
+
+Administrators can use the dedicated Location Management page for creating and managing locations. Navigate to **Admin → Location Management** (or use the command palette: **Create Location**). This page provides the same tree-based interface as the main Locations page, with a "Back to Admin Dashboard" link for quick return. It is particularly useful when performing administrative tasks from the Admin section.
 
 ## Navigating the Location Tree
 
@@ -63,7 +67,7 @@ When you create a collection, you'll need to assign it to a location. This happe
 
 If you need to move a collection to a different location later—perhaps because you've reorganized storage or moved collections physically—you can do so from the collection detail page. Click "Edit" or "Change Location", select the new location, and save. The system will update the location assignment, and the collection will appear in the new location's contents list.
 
-For moving multiple collections at once, the system provides bulk movement tools that are covered in the [Collection Move](/guides/features/collection-move/) guide. These tools are especially useful when you're reorganizing storage on a larger scale.
+For moving multiple collections at once, the system provides bulk movement tools that are covered in the [Collection Move](/docs/guides/features/collection-move/) guide. These tools are especially useful when you're reorganizing storage on a larger scale.
 
 ## Searching for Locations
 
@@ -109,4 +113,4 @@ Document your location organization conventions so team members can follow them 
 
 ## What's Next?
 
-Now that you understand location management, you might want to learn about [Container Management](/guides/workflows/containers/) to see how containers relate to locations, explore [Collection Move](/guides/features/collection-move/) to learn how to move collections between locations, or check out [Reference Data - Locations](/guides/reference-data/locations-ref/) to see the alternative interface for managing locations.
+Now that you understand location management, you might want to learn about [Container Management](/docs/guides/workflows/containers/) to see how containers relate to locations, explore [Collection Move](/docs/guides/features/collection-move/) to learn how to move collections between locations, or visit Admin → Location Management for the administrative location interface.

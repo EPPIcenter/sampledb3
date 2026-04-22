@@ -41,11 +41,11 @@ describe('Collection Move Integration Tests', () => {
     })
     const sourceLocation = await createTestLocation(testDb, {
       name: 'Source Location',
-      storageTypeId: storageType.id,
+      storageTypeId: String(storageType.id),
     })
     const targetLocation = await createTestLocation(testDb, {
       name: 'Target Location',
-      storageTypeId: storageType.id,
+      storageTypeId: String(storageType.id),
     })
 
     // Note: This test requires a collection (plate/box) to be created first

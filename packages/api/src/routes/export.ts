@@ -18,6 +18,7 @@ import {
   enrichContainerData,
   filterContainersByType,
   formatAsCSV,
+  formatSimpleCSV,
   formatAsJSON,
   formatAsExcel,
   buildExportSummary,
@@ -28,9 +29,36 @@ import {
   type ExportFilters,
   type ExportSummary,
   type MultiStudyExportEntry,
+  type CSVExportOptions,
 } from '../lib/export-helpers'
 import { resolveSubjectNamesByStudy } from '../lib/identifier-resolution'
 import { resolveStudyByShortCode } from '../lib/identifier-resolution'
+import { createAuthMiddleware } from '../middleware/auth'
+
+/**
+ * Helper function to parse CSV options from query params or request body
+ */
+function parseCSVOptions(params: any): CSVExportOptions {
+  return {
+    delimiter: (params.csv_delimiter as ',' | ';' | '\t' | undefined) ?? ',',
+    includeBOM: params.csv_bom !== false && params.csv_bom !== 'false', // Default to true
+    lineEnding: (params.csv_line_ending as 'LF' | 'CRLF' | undefined) ?? 'CRLF',
+  }
+}
+
+/**
+ * Format a date as a filesystem-safe local datetime string
+ * Format: YYYY-MM-DD_HH-MM-SS (e.g., "2026-01-27_14-30-45")
+ */
+function formatLocalDateTime(date: Date = new Date()): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`
+}
 
 /**
  * Create export routes with database injection
@@ -38,12 +66,20 @@ import { resolveStudyByShortCode } from '../lib/identifier-resolution'
  */
 export function createExportRoutes(database: Database): Hono {
   const export_ = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
 
 // Export specimens as CSV
-export_.get('/specimens.csv', async (c) => {
+export_.get('/specimens.csv', authMiddleware, async (c) => {
   try {
     const studyCode = c.req.query('study')
     const sourceType = c.req.query('source_type')
+    
+    // Parse CSV options from query params
+    const csvOptions: CSVExportOptions = {
+      delimiter: (c.req.query('csv_delimiter') as ',' | ';' | '\t' | undefined) ?? ',',
+      includeBOM: c.req.query('csv_bom') !== 'false', // Default to true
+      lineEnding: (c.req.query('csv_line_ending') as 'LF' | 'CRLF' | undefined) ?? 'CRLF',
+    }
     
     let query = database
       .select({
@@ -95,7 +131,7 @@ export_.get('/specimens.csv', async (c) => {
     
     const specimens = await query
   
-    // Convert to CSV
+    // Convert to CSV using the helper function
     const headers = ['id', 'subject_id', 'control_batch_id', 'specimen_type', 'collection_date', 'created']
     const rows = specimens.map(s => [
       s.id,
@@ -106,13 +142,10 @@ export_.get('/specimens.csv', async (c) => {
       s.created,
     ])
     
-    const csv = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n')
+    const csv = formatSimpleCSV(headers, rows, csvOptions)
     
     c.header('Content-Type', 'text/csv')
-    c.header('Content-Disposition', `attachment; filename="specimens_${Date.now()}.csv"`)
+    c.header('Content-Disposition', `attachment; filename="specimens_${formatLocalDateTime()}.csv"`)
     return c.text(csv)
   } catch (error: any) {
     console.error('Error exporting specimens:', error)
@@ -121,8 +154,15 @@ export_.get('/specimens.csv', async (c) => {
 })
 
 // Export inventory summary
-export_.get('/inventory.csv', async (c) => {
+export_.get('/inventory.csv', authMiddleware, async (c) => {
   try {
+    // Parse CSV options from query params
+    const csvOptions: CSVExportOptions = {
+      delimiter: (c.req.query('csv_delimiter') as ',' | ';' | '\t' | undefined) ?? ',',
+      includeBOM: c.req.query('csv_bom') !== 'false', // Default to true
+      lineEnding: (c.req.query('csv_line_ending') as 'LF' | 'CRLF' | undefined) ?? 'CRLF',
+    }
+    
     // Get all specimens
     const allSpecimens = await database
       .select({
@@ -147,13 +187,13 @@ export_.get('/inventory.csv', async (c) => {
       }
     }
     
-    const csv = [
-      'source_type,count',
-      ...Object.entries(counts).map(([type, count]) => `${type},${count}`)
-    ].join('\n')
+    // Convert to CSV using the helper function
+    const headers = ['source_type', 'count']
+    const rows = Object.entries(counts).map(([type, count]) => [type, count])
+    const csv = formatSimpleCSV(headers, rows, csvOptions)
     
     c.header('Content-Type', 'text/csv')
-    c.header('Content-Disposition', `attachment; filename="inventory_${Date.now()}.csv"`)
+    c.header('Content-Disposition', `attachment; filename="inventory_${formatLocalDateTime()}.csv"`)
     return c.text(csv)
   } catch (error: any) {
     console.error('Error exporting inventory:', error)
@@ -162,8 +202,10 @@ export_.get('/inventory.csv', async (c) => {
 })
 
 // Export containers with full context
-export_.get('/containers', async (c) => {
+export_.get('/containers', authMiddleware, async (c) => {
   try {
+    const user = c.get('user')
+    const userId = user?.id
     const studyCode = c.req.query('study')
     if (!studyCode) {
       return c.json({ error: 'Study parameter is required' }, 400)
@@ -211,8 +253,8 @@ export_.get('/containers', async (c) => {
     // Check if this is just a count request
     const countOnly = c.req.query('count_only') === 'true'
 
-    // Get config_name if provided
-    const configName = c.req.query('config_name')
+    // Get columns if provided
+    const columns = c.req.query('columns') ? JSON.parse(c.req.query('columns') as string) : undefined
 
     // Build query and get containers
     let containers, study, specimens
@@ -222,58 +264,60 @@ export_.get('/containers', async (c) => {
       study = result.study
       specimens = result.specimens
     } catch (error: any) {
-      return c.json({ error: error.message || 'Failed to build export query' }, 404)
-    }
-
-    if (!containers || containers.length === 0) {
-      return c.json({ error: 'No containers found' }, 404)
+      return c.json({ error: error.message }, 404)
     }
 
     if (countOnly) {
-      // Apply container type filter if specified
       let filteredContainers = containers
-      if (filters.container_types && filters.container_types.length > 0) {
-        const containerIds = containers.map(c => c.id)
+      if (filters.container_types && filters.container_types.length > 0 && filteredContainers.length > 0) {
+        const containerIds = filteredContainers.map((c: { id: number }) => c.id)
         const matchingIds = await filterContainersByType(database, containerIds, filters.container_types)
-        filteredContainers = containers.filter(c => matchingIds.includes(c.id))
+        filteredContainers = filteredContainers.filter((c: { id: number }) => matchingIds.includes(c.id))
       }
       return c.json({ count: filteredContainers.length })
+    }
+
+    if (containers.length === 0) {
+      return c.json({ error: 'No containers found for this study' }, 404)
     }
 
     // Enrich container data (this also applies container type filtering)
     const enrichedData = await enrichContainerData(database, containers, specimens || [], study, filters.container_types, undefined)
 
-    // Determine format
-    const format = (c.req.query('format') || 'csv') as 'csv' | 'xlsx' | 'json'
+    // Determine format and validate
+    const formatParam = c.req.query('format') as string | undefined
+    const validFormats = ['csv', 'xlsx', 'json']
+    if (!formatParam || !validFormats.includes(formatParam)) {
+      return c.json({ error: 'Invalid format. Use csv, xlsx, or json.' }, 400)
+    }
+    const format = formatParam as 'csv' | 'xlsx' | 'json'
 
-    // Generate filename
-    const timestamp = Date.now()
+    // Generate filename with local datetime
+    const timestamp = formatLocalDateTime()
     const filename = `study_${study.shortCode}_export_${timestamp}`
 
     if (format === 'json') {
-      const jsonData = await formatAsJSON(database, enrichedData, filters, study, configName)
+      const jsonData = await formatAsJSON(database, enrichedData, filters, study, columns, userId)
       c.header('Content-Type', 'application/json')
       c.header('Content-Disposition', `attachment; filename="${filename}.json"`)
       return c.json(jsonData)
     }
 
     if (format === 'csv') {
-      const csv = await formatAsCSV(database, enrichedData, configName)
+      const csvOptions = parseCSVOptions(c.req.query())
+      const csv = await formatAsCSV(database, enrichedData, columns, csvOptions, userId)
       c.header('Content-Type', 'text/csv')
       c.header('Content-Disposition', `attachment; filename="${filename}.csv"`)
       return c.text(csv)
     }
 
-    if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(database, enrichedData, configName)
-      c.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-      c.header('Content-Disposition', `attachment; filename="${filename}.xlsx"`)
-      return c.body(new Uint8Array(excelBuffer), 200, {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      })
-    }
-
-    return c.json({ error: 'Invalid format. Use csv, xlsx, or json' }, 400)
+    // format === 'xlsx'
+    const excelBuffer = await formatAsExcel(database, enrichedData, columns, userId)
+    c.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    c.header('Content-Disposition', `attachment; filename="${filename}.xlsx"`)
+    return c.body(new Uint8Array(excelBuffer), 200, {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
   } catch (error: any) {
     console.error('Error exporting containers:', error)
     return c.json({ error: 'Failed to export containers', details: error.message }, 500)
@@ -281,8 +325,10 @@ export_.get('/containers', async (c) => {
 })
 
 // Export containers by subject names (POST endpoint)
-export_.post('/containers', async (c) => {
+export_.post('/containers', authMiddleware, async (c) => {
   try {
+    const user = c.get('user')
+    const userId = user?.id
     const body = await c.req.json()
     const studyCode = body.study
     if (!studyCode) {
@@ -324,7 +370,7 @@ export_.post('/containers', async (c) => {
         summary,
         data: [],
         format: body.format || 'json',
-        filename: `study_${studyCode}_export_${Date.now()}`,
+        filename: `study_${studyCode}_export_${formatLocalDateTime()}`,
       })
     }
 
@@ -379,7 +425,7 @@ export_.post('/containers', async (c) => {
       study = result.study
       specimens = result.specimens
     } catch (error: any) {
-      return c.json({ error: error.message || 'Failed to build export query' }, 404)
+      return c.json({ error: error.message }, 404)
     }
 
     if (countOnly) {
@@ -416,14 +462,15 @@ export_.post('/containers', async (c) => {
 
     // Determine format
     const format = (body.format || 'json') as 'csv' | 'xlsx' | 'json'
-    const configName = body.config_name
+    // Get columns if provided
+    const columns = body.columns ? (Array.isArray(body.columns) ? body.columns : JSON.parse(body.columns)) : undefined
 
-    // Generate filename
-    const timestamp = Date.now()
+    // Generate filename with local datetime
+    const timestamp = formatLocalDateTime()
     const filename = `study_${study.shortCode}_export_${timestamp}`
 
     if (format === 'json') {
-      const jsonData = await formatAsJSON(database, enrichedData, filters, study, configName)
+      const jsonData = await formatAsJSON(database, enrichedData, filters, study, columns, userId)
       return c.json({
         summary,
         data: jsonData.containers,
@@ -433,7 +480,8 @@ export_.post('/containers', async (c) => {
     }
 
         if (format === 'csv') {
-          const csv = await formatAsCSV(database, enrichedData, configName)
+          const csvOptions = parseCSVOptions(body)
+          const csv = await formatAsCSV(database, enrichedData, columns, csvOptions, userId)
           const base64Csv = Buffer.from(csv).toString('base64')
       return c.json({
         summary,
@@ -443,18 +491,15 @@ export_.post('/containers', async (c) => {
       })
     }
 
-    if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(database, enrichedData, configName)
-      const base64Excel = excelBuffer.toString('base64')
-      return c.json({
-        summary,
-        data: base64Excel,
-        format: 'xlsx',
-        filename: `${filename}.xlsx`,
-      })
-    }
-
-    return c.json({ error: 'Invalid format. Use csv, xlsx, or json' }, 400)
+    // format === 'xlsx'
+    const excelBuffer = await formatAsExcel(database, enrichedData, columns, userId)
+    const base64Excel = excelBuffer.toString('base64')
+    return c.json({
+      summary,
+      data: base64Excel,
+      format: 'xlsx',
+      filename: `${filename}.xlsx`,
+    })
   } catch (error: any) {
     console.error('Error exporting containers by names:', error)
     return c.json({ error: 'Failed to export containers', details: error.message }, 500)
@@ -462,7 +507,7 @@ export_.post('/containers', async (c) => {
 })
 
 // Get available specimen types and container types for a study
-export_.get('/available-types', async (c) => {
+export_.get('/available-types', authMiddleware, async (c) => {
   try {
     const studyCode = c.req.query('study')
     if (!studyCode) {
@@ -568,7 +613,7 @@ export_.get('/available-types', async (c) => {
 })
 
 // Validate study codes (for multi-study export)
-export_.post('/containers/validate-studies', async (c) => {
+export_.post('/containers/validate-studies', authMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const studyCodes = body.study_codes || []
@@ -598,8 +643,10 @@ export_.post('/containers/validate-studies', async (c) => {
 })
 
 // Multi-study export endpoint
-export_.post('/containers/multi-study', async (c) => {
+export_.post('/containers/multi-study', authMiddleware, async (c) => {
   try {
+    const user = c.get('user')
+    const userId = user?.id
     const body = await c.req.json()
     const entries = body.entries || []
     
@@ -653,18 +700,19 @@ export_.post('/containers/multi-study', async (c) => {
     
     // Determine format
     const format = (body.format || 'json') as 'csv' | 'xlsx' | 'json'
-    const configName = body.config_name
-    const timestamp = Date.now()
+    // Get columns if provided
+    const columns = body.columns ? (Array.isArray(body.columns) ? body.columns : JSON.parse(body.columns)) : undefined
+    const timestamp = formatLocalDateTime()
     const filename = `multi_study_export_${timestamp}`
     
     if (format === 'json') {
       // For multi-study, we need to create a dummy study object for formatAsJSON
       // Since it's multi-study, we'll use the first study or create a generic one
-      const firstStudy = result.studies && result.studies.size > 0 
+      const firstStudy = result.studies.size > 0
         ? Array.from(result.studies.values())[0]
         : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', description: null, leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '', createdBy: null, updatedBy: null }
       const dummyFilters: ExportFilters = { study: 'MULTI' }
-      const jsonData = await formatAsJSON(database, result.containers, dummyFilters, firstStudy, configName)
+      const jsonData = await formatAsJSON(database, result.containers, dummyFilters, firstStudy, columns, userId)
       return c.json({
         summary: result.summary,
         data: jsonData.containers,
@@ -674,7 +722,8 @@ export_.post('/containers/multi-study', async (c) => {
     }
     
         if (format === 'csv') {
-          const csv = await formatAsCSV(database, result.containers, configName)
+          const csvOptions = parseCSVOptions(body)
+          const csv = await formatAsCSV(database, result.containers, columns, csvOptions, userId)
           const base64Csv = Buffer.from(csv).toString('base64')
       return c.json({
         summary: result.summary,
@@ -684,18 +733,15 @@ export_.post('/containers/multi-study', async (c) => {
       })
     }
     
-    if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(database, result.containers, configName)
-      const base64Excel = excelBuffer.toString('base64')
-      return c.json({
-        summary: result.summary,
-        data: base64Excel,
-        format: 'xlsx',
-        filename: `${filename}.xlsx`,
-      })
-    }
-    
-    return c.json({ error: 'Invalid format. Use csv, xlsx, or json' }, 400)
+    // format === 'xlsx'
+    const excelBuffer = await formatAsExcel(database, result.containers, columns, userId)
+    const base64Excel = excelBuffer.toString('base64')
+    return c.json({
+      summary: result.summary,
+      data: base64Excel,
+      format: 'xlsx',
+      filename: `${filename}.xlsx`,
+    })
   } catch (error: any) {
     console.error('Error exporting containers from multiple studies:', error)
     return c.json({ error: 'Failed to export containers', details: error.message }, 500)
@@ -703,8 +749,10 @@ export_.post('/containers/multi-study', async (c) => {
 })
 
 // Export containers by micronix barcodes (POST endpoint)
-export_.post('/containers/by-barcodes', async (c) => {
+export_.post('/containers/by-barcodes', authMiddleware, async (c) => {
   try {
+    const user = c.get('user')
+    const userId = user?.id
     const body = await c.req.json()
     const barcodes = body.barcodes || []
     
@@ -731,7 +779,7 @@ export_.post('/containers/by-barcodes', async (c) => {
         summary,
         data: [],
         format: body.format || 'json',
-        filename: `barcode_export_${Date.now()}`,
+        filename: `barcode_export_${formatLocalDateTime()}`,
       })
     }
 
@@ -744,7 +792,7 @@ export_.post('/containers/by-barcodes', async (c) => {
       studies = result.studies
       subjectToStudyMap = result.subjectToStudyMap
     } catch (error: any) {
-      return c.json({ error: error.message || 'Failed to build export query' }, 404)
+      return c.json({ error: error.message }, 404)
     }
 
     if (containers.length === 0) {
@@ -757,14 +805,14 @@ export_.post('/containers/by-barcodes', async (c) => {
         summary,
         data: [],
         format: body.format || 'json',
-        filename: `barcode_export_${Date.now()}`,
+        filename: `barcode_export_${formatLocalDateTime()}`,
       })
     }
 
     // Enrich container data
     // For multi-study, we use subjectToStudyMap to get the correct study for each container
-    const firstStudy = studies && studies.length > 0 
-      ? studies[0] 
+    const firstStudy = studies.length > 0
+      ? studies[0]
       : { id: 0, shortCode: 'MULTI', title: 'Multi-Study Export', description: null, leadPerson: '', isLongitudinal: false, created: '', lastUpdated: '', createdBy: null, updatedBy: null }
     
     const enrichedData = await enrichContainerData(database, containers, specimens, firstStudy, undefined, subjectToStudyMap)
@@ -778,14 +826,14 @@ export_.post('/containers/by-barcodes', async (c) => {
 
     // Determine format
     const format = (body.format || 'json') as 'csv' | 'xlsx' | 'json'
-    const configName = body.config_name
-    const timestamp = Date.now()
+    // Get columns if provided
+    const columns = body.columns ? (Array.isArray(body.columns) ? body.columns : JSON.parse(body.columns)) : undefined
+    const timestamp = formatLocalDateTime()
     const filename = `barcode_export_${timestamp}`
 
     if (format === 'json') {
       const dummyFilters: ExportFilters = { study: 'MULTI' }
-      const studyWithDescription = firstStudy.description !== undefined ? firstStudy : { ...firstStudy, description: null as string | null }
-      const jsonData = await formatAsJSON(database, enrichedData, dummyFilters, studyWithDescription, configName)
+      const jsonData = await formatAsJSON(database, enrichedData, dummyFilters, firstStudy, columns, userId)
       return c.json({
         summary,
         data: jsonData.containers,
@@ -795,7 +843,8 @@ export_.post('/containers/by-barcodes', async (c) => {
     }
 
     if (format === 'csv') {
-      const csv = await formatAsCSV(database, enrichedData, configName)
+      const csvOptions = parseCSVOptions(body)
+      const csv = await formatAsCSV(database, enrichedData, columns, csvOptions, userId)
       const base64Csv = Buffer.from(csv).toString('base64')
       return c.json({
         summary,
@@ -805,18 +854,15 @@ export_.post('/containers/by-barcodes', async (c) => {
       })
     }
 
-    if (format === 'xlsx') {
-      const excelBuffer = await formatAsExcel(database, enrichedData, configName)
-      const base64Excel = excelBuffer.toString('base64')
-      return c.json({
-        summary,
-        data: base64Excel,
-        format: 'xlsx',
-        filename: `${filename}.xlsx`,
-      })
-    }
-
-    return c.json({ error: 'Invalid format. Use csv, xlsx, or json' }, 400)
+    // format === 'xlsx'
+    const excelBuffer = await formatAsExcel(database, enrichedData, columns, userId)
+    const base64Excel = excelBuffer.toString('base64')
+    return c.json({
+      summary,
+      data: base64Excel,
+      format: 'xlsx',
+      filename: `${filename}.xlsx`,
+    })
   } catch (error: any) {
     console.error('Error exporting containers by barcodes:', error)
     return c.json({ error: 'Failed to export containers', details: error.message }, 500)

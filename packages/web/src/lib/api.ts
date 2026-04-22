@@ -80,6 +80,9 @@ export interface ControlDefinition {
   batchCount?: number
   specimenCount?: number
   spotCount?: number
+  micronixCount?: number
+  cryovialCount?: number
+  staticWellCount?: number
   tubeCount?: number
   inventoryTotal?: number
   strains?: Array<{ id: number; name: string; percentage?: number }>
@@ -205,6 +208,10 @@ export const studiesApi = {
     const response = await api.put<StudyResponse>(`/studies/${id}`, data)
     return response.data
   },
+  delete: async (id: number): Promise<{ message: string }> => {
+    const response = await api.delete<{ message: string }>(`/studies/${id}`)
+    return response.data
+  },
 }
 
 export interface SubjectSummarySpecimen {
@@ -223,6 +230,7 @@ export interface SubjectSummarySpecimen {
     type: string
     remainingQuantity: number
     unit: string
+    comment?: string | null
     collectionName?: string
     position?: string
     collectionId?: number
@@ -283,6 +291,8 @@ export const subjectsApi = {
   },
   createBulk: (data: { subjects: Array<{ studyShortCode: string; name: string }> }) =>
     api.post<{ subjects: StudySubject[]; created: number; errors?: Array<{ index: number; error: string }> }>('/subjects/bulk', data),
+  validateBulk: (data: { subjects: Array<{ studyShortCode: string; name: string }> }) =>
+    api.post<{ valid: boolean; errors: Array<{ index: number; message: string }> }>('/subjects/bulk/validate', data),
   createWithSpecimens: (data: {
     studyShortCode: string
     subjectName: string
@@ -338,6 +348,7 @@ type SpecimenResponse = { specimen: Specimen }
 type SpecimensBulkResponse = {
   specimens: Specimen[]
   created: number
+  containersCreated?: number
   errors?: Array<{ index: number; error: string }>
 }
 
@@ -361,7 +372,30 @@ type CreateSpecimensBulkData = {
     specimenTypeName: string
     collectionDate?: string
     containerBarcode?: string
+    container?: {
+      containerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+      collectionName?: string
+      collectionBarcode?: string
+      barcode?: string
+      position?: string
+      label?: string
+      collectionLocationId?: number
+    }
   }>
+}
+
+/** Payload for adding a container to an existing specimen (POST /specimens/:id/containers). */
+export type AddContainerData = {
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+  collectionName?: string
+  collectionBarcode?: string
+  barcode?: string
+  position?: string
+  label?: string
+  unitId?: number
+  totalQuantity?: number
+  remainingQuantity?: number
+  comment?: string
 }
 
 export const specimensApi = {
@@ -379,6 +413,21 @@ export const specimensApi = {
   },
   createBulk: async (data: CreateSpecimensBulkData): Promise<SpecimensBulkResponse> => {
     const response = await api.post<SpecimensBulkResponse>('/specimens/bulk', data)
+    return response.data
+  },
+  validateBulk: async (data: CreateSpecimensBulkData): Promise<{ valid: boolean; errors: Array<{ index: number; message: string }> }> => {
+    const response = await api.post<{ valid: boolean; errors: Array<{ index: number; message: string }> }>('/specimens/bulk/validate', data)
+    return response.data
+  },
+  /** Add a container to an existing specimen. */
+  addContainer: async (
+    specimenId: number,
+    data: AddContainerData
+  ): Promise<{ containerId: number }> => {
+    const response = await api.post<{ containerId: number }>(
+      `/specimens/${specimenId}/containers`,
+      data
+    )
     return response.data
   },
 }
@@ -626,6 +675,9 @@ export interface ControlBatch {
   lastUpdated: string
   specimenCount?: number
   spotCount?: number
+  micronixCount?: number
+  cryovialCount?: number
+  staticWellCount?: number
   tubeCount?: number
   inventoryTotal?: number
   controlType?: string
@@ -674,6 +726,9 @@ export interface ControlDefinitionSummaryResponse {
   batches: Array<ControlBatch & {
     specimenCount: number
     spotCount?: number
+    micronixCount?: number
+    cryovialCount?: number
+    staticWellCount?: number
     tubeCount?: number
     inventoryTotal?: number
     inventory: Array<{
@@ -685,6 +740,9 @@ export interface ControlDefinitionSummaryResponse {
     totalBatches: number
     totalContainers: number
     totalSpots: number
+    totalMicronix: number
+    totalCryovial: number
+    totalStaticWells: number
     totalTubes: number
     latestBatchDate?: string | null
     totalSpecimens: number
@@ -700,6 +758,9 @@ export const controlsApi = {
   checkUnique: (data: { controlType: ControlDefinition['controlType']; targetDensity?: number; targetDensityUnitId?: number; strains?: Array<{ strainId: number; percentage: number }> }) => api.post<{ exists: boolean; controlDefinition?: ControlDefinition }>('/blood-controls/check-unique', data),
   suggestName: (data: { controlType?: ControlDefinition['controlType']; targetDensity: number; targetDensityUnitId?: number; strains: Array<{ strainId: number; percentage: number }> }) => api.post<{ suggestedName: string; exists: boolean; existingDefinition?: ControlDefinition }>('/blood-controls/suggest-name', data),
   create: (data: Omit<ControlDefinition, 'id' | 'created' | 'lastUpdated' | 'strains'> & { strains?: Array<{ strainId: number; percentage: number }> }) => api.post<{ control: ControlDefinition }>('/blood-controls', data),
+  /** Create or get multiple definitions for same composition at multiple densities. Returns 201 with controls array. names[] (same length as targetDensities) is required and used when creating new definitions. */
+  createDefinitionsBulk: (data: { strains: Array<{ strainId: number; percentage: number }>; targetDensities: number[]; targetDensityUnitId?: number; names: string[] }) =>
+    api.post<{ controls: ControlDefinition[] }>('/blood-controls/definitions/bulk', data),
   update: (id: number, data: Partial<ControlDefinition> & { strains?: Array<{ strainId: number; percentage: number }> }) => api.patch<{ control: ControlDefinition }>(`/blood-controls/${id}`, data),
   listAllBatches: () => api.get<{ batches: Array<ControlBatch & { definitionName?: string }> }>('/blood-controls/batches'),
   getBatches: (id: number) => api.get<{ batches: ControlBatch[] }>(`/blood-controls/${id}/batches`),
@@ -764,6 +825,8 @@ export const controlsApi = {
     }>
   }) => api.post<{ specimens: Array<{ id: number; specimenTypeName: string; containerCount: number; containerIds: number[] }>; createdCollections: Array<{ type: string; id: number; name: string }> }>(`/blood-controls/batches/${batchId}/specimens/bulk`, data),
   validateCSV: (data: { csvText: string }) => api.post<{ valid: boolean; errors: Array<{ row: number; field?: string; error: string }>; preview: Array<Record<string, any>> }>('/blood-controls/batches/validate-csv', data),
+  updateBatch: (id: number, data: { name?: string; productionDate?: string; properties?: Record<string, any> }) => api.patch<{ batch: ControlBatch }>(`/blood-controls/batches/${id}`, data),
+  deleteSpecimenFromBatch: (batchId: number, specimenId: number) => api.delete<{ message: string }>(`/blood-controls/batches/${batchId}/specimens/${specimenId}`),
   deleteBatch: (id: number) => api.delete<{ message: string }>(`/blood-controls/batches/${id}`),
 }
 
@@ -802,7 +865,7 @@ export const locationsApi = {
     if (params?.cryovial_boxes_limit) queryParams.cryovial_boxes_limit = params.cryovial_boxes_limit
     if (params?.bags_page) queryParams.bags_page = params.bags_page
     if (params?.bags_limit) queryParams.bags_limit = params.bags_limit
-    return api.get<{ location: Location; contents: { micronixPlates?: Array<{ id: number; name: string; barcode?: string | null; locationId: number; itemCount?: number }>; cryovialBoxes?: Array<{ id: number; name: string; barcode?: string | null; locationId: number; itemCount?: number }>; boxes?: Array<{ id: number; name: string; locationId: number; itemCount?: number }>; bags?: Array<{ id: number; name: string; locationId: number; itemCount?: number }> }; pagination?: { page: number; limit: number; total: number; totalPages: number }; hierarchyStats?: LocationHierarchyStats }>(`/locations/${id}`, { params: queryParams })
+    return api.get<{ location: Location; contents: { micronixPlates?: Array<{ id: number; name: string; barcode?: string | null; locationId: number; itemCount?: number }>; cryovialBoxes?: Array<{ id: number; name: string; barcode?: string | null; locationId: number; itemCount?: number }>; boxes?: Array<{ id: number; name: string; locationId: number; itemCount?: number }>; bags?: Array<{ id: number; name: string; locationId: number; itemCount?: number }> }; pagination?: { micronixPlates?: { page: number; limit: number; total: number; totalPages: number }; cryovialBoxes?: { page: number; limit: number; total: number; totalPages: number }; boxes?: { page: number; limit: number; total: number; totalPages: number }; bags?: { page: number; limit: number; total: number; totalPages: number } }; hierarchyStats?: LocationHierarchyStats }>(`/locations/${id}`, { params: queryParams })
   },
   create: (data: Omit<Location, 'id' | 'created' | 'lastUpdated'>) =>
     api.post<{ location: Location }>('/locations', data),
@@ -901,6 +964,50 @@ interface PaperEntry {
   container?: unknown
 }
 
+export interface ValidatePlateScanResult {
+  plate: { id: number; name: string }
+  summary: {
+    totalExpected: number
+    matched: number
+    missingInScan: number
+    extraInScan: number
+    mismatch: number
+    exhaustedCount: number
+    taggedCount: number
+  }
+  wells: Array<{
+    position: string
+    scanBarcode: string | null
+    expectedBarcode: string | null
+    status: 'match' | 'mismatch' | 'missing_in_scan' | 'extra_in_scan'
+    exhausted: boolean
+    tags: string[]
+    /** When status is mismatch or extra_in_scan, where the scanned barcode is registered (plate + position). */
+    scanBarcodeOrigin: { plateId: number; plateName: string; position: string } | null
+  }>
+  /** True when plate was inferred from scan barcodes (plateId was not sent). */
+  inferredPlate?: boolean
+}
+
+/** Per-plate summary in inference report when a single plate cannot be inferred. */
+export interface InferenceReportPlateBreakdownEntry {
+  plateId: number
+  plateName: string
+  tubeCount: number
+  inExpectedPositionCount: number
+}
+
+/** Detailed report when plate cannot be inferred (unknown barcodes and/or multiple plates). */
+export interface InferenceReport {
+  unknownBarcodes: string[]
+  plateBreakdown: InferenceReportPlateBreakdownEntry[]
+}
+
+/** Response from validate-scan: either validation result or inference report. */
+export type ValidatePlateScanResponse =
+  | ValidatePlateScanResult
+  | { inferenceReport: InferenceReport }
+
 export const collectionsApi = {
   getMicronixPlate: (id: number) =>
     api.get<{ plate: MicronixPlateResponse; wells: Record<string, WellEntry> }>(`/collections/plates/micronix/${id}`),
@@ -914,8 +1021,13 @@ export const collectionsApi = {
     api.get<{ sheet: SheetResponse; papers: PaperEntry[] }>(`/collections/sheets/${id}`),
   check: (data: { collections: Array<{ identifier: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet' }> }) =>
     api.post<{ results: Array<{ identifier: string; type: string; exists: boolean; id: number | null }> }>('/collections/check', data),
+  /** Resolve collection by name and type; returns found + id/location when existing (for batch creation). */
+  resolve: (data: { name: string; type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box' }) =>
+    api.post<{ found: boolean; id?: number; name?: string; type?: string; locationId?: number; locationName?: string }>('/collections/resolve', data),
   createMicronixPlate: (data: { name: string; locationId: number; barcode?: string }) =>
     api.post<{ plate: MicronixPlateResponse }>('/collections/plates/micronix', data),
+  validatePlateScan: (data: { csvText: string; plateId?: number; scannerConfigurationId: string }) =>
+    api.post<ValidatePlateScanResponse>('/collections/plates/micronix/validate-scan', data),
   createCryovialBox: (data: { name: string; locationId: number; barcode?: string }) =>
     api.post<{ box: CryovialBoxResponse }>('/collections/boxes/cryovial', data),
   createBox: (data: { name: string; locationId: number }) =>
@@ -930,9 +1042,12 @@ export const collectionsApi = {
   }) =>
     api.post<{ containers: Array<{ identifier: { type: string; value: string } | string; container: unknown }> }>('/collections/containers/resolve', data),
   listCollectionsByType: (type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet') =>
-    api.get<{ collections: Array<{ id: number; name: string }> }>(`/collections/list/${type}`),
+    api.get<{ collections: Array<{ id: number; name: string; locationId?: number | null; itemCount?: number; location?: { id: number; path: string | null } | null }> }>(`/collections/list/${type}`),
+  listAllCollections: () =>
+    api.get<{ collections: Array<{ id: number; name: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'; barcode: string | null; locationId: number | null; itemCount: number; location: { id: number; path: string | null } | null }> }>('/collections/list-all'),
   moveContainers: (data: {
     collectionType?: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet'
+    atomicMode?: 'all_or_nothing' | 'best_effort'
     mappings: Array<{
       fromCollectionName: string
       toCollectionName: string
@@ -956,6 +1071,7 @@ export const collectionsApi = {
   }) => api.post<{ success: boolean; moved: number }>('/collections/sheets/move', data),
   moveCollections: (data: {
     collectionType: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+    atomicMode?: 'all_or_nothing' | 'best_effort'
     moves: Array<{
       identifier:
         | { type: 'id'; id: number }
@@ -1013,11 +1129,28 @@ export interface ContainerExportData {
   last_updated: string
 }
 
+export interface CSVExportOptions {
+  delimiter?: ',' | ';' | '\t'
+  includeBOM?: boolean
+  lineEnding?: 'LF' | 'CRLF'
+}
+
 export const exportApi = {
-  specimens: (params?: { study?: string; source_type?: string }) =>
-    api.get('/export/specimens.csv', { params, responseType: 'blob' }),
-  inventory: () => api.get('/export/inventory.csv', { responseType: 'blob' }),
-  containers: (params: ExportFilters, format: 'csv' | 'xlsx' | 'json' = 'csv', configName?: string) => {
+  specimens: (params?: { study?: string; source_type?: string; csv_delimiter?: ',' | ';' | '\t'; csv_bom?: boolean; csv_line_ending?: 'LF' | 'CRLF' }) => {
+    const queryParams: any = { ...params }
+    if (params?.csv_delimiter) queryParams.csv_delimiter = params.csv_delimiter
+    if (params?.csv_bom !== undefined) queryParams.csv_bom = params.csv_bom
+    if (params?.csv_line_ending) queryParams.csv_line_ending = params.csv_line_ending
+    return api.get('/export/specimens.csv', { params: queryParams, responseType: 'blob' })
+  },
+  inventory: (csvOptions?: CSVExportOptions) => {
+    const params: any = {}
+    if (csvOptions?.delimiter) params.csv_delimiter = csvOptions.delimiter
+    if (csvOptions?.includeBOM !== undefined) params.csv_bom = csvOptions.includeBOM
+    if (csvOptions?.lineEnding) params.csv_line_ending = csvOptions.lineEnding
+    return api.get('/export/inventory.csv', { params, responseType: 'blob' })
+  },
+  containers: (params: ExportFilters, format: 'csv' | 'xlsx' | 'json' = 'csv', columns?: string[], csvOptions?: CSVExportOptions) => {
     const queryParams: Record<string, string | number | number[] | string[] | undefined> = { format }
     // Add study
     queryParams.study = params.study
@@ -1026,8 +1159,8 @@ export const exportApi = {
     if (params.date_to) queryParams.date_to = params.date_to
     if (params.created_from) queryParams.created_from = params.created_from
     if (params.created_to) queryParams.created_to = params.created_to
-    // Add config_name if provided
-    if (configName) queryParams.config_name = configName
+    // Add columns if provided
+    if (columns && columns.length > 0) queryParams.columns = JSON.stringify(columns)
     // Add arrays - axios will serialize these correctly
     if (params.specimen_type_ids && params.specimen_type_ids.length > 0) {
       queryParams.specimen_type_ids = params.specimen_type_ids
@@ -1040,6 +1173,12 @@ export const exportApi = {
     }
     if (params.subject_ids && params.subject_ids.length > 0) {
       queryParams.subject_ids = params.subject_ids
+    }
+    // Add CSV options if provided
+    if (csvOptions) {
+      if (csvOptions.delimiter) queryParams.csv_delimiter = csvOptions.delimiter
+      if (csvOptions.includeBOM !== undefined) queryParams.csv_bom = csvOptions.includeBOM ? 'true' : 'false'
+      if (csvOptions.lineEnding) queryParams.csv_line_ending = csvOptions.lineEnding
     }
     return api.get('/export/containers', {
       params: queryParams,
@@ -1089,13 +1228,16 @@ export const exportApi = {
     subject_dates?: { [subjectName: string]: { exact?: string; from?: string; to?: string } }
     date_tolerance?: number
     format?: 'csv' | 'xlsx' | 'json'
-    config_name?: string
+    columns?: string[]
     specimen_type_ids?: number[]
     container_types?: string[]
     date_from?: string
     date_to?: string
     created_from?: string
     created_to?: string
+    csv_delimiter?: ',' | ';' | '\t'
+    csv_bom?: boolean
+    csv_line_ending?: 'LF' | 'CRLF'
   }) => {
     return api.post<{
       summary: {
@@ -1153,13 +1295,16 @@ export const exportApi = {
     subject_dates?: { [subjectName: string]: { exact?: string; from?: string; to?: string } }
     date_tolerance?: number
     format?: 'csv' | 'xlsx' | 'json'
-    config_name?: string
+    columns?: string[]
     specimen_type_ids?: number[]
     container_types?: string[]
     date_from?: string
     date_to?: string
     created_from?: string
     created_to?: string
+    csv_delimiter?: ',' | ';' | '\t'
+    csv_bom?: boolean
+    csv_line_ending?: 'LF' | 'CRLF'
   }) => {
     return api.post<{
       summary: {
@@ -1218,7 +1363,10 @@ export const exportApi = {
   containersByBarcodes: (params: {
     barcodes: string[]
     format?: 'csv' | 'xlsx' | 'json'
-    config_name?: string
+    columns?: string[]
+    csv_delimiter?: ',' | ';' | '\t'
+    csv_bom?: boolean
+    csv_line_ending?: 'LF' | 'CRLF'
   }) => {
     return api.post<{
       summary: {
@@ -1288,12 +1436,19 @@ export interface DerivationCsvImportResultRow {
   parentContainerId?: number
   childContainerId?: number
   collectionStatus?: 'existing' | 'will_be_created'
+  /** User-facing: derivation type name */
+  derivationTypeName?: string
+  /** User-facing: parent container/source (e.g. barcode, box · position) */
+  parentSummary?: string
+  /** User-facing: child placement (e.g. collection · position) */
+  childSummary?: string
 }
 
 export interface BulkDerivationSettings {
   derivationType: string
   specimenTypeName: string
-  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper'
+  /** Empty string means "provide this column in the CSV (per row)" */
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | ''
   protocol: string
   derivationDate: string
   quantity?: number
@@ -1331,9 +1486,9 @@ export interface ValidationResult {
 
 export const derivationsApi = {
   createFromContainer: (parentContainerId: number, payload: CreateDerivationPayload) =>
-    api.post<CreateDerivationResponse>(`/containers/${parentContainerId}/derive`, payload),
+    api.post<CreateDerivationResponse>(`/derivations/containers/${parentContainerId}/derive`, payload),
   listFromContainer: (containerId: number, params?: { derivation_type?: string }) =>
-    api.get<{ derivations: Derivation[]; count: number }>(`/containers/${containerId}/derivations`, {
+    api.get<{ derivations: Derivation[]; count: number }>(`/derivations/containers/${containerId}/derivations`, {
       params,
     }),
   getSource: (containerId: number) =>
@@ -1341,17 +1496,17 @@ export const derivationsApi = {
       derivation: Derivation
       parentContainer: any
       parentSpecimen: Specimen
-    }>(`/containers/${containerId}/source`),
+    }>(`/derivations/containers/${containerId}/source`),
   getChain: (containerId: number) =>
     api.get<{
       ancestors: Array<{ container: any; derivation: Derivation }>
       descendants: Array<{ container: any; derivation: Derivation }>
       current: any
-    }>(`/containers/${containerId}/derivation-chain`),
+    }>(`/derivations/containers/${containerId}/derivation-chain`),
   update: (id: number, patch: Partial<Pick<Derivation, 'derivationDate' | 'protocol' | 'notes' | 'properties'>>) =>
-    api.patch<{ derivation: Derivation }>(`/derivations/${id}`, patch),
+    api.patch<{ derivation: Derivation }>(`/derivations/derivations/${id}`, patch),
   delete: (id: number) =>
-    api.delete<{ message: string }>(`/derivations/${id}`),
+    api.delete<{ message: string }>(`/derivations/derivations/${id}`),
   importCsv: (csv: string, options?: { dryRun?: boolean; settings?: BulkDerivationSettings }) =>
     api.post<{ rows: DerivationCsvImportResultRow[] }>('/imports/derivations-csv', {
       csv,
@@ -1363,6 +1518,85 @@ export const derivationsApi = {
       csv,
       settings,
     }),
+}
+
+export type BulkCombinedAtomicMode = 'full_file' | 'per_subject'
+
+export const importsApi = {
+  bulkCombined: (data: {
+    studyShortCode: string
+    atomicMode: BulkCombinedAtomicMode
+    createCollections?: Array<{
+      type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+      name: string
+      locationId: number
+      barcode?: string
+    }>
+    subjects: Array<{
+      subjectName: string
+      specimens: Array<{
+        specimenTypeName: string
+        collectionDate?: string
+        container?: {
+          containerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+          collectionName?: string
+          collectionBarcode?: string
+          barcode?: string
+          position?: string
+          label?: string
+          unitId?: number
+          totalQuantity?: number
+          remainingQuantity?: number
+          comment?: string
+          collectionLocationId?: number
+        }
+      }>
+    }>
+  }) =>
+    api.post<{
+      summary: { subjectsCreated: number; subjectsUpdated: number; specimensCreated: number; containersCreated: number }
+      results: Array<{
+        subject: StudySubject
+        subjectCreated: boolean
+        specimens: Array<{ specimen: Specimen; containerCreated: boolean; containerId?: number }>
+      }>
+      errors?: Array<{ index: number; error: string }>
+    }>('/imports/bulk-combined', data),
+  bulkCombinedValidate: (data: {
+    studyShortCode: string
+    atomicMode: BulkCombinedAtomicMode
+    createCollections?: Array<{
+      type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
+      name: string
+      locationId: number
+      barcode?: string
+    }>
+    subjects: Array<{
+      subjectName: string
+      specimens: Array<{
+        specimenTypeName: string
+        collectionDate?: string
+        container?: {
+          containerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+          collectionName?: string
+          collectionBarcode?: string
+          barcode?: string
+          position?: string
+          label?: string
+          unitId?: number
+          totalQuantity?: number
+          remainingQuantity?: number
+          comment?: string
+          collectionLocationId?: number
+        }
+        rowIndex?: number
+      }>
+    }>
+  }) =>
+    api.post<{
+      valid: boolean
+      errors: Array<{ subjectIndex: number; specimenIndex?: number; rowIndex?: number; message: string }>
+    }>('/imports/bulk-combined/validate', data),
 }
 
 /**
@@ -1516,10 +1750,22 @@ export interface ScannerConfiguration {
   columnColumn?: string
   skipRows: number
   isDefault?: boolean
+  plateNameSource?: 'filename' | 'column'
+  plateNameColumn?: string
 }
 
 export interface ScannerConfigurations {
   configurations: ScannerConfiguration[]
+}
+
+export interface TableViewConfiguration {
+  name: string
+  columns: string[]
+  isDefault?: boolean
+}
+
+export interface TableViewConfigurations {
+  configurations: TableViewConfiguration[]
 }
 
 export interface AllSettings {
@@ -1529,6 +1775,7 @@ export interface AllSettings {
   session_settings: SessionSettings | null
   export_configurations: ExportConfigurations | null
   scanner_configurations: ScannerConfigurations | null
+  table_view_configurations: TableViewConfigurations | null
 }
 
 export interface Unit {
@@ -1546,6 +1793,7 @@ export type SettingValue =
   | { type: 'session_settings'; value: SessionSettings }
   | { type: 'export_configurations'; value: ExportConfigurations }
   | { type: 'scanner_configurations'; value: ScannerConfigurations }
+  | { type: 'table_view_configurations'; value: TableViewConfigurations }
 
 // Helper type to extract setting value by key
 export type SettingValueByKey<T extends string> =
@@ -1555,6 +1803,7 @@ export type SettingValueByKey<T extends string> =
   T extends 'session_settings' ? SessionSettings :
   T extends 'export_configurations' ? ExportConfigurations :
   T extends 'scanner_configurations' ? ScannerConfigurations :
+  T extends 'table_view_configurations' ? TableViewConfigurations :
   never
 
 export const settingsApi = {
@@ -1586,6 +1835,12 @@ export const exportConfigurationsApi = {
     api.post<{ success: boolean; config: ExportConfiguration }>('/settings/export-configurations/personal', config),
   updatePersonal: (configs: ExportConfigurations) => 
     api.put<{ success: boolean; configurations: ExportConfiguration[] }>('/settings/export-configurations/personal', configs),
+}
+
+export const tableViewConfigurationsApi = {
+  get: () => api.get<{ key: string; value: TableViewConfigurations }>('/settings/table_view_configurations'),
+  update: (configs: TableViewConfigurations) =>
+    api.put<TableViewConfigurations>('/settings/table_view_configurations', configs),
 }
 
 export const scannerConfigurationsApi = {
@@ -1624,6 +1879,7 @@ export interface User {
   createdAt?: string
   lastLogin?: string
   deletedAt?: string
+  approvedAt?: string | null
 }
 
 export interface UserSession {
@@ -1675,6 +1931,8 @@ export interface AdminSystemStats {
 export const authApi = {
   login: (emailOrUsername: string, password: string) =>
     api.post<{ user: User }>('/auth/login', { emailOrUsername, password }),
+  selfRegister: (data: { email: string; name: string; password: string; username?: string | null }) =>
+    api.post<{ user: User }>('/auth/self-register', data),
   logout: () => api.post<{ message: string }>('/auth/logout'),
   getCurrentUser: () => api.get<{ user: User }>('/auth/current'),
   switchUser: (userId: number, password: string) =>
@@ -1702,8 +1960,236 @@ export const adminApi = {
     api.get<{ sessions: UserSession[] }>(`/auth/users/${userId}/sessions`),
   revokeSession: (sessionId: string) =>
     api.delete<{ message: string }>(`/auth/sessions/${sessionId}`),
+  approveUser: (id: number) =>
+    api.patch<{ user: User }>(`/auth/users/${id}/approve`),
   getSystemStats: () =>
     api.get<AdminSystemStats>('/statistics/admin'),
+  getEmptyCollections: () =>
+    api.get<{ collections: EmptyCollectionItem[] }>('/admin/data-audit/empty-collections'),
+  deleteEmptyCollections: (ids: EmptyCollectionsDeleteIds) =>
+    api.post<{ deleted: number; errors?: string[] }>('/admin/data-audit/empty-collections/delete', { ids }),
+  getIntegrityReport: () =>
+    api.get<IntegrityReport>('/admin/data-audit/integrity-report'),
+}
+
+export interface DuplicateBarcodeItem {
+  barcode: string
+  containerType: 'micronix_tube'
+  ids: number[]
+}
+
+export interface LocationPathInconsistencyItem {
+  id: number
+  name: string
+  storedPath: string | null
+  expectedPath: string
+}
+
+export interface IntegrityReport {
+  emptyCollections: EmptyCollectionItem[]
+  collectionsWithMissingLocation: CollectionWithMissingLocationItem[]
+  containersWithMissingSpecimen: ContainerWithMissingSpecimenItem[]
+  subtypeOrphans: SubtypeOrphanItem[]
+  sheetsWithMissingBoxOrBag: SheetWithMissingBoxOrBagItem[]
+  specimensWithMissingSubjectOrBatch: SpecimenWithMissingSubjectOrBatchItem[]
+  studySubjectsWithMissingStudy: StudySubjectWithMissingStudyItem[]
+  derivationBrokenRefs: DerivationBrokenRefItem[]
+  storageContainerTagOrphans: StorageContainerTagOrphanItem[]
+  duplicateBarcodes: DuplicateBarcodeItem[]
+  locationPathInconsistencies: LocationPathInconsistencyItem[]
+}
+
+export interface CollectionWithMissingLocationItem {
+  type: EmptyCollectionItem['type']
+  id: number
+  name: string
+  locationId: number
+}
+
+export interface ContainerWithMissingSpecimenItem {
+  id: number
+  specimenId: number
+}
+
+export interface SubtypeOrphanItem {
+  id: number
+}
+
+export interface SheetWithMissingBoxOrBagItem {
+  id: number
+  name: string
+  boxId: number | null
+  bagId: number | null
+}
+
+export interface SpecimenWithMissingSubjectOrBatchItem {
+  id: number
+  studySubjectId: number | null
+  controlBatchId: number | null
+}
+
+export interface StudySubjectWithMissingStudyItem {
+  id: number
+  studyId: number
+  name: string
+}
+
+export interface DerivationBrokenRefItem {
+  id: number
+  parentContainerId: number
+  childContainerId: number
+}
+
+export interface StorageContainerTagOrphanItem {
+  storageContainerId: number
+  tagId: number
+}
+
+export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+
+export interface EmptyCollectionItem {
+  type: CollectionType
+  id: number
+  name: string
+  locationId?: number
+  locationPath?: string | null
+}
+
+export interface EmptyCollectionsDeleteIds {
+  micronix_plate?: number[]
+  cryovial_box?: number[]
+  box?: number[]
+  bag?: number[]
+}
+
+export interface ErrorLog {
+  id: number
+  timestamp: string
+  source: 'frontend' | 'backend'
+  level: 'error' | 'warning' | 'info'
+  message: string
+  errorCode?: string
+  stack?: string
+  context?: Record<string, unknown>
+  userId?: number
+  url?: string
+  userAgent?: string
+  resolved: boolean
+  resolvedAt?: string
+  resolvedBy?: number
+}
+
+export interface ErrorLogsResponse {
+  logs: ErrorLog[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+
+export interface ErrorLogsQueryParams {
+  source?: 'frontend' | 'backend'
+  level?: 'error' | 'warning' | 'info'
+  resolved?: boolean
+  page?: number
+  limit?: number
+  search?: string
+}
+
+export interface CleanupResponse {
+  success: boolean
+  deleted: number
+  retentionDays: number
+  message: string
+}
+
+// qPCR experiments
+export interface QpcrExperimentTarget {
+  id: number
+  targetName: string
+  fluorophore: string | null
+  reporter: string | null
+  sortOrder: number
+}
+
+export interface QpcrExperiment {
+  id: number
+  name: string | null
+  templateFormat: 'biorad' | 'quant_studio'
+  status: 'setup' | 'in_progress' | 'results_uploaded'
+  standardLayout: Record<string, unknown> | null
+  plateBarcode?: string | null
+  instrumentType?: string | null
+  created: string
+  lastUpdated: string
+  createdBy: number | null
+  updatedBy: number | null
+  /** Targets (multiplex); present on detail and list. */
+  targets?: QpcrExperimentTarget[]
+  /** Present when listing experiments (GET /qpcr-experiments). */
+  wellCount?: number
+  /** Present when listing experiments (GET /qpcr-experiments). */
+  runCount?: number
+  /** Present when listing experiments; ISO date of latest run. */
+  lastRunAt?: string | null
+}
+
+export type QpcrExperimentWellSource =
+  | { type: 'subject'; id: number; name: string; study: { id: number; title: string; code: string } }
+  | { type: 'control'; id: number; name: string; definitionName: string | null; controlType: string }
+  | null
+
+export interface QpcrExperimentWell {
+  id: number
+  qpcrExperimentId: number
+  wellPosition: string
+  barcode: string | null
+  storageContainerId: number | null
+  specimenId: number | null
+  contentType: 'standard' | 'unknown' | 'negative' | null
+  standardDensity: number | null
+  cq: number | null
+  startingQuantity: number | null
+  cqMean: number | null
+  rawSampleName: string | null
+  source?: QpcrExperimentWellSource
+}
+
+export interface QpcrExperimentDetailResponse {
+  experiment: QpcrExperiment
+  wells: QpcrExperimentWell[]
+}
+
+export const qpcrExperimentsApi = {
+  list: (params?: { status?: string; limit?: number }) =>
+    api.get<{ experiments: QpcrExperiment[] }>('/qpcr-experiments', { params }),
+  get: (id: number) =>
+    api.get<QpcrExperimentDetailResponse>(`/qpcr-experiments/${id}`),
+  create: (data: { name?: string | null; templateFormat: 'biorad' | 'quant_studio'; standardLayout?: Record<string, unknown> | null }) =>
+    api.post<QpcrExperiment>('/qpcr-experiments', data),
+  update: (id: number, data: { name?: string | null; standardLayout?: Record<string, unknown> | null; status?: 'setup' | 'in_progress' | 'results_uploaded'; targets?: Array<{ targetName: string; fluorophore?: string | null; reporter?: string | null }>; instrumentType?: string | null }) =>
+    api.patch<QpcrExperiment>(`/qpcr-experiments/${id}`, data),
+  uploadPlate: (id: number, data: { csvText: string; scannerConfigurationId: string; plateBarcode?: string | null }) =>
+    api.post<{ wells: QpcrExperimentWell[]; unresolved: Array<{ wellPosition: string; barcode: string }> }>(`/qpcr-experiments/${id}/plate`, data),
+  updateWells: (id: number, data: { wellPosition?: string; positions?: string[]; contentType: 'empty' | 'negative' }) =>
+    api.patch<{ wells: QpcrExperimentWell[] }>(`/qpcr-experiments/${id}/wells`, data),
+  uploadResults: (id: number, data: { fileContent: string; fileName: string; instrumentType: 'Biorad_CFX' | 'QuantStudio' }) =>
+    api.post<{ run: { id: number }; wellResultCount: number; amplificationCount: number }>(`/qpcr-experiments/${id}/results`, data),
+  delete: (id: number) =>
+    api.delete<void>(`/qpcr-experiments/${id}`),
+}
+
+export const errorLogsApi = {
+  list: (params?: ErrorLogsQueryParams) =>
+    api.get<ErrorLogsResponse>('/error-logs', { params }),
+  get: (id: number) =>
+    api.get<ErrorLog>(`/error-logs/${id}`),
+  resolve: (id: number) =>
+    api.patch<{ success: boolean }>(`/error-logs/${id}/resolve`),
+  cleanup: (retentionDays?: number) =>
+    api.post<CleanupResponse>('/error-logs/cleanup', retentionDays ? { retentionDays } : {}),
 }
 
 export default api

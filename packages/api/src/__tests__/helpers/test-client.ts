@@ -39,8 +39,14 @@ export function expectStatus(response: Response, expectedStatus: number) {
 /**
  * Assert that a response has an error message
  */
-export async function expectError(response: Response, expectedMessage?: string) {
-  const data = await response.json() as any
+interface ErrorResponse {
+  error: string
+  errorCode?: string
+  details?: unknown
+}
+
+export async function expectError(response: Response, expectedMessage?: string): Promise<ErrorResponse> {
+  const data = await response.json() as ErrorResponse
   expect(data).toHaveProperty('error')
   if (expectedMessage) {
     expect(data.error).toContain(expectedMessage)
@@ -53,9 +59,9 @@ export async function expectError(response: Response, expectedMessage?: string) 
  */
 export async function expectJsonStructure(
   response: Response,
-  structure: Record<string, any>
-) {
-  const data = await response.json() as any
+  structure: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const data = await response.json() as Record<string, unknown>
   for (const [key, value] of Object.entries(structure)) {
     expect(data).toHaveProperty(key)
     if (value !== undefined) {
@@ -69,16 +75,31 @@ export async function expectJsonStructure(
  * Unpack the data field from a standardized API response
  * This avoids the verbose data.data pattern in tests
  */
+interface ApiResponseWrapper<T> {
+  data: T
+  meta?: unknown
+  error?: never
+}
+
 export async function getResponseData<T>(response: Response): Promise<T> {
-  const json = await response.json() as any
-  return json.data as T
+  const json = await response.json() as ApiResponseWrapper<T>
+  return json.data
 }
 
 /**
  * Get the full response including metadata (for cases where you need error, meta, etc.)
  */
-export async function getResponse<T>(response: Response): Promise<{ data: T; meta?: any; error?: string }> {
-  return await response.json() as any
+interface ApiResponseWithMeta<T> {
+  data: T
+  meta?: {
+    pagination?: unknown
+    filters?: unknown
+  }
+  error?: never
+}
+
+export async function getResponse<T>(response: Response): Promise<ApiResponseWithMeta<T>> {
+  return await response.json() as ApiResponseWithMeta<T>
 }
 
 /**
@@ -144,11 +165,11 @@ export function authenticatedRequest(
     requestHeaders['Content-Type'] = 'application/json'
   }
   
-  return app.request(path, {
+  return Promise.resolve(app.request(path, {
     method,
     headers: requestHeaders,
     body: json ? JSON.stringify(json) : undefined,
-  })
+  }))
 }
 
 /**
@@ -199,3 +220,50 @@ export async function createAuthenticatedTestClient(
   return createAuthenticatedClient(app, db, emailOrUsername, password)
 }
 
+/**
+ * Create an authenticated wrapper around a test client
+ * This automatically adds the Cookie header to all requests
+ * 
+ * @param client - The base test client
+ * @param cookieHeader - The cookie header string (e.g., "session_id=abc123")
+ * @returns A wrapped client that automatically includes the cookie in all requests
+ */
+export function createAuthenticatedClientWrapper(
+  client: ReturnType<typeof createTestClient>,
+  cookieHeader: string
+): ReturnType<typeof createTestClient> {
+  // Create a proxy that intercepts method calls
+  return new Proxy(client, {
+    get(target, prop) {
+      const value = (target as any)[prop]
+      
+      // If it's a function that looks like a request method ($get, $post, etc.)
+      if (typeof value === 'function' && typeof prop === 'string' && prop.startsWith('$')) {
+        return function(...args: any[]) {
+          // The first argument is typically an options object
+          const options = args[0] || {}
+          
+          // Merge in the cookie header
+          const headers = options.headers || {}
+          const mergedHeaders = {
+            ...headers,
+            Cookie: cookieHeader,
+          }
+          
+          // Call the original method with updated options
+          return value.call(target, {
+            ...options,
+            headers: mergedHeaders,
+          })
+        }
+      }
+      
+      // If it's an object (like client.api), recursively wrap it
+      if (value && typeof value === 'object' && !Array.isArray(value) && value !== null) {
+        return createAuthenticatedClientWrapper(value as any, cookieHeader)
+      }
+      
+      return value
+    },
+  }) as any
+}

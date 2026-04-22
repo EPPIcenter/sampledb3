@@ -35,6 +35,12 @@ export type Settings = InferSelectModel<typeof settings>
 export type SpecimenTypeContainerType = InferSelectModel<typeof specimenTypeContainerType>
 export type ContainerTypeUnit = InferSelectModel<typeof containerTypeUnit>
 export type ContainerDerivation = InferSelectModel<typeof containerDerivation>
+export type QpcrExperiment = InferSelectModel<typeof qpcrExperiment>
+export type QpcrExperimentTarget = InferSelectModel<typeof qpcrExperimentTarget>
+export type QpcrExperimentWell = InferSelectModel<typeof qpcrExperimentWell>
+export type QpcrRun = InferSelectModel<typeof qpcrRun>
+export type QpcrWellResult = InferSelectModel<typeof qpcrWellResult>
+export type QpcrAmplificationData = InferSelectModel<typeof qpcrAmplificationData>
 
 // Users and authentication
 export const users = sqliteTable('users', {
@@ -47,6 +53,7 @@ export const users = sqliteTable('users', {
   createdAt: text('created').notNull().default(sql`current_timestamp`),
   lastLogin: text('last_login'),
   deletedAt: text('deleted_at'), // Soft delete timestamp
+  approvedAt: text('approved_at'), // null = pending approval; non-null = approved
 })
 
 export const sessions = sqliteTable('sessions', {
@@ -429,4 +436,132 @@ export const containerDerivation = sqliteTable('container_derivation', {
   childIdx: index('idx_container_derivation_child').on(table.childContainerId),
   typeIdx: index('idx_container_derivation_type').on(table.derivationType),
   dateIdx: index('idx_container_derivation_date').on(table.derivationDate),
+}))
+
+// Error logging table
+export const errorLogs = sqliteTable('error_logs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  timestamp: text('timestamp').notNull().default(sql`current_timestamp`),
+  source: text('source').notNull(), // 'frontend' | 'backend'
+  level: text('level').notNull(), // 'error' | 'warning' | 'info'
+  message: text('message').notNull(),
+  errorCode: text('error_code'),
+  stack: text('stack'),
+  context: text('context', { mode: 'json' }), // JSON field for additional context
+  userId: integer('user_id'), // Optional user ID if available
+  url: text('url'), // Request URL for backend, page URL for frontend
+  userAgent: text('user_agent'),
+  resolved: integer('resolved', { mode: 'boolean' }).notNull().default(false),
+  resolvedAt: text('resolved_at'),
+  resolvedBy: integer('resolved_by'), // User ID who resolved it
+}, (table) => ({
+  timestampIdx: index('error_logs_timestamp_idx').on(table.timestamp),
+  sourceIdx: index('error_logs_source_idx').on(table.source),
+  levelIdx: index('error_logs_level_idx').on(table.level),
+  resolvedIdx: index('error_logs_resolved_idx').on(table.resolved),
+}))
+
+// qPCR experiments: plate layout + template + results workflow
+export const qpcrExperiment = sqliteTable('qpcr_experiment', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name'),
+  templateFormat: text('template_format').notNull(), // 'biorad' | 'quant_studio'
+  status: text('status').notNull(), // 'setup' | 'in_progress' | 'results_uploaded'
+  standardLayout: text('standard_layout', { mode: 'json' }), // optional mapping of positions to standard labels / control batch
+  plateBarcode: text('plate_barcode'),
+  instrumentType: text('instrument_type'),
+  created: text('created').notNull().default(sql`current_timestamp`),
+  lastUpdated: text('last_updated').notNull().default(sql`current_timestamp`),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
+}, (table) => ({
+  statusIdx: index('qpcr_experiment_status_idx').on(table.status),
+}))
+
+// qPCR experiment targets: multiple targets per experiment (multiplex)
+export const qpcrExperimentTarget = sqliteTable(
+  'qpcr_experiment_target',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    qpcrExperimentId: integer('qpcr_experiment_id')
+      .notNull()
+      .references(() => qpcrExperiment.id, { onDelete: 'cascade' }),
+    targetName: text('target_name').notNull(),
+    fluorophore: text('fluorophore'),
+    reporter: text('reporter'),
+    sortOrder: integer('sort_order').notNull().default(0),
+  },
+  (table) => ({
+    experimentTargetUnique: unique('qpcr_experiment_target_unique').on(
+      table.qpcrExperimentId,
+      table.targetName
+    ),
+    experimentIdx: index('qpcr_experiment_target_experiment_idx').on(table.qpcrExperimentId),
+  })
+)
+
+export const qpcrExperimentWell = sqliteTable('qpcr_experiment_well', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  qpcrExperimentId: integer('qpcr_experiment_id').notNull().references(() => qpcrExperiment.id, { onDelete: 'cascade' }),
+  wellPosition: text('well_position').notNull(), // e.g. A01
+  barcode: text('barcode'),
+  storageContainerId: integer('storage_container_id').references(() => storageContainer.id),
+  specimenId: integer('specimen_id').references(() => specimen.id),
+  // Result fields (filled on results upload)
+  contentType: text('content_type'), // 'standard' | 'unknown' | 'negative'
+  standardDensity: real('standard_density'),
+  cq: real('cq'),
+  startingQuantity: real('starting_quantity'),
+  cqMean: real('cq_mean'),
+  rawSampleName: text('raw_sample_name'),
+}, (table) => ({
+  experimentWellUnique: unique('qpcr_experiment_well_unique').on(table.qpcrExperimentId, table.wellPosition),
+  experimentIdx: index('qpcr_experiment_well_experiment_idx').on(table.qpcrExperimentId),
+  specimenIdx: index('qpcr_experiment_well_specimen_idx').on(table.specimenId),
+}))
+
+// qPCR run: one per uploaded result file
+export const qpcrRun = sqliteTable('qpcr_run', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  qpcrExperimentId: integer('qpcr_experiment_id').notNull().references(() => qpcrExperiment.id, { onDelete: 'cascade' }),
+  instrumentType: text('instrument_type').notNull(), // 'Biorad_CFX' | 'QuantStudio'
+  runStartedAt: text('run_started_at'),
+  runEndedAt: text('run_ended_at'),
+  experimentName: text('experiment_name'),
+  fileName: text('file_name'),
+  created: text('created').notNull().default(sql`current_timestamp`),
+  slope: real('slope'),
+  yIntercept: real('y_intercept'),
+  rSquared: real('r_squared'),
+  efficiency: real('efficiency'),
+}, (table) => ({
+  experimentIdx: index('qpcr_run_experiment_idx').on(table.qpcrExperimentId),
+}))
+
+// qPCR well result: per-well, per-target result from a run
+export const qpcrWellResult = sqliteTable('qpcr_well_result', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  qpcrRunId: integer('qpcr_run_id').notNull().references(() => qpcrRun.id, { onDelete: 'cascade' }),
+  wellPosition: text('well_position').notNull(),
+  targetName: text('target_name'),
+  sampleBarcode: text('sample_barcode'),
+  task: text('task'), // STANDARD | NTC | UNKNOWN
+  cq: real('cq'),
+  quantity: real('quantity'),
+  standardQuantity: real('standard_quantity'),
+  ampStatus: text('amp_status'),
+}, (table) => ({
+  runWellTargetUnique: unique('qpcr_well_result_run_well_target_unique').on(table.qpcrRunId, table.wellPosition, table.targetName),
+  runIdx: index('qpcr_well_result_run_idx').on(table.qpcrRunId),
+}))
+
+// qPCR amplification data: cycle-by-cycle (QuantStudio); optional
+export const qpcrAmplificationData = sqliteTable('qpcr_amplification_data', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  qpcrWellResultId: integer('qpcr_well_result_id').notNull().references(() => qpcrWellResult.id, { onDelete: 'cascade' }),
+  cycle: integer('cycle').notNull(),
+  rn: real('rn'),
+  deltaRn: real('delta_rn'),
+}, (table) => ({
+  wellResultIdx: index('qpcr_amplification_data_well_result_idx').on(table.qpcrWellResultId),
 }))

@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
 import ReferenceDataTable from '../components/ReferenceDataTable'
 import ReferenceDataForm from '../components/ReferenceDataForm'
-import Pagination from '../components/Pagination'
 import {
   referenceDataConfigs,
   getReferenceDataConfig,
@@ -11,12 +10,16 @@ import {
 } from '../config/reference-data-config'
 import { useStorageTypes } from '../hooks/useReferenceData'
 import { locationsApi, specimenTypesApi, type Location, type SpecimenType } from '../lib/api'
+import { useFocusSearchOnSlash } from '../hooks/useHotkey'
+import '../styles/reference-data.css'
 
 export default function ReferenceData() {
-  const { user } = useUser()
-  const isAdmin = user?.role === 'admin'
+  const { canManageReferenceData } = useUser()
   const [searchParams, setSearchParams] = useSearchParams()
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- tab from URL may be missing or invalid
   const activeTab = (searchParams.get('tab') as ReferenceDataType) || 'specimen-types'
+  // Keep isAdmin for backward compatibility in this file (used in multiple places)
+  const isAdmin = canManageReferenceData
 
   const setActiveTab = (tab: ReferenceDataType) => {
     setSearchParams((prev) => {
@@ -27,6 +30,7 @@ export default function ReferenceData() {
   }
 
   const config = getReferenceDataConfig(activeTab)
+   
   if (!config) {
     return <div>Invalid tab</div>
   }
@@ -35,11 +39,9 @@ export default function ReferenceData() {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<any[]>([])
 
-  // Pagination state (for locations)
+  // Client-side pagination state (for locations)
   const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [total, setTotal] = useState(0)
-  const limit = 50
+  const pageSize = 50
 
   // Search state (for locations)
   const [search, setSearch] = useState('')
@@ -65,19 +67,23 @@ export default function ReferenceData() {
     return () => clearTimeout(timeoutId)
   }, [search])
 
-  // Reset pagination when switching tabs
-  useEffect(() => {
+  // Reset pagination/search/editing when tab or search changes (adjust during render)
+  const prevTabRef = useRef(activeTab)
+  const prevSearchRef = useRef(search)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  useFocusSearchOnSlash(searchInputRef)
+   
+  if (prevTabRef.current !== activeTab) {
+    prevTabRef.current = activeTab
+    prevSearchRef.current = ''
     setPage(1)
     setSearch('')
     setEditingItem(null)
-  }, [activeTab])
-
-  // Reset to page 1 when search changes
-  useEffect(() => {
-    if (config.requiresSearch) {
-      setPage(1)
-    }
-  }, [search, config.requiresSearch])
+  }
+  if (config.requiresSearch && prevSearchRef.current !== search) {
+    prevSearchRef.current = search
+    setPage(1)
+  }
 
   // Load dependencies
   useEffect(() => {
@@ -86,6 +92,7 @@ export default function ReferenceData() {
         const deps: Record<string, any[]> = {}
         for (const depType of config.requiresDependencies) {
           const depConfig = getReferenceDataConfig(depType)
+           
           if (depConfig) {
             try {
               const res = await depConfig.list()
@@ -94,9 +101,12 @@ export default function ReferenceData() {
               if (Array.isArray(data)) {
                 // Direct array: { data: T[] }
                 deps[depConfig.getDataKey()] = data
-              } else if (typeof data === 'object' && data !== null) {
-                // Nested structure: { data: { [key]: T[] } }
-                deps[depConfig.getDataKey()] = (data as any)[depConfig.getDataKey()] || []
+              } else if (
+                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- API can return object shape at runtime
+                typeof data === 'object' && data !== null
+              ) {
+                // Nested structure: { data: { [key]: T[] } }; key may be missing at runtime
+                deps[depConfig.getDataKey()] = ((data as Record<string, unknown>)[depConfig.getDataKey()] as unknown[] | undefined) ?? []
               } else {
                 deps[depConfig.getDataKey()] = []
               }
@@ -118,7 +128,7 @@ export default function ReferenceData() {
         try {
           // Load all locations without pagination
           const res = await locationsApi.list()
-          setAllLocations(res.data.locations || [])
+          setAllLocations(res.data.locations)
         } catch (error) {
           console.error('Failed to load all locations:', error)
         }
@@ -140,6 +150,7 @@ export default function ReferenceData() {
   }, [activeTab, data])
 
   const loadContainerTypeRelationships = async () => {
+     
     if (activeTab !== 'specimen-types' || data.length === 0) return
 
     try {
@@ -151,13 +162,8 @@ export default function ReferenceData() {
       const promises = specimenTypes.map(async (st) => {
         try {
           const response = await specimenTypesApi.getContainerTypes(st.id)
-          relationships[st.id] = response.data.containerTypes || []
-          // Store usage info if provided by API
-          if (response.data.usageInfo) {
-            usageInfo[st.id] = response.data.usageInfo
-          } else {
-            usageInfo[st.id] = {}
-          }
+          relationships[st.id] = response.data.containerTypes
+          usageInfo[st.id] = response.data.usageInfo ?? {}
         } catch (error) {
           console.error(`Failed to load container types for specimen type ${st.id}:`, error)
           relationships[st.id] = []
@@ -182,7 +188,7 @@ export default function ReferenceData() {
     try {
       // Optimistically update state
       setContainerTypeRelationships((prev) => {
-        const current = prev[specimenTypeId] || []
+        const current = prev[specimenTypeId] ?? []
         const updated = isAdding
           ? [...current, containerType]
           : current.filter((ct) => ct !== containerType)
@@ -210,19 +216,16 @@ export default function ReferenceData() {
   // Load data
   useEffect(() => {
     loadData()
-  }, [activeTab, page, searchDebounced])
+  }, [activeTab, searchDebounced])
 
   const loadData = async () => {
     setLoading(true)
     try {
       if (config.requiresPagination || config.requiresSearch) {
-        // Locations with pagination/search
-        const res = await locationsApi.list(page, limit, searchDebounced)
+        // Locations - load all (no pagination params = return all)
+        const res = await locationsApi.list(undefined, undefined, searchDebounced)
         setData((res.data as any)[config.getDataKey()] || [])
-        if (res.data.pagination) {
-          setTotalPages(res.data.pagination.totalPages)
-          setTotal(res.data.pagination.total)
-        }
+        setPage(1) // Reset to first page when data changes
       } else {
         // Simple list
         // The API returns { data: [...] } or { data: { [key]: [...] } }
@@ -231,9 +234,10 @@ export default function ReferenceData() {
         if (Array.isArray(data)) {
           // Direct array: { data: T[] }
           setData(data)
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- API can return object shape at runtime
         } else if (typeof data === 'object' && data !== null) {
-          // Nested structure: { data: { [key]: T[] } }
-          setData((data as any)[config.getDataKey()] || [])
+          // Nested structure: { data: { [key]: T[] } }; key may be missing at runtime
+          setData(((data as Record<string, unknown>)[config.getDataKey()] as unknown[] | undefined) ?? [])
         } else {
           setData([])
         }
@@ -280,7 +284,7 @@ export default function ReferenceData() {
       for (const depType of config.requiresDependencies) {
         const depConfig = getReferenceDataConfig(depType)
         if (depConfig) {
-          deps[depConfig.getDataKey()] = dependencies[depConfig.getDataKey()] || []
+          deps[depConfig.getDataKey()] = (dependencies[depConfig.getDataKey()] as unknown[] | undefined) ?? []
         }
       }
     }
@@ -321,54 +325,56 @@ export default function ReferenceData() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Reference Data Management</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Manage static lookup tables and reference data used throughout the system
-        </p>
-      </div>
-
-      <div className="bg-white rounded-lg shadow">
-        <div className="border-b border-gray-100">
-          <nav className="flex -mb-px">
-            {referenceDataConfigs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id)
-                  setEditingItem(null)
-                }}
-                className={`px-6 py-3 text-sm font-medium border-b-2 ${activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200'
-                  }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+    <div className="reference-data-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+        <div className="mb-6 ref-data-reveal ref-data-reveal-1">
+          <h1 className="text-3xl font-bold">Reference Data Management</h1>
+          <p className="text-sm text-app-text-muted mt-1 ref-data-description">
+            Manage static lookup tables and reference data used throughout the system.
+            {' '}
+            <a href="/docs/guides/reference-data/overview/" className="text-app-accent hover:text-app-accent-hover hover:underline">
+              Reference data guide
+            </a>
+          </p>
         </div>
 
-        <div className="p-6">
-          {!isAdmin && (
-            <div className="mb-4 rounded-md bg-blue-50 border border-blue-200 p-3">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="text-sm font-medium text-blue-800">
-                  Reference data is view-only. Contact an administrator to add or modify reference data.
-                </p>
+        <div className="ref-data-card ref-data-reveal ref-data-reveal-2">
+          <div className="border-b border-app-border">
+            <nav className="flex -mb-px">
+              {referenceDataConfigs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveTab(tab.id)
+                    setEditingItem(null)
+                  }}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 ref-data-tab ${activeTab === tab.id ? 'ref-data-tab-active border-b-2' : 'border-transparent'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div className="p-6">
+            {!canManageReferenceData && (
+              <div className="mb-4 rounded-md ref-data-notice p-3">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-sm font-medium">
+                    Reference data is view-only. Contact an administrator to add or modify reference data.
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           <div className="mb-4 flex justify-end">
-            {isAdmin && (
+            {canManageReferenceData && (
               <button
                 onClick={() => setEditingItem({})}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover"
               >
                 Add New
               </button>
@@ -386,30 +392,30 @@ export default function ReferenceData() {
             onSearchChange={config.requiresSearch ? setSearch : undefined}
             disableClientFilter={config.requiresSearch}
             loading={loading && config.requiresSearch}
-            readOnly={!isAdmin}
+            readOnly={!canManageReferenceData}
+            pagination={config.requiresPagination ? {
+              page,
+              pageSize,
+              onPageChange: setPage,
+              showPagination: true,
+            } : undefined}
+            searchInputRef={searchInputRef}
           />
-
-          {config.requiresPagination && totalPages > 1 && (
-            <Pagination
-              currentPage={page}
-              totalPages={totalPages}
-              totalItems={total}
-              itemsPerPage={limit}
-              onPageChange={setPage}
-            />
-          )}
+          </div>
         </div>
-      </div>
 
-      {editingItem !== null && isAdmin && (
-        <ReferenceDataForm
-          item={editingItem}
-          fields={getFormFields()}
-          onSave={handleSave}
-          onCancel={() => setEditingItem(null)}
-          title={getTitle()}
-        />
-      )}
+        {editingItem !== null && canManageReferenceData && (
+          <ReferenceDataForm
+            key={editingItem?.id ?? 'new'}
+            item={editingItem}
+            fields={getFormFields()}
+            onSave={handleSave}
+            onCancel={() => setEditingItem(null)}
+            title={getTitle()}
+            modalClassName="reference-data-form-modal"
+          />
+        )}
+      </div>
     </div>
   )
 }

@@ -59,4 +59,4 @@ If some barcodes aren't found but you're sure they exist, verify the barcodes ar
 
 ## What's Next?
 
-Now that you understand barcode export, you might want to explore [Bulk Export](/guides/bulk-operations/export/) for exporting based on subject lists, check out [Settings](/guides/advanced/settings/) to configure export settings, or review [Search Functionality](/guides/advanced/search/) to learn other ways to find containers.
+Now that you understand barcode export, you might want to explore [Bulk Export](/docs/guides/bulk-operations/export/) for exporting based on subject lists, check out [Settings](/docs/guides/advanced/settings/) to configure export settings, or review [Search Functionality](/docs/guides/advanced/search/) to learn other ways to find containers.

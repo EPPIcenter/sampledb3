@@ -6,7 +6,8 @@ import type { InferSelectModel } from 'drizzle-orm'
 import type { Database } from '../db/client'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from './error-handler'
 import { listResponse, successResponse, createdResponse } from './response-helpers'
-import { createAdminMiddleware } from '../middleware/auth'
+import { requireParam } from './common-validators'
+import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 
 export interface CrudRouteConfig<
   TTable extends SQLiteTable,
@@ -128,10 +129,11 @@ export function createCrudRoutes<
   const updateSchema = (providedUpdateSchema || createSchema) as z.ZodType<TUpdate>
 
   const routes = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
   const adminMiddleware = createAdminMiddleware(database)
 
   // GET / - List all
-  routes.get('/', async (c) => {
+  routes.get('/', authMiddleware, async (c) => {
     try {
       let query = database.select().from(table)
       
@@ -157,8 +159,8 @@ export function createCrudRoutes<
   })
 
   // GET /:id - Get one
-  routes.get('/:id', async (c) => {
-    const id = parseInt(c.req.param('id'))
+  routes.get('/:id', authMiddleware, async (c) => {
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: `Invalid ${entityName} ID` }, 400)
@@ -228,7 +230,12 @@ export function createCrudRoutes<
         .values(insertData as any)
         .returning()
 
-      const transformed = transformDetail ? transformDetail(result[0] as TSelect) : result[0]
+      const row = result[0]
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+      if (!row) {
+        throw new Error('Insert did not return row')
+      }
+      const transformed = transformDetail ? transformDetail(row as TSelect) : row
       return createdResponse(c, transformed)
     } catch (error) {
       return handleRouteError(error, c)
@@ -237,7 +244,7 @@ export function createCrudRoutes<
 
   // PUT /:id - Update (admin only)
   routes.put('/:id', adminMiddleware, async (c) => {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: `Invalid ${entityName} ID` }, 400)
@@ -302,7 +309,12 @@ export function createCrudRoutes<
         .where(eq((table as any).id, id))
         .returning()
 
-      const transformed = transformDetail ? transformDetail(result[0] as TSelect) : result[0]
+      const row = result[0]
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+      if (!row) {
+        throw new NotFoundError(entityName, id)
+      }
+      const transformed = transformDetail ? transformDetail(row as TSelect) : row
       return successResponse(c, transformed)
     } catch (error) {
       return handleRouteError(error, c)
@@ -311,7 +323,7 @@ export function createCrudRoutes<
 
   // DELETE /:id - Delete (admin only)
   routes.delete('/:id', adminMiddleware, async (c) => {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: `Invalid ${entityName} ID` }, 400)

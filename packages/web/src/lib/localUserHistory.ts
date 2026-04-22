@@ -23,7 +23,7 @@ export function getRecentUsers(): LocalUser[] {
     return users.sort((a, b) => new Date(b.lastLogin).getTime() - new Date(a.lastLogin).getTime())
   } catch (error) {
     console.error('Failed to load recent users from localStorage:', error)
-    return []
+    throw error
   }
 }
 
@@ -52,29 +52,5 @@ export function addRecentUser(user: User): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
   } catch (error) {
     console.error('Failed to save recent user to localStorage:', error)
-  }
-}
-
-/**
- * Remove a user from recent users list
- */
-export function removeRecentUser(userId: number): void {
-  try {
-    const users = getRecentUsers()
-    const filtered = users.filter(u => u.id !== userId)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered))
-  } catch (error) {
-    console.error('Failed to remove recent user from localStorage:', error)
-  }
-}
-
-/**
- * Clear all recent users
- */
-export function clearRecentUsers(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY)
-  } catch (error) {
-    console.error('Failed to clear recent users from localStorage:', error)
   }
 }

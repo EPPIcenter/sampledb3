@@ -19,18 +19,18 @@ export default function DateFilterControls({
   return (
     <div className="mb-4 flex gap-4 items-end flex-wrap">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-app-text mb-1">
           From Date
         </label>
         <input
           type="date"
           value={minDate}
           onChange={(e) => setMinDate(e.target.value)}
-          className="px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-app-text mb-1">
           To Date
         </label>
         <input
@@ -38,17 +38,17 @@ export default function DateFilterControls({
           value={maxDate}
           max={maxAvailableDate}
           onChange={(e) => setMaxDate(e.target.value)}
-          className="px-3 py-2 border border-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent"
         />
       </div>
       <button
         onClick={reset}
-        className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+        className="px-4 py-2 text-sm text-app-text bg-app-surface rounded-lg hover:bg-app-surface/80 transition-colors"
       >
         Reset
       </button>
       {showCount && filteredCount !== undefined && totalCount !== undefined && (
-        <div className="text-xs text-gray-500 mt-1">
+        <div className="text-xs text-app-text-muted mt-1">
           Showing {filteredCount.toLocaleString()} of {totalCount.toLocaleString()} items
         </div>
       )}

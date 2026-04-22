@@ -5,17 +5,24 @@ import { nanoid } from 'nanoid'
 import type { Hono } from 'hono'
 import { testClient } from 'hono/testing'
 import { eq, and, isNull } from 'drizzle-orm'
+import { utcNow } from '../../lib/datetime'
 
 export interface CreateTestUserOptions {
   email: string
   name: string
   password?: string
   username?: string | null
-  role?: 'admin' | 'member' | 'viewer'
+  role?: 'admin' | 'member' | 'viewer' // Defaults to 'member'
+  approvedAt?: string | null // null = pending approval; non-null = approved. Defaults to createdAt (approved)
 }
 
 /**
  * Create a test user in the database
+ * 
+ * Role permissions:
+ * - 'admin': Full access (create, read, update, delete everything)
+ * - 'member': Can create/edit/delete data (subjects, specimens, etc.) but NOT reference data
+ * - 'viewer': Read-only access to everything
  */
 export async function createTestUser(
   db: Database,
@@ -23,13 +30,16 @@ export async function createTestUser(
 ) {
   const passwordHash = await bcrypt.hash(options.password || 'password123', 10)
   
+  const createdAt = utcNow()
+  const approvedAt = options.approvedAt !== undefined ? options.approvedAt : createdAt
   const [user] = await db.insert(users).values({
     email: options.email,
     name: options.name,
     passwordHash,
     username: options.username || null,
     role: options.role || 'member',
-    createdAt: new Date().toISOString(),
+    createdAt,
+    approvedAt, // null = pending; else approved
   }).returning()
 
   return user
@@ -103,6 +113,29 @@ export async function setupSessionSettings(db: Database, maxAgeSeconds: number =
       target: [settings.key, settings.userId],
       set: {
         value: { maxAgeSeconds },
+      },
+    })
+}
+
+/**
+ * Setup pagination settings for tests (uses test database).
+ * Required for routes that call validateLimit() (e.g. locations, studies, subjects list/detail).
+ */
+export async function setupPaginationSettings(
+  db: Database,
+  config: { defaultPageSize: number; maxPageSize: number } = { defaultPageSize: 25, maxPageSize: 100 }
+) {
+  await db
+    .insert(settings)
+    .values({
+      key: 'pagination_settings',
+      userId: null,
+      value: config,
+    })
+    .onConflictDoUpdate({
+      target: [settings.key, settings.userId],
+      set: {
+        value: config,
       },
     })
 }

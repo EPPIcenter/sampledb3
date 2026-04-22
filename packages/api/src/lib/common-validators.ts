@@ -1,3 +1,4 @@
+import type { Context } from 'hono'
 import { z } from 'zod'
 
 /**
@@ -74,6 +75,28 @@ export const positiveInteger = z.number().int().positive('Must be a positive int
  * Validates an optional positive integer
  */
 export const optionalPositiveInteger = positiveInteger.optional()
+
+/**
+ * Reads a required path parameter from a Hono context.
+ *
+ * Hono >= 4.12 types `c.req.param(key)` as `string | undefined` because the
+ * inferred path type cannot statically prove the key is present (see
+ * https://github.com/honojs/hono/pull/4723). For handlers that are registered
+ * against a route containing the segment (e.g. `app.get('/:id', ...)`) the
+ * router guarantees the value is defined at runtime, so a missing value here
+ * indicates a programming error (handler attached to the wrong route, or the
+ * segment was renamed). We surface that loudly rather than silently coercing
+ * to an empty string.
+ */
+export function requireParam(c: Context, key: string): string {
+  const value = c.req.param(key)
+  if (value === undefined) {
+    throw new Error(
+      `Required path parameter "${key}" was undefined; the handler is attached to a route that does not declare ":${key}".`
+    )
+  }
+  return value
+}
 
 /**
  * Helper to parse and validate an ID from route params

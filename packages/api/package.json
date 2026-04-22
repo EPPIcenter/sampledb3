@@ -5,15 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "dev:production": "DATABASE_PATH=../../sampledb_database.sqlite bun --watch src/index.ts",
     "build": "tsc && tsc-alias",
     "start": "bun dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
-    "test": "bun test src",
-    "test:watch": "bun test --watch src",
+    "test": "NODE_ENV=test bun test src",
+    "test:watch": "NODE_ENV=test bun test --watch src",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "NODE_ENV=test bun test src --coverage",
+    "demo:seed": "bun src/lib/demo-seed.ts"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.5.3",

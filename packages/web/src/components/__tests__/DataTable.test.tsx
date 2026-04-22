@@ -27,8 +27,8 @@ describe('DataTable', () => {
     { id: 3, name: 'Item 3', value: 30.0 },
   ]
 
-  it('should render table with data', () => {
-    render(<DataTable data={testData} columns={columns} />)
+  it('should render table with data', async () => {
+    await render(<DataTable data={testData} columns={columns} />)
     
     expect(screen.getByText('ID')).toBeInTheDocument()
     expect(screen.getByText('Name')).toBeInTheDocument()
@@ -39,22 +39,22 @@ describe('DataTable', () => {
     expect(screen.getByText('Item 3')).toBeInTheDocument()
   })
 
-  it('should render custom cell renderers', () => {
-    render(<DataTable data={testData} columns={columns} />)
+  it('should render custom cell renderers', async () => {
+    await render(<DataTable data={testData} columns={columns} />)
     
     expect(screen.getByText('$10.50')).toBeInTheDocument()
     expect(screen.getByText('$20.75')).toBeInTheDocument()
     expect(screen.getByText('$30.00')).toBeInTheDocument()
   })
 
-  it('should show empty message when no data', () => {
-    render(<DataTable data={[]} columns={columns} emptyMessage="No items found" />)
+  it('should show empty message when no data', async () => {
+    await render(<DataTable data={[]} columns={columns} emptyMessage="No items found" />)
     
     expect(screen.getByText('No items found')).toBeInTheDocument()
   })
 
-  it('should show loading state', () => {
-    const { container } = render(<DataTable data={[]} columns={columns} loading />)
+  it('should show loading state', async () => {
+    const { container } = await render(<DataTable data={[]} columns={columns} loading />)
     
     // DataTable uses SkeletonTable when loading, check for skeleton elements
     const skeleton = container.querySelector('[class*="animate-pulse"]')
@@ -63,7 +63,7 @@ describe('DataTable', () => {
 
   it('should sort data when sortable column header is clicked', async () => {
     const user = userEvent.setup()
-    render(<DataTable data={testData} columns={columns} />)
+    await render(<DataTable data={testData} columns={columns} />)
     
     // Click on Name header to sort
     const nameHeader = screen.getByText('Name')
@@ -78,7 +78,7 @@ describe('DataTable', () => {
     const user = userEvent.setup()
     const onRowClick = vi.fn()
     
-    render(<DataTable data={testData} columns={columns} onRowClick={onRowClick} />)
+    await render(<DataTable data={testData} columns={columns} onRowClick={onRowClick} />)
     
     // Click on first data row
     const firstItem = screen.getByText('Item 1')
@@ -89,7 +89,7 @@ describe('DataTable', () => {
 
   it('should handle sorting direction toggle', async () => {
     const user = userEvent.setup()
-    render(<DataTable data={testData} columns={columns} />)
+    await render(<DataTable data={testData} columns={columns} />)
     
     const nameHeader = screen.getByText('Name')
     
@@ -106,13 +106,13 @@ describe('DataTable', () => {
     expect(nameHeader).toBeInTheDocument()
   })
 
-  it('should not show sort indicators for non-sortable columns', () => {
+  it('should not show sort indicators for non-sortable columns', async () => {
     const nonSortableColumns: Column<TestItem>[] = [
       { key: 'id', label: 'ID' },
       { key: 'name', label: 'Name' },
     ]
     
-    render(<DataTable data={testData} columns={nonSortableColumns} />)
+    await render(<DataTable data={testData} columns={nonSortableColumns} />)
     
     // Columns should render but not have sort indicators
     expect(screen.getByText('ID')).toBeInTheDocument()

@@ -76,23 +76,17 @@ export default function SpecimenForm({
   useEffect(() => {
     loadStudies()
     loadSpecimenTypes()
-    // If subjectId is provided, load subjects for the study
-    if (subjectId && studyId && studyId > 0) {
-      loadSubjects(studyId)
-    }
   }, [])
 
+  // Single effect: load subjects when study (prop or form) or source type changes
   useEffect(() => {
-    if (studyId && studyId > 0 && formData.sourceType === 'subject') {
-      loadSubjects(studyId)
+    if (formData.sourceType === 'subject') {
+      const effectiveStudyId = (formData.studyId || studyId) ?? 0
+      if (effectiveStudyId > 0) {
+        loadSubjects(effectiveStudyId)
+      }
     }
-  }, [studyId])
-
-  useEffect(() => {
-    if (formData.studyId > 0 && formData.sourceType === 'subject') {
-      loadSubjects(formData.studyId)
-    }
-  }, [formData.studyId, formData.sourceType])
+  }, [studyId, formData.studyId, formData.sourceType])
 
   useEffect(() => {
     if (formData.sourceType !== 'subject') {
@@ -134,23 +128,23 @@ export default function SpecimenForm({
       switch (sourceType) {
         case 'control':
           const controlsRes = await controlsApi.list()
-          setControls(controlsRes.data.controls || [])
+          setControls(controlsRes.data.controls)
           break
         case 'reagent':
           const reagentsRes = await reagentsApi.list()
-          setReagents(reagentsRes.data.reagents || [])
+          setReagents(reagentsRes.data.reagents)
           break
         case 'cell_line':
           const cellLinesRes = await cellLinesApi.list()
-          setCellLines(cellLinesRes.data.cellLines || [])
+          setCellLines(cellLinesRes.data.cellLines)
           break
         case 'plasmid':
           const plasmidsRes = await plasmidsApi.list()
-          setPlasmids(plasmidsRes.data.plasmids || [])
+          setPlasmids(plasmidsRes.data.plasmids)
           break
         case 'standard':
           const standardsRes = await standardsApi.list()
-          setStandards(standardsRes.data.standards || [])
+          setStandards(standardsRes.data.standards)
           break
       }
     } catch (error) {
@@ -247,7 +241,7 @@ export default function SpecimenForm({
         onSuccess()
       } else {
         // Navigate to the newly created specimen's detail page
-        if (response.specimen?.id) {
+        if (response.specimen.id) {
           navigate(`/specimens/${response.specimen.id}`)
         } else {
           navigate('/statistics')
@@ -271,16 +265,16 @@ export default function SpecimenForm({
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+        <div className="bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded">
           {error}
         </div>
       )}
 
       {!subjectId && !controlBatchId && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Source & Study</h2>
+          <h2 className="text-lg font-semibold text-app-text">Source & Study</h2>
           <div>
-            <label htmlFor="specimen-source-type" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="specimen-source-type" className="block text-sm font-medium text-app-text mb-2">
               Source Type *
             </label>
             <select
@@ -301,7 +295,7 @@ export default function SpecimenForm({
 
           {formData.sourceType === 'control' && (
             <div>
-              <label htmlFor="specimen-source" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="specimen-source" className="block text-sm font-medium text-app-text mb-2">
                 Control *
               </label>
               <select
@@ -323,7 +317,7 @@ export default function SpecimenForm({
 
           {formData.sourceType === 'reagent' && (
             <div>
-              <label htmlFor="specimen-source" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="specimen-source" className="block text-sm font-medium text-app-text mb-2">
                 Reagent *
               </label>
               <select
@@ -347,7 +341,7 @@ export default function SpecimenForm({
 
           {formData.sourceType === 'cell_line' && (
             <div>
-              <label htmlFor="specimen-source" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="specimen-source" className="block text-sm font-medium text-app-text mb-2">
                 Cell Line *
               </label>
               <select
@@ -370,7 +364,7 @@ export default function SpecimenForm({
 
           {formData.sourceType === 'plasmid' && (
             <div>
-              <label htmlFor="specimen-source" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="specimen-source" className="block text-sm font-medium text-app-text mb-2">
                 Plasmid *
               </label>
               <select
@@ -394,7 +388,7 @@ export default function SpecimenForm({
 
           {formData.sourceType === 'standard' && (
             <div>
-              <label htmlFor="specimen-source" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="specimen-source" className="block text-sm font-medium text-app-text mb-2">
                 Standard *
               </label>
               <select
@@ -419,7 +413,7 @@ export default function SpecimenForm({
           {formData.sourceType === 'subject' && (
             <div className="space-y-4">
               <div>
-                <label htmlFor="specimen-study" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="specimen-study" className="block text-sm font-medium text-app-text mb-2">
                   Study *
                 </label>
                 <StudyPicker
@@ -452,16 +446,16 @@ export default function SpecimenForm({
                           subjectName: '',
                         })
                       }
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="h-4 w-4 text-app-accent focus:ring-app-accent border-app-border rounded"
                     />
-                    <label htmlFor="create-new-subject" className="text-sm font-medium text-gray-700 cursor-pointer">
+                    <label htmlFor="create-new-subject" className="text-sm font-medium text-app-text cursor-pointer">
                       Create New Subject
                     </label>
                   </div>
 
                   {formData.createNewSubject ? (
                     <div>
-                      <label htmlFor="new-subject-name" className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="new-subject-name" className="block text-sm font-medium text-app-text mb-2">
                         Subject Name *
                       </label>
                       <input
@@ -478,7 +472,7 @@ export default function SpecimenForm({
                     </div>
                   ) : (
                     <div>
-                      <label htmlFor="specimen-subject" className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="specimen-subject" className="block text-sm font-medium text-app-text mb-2">
                         Subject *
                       </label>
                       <select
@@ -518,10 +512,10 @@ export default function SpecimenForm({
       )}
 
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Specimen Details</h2>
+        <h2 className="text-lg font-semibold text-app-text">Specimen Details</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label htmlFor="specimen-type" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="specimen-type" className="block text-sm font-medium text-app-text mb-2">
               Specimen Type *
             </label>
             <select
@@ -548,7 +542,7 @@ export default function SpecimenForm({
           </div>
 
           <div>
-            <label htmlFor="collection-date" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="collection-date" className="block text-sm font-medium text-app-text mb-2">
               Collection Date
             </label>
             <input
@@ -569,18 +563,18 @@ export default function SpecimenForm({
         onValidationChange={(isValid) => setContainerValid(isValid)}
       />
 
-      <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+      <div className="flex justify-end space-x-3 pt-4 border-t border-app-border">
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 border border-gray-100 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          className="px-4 py-2 border border-app-border rounded-lg text-app-text hover:bg-app-surface transition-colors"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={loading || !containerValid}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50 transition-colors"
         >
           {loading ? 'Saving...' : specimen ? 'Update' : 'Create'}
         </button>

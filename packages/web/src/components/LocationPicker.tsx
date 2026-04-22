@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { locationsApi, type Location } from '../lib/api'
 import { buildLocationTree, filterLocationTree, getLocationLabel, getRootLocations, getLocationChildren, getLocationAncestors } from '../lib/location-tree'
+import ModalPortal from './ModalPortal'
 
 interface LocationPickerProps {
   value: number | null
@@ -18,29 +19,31 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
 
   useEffect(() => {
     loadLocations()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [filterCollectionsOnly])
 
-  // Auto-expand all nodes when searching to show matches
-  useEffect(() => {
-    if (search.trim() && locations.length > 0) {
-      const allIds = new Set(locations.map(loc => loc.id))
-      setExpandedIds(allIds)
-    }
-  }, [search, locations])
-
-  // Auto-expand ancestors of selected location
-  useEffect(() => {
-    if (value && locations.length > 0) {
-      const ancestors = getLocationAncestors(locations, value)
-      setExpandedIds(prev => {
-        const next = new Set(prev)
-        ancestors.forEach(a => next.add(a.id))
+  // Auto-expand when search or value/locations change (adjust during render)
+  const prevExpandedDepsRef = useRef({ search, value, locationsLength: locations.length })
+  const expandedDeps = { search, value, locationsLength: locations.length }
+  const depsChanged =
+    prevExpandedDepsRef.current.search !== search ||
+    prevExpandedDepsRef.current.value !== value ||
+    prevExpandedDepsRef.current.locationsLength !== locations.length
+  if (depsChanged && locations.length > 0) {
+    prevExpandedDepsRef.current = expandedDeps
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (search.trim()) {
+        locations.forEach((loc) => next.add(loc.id))
+      }
+      if (value) {
+        const ancestors = getLocationAncestors(locations, value)
+        ancestors.forEach((a) => next.add(a.id))
         next.add(value)
-        return next
-      })
-    }
-  }, [value, locations])
+      }
+      return next
+    })
+  }
 
   const loadLocations = async () => {
     try {
@@ -48,7 +51,7 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
       // Call without pagination params to get all locations
       // The API returns all locations when page/limit are not provided
       const response = await locationsApi.list()
-      let allLocations = response.data.locations || []
+      let allLocations = response.data.locations
       
       // Filter to collection-capable locations if requested
       // Include locations that can contain collections AND their ancestors (so we can navigate to them)
@@ -115,26 +118,18 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
 
   const renderLocationNode = (loc: Location, depth: number = 0): React.ReactNode => {
     // When searching, use filtered tree to get children; otherwise use all locations
-    const children = search.trim() 
+    const children = search.trim()
       ? Array.from(filteredTree.get(loc.id) || [])
       : getLocationChildren(locations, loc.id)
     const hasChildren = children.length > 0
     const isExpanded = expandedIds.has(loc.id)
     const isSelected = value === loc.id
-
-    const handleNodeClick = () => {
-      if (isSelected && hasChildren) {
-        // If already selected and has children, toggle expansion
-        toggleExpanded(loc.id)
-      } else {
-        // Otherwise, select the node (but don't close modal - let user click Done)
-        onChange(loc.id)
-      }
-    }
+    const locationLabel = getLocationLabel(loc)
+    const expandAriaLabel = isExpanded ? `Collapse ${locationLabel}` : `Expand ${locationLabel}`
 
     return (
-      <div key={loc.id} className={depth > 0 ? 'ml-4 border-l border-gray-100 pl-3 mt-1' : 'mb-2'}>
-        <div className="flex items-center">
+      <div key={loc.id} className={depth > 0 ? 'ml-4 border-l border-app-border pl-3 mt-1' : 'mb-2'}>
+        <div className="flex items-center gap-2">
           {hasChildren ? (
             <button
               type="button"
@@ -142,39 +137,66 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
                 e.stopPropagation()
                 toggleExpanded(loc.id)
               }}
-              className="w-3 h-3 mr-2 text-gray-500 flex-shrink-0 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-              aria-label={isExpanded ? 'Collapse' : 'Expand'}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toggleExpanded(loc.id)
+                }
+              }}
+              aria-expanded={isExpanded}
+              aria-label={expandAriaLabel}
+              className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border border-transparent hover:bg-app-surface hover:border-app-border transition-colors text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent focus-visible:ring-offset-1"
             >
-              {isExpanded ? '▾' : '▸'}
+              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-app-text-muted" aria-hidden>
+                {isExpanded ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className={`truncate text-sm ${isSelected ? 'text-app-accent-hover font-medium' : 'text-app-text'}`}>
+                  {locationLabel}
+                </p>
+                {loc.path && (
+                  <p className="text-[10px] text-app-text-muted font-mono truncate mt-0.5">
+                    {loc.path}
+                  </p>
+                )}
+              </div>
             </button>
           ) : (
-            <span className="w-3 h-3 mr-2"></span>
-          )}
-          <button
-            type="button"
-            onClick={handleNodeClick}
-            className={`flex items-center justify-between flex-1 px-2 py-1 rounded text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors ${
-              isSelected
-                ? 'bg-blue-50 border border-blue-200 shadow-sm'
-                : 'hover:bg-gray-50 border border-transparent'
-            }`}
-          >
-            <div className="text-left flex-1 min-w-0">
-              <p className={`truncate ${isSelected ? 'text-blue-900 font-medium' : 'text-gray-900'}`}>
-                {getLocationLabel(loc)}
-              </p>
-              {loc.path && (
-                <p className="text-[10px] text-gray-400 font-mono truncate">
-                  {loc.path}
+            <div className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg">
+              <span className="w-5 flex-shrink-0" aria-hidden />
+              <div className="flex-1 min-w-0">
+                <p className={`truncate text-sm ${isSelected ? 'text-app-accent-hover font-medium' : 'text-app-text'}`}>
+                  {getLocationLabel(loc)}
                 </p>
-              )}
+                {loc.path && (
+                  <p className="text-[10px] text-app-text-muted font-mono truncate mt-0.5">
+                    {loc.path}
+                  </p>
+                )}
+              </div>
             </div>
-            {isSelected && (
-              <span className="text-[10px] font-mono text-blue-700 ml-2 flex-shrink-0">
-                selected
-              </span>
-            )}
-          </button>
+          )}
+          {(!filterCollectionsOnly || loc.canContainCollections) && (
+            <button
+              type="button"
+              onClick={() => onChange(loc.id)}
+              className={`flex-shrink-0 px-3 py-2 min-h-[44px] text-sm font-medium rounded-lg transition-colors ${
+                isSelected
+                  ? 'bg-app-accent text-white hover:bg-app-accent-hover'
+                  : 'bg-app-surface text-app-text-muted hover:bg-app-border'
+              }`}
+            >
+              {isSelected ? 'Selected' : 'Select'}
+            </button>
+          )}
         </div>
 
         {hasChildren && isExpanded && (
@@ -204,18 +226,18 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
     if (displayRoots.length === 0) {
       return (
         <div className="p-4 text-center">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-app-text-muted">
             {search ? 'No locations match this search.' : 'No locations available.'}
           </p>
           {!search && locations.length === 0 && (
-            <p className="text-xs text-gray-400 mt-2">
+            <p className="text-xs text-app-text-muted mt-2">
               {filterCollectionsOnly 
                 ? 'Try removing the collection filter or ensure locations have canContainCollections set to true.'
                 : 'Please check that locations exist in the database.'}
             </p>
           )}
           {!search && locations.length > 0 && rootLocations.length === 0 && (
-            <div className="text-xs text-gray-400 mt-2 space-y-1 text-left max-w-md mx-auto">
+            <div className="text-xs text-app-text-muted mt-2 space-y-1 text-left max-w-md mx-auto">
               <p className="font-medium">No root locations found (locations with parentId === null).</p>
               <p className="mt-1">This may indicate that:</p>
               <ul className="list-disc list-inside mt-1 space-y-0.5">
@@ -244,31 +266,32 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
         type="button"
         onClick={() => !disabled && setOpen(true)}
         disabled={disabled}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-          disabled ? 'bg-gray-50 cursor-not-allowed opacity-60' : ''
+        className={`w-full px-3 py-2 border border-app-border rounded-md shadow-sm bg-app-card text-app-text text-left focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-app-accent ${
+          disabled ? 'bg-app-surface cursor-not-allowed opacity-60' : ''
         }`}
       >
         {loading ? (
-          <span className="text-gray-400">Loading locations...</span>
+          <span className="text-app-text-muted">Loading locations...</span>
         ) : selectedLocation ? (
-          <span className="text-gray-900">{selectedLocation.path || selectedLocation.name}</span>
+          <span className="text-app-text">{selectedLocation.path || selectedLocation.name}</span>
         ) : (
-          <span className="text-gray-400">Select location...</span>
+          <span className="text-app-text-muted">Select location...</span>
         )}
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
-          <div
-            className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-            onClick={() => setOpen(false)}
-          />
-          <div className="relative z-10 bg-white rounded-lg shadow-xl p-6 max-h-[90vh] flex flex-col w-full max-w-3xl mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Select Location</h2>
+        <ModalPortal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center">
+            <div
+              className="fixed inset-0 bg-black/40 backdrop-blur-md"
+              onClick={() => setOpen(false)}
+            />
+<div className="relative z-10 bg-app-card rounded-lg shadow-xl p-6 max-h-[90vh] flex flex-col w-full max-w-3xl mx-4 border border-app-border">
+              <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-app-text">Select Location</h2>
               <button
                 type="button"
-                className="text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded"
                 onClick={() => setOpen(false)}
                 aria-label="Close location selection dialog"
               >
@@ -294,17 +317,17 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
             </div>
 
             {selectedLocation && (
-              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="mb-4 p-3 bg-app-accent-muted border border-app-accent/50 rounded-lg">
                 <div className="text-sm">
-                  <span className="font-medium text-gray-700">Selected: </span>
-                  <span className="text-gray-900">{selectedLocation.path || selectedLocation.name}</span>
+                  <span className="font-medium text-app-text">Selected: </span>
+                  <span className="text-app-text">{selectedLocation.path || selectedLocation.name}</span>
                 </div>
               </div>
             )}
 
-            <div className="border border-gray-200 rounded-md overflow-y-auto flex-1 min-h-0 bg-white">
+            <div className="border border-app-border rounded-md overflow-y-auto flex-1 min-h-0 bg-app-card">
               {loading ? (
-                <div className="p-4 text-sm text-gray-500 text-center">Loading locations…</div>
+                <div className="p-4 text-sm text-app-text-muted text-center">Loading locations…</div>
               ) : (
                 renderTree()
               )}
@@ -314,20 +337,21 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
               <button
                 type="button"
                 onClick={() => onChange(null)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                className="px-4 py-2 border border-app-border text-app-text rounded-lg hover:bg-app-surface font-medium"
               >
                 Clear
               </button>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover font-medium"
               >
                 Done
               </button>
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </>
   )

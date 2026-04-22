@@ -91,8 +91,8 @@ Use the system's validation features before committing to operations—validatio
 
 ## Getting Additional Help
 
-If you've tried the solutions in this guide and problems persist, there are additional resources available. Review the [CSV File Guidelines](/guides/troubleshooting/csv-guidelines/) for detailed formatting requirements. Check [Best Practices](/guides/troubleshooting/best-practices/) for recommended workflows that can prevent issues. Contact your system administrator if problems seem to be system-related or if you need assistance with configuration issues.
+If you've tried the solutions in this guide and problems persist, there are additional resources available. Review the [CSV File Guidelines](/docs/guides/troubleshooting/csv-guidelines/) for detailed formatting requirements. Check [Best Practices](/docs/guides/troubleshooting/best-practices/) for recommended workflows that can prevent issues. Contact your system administrator if problems seem to be system-related or if you need assistance with configuration issues.
 
 ## What's Next?
 
-Now that you understand common issues and their solutions, you might want to review [Best Practices](/guides/troubleshooting/best-practices/) to learn workflows that prevent problems, check [CSV File Guidelines](/guides/troubleshooting/csv-guidelines/) for detailed import requirements, or explore the relevant feature guides to understand how features work correctly.
+Now that you understand common issues and their solutions, you might want to review [Best Practices](/docs/guides/troubleshooting/best-practices/) to learn workflows that prevent problems, check [CSV File Guidelines](/docs/guides/troubleshooting/csv-guidelines/) for detailed import requirements, or explore the relevant feature guides to understand how features work correctly.

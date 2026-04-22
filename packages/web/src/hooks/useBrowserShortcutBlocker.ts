@@ -26,7 +26,7 @@ export function useBrowserShortcutBlocker(enabled: boolean = true) {
       const isMac = /Mac|iPhone|iPod|iPad/i.test(navigator.platform)
       const modifier = isMac ? event.metaKey : event.ctrlKey
       const shift = event.shiftKey
-      const key = event.key.toLowerCase()
+      const key = (event.key ?? '').toLowerCase() // eslint-disable-line @typescript-eslint/no-unnecessary-condition
 
       // Note: Critical browser shortcuts (Ctrl/Cmd+W, N, T) cannot be blocked
       // by JavaScript for security reasons. Only attempting to block find shortcuts.

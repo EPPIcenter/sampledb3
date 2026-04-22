@@ -1,19 +1,40 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest, createAuthenticatedClientWrapper } from '../../__tests__/helpers/test-client'
 import { createCrudRoutes } from '../crud-routes'
+import { handleRouteError } from '../error-handler'
 import { setupTestDatabase, cleanupTestDatabase, resetTestDatabase } from '../../__tests__/helpers/db-setup'
 import { tag, storageContainer, storageContainerTag } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import type { Database } from '../../db/client'
+import { utcNow } from '../datetime'
 import { createTestTag, createTestStorageContainer, createTestSpecimenType, createTestSpecimen, createTestUnit } from '../../__tests__/helpers/factories'
 import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
+import type { ErrorResponse, SuccessResponse, ValidationErrorResponse } from '../../__tests__/helpers/test-types'
 
 describe('createCrudRoutes Factory', () => {
   let testDb: Database
   let sqlite: any
   let cookieHeader: string
+
+  // Helper to create an authenticated test client
+  function createAuthClient(app: Hono) {
+    const baseClient = createTestClient(app)
+    return createAuthenticatedClientWrapper(baseClient, cookieHeader)
+  }
+
+  // Helper to create app with db context and error handler so error_logs table is used
+  function createTagsApp(routes: Hono): Hono {
+    const app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
+    app.onError((err, c) => handleRouteError(err, c))
+    app.route('/api/tags', routes)
+    return app
+  }
 
   beforeEach(async () => {
     const setup = await setupTestDatabase()
@@ -60,13 +81,14 @@ describe('createCrudRoutes Factory', () => {
         createSchema,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
 
-      const res = await client.api.tags.$get()
+      const res = await authenticatedRequest(app, '/api/tags', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData<Array<{ id: number; name: string }>>(res)
       expect(Array.isArray(data)).toBe(true)
     })
 
@@ -87,16 +109,15 @@ describe('createCrudRoutes Factory', () => {
       // Create a test tag
       const testTag = await createTestTag(testDb, { name: 'Test Tag' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
 
-      const res = await client.api.tags[':id'].$get({
-        param: { id: String(testTag.id) },
+      const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
+        method: 'GET',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as { id: number; name: string }
       expect(data).toBeDefined()
       expect(data.id).toBe(testTag.id)
       expect(data.name).toBe('Test Tag')
@@ -116,16 +137,15 @@ describe('createCrudRoutes Factory', () => {
         createSchema,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
 
-      const res = await client.api.tags[':id'].$get({
-        param: { id: '99999' },
+      const res = await authenticatedRequest(app, '/api/tags/99999', {
+        method: 'GET',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(404)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toBe('Tag with id 99999 not found')
     })
 
@@ -143,16 +163,15 @@ describe('createCrudRoutes Factory', () => {
         createSchema,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
 
-      const res = await client.api.tags[':id'].$get({
-        param: { id: 'invalid' },
+      const res = await authenticatedRequest(app, '/api/tags/invalid', {
+        method: 'GET',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('Invalid Tag ID')
     })
 
@@ -170,9 +189,8 @@ describe('createCrudRoutes Factory', () => {
         createSchema,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
+      const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'POST',
@@ -181,7 +199,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as { id: number; name: string }
       expect(data).toBeDefined()
       expect(data.name).toBe('New Tag')
       expect(data.id).toBeDefined()
@@ -204,9 +222,8 @@ describe('createCrudRoutes Factory', () => {
       // Create a test state
       const testTag = await createTestTag(testDb, { name: 'Original Name' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
+      const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'PUT',
@@ -215,7 +232,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as { name: string }
       expect(data.name).toBe('Updated Name')
     })
 
@@ -236,8 +253,7 @@ describe('createCrudRoutes Factory', () => {
       // Create a test state
       const testTag = await createTestTag(testDb, { name: 'To Delete' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'DELETE',
@@ -245,15 +261,14 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as SuccessResponse
       expect(data.message).toContain('deleted successfully')
 
       // Verify it's deleted
-      const app2 = new Hono()
-      app2.route('/api/tags', routes)
-      const client2 = createTestClient(app2)
-      const getRes = await client2.api.tags[':id'].$get({
-        param: { id: String(testTag.id) },
+      const app2 = createTagsApp(routes)
+      const getRes = await authenticatedRequest(app2, `/api/tags/${testTag.id}`, {
+        method: 'GET',
+        cookie: cookieHeader,
       })
       expect(getRes.status).toBe(404)
     })
@@ -274,8 +289,7 @@ describe('createCrudRoutes Factory', () => {
         createSchema,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'POST',
@@ -284,7 +298,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ValidationErrorResponse
       expect(data.error).toBe('Validation error')
       expect(data.details).toBeDefined()
     })
@@ -305,9 +319,8 @@ describe('createCrudRoutes Factory', () => {
 
       const testTag = await createTestTag(testDb, { name: 'Test' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
+      const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'PUT',
@@ -334,9 +347,8 @@ describe('createCrudRoutes Factory', () => {
 
       await createTestTag(testDb, { name: 'Duplicate' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
+      const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'POST',
@@ -345,7 +357,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(409)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('already exists')
     })
 
@@ -366,9 +378,8 @@ describe('createCrudRoutes Factory', () => {
       const tag1 = await createTestTag(testDb, { name: 'Tag 1' })
       await createTestTag(testDb, { name: 'Tag 2' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
+      const client = createAuthClient(app)
 
       // Try to update state1 to have the same name as state2
       const res = await authenticatedRequest(app, `/api/tags/${tag1.id}`, {
@@ -378,7 +389,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(409)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('already exists')
     })
 
@@ -398,9 +409,8 @@ describe('createCrudRoutes Factory', () => {
 
       const testTag = await createTestTag(testDb, { name: 'Original' })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
+      const client = createAuthClient(app)
 
       // Update with the same name should work
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
@@ -438,9 +448,8 @@ describe('createCrudRoutes Factory', () => {
         validateCreate,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
+      const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'POST',
@@ -450,7 +459,7 @@ describe('createCrudRoutes Factory', () => {
 
       expect(validateCreateCalled).toBe(true)
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toBe('Custom validation failed')
     })
 
@@ -480,9 +489,8 @@ describe('createCrudRoutes Factory', () => {
         validateUpdate,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
+      const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'PUT',
@@ -492,7 +500,7 @@ describe('createCrudRoutes Factory', () => {
 
       expect(validateUpdateCalled).toBe(true)
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toBe('Custom update validation failed')
     })
   })
@@ -549,9 +557,8 @@ describe('createCrudRoutes Factory', () => {
         checkInUse,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
+      const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'DELETE',
@@ -559,7 +566,7 @@ describe('createCrudRoutes Factory', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('in use')
     })
 
@@ -594,8 +601,7 @@ describe('createCrudRoutes Factory', () => {
         checkInUse,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
+      const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'DELETE',
@@ -630,13 +636,14 @@ describe('createCrudRoutes Factory', () => {
         transformList,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
 
-      const res = await client.api.tags.$get()
+      const res = await authenticatedRequest(app, '/api/tags', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as Array<{ name: string }>
       expect(data[0].name).toBe('TAG 1')
       expect(data[1].name).toBe('TAG 2')
     })
@@ -664,16 +671,15 @@ describe('createCrudRoutes Factory', () => {
         transformDetail,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
 
-      const res = await client.api.tags[':id'].$get({
-        param: { id: String(testTag.id) },
+      const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
+        method: 'GET',
+        cookie: cookieHeader,
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as { name: string; transformed: boolean }
       expect(data.name).toBe('TEST TAG')
       expect(data.transformed).toBe(true)
     })
@@ -699,9 +705,8 @@ describe('createCrudRoutes Factory', () => {
         onCreateDefaults,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
+      const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'POST',
@@ -722,7 +727,7 @@ describe('createCrudRoutes Factory', () => {
       const testTag = await createTestTag(testDb, { name: 'Test' })
 
       const onUpdateDefaults = () => ({
-        updatedAt: new Date().toISOString(),
+        updatedAt: utcNow(),
       })
 
       const routes = createCrudRoutes({
@@ -735,9 +740,8 @@ describe('createCrudRoutes Factory', () => {
         onUpdateDefaults,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
+      const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'PUT',
@@ -768,16 +772,17 @@ describe('createCrudRoutes Factory', () => {
         createSchema,
       })
 
-      const app = new Hono()
-      app.route('/api/tags', routes)
-      const client = createTestClient(app)
+      const app = createTagsApp(routes)
 
-      const res = await client.api.tags.$get()
+      const res = await authenticatedRequest(app, '/api/tags', {
+        method: 'GET',
+        cookie: cookieHeader,
+      })
       expect(res.status).toBe(200)
-      const data = await getResponseData(res)
+      const data = await getResponseData(res) as Array<{ name: string }>
       expect(data.length).toBeGreaterThanOrEqual(3)
       // Should be ordered by name
-      const names = data.map((s: any) => s.name)
+      const names = data.map((s) => s.name)
       expect(names).toEqual([...names].sort())
     })
   })

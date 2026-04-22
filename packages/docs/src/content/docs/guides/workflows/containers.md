@@ -57,7 +57,7 @@ There are two main ways to associate specimens with containers: you can create t
 
 ### Creating Containers During Specimen Registration
 
-When you're registering a specimen and you know where it will be stored, you can create the container right then. In the specimen registration form, check the "Create container" option, and you'll see additional fields appear. Select the container type that matches your storage method, then either select an existing collection or create a new one on the spot.
+When you're registering a specimen and you know where it will be stored, you can create the container right then. In the specimen registration form, check the "Create container" option, and you'll see additional fields appear. Select the container type that matches your storage method, then either select an existing collection or create a new one on the spot. When choosing a collection, type to search by name; matches show the collection name and storage path (exact and partial matches), and you can create a new collection (name and location) from the same control when the flow allows it.
 
 For each container type, you'll need to provide the appropriate details. Micronix tubes need a barcode (which must be unique across your entire system) and a position in the plate. Cryovial tubes need a position, and you can optionally add a barcode if your lab uses them. Papers need a label identifier. Static wells need a position.
 
@@ -69,6 +69,10 @@ If you've already created collections and want to add specimens to them, you can
 
 This approach is useful when you're populating a collection over time, or when you're organizing specimens that were registered without containers initially.
 
+### Adding a container from the specimen details page
+
+When viewing a specimen's detail page, you can add a new container for that specimen without re-registering it. In the **Containers** section, click **Add container** to open the form. Choose the container type (allowed types depend on the specimen type), select or create a collection, and enter the required fields (barcode and position for micronix or cryovial tubes, label for paper). This is useful when a specimen gains an additional aliquot or is moved to a new container after initial registration.
+
 ## Understanding Container Details
 
 When you view a container's detail page, you'll see comprehensive information about that container and its contents. The container type tells you what kind of storage unit it is. If the container has a barcode, you'll see that unique identifier. The position or label shows where the container is located within its collection.
@@ -78,6 +82,8 @@ You'll see which collection the container belongs to, and through that collectio
 The container's status is automatically determined by its remaining quantity. Containers with remaining quantity greater than zero are marked as "In Use", meaning they still have usable material. Containers with zero remaining quantity are marked as "Exhausted", indicating all the material has been used. This automatic status tracking helps you see at a glance which containers are still available.
 
 The quantities section shows both the total quantity (how much material the container originally held) and the remaining quantity (how much is still available). This helps you track material usage and plan when containers might need to be replenished.
+
+You can add optional notes to a container (for example, storage conditions or handling instructions). Those notes appear on the container detail page and are also shown when viewing the specimen (on the specimen detail page) or when viewing the subject's specimen list, so you can see container notes in context without opening each container.
 
 ## Position Formats and Why They Matter
 
@@ -107,9 +113,11 @@ Box and Bag detail pages show the box or bag information and list the sheets con
 
 Sheet detail pages show information about a specific sheet and list all the papers it contains, along with their associated specimens.
 
+On each of these collection detail pages (plates, cryovial boxes, boxes, bags, and sheets), you can switch to a **Table** view that lists every position or item in a tabular format. Use the **Export CSV** button in the table view to download the current list as a CSV file for use in spreadsheets or other tools.
+
 ## Moving Containers Between Collections
 
-As your laboratory work progresses, you may need to reorganize containers by moving them from one collection to another. This might happen when you're consolidating samples, reorganizing storage, or moving containers to new locations. The system provides tools for moving containers, which are covered in detail in the [Container Movement Guide](/guides/bulk-operations/container-movement/). These tools support moving individual containers or bulk moves using CSV files, depending on your needs.
+As your laboratory work progresses, you may need to reorganize containers by moving them from one collection to another. This might happen when you're consolidating samples, reorganizing storage, or moving containers to new locations. The system provides tools for moving containers, which are covered in detail in the [Container Movement Guide](/docs/guides/bulk-operations/container-movement/). These tools support moving individual containers or bulk moves using CSV files, depending on your needs.
 
 ## Best Practices for Container Management
 
@@ -123,4 +131,4 @@ Location assignment is crucial for finding samples later. Always assign collecti
 
 ## What's Next?
 
-Now that you understand container management, you might want to learn about [Location Management](/guides/workflows/locations/) to organize your storage infrastructure, explore [Container Movement](/guides/bulk-operations/container-movement/) to learn how to reorganize containers, or dive into [Bulk Import](/guides/bulk-operations/import/) to see how to import specimens with containers efficiently.
+Now that you understand container management, you might want to learn about [Location Management](/docs/guides/workflows/locations/) to organize your storage infrastructure, explore [Container Movement](/docs/guides/bulk-operations/container-movement/) to learn how to reorganize containers, or dive into [Bulk Import](/docs/guides/bulk-operations/import/) to see how to import specimens with containers efficiently.

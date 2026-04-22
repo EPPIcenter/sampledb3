@@ -1,0 +1,450 @@
+/**
+ * Blood Controls pages – "Modern precision lab" theme
+ * Scoped to .blood-controls-page. Uses app design tokens (see tokens.css).
+ */
+
+.blood-controls-page {
+  font-family: var(--app-font-sans);
+  background: linear-gradient(180deg, rgb(var(--app-bg)) 0%, rgb(var(--app-surface)) 100%);
+  min-height: 100%;
+  position: relative;
+}
+
+/* Subtle grid background for lab feel */
+.blood-controls-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.blood-controls-page h1,
+.blood-controls-page h2,
+.blood-controls-page h3 {
+  font-family: var(--app-font-display);
+  letter-spacing: -0.02em;
+  color: rgb(var(--app-text));
+}
+
+/* Card surface – use .dashboard-card or .blood-controls-card inside .blood-controls-page */
+.blood-controls-page .dashboard-card,
+.blood-controls-page .blood-controls-card {
+  background: rgb(var(--app-card));
+  border: 1px solid rgb(var(--app-border));
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.blood-controls-page .dashboard-card:hover,
+.blood-controls-page .blood-controls-card:hover {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07);
+  border-color: rgb(var(--app-accent) / 0.3);
+}
+
+/* Section title */
+.blood-controls-page .dashboard-section-title,
+.blood-controls-page .blood-controls-section-title {
+  font-family: var(--app-font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: rgb(var(--app-text));
+}
+
+/* Accent link */
+.blood-controls-page .dashboard-link,
+.blood-controls-page .blood-controls-link {
+  color: rgb(var(--app-accent));
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.blood-controls-page .dashboard-link:hover,
+.blood-controls-page .blood-controls-link:hover {
+  color: rgb(var(--app-accent-hover));
+}
+
+.blood-controls-page .dashboard-link:focus-visible,
+.blood-controls-page .blood-controls-link:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* Only show outline when the card itself is the focus target (e.g. card-as-link), not when a child has focus */
+.blood-controls-page a.dashboard-card:focus-visible,
+.blood-controls-page a.blood-controls-card:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* For focusable div cards, no outline on mouse click */
+.blood-controls-page .dashboard-card:focus:not(:focus-visible),
+.blood-controls-page .blood-controls-card:focus:not(:focus-visible) {
+  outline: none;
+}
+.blood-controls-page .dashboard-card:focus-visible,
+.blood-controls-page .blood-controls-card:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* Staggered reveal on load */
+.blood-controls-page .blood-controls-reveal {
+  animation: bloodControlsReveal 0.4s ease-out forwards;
+  opacity: 0;
+}
+
+.blood-controls-page .blood-controls-reveal-1 { animation-delay: 0.05s; }
+.blood-controls-page .blood-controls-reveal-2 { animation-delay: 0.1s; }
+.blood-controls-page .blood-controls-reveal-3 { animation-delay: 0.15s; }
+.blood-controls-page .blood-controls-reveal-4 { animation-delay: 0.2s; }
+.blood-controls-page .blood-controls-reveal-5 { animation-delay: 0.25s; }
+.blood-controls-page .blood-controls-reveal-6 { animation-delay: 0.3s; }
+.blood-controls-page .blood-controls-reveal-7 { animation-delay: 0.35s; }
+.blood-controls-page .blood-controls-reveal-8 { animation-delay: 0.4s; }
+
+@keyframes bloodControlsReveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tabs – active tab with teal border and text */
+.blood-controls-page .blood-controls-tabs button {
+  border-bottom: 2px solid transparent;
+}
+
+.blood-controls-page .blood-controls-tabs button[aria-selected="true"],
+.blood-controls-page .blood-controls-tabs button.blood-controls-tab-active {
+  border-bottom-color: rgb(var(--app-accent));
+  color: rgb(var(--app-accent));
+}
+
+.blood-controls-page .blood-controls-tabs button:not(.blood-controls-tab-active) {
+  color: rgb(var(--app-text-muted));
+  border-bottom-color: transparent;
+}
+
+.blood-controls-page .blood-controls-tabs button:not(.blood-controls-tab-active):hover {
+  color: rgb(var(--app-text));
+  border-bottom-color: rgb(var(--app-border));
+}
+
+/* Filters: search input, strain pills, density/date inputs */
+.blood-controls-page input[type="text"]:focus,
+.blood-controls-page input[type="number"]:focus,
+.blood-controls-page input[type="date"]:focus,
+.blood-controls-page select:focus,
+.blood-controls-page textarea:focus {
+  border-color: rgb(var(--app-accent) / 0.5);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
+}
+
+.blood-controls-page .blood-controls-filter-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgb(var(--app-text-muted));
+}
+
+/* Strain pill selected state */
+.blood-controls-page .blood-controls-pill-selected {
+  background: rgb(var(--app-accent));
+  color: white;
+  border-color: rgb(var(--app-accent));
+}
+
+.blood-controls-page .blood-controls-pill {
+  background: rgb(var(--app-surface));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
+}
+
+.blood-controls-page .blood-controls-pill:hover {
+  background: rgb(var(--app-border));
+}
+
+/* Buttons */
+.blood-controls-page .blood-controls-btn-primary {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  background: rgb(var(--app-accent));
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.blood-controls-page .blood-controls-btn-primary:hover {
+  background: rgb(var(--app-accent-hover));
+}
+
+.blood-controls-page .blood-controls-btn-secondary {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.blood-controls-page .blood-controls-btn-secondary:hover {
+  background: rgb(var(--app-surface));
+  border-color: rgb(var(--app-accent) / 0.3);
+}
+
+.blood-controls-page .blood-controls-btn-danger {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  background: rgb(var(--app-trend-down));
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.blood-controls-page .blood-controls-btn-danger:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.blood-controls-page .blood-controls-btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Control type badge (blood / plasma positive / negative etc.) */
+.blood-controls-page .blood-controls-badge {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid rgb(var(--app-badge) / 0.3);
+  background: rgb(var(--app-badge-bg));
+  color: rgb(var(--app-badge));
+}
+
+/* Form controls and focus ring */
+.blood-controls-page input:focus,
+.blood-controls-page select:focus,
+.blood-controls-page textarea:focus {
+  border-color: rgb(var(--app-accent) / 0.5);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
+}
+
+.blood-controls-page button:focus-visible,
+.blood-controls-page a:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* Breadcrumb */
+.blood-controls-page nav[aria-label="Breadcrumb navigation"] a {
+  color: rgb(var(--app-accent));
+}
+
+.blood-controls-page nav[aria-label="Breadcrumb navigation"] a:hover {
+  color: rgb(var(--app-accent-hover));
+}
+
+/* SimpleTimeline inside blood-controls-page */
+.blood-controls-page .simple-timeline .text-gray-500,
+.blood-controls-page .simple-timeline .text-gray-600,
+.blood-controls-page .simple-timeline .text-gray-400 {
+  color: rgb(var(--app-text-muted));
+}
+
+.blood-controls-page .simple-timeline .text-gray-900 {
+  color: rgb(var(--app-text));
+}
+
+.blood-controls-page .simple-timeline .text-gray-300 {
+  color: rgb(var(--app-border));
+}
+
+.blood-controls-page .simple-timeline .text-blue-600 {
+  color: rgb(var(--app-accent));
+}
+
+.blood-controls-page .simple-timeline .border-blue-500 {
+  border-color: rgb(var(--app-accent));
+}
+
+.blood-controls-page .simple-timeline .bg-gray-50,
+.blood-controls-page .simple-timeline .hover\:bg-gray-50:hover {
+  background-color: rgb(var(--app-surface));
+}
+
+.blood-controls-page .simple-timeline .bg-gray-100,
+.blood-controls-page .simple-timeline .border-gray-100 {
+  background-color: rgb(var(--app-accent-muted));
+  border-color: rgb(var(--app-border));
+}
+
+.blood-controls-page .simple-timeline .hover\:bg-gray-200:hover {
+  background-color: rgb(var(--app-accent-muted));
+}
+
+.blood-controls-page .simple-timeline .hover\:text-gray-900:hover {
+  color: rgb(var(--app-text));
+}
+
+/* ControlDefinitionForm when used inside blood-controls-page: primary/submit and secondary/cancel */
+.blood-controls-page form .flex.justify-end button[type="submit"] {
+  background: rgb(var(--app-accent));
+  color: white;
+  border: none;
+}
+
+.blood-controls-page form .flex.justify-end button[type="submit"]:hover:not(:disabled) {
+  background: rgb(var(--app-accent-hover));
+}
+
+.blood-controls-page form .flex.justify-end button[type="button"] {
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
+}
+
+.blood-controls-page form .flex.justify-end button[type="button"]:hover {
+  background: rgb(var(--app-surface));
+  border-color: rgb(var(--app-accent) / 0.3);
+}
+
+/* Override blue to teal when inside blood-controls-page */
+.blood-controls-page .bg-blue-50,
+.blood-controls-page .bg-blue-100 {
+  background-color: rgb(var(--app-accent-muted));
+}
+.blood-controls-page .border-blue-100,
+.blood-controls-page .border-blue-200,
+.blood-controls-page .border-blue-300 {
+  border-color: rgb(var(--app-accent) / 0.5);
+}
+.blood-controls-page .text-blue-600,
+.blood-controls-page .text-blue-700,
+.blood-controls-page .text-blue-800 {
+  color: rgb(var(--app-accent-hover));
+}
+.blood-controls-page .bg-blue-600,
+.blood-controls-page .bg-blue-700 {
+  background-color: rgb(var(--app-accent));
+}
+.blood-controls-page .hover\:bg-blue-700:hover {
+  background-color: rgb(var(--app-accent-hover));
+}
+.blood-controls-page .focus\:ring-blue-500:focus,
+.blood-controls-page .focus\:border-blue-500:focus {
+  --tw-ring-color: rgb(var(--app-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
+}
+
+/* StatCard / StatChart number styling */
+.blood-controls-page .stat-card-title {
+  color: rgb(var(--app-text-muted));
+}
+.blood-controls-page .stat-card-value {
+  color: rgb(var(--app-text));
+  font-variant-numeric: tabular-nums;
+}
+.blood-controls-page .stat-chart-title {
+  color: rgb(var(--app-text));
+}
+.blood-controls-page .stat-chart-empty {
+  color: rgb(var(--app-text-muted));
+}
+.blood-controls-page .dashboard-stat-value {
+  color: rgb(var(--app-text));
+  font-variant-numeric: tabular-nums;
+}
+.blood-controls-page .dashboard-stat-muted {
+  color: rgb(var(--app-text-muted));
+}
+
+/* Batch wizard: definition listbox options */
+.blood-controls-page .blood-controls-definition-option {
+  background: rgb(var(--app-card));
+  cursor: pointer;
+}
+
+.blood-controls-page .blood-controls-definition-option:hover {
+  background: rgb(var(--app-surface));
+}
+
+.blood-controls-page .blood-controls-definition-option-selected {
+  background: rgb(var(--app-accent-muted) / 0.6);
+  border-left: 3px solid rgb(var(--app-accent));
+}
+
+.blood-controls-page .blood-controls-definition-option-focused {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: -2px;
+}
+
+.blood-controls-page .blood-controls-badge-inline {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  background: rgb(var(--app-badge-bg));
+  color: rgb(var(--app-badge));
+}
+
+/* Modal overlay (portaled to body) inherits :root tokens. */
+
+.blood-controls-modal-overlay .blood-controls-modal-panel {
+  background: rgb(var(--app-card));
+  border: 1px solid rgb(var(--app-border));
+  border-radius: 0.75rem;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+}
+
+.blood-controls-modal-overlay .blood-controls-modal-panel input:focus,
+.blood-controls-modal-overlay .blood-controls-modal-panel select:focus,
+.blood-controls-modal-overlay .blood-controls-modal-panel textarea:focus {
+  border-color: rgb(var(--app-accent) / 0.5);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
+}
+
+.blood-controls-modal-overlay .blood-controls-modal-panel form .flex.justify-end button[type="submit"] {
+  background: rgb(var(--app-accent));
+  color: white;
+  border: none;
+}
+
+.blood-controls-modal-overlay .blood-controls-modal-panel form .flex.justify-end button[type="submit"]:hover:not(:disabled) {
+  background: rgb(var(--app-accent-hover));
+}
+
+.blood-controls-modal-overlay .blood-controls-modal-panel form .flex.justify-end button[type="button"] {
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
+}
+
+.blood-controls-modal-overlay .blood-controls-modal-panel form .flex.justify-end button[type="button"]:hover {
+  background: rgb(var(--app-surface));
+  border-color: rgb(var(--app-accent) / 0.3);
+}

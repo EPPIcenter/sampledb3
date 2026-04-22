@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { adminApi, type AdminSystemStats } from '../lib/api'
+import '../styles/admin.css'
 
 export default function AdminStatistics() {
   const [stats, setStats] = useState<AdminSystemStats | null>(null)
@@ -16,8 +17,11 @@ export default function AdminStatistics() {
       setError(null)
       const response = await adminApi.getSystemStats()
       setStats(response.data)
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load statistics')
+    } catch (err: unknown) {
+      const message = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : null
+      setError(message || 'Failed to load statistics')
       console.error('Error loading admin stats:', err)
     } finally {
       setLoading(false)
@@ -26,16 +30,18 @@ export default function AdminStatistics() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">System Statistics</h1>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="bg-white rounded-lg shadow p-6 animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
-                <div className="h-8 bg-gray-200 rounded w-1/2"></div>
-              </div>
-            ))}
+      <div className="admin-page">
+        <div className="relative z-10 p-6">
+          <div className="max-w-7xl mx-auto">
+            <h1 className="text-2xl font-bold mb-6">System Statistics</h1>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="admin-card p-6 animate-pulse">
+                  <div className="h-4 admin-skeleton rounded w-3/4 mb-4" />
+                  <div className="h-8 admin-skeleton rounded w-1/2" />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -44,17 +50,19 @@ export default function AdminStatistics() {
 
   if (error) {
     return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">System Statistics</h1>
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-800">{error}</p>
-            <button
-              onClick={loadStats}
-              className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-            >
-              Retry
-            </button>
+      <div className="admin-page">
+        <div className="relative z-10 p-6">
+          <div className="max-w-7xl mx-auto">
+            <h1 className="text-2xl font-bold mb-6">System Statistics</h1>
+            <div className="rounded-lg border border-app-trend-down bg-app-trend-down/10 p-4">
+              <p className="text-app-trend-down">{error}</p>
+              <button
+                onClick={loadStats}
+                className="admin-btn-primary mt-4 px-4 py-2 rounded-lg"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -62,6 +70,8 @@ export default function AdminStatistics() {
   }
 
   if (!stats) return null
+
+  const iconBgClass = 'p-2 rounded-lg bg-[rgb(var(--app-accent-muted))] text-[rgb(var(--app-accent))]'
 
   const renderIcon = (iconName: string, className: string) => {
     switch (iconName) {
@@ -111,7 +121,7 @@ export default function AdminStatistics() {
   const sections = [
     {
       title: 'Users & Sessions',
-      icon: 'users',
+      icon: 'users' as const,
       items: [
         { label: 'Total Users', value: stats.users.total },
         { label: 'Active Users', value: stats.users.active },
@@ -122,7 +132,7 @@ export default function AdminStatistics() {
     },
     {
       title: 'Entities',
-      icon: 'database',
+      icon: 'database' as const,
       items: [
         { label: 'Studies', value: stats.entities.studies },
         { label: 'Subjects', value: stats.entities.subjects },
@@ -132,7 +142,7 @@ export default function AdminStatistics() {
     },
     {
       title: 'Containers by Type',
-      icon: 'package',
+      icon: 'package' as const,
       items: [
         { label: 'Micronix Tubes', value: stats.containers.micronixTubes },
         { label: 'Cryovial Tubes', value: stats.containers.cryovialTubes },
@@ -142,7 +152,7 @@ export default function AdminStatistics() {
     },
     {
       title: 'Collections',
-      icon: 'package',
+      icon: 'package' as const,
       items: [
         { label: 'Micronix Plates', value: stats.collections.micronixPlates },
         { label: 'Cryovial Boxes', value: stats.collections.cryovialBoxes },
@@ -152,7 +162,7 @@ export default function AdminStatistics() {
     },
     {
       title: 'Reference Data',
-      icon: 'settings',
+      icon: 'settings' as const,
       items: [
         { label: 'Specimen Types', value: stats.referenceData.specimenTypes },
         { label: 'Storage Types', value: stats.referenceData.storageTypes },
@@ -163,56 +173,62 @@ export default function AdminStatistics() {
     },
     {
       title: 'Storage',
-      icon: 'mapPin',
+      icon: 'mapPin' as const,
       items: [{ label: 'Locations', value: stats.locations.total }],
     },
   ]
 
   return (
-    <div className="p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">System Statistics</h1>
-          <p className="text-gray-600 mt-1">Comprehensive overview of your SampleDB system</p>
-        </div>
+    <div className="admin-page">
+      <div className="relative z-10 p-6">
+        <div className="max-w-7xl mx-auto">
+          <header className="mb-6">
+            <h1 className="text-2xl font-bold">System Statistics</h1>
+            <p className="text-[rgb(var(--app-text-muted))] mt-1">Comprehensive overview of your SampleDB system</p>
+          </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {sections.map((section, sectionIndex) => {
-            return (
-              <div key={sectionIndex} className="bg-white rounded-lg shadow p-6 border border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {sections.map((section, sectionIndex) => (
+              <div key={sectionIndex} className="admin-card p-6">
                 <div className="flex items-center mb-4">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    {renderIcon(section.icon, 'h-5 w-5 text-blue-600')}
+                  <div className={iconBgClass}>
+                    {renderIcon(section.icon, 'h-5 w-5')}
                   </div>
-                  <h2 className="text-lg font-semibold text-gray-900 ml-3">{section.title}</h2>
+                  <h2 className="admin-section-title ml-3">{section.title}</h2>
                 </div>
                 <div className="space-y-3">
                   {section.items.map((item, itemIndex) => (
-                    <div key={itemIndex} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                      <span className="text-sm text-gray-600">{item.label}</span>
-                      <span className="text-lg font-bold text-gray-900">{item.value.toLocaleString()}</span>
+                    <div
+                      key={itemIndex}
+                      className="flex items-center justify-between py-2 border-b border-[rgb(var(--app-border))] last:border-0"
+                    >
+                      <span className="text-sm text-[rgb(var(--app-text-muted))]">{item.label}</span>
+                      <span className="text-lg font-bold" style={{ color: 'rgb(var(--app-text))' }}>{item.value.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
               </div>
-            )
-          })}
-        </div>
-
-        {/* Users by Role */}
-        {stats.users.byRole && Object.keys(stats.users.byRole).length > 0 && (
-          <div className="mt-6 bg-white rounded-lg shadow p-6 border border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Users by Role</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {Object.entries(stats.users.byRole).map(([role, count]) => (
-                <div key={role} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium text-gray-700 capitalize">{role}</span>
-                  <span className="text-2xl font-bold text-gray-900">{count}</span>
-                </div>
-              ))}
-            </div>
+            ))}
           </div>
-        )}
+
+          {/* Users by Role */}
+          {Object.keys(stats.users.byRole).length > 0 && (
+            <div className="mt-6 admin-card p-6">
+              <h2 className="admin-section-title mb-4">Users by Role</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {Object.entries(stats.users.byRole).map(([role, count]) => (
+                  <div
+                    key={role}
+                    className="flex items-center justify-between p-4 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-surface))]"
+                  >
+                    <span className="text-sm font-medium capitalize" style={{ color: 'rgb(var(--app-text))' }}>{role}</span>
+                    <span className="text-2xl font-bold" style={{ color: 'rgb(var(--app-text))' }}>{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

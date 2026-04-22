@@ -13,7 +13,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
   const [expandedSpecimens, setExpandedSpecimens] = useState<Map<number, boolean>>(new Map())
   if (specimens.length === 0) {
     return (
-      <div className="text-center py-4 text-gray-500 text-sm">
+      <div className="simple-timeline text-center py-4 dashboard-stat-muted text-sm">
         No collection events
       </div>
     )
@@ -42,7 +42,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
   const groupedByDate = sortedSpecimens.reduce((groups, specimen) => {
     const dateKey = specimen.collectionDate || specimen.created
     const dateOnly = new Date(dateKey).toDateString() // Gets date without time
-    
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- dynamic key may be missing
     if (!groups[dateOnly]) {
       groups[dateOnly] = []
     }
@@ -162,7 +162,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
   }
 
   return (
-    <div>
+    <div className="simple-timeline">
       <div className="space-y-3">
         {Object.entries(groupedByDate).map(([dateKey, dateSpecimens]) => {
           const displayDate = dateSpecimens[0].collectionDate || dateSpecimens[0].created
@@ -171,7 +171,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
             <div key={dateKey} className="space-y-2">
               {/* Date header */}
               <div className="px-1.5">
-                <span className="text-xs font-medium text-gray-600">
+                <span className="text-xs font-medium text-app-text-muted">
                   {dateSpecimens[0].collectionDate ? 'Collected' : 'Created'}: {formatDateHeader(displayDate)}
                 </span>
               </div>
@@ -182,7 +182,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                 
                 return (
                   <div key={specimen.id} className="group relative">
-                    <div className="hover:bg-gray-50 rounded-lg transition-colors p-1.5">
+                    <div className="hover:bg-app-surface rounded-lg transition-colors p-1.5">
                       <Link
                         to={`/specimens/${specimen.id}`}
                         className="block"
@@ -190,8 +190,8 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                         <div className="flex items-center gap-2">
                           {/* Specimen icon */}
                           <div className="flex-shrink-0">
-                            <div className="w-8 h-8 rounded-full bg-white border-2 border-blue-500 flex items-center justify-center">
-                              <div className="text-blue-600">
+                            <div className="w-8 h-8 rounded-full bg-app-card border-2 border-app-accent flex items-center justify-center">
+                              <div className="text-app-accent">
                                 {getSpecimenTypeIcon(specimen.specimenTypeName)}
                               </div>
                             </div>
@@ -202,36 +202,36 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                             {/* Top row: Type and Counts */}
                             <div className="flex items-center gap-3 flex-wrap">
                               <div className="flex items-center gap-2 min-w-0">
-                                <p className="font-medium text-gray-900 text-sm whitespace-nowrap">
+                                <p className="font-medium dashboard-stat-value text-sm whitespace-nowrap">
                                   {specimen.specimenTypeName}
                                 </p>
                               </div>
                           
-                              <div className="flex items-center text-xs text-gray-600 gap-1">
-                                <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <div className="flex items-center text-xs dashboard-stat-muted gap-1">
+                                <svg className="w-3 h-3 text-app-text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                                 </svg>
                                 <span className="whitespace-nowrap">
-                                  <strong>{specimen.containerCount}</strong> {specimen.containerCount === 1 ? 'container' : 'containers'}
+                                  <strong className="dashboard-stat-value">{specimen.containerCount}</strong> {specimen.containerCount === 1 ? 'container' : 'containers'}
                                   {unitsLabel && (
-                                    <span className="ml-1 text-gray-500">
+                                    <span className="ml-1 dashboard-stat-muted">
                                       ({unitsLabel} available)
                                     </span>
                                   )}
                                 </span>
                               </div>
 
-                              {specimen.containerCount > 0 && specimen.containerBreakdown && Object.keys(specimen.containerBreakdown).length > 0 && (
+                              {specimen.containerCount > 0 && Object.keys(specimen.containerBreakdown).length > 0 && (
                                 <>
-                                  <span className="text-gray-300">•</span>
-                                  <div className="flex items-center text-xs text-gray-600 gap-1.5">
+                                  <span className="text-app-border">•</span>
+                                  <div className="flex items-center text-xs dashboard-stat-muted gap-1.5">
                                     {Object.entries(specimen.containerBreakdown).map(([type, count]) => (
                                       <div key={type} className="flex items-center gap-0.5" title={getContainerTypeName(type)}>
-                                        <span className="text-gray-500">{getContainerTypeIcon(type)}</span>
-                                        <span className="text-gray-500">{count}</span>
+                                        <span className="dashboard-stat-muted">{getContainerTypeIcon(type)}</span>
+                                        <span className="dashboard-stat-value">{count}</span>
                                       </div>
                                     ))}
-                                    <span className="text-gray-500 ml-0.5 capitalize">
+                                    <span className="dashboard-stat-muted ml-0.5 capitalize">
                                       ({formatContainerBreakdown(specimen.containerBreakdown)})
                                     </span>
                                   </div>
@@ -241,7 +241,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                           </div>
 
                           <svg
-                            className="h-3.5 w-3.5 text-gray-400 flex-shrink-0 absolute right-1.5 top-1/2 -translate-y-1/2"
+                            className="h-3.5 w-3.5 text-app-text-muted flex-shrink-0 absolute right-1.5 top-1/2 -translate-y-1/2"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -268,7 +268,7 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                   e.stopPropagation()
                                   toggleSpecimenExpanded(specimen.id, specimen.containers?.length || 0)
                                 }}
-                                className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 transition-colors"
+                                className="flex items-center gap-1.5 text-xs dashboard-stat-muted hover:opacity-90 transition-colors"
                                 aria-expanded={isSpecimenExpanded(specimen.id, specimen.containers.length)}
                                 aria-label={`${isSpecimenExpanded(specimen.id, specimen.containers.length) ? 'Collapse' : 'Expand'} container locations`}
                               >
@@ -294,7 +294,8 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                         params.set('position', c.position)
                                       }
                                       // For paper containers without position, use container ID as fallback
-                                      if (c.type === 'paper' && !c.position && c.id) {
+                                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- id may be omitted for paper
+                                      if (c.type === 'paper' && !c.position && c.id !== undefined) {
                                         params.set('containerId', String(c.id))
                                       }
                                       const queryString = params.toString()
@@ -312,12 +313,12 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                             navigate(finalUrl)
                                           }
                                         }}
-                                        className="px-1.5 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-[10px] font-mono text-gray-600 border border-gray-100 transition-colors cursor-pointer"
+                                        className="px-1.5 py-0.5 bg-app-surface hover:bg-app-surface/80 rounded text-[10px] font-mono text-app-text-muted border border-app-border transition-colors cursor-pointer"
                                         title={`${getContainerTypeName(c.type)} in ${c.collectionName}${c.position ? ` at ${c.position}` : ''}${c.locationPath ? ` (${c.locationPath})` : ''}`}
                                       >
                                         {c.collectionName}{c.position ? `:${c.position}` : ''}
                                         {c.locationPath && (
-                                          <span className="ml-1 text-gray-400 font-sans">
+                                          <span className="ml-1 text-app-text-muted font-sans">
                                             ({c.locationPath})
                                           </span>
                                         )}
@@ -340,7 +341,8 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                     params.set('position', c.position)
                                   }
                                   // For paper containers without position, use container ID as fallback
-                                  if (c.type === 'paper' && !c.position && c.id) {
+                                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- id may be omitted for paper
+                                  if (c.type === 'paper' && !c.position && c.id !== undefined) {
                                     params.set('containerId', String(c.id))
                                   }
                                   const queryString = params.toString()
@@ -358,16 +360,29 @@ export default function SimpleTimeline({ specimens }: SimpleTimelineProps) {
                                         navigate(finalUrl)
                                       }
                                     }}
-                                    className="px-1.5 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-[10px] font-mono text-gray-600 border border-gray-100 transition-colors cursor-pointer"
+                                    className="px-1.5 py-0.5 bg-app-surface hover:bg-app-surface/80 rounded text-[10px] font-mono text-app-text-muted border border-app-border transition-colors cursor-pointer"
                                     title={`${getContainerTypeName(c.type)} in ${c.collectionName}${c.position ? ` at ${c.position}` : ''}${c.locationPath ? ` (${c.locationPath})` : ''}`}
                                   >
                                     {c.collectionName}{c.position ? `:${c.position}` : ''}
                                     {c.locationPath && (
-                                      <span className="ml-1 text-gray-400 font-sans">
+                                      <span className="ml-1 text-app-text-muted font-sans">
                                         ({c.locationPath})
                                       </span>
                                     )}
                                   </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                          {specimen.containers.some(c => c.comment) && (
+                            <div className="mt-1.5 text-xs dashboard-stat-muted space-y-0.5">
+                              {specimen.containers.filter(c => c.comment).map((c, i) => {
+                                const label = [c.collectionName, c.position].filter(Boolean).join(' ')
+                                const note = c.comment!.length > 60 ? `${c.comment!.slice(0, 57)}…` : c.comment
+                                return (
+                                  <div key={i} title={c.comment!}>
+                                    <span className="font-medium">Notes</span>{label ? ` (${label}): ` : ': '}{note}
+                                  </div>
                                 )
                               })}
                             </div>

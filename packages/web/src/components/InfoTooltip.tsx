@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   useFloating,
   autoUpdate,
@@ -48,13 +49,13 @@ export default function InfoTooltip({ text, className = '' }: InfoTooltipProps) 
   // Determine arrow direction based on placement
   const getArrowBorderClass = () => {
     if (placement.startsWith('top')) {
-      return 'border-t-gray-200'
+      return 'border-t-app-border'
     } else if (placement.startsWith('bottom')) {
-      return 'border-b-gray-200'
+      return 'border-b-app-border'
     } else if (placement.startsWith('left')) {
-      return 'border-l-gray-200'
+      return 'border-l-app-border'
     } else {
-      return 'border-r-gray-200'
+      return 'border-r-app-border'
     }
   }
 
@@ -62,7 +63,7 @@ export default function InfoTooltip({ text, className = '' }: InfoTooltipProps) 
     <span className={`relative inline-block ${className}`}>
       <span
         ref={refs.setReference}
-        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 cursor-help"
+        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-app-accent-muted text-app-accent hover:bg-app-accent-muted/80 focus:outline-none focus:ring-2 focus:ring-app-accent focus:ring-offset-1 cursor-help"
         onMouseEnter={() => setIsVisible(true)}
         onMouseLeave={() => setIsVisible(false)}
         onFocus={() => setIsVisible(true)}
@@ -84,25 +85,27 @@ export default function InfoTooltip({ text, className = '' }: InfoTooltipProps) 
           />
         </svg>
       </span>
-      {isVisible && (
-        <span
-          ref={refs.setFloating}
-          style={{
-            ...floatingStyles,
-            width: 'max-content',
-            maxWidth: '32rem',
-            minWidth: '20rem',
-          }}
-          className="z-50 p-3 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg shadow-lg pointer-events-none block"
-        >
+      {isVisible &&
+        createPortal(
           <span
-            ref={arrowRef}
-            style={arrowStyle}
-            className={`w-0 h-0 border-4 border-transparent ${getArrowBorderClass()}`}
-          />
-          <span className="relative z-10 block">{text}</span>
-        </span>
-      )}
+            ref={refs.setFloating}
+            style={{
+              ...floatingStyles,
+              width: 'max-content',
+              maxWidth: '32rem',
+              minWidth: '20rem',
+            }}
+            className="z-[10060] p-3 text-sm text-app-text bg-app-card border border-app-border rounded-lg shadow-lg pointer-events-none block"
+          >
+            <span
+              ref={arrowRef}
+              style={arrowStyle}
+              className={`w-0 h-0 border-4 border-transparent ${getArrowBorderClass()}`}
+            />
+            <span className="relative z-10 block">{text}</span>
+          </span>,
+          document.body
+        )}
     </span>
   )
 }

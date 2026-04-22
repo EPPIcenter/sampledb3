@@ -25,14 +25,18 @@ const mockUser = {
 let mockUserValue = mockUser
 let mockLoadingValue = false
 
-vi.mock('../../contexts/UserContext', () => ({
-  useUser: () => ({
-    user: mockUserValue,
-    refreshUser: mockRefreshUser,
-    loading: mockLoadingValue,
-    error: null,
-  }),
-}))
+vi.mock('../../contexts/UserContext', async () => {
+  const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')
+  return {
+    ...actual,
+    useUser: () => ({
+      user: mockUserValue,
+      refreshUser: mockRefreshUser,
+      loading: mockLoadingValue,
+      error: null,
+    }),
+  }
+})
 
 import { authApi } from '../../lib/api'
 
@@ -42,8 +46,8 @@ describe('Profile Page', () => {
   })
 
   describe('Profile Page Rendering', () => {
-    it('renders profile form with user data', () => {
-      render(<Profile />)
+    it('renders profile form with user data', async () => {
+      await render(<Profile />)
 
       // Use getElementById for exact matching
       expect(screen.getByLabelText('Name')).toHaveValue('Test User')
@@ -51,21 +55,21 @@ describe('Profile Page', () => {
       expect(screen.getByLabelText(/username/i)).toHaveValue('testuser')
     })
 
-    it('renders password change form', () => {
-      render(<Profile />)
+    it('renders password change form', async () => {
+      await render(<Profile />)
 
       expect(screen.getByLabelText(/^current password$/i)).toBeInTheDocument()
       expect(screen.getByLabelText(/^new password$/i)).toBeInTheDocument()
       expect(screen.getByLabelText(/^confirm new password$/i)).toBeInTheDocument()
     })
 
-    it('shows loading state when user is not loaded', () => {
+    it('shows loading state when user is not loaded', async () => {
       const originalUser = mockUserValue
       const originalLoading = mockLoadingValue
       mockUserValue = null as any
       mockLoadingValue = true
 
-      render(<Profile />)
+      await render(<Profile />)
       expect(screen.getByText(/loading profile/i)).toBeInTheDocument()
 
       // Restore
@@ -73,8 +77,8 @@ describe('Profile Page', () => {
       mockLoadingValue = originalLoading
     })
 
-    it('displays current user information', () => {
-      render(<Profile />)
+    it('displays current user information', async () => {
+      await render(<Profile />)
 
       expect(screen.getByText('My Profile')).toBeInTheDocument()
       expect(screen.getByText(/manage your account information/i)).toBeInTheDocument()
@@ -84,7 +88,7 @@ describe('Profile Page', () => {
   describe('Profile Update Form', () => {
     it('updates name field', async () => {
       const user = userEvent.setup()
-      render(<Profile />)
+      await render(<Profile />)
 
       const nameInput = screen.getByLabelText('Name')
       await user.clear(nameInput)
@@ -95,7 +99,7 @@ describe('Profile Page', () => {
 
     it('updates email field', async () => {
       const user = userEvent.setup()
-      render(<Profile />)
+      await render(<Profile />)
 
       const emailInput = screen.getByLabelText('Email')
       await user.clear(emailInput)
@@ -106,7 +110,7 @@ describe('Profile Page', () => {
 
     it('updates username field', async () => {
       const user = userEvent.setup()
-      render(<Profile />)
+      await render(<Profile />)
 
       const usernameInput = screen.getByLabelText(/username/i)
       await user.clear(usernameInput)
@@ -125,7 +129,7 @@ describe('Profile Page', () => {
         },
       })
 
-      render(<Profile />)
+      await render(<Profile />)
 
       const emailInput = screen.getByLabelText('Email')
       await user.clear(emailInput)
@@ -150,7 +154,7 @@ describe('Profile Page', () => {
         },
       } as any)
 
-      render(<Profile />)
+      await render(<Profile />)
 
       const nameInput = screen.getByLabelText('Name')
       await user.clear(nameInput)
@@ -170,7 +174,7 @@ describe('Profile Page', () => {
         data: { user: mockUser },
       } as any)
 
-      render(<Profile />)
+      await render(<Profile />)
 
       const nameInput = screen.getByLabelText('Name')
       await user.clear(nameInput)
@@ -192,7 +196,7 @@ describe('Profile Page', () => {
         data: { user: mockUser },
       } as any)
 
-      render(<Profile />)
+      await render(<Profile />)
 
       const nameInput = screen.getByLabelText('Name')
       await user.clear(nameInput)
@@ -212,7 +216,7 @@ describe('Profile Page', () => {
         data: { user: { ...mockUser, username: undefined } },
       } as any)
 
-      render(<Profile />)
+      await render(<Profile />)
 
       const usernameInput = screen.getByLabelText(/username/i)
       await user.clear(usernameInput)
@@ -235,7 +239,7 @@ describe('Profile Page', () => {
       })
       vi.mocked(authApi.updateProfile).mockReturnValueOnce(updatePromise as any)
 
-      render(<Profile />)
+      await render(<Profile />)
 
       const nameInput = screen.getByLabelText('Name')
       await user.clear(nameInput)
@@ -257,7 +261,7 @@ describe('Profile Page', () => {
 
     it('shows error when no changes to save', async () => {
       const user = userEvent.setup()
-      render(<Profile />)
+      await render(<Profile />)
 
       const submitButton = screen.getByRole('button', { name: /save changes/i })
       await user.click(submitButton)
@@ -271,7 +275,7 @@ describe('Profile Page', () => {
   describe('Password Change Form', () => {
     it('updates current password field', async () => {
       const user = userEvent.setup()
-      render(<Profile />)
+      await render(<Profile />)
 
       const currentPasswordInput = screen.getByLabelText(/^current password$/i)
       await user.type(currentPasswordInput, 'currentpass123')
@@ -281,7 +285,7 @@ describe('Profile Page', () => {
 
     it('updates new password field', async () => {
       const user = userEvent.setup()
-      render(<Profile />)
+      await render(<Profile />)
 
       const newPasswordInput = screen.getByLabelText(/^new password$/i)
       await user.type(newPasswordInput, 'newpass123')
@@ -291,7 +295,7 @@ describe('Profile Page', () => {
 
     it('updates confirm password field', async () => {
       const user = userEvent.setup()
-      render(<Profile />)
+      await render(<Profile />)
 
       const confirmPasswordInput = screen.getByLabelText(/^confirm new password$/i)
       await user.type(confirmPasswordInput, 'newpass123')
@@ -301,7 +305,7 @@ describe('Profile Page', () => {
 
     it('shows/hides password visibility toggle', async () => {
       const user = userEvent.setup()
-      render(<Profile />)
+      await render(<Profile />)
 
       const currentPasswordInput = screen.getByLabelText(/current password/i) as HTMLInputElement
       expect(currentPasswordInput.type).toBe('password')
@@ -320,7 +324,7 @@ describe('Profile Page', () => {
 
     it('validates password match before submit', async () => {
       const user = userEvent.setup()
-      render(<Profile />)
+      await render(<Profile />)
 
       const currentPasswordInput = screen.getByLabelText(/^current password$/i)
       const newPasswordInput = screen.getByLabelText(/^new password$/i)
@@ -342,7 +346,7 @@ describe('Profile Page', () => {
 
     it('shows error on mismatch', async () => {
       const user = userEvent.setup()
-      render(<Profile />)
+      await render(<Profile />)
 
       const currentPasswordInput = screen.getByLabelText(/^current password$/i)
       const newPasswordInput = screen.getByLabelText(/^new password$/i)
@@ -370,7 +374,7 @@ describe('Profile Page', () => {
         },
       })
 
-      render(<Profile />)
+      await render(<Profile />)
 
       const currentPasswordInput = screen.getByLabelText(/^current password$/i)
       const newPasswordInput = screen.getByLabelText(/^new password$/i)
@@ -394,7 +398,7 @@ describe('Profile Page', () => {
         data: { message: 'Password changed successfully' },
       } as any)
 
-      render(<Profile />)
+      await render(<Profile />)
 
       const currentPasswordInput = screen.getByLabelText(/^current password$/i)
       const newPasswordInput = screen.getByLabelText(/^new password$/i)
@@ -418,7 +422,7 @@ describe('Profile Page', () => {
         data: { message: 'Password changed successfully' },
       } as any)
 
-      render(<Profile />)
+      await render(<Profile />)
 
       const currentPasswordInput = screen.getByLabelText(/^current password$/i)
       const newPasswordInput = screen.getByLabelText(/^new password$/i)
@@ -444,7 +448,7 @@ describe('Profile Page', () => {
         data: { message: 'Password changed successfully' },
       } as any)
 
-      render(<Profile />)
+      await render(<Profile />)
 
       const currentPasswordInput = screen.getByLabelText(/^current password$/i)
       const newPasswordInput = screen.getByLabelText(/^new password$/i)

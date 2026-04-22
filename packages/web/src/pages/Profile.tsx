@@ -1,38 +1,24 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { authApi } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
+import '../styles/profile.css'
 
-export default function Profile() {
-  const { user, refreshUser } = useUser()
+function ProfileFormInner({ user }: { user: NonNullable<ReturnType<typeof useUser>['user']> }) {
+  const { refreshUser } = useUser()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-
-  // Profile form state
   const [profileForm, setProfileForm] = useState({
-    name: '',
-    email: '',
-    username: '',
+    name: user.name || '',
+    email: user.email || '',
+    username: user.username || '',
   })
-
-  // Password form state
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   })
   const [showPasswords, setShowPasswords] = useState(false)
-
-  // Initialize form with user data
-  useEffect(() => {
-    if (user) {
-      setProfileForm({
-        name: user.name || '',
-        email: user.email || '',
-        username: user.username || '',
-      })
-    }
-  }, [user])
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -43,13 +29,13 @@ export default function Profile() {
     try {
       const updateData: { name?: string; email?: string; username?: string | null } = {}
       
-      if (profileForm.name !== user?.name) {
+      if (profileForm.name !== user.name) {
         updateData.name = profileForm.name
       }
-      if (profileForm.email !== user?.email) {
+      if (profileForm.email !== user.email) {
         updateData.email = profileForm.email
       }
-      if (profileForm.username !== (user?.username || '')) {
+      if (profileForm.username !== (user.username || '')) {
         updateData.username = profileForm.username || null
       }
 
@@ -63,8 +49,12 @@ export default function Profile() {
       setSuccess('Profile updated successfully')
       setTimeout(() => setSuccess(null), 3000)
       await refreshUser()
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to update profile')
+    } catch (err: unknown) {
+      const message =
+        typeof err === 'object' && err !== null && 'response' in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : null
+      setError(message ?? 'Failed to update profile')
     } finally {
       setLoading(false)
     }
@@ -94,57 +84,52 @@ export default function Profile() {
         newPassword: '',
         confirmPassword: '',
       })
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to change password')
+    } catch (err: unknown) {
+      const message =
+        typeof err === 'object' && err !== null && 'response' in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : null
+      setError(message ?? 'Failed to change password')
     } finally {
       setLoading(false)
     }
   }
 
-  if (!user) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white shadow rounded-lg p-6">
-          <p className="text-gray-500">Loading profile...</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Manage your account information and security settings
-        </p>
-      </div>
-
-      {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
-          {error}
+    <div className="profile-page">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+        <div className="mb-6 profile-reveal profile-reveal-1">
+          <h1 className="text-3xl font-bold dashboard-stat-value">My Profile</h1>
+          <p className="mt-1 text-sm dashboard-stat-muted profile-description">
+            Manage your account information and security settings
+          </p>
         </div>
-      )}
 
-      {success && (
-        <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md text-sm">
-          {success}
-        </div>
-      )}
-
-      <div className="space-y-6">
-        {/* Profile Information Form */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-medium text-gray-900">Profile Information</h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Update your personal information
-            </p>
+        {error && (
+          <div className="mb-6 profile-alert-error px-4 py-3 rounded-md text-sm profile-reveal profile-reveal-2">
+            {error}
           </div>
+        )}
+
+        {success && (
+          <div className="mb-6 profile-alert-success px-4 py-3 rounded-md text-sm profile-reveal profile-reveal-2">
+            {success}
+          </div>
+        )}
+
+        <div className="space-y-6">
+          {/* Profile Information Form */}
+          <div className="profile-card profile-reveal profile-reveal-3">
+            <div className="px-6 py-4 border-b border-app-border">
+              <h2 className="text-lg font-medium dashboard-stat-value">Profile Information</h2>
+              <p className="mt-1 text-sm dashboard-stat-muted profile-description">
+                Update your personal information
+              </p>
+            </div>
           <form onSubmit={handleProfileSubmit} className="px-6 py-4">
             <div className="space-y-4">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="name" className="block text-sm font-medium text-app-text mb-2">
                   Name
                 </label>
                 <input
@@ -153,12 +138,12 @@ export default function Profile() {
                   required
                   value={profileForm.name}
                   onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="form-input"
                 />
               </div>
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="email" className="block text-sm font-medium text-app-text mb-2">
                   Email
                 </label>
                 <input
@@ -167,13 +152,13 @@ export default function Profile() {
                   required
                   value={profileForm.email}
                   onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="form-input"
                 />
               </div>
 
               <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-                  Username <span className="text-gray-500 text-xs">(optional)</span>
+                <label htmlFor="username" className="block text-sm font-medium text-app-text mb-2">
+                  Username <span className="dashboard-stat-muted text-xs">(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -181,9 +166,9 @@ export default function Profile() {
                   value={profileForm.username}
                   onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
                   placeholder="Leave empty to remove username"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="form-input"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs dashboard-stat-muted">
                   You can use your username or email to log in
                 </p>
               </div>
@@ -193,7 +178,7 @@ export default function Profile() {
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-app-accent hover:bg-app-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-app-accent disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Saving...' : 'Save Changes'}
               </button>
@@ -202,32 +187,32 @@ export default function Profile() {
         </div>
 
         {/* Change Password Form */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-medium text-gray-900">Change Password</h2>
-            <p className="mt-1 text-sm text-gray-500">
+        <div className="profile-card profile-reveal profile-reveal-4">
+          <div className="px-6 py-4 border-b border-app-border">
+            <h2 className="text-lg font-medium dashboard-stat-value">Change Password</h2>
+            <p className="mt-1 text-sm dashboard-stat-muted profile-description">
               Update your password to keep your account secure
             </p>
           </div>
           <form onSubmit={handlePasswordSubmit} className="px-6 py-4">
             <div className="space-y-4">
               <div>
-                <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="currentPassword" className="block text-sm font-medium text-app-text mb-2">
                   Current Password
                 </label>
-                <div className="mt-1 relative">
+                <div className="relative">
                   <input
                     type={showPasswords ? 'text' : 'password'}
                     id="currentPassword"
                     required
                     value={passwordForm.currentPassword}
                     onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm pr-10"
+                    className="form-input pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPasswords(!showPasswords)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-app-text-muted hover:text-app-text"
                   >
                     {showPasswords ? (
                       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -244,7 +229,7 @@ export default function Profile() {
               </div>
 
               <div>
-                <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="newPassword" className="block text-sm font-medium text-app-text mb-2">
                   New Password
                 </label>
                 <input
@@ -253,12 +238,12 @@ export default function Profile() {
                   required
                   value={passwordForm.newPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="form-input"
                 />
               </div>
 
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-app-text mb-2">
                   Confirm New Password
                 </label>
                 <input
@@ -267,7 +252,7 @@ export default function Profile() {
                   required
                   value={passwordForm.confirmPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="form-input"
                 />
               </div>
             </div>
@@ -276,14 +261,31 @@ export default function Profile() {
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-app-accent hover:bg-app-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-app-accent disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Changing Password...' : 'Change Password'}
               </button>
             </div>
           </form>
         </div>
+        </div>
       </div>
     </div>
   )
+}
+
+export default function Profile() {
+  const { user } = useUser()
+  if (!user) {
+    return (
+      <div className="profile-page">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+          <div className="profile-card p-6">
+            <p className="dashboard-stat-muted profile-description">Loading profile...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  return <ProfileFormInner key={user.id} user={user} />
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams, Navigate } from 'react-router-dom'
 import BatchInfoStep from '../components/wizards/BatchInfoStep'
 import SpecimenTypesStep from '../components/wizards/SpecimenTypesStep'
 import CSVUploadStep from '../components/wizards/CSVUploadStep'
@@ -7,6 +7,12 @@ import ContainerConfigurationStep from '../components/wizards/ContainerConfigura
 import ReviewStep from '../components/wizards/ReviewStep'
 import { controlsApi, specimenTypesApi } from '../lib/api'
 import type { ControlDefinition, SpecimenType } from '../lib/api'
+import { useUser } from '../contexts/UserContext'
+import { getCompositionKey } from '../lib/composition-key'
+import '../styles/blood-controls.css'
+
+/** Strains for composition (used for multi-batch CSV flow). */
+export type CompositionStrains = Array<{ id: number; percentage?: number }>
 
 export type WizardStep = 'batch-info' | 'specimen-types' | 'csv-upload' | 'containers' | 'review'
 
@@ -48,8 +54,16 @@ export interface CSVFileData {
     barcode?: string
     quantity?: number
     unit_symbol?: string
+    /** Optional density; when present, rows are grouped by density for batch creation */
+    density?: number
+    /** For paper (DBS): sheet name for this row. Multiple rows can share a sheet; sheets go into the file's collection (box/bag). */
+    sheet_name?: string
   }>
   containerType?: 'paper' | 'cryovial_tube' | 'micronix_tube'
+  /** True when container type was fully inferred (sheet_name → paper). When false but containerCategoryInferred === 'tube', user picks cryovial vs micronix. */
+  containerTypeInferred?: boolean
+  /** When 'tube', template had position column; user must choose cryovial or micronix. */
+  containerCategoryInferred?: 'paper' | 'tube'
   collectionId?: number
   collectionName?: string
   collectionLocationId?: number
@@ -58,15 +72,53 @@ export interface CSVFileData {
   errors: Array<{ row: number; field?: string; error: string }>
 }
 
+export function canProceedToReview(
+  specimenTypes: SpecimenTypeConfig[],
+  csvFiles: CSVFileData[],
+): boolean {
+  const hasManual = specimenTypes.length > 0
+  const hasCsv = csvFiles.length > 0
+  if (!hasManual && !hasCsv) return false
+  const manualOk = !hasManual || specimenTypes.every(st => st.containers.length > 0)
+  const csvOk = !hasCsv || csvFiles.every(f => {
+    const collectionOk =
+      f.collectionId != null ||
+      (!!f.collectionName && f.collectionLocationId != null && !!f.collectionType)
+    const paperNeedsSheet = f.containerType === 'paper'
+      ? (!!(f.sheetName?.trim()) || (f.rows.length > 0 && f.rows.every(r => !!(r.sheet_name?.trim()))))
+      : true
+    return collectionOk && paperNeedsSheet
+  })
+  return manualOk && csvOk
+}
+
 export default function ControlBatchWizard() {
   const navigate = useNavigate()
-  const { id: batchId } = useParams<{ id?: string }>()
+  const { canWrite } = useUser()
+  const { id: batchId, definitionId, compositionKey: compositionKeyParam } = useParams<{
+    id?: string
+    definitionId?: string
+    compositionKey?: string
+  }>()
   const [searchParams, setSearchParams] = useSearchParams()
-  
+
+  if (!canWrite) {
+    return <Navigate to="/blood-controls" replace />
+  }
+
+  const compositionKey = compositionKeyParam ? decodeURIComponent(compositionKeyParam) : null
+  // Composition route is only used for "add batches from CSV"; path alone defines the short flow.
+  const isCompositionCsvFlow = !!compositionKey
+
   const isAddMode = !!batchId
-  // In add mode, skip batch-info step and go directly to specimen-types
-  const defaultStep = isAddMode ? 'specimen-types' : 'batch-info'
-  const currentStep = (searchParams.get('step') as WizardStep) || defaultStep
+  const isCreateFromDefinition = !!definitionId && !isCompositionCsvFlow
+  // Composition CSV flow: start at csv-upload. Add mode: specimen-types. From definition: batch-info.
+  const defaultStep = isCompositionCsvFlow
+    ? 'csv-upload'
+    : isAddMode
+      ? 'specimen-types'
+      : 'batch-info'
+  const currentStep = (searchParams.get('step') as WizardStep | null) ?? defaultStep
 
   const [batchInfo, setBatchInfo] = useState<BatchInfo>({
     controlDefinitionId: null,
@@ -75,6 +127,8 @@ export default function ControlBatchWizard() {
     productionDate: new Date().toISOString().split('T')[0],
   })
   
+  const [compositionStrains, setCompositionStrains] = useState<CompositionStrains | null>(null)
+  const [compositionDefinitions, setCompositionDefinitions] = useState<ControlDefinition[] | null>(null)
   const [specimenTypes, setSpecimenTypes] = useState<SpecimenTypeConfig[]>([])
   const [csvFiles, setCsvFiles] = useState<CSVFileData[]>([])
   const [availableSpecimenTypes, setAvailableSpecimenTypes] = useState<SpecimenType[]>([])
@@ -85,8 +139,12 @@ export default function ControlBatchWizard() {
     loadSpecimenTypes()
     if (isAddMode && batchId) {
       loadExistingBatch(parseInt(batchId))
+    } else if (isCompositionCsvFlow && compositionKey) {
+      loadCompositionStrains(compositionKey)
+    } else if (isCreateFromDefinition && definitionId) {
+      loadDefinitionAndBatchInfo(parseInt(definitionId))
     }
-  }, [batchId, isAddMode])
+  }, [batchId, isAddMode, definitionId, isCreateFromDefinition, isCompositionCsvFlow, compositionKey])
 
   const loadSpecimenTypes = async () => {
     try {
@@ -118,6 +176,70 @@ export default function ControlBatchWizard() {
     }
   }
 
+  const loadCompositionStrains = async (key: string) => {
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await controlsApi.list()
+      const all = (res.data.controls) as ControlDefinition[]
+      const defs = all.filter((def) => {
+        const defKey = getCompositionKey((def.strains ?? []).map((s) => ({ id: s.id, percentage: s.percentage })))
+        return defKey === key
+      })
+      setCompositionDefinitions(defs.length > 0 ? defs.sort((a, b) => (a.targetDensity ?? 0) - (b.targetDensity ?? 0)) : null)
+      if (defs.length > 0 && defs[0].strains?.length) {
+        setCompositionStrains(
+          defs[0].strains.map((s) => ({ id: s.id, percentage: s.percentage }))
+        )
+      } else {
+        setError('Composition not found or has no strain data')
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to load composition')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadDefinitionAndBatchInfo = async (defId: number) => {
+    try {
+      setLoading(true)
+      setError(null)
+      const today = new Date().toISOString().split('T')[0]
+      const [summaryResponse, nameResponse] = await Promise.all([
+        controlsApi.getDefinitionSummary(defId),
+        controlsApi.suggestBatchName(defId, today),
+      ])
+      const { control, composition } = summaryResponse.data
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- API may omit control
+      if (!control) {
+        setError('Control definition not found')
+        return
+      }
+      const controlWithComposition = {
+        ...control,
+        strains: composition?.strains,
+      }
+      setBatchInfo({
+        controlDefinitionId: control.id,
+        controlDefinition: controlWithComposition,
+        name: nameResponse.data.name,
+        productionDate: today,
+      })
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to load control definition')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getCancelTarget = () => {
+    if (isAddMode && batchId) return `/blood-controls/batches/${batchId}`
+    if (isCompositionCsvFlow && compositionKey) return `/blood-controls/compositions/${encodeURIComponent(compositionKey)}`
+    if (isCreateFromDefinition && definitionId) return `/blood-controls/${definitionId}`
+    return '/blood-controls'
+  }
+
   const setStep = (step: WizardStep) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
@@ -129,135 +251,200 @@ export default function ControlBatchWizard() {
   const canProceedToStep = (step: WizardStep): boolean => {
     switch (step) {
       case 'batch-info':
-        return !isAddMode // Only accessible when creating new batch
+        return !isAddMode // Creating new batch (from definition or standalone)
       case 'specimen-types':
       case 'csv-upload':
-        return isAddMode || !!batchInfo.controlDefinitionId
+        return isAddMode || !!batchInfo.controlDefinitionId || isCompositionCsvFlow
       case 'containers':
         return specimenTypes.length > 0 || csvFiles.length > 0
       case 'review':
-        return (specimenTypes.length > 0 || csvFiles.length > 0) &&
-               (specimenTypes.every(st => st.containers.length > 0) || 
-                csvFiles.every(f => f.collectionId || f.collectionName))
+        return canProceedToReview(specimenTypes, csvFiles)
       default:
         return false
     }
   }
 
-  const steps: Array<{ id: WizardStep; label: string; number: number }> = [
-    { id: 'batch-info', label: 'Batch Info', number: 1 },
-    { id: 'specimen-types', label: 'Specimen Types', number: 2 },
-    { id: 'containers', label: 'Containers', number: 3 },
-    { id: 'review', label: 'Review', number: 4 },
-  ]
+  // Flow-specific steps so the indicator only shows relevant steps with correct numbers
+  const steps: Array<{ id: WizardStep; label: string; number: number }> = (() => {
+    if (isCompositionCsvFlow) {
+      return [
+        { id: 'csv-upload', label: 'Upload CSV', number: 1 },
+        { id: 'containers', label: 'Containers', number: 2 },
+        { id: 'review', label: 'Review', number: 3 },
+      ]
+    }
+    if (isAddMode) {
+      return [
+        { id: 'specimen-types', label: 'Specimen Types', number: 1 },
+        { id: 'csv-upload', label: 'CSV Upload', number: 2 },
+        { id: 'containers', label: 'Containers', number: 3 },
+        { id: 'review', label: 'Review', number: 4 },
+      ]
+    }
+    return [
+      { id: 'batch-info', label: 'Batch Info', number: 1 },
+      { id: 'specimen-types', label: 'Specimen Types', number: 2 },
+      { id: 'csv-upload', label: 'CSV Upload', number: 3 },
+      { id: 'containers', label: 'Containers', number: 4 },
+      { id: 'review', label: 'Review', number: 5 },
+    ]
+  })()
 
   const currentStepIndex = steps.findIndex(s => s.id === currentStep)
+  const urlStepValid = currentStepIndex >= 0
+  const onContainersOrReviewWithoutData =
+    (currentStep === 'containers' || currentStep === 'review') &&
+    !canProceedToStep('containers')
+  const effectiveStep: WizardStep = !urlStepValid
+    ? defaultStep
+    : onContainersOrReviewWithoutData
+      ? defaultStep
+      : currentStep
+
+  useEffect(() => {
+    if (effectiveStep === currentStep) return
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('step', effectiveStep)
+      return next
+    })
+  }, [effectiveStep, currentStep, setSearchParams])
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">Loading...</div>
+      <div className="blood-controls-page">
+        <div className="container mx-auto px-4 py-8 relative z-[1]">
+          <div className="text-center" style={{ color: 'rgb(var(--app-text-muted))' }}>Loading...</div>
+        </div>
       </div>
     )
   }
 
   if (error) {
+    const backTarget = isCompositionCsvFlow && compositionKey
+      ? `/blood-controls/compositions/${encodeURIComponent(compositionKey)}`
+      : isCreateFromDefinition && definitionId
+        ? `/blood-controls/${definitionId}`
+        : '/blood-controls'
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center text-red-600">{error}</div>
+      <div className="blood-controls-page">
+        <div className="container mx-auto px-4 py-8 relative z-[1]">
+          <div className="text-center space-y-4">
+            <p style={{ color: 'rgb(var(--app-trend-down))' }}>{error}</p>
+            <button
+              onClick={() => navigate(backTarget)}
+              className="blood-controls-btn-secondary"
+            >
+              Back to {isCreateFromDefinition && definitionId ? 'Control Definition' : 'Blood Controls'}
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">
-          {isAddMode ? 'Add Specimens to Batch' : 'Create Control Batch'}
-        </h1>
-        <p className="text-gray-500 mt-1">
-          {isAddMode 
-            ? 'Add specimens and containers to an existing control batch'
-            : 'Create a new control batch and add specimens with containers'}
-        </p>
-      </div>
-
-      {/* Step indicator */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="flex items-center justify-between">
-          {steps.map((step, index) => (
-            <div key={step.id} className="flex items-center flex-1">
-              <div
-                className={`flex items-center cursor-pointer ${
-                  currentStep === step.id
-                    ? 'text-blue-600 font-semibold'
-                    : canProceedToStep(step.id)
-                    ? 'text-gray-500'
-                    : 'text-gray-400'
-                }`}
-                onClick={() => {
-                  if (canProceedToStep(step.id)) {
-                    setStep(step.id)
-                  }
-                }}
-              >
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    currentStep === step.id
-                      ? 'bg-blue-600 text-white'
-                      : canProceedToStep(step.id)
-                      ? 'bg-gray-200'
-                      : 'bg-gray-100'
-                  }`}
-                >
-                  {step.number}
-                </div>
-                <span className="ml-2 hidden sm:inline">{step.label}</span>
-              </div>
-              {index < steps.length - 1 && (
-                <div className="flex-1 h-1 bg-gray-200 mx-4" />
-              )}
-            </div>
-          ))}
+    <div className="blood-controls-page">
+      <div className="container mx-auto px-4 py-8 max-w-6xl relative z-[1]">
+        <div className="mb-6 blood-controls-reveal blood-controls-reveal-1">
+          <h1 className="text-3xl font-bold">
+            {isAddMode ? 'Add Specimens to Batch' : 'Create Control Batch'}
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
+            {isAddMode
+              ? 'Add specimens and containers to an existing control batch'
+              : 'Create a new control batch and add specimens with containers'}
+          </p>
         </div>
-      </div>
 
-      {/* Step content */}
-      <div className="bg-white rounded-lg shadow p-6">
-        {currentStep === 'batch-info' && !isAddMode && (
+        {/* Step indicator */}
+        <div className="dashboard-card p-4 mb-6 blood-controls-reveal blood-controls-reveal-2">
+          <div className="flex items-center justify-between">
+            {steps.map((step, index) => (
+              <div key={step.id} className="flex items-center flex-1">
+                <div
+                  className={`flex items-center cursor-pointer ${effectiveStep === step.id ? 'font-semibold' : ''}`}
+                  style={{
+                    color: effectiveStep === step.id ? 'rgb(var(--app-accent))' : canProceedToStep(step.id) ? 'rgb(var(--app-text-muted))' : 'rgb(var(--app-border))',
+                  }}
+                  onClick={() => {
+                    if (canProceedToStep(step.id)) {
+                      setStep(step.id)
+                    }
+                  }}
+                >
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{
+                      background: effectiveStep === step.id ? 'rgb(var(--app-accent))' : canProceedToStep(step.id) ? 'rgb(var(--app-border))' : 'rgb(var(--app-surface))',
+                      color: effectiveStep === step.id ? 'white' : 'rgb(var(--app-text-muted))',
+                    }}
+                  >
+                    {step.number}
+                  </div>
+                  <span className="ml-2 hidden sm:inline">{step.label}</span>
+                </div>
+                {index < steps.length - 1 && (
+                  <div className="flex-1 h-1 mx-4" style={{ background: 'rgb(var(--app-border))' }} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Step content */}
+        <div className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-3">
+        {effectiveStep === 'batch-info' && !isAddMode && (
           <BatchInfoStep
             batchInfo={batchInfo}
             onChange={setBatchInfo}
             onNext={() => setStep('specimen-types')}
-            onCancel={() => navigate('/blood-controls')}
+            onCancel={() => navigate(getCancelTarget())}
             isAddMode={isAddMode}
+            definitionPreSelected={isCreateFromDefinition}
           />
         )}
 
-        {currentStep === 'specimen-types' && (
+        {effectiveStep === 'specimen-types' && (
           <SpecimenTypesStep
             specimenTypes={specimenTypes}
             onChange={setSpecimenTypes}
             availableSpecimenTypes={availableSpecimenTypes}
             onNext={() => setStep('containers')}
-            onBack={isAddMode ? () => navigate(`/blood-controls/batches/${batchId}`) : () => setStep('batch-info')}
-            onCancel={() => navigate(isAddMode ? `/blood-controls/batches/${batchId}` : '/blood-controls')}
+            onBack={
+              isAddMode
+                ? () => navigate(`/blood-controls/batches/${batchId}`)
+                : () => setStep('batch-info')
+            }
+            onCancel={() => navigate(getCancelTarget())}
             onSwitchToCSV={() => setStep('csv-upload')}
           />
         )}
 
-        {currentStep === 'csv-upload' && (
+        {effectiveStep === 'csv-upload' && (
           <CSVUploadStep
             csvFiles={csvFiles}
             onChange={setCsvFiles}
             availableSpecimenTypes={availableSpecimenTypes}
             onNext={() => setStep('containers')}
-            onBack={() => setStep('specimen-types')}
-            onCancel={() => navigate(isAddMode ? `/blood-controls/batches/${batchId}` : '/blood-controls')}
+            onBack={
+              isCompositionCsvFlow
+                ? () => navigate(getCancelTarget())
+                : () => setStep('specimen-types')
+            }
+            backLabel={isCompositionCsvFlow ? 'Cancel' : undefined}
+            onCancel={() => navigate(getCancelTarget())}
+            showProductionDate={isCompositionCsvFlow}
+            batchInfo={isCompositionCsvFlow ? { productionDate: batchInfo.productionDate } : undefined}
+            onBatchInfoChange={
+              isCompositionCsvFlow
+                ? (info) => setBatchInfo((prev) => ({ ...prev, ...info }))
+                : undefined
+            }
           />
         )}
 
-        {currentStep === 'containers' && (
+        {effectiveStep === 'containers' && (
           <ContainerConfigurationStep
             specimenTypes={specimenTypes}
             csvFiles={csvFiles}
@@ -271,24 +458,28 @@ export default function ControlBatchWizard() {
                 setStep('specimen-types')
               }
             }}
-            onCancel={() => navigate(isAddMode ? `/blood-controls/batches/${batchId}` : '/blood-controls')}
+            onCancel={() => navigate(getCancelTarget())}
           />
         )}
 
-        {currentStep === 'review' && (
+        {effectiveStep === 'review' && (
           <ReviewStep
             batchInfo={batchInfo}
+            compositionStrains={compositionStrains}
+            compositionDefinitions={compositionDefinitions}
             specimenTypes={specimenTypes}
             csvFiles={csvFiles}
             onBack={() => setStep('containers')}
-            onCancel={() => navigate(isAddMode ? `/blood-controls/batches/${batchId}` : '/blood-controls')}
+            onCancel={() => navigate(getCancelTarget())}
             onSuccess={(batchId) => {
               navigate(`/blood-controls/batches/${batchId}`)
             }}
             isAddMode={isAddMode}
             existingBatchId={batchId ? parseInt(batchId) : undefined}
+            onBatchInfoChange={isCompositionCsvFlow ? (info) => setBatchInfo((prev) => ({ ...prev, ...info })) : undefined}
           />
         )}
+        </div>
       </div>
     </div>
   )

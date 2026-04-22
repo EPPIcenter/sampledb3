@@ -12,18 +12,25 @@ import {
   sheet,
   storageContainer,
   specimen,
+  specimenType,
   location,
   studySubject,
   study,
   controlBatch,
   controlDefinition,
   unit,
+  strain,
 } from '../db/schema'
-import { eq, sql } from 'drizzle-orm'
+import { eq, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { executeMoves, resolveContainersByBarcodes, type BatchMoveRequest, type ContainerInfo } from '../lib/container-move'
-import { resolveCollection } from '../lib/collection-resolution'
+import { resolveCollection, resolveCollectionByName, getCollectionLocation } from '../lib/collection-resolution'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { handleRouteError } from '../lib/error-handler'
+import { utcNow } from '../lib/datetime'
+import { validatePlateScan, inferPlateOrGetReport } from '../lib/plate-scan-validation'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create collections routes with database injection
@@ -31,6 +38,8 @@ import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/colle
  */
 export function createCollectionsRoutes(database: Database): Hono {
   const collections = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
 // Helper to build location path string
 function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | undefined {
@@ -48,6 +57,7 @@ type ContainerSource =
         id: number
         title: string
         code: string
+        leadPerson: string
       }
     }
   | {
@@ -56,6 +66,9 @@ type ContainerSource =
       name: string
       definitionName: string | null
       controlType: string
+      targetDensity: number | null
+      targetDensityUnit: string | null
+      strainComposition: string | null
     }
   | null
 
@@ -74,6 +87,16 @@ async function enrichContainer(containerId: number) {
     database.select().from(specimen).where(eq(specimen.id, container.specimenId)).get(),
   ])
 
+  let specimenTypeName: string | null = null
+  if (spec?.specimenTypeId) {
+    const st = await database
+      .select({ name: specimenType.name })
+      .from(specimenType)
+      .where(eq(specimenType.id, spec.specimenTypeId))
+      .get()
+    specimenTypeName = st?.name ?? null
+  }
+
   let source: ContainerSource = null
   if (spec?.studySubjectId) {
     const subject = await database
@@ -83,6 +106,7 @@ async function enrichContainer(containerId: number) {
         studyId: studySubject.studyId,
         studyTitle: study.title,
         studyCode: study.shortCode,
+        studyLeadPerson: study.leadPerson,
       })
       .from(studySubject)
       .leftJoin(study, eq(studySubject.studyId, study.id))
@@ -98,6 +122,7 @@ async function enrichContainer(containerId: number) {
           id: subject.studyId,
           title: subject.studyTitle,
           code: subject.studyCode,
+          leadPerson: subject.studyLeadPerson ?? '',
         },
       }
     }
@@ -109,6 +134,8 @@ async function enrichContainer(containerId: number) {
         productionDate: controlBatch.productionDate,
         definitionName: controlDefinition.name,
         controlType: controlDefinition.controlType,
+        definitionId: controlDefinition.id,
+        definitionProperties: controlDefinition.properties,
       })
       .from(controlBatch)
       .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
@@ -116,12 +143,43 @@ async function enrichContainer(containerId: number) {
       .get()
 
     if (batch && batch.definitionName && batch.controlType) {
+      let targetDensity: number | null = null
+      let targetDensityUnitId: number | null = null
+      let strainComposition: string | null = null
+      const props = batch.definitionProperties as { targetDensity?: number; targetDensityUnitId?: number; strains?: Array<{ id?: number; name?: string; percentage?: number }> } | null
+      if (props) {
+        targetDensity = props.targetDensity ?? null
+        targetDensityUnitId = props.targetDensityUnitId ?? null
+        if (props.strains && Array.isArray(props.strains) && props.strains.length > 0) {
+          const strainIds = props.strains.map((s) => (typeof s === 'number' ? s : s.id)).filter((id): id is number => id != null)
+          const strainRows = strainIds.length > 0 ? await database.select().from(strain).where(inArray(strain.id, strainIds)) : []
+          const strainNameMap = new Map(strainRows.map((s) => [s.id, s.name]))
+          strainComposition = props.strains
+            .map((s) => {
+              if (typeof s === 'number') {
+                return `${strainNameMap.get(s) ?? `Strain ${s}`} (0%)`
+              }
+              const name = s.name ?? strainNameMap.get(s.id!) ?? `Strain ${s.id}`
+              const pct = s.percentage ?? 0
+              return `${name} (${pct}%)`
+            })
+            .join('; ')
+        }
+      }
+      let targetDensityUnit: string | null = null
+      if (targetDensityUnitId) {
+        const u = await database.select({ symbol: unit.symbol }).from(unit).where(eq(unit.id, targetDensityUnitId)).get()
+        targetDensityUnit = u?.symbol ?? null
+      }
       source = {
         type: 'control',
         id: batch.id,
         name: batch.name,
         definitionName: batch.definitionName,
         controlType: batch.controlType,
+        targetDensity,
+        targetDensityUnit,
+        strainComposition,
       }
     }
   }
@@ -133,14 +191,17 @@ async function enrichContainer(containerId: number) {
     totalQuantity: container.totalQuantity,
     remainingQuantity: container.remainingQuantity,
     comment: container.comment,
+    created: container.created,
+    lastUpdated: container.lastUpdated,
     specimen: spec || null,
+    specimenTypeName,
     source,
   }
 }
 
 // Micronix plate detail
-collections.get('/plates/micronix/:id', async (c) => {
-  const id = parseInt(c.req.param('id'))
+collections.get('/plates/micronix/:id', authMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid plate ID' }, 400)
 
   const plate = await database.select().from(micronixPlate).where(eq(micronixPlate.id, id)).get()
@@ -195,9 +256,56 @@ collections.get('/plates/micronix/:id', async (c) => {
   })
 })
 
+// Validate scanned plate CSV against a micronix plate (plateId optional: when omitted, plate is inferred from scan barcodes)
+collections.post('/plates/micronix/validate-scan', authMiddleware, memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      csvText: z.string(),
+      plateId: z.number().int().positive().optional(),
+      scannerConfigurationId: z.string().min(1),
+    })
+    const data = schema.parse(body)
+
+    let plateId: number
+    let inferredPlate = false
+
+    if (data.plateId != null) {
+      plateId = data.plateId
+    } else {
+      const inferResult = await inferPlateOrGetReport(database, {
+        csvText: data.csvText,
+        scannerConfigurationId: data.scannerConfigurationId,
+      })
+      if ('inferenceReport' in inferResult) {
+        return c.json({ inferenceReport: inferResult.inferenceReport })
+      }
+      plateId = inferResult.plate.id
+      inferredPlate = true
+    }
+
+    const result = await validatePlateScan(database, {
+      csvText: data.csvText,
+      plateId,
+      scannerConfigurationId: data.scannerConfigurationId,
+    })
+    return c.json({ ...result, ...(inferredPlate && { inferredPlate: true }) })
+  } catch (error) {
+    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    if (error instanceof Error) {
+      if (error.message === 'Scanner configuration not found') return c.json({ error: error.message }, 400)
+      if (error.message === 'Plate not found') return c.json({ error: error.message }, 404)
+      if (error.message.startsWith('Cannot infer plate:')) {
+        return c.json({ error: error.message }, 400)
+      }
+    }
+    throw error
+  }
+})
+
 // Cryovial box detail
-collections.get('/boxes/cryovial/:id', async (c) => {
-  const id = parseInt(c.req.param('id'))
+collections.get('/boxes/cryovial/:id', authMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid box ID' }, 400)
 
   const boxRecord = await database.select().from(cryovialBox).where(eq(cryovialBox.id, id)).get()
@@ -231,8 +339,7 @@ collections.get('/boxes/cryovial/:id', async (c) => {
         pos = `${row}${col.padStart(2, '0')}`
       }
     }
-    if (!positions[pos]) positions[pos] = []
-    positions[pos].push(entry)
+    (positions[pos] ??= []).push(entry)
   })
 
   return c.json({
@@ -246,8 +353,8 @@ collections.get('/boxes/cryovial/:id', async (c) => {
 })
 
 // Generic box detail
-collections.get('/boxes/:id', async (c) => {
-  const id = parseInt(c.req.param('id'))
+collections.get('/boxes/:id', authMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid box ID' }, 400)
 
   const boxRecord = await database.select().from(box).where(eq(box.id, id)).get()
@@ -294,8 +401,8 @@ collections.get('/boxes/:id', async (c) => {
 })
 
 // Bag detail
-collections.get('/bags/:id', async (c) => {
-  const id = parseInt(c.req.param('id'))
+collections.get('/bags/:id', authMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid bag ID' }, 400)
 
   const bagRecord = await database.select().from(bag).where(eq(bag.id, id)).get()
@@ -342,8 +449,8 @@ collections.get('/bags/:id', async (c) => {
 })
 
 // Sheet detail (Replaces DBS bag detail)
-collections.get('/sheets/:id', async (c) => {
-  const id = parseInt(c.req.param('id'))
+collections.get('/sheets/:id', authMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid sheet ID' }, 400)
 
   const sheetRecord = await database.select().from(sheet).where(eq(sheet.id, id)).get()
@@ -394,7 +501,7 @@ collections.get('/sheets/:id', async (c) => {
 })
 
 // Check collection existence
-collections.post('/check', async (c) => {
+collections.post('/check', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -424,8 +531,41 @@ collections.post('/check', async (c) => {
   }
 })
 
+// Resolve collection by name and type (for batch creation: show existing or prompt for new)
+collections.post('/resolve', authMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      name: z.string().min(1),
+      type: z.enum(['box', 'bag', 'micronix_plate', 'cryovial_box']),
+    })
+    const data = schema.parse(body)
+    const id = await resolveCollectionByName(data.name, data.type, database)
+    if (!id) {
+      return c.json({ found: false })
+    }
+    const locationId = await getCollectionLocation(database, id, data.type)
+    let locationName: string | undefined
+    if (locationId != null) {
+      const loc = await database.select({ name: location.name, path: location.path }).from(location).where(eq(location.id, locationId)).get()
+      locationName = loc?.path ?? loc?.name ?? undefined
+    }
+    return c.json({
+      found: true,
+      id,
+      name: data.name,
+      type: data.type,
+      locationId: locationId ?? undefined,
+      locationName,
+    })
+  } catch (error) {
+    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
 // Create micronix plate
-collections.post('/plates/micronix', async (c) => {
+collections.post('/plates/micronix', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -448,7 +588,7 @@ collections.post('/plates/micronix', async (c) => {
     const existing = await database.select().from(micronixPlate).where(eq(micronixPlate.name, data.name)).get()
     if (existing) return c.json({ error: 'Plate with this name already exists' }, 400)
     
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     const [newPlate] = await database.insert(micronixPlate).values({
       ...data,
@@ -458,8 +598,14 @@ collections.post('/plates/micronix', async (c) => {
       createdBy: user?.id,
       updatedBy: user?.id,
     }).returning()
-    
-    return c.json({ plate: newPlate }, 201)
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newPlate) {
+      throw new Error('Insert did not return plate row')
+    }
+    return c.json({
+      plate: { ...newPlate, locationPath: buildLocationPath(loc) },
+    }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
     return c.json({ error: 'Internal server error' }, 500)
@@ -467,7 +613,7 @@ collections.post('/plates/micronix', async (c) => {
 })
 
 // Create cryovial box
-collections.post('/boxes/cryovial', async (c) => {
+collections.post('/boxes/cryovial', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -490,7 +636,7 @@ collections.post('/boxes/cryovial', async (c) => {
     const existing = await database.select().from(cryovialBox).where(eq(cryovialBox.name, data.name)).get()
     if (existing) return c.json({ error: 'Cryovial box with this name already exists' }, 400)
     
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     const [newBox] = await database.insert(cryovialBox).values({
       ...data,
@@ -500,8 +646,14 @@ collections.post('/boxes/cryovial', async (c) => {
       createdBy: user?.id,
       updatedBy: user?.id,
     }).returning()
-    
-    return c.json({ box: newBox }, 201)
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newBox) {
+      throw new Error('Insert did not return cryovial box row')
+    }
+    return c.json({
+      box: { ...newBox, locationPath: buildLocationPath(loc) },
+    }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
     return c.json({ error: 'Internal server error' }, 500)
@@ -509,7 +661,7 @@ collections.post('/boxes/cryovial', async (c) => {
 })
 
 // Create regular box
-collections.post('/boxes', async (c) => {
+collections.post('/boxes', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -531,7 +683,7 @@ collections.post('/boxes', async (c) => {
     const existing = await database.select().from(box).where(eq(box.name, data.name)).get()
     if (existing) return c.json({ error: 'Box with this name already exists' }, 400)
     
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     const [newBox] = await database.insert(box).values({
       ...data,
@@ -540,8 +692,14 @@ collections.post('/boxes', async (c) => {
       createdBy: user?.id,
       updatedBy: user?.id,
     }).returning()
-    
-    return c.json({ box: newBox }, 201)
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newBox) {
+      throw new Error('Insert did not return box row')
+    }
+    return c.json({
+      box: { ...newBox, locationPath: buildLocationPath(loc) },
+    }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
     return c.json({ error: 'Internal server error' }, 500)
@@ -549,7 +707,7 @@ collections.post('/boxes', async (c) => {
 })
 
 // Create bag
-collections.post('/bags', async (c) => {
+collections.post('/bags', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -571,7 +729,7 @@ collections.post('/bags', async (c) => {
     const existing = await database.select().from(bag).where(eq(bag.name, data.name)).get()
     if (existing) return c.json({ error: 'Bag with this name already exists' }, 400)
     
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     const [newBag] = await database.insert(bag).values({
       ...data,
@@ -580,8 +738,14 @@ collections.post('/bags', async (c) => {
       createdBy: user?.id,
       updatedBy: user?.id,
     }).returning()
-    
-    return c.json({ bag: newBag }, 201)
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newBag) {
+      throw new Error('Insert did not return bag row')
+    }
+    return c.json({
+      bag: { ...newBag, locationPath: buildLocationPath(loc) },
+    }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
     return c.json({ error: 'Internal server error' }, 500)
@@ -589,7 +753,7 @@ collections.post('/bags', async (c) => {
 })
 
 // Resolve multiple identifiers to container info
-collections.post('/containers/resolve', async (c) => {
+collections.post('/containers/resolve', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -639,29 +803,229 @@ collections.post('/containers/resolve', async (c) => {
   }
 })
 
-// List collections by type
-collections.get('/list/:type', async (c) => {
+// List all collections (optimized for move page)
+collections.get('/list-all', authMiddleware, async (c) => {
   try {
-    const type = c.req.param('type') as any
+    // Load all collection types in parallel with optimized queries
+    const [plates, cryovialBoxes, boxes, bags] = await Promise.all([
+      // Micronix plates with batch item counts
+      (async () => {
+        const platesData = await database
+          .select({
+            plate: micronixPlate,
+            location: location,
+          })
+          .from(micronixPlate)
+          .leftJoin(location, eq(micronixPlate.locationId, location.id))
+        
+        // Batch count queries for efficiency
+        const plateIds = platesData.map(p => p.plate.id)
+        const [tubeCounts, wellCounts] = plateIds.length > 0 ? await Promise.all([
+          database
+            .select({
+              collectionId: micronixTube.collectionId,
+              count: sql<number>`COUNT(*)`.as('count'),
+            })
+            .from(micronixTube)
+            .where(inArray(micronixTube.collectionId, plateIds))
+            .groupBy(micronixTube.collectionId),
+          database
+            .select({
+              collectionId: staticWell.collectionId,
+              count: sql<number>`COUNT(*)`.as('count'),
+            })
+            .from(staticWell)
+            .where(inArray(staticWell.collectionId, plateIds))
+            .groupBy(staticWell.collectionId),
+        ]) : [[], []]
+        
+        const tubeCountMap = new Map(tubeCounts.map(t => [t.collectionId, t.count]))
+        const wellCountMap = new Map(wellCounts.map(w => [w.collectionId, w.count]))
+        
+        return platesData.map((r) => ({
+          id: r.plate.id,
+          name: r.plate.name,
+          type: 'micronix_plate' as const,
+          barcode: r.plate.barcode,
+          locationId: r.plate.locationId,
+          itemCount: (tubeCountMap.get(r.plate.id) || 0) + (wellCountMap.get(r.plate.id) || 0),
+          location: r.location
+            ? {
+                id: r.location.id,
+                path: buildLocationPath(r.location),
+              }
+            : null,
+        }))
+      })(),
+      
+      // Cryovial boxes with batch item counts
+      (async () => {
+        const boxesData = await database
+          .select({
+            box: cryovialBox,
+            location: location,
+          })
+          .from(cryovialBox)
+          .leftJoin(location, eq(cryovialBox.locationId, location.id))
+        
+        const boxIds = boxesData.map(b => b.box.id)
+        const tubeCounts = boxIds.length > 0 ? await database
+          .select({
+            collectionId: cryovialTube.collectionId,
+            count: sql<number>`COUNT(*)`.as('count'),
+          })
+          .from(cryovialTube)
+          .where(inArray(cryovialTube.collectionId, boxIds))
+          .groupBy(cryovialTube.collectionId) : []
+        
+        const tubeCountMap = new Map(tubeCounts.map(t => [t.collectionId, t.count]))
+        
+        return boxesData.map((r) => ({
+          id: r.box.id,
+          name: r.box.name,
+          type: 'cryovial_box' as const,
+          barcode: r.box.barcode,
+          locationId: r.box.locationId,
+          itemCount: tubeCountMap.get(r.box.id) || 0,
+          location: r.location
+            ? {
+                id: r.location.id,
+                path: buildLocationPath(r.location),
+              }
+            : null,
+        }))
+      })(),
+      
+      // Boxes with batch item counts
+      (async () => {
+        const boxesData = await database
+          .select({
+            box: box,
+            location: location,
+          })
+          .from(box)
+          .leftJoin(location, eq(box.locationId, location.id))
+        
+        const boxIds = boxesData.map(b => b.box.id)
+        const sheetCounts = boxIds.length > 0 ? await database
+          .select({
+            boxId: sheet.boxId,
+            count: sql<number>`COUNT(*)`.as('count'),
+          })
+          .from(sheet)
+          .where(inArray(sheet.boxId, boxIds))
+          .groupBy(sheet.boxId) : []
+        
+        const sheetCountMap = new Map(sheetCounts.map(s => [s.boxId, s.count]))
+        
+        return boxesData.map((r) => ({
+          id: r.box.id,
+          name: r.box.name,
+          type: 'box' as const,
+          barcode: null,
+          locationId: r.box.locationId,
+          itemCount: sheetCountMap.get(r.box.id) || 0,
+          location: r.location
+            ? {
+                id: r.location.id,
+                path: buildLocationPath(r.location),
+              }
+            : null,
+        }))
+      })(),
+      
+      // Bags with batch item counts
+      (async () => {
+        const bagsData = await database
+          .select({
+            bag: bag,
+            location: location,
+          })
+          .from(bag)
+          .leftJoin(location, eq(bag.locationId, location.id))
+        
+        const bagIds = bagsData.map(b => b.bag.id)
+        const sheetCounts = bagIds.length > 0 ? await database
+          .select({
+            bagId: sheet.bagId,
+            count: sql<number>`COUNT(*)`.as('count'),
+          })
+          .from(sheet)
+          .where(inArray(sheet.bagId, bagIds))
+          .groupBy(sheet.bagId) : []
+        
+        const sheetCountMap = new Map(sheetCounts.map(s => [s.bagId, s.count]))
+        
+        return bagsData.map((r) => ({
+          id: r.bag.id,
+          name: r.bag.name,
+          type: 'bag' as const,
+          barcode: null,
+          locationId: r.bag.locationId,
+          itemCount: sheetCountMap.get(r.bag.id) || 0,
+          location: r.location
+            ? {
+                id: r.location.id,
+                path: buildLocationPath(r.location),
+              }
+            : null,
+        }))
+      })(),
+    ])
+    
+    return c.json({
+      collections: [...plates, ...cryovialBoxes, ...boxes, ...bags],
+    })
+  } catch (error) {
+    console.error('Error loading all collections:', error)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// List collections by type
+collections.get('/list/:type', authMiddleware, async (c) => {
+  try {
+    const type = requireParam(c, 'type') as any
     let result: any[] = []
 
     switch (type) {
       case 'micronix_plate': {
-        const plates = await database
+        const platesData = await database
           .select({
             plate: micronixPlate,
             location: location,
-            tubeCount: sql<number>`(SELECT COUNT(*) FROM ${micronixTube} WHERE ${micronixTube.collectionId} = ${micronixPlate.id})`,
-            wellCount: sql<number>`(SELECT COUNT(*) FROM ${staticWell} WHERE ${staticWell.collectionId} = ${micronixPlate.id})`,
           })
           .from(micronixPlate)
           .leftJoin(location, eq(micronixPlate.locationId, location.id))
-        result = plates.map((r) => ({
+        const plateIds = platesData.map((p) => p.plate.id)
+        const [tubeCounts, wellCounts] = plateIds.length > 0
+          ? await Promise.all([
+              database
+                .select({
+                  collectionId: micronixTube.collectionId,
+                  count: sql<number>`COUNT(*)`.as('count'),
+                })
+                .from(micronixTube)
+                .where(inArray(micronixTube.collectionId, plateIds))
+                .groupBy(micronixTube.collectionId),
+              database
+                .select({
+                  collectionId: staticWell.collectionId,
+                  count: sql<number>`COUNT(*)`.as('count'),
+                })
+                .from(staticWell)
+                .where(inArray(staticWell.collectionId, plateIds))
+                .groupBy(staticWell.collectionId),
+            ])
+          : [[], []]
+        const tubeCountMap = new Map(tubeCounts.map((t) => [t.collectionId, t.count]))
+        const wellCountMap = new Map(wellCounts.map((w) => [w.collectionId, w.count]))
+        result = platesData.map((r) => ({
           id: r.plate.id,
           name: r.plate.name,
           barcode: r.plate.barcode,
           locationId: r.plate.locationId,
-          itemCount: (r.tubeCount || 0) + (r.wellCount || 0),
+          itemCount: (tubeCountMap.get(r.plate.id) || 0) + (wellCountMap.get(r.plate.id) || 0),
           location: r.location
             ? {
                 id: r.location.id,
@@ -764,11 +1128,12 @@ collections.get('/list/:type', async (c) => {
 })
 
 // Move containers
-collections.post('/containers/move', async (c) => {
+collections.post('/containers/move', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
       collectionType: z.enum(['micronix_plate', 'cryovial_box', 'box', 'bag', 'sheet']).optional(),
+      atomicMode: z.enum(['all_or_nothing', 'best_effort']).default('all_or_nothing'),
       mappings: z.array(z.object({
         fromCollectionName: z.string().min(1),
         toCollectionName: z.string().min(1),
@@ -815,7 +1180,7 @@ collections.post('/containers/move', async (c) => {
 })
 
 // Move sheets
-collections.post('/sheets/move', async (c) => {
+collections.post('/sheets/move', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -841,24 +1206,28 @@ collections.post('/sheets/move', async (c) => {
 
     await database.transaction(async (tx) => {
       for (const sheetId of data.sheetIds) {
-        if (data.targetCollectionType === 'box') {
-          tx.update(sheet)
-            .set({
-              boxId: data.targetCollectionId,
-              bagId: null,
-              lastUpdated: sql`current_timestamp`,
-            })
-            .where(eq(sheet.id, sheetId))
-            .run()
-        } else {
-          tx.update(sheet)
-            .set({
-              bagId: data.targetCollectionId,
-              boxId: null,
-              lastUpdated: sql`current_timestamp`,
-            })
-            .where(eq(sheet.id, sheetId))
-            .run()
+        const updated =
+          data.targetCollectionType === 'box'
+            ? await tx
+                .update(sheet)
+                .set({
+                  boxId: data.targetCollectionId,
+                  bagId: null,
+                  lastUpdated: sql`current_timestamp`,
+                })
+                .where(eq(sheet.id, sheetId))
+                .returning()
+            : await tx
+                .update(sheet)
+                .set({
+                  bagId: data.targetCollectionId,
+                  boxId: null,
+                  lastUpdated: sql`current_timestamp`,
+                })
+                .where(eq(sheet.id, sheetId))
+                .returning()
+        if (updated.length === 0) {
+          throw new Error(`Sheet not found: ${sheetId}`)
         }
       }
     })
@@ -879,11 +1248,12 @@ collections.post('/sheets/move', async (c) => {
 })
 
 // Move collections
-collections.post('/move', async (c) => {
+collections.post('/move', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
       collectionType: z.enum(['micronix_plate', 'cryovial_box', 'box', 'bag']),
+      atomicMode: z.enum(['all_or_nothing', 'best_effort']).default('all_or_nothing'),
       moves: z.array(z.object({
         identifier: z.union([
           z.object({ type: z.literal('id'), id: z.number().int().positive() }),
@@ -926,15 +1296,7 @@ collections.post('/move', async (c) => {
       errors: moveResult.errors,
     })
   } catch (error: unknown) {
-    console.error('Error moving collections:', error)
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    return c.json(
-      {
-        error: 'Internal server error',
-        message: errorMessage,
-      },
-      500
-    )
+    return handleRouteError(error, c)
   }
 })
 

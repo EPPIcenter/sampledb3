@@ -5,12 +5,14 @@ import type { Database as DrizzleDatabase } from '../../db/client'
 
 /**
  * Creates an in-memory SQLite database for testing
+ * Assigns a unique _id so defaults/settings cache keys are distinct across test DBs (avoids cross-test contamination when running full suite).
  */
 export function createTestDatabase(): { db: DrizzleDatabase; sqlite: Database } {
   const sqlite = new Database(':memory:')
   sqlite.exec('PRAGMA journal_mode = WAL')
 
-  const db = drizzle(sqlite, { schema })
+  const db = drizzle(sqlite, { schema }) as DrizzleDatabase & { _id?: string }
+  db._id = `test-db-${crypto.randomUUID()}`
 
   return { db, sqlite }
 }
@@ -40,7 +42,8 @@ function createSchema(sqlite: Database) {
       role TEXT NOT NULL,
       created TEXT NOT NULL DEFAULT (datetime('now')),
       last_login TEXT,
-      deleted_at TEXT
+      deleted_at TEXT,
+      approved_at TEXT
     )
   `)
 
@@ -232,6 +235,8 @@ function createSchema(sqlite: Database) {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS specimen_control_batch_id_idx ON specimen(control_batch_id)`)
   sqlite.exec(`CREATE INDEX IF NOT EXISTS specimen_collection_date_idx ON specimen(collection_date)`)
   sqlite.exec(`CREATE INDEX IF NOT EXISTS specimen_specimen_type_id_idx ON specimen(specimen_type_id)`)
+  sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_specimen_study_subject_type_date ON specimen(study_subject_id, specimen_type_id, collection_date) WHERE study_subject_id IS NOT NULL`)
+  sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_specimen_control_batch_type_date ON specimen(control_batch_id, specimen_type_id, collection_date) WHERE control_batch_id IS NOT NULL`)
 
   // Storage containers
   sqlite.exec(`
@@ -469,6 +474,81 @@ function createSchema(sqlite: Database) {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_container_derivation_child ON container_derivation(child_container_id)`)
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_container_derivation_type ON container_derivation(derivation_type)`)
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_container_derivation_date ON container_derivation(derivation_date)`)
+
+  // Error logging
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS error_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+      source TEXT NOT NULL,
+      level TEXT NOT NULL,
+      message TEXT NOT NULL,
+      error_code TEXT,
+      stack TEXT,
+      context TEXT,
+      user_id INTEGER,
+      url TEXT,
+      user_agent TEXT,
+      resolved INTEGER NOT NULL DEFAULT 0,
+      resolved_at TEXT,
+      resolved_by INTEGER
+    )
+  `)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS error_logs_timestamp_idx ON error_logs(timestamp)`)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS error_logs_source_idx ON error_logs(source)`)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS error_logs_level_idx ON error_logs(level)`)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS error_logs_resolved_idx ON error_logs(resolved)`)
+
+  // qPCR experiments (template tests)
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS qpcr_experiment (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT,
+      template_format TEXT NOT NULL,
+      status TEXT NOT NULL,
+      standard_layout TEXT,
+      plate_barcode TEXT,
+      instrument_type TEXT,
+      created TEXT NOT NULL DEFAULT (datetime('now')),
+      last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by INTEGER REFERENCES users(id),
+      updated_by INTEGER REFERENCES users(id)
+    )
+  `)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS qpcr_experiment_status_idx ON qpcr_experiment(status)`)
+
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS qpcr_experiment_target (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      qpcr_experiment_id INTEGER NOT NULL REFERENCES qpcr_experiment(id) ON DELETE CASCADE,
+      target_name TEXT NOT NULL,
+      fluorophore TEXT,
+      reporter TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      UNIQUE (qpcr_experiment_id, target_name)
+    )
+  `)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS qpcr_experiment_target_experiment_idx ON qpcr_experiment_target(qpcr_experiment_id)`)
+
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS qpcr_experiment_well (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      qpcr_experiment_id INTEGER NOT NULL REFERENCES qpcr_experiment(id) ON DELETE CASCADE,
+      well_position TEXT NOT NULL,
+      barcode TEXT,
+      storage_container_id INTEGER REFERENCES storage_container(id),
+      specimen_id INTEGER REFERENCES specimen(id),
+      content_type TEXT,
+      standard_density REAL,
+      cq REAL,
+      starting_quantity REAL,
+      cq_mean REAL,
+      raw_sample_name TEXT,
+      UNIQUE (qpcr_experiment_id, well_position)
+    )
+  `)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS qpcr_experiment_well_experiment_idx ON qpcr_experiment_well(qpcr_experiment_id)`)
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS qpcr_experiment_well_specimen_idx ON qpcr_experiment_well(specimen_id)`)
 }
 
 /**

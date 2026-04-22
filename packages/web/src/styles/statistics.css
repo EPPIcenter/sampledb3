@@ -1,0 +1,188 @@
+/**
+ * Statistics page – "Modern precision lab" theme
+ * Scoped to .statistics-page. Uses app design tokens (see tokens.css).
+ */
+
+.statistics-page {
+  font-family: var(--app-font-sans);
+  background: linear-gradient(180deg, rgb(var(--app-bg)) 0%, rgb(var(--app-surface)) 100%);
+  min-height: 100%;
+  position: relative;
+}
+
+/* Subtle grid background for lab feel */
+.statistics-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.statistics-page h1,
+.statistics-page h2,
+.statistics-page h3 {
+  font-family: var(--app-font-display);
+  letter-spacing: -0.02em;
+  color: rgb(var(--app-text));
+}
+
+/* Card surface */
+.statistics-page .statistics-card {
+  background: rgb(var(--app-card));
+  border: 1px solid rgb(var(--app-border));
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.statistics-page .statistics-card:hover {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07);
+  border-color: rgb(var(--app-accent) / 0.3);
+}
+
+/* Section title */
+.statistics-page .statistics-section-title {
+  font-family: var(--app-font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: rgb(var(--app-text));
+}
+
+/* Accent link and button (Apply Filters, Reset, filter badge) */
+.statistics-page .statistics-link {
+  color: rgb(var(--app-accent));
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.statistics-page .statistics-link:hover {
+  color: rgb(var(--app-accent-hover));
+}
+
+.statistics-page .statistics-link:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+.statistics-page .statistics-btn-primary {
+  background: rgb(var(--app-accent));
+  color: white;
+  font-weight: 500;
+  transition: background-color 0.15s ease;
+}
+
+.statistics-page .statistics-btn-primary:hover:not(:disabled) {
+  background: rgb(var(--app-accent-hover));
+}
+
+.statistics-page .statistics-btn-primary:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+.statistics-page .statistics-badge {
+  background: rgb(var(--app-accent-muted));
+  color: rgb(var(--app-accent-hover));
+  font-weight: 500;
+}
+
+/* Filter chips */
+.statistics-page .statistics-chip {
+  background: rgb(var(--app-accent-muted));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.statistics-page .statistics-chip:hover {
+  background: rgb(var(--app-accent) / 0.15);
+  border-color: rgb(var(--app-accent) / 0.5);
+}
+
+/* Override blue to teal when inside statistics-page */
+.statistics-page .bg-blue-50,
+.statistics-page .bg-blue-100 {
+  background-color: rgb(var(--app-accent-muted));
+}
+.statistics-page .border-blue-200,
+.statistics-page .border-blue-300 {
+  border-color: rgb(var(--app-accent) / 0.5);
+}
+.statistics-page .text-blue-600,
+.statistics-page .text-blue-700,
+.statistics-page .text-blue-800 {
+  color: rgb(var(--app-accent-hover));
+}
+.statistics-page .bg-blue-600,
+.statistics-page .bg-blue-700 {
+  background-color: rgb(var(--app-accent));
+}
+.statistics-page .hover\:bg-blue-700:hover {
+  background-color: rgb(var(--app-accent-hover));
+}
+.statistics-page .hover\:text-blue-800:hover {
+  color: rgb(var(--app-accent-hover));
+}
+.statistics-page .focus\:ring-blue-500:focus,
+.statistics-page .focus\:border-blue-500:focus {
+  --tw-ring-color: rgb(var(--app-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
+}
+
+/* Skeleton pulse when inside statistics-page */
+.statistics-page .statistics-skeleton {
+  --tw-bg-opacity: 1;
+  background-color: rgb(var(--app-border) / 0.5);
+}
+
+/* StatCard / StatChart number styling */
+.statistics-page .stat-card-title {
+  color: rgb(var(--app-text-muted));
+}
+.statistics-page .stat-card-value {
+  color: rgb(var(--app-text));
+  font-variant-numeric: tabular-nums;
+}
+.statistics-page .stat-chart-title {
+  color: rgb(var(--app-text));
+}
+.statistics-page .stat-chart-empty {
+  color: rgb(var(--app-text-muted));
+}
+.statistics-page .dashboard-stat-value {
+  color: rgb(var(--app-text));
+  font-variant-numeric: tabular-nums;
+}
+.statistics-page .dashboard-stat-muted {
+  color: rgb(var(--app-text-muted));
+}
+
+/* Staggered reveal (optional) */
+.statistics-page .statistics-reveal {
+  animation: statisticsReveal 0.4s ease-out forwards;
+  opacity: 0;
+}
+
+.statistics-page .statistics-reveal-1 { animation-delay: 0.05s; }
+.statistics-page .statistics-reveal-2 { animation-delay: 0.1s; }
+.statistics-page .statistics-reveal-3 { animation-delay: 0.15s; }
+.statistics-page .statistics-reveal-4 { animation-delay: 0.2s; }
+
+@keyframes statisticsReveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

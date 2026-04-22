@@ -1,11 +1,13 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { locationsApi, type Location } from '../lib/api'
-import { buildLocationTree, filterLocationTree, getLocationLabel, getRootLocations, getLocationChildren } from '../lib/location-tree'
+import { buildLocationTree, filterLocationTree, getLocationLabel, getRootLocations, getLocationChildren, getLocationAncestors } from '../lib/location-tree'
+import ModalPortal from './ModalPortal'
 
 export interface LocationSelection {
   locationId: number
   path: string
   name: string
+  effectiveStorageTypeName?: string | null
 }
 
 interface LocationTreePickerProps {
@@ -32,14 +34,23 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
       setLoading(true)
       // Fetch all locations in a single request (no pagination params)
       const response = await locationsApi.list()
-      let allLocations = response.data.locations || []
-      
-      // Filter to collection-capable locations if requested
+      const allLocations = response.data.locations
+
       if (filterCollectionsOnly) {
-        allLocations = allLocations.filter(loc => loc.canContainCollections)
+        // Show collection-capable locations plus all their ancestors so the tree has roots
+        // and users can navigate to selectable targets (roots may have canContainCollections=false)
+        const collectionCapable = allLocations.filter((loc) => loc.canContainCollections)
+        const byId = new Map<number, Location>()
+        for (const loc of collectionCapable) {
+          byId.set(loc.id, loc)
+          for (const ancestor of getLocationAncestors(allLocations, loc.id)) {
+            byId.set(ancestor.id, ancestor)
+          }
+        }
+        setLocations(Array.from(byId.values()))
+      } else {
+        setLocations(allLocations)
       }
-      
-      setLocations(allLocations)
     } catch (error) {
       console.error('Failed to load locations:', error)
     } finally {
@@ -47,31 +58,83 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
     }
   }
 
+  // Pre-compute location children map for O(1) lookup
+  const locationChildrenMap = useMemo(() => {
+    const map = new Map<number, Location[]>()
+    locations.forEach((loc) => {
+      if (loc.parentId !== null) {
+        if (!map.has(loc.parentId)) {
+          map.set(loc.parentId, [])
+        }
+        map.get(loc.parentId)!.push(loc)
+      }
+    })
+    // Sort children by name
+    for (const children of map.values()) {
+      children.sort((a, b) => a.name.localeCompare(b.name))
+    }
+    return map
+  }, [locations])
+
+  // Pre-compute location map for O(1) lookup
+  const locationMap = useMemo(() => {
+    const map = new Map<number, Location>()
+    locations.forEach((loc) => map.set(loc.id, loc))
+    return map
+  }, [locations])
+
   const tree = useMemo(() => buildLocationTree(locations), [locations])
   const filteredTree = useMemo(
     () => (search.trim() ? filterLocationTree(tree, search) : tree),
     [tree, search]
   )
 
-  const isSelected = (locationId: number): boolean => {
-    return selected.some(s => s.locationId === locationId)
+  // Auto-expand when selected, search, or locations change (adjust during render)
+  const selectedKey = selected.map((s) => s.locationId).sort().join(',')
+  const prevExpandedDepsRef = useRef({ selectedKey, search, locationsLength: locations.length })
+  const expandedDeps = { selectedKey, search, locationsLength: locations.length }
+  const expandedDepsChanged =
+    prevExpandedDepsRef.current.selectedKey !== selectedKey ||
+    prevExpandedDepsRef.current.search !== search ||
+    prevExpandedDepsRef.current.locationsLength !== locations.length
+  if (expandedDepsChanged && locations.length > 0) {
+    prevExpandedDepsRef.current = expandedDeps
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (search.trim()) {
+        locations.forEach((loc) => next.add(loc.id))
+      }
+      if (selected.length > 0) {
+        selected.forEach((sel) => {
+          const ancestors = getLocationAncestors(locations, sel.locationId)
+          ancestors.forEach((a) => next.add(a.id))
+          next.add(sel.locationId)
+        })
+      }
+      return next
+    })
   }
 
-  const toggleSelection = (loc: Location) => {
+  const isSelected = useCallback((locationId: number): boolean => {
+    return selected.some((s) => s.locationId === locationId)
+  }, [selected])
+
+  const toggleSelection = useCallback((loc: Location) => {
     const selection: LocationSelection = {
       locationId: loc.id,
       path: loc.path || loc.name,
       name: loc.name,
+      effectiveStorageTypeName: loc.effectiveStorageTypeName ?? null,
     }
     
     if (isSelected(loc.id)) {
       // Remove selection
-      onChange(selected.filter(s => s.locationId !== loc.id))
+      onChange(selected.filter((s) => s.locationId !== loc.id))
     } else {
       // Add selection
       onChange([...selected, selection])
     }
-  }
+  }, [selected, onChange, isSelected])
 
   const removeSelection = (index: number) => {
     onChange(selected.filter((_, i) => i !== index))
@@ -81,8 +144,8 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
     onChange([])
   }
 
-  const toggleExpanded = (locationId: number) => {
-    setExpandedIds(prev => {
+  const toggleExpanded = useCallback((locationId: number) => {
+    setExpandedIds((prev) => {
       const next = new Set(prev)
       if (next.has(locationId)) {
         next.delete(locationId)
@@ -91,124 +154,218 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
       }
       return next
     })
-  }
+  }, [])
 
-  const renderLocationNode = (loc: Location, depth: number = 0): React.ReactNode => {
-    const children = getLocationChildren(locations, loc.id)
+  // Highlight search term in text
+  const highlightText = useCallback((text: string, searchTerm: string) => {
+    if (!searchTerm.trim()) return text
+    const parts = text.split(new RegExp(`(${searchTerm})`, 'gi'))
+    return parts.map((part, i) =>
+      part.toLowerCase() === searchTerm.toLowerCase() ? (
+        <mark key={i} className="rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    )
+  }, [])
+
+  const renderLocationNode = useCallback((loc: Location, depth: number = 0): React.ReactNode => {
+    const children = locationChildrenMap.get(loc.id) || []
     const hasChildren = children.length > 0
     const isExpanded = expandedIds.has(loc.id)
     const locSelected = isSelected(loc.id)
+    const canContainCollections = loc.canContainCollections
+    const locationLabel = getLocationLabel(loc)
+    const expandAriaLabel = isExpanded ? `Collapse ${locationLabel}` : `Expand ${locationLabel}`
 
     return (
-      <div key={loc.id} className={depth > 0 ? 'ml-4 border-l border-gray-100 pl-3' : 'mb-1'}>
+      <div key={loc.id} className={depth > 0 ? 'ml-4 border-l-2 border-app-border pl-3' : 'mb-1'}>
         <div
-          className={`flex items-center justify-between w-full px-2 py-1.5 rounded hover:bg-gray-50 ${
-            locSelected ? 'bg-blue-50 border border-blue-200' : ''
+          className={`flex items-center gap-2 w-full rounded-lg transition-colors ${
+            locSelected
+              ? 'bg-app-accent-muted border-2 border-app-accent shadow-sm'
+              : canContainCollections
+              ? 'border border-transparent hover:border-app-border'
+              : 'bg-app-surface border border-app-border opacity-75'
           }`}
         >
-          <div className="flex items-center flex-1">
-            {hasChildren ? (
-              <button
-                type="button"
-                onClick={() => toggleExpanded(loc.id)}
-                className="w-3 h-3 mr-2 text-gray-500 focus-visible:outline-none"
-              >
-                {isExpanded ? '▾' : '▸'}
-              </button>
-            ) : (
-              <span className="w-3 h-3 mr-2" />
-            )}
+          {hasChildren ? (
             <button
               type="button"
-              onClick={() => toggleSelection(loc)}
-              className="flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              onClick={() => toggleExpanded(loc.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toggleExpanded(loc.id)
+                }
+              }}
+              aria-expanded={isExpanded}
+              aria-label={expandAriaLabel}
+              className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg border-0 bg-transparent text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent focus-visible:ring-offset-1 hover:bg-app-surface"
             >
-              <span className={`font-medium ${locSelected ? 'text-blue-700' : 'text-gray-800'}`}>
-                {getLocationLabel(loc)}
+              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-app-text-muted" aria-hidden>
+                {isExpanded ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
               </span>
-              {loc.path && (
-                <span className="ml-2 text-xs text-gray-500 font-mono">
-                  ({loc.path})
-                </span>
-              )}
-              {locSelected && (
-                <span className="ml-2 text-xs text-blue-600">(selected)</span>
-              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`font-medium ${locSelected ? 'text-app-accent-hover' : canContainCollections ? 'text-app-text' : 'text-app-text-muted'}`}>
+                    {search.trim() ? highlightText(locationLabel, search) : locationLabel}
+                  </span>
+                  {loc.path && loc.path !== loc.name && (
+                    <span className={`text-xs font-mono truncate ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
+                      {search.trim() ? highlightText(loc.path, search) : loc.path}
+                    </span>
+                  )}
+                  {(loc.effectiveStorageTypeName || loc.storageTypeName) && (
+                    <span className={`text-xs font-normal ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
+                      ({loc.effectiveStorageTypeName || loc.storageTypeName})
+                    </span>
+                  )}
+                  {!canContainCollections && (
+                    <span className="text-xs text-app-text-muted italic">(cannot contain collections)</span>
+                  )}
+                  {locSelected && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-app-accent text-white">
+                      Selected
+                    </span>
+                  )}
+                </div>
+                {loc.description && (
+                  <div className={`text-xs mt-0.5 truncate ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
+                    {search.trim() ? highlightText(loc.description, search) : loc.description}
+                  </div>
+                )}
+              </div>
             </button>
-          </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              toggleSelection(loc)
-            }}
-            className={`ml-2 px-2 py-0.5 text-xs rounded ${
-              locSelected
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {locSelected ? 'Deselect' : 'Select'}
-          </button>
+          ) : (
+            <div className="storage-tree-picker-row flex-1 min-w-0 flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg">
+              <span className="w-5 flex-shrink-0" aria-hidden />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`font-medium ${locSelected ? 'text-app-accent-hover' : canContainCollections ? 'text-app-text' : 'text-app-text-muted'}`}>
+                    {search.trim() ? highlightText(locationLabel, search) : locationLabel}
+                  </span>
+                  {loc.path && loc.path !== loc.name && (
+                    <span className={`text-xs font-mono truncate ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
+                      {search.trim() ? highlightText(loc.path, search) : loc.path}
+                    </span>
+                  )}
+                  {(loc.effectiveStorageTypeName || loc.storageTypeName) && (
+                    <span className={`text-xs font-normal ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
+                      ({loc.effectiveStorageTypeName || loc.storageTypeName})
+                    </span>
+                  )}
+                  {!canContainCollections && (
+                    <span className="text-xs text-app-text-muted italic">(cannot contain collections)</span>
+                  )}
+                  {locSelected && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-app-accent text-white">
+                      Selected
+                    </span>
+                  )}
+                </div>
+                {loc.description && (
+                  <div className={`text-xs mt-0.5 truncate ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
+                    {search.trim() ? highlightText(loc.description, search) : loc.description}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {canContainCollections && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleSelection(loc)
+              }}
+              className={`flex-shrink-0 px-3 py-2 min-h-[44px] text-sm font-medium rounded-lg transition-colors ${
+                locSelected
+                  ? 'bg-app-accent text-white hover:bg-app-accent-hover'
+                  : 'bg-app-surface text-app-text-muted hover:bg-app-border'
+              }`}
+            >
+              {locSelected ? 'Deselect' : 'Select'}
+            </button>
+          )}
         </div>
         {hasChildren && isExpanded && (
           <div className="mt-1 space-y-1">
-            {children.map(child => renderLocationNode(child, depth + 1))}
+            {children.map((child) => renderLocationNode(child, depth + 1))}
           </div>
         )}
       </div>
     )
-  }
+  }, [expandedIds, isSelected, toggleSelection, toggleExpanded, locationChildrenMap, search, highlightText])
 
-  const renderTree = () => {
+  const renderTree = useCallback(() => {
     const rootLocations = getRootLocations(locations)
     const displayRoots = search.trim()
       ? Array.from(filteredTree.get(null) || [])
       : rootLocations
 
     if (displayRoots.length === 0) {
-      return <p className="text-sm text-gray-500 p-4">No locations match this filter.</p>
+      return (
+        <div className="p-8 text-center">
+          <p className="text-sm text-app-text-muted mb-2">No locations match this filter.</p>
+          {filterCollectionsOnly && (
+            <p className="text-xs text-app-text-muted">Only locations that can contain collections are shown.</p>
+          )}
+        </div>
+      )
     }
 
     return (
-      <div className="text-sm">
+      <div className="text-sm space-y-1">
         {displayRoots.map((root) => renderLocationNode(root, 0))}
       </div>
     )
-  }
+  }, [locations, search, filteredTree, filterCollectionsOnly, renderLocationNode])
 
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full px-3 py-2 border border-gray-100 rounded-md shadow-sm bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        className="w-full px-3 py-2 border border-app-border rounded-md shadow-sm bg-app-card text-app-text text-left focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-app-accent"
       >
         {selected.length > 0 ? (
           <div className="space-y-1">
             {selected.map((sel, index) => (
-              <div key={index} className="text-sm text-gray-900 truncate">
+              <div key={index} className="text-sm text-app-text truncate">
                 {sel.path}
+                {sel.effectiveStorageTypeName ? ` (${sel.effectiveStorageTypeName})` : ''}
               </div>
             ))}
           </div>
         ) : (
-          <span className="text-gray-400">Select locations...</span>
+          <span className="text-app-text-muted">Select locations...</span>
         )}
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
-          <div
-            className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-            onClick={() => setOpen(false)}
-          />
-          <div className="relative z-10 w-full max-w-4xl mx-4 bg-white rounded-lg shadow-xl p-6 max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Select Locations</h2>
+        <ModalPortal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center">
+            <div
+              className="fixed inset-0 bg-black/40 backdrop-blur-md"
+              onClick={() => setOpen(false)}
+            />
+<div className="relative z-10 w-full max-w-4xl mx-4 bg-app-card rounded-lg shadow-xl p-6 max-h-[90vh] flex flex-col border border-app-border">
+              <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-app-text">Select Locations</h2>
               <button
                 type="button"
-                className="text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded"
                 onClick={() => setOpen(false)}
                 aria-label="Close location selection dialog"
               >
@@ -222,27 +379,46 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
               <label htmlFor="location-search" className="sr-only">
                 Search locations
               </label>
-              <input
-                id="location-search"
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name, path, or description…"
-                className="w-full form-input"
-                autoFocus
-              />
+              <div className="relative">
+                <input
+                  id="location-search"
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name, path, or description…"
+                  className="w-full px-4 py-2 border border-app-border rounded-lg shadow-sm bg-app-card text-app-text focus:ring-2 focus:ring-app-accent focus:border-app-accent"
+                  autoFocus
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="absolute right-3 top-2.5 text-app-text-muted hover:text-app-text"
+                    aria-label="Clear search"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {filterCollectionsOnly && (
+                <p className="mt-2 text-xs text-app-text-muted">
+                  Only showing locations that can contain collections
+                </p>
+              )}
             </div>
 
             {selected.length > 0 && (
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <div className="mb-4 p-3 bg-app-surface rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">
+                  <span className="text-sm font-medium text-app-text">
                     Selected ({selected.length}):
                   </span>
                   <button
                     type="button"
                     onClick={clearAll}
-                    className="text-xs text-blue-600 hover:text-blue-800"
+                    className="text-xs text-app-accent hover:text-app-accent-hover"
                   >
                     Clear all
                   </button>
@@ -251,13 +427,14 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
                   {selected.map((sel, index) => (
                     <span
                       key={index}
-                      className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 text-xs font-medium"
+                      className="inline-flex items-center px-2 py-1 rounded-md bg-app-accent-muted text-app-accent-hover text-xs font-medium"
                     >
                       {sel.path}
+                      {sel.effectiveStorageTypeName ? ` (${sel.effectiveStorageTypeName})` : ''}
                       <button
                         type="button"
                         onClick={() => removeSelection(index)}
-                        className="ml-1 text-blue-600 hover:text-blue-800"
+                        className="ml-1 text-app-accent hover:text-app-accent-hover"
                         aria-label={`Remove ${sel.path}`}
                       >
                         <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -270,9 +447,12 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
               </div>
             )}
 
-            <div className="border border-gray-100 rounded-md overflow-y-auto flex-1 min-h-0">
+            <div className="border border-app-border rounded-lg overflow-y-auto flex-1 min-h-0 bg-app-surface p-2">
               {loading ? (
-                <div className="p-4 text-sm text-gray-500">Loading locations…</div>
+                <div className="p-8 text-center">
+                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-app-accent"></div>
+                  <p className="mt-2 text-sm text-app-text-muted">Loading locations…</p>
+                </div>
               ) : (
                 renderTree()
               )}
@@ -282,13 +462,14 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover font-medium"
               >
                 Done
               </button>
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </>
   )

@@ -1,4 +1,7 @@
 import type { Database } from '../db/client'
+import type { ExtractTablesWithRelations } from 'drizzle-orm'
+import type { SQLiteTransaction } from 'drizzle-orm/sqlite-core'
+import type * as schema from '../db/schema'
 import {
   storageContainer,
   micronixTube,
@@ -7,13 +10,20 @@ import {
   staticWell,
   sheet,
   specimen,
+  box,
+  bag,
 } from '../db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } from './defaults'
 import { validateUnitForContainerType, validateContainerTypeForSpecimenType } from './validation'
 import {
   resolveCollection,
 } from './collection-resolution'
+import { utcNow } from './datetime'
+
+type DatabaseOrTransaction =
+  | Database
+  | SQLiteTransaction<'sync', void, typeof schema, ExtractTablesWithRelations<typeof schema>>
 
 /**
  * Normalize position string to match frontend format (e.g., "B1" -> "B01")
@@ -63,6 +73,9 @@ export async function validateContainerData(
     if (!data.collectionName && !data.collectionBarcode) {
       return { valid: false, error: 'Collection name or barcode is required' }
     }
+    if (!data.position || String(data.position).trim() === '') {
+      return { valid: false, error: 'Position (well) is required for micronix tubes.' }
+    }
     // Validate barcode uniqueness
     const existing = await database
       .select({ id: micronixTube.id })
@@ -75,6 +88,9 @@ export async function validateContainerData(
   } else if (containerType === 'cryovial_tube') {
     if (!data.collectionName && !data.collectionBarcode) {
       return { valid: false, error: 'Collection name or barcode is required' }
+    }
+    if (!data.position || String(data.position).trim() === '') {
+      return { valid: false, error: 'Position (well) is required for cryovial tubes.' }
     }
     // Validate barcode uniqueness if provided
     if (data.barcode) {
@@ -94,9 +110,12 @@ export async function validateContainerData(
     if (!data.label) {
       return { valid: false, error: 'Label is required for papers' }
     }
-  } else if (containerType === 'static_well') {
+  } else {
     if (!data.collectionName && !data.collectionBarcode) {
       return { valid: false, error: 'Collection name or barcode is required' }
+    }
+    if (!data.position || String(data.position).trim() === '') {
+      return { valid: false, error: 'Position (well) is required for static wells.' }
     }
   }
 
@@ -109,27 +128,28 @@ export async function validateContainerData(
 async function createMicronixTube(
   specimenId: number,
   data: ContainerData,
-  database: Database,
+  database: DatabaseOrTransaction,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
-    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate', database)
+    const dbForValidation = database as unknown as Database
+    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate', dbForValidation)
     if (!collectionId) return { success: false, error: 'Micronix plate not found' }
 
-    const defaultUnitId = await getDefaultUnit(database, 'micronix_tube')
+    const defaultUnitId = await getDefaultUnit(dbForValidation, 'micronix_tube')
     const finalUnitId = data.unitId || defaultUnitId
 
     // Validate unit is allowed for container type
-    const unitValidation = await validateUnitForContainerType(database, 'micronix_tube', finalUnitId)
+    const unitValidation = await validateUnitForContainerType(dbForValidation, 'micronix_tube', finalUnitId)
     if (!unitValidation.valid) {
       return { success: false, error: unitValidation.error }
     }
 
-    const defaultTotalQty = await getDefaultTotalQuantity(database, 'micronix_tube')
-    const defaultRemainingQty = await getDefaultRemainingQuantity(database, 'micronix_tube')
+    const defaultTotalQty = await getDefaultTotalQuantity(dbForValidation, 'micronix_tube')
+    const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'micronix_tube')
 
-    const now = new Date().toISOString()
-    const [container] = await database.insert(storageContainer).values({
+    const now = utcNow()
+    const inserted = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
@@ -141,6 +161,9 @@ async function createMicronixTube(
       updatedBy: userId,
     }).returning()
 
+    const container = inserted[0]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (inserted.length === 0 || container === undefined) throw new Error('Insert did not return container row')
     await database.insert(micronixTube).values({
       id: container.id,
       collectionId: collectionId,
@@ -150,8 +173,7 @@ async function createMicronixTube(
 
     return { success: true, containerId: container.id }
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create micronix tube'
-    return { success: false, error: errorMessage }
+    throw error
   }
 }
 
@@ -161,27 +183,28 @@ async function createMicronixTube(
 async function createCryovialTube(
   specimenId: number,
   data: ContainerData,
-  database: Database = db,
+  database: DatabaseOrTransaction,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
-    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'cryovial_box', database)
+    const dbForValidation = database as unknown as Database
+    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'cryovial_box', dbForValidation)
     if (!collectionId) return { success: false, error: 'Cryovial box not found' }
 
-    const defaultUnitId = await getDefaultUnit(database, 'cryovial_tube')
+    const defaultUnitId = await getDefaultUnit(dbForValidation, 'cryovial_tube')
     const finalUnitId = data.unitId || defaultUnitId
 
     // Validate unit is allowed for container type
-    const unitValidation = await validateUnitForContainerType(database, 'cryovial_tube', finalUnitId)
+    const unitValidation = await validateUnitForContainerType(dbForValidation, 'cryovial_tube', finalUnitId)
     if (!unitValidation.valid) {
       return { success: false, error: unitValidation.error }
     }
 
-    const defaultTotalQty = await getDefaultTotalQuantity(database, 'cryovial_tube')
-    const defaultRemainingQty = await getDefaultRemainingQuantity(database, 'cryovial_tube')
+    const defaultTotalQty = await getDefaultTotalQuantity(dbForValidation, 'cryovial_tube')
+    const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'cryovial_tube')
 
-    const now = new Date().toISOString()
-    const [container] = await database.insert(storageContainer).values({
+    const now = utcNow()
+    const inserted = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
@@ -193,6 +216,9 @@ async function createCryovialTube(
       updatedBy: userId,
     }).returning()
 
+    const container = inserted[0]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (inserted.length === 0 || container === undefined) throw new Error('Insert did not return container row')
     await database.insert(cryovialTube).values({
       id: container.id,
       collectionId: collectionId,
@@ -202,39 +228,78 @@ async function createCryovialTube(
 
     return { success: true, containerId: container.id }
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create cryovial tube'
-    return { success: false, error: errorMessage }
+    throw error
   }
 }
 
 /**
  * Create paper container
+ *
+ * For paper: collectionName = box (or bag) name, label = sheet name within that box/bag.
+ * The function resolves the box, then finds or creates the sheet inside it.
  */
 async function createPaper(
   specimenId: number,
   data: ContainerData,
-  database: Database = db,
+  database: DatabaseOrTransaction,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
-    // Resolve sheet
-    const sheetRecord = await database.select({ id: sheet.id }).from(sheet).where(eq(sheet.name, data.collectionName!)).get()
-    if (!sheetRecord) return { success: false, error: 'Sheet not found' }
+    const dbForValidation = database as unknown as Database
 
-    const defaultUnitId = await getDefaultUnit(database, 'paper')
+    // Resolve box by collectionName
+    const boxRecord = await database.select({ id: box.id }).from(box).where(eq(box.name, data.collectionName!)).get()
+    const bagRecord = !boxRecord
+      ? await database.select({ id: bag.id }).from(bag).where(eq(bag.name, data.collectionName!)).get()
+      : null
+    if (!boxRecord && !bagRecord) {
+      return { success: false, error: `Collection (box/bag) not found: ${data.collectionName}` }
+    }
+
+    // Find or create sheet by label within the resolved box/bag
+    const sheetName = data.label!
+    let sheetRecord: { id: number } | undefined
+    if (boxRecord) {
+      sheetRecord = await database
+        .select({ id: sheet.id })
+        .from(sheet)
+        .where(and(eq(sheet.name, sheetName), eq(sheet.boxId, boxRecord.id)))
+        .get()
+    } else {
+      sheetRecord = await database
+        .select({ id: sheet.id })
+        .from(sheet)
+        .where(and(eq(sheet.name, sheetName), eq(sheet.bagId, bagRecord!.id)))
+        .get()
+    }
+
+    if (!sheetRecord) {
+      const now = utcNow()
+      const [newSheet] = await database.insert(sheet).values({
+        name: sheetName,
+        boxId: boxRecord?.id ?? null,
+        bagId: bagRecord?.id ?? null,
+        created: now,
+        lastUpdated: now,
+        createdBy: userId,
+        updatedBy: userId,
+      }).returning()
+      sheetRecord = { id: newSheet.id }
+    }
+
+    const defaultUnitId = await getDefaultUnit(dbForValidation, 'paper')
     const finalUnitId = data.unitId || defaultUnitId
 
-    // Validate unit is allowed for container type
-    const unitValidation = await validateUnitForContainerType(database, 'paper', finalUnitId)
+    const unitValidation = await validateUnitForContainerType(dbForValidation, 'paper', finalUnitId)
     if (!unitValidation.valid) {
       return { success: false, error: unitValidation.error }
     }
 
-    const defaultTotalQty = await getDefaultTotalQuantity(database, 'paper')
-    const defaultRemainingQty = await getDefaultRemainingQuantity(database, 'paper')
+    const defaultTotalQty = await getDefaultTotalQuantity(dbForValidation, 'paper')
+    const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'paper')
 
-    const now = new Date().toISOString()
-    const [container] = await database.insert(storageContainer).values({
+    const now = utcNow()
+    const inserted = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
@@ -246,6 +311,9 @@ async function createPaper(
       updatedBy: userId,
     }).returning()
 
+    const container = inserted[0]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (inserted.length === 0 || container === undefined) throw new Error('Insert did not return container row')
     await database.insert(paper).values({
       id: container.id,
       sheetId: sheetRecord.id,
@@ -255,8 +323,7 @@ async function createPaper(
 
     return { success: true, containerId: container.id }
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create paper'
-    return { success: false, error: errorMessage }
+    throw error
   }
 }
 
@@ -266,27 +333,28 @@ async function createPaper(
 async function createStaticWell(
   specimenId: number,
   data: ContainerData,
-  database: Database = db,
+  database: DatabaseOrTransaction,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
   try {
-    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate', database)
+    const dbForValidation = database as unknown as Database
+    const collectionId = await resolveCollection(data.collectionName || data.collectionBarcode!, 'micronix_plate', dbForValidation)
     if (!collectionId) return { success: false, error: 'Micronix plate not found' }
 
-    const defaultUnitId = await getDefaultUnit(database, 'static_well')
+    const defaultUnitId = await getDefaultUnit(dbForValidation, 'static_well')
     const finalUnitId = data.unitId || defaultUnitId
 
     // Validate unit is allowed for container type
-    const unitValidation = await validateUnitForContainerType(database, 'static_well', finalUnitId)
+    const unitValidation = await validateUnitForContainerType(dbForValidation, 'static_well', finalUnitId)
     if (!unitValidation.valid) {
       return { success: false, error: unitValidation.error }
     }
 
-    const defaultTotalQty = await getDefaultTotalQuantity(database, 'static_well')
-    const defaultRemainingQty = await getDefaultRemainingQuantity(database, 'static_well')
+    const defaultTotalQty = await getDefaultTotalQuantity(dbForValidation, 'static_well')
+    const defaultRemainingQty = await getDefaultRemainingQuantity(dbForValidation, 'static_well')
 
-    const now = new Date().toISOString()
-    const [container] = await database.insert(storageContainer).values({
+    const now = utcNow()
+    const inserted = await database.insert(storageContainer).values({
       specimenId,
       unitId: finalUnitId,
       totalQuantity: data.totalQuantity ?? defaultTotalQty,
@@ -298,6 +366,9 @@ async function createStaticWell(
       updatedBy: userId,
     }).returning()
 
+    const container = inserted[0]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (inserted.length === 0 || container === undefined) throw new Error('Insert did not return container row')
     await database.insert(staticWell).values({
       id: container.id,
       collectionId: collectionId,
@@ -306,8 +377,7 @@ async function createStaticWell(
 
     return { success: true, containerId: container.id }
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create static well'
-    return { success: false, error: errorMessage }
+    throw error
   }
 }
 
@@ -317,10 +387,11 @@ async function createStaticWell(
 export async function createContainerForSpecimen(
   specimenId: number,
   data: ContainerData,
-  database: Database,
+  database: DatabaseOrTransaction,
   userId?: number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
-    const validation = await validateContainerData(database, data.containerType, data)
+    const dbForValidation = database as unknown as Database
+    const validation = await validateContainerData(dbForValidation, data.containerType, data)
   if (!validation.valid) return { success: false, error: validation.error }
 
   // Get specimen to find specimen type ID for validation
@@ -330,11 +401,9 @@ export async function createContainerForSpecimen(
   }
 
   // Validate container type is allowed for specimen type
-  if (data.containerType) {
-    const containerTypeValidation = await validateContainerTypeForSpecimenType(database, specimenRecord.specimenTypeId, data.containerType)
-    if (!containerTypeValidation.valid) {
-      return { success: false, error: containerTypeValidation.error }
-    }
+  const containerTypeValidation = await validateContainerTypeForSpecimenType(dbForValidation, specimenRecord.specimenTypeId, data.containerType)
+  if (!containerTypeValidation.valid) {
+    return { success: false, error: containerTypeValidation.error }
   }
 
   switch (data.containerType) {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import type { RefObject } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { getModifierKey } from '../lib/hotkeys'
 
@@ -18,12 +18,15 @@ export function isTypingInInput(): boolean {
   const activeElement = document.activeElement
   if (!activeElement) return false
 
-  const tagName = activeElement.tagName.toLowerCase()
+  // activeElement can be document or other non-Element nodes in edge cases; they have no tagName/getAttribute
+  const el = activeElement as Element
+  if (typeof el.tagName !== 'string') return false
+  const tagName = el.tagName.toLowerCase()
   const isInput = tagName === 'input' || tagName === 'textarea'
-  const isContentEditable = activeElement.getAttribute('contenteditable') === 'true'
+  const isContentEditable = el.getAttribute('contenteditable') === 'true'
   
   // Check if it's a search input (we might want to allow browser find in some cases)
-  const isSearchInput = activeElement.getAttribute('type') === 'search'
+  const isSearchInput = el.getAttribute('type') === 'search'
   
   // Don't block if user is actively typing in an input/textarea
   // But do block if it's just focused (not actively typing)
@@ -120,5 +123,24 @@ export function useModifierShiftHotkey(
   const modifier = getModifierKey()
   const hotkey = `${modifier}+shift+${key}`
   useHotkey(hotkey, callback, options)
+}
+
+/**
+ * Vim-style "/" key: focus the given search input when "/" is pressed.
+ * When focus is already on that input, do nothing so "/" can be typed in the search field.
+ * Uses key name "slash" because react-hotkeys-hook v5 listens to key code by default.
+ */
+export function useFocusSearchOnSlash(
+  ref: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
+) {
+  useHotkey(
+    'slash',
+    (e) => {
+      if (ref.current && document.activeElement === ref.current) return
+      e.preventDefault()
+      ref.current?.focus()
+    },
+    { enableOnFormTags: true, stopPropagation: true }
+  )
 }
 

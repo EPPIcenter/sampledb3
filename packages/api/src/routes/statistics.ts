@@ -23,11 +23,12 @@ import {
   unit,
   box,
   bag,
+  sheet,
 } from '../db/schema'
 import { eq, and, or, sql, gte, lte, inArray, isNull, gt } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { cache, cacheKeys } from '../lib/cache'
-import { createAdminMiddleware } from '../middleware/auth'
+import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 
 /**
  * Create statistics routes with database injection
@@ -36,6 +37,7 @@ import { createAdminMiddleware } from '../middleware/auth'
  */
 export function createStatisticsRoutes(database: Database, sqliteDatabase: SQLiteDatabase) {
   const statistics = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
   const adminMiddleware = createAdminMiddleware(database)
 
 // Helper to build date filter conditions
@@ -96,9 +98,8 @@ async function getContainerTypes(containerIds: number[]): Promise<Map<number, st
   return typeMap
 }
 
-statistics.get('/', async (c) => {
+statistics.get('/', authMiddleware, async (c) => {
   try {
-    console.log('[STATS] Starting statistics request')
     // Parse query parameters
     const studyCode = c.req.query('study')
     const sourceType = c.req.query('source_type')
@@ -112,20 +113,6 @@ statistics.get('/', async (c) => {
     const collectionDateTo = c.req.query('collection_date_to')
     const createdFrom = c.req.query('created_from')
     const createdTo = c.req.query('created_to')
-    
-    console.log('[STATS] Query params:', {
-      studyCode,
-      sourceType,
-      specimenTypeId,
-      containerType,
-      tagIds,
-      tagIdsLength: tagIds?.length,
-      locationId,
-    })
-    
-    // Debug: Check raw query params
-    const rawTagIds = c.req.queries('tag_ids')
-    console.log('[STATS] Raw tag_ids query param:', rawTagIds)
 
     // Build specimen filter conditions
     const specimenConditions = []
@@ -201,13 +188,11 @@ statistics.get('/', async (c) => {
     specimenConditions.push(...collectionDateFilters, ...createdDateFilters)
 
     // Get filtered specimens
-    console.log('[STATS] Querying filtered specimens, conditions:', specimenConditions.length)
     let specimenQuery = database.select().from(specimen)
     if (specimenConditions.length > 0) {
       specimenQuery = specimenQuery.where(and(...specimenConditions) as any) as any
     }
     const filteredSpecimens = await specimenQuery
-    console.log('[STATS] Found', filteredSpecimens.length, 'specimens')
 
     const specimenIds = filteredSpecimens.map(s => s.id)
 
@@ -328,7 +313,6 @@ statistics.get('/', async (c) => {
     let filteredLocationIds: number[] = []
     
     if (hasLocationFilter) {
-      console.log('[STATS] Processing location filter')
       const id = parseInt(locationId!)
       if (!isNaN(id)) {
         // Get the location and all its descendants
@@ -343,9 +327,7 @@ statistics.get('/', async (c) => {
           const { getLocationDescendants } = await import('../lib/location-helpers')
           const descendants = await getLocationDescendants(sqliteDatabase, id)
           filteredLocationIds = [id, ...descendants.map(d => d.id)]
-          console.log('[STATS] Found', filteredLocationIds.length, 'locations (including descendants)')
         } else {
-          console.log('[STATS] Location not found, returning empty results')
           // Location not found, return empty results
           return c.json({
             specimens: {
@@ -376,7 +358,6 @@ statistics.get('/', async (c) => {
     // Using AND logic: containers must have ALL selected tags
     let tagFilteredContainerIds: number[] | null = null
     if (tagIds && tagIds.length > 0) {
-      console.log('[STATS] Querying containers by tags (AND logic):', tagIds)
       
       // For AND logic, find containers that have all selected tags
       // Query containers for each tag and find the intersection
@@ -400,8 +381,7 @@ statistics.get('/', async (c) => {
       } else {
         tagFilteredContainerIds = []
       }
-      
-      console.log('[STATS] Found', tagFilteredContainerIds.length, 'containers with all selected tags')
+
       if (tagFilteredContainerIds.length === 0) {
         // No containers match all the tags, return empty results
         return c.json({
@@ -436,10 +416,8 @@ statistics.get('/', async (c) => {
       // Get location-filtered container IDs once (if location filter is active)
       let locationFilteredContainerIds: number[] | null = null
       if (hasLocationFilter && filteredLocationIds.length > 0) {
-        console.log('[STATS] Querying containers by location (all specimens)')
         // Query container IDs by matching location IDs (avoiding circular references)
         // First, get plates/boxes that match the location IDs
-        console.log('[STATS] Step 1: Querying plates/boxes for', filteredLocationIds.length, 'locations')
         const [matchingPlates, matchingBoxes] = await Promise.all([
           database.select({ id: micronixPlate.id })
             .from(micronixPlate)
@@ -448,13 +426,11 @@ statistics.get('/', async (c) => {
             .from(cryovialBox)
             .where(inArray(cryovialBox.locationId, filteredLocationIds)),
         ])
-        console.log('[STATS] Found', matchingPlates.length, 'plates and', matchingBoxes.length, 'boxes')
         
         const plateIds = matchingPlates.map(p => p.id)
         const boxIds = matchingBoxes.map(b => b.id)
         
         // Then get container IDs from those plates/boxes
-        console.log('[STATS] Step 2: Querying containers from plates/boxes')
         const [micronixContainerIds, cryovialContainerIds] = await Promise.all([
           plateIds.length > 0
             ? database.select({ id: micronixTube.id })
@@ -467,8 +443,7 @@ statistics.get('/', async (c) => {
                 .where(inArray(cryovialTube.collectionId, boxIds))
             : Promise.resolve([]),
         ])
-        console.log('[STATS] Found', micronixContainerIds.length, 'micronix and', cryovialContainerIds.length, 'cryovial containers')
-        
+
         // Combine container IDs
         locationFilteredContainerIds = [
           ...new Set([
@@ -481,13 +456,11 @@ statistics.get('/', async (c) => {
         if (tagFilteredContainerIds) {
           locationFilteredContainerIds = locationFilteredContainerIds.filter(id => tagFilteredContainerIds!.includes(id))
         }
-        console.log('[STATS] Total location-filtered container IDs:', locationFilteredContainerIds.length)
       }
       
       // Batch query if too many specimen IDs to avoid SQLite variable limit
       // Use Promise.all to parallelize queries for better performance
       const specimenChunks = chunkArray(specimenIds, 500)
-      console.log('[STATS] Processing', specimenChunks.length, 'specimen chunks in parallel')
       
       const chunkResults = await Promise.all(
         specimenChunks.map(async (specimenChunk, chunkIndex) => {
@@ -506,7 +479,6 @@ statistics.get('/', async (c) => {
 
           containerQuery = containerQuery.where(and(...containerConditions) as any) as any
           const containers = await containerQuery
-          console.log('[STATS] Chunk', chunkIndex + 1, 'of', specimenChunks.length, 'found', containers.length, 'containers')
           return containers
         })
       )
@@ -549,10 +521,8 @@ statistics.get('/', async (c) => {
     } else {
       // No specimen filter, but we might have state/status/location filters
       if (hasLocationFilter && filteredLocationIds.length > 0) {
-        console.log('[STATS] Querying containers by location (no specimen filter)')
         // Query container IDs by matching location IDs (avoiding circular references)
         // First, get plates/boxes that match the location IDs
-        console.log('[STATS] Step 1: Querying plates/boxes for', filteredLocationIds.length, 'locations')
         const [matchingPlates, matchingBoxes] = await Promise.all([
           database.select({ id: micronixPlate.id })
             .from(micronixPlate)
@@ -561,13 +531,11 @@ statistics.get('/', async (c) => {
             .from(cryovialBox)
             .where(inArray(cryovialBox.locationId, filteredLocationIds)),
         ])
-        console.log('[STATS] Found', matchingPlates.length, 'plates and', matchingBoxes.length, 'boxes')
         
         const plateIds = matchingPlates.map(p => p.id)
         const boxIds = matchingBoxes.map(b => b.id)
         
         // Then get container IDs from those plates/boxes
-        console.log('[STATS] Step 2: Querying containers from plates/boxes')
         const [micronixContainerIds, cryovialContainerIds] = await Promise.all([
           plateIds.length > 0
             ? database.select({ id: micronixTube.id })
@@ -580,7 +548,6 @@ statistics.get('/', async (c) => {
                 .where(inArray(cryovialTube.collectionId, boxIds))
             : Promise.resolve([]),
         ])
-        console.log('[STATS] Found', micronixContainerIds.length, 'micronix and', cryovialContainerIds.length, 'cryovial containers')
         
         // Combine container IDs
         const locationFilteredContainerIds = [
@@ -776,18 +743,15 @@ statistics.get('/', async (c) => {
 
     // Containers by tags
     const finalContainerIds = finalContainers.map(c => c.id)
-    console.log('[STATS] Querying container tags for', finalContainerIds.length, 'containers')
     let containerTags: Array<{ containerId: number; tagId: number; tagName: string }> = []
     
     if (finalContainerIds.length > 0) {
       // Batch query to avoid SQLite variable limit and stack overflow
       const containerIdChunks = chunkArray(finalContainerIds, 500)
-      console.log('[STATS] Processing', containerIdChunks.length, 'chunks for container tags in parallel')
-      
+
       // Use Promise.all to parallelize container tag queries
       const tagChunkResults = await Promise.all(
         containerIdChunks.map(async (chunk, i) => {
-          console.log('[STATS] Querying container tags chunk', i + 1, 'of', containerIdChunks.length, 'with', chunk.length, 'container IDs')
           const chunkTags = await database
             .select({
               containerId: storageContainerTag.storageContainerId,
@@ -797,14 +761,12 @@ statistics.get('/', async (c) => {
             .from(storageContainerTag)
             .innerJoin(tag, eq(storageContainerTag.tagId, tag.id))
             .where(inArray(storageContainerTag.storageContainerId, chunk))
-          console.log('[STATS] Found', chunkTags.length, 'tags in chunk')
           return chunkTags
         })
       )
       containerTags = tagChunkResults.flat()
     }
-    console.log('[STATS] Found', containerTags.length, 'total container tags')
-    
+
     const byTags: Record<string, number> = {}
     containerTags.forEach(ct => {
       byTags[ct.tagName] = (byTags[ct.tagName] || 0) + 1
@@ -814,7 +776,7 @@ statistics.get('/', async (c) => {
     const byStatus: Record<string, number> = {}
     finalContainers.forEach(c => {
       let statusName: string
-      if (c.remainingQuantity === null || c.remainingQuantity === undefined) {
+      if (c.remainingQuantity == null) {
         statusName = 'Unknown'
       } else if (c.remainingQuantity > 0) {
         statusName = 'In Use'
@@ -825,23 +787,22 @@ statistics.get('/', async (c) => {
     })
 
     // Storage Statistics
-    // Get location IDs from containers via micronix/cryovial plates/boxes
+    // Get location IDs from containers via micronix/cryovial plates/boxes, paper via sheets/boxes/bags, and static wells
     // Reuse finalContainerIds from above (line 673)
-    console.log('[STATS] Querying storage statistics for', finalContainerIds.length, 'containers')
     
     let micronixTubes: Array<{ containerId: number; locationId: number | null }> = []
     let cryovialTubes: Array<{ containerId: number; locationId: number | null }> = []
+    let paperContainers: Array<{ containerId: number; locationId: number | null }> = []
+    let staticWells: Array<{ containerId: number; locationId: number | null }> = []
     
     if (finalContainerIds.length > 0) {
       // Batch queries to avoid SQLite variable limit
       // Use Promise.all to parallelize all chunks
       const containerChunks = chunkArray(finalContainerIds, 500)
-      console.log('[STATS] Processing', containerChunks.length, 'chunks for storage statistics in parallel')
-      
+
       const storageChunkResults = await Promise.all(
         containerChunks.map(async (chunk, i) => {
-          console.log('[STATS] Querying storage chunk', i + 1, 'of', containerChunks.length, 'with', chunk.length, 'container IDs')
-          const [micronixBatch, cryovialBatch] = await Promise.all([
+          const [micronixBatch, cryovialBatch, paperBoxBatch, paperBagBatch, staticWellBatch] = await Promise.all([
             database.select({ containerId: micronixTube.id, locationId: micronixPlate.locationId })
               .from(micronixTube)
               .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
@@ -850,9 +811,43 @@ statistics.get('/', async (c) => {
               .from(cryovialTube)
               .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
               .where(inArray(cryovialTube.id, chunk)),
+            // Paper containers in boxes: paper -> sheet -> box -> location
+            database.select({ containerId: paper.id, locationId: box.locationId })
+              .from(paper)
+              .leftJoin(sheet, eq(paper.sheetId, sheet.id))
+              .leftJoin(box, eq(sheet.boxId, box.id))
+              .where(inArray(paper.id, chunk)),
+            // Paper containers in bags: paper -> sheet -> bag -> location
+            database.select({ containerId: paper.id, locationId: bag.locationId })
+              .from(paper)
+              .leftJoin(sheet, eq(paper.sheetId, sheet.id))
+              .leftJoin(bag, eq(sheet.bagId, bag.id))
+              .where(inArray(paper.id, chunk)),
+            // Static wells: static_well -> micronix_plate -> location
+            database.select({ containerId: staticWell.id, locationId: micronixPlate.locationId })
+              .from(staticWell)
+              .leftJoin(micronixPlate, eq(staticWell.collectionId, micronixPlate.id))
+              .where(inArray(staticWell.id, chunk)),
           ])
-          console.log('[STATS] Found', micronixBatch.length, 'micronix and', cryovialBatch.length, 'cryovial in chunk')
-          return { micronix: micronixBatch, cryovial: cryovialBatch }
+          
+          // Combine paper results (box and bag), preferring box location if both exist
+          const paperMap = new Map<number, number | null>()
+          paperBoxBatch.forEach(p => {
+            if (p.locationId !== null) {
+              paperMap.set(p.containerId, p.locationId)
+            }
+          })
+          paperBagBatch.forEach(p => {
+            // Only set if not already set from box (box takes precedence)
+            if (!paperMap.has(p.containerId) && p.locationId !== null) {
+              paperMap.set(p.containerId, p.locationId)
+            }
+          })
+          const paperBatch = Array.from(paperMap.entries()).map(([containerId, locationId]) => ({
+            containerId,
+            locationId,
+          }))
+          return { micronix: micronixBatch, cryovial: cryovialBatch, paper: paperBatch, staticWell: staticWellBatch }
         })
       )
       
@@ -860,32 +855,38 @@ statistics.get('/', async (c) => {
       storageChunkResults.forEach(result => {
         micronixTubes.push(...result.micronix)
         cryovialTubes.push(...result.cryovial)
+        paperContainers.push(...result.paper)
+        staticWells.push(...result.staticWell)
       })
     }
+
+    // Count containers with locations for verification
+    const containersWithLocations = micronixTubes.filter(t => t.locationId !== null).length +
+      cryovialTubes.filter(t => t.locationId !== null).length +
+      paperContainers.filter(t => t.locationId !== null).length +
+      staticWells.filter(t => t.locationId !== null).length
 
     const locationIds = [
       ...micronixTubes.map(t => t.locationId).filter((id): id is number => id !== null),
       ...cryovialTubes.map(t => t.locationId).filter((id): id is number => id !== null),
+      ...paperContainers.map(t => t.locationId).filter((id): id is number => id !== null),
+      ...staticWells.map(t => t.locationId).filter((id): id is number => id !== null),
     ]
 
     const byLocation: { location: string; count: number }[] = []
     const byRootLocation: Record<string, number> = {}
 
     if (locationIds.length > 0) {
-      console.log('[STATS] Querying', locationIds.length, 'locations for storage statistics')
       // Batch query to avoid SQLite variable limit
       // Use Promise.all to parallelize location queries
       const locationChunks = chunkArray(locationIds, 500)
-      console.log('[STATS] Processing', locationChunks.length, 'location chunks in parallel')
-      
+
       const locationChunkResults = await Promise.all(
         locationChunks.map(async (chunk, i) => {
-          console.log('[STATS] Querying location chunk', i + 1, 'of', locationChunks.length, 'with', chunk.length, 'location IDs')
           const locations = await database
             .select()
             .from(location)
             .where(inArray(location.id, chunk))
-          console.log('[STATS] Found', locations.length, 'locations in chunk')
           return locations
         })
       )
@@ -898,7 +899,7 @@ statistics.get('/', async (c) => {
       const parentIdsToLoad = new Set<number>()
       locations.forEach(loc => {
         let current: typeof location.$inferSelect | undefined = loc
-        while (current?.parentId !== null && current.parentId !== undefined) {
+        while (current.parentId != null) {
           if (!locationMap.has(current.parentId)) {
             parentIdsToLoad.add(current.parentId)
           }
@@ -910,7 +911,6 @@ statistics.get('/', async (c) => {
 
       // Load missing parent locations
       if (parentIdsToLoad.size > 0) {
-        console.log('[STATS] Loading', parentIdsToLoad.size, 'missing parent locations')
         const parentChunks = chunkArray(Array.from(parentIdsToLoad), 500)
         for (const chunk of parentChunks) {
           const parentLocations = await database
@@ -956,7 +956,7 @@ statistics.get('/', async (c) => {
       // Helper function to find root location by walking up parent chain
       const getRootLocation = (loc: typeof location.$inferSelect): typeof location.$inferSelect => {
         let current = loc
-        while (current.parentId !== null && current.parentId !== undefined) {
+        while (current.parentId != null) {
           const parent = locationMap.get(current.parentId)
           if (!parent) {
             // If parent not found, current is as high as we can go
@@ -986,17 +986,22 @@ statistics.get('/', async (c) => {
         })
 
       // Count by root location (root location name)
+      let countedByRoot = 0
       locationIds.forEach(id => {
         const loc = locationMap.get(id)
         if (loc) {
           const rootLoc = getRootLocation(loc)
           const rootName = rootLoc.name || `Location ${rootLoc.id}`
           byRootLocation[rootName] = (byRootLocation[rootName] || 0) + 1
+          countedByRoot++
         }
       })
     }
 
-    console.log('[STATS] Successfully completed statistics request')
+    // Calculate total containers with locations for verification
+    const totalContainersWithLocations = Object.values(byRootLocation).reduce((sum, count) => sum + count, 0)
+    const containersWithoutLocations = containerTotal - totalContainersWithLocations
+    
     return c.json({
       specimens: {
         total: adjustedSpecimenTotal,
@@ -1016,13 +1021,15 @@ statistics.get('/', async (c) => {
       storage: {
         byLocation,
         byRootLocation,
+        // Add summary for debugging/verification
+        _summary: {
+          totalContainers: containerTotal,
+          containersWithLocations: totalContainersWithLocations,
+          containersWithoutLocations: containersWithoutLocations,
+        },
       },
     })
   } catch (error: unknown) {
-    console.error('[STATS] Error fetching statistics:', error)
-    if (error instanceof Error) {
-      console.error('[STATS] Error stack:', error.stack)
-    }
     const errorMessage = error instanceof Error ? error.message : String(error)
     const isDevelopment = process.env.NODE_ENV !== 'production'
     return c.json({ 

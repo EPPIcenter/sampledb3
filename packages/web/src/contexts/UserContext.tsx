@@ -1,51 +1,57 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
+import { useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
 import { authApi, type User } from '../lib/api'
 import { addRecentUser } from '../lib/localUserHistory'
+import { UserContext } from './user-context-instance'
 
-interface UserContextType {
-  user: User | null
-  loading: boolean
-  error: string | null
-  refreshUser: () => Promise<void>
-  switchUser: (userId: number, password: string) => Promise<void>
-  setUser: (user: User | null) => void
-}
-
-const UserContext = createContext<UserContextType | undefined>(undefined)
+// Run refresh once per app load; cache result for remounts (e.g. Strict Mode)
+let userDidInit = false
+let userCachedUser: User | null = null
+let userCachedLoading = true
+let userCachedError: string | null = null
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUserState] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const setUser = useCallback((u: User | null) => {
+    setUserState(u)
+    userCachedUser = u
+    userCachedLoading = false
+    userCachedError = null
+  }, [])
+
   const refreshUser = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    userCachedLoading = true
+    userCachedError = null
     try {
-      setLoading(true)
-      setError(null)
       const response = await authApi.getCurrentUser()
       const userData = response.data.user
       setUser(userData)
-      // Save to local user history when user is refreshed
-      if (userData) {
-        addRecentUser(userData)
-      }
+      addRecentUser(userData)
     } catch (err: unknown) {
-      // If 401, user is not authenticated - this is expected, not an error
       if (typeof err === 'object' && err !== null && 'response' in err) {
         const axiosErr = err as { response?: { status?: number; data?: { error?: string } } }
         if (axiosErr.response?.status === 401) {
           setUser(null)
           setError(null)
         } else {
-          setError(axiosErr.response?.data?.error || 'Failed to load user')
+          const errMsg = axiosErr.response?.data?.error || 'Failed to load user'
+          setError(errMsg)
           setUser(null)
+          userCachedError = errMsg
         }
       } else {
-        setError('Failed to load user')
+        const errMsg = 'Failed to load user'
+        setError(errMsg)
         setUser(null)
+        userCachedError = errMsg
       }
     } finally {
       setLoading(false)
+      userCachedLoading = false
     }
   }, [])
 
@@ -55,7 +61,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setError(null)
       const response = await authApi.switchUser(userId, password)
       // The response structure is: { data: { user: {...} } }
-      const userData = response.data?.user
+      const userData = response.data.user
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- server may omit user
       if (!userData) {
         throw new Error('Invalid response from server')
       }
@@ -84,6 +91,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
           errorMessage = (err as { message: string }).message
         }
       }
+      // Map session/auth middleware messages to user-friendly text (wrong password shows "Invalid password" from API)
+      if (errorMessage === 'No session ID provided' || errorMessage === 'Invalid or expired session') {
+        errorMessage = 'Your session may have expired. Please refresh the page and sign in again.'
+      }
       setError(errorMessage)
       setLoading(false)
       // Don't call refreshUser() here - if switch failed, we want to keep the current user
@@ -93,13 +104,39 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    refreshUser()
+    if (!userDidInit) {
+      userDidInit = true
+      void refreshUser()
+    } else {
+      setUser(userCachedUser)
+      setLoading(userCachedLoading)
+      setError(userCachedError)
+    }
   }, [refreshUser])
+
+  // Permission helpers
+  const canWrite = useMemo(() => user?.role === 'admin' || user?.role === 'member', [user])
+  const canManageReferenceData = useMemo(() => user?.role === 'admin', [user])
+  const isAdmin = useMemo(() => user?.role === 'admin', [user])
+  const isMember = useMemo(() => user?.role === 'member', [user])
+  const isViewer = useMemo(() => user?.role === 'viewer', [user])
 
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(
-    () => ({ user, loading, error, refreshUser, switchUser, setUser }),
-    [user, loading, error, refreshUser, switchUser, setUser]
+    () => ({ 
+      user, 
+      loading, 
+      error, 
+      refreshUser, 
+      switchUser, 
+      setUser,
+      canWrite,
+      canManageReferenceData,
+      isAdmin,
+      isMember,
+      isViewer,
+    }),
+    [user, loading, error, refreshUser, switchUser, setUser, canWrite, canManageReferenceData, isAdmin, isMember, isViewer]
   )
 
   return (

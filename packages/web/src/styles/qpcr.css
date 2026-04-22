@@ -1,0 +1,247 @@
+/**
+ * qPCR experiment UI – "Precision lab" theme
+ * Scoped to .qpcr-theme wrapper on list, new, and detail pages. Uses app design tokens (see tokens.css).
+ */
+
+.qpcr-theme {
+  font-family: var(--app-font-sans);
+}
+
+/* Page background: theme-aware gradient (replaces from-slate-50 to-white) */
+.qpcr-theme.qpcr-page-bg {
+  min-height: 100vh;
+  background: linear-gradient(180deg, rgb(var(--app-bg)) 0%, rgb(var(--app-surface)) 100%);
+}
+
+.qpcr-theme h1,
+.qpcr-theme h2,
+.qpcr-theme h3 {
+  font-family: var(--app-font-display);
+  letter-spacing: -0.02em;
+}
+
+/* Form overrides: teal focus within qPCR pages */
+.qpcr-theme .qpcr-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgb(var(--app-border));
+  border-radius: 0.5rem;
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+.qpcr-theme .qpcr-input:focus {
+  outline: none;
+  border-color: rgb(var(--app-accent));
+  box-shadow: 0 0 0 2px rgb(var(--app-accent) / 0.3);
+}
+
+.qpcr-theme .qpcr-select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgb(var(--app-border));
+  border-radius: 0.5rem;
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+.qpcr-theme .qpcr-select:focus {
+  outline: none;
+  border-color: rgb(var(--app-accent));
+  box-shadow: 0 0 0 2px rgb(var(--app-accent) / 0.3);
+}
+
+/* Primary CTA */
+.qpcr-theme .qpcr-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  color: white;
+  background-color: rgb(var(--app-accent));
+  transition: background-color 0.15s;
+}
+.qpcr-theme .qpcr-btn-primary:hover:not(:disabled) {
+  background-color: rgb(var(--app-accent-hover));
+}
+.qpcr-theme .qpcr-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Secondary / outline */
+.qpcr-theme .qpcr-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  border: 1px solid rgb(var(--app-border));
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
+  transition: background-color 0.15s;
+}
+.qpcr-theme .qpcr-btn-secondary:hover {
+  background: rgb(var(--app-surface));
+}
+
+/* Danger */
+.qpcr-theme .qpcr-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid rgb(var(--app-trend-down) / 0.5);
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-trend-down));
+  transition: background-color 0.15s;
+}
+.qpcr-theme .qpcr-btn-danger:hover {
+  background: rgb(var(--app-trend-down) / 0.1);
+}
+.qpcr-theme .qpcr-btn-danger:disabled {
+  opacity: 0.5;
+}
+
+/* Status pills */
+.qpcr-theme .qpcr-pill-setup {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: rgb(var(--app-standard-muted));
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(var(--app-standard));
+}
+.qpcr-theme .qpcr-pill-template {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: rgb(var(--app-accent-muted));
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(var(--app-accent-hover));
+}
+.qpcr-theme .qpcr-pill-results {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: rgb(var(--app-trend-up) / 0.15);
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(var(--app-trend-up));
+}
+
+/* Fallback pill for unknown status */
+.qpcr-theme .qpcr-pill-unknown {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: rgb(var(--app-surface));
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(var(--app-text-muted));
+}
+
+/* Card surface */
+.qpcr-theme .qpcr-card {
+  border-radius: 0.75rem;
+  border: 1px solid rgb(var(--app-border));
+  background: rgb(var(--app-card));
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+}
+
+/* Staggered reveal */
+.qpcr-theme .qpcr-reveal {
+  animation: qpcr-fade-in 0.4s ease-out forwards;
+}
+@keyframes qpcr-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Well selection: selected well gets teal ring and soft tint */
+.qpcr-theme .qpcr-well-plate .qpcr-well--selected {
+  box-shadow: 0 0 0 2px rgb(var(--app-accent));
+  background-color: rgb(var(--app-accent-muted) / 0.5);
+}
+
+/* Well detail panel: links use teal to match theme */
+.qpcr-theme .qpcr-well-panel a[href].qpcr-well-panel-link {
+  color: rgb(var(--app-accent));
+  font-weight: 500;
+}
+.qpcr-theme .qpcr-well-panel a[href].qpcr-well-panel-link:hover {
+  color: rgb(var(--app-accent-hover));
+  text-decoration: underline;
+}
+
+/* Breadcrumb inside qpcr-theme – teal accent and themed container */
+.qpcr-theme nav[aria-label="Breadcrumb navigation"] {
+  background: rgb(var(--app-bg));
+  border: 1px solid rgb(var(--app-border));
+  border-radius: 0.75rem;
+}
+
+.qpcr-theme nav[aria-label="Breadcrumb navigation"] a {
+  color: rgb(var(--app-accent));
+}
+
+.qpcr-theme nav[aria-label="Breadcrumb navigation"] a:hover {
+  color: rgb(var(--app-accent-hover));
+}
+
+.qpcr-theme nav[aria-label="Breadcrumb navigation"] a:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* List table: dense, theme borders, teal hover */
+.qpcr-theme .qpcr-table-wrapper {
+  overflow-x: auto;
+}
+
+.qpcr-theme .qpcr-table-wrapper table {
+  border-collapse: collapse;
+  min-width: 100%;
+}
+
+.qpcr-theme .qpcr-table-wrapper thead th {
+  border-bottom: 1px solid rgb(var(--app-border));
+  color: rgb(var(--app-text-muted));
+  font-weight: 500;
+}
+
+.qpcr-theme .qpcr-table-wrapper tbody tr:hover {
+  background-color: rgb(var(--app-accent-muted) / 0.25);
+}
+
+.qpcr-theme .qpcr-table-wrapper tbody tr:focus-within {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: -2px;
+}
+
+.qpcr-theme .qpcr-table-wrapper tbody td {
+  border-bottom: 1px solid rgb(var(--app-border));
+  color: rgb(var(--app-text));
+}
+
+.qpcr-theme .qpcr-table-wrapper tbody tr.bg-blue-50 {
+  background-color: rgb(var(--app-accent-muted) / 0.5);
+}

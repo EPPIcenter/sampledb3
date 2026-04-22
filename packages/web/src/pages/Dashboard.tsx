@@ -1,25 +1,26 @@
-import { useEffect, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import '../styles/dashboard.css'
 import api, {
   studiesApi,
   activityApi,
   statisticsApi,
-  locationsApi,
   controlsApi,
-  searchApi,
+  qpcrExperimentsApi,
   type Study,
-  type SearchResult,
   type StudySummaryBasic,
   type StatisticsData,
-  type Location,
+  type QpcrExperiment,
 } from '../lib/api'
 import MetricCard from '../components/dashboard/MetricCard'
 import RecentStudies from '../components/dashboard/RecentStudies'
 import ActivityFeed from '../components/dashboard/ActivityFeed'
 import SystemInsights from '../components/dashboard/SystemInsights'
-import StorageOverview from '../components/dashboard/StorageOverview'
 import SkeletonCard from '../components/SkeletonCard'
+import SearchModal from '../components/SearchModal'
 import { calculateTrend } from '../utils/trends'
+import { useUser } from '../contexts/UserContext'
+import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 
 interface ActivityItem {
   id: number
@@ -43,7 +44,7 @@ interface LoadingState {
 }
 
 export default function Dashboard() {
-  const navigate = useNavigate()
+  const { canWrite } = useUser()
   
   // Critical data (loads first)
   const [stats, setStats] = useState<DashboardStats>({
@@ -59,29 +60,41 @@ export default function Dashboard() {
   const [statisticsData, setStatisticsData] = useState<StatisticsData | null>(null)
   const [recentStudies, setRecentStudies] = useState<Array<Study & { summary?: StudySummaryBasic | null }>>([])
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
-  const [locations, setLocations] = useState<Location[]>([])
-  const [locationCounts, setLocationCounts] = useState<Record<string, number>>({})
   const [hasControls, setHasControls] = useState(false)
+  const [recentQpcrExperiments, setRecentQpcrExperiments] = useState<QpcrExperiment[]>([])
+
+  // Hero search: open SearchModal with prefilled query
+  const [searchModalOpen, setSearchModalOpen] = useState(false)
+  const [searchInitialQuery, setSearchInitialQuery] = useState('')
+  const heroSearchRef = useRef<HTMLInputElement>(null)
+  useFocusSearchOnSlash(heroSearchRef)
+
+  // Data freshness (set when critical load completes)
+  const [dataAsOf, setDataAsOf] = useState<Date | null>(null)
   
   const [loading, setLoading] = useState<LoadingState>({
     critical: true,
     secondary: true,
   })
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
-  const [searchLoading, setSearchLoading] = useState(false)
+  const [qpcrLoading, setQpcrLoading] = useState(true)
 
-  // Load critical data first
+  // Load critical and qPCR on mount; qPCR fetches immediately so the card can render as soon as the fast qpcr-experiments API returns. Secondary (statistics, studies, activity, controls) runs after critical.
   useEffect(() => {
     loadCriticalData()
-  }, [])
 
-  // Load secondary data after critical data is loaded
-  useEffect(() => {
-    if (!loading.critical) {
-      loadSecondaryData()
-    }
-  }, [loading.critical])
+    // qPCR list is fast; fetch in parallel so the card doesn't wait for critical or other secondary requests
+    qpcrExperimentsApi
+      .list({ limit: 5 })
+      .then((res) => {
+        const all = (res.data.experiments) as QpcrExperiment[]
+        const sorted = [...all].sort(
+          (a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
+        )
+        setRecentQpcrExperiments(sorted.slice(0, 5))
+      })
+      .catch(() => setRecentQpcrExperiments([]))
+      .finally(() => setQpcrLoading(false))
+  }, [])
 
   const loadCriticalData = async () => {
     try {
@@ -97,11 +110,11 @@ export default function Dashboard() {
       ])
 
       const currentStats: DashboardStats = {
-        studies: studiesRes.data.pagination?.total || studiesRes.data.studies?.length || 0,
-        specimens: specimensRes.data.pagination?.total || specimensRes.data.specimens?.length || 0,
-        subjects: subjectsRes.data.pagination?.total || subjectsRes.data.subjects?.length || 0,
-        containers: containersRes.data.pagination?.total || containersRes.data.containers?.length || 0,
-        locations: locationsRes.data.pagination?.total || locationsRes.data.locations?.length || 0,
+        studies: studiesRes.data.pagination.total ?? studiesRes.data.studies.length,
+        specimens: specimensRes.data.pagination.total ?? specimensRes.data.specimens.length,
+        subjects: subjectsRes.data.pagination.total ?? subjectsRes.data.subjects.length,
+        containers: containersRes.data.pagination.total ?? containersRes.data.containers.length,
+        locations: locationsRes.data.pagination.total ?? locationsRes.data.locations.length,
       }
 
       setStats(currentStats)
@@ -135,7 +148,10 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Failed to load critical dashboard data:', error)
     } finally {
+      setDataAsOf(new Date())
       setLoading((prev) => ({ ...prev, critical: false }))
+      // Load secondary data in same flow (avoids chain of Effects)
+      loadSecondaryData()
     }
   }
 
@@ -143,63 +159,23 @@ export default function Dashboard() {
     try {
       setLoading((prev) => ({ ...prev, secondary: true }))
 
-      // Load all secondary data in parallel
+      // Load secondary data in parallel (qPCR is fetched separately on mount so its card can render as soon as that fast API returns)
       const [
         statisticsRes,
         studiesListRes,
         activityRes,
-        locationsRes,
         controlsRes,
       ] = await Promise.all([
         statisticsApi.get().catch(() => ({ data: null })),
         studiesApi.list(undefined, { limit: 15 }).catch(() => ({ studies: [] })),
         activityApi.recent(20).catch(() => ({ data: { activity: [] } })),
-        locationsApi.list().catch(() => ({ data: { locations: [] } })),
         controlsApi.list().catch(() => ({ data: { controls: [] } })),
       ])
 
-      // Set statistics data
-      if (statisticsRes.data) {
-        setStatisticsData(statisticsRes.data)
-        
-        // Extract location counts from statistics
-        // byRootLocation uses root location names as keys
-        // We'll match locations by name to get counts
-        const counts: Record<string, number> = {}
-        if (statisticsRes.data.storage.byRootLocation) {
-          // Store counts by root location name
-          Object.entries(statisticsRes.data.storage.byRootLocation).forEach(([name, count]) => {
-            counts[name] = count as number
-          })
-        }
-        setLocationCounts(counts)
-      }
+      // Set all state that doesn't depend on study summaries so qPCR, activity, etc. can render immediately
+      setStatisticsData(statisticsRes.data)
 
-      // Load study summaries
-      const studies = studiesListRes.studies || []
-      if (studies.length > 0) {
-        const studyIds = studies.map((s: Study) => s.id)
-        try {
-          const summariesRes = await studiesApi.getSummaries(studyIds)
-          const summariesMap = new Map(
-            (summariesRes.summaries || []).map((s: StudySummaryBasic) => [s.studyId, s])
-          )
-          setRecentStudies(
-            studies.map((study: Study) => ({
-              ...study,
-              summary: summariesMap.get(study.id) || null,
-            }))
-          )
-        } catch (error) {
-          console.error('Failed to load study summaries:', error)
-          setRecentStudies(studies)
-        }
-      } else {
-        setRecentStudies([])
-      }
-
-      // Set activity
-      const activities = (activityRes.data.activity || []) as any[]
+      const activities = activityRes.data.activity as any[]
       setRecentActivity(
         activities.map((item) => ({
           id: item.id,
@@ -210,45 +186,39 @@ export default function Dashboard() {
         }))
       )
 
-      // Set locations
-      setLocations(locationsRes.data.locations || [])
+      setHasControls(controlsRes.data.controls.length > 0)
 
-      // Check if controls exist
-      setHasControls((controlsRes.data.controls || []).length > 0)
-    } catch (error) {
-      console.error('Failed to load secondary dashboard data:', error)
-    } finally {
+      const studies = studiesListRes.studies
+      setRecentStudies(
+        studies.map((study: Study) => ({ ...study, summary: null }))
+      )
+
+      // Unblock secondary UI so qPCR, activity, statistics, and controls render immediately
       setLoading((prev) => ({ ...prev, secondary: false }))
-    }
-  }
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!searchQuery.trim()) return
-
-    try {
-      setSearchLoading(true)
-      const response = await searchApi.search(searchQuery.trim())
-      setSearchResults(response.data.results || [])
-      
-      // Navigate to first result if available
-      if (response.data.results && response.data.results.length > 0) {
-        const firstResult = response.data.results[0]
-        // Navigate based on result type
-        if (firstResult.type === 'specimen') {
-          navigate(`/specimens/${firstResult.id}`)
-        } else if (firstResult.type === 'study') {
-          navigate(`/studies/${firstResult.id}`)
-        } else if (firstResult.type === 'container') {
-          navigate(`/containers/${firstResult.id}`)
-        } else if (firstResult.type === 'subject') {
-          navigate(`/subjects/${firstResult.id}`)
+      // Load study summaries in background; Recent Studies section updates when done
+      {
+        const studyIds = studies.map((s: Study) => s.id)
+        try {
+          const summariesRes = await studiesApi.getSummaries(studyIds)
+          const summariesMap = new Map(
+            summariesRes.summaries.map((s: StudySummaryBasic) => [s.studyId, s])
+          )
+          setRecentStudies(
+            studies.map((study: Study) => ({
+              ...study,
+              summary: summariesMap.get(study.id) || null,
+            }))
+          )
+        } catch (error) {
+          console.error('Failed to load study summaries:', error)
         }
       }
     } catch (error) {
-      console.error('Search failed:', error)
+      console.error('Failed to load secondary dashboard data:', error)
+      setLoading((prev) => ({ ...prev, secondary: false }))
     } finally {
-      setSearchLoading(false)
+      setLoading((prev) => ({ ...prev, secondary: false }))
     }
   }
 
@@ -256,156 +226,262 @@ export default function Dashboard() {
   const specimensTrend = previousStats ? calculateTrend(stats.specimens, previousStats.specimens) : null
   const subjectsTrend = previousStats ? calculateTrend(stats.subjects, previousStats.subjects) : null
 
-  const isLoading = loading.critical || loading.secondary
+  const handleSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const form = e.currentTarget
+    const input = form.querySelector<HTMLInputElement>('input[name="dashboard-search"]')
+    if (!input) return
+    const q = input.value.trim() || ''
+    if (q) {
+      setSearchInitialQuery(q)
+      setSearchModalOpen(true)
+    }
+  }
+
+  const formatDataAsOf = (d: Date) =>
+    d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6 text-gray-900">Dashboard</h1>
-
-      {/* Hero Metrics Section */}
-      {loading.critical ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <SkeletonCard key={i} height="h-24" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-          <MetricCard
-            title="Studies"
-            value={stats.studies}
-            linkTo="/studies"
-            color="blue"
-          />
-          <MetricCard
-            title="Specimens"
-            value={stats.specimens}
-            linkTo="/specimens"
-            trend={specimensTrend ? { value: specimensTrend.value, positive: specimensTrend.positive, label: '30d' } : undefined}
-            color="green"
-          />
-          <MetricCard
-            title="Subjects"
-            value={stats.subjects}
-            trend={subjectsTrend ? { value: subjectsTrend.value, positive: subjectsTrend.positive, label: '30d' } : undefined}
-            color="purple"
-          />
-          <MetricCard
-            title="Containers"
-            value={stats.containers}
-            linkTo="/locations"
-            color="orange"
-          />
-          <MetricCard
-            title="Locations"
-            value={stats.locations}
-            linkTo="/locations"
-            color="indigo"
-          />
-        </div>
-      )}
-
-      {/* Quick Actions Section */}
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
-        <h2 className="text-xl font-semibold mb-4 text-gray-900">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Link
-            to="/specimens/new"
-            className="flex items-center gap-3 p-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            aria-label="Register new specimen"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <div className="text-left">
-              <div className="font-medium">Register New Specimen</div>
-              <div className="text-sm text-blue-100">Add a new specimen to the system</div>
-            </div>
-          </Link>
-          <Link
-            to="/studies/new"
-            className="flex items-center gap-3 p-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            aria-label="Create new study"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-            <div className="text-left">
-              <div className="font-medium">Create New Study</div>
-              <div className="text-sm text-green-100">Start a new research study</div>
-            </div>
-          </Link>
-          <Link
-            to="/import"
-            className="flex items-center gap-3 p-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            aria-label="Bulk import"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-            <div className="text-left">
-              <div className="font-medium">Bulk Import</div>
-              <div className="text-sm text-purple-100">Import data from CSV</div>
-            </div>
-          </Link>
-          <form onSubmit={handleSearch} className="flex flex-col gap-2">
+    <div className="dashboard-page">
+      <SearchModal
+        isOpen={searchModalOpen}
+        onClose={() => { setSearchModalOpen(false); setSearchInitialQuery('') }}
+        initialQuery={searchInitialQuery || undefined}
+      />
+      <div className="relative z-10 container mx-auto px-4 py-8">
+        {/* Hero + search */}
+        <header className="mb-6 dashboard-reveal dashboard-reveal-1">
+          <h1 className="text-3xl font-bold mb-1">Lab Overview</h1>
+          <p className="text-[rgb(var(--app-text-muted))] text-lg mb-4">Find samples, track activity, run workflows</p>
+          <form onSubmit={handleSearchSubmit} className="dashboard-search-form max-w-2xl">
             <div className="flex gap-2">
               <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Quick search..."
-                className="form-input flex-1"
-                aria-label="Quick search"
+                ref={heroSearchRef}
+                type="search"
+                name="dashboard-search"
+                placeholder="Search by barcode, study code, subject, or ID"
+                className="dashboard-search-input flex-1 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3 text-[rgb(var(--app-text))] placeholder:text-[rgb(var(--app-text-muted))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--app-accent))] focus:border-transparent"
+                aria-label="Search samples and studies"
               />
               <button
                 type="submit"
-                disabled={searchLoading}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
-                aria-label="Search"
+                className="dashboard-search-btn rounded-xl px-4 py-3 font-medium text-white bg-[rgb(var(--app-accent))] hover:bg-[rgb(var(--app-accent-hover))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--app-accent))] focus:ring-offset-2 transition-colors"
               >
-                {searchLoading ? '...' : 'Search'}
+                Search
               </button>
             </div>
-            <div className="text-xs text-gray-500">Press Enter to search</div>
           </form>
-        </div>
-      </div>
+          {dataAsOf && (
+            <p className="mt-2 text-sm text-[rgb(var(--app-text-muted))]" aria-live="polite">
+              Data as of {formatDataAsOf(dataAsOf)}
+            </p>
+          )}
+        </header>
 
-      {/* Recent Studies and Activity Feed */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <RecentStudies studies={recentStudies} loading={loading.secondary} />
-        <ActivityFeed activities={recentActivity} loading={loading.secondary} />
-      </div>
+        {/* Primary actions */}
+        <section className="mb-8 dashboard-reveal dashboard-reveal-2" aria-labelledby="quick-actions-title">
+          <h2 id="quick-actions-title" className="dashboard-section-title mb-4 sr-only">Quick Actions</h2>
+          <div className={`grid grid-cols-1 ${canWrite ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-1'} gap-4`}>
+            {canWrite && (
+              <>
+                <Link
+                  to="/specimens/new"
+                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-[rgb(var(--app-accent))] hover:shadow-md transition-all duration-200"
+                  aria-label="Register new specimen"
+                >
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--app-accent-muted))] flex items-center justify-center text-[rgb(var(--app-accent))]">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </span>
+                  <div className="text-left min-w-0">
+                    <div className="font-medium text-[rgb(var(--app-text))]">Register New Specimen</div>
+                    <div className="text-sm text-[rgb(var(--app-text-muted))]">Add a new specimen to the system</div>
+                  </div>
+                </Link>
+                <Link
+                  to="/studies/new"
+                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-[rgb(var(--app-accent))] hover:shadow-md transition-all duration-200"
+                  aria-label="Create new study"
+                >
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--app-accent-muted))] flex items-center justify-center text-[rgb(var(--app-accent))]">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                  </span>
+                  <div className="text-left min-w-0">
+                    <div className="font-medium text-[rgb(var(--app-text))]">Create New Study</div>
+                    <div className="text-sm text-[rgb(var(--app-text-muted))]">Start a new research study</div>
+                  </div>
+                </Link>
+                <Link
+                  to="/import"
+                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-[rgb(var(--app-accent))] hover:shadow-md transition-all duration-200"
+                  aria-label="Bulk import"
+                >
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--app-accent-muted))] flex items-center justify-center text-[rgb(var(--app-accent))]">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                  </span>
+                  <div className="text-left min-w-0">
+                    <div className="font-medium text-[rgb(var(--app-text))]">Bulk Import</div>
+                    <div className="text-sm text-[rgb(var(--app-text-muted))]">Import data from CSV</div>
+                  </div>
+                </Link>
+                <Link
+                  to="/locations"
+                  className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-[rgb(var(--app-accent))] hover:shadow-md transition-all duration-200"
+                  aria-label="Browse storage"
+                >
+                  <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--app-accent-muted))] flex items-center justify-center text-[rgb(var(--app-accent))]">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </span>
+                  <div className="text-left min-w-0">
+                    <div className="font-medium text-[rgb(var(--app-text))]">Browse Storage</div>
+                    <div className="text-sm text-[rgb(var(--app-text-muted))]">View locations and collections</div>
+                  </div>
+                </Link>
+              </>
+            )}
+            {!canWrite && (
+              <Link
+                to="/locations"
+                className="dashboard-action-tile flex items-center gap-3 p-4 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-[rgb(var(--app-accent))] hover:shadow-md transition-all duration-200"
+                aria-label="Browse storage"
+              >
+                <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-[rgb(var(--app-accent-muted))] flex items-center justify-center text-[rgb(var(--app-accent))]">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </span>
+                <div className="text-left min-w-0">
+                  <div className="font-medium text-[rgb(var(--app-text))]">Browse Storage</div>
+                  <div className="text-sm text-[rgb(var(--app-text-muted))]">View locations and collections</div>
+                </div>
+              </Link>
+            )}
+          </div>
+          {!canWrite && (
+            <div className="mt-4 rounded-lg p-3 bg-[rgb(var(--app-accent-muted))] border border-[rgb(var(--app-accent)/0.3)]">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-[rgb(var(--app-accent))]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm font-medium text-[rgb(var(--app-text))]">
+                  You have view-only access. Contact an administrator or member to create or modify data.
+                </p>
+              </div>
+            </div>
+          )}
+        </section>
 
-      {/* System Insights */}
-      <SystemInsights data={statisticsData} loading={loading.secondary} />
-
-      {/* Storage Overview */}
-      <StorageOverview
-        locations={locations}
-        locationCounts={locationCounts}
-        loading={loading.secondary}
-      />
-
-      {/* Controls Inventory (Conditional) */}
-      {hasControls && !loading.secondary && (
-        <div className="bg-white rounded-lg shadow p-6 mb-8">
+        {/* Next steps: qPCR Experiments — own loading so card appears as soon as the fast qpcr-experiments API returns; no stagger delay */}
+        <section className="dashboard-card p-6 mb-8 dashboard-reveal dashboard-reveal-qpcr" aria-labelledby="qpcr-experiments-title">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Blood Controls</h2>
-            <Link
-              to="/blood-controls"
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-              aria-label="View all blood controls"
-            >
-              View All Controls →
-            </Link>
+            <h2 id="qpcr-experiments-title" className="dashboard-section-title">qPCR Experiments</h2>
+            {canWrite && (
+              <Link to="/qpcr-experiments/new" className="dashboard-link text-sm" aria-label="New qPCR experiment">
+                New qPCR experiment
+              </Link>
+            )}
           </div>
-          <div className="text-gray-600">
-            Blood control definitions and batches are available. Visit the Blood Controls page to manage them.
-          </div>
+          {qpcrLoading ? (
+            <SkeletonCard height="h-24" className="mb-2" />
+          ) : recentQpcrExperiments.length === 0 ? (
+            <p className="text-[rgb(var(--app-text-muted))] py-2">
+              No qPCR experiments yet — {canWrite ? 'create one to get started.' : 'qPCR experiments will appear here.'}
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {recentQpcrExperiments.map((exp) => (
+                <li key={exp.id}>
+                  <Link
+                    to={`/qpcr-experiments/${exp.id}`}
+                    className="flex items-center justify-between p-3 rounded-lg border border-[rgb(var(--app-border))] hover:border-[rgb(var(--app-accent)/0.4)] hover:bg-[rgb(var(--app-surface))] transition-all duration-200"
+                    aria-label={`View qPCR experiment ${exp.name ?? exp.id}`}
+                  >
+                    <span className="font-medium text-[rgb(var(--app-text))] truncate">
+                      {exp.name ?? `Experiment #${exp.id}`}
+                    </span>
+                    <span
+                      className={`flex-shrink-0 ml-2 px-2 py-0.5 text-xs font-medium rounded dashboard-qpcr-state dashboard-qpcr-state-${exp.status.replace('_', '-')}`}
+                      aria-label={`Status: ${exp.status}`}
+                    >
+                      {exp.status === 'setup' && 'Setup'}
+                      {exp.status === 'in_progress' && 'In progress'}
+                      {exp.status === 'results_uploaded' && 'Results imported'}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Metrics: grouped by Inventory / Studies / Storage */}
+        <section className="mb-8 dashboard-reveal dashboard-reveal-4" aria-labelledby="metrics-title">
+          <h2 id="metrics-title" className="dashboard-section-title mb-4 sr-only">Key metrics</h2>
+          {loading.critical ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <SkeletonCard key={i} height="h-24" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="dashboard-metrics-group">
+                <h3 className="dashboard-metrics-group-label">Inventory</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <MetricCard title="Specimens" value={stats.specimens} linkTo="/specimens" trend={specimensTrend ? { value: specimensTrend.value, positive: specimensTrend.positive, label: '30d' } : undefined} color="green" index={4} />
+                  <MetricCard title="Containers" value={stats.containers} linkTo="/locations" color="orange" index={5} />
+                </div>
+              </div>
+              <div className="dashboard-metrics-group">
+                <h3 className="dashboard-metrics-group-label">Studies</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <MetricCard title="Studies" value={stats.studies} linkTo="/studies" color="blue" index={6} />
+                  <MetricCard title="Subjects" value={stats.subjects} trend={subjectsTrend ? { value: subjectsTrend.value, positive: subjectsTrend.positive, label: '30d' } : undefined} color="purple" index={7} />
+                </div>
+              </div>
+              <div className="dashboard-metrics-group">
+                <h3 className="dashboard-metrics-group-label">Storage</h3>
+                <div className="grid grid-cols-1 gap-4">
+                  <MetricCard title="Locations" value={stats.locations} linkTo="/locations" color="indigo" index={8} />
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Recent Studies and Activity Feed */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <RecentStudies studies={recentStudies} loading={loading.secondary} />
+          <ActivityFeed activities={recentActivity} loading={loading.secondary} />
         </div>
-      )}
+
+        {/* System Insights */}
+        <SystemInsights data={statisticsData} loading={loading.secondary} />
+
+        {/* Controls Inventory (Conditional) */}
+        {hasControls && !loading.secondary && (
+          <section className="dashboard-card p-6 mb-8" aria-labelledby="blood-controls-title">
+            <div className="flex items-center justify-between mb-4">
+              <h2 id="blood-controls-title" className="dashboard-section-title">Blood Controls</h2>
+              <Link to="/blood-controls" className="dashboard-link text-sm" aria-label="View all blood controls">
+                View All Controls →
+              </Link>
+            </div>
+            <p className="text-[rgb(var(--app-text-muted))]">
+              Blood control definitions and batches are available. Visit the Blood Controls page to manage them.
+            </p>
+          </section>
+        )}
+      </div>
     </div>
   )
 }

@@ -1,0 +1,296 @@
+/**
+ * Admin pages – "Modern precision lab" theme
+ * Scoped to .admin-page. Uses app design tokens (see tokens.css).
+ */
+
+.admin-page {
+  font-family: var(--app-font-sans);
+  background: linear-gradient(180deg, rgb(var(--app-bg)) 0%, rgb(var(--app-surface)) 100%);
+  min-height: 100%;
+  position: relative;
+}
+
+/* Subtle grid background for lab feel */
+.admin-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.admin-page h1,
+.admin-page h2,
+.admin-page h3 {
+  font-family: var(--app-font-display);
+  letter-spacing: -0.02em;
+  color: rgb(var(--app-text));
+}
+
+/* Card surface */
+.admin-page .admin-card {
+  background: rgb(var(--app-card));
+  border: 1px solid rgb(var(--app-border));
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.admin-page .admin-card:hover {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07);
+  border-color: rgb(var(--app-accent) / 0.3);
+}
+
+/* Modal overlay uses :root app tokens when portaled to body (outside .admin-page) */
+.admin-modal-overlay .admin-card {
+  background: rgb(var(--app-card));
+  border: 1px solid rgb(var(--app-border));
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.admin-modal-overlay .admin-btn-primary {
+  background: rgb(var(--app-accent));
+  color: white;
+  font-weight: 500;
+  transition: background-color 0.15s ease;
+  border: none;
+  border-radius: 0.5rem;
+}
+
+.admin-modal-overlay .admin-btn-primary:hover:not(:disabled) {
+  background: rgb(var(--app-accent-hover));
+}
+
+.admin-modal-overlay .admin-btn-primary:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+.admin-modal-overlay .admin-btn-secondary {
+  background: rgb(var(--app-surface));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
+  font-weight: 500;
+  border-radius: 0.5rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-modal-overlay .admin-btn-secondary:hover:not(:disabled) {
+  background: rgb(var(--app-border) / 0.5);
+  border-color: rgb(var(--app-border));
+}
+
+.admin-modal-overlay .admin-btn-secondary:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* Section title */
+.admin-page .admin-section-title {
+  font-family: var(--app-font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: rgb(var(--app-text));
+}
+
+/* Accent link */
+.admin-page .admin-link {
+  color: rgb(var(--app-accent));
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.admin-page .admin-link:hover {
+  color: rgb(var(--app-accent-hover));
+}
+
+.admin-page .admin-link:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* Primary button */
+.admin-page .admin-btn-primary {
+  background: rgb(var(--app-accent));
+  color: white;
+  font-weight: 500;
+  transition: background-color 0.15s ease;
+  border: none;
+  border-radius: 0.5rem;
+}
+
+.admin-page .admin-btn-primary:hover:not(:disabled) {
+  background: rgb(var(--app-accent-hover));
+}
+
+.admin-page .admin-btn-primary:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* Secondary / neutral button */
+.admin-page .admin-btn-secondary {
+  background: rgb(var(--app-surface));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
+  font-weight: 500;
+  border-radius: 0.5rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-page .admin-btn-secondary:hover:not(:disabled) {
+  background: rgb(var(--app-border) / 0.5);
+  border-color: rgb(var(--app-border));
+}
+
+.admin-page .admin-btn-secondary:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* Form controls: teal focus ring when inside admin-page */
+.admin-page input:focus,
+.admin-page select:focus,
+.admin-page textarea:focus {
+  border-color: rgb(var(--app-accent) / 0.5);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
+}
+
+.admin-page input[type="radio"],
+.admin-page input[type="checkbox"] {
+  accent-color: rgb(var(--app-accent));
+}
+
+.admin-page button:focus-visible,
+.admin-page a:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+.admin-page .form-input:focus,
+.admin-page .form-select:focus {
+  border-color: rgb(var(--app-accent) / 0.5);
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
+}
+
+/* Table: thead/tbody borders and header background */
+.admin-page .admin-table thead {
+  background: rgb(var(--app-surface));
+}
+
+.admin-page .admin-table th {
+  border-bottom: 1px solid rgb(var(--app-border));
+  color: rgb(var(--app-text-muted));
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.admin-page .admin-table td {
+  border-bottom: 1px solid rgb(var(--app-border));
+  color: rgb(var(--app-text));
+}
+
+.admin-page .admin-table tbody tr:hover {
+  background: rgb(var(--app-surface) / 0.5);
+}
+
+/* Override blue to teal when inside admin-page */
+.admin-page .bg-blue-50,
+.admin-page .bg-blue-100 {
+  background-color: rgb(var(--app-accent-muted));
+}
+.admin-page .border-blue-200,
+.admin-page .border-blue-300 {
+  border-color: rgb(var(--app-accent) / 0.5);
+}
+.admin-page .text-blue-600,
+.admin-page .text-blue-700,
+.admin-page .text-blue-800 {
+  color: rgb(var(--app-accent-hover));
+}
+.admin-page .bg-blue-600,
+.admin-page .bg-blue-700 {
+  background-color: rgb(var(--app-accent));
+}
+.admin-page .hover\:bg-blue-700:hover {
+  background-color: rgb(var(--app-accent-hover));
+}
+.admin-page .hover\:text-blue-900:hover {
+  color: rgb(var(--app-accent-hover));
+}
+.admin-page .focus\:ring-blue-500:focus,
+.admin-page .focus\:border-blue-500:focus {
+  --tw-ring-color: rgb(var(--app-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
+}
+
+/* StatCard / StatChart number styling */
+.admin-page .stat-card-title {
+  color: rgb(var(--app-text-muted));
+}
+.admin-page .stat-card-value {
+  color: rgb(var(--app-text));
+  font-variant-numeric: tabular-nums;
+}
+.admin-page .stat-chart-title {
+  color: rgb(var(--app-text));
+}
+.admin-page .stat-chart-empty {
+  color: rgb(var(--app-text-muted));
+}
+.admin-page .dashboard-stat-value {
+  color: rgb(var(--app-text));
+  font-variant-numeric: tabular-nums;
+}
+.admin-page .dashboard-stat-muted {
+  color: rgb(var(--app-text-muted));
+}
+
+/* Skeleton pulse when inside admin-page */
+.admin-page .admin-skeleton {
+  background-color: rgb(var(--app-border) / 0.5);
+}
+
+/* Staggered reveal */
+.admin-page .admin-reveal {
+  animation: adminReveal 0.4s ease-out forwards;
+  opacity: 0;
+}
+
+.admin-page .admin-reveal-1 { animation-delay: 0.05s; }
+.admin-page .admin-reveal-2 { animation-delay: 0.1s; }
+.admin-page .admin-reveal-3 { animation-delay: 0.15s; }
+.admin-page .admin-reveal-4 { animation-delay: 0.2s; }
+.admin-page .admin-reveal-5 { animation-delay: 0.25s; }
+.admin-page .admin-reveal-6 { animation-delay: 0.3s; }
+.admin-page .admin-reveal-7 { animation-delay: 0.35s; }
+.admin-page .admin-reveal-8 { animation-delay: 0.4s; }
+
+@keyframes adminReveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Modal overlay/panel: theme-appropriate when inside admin-page */
+.admin-page [role="dialog"] {
+  background: rgb(var(--app-card));
+  border: 1px solid rgb(var(--app-border));
+  border-radius: 0.75rem;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+}

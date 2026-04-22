@@ -1,13 +1,17 @@
 import { Hono } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import { users, sessions } from '../db/schema'
-import { eq, and, isNull, gt, ne, or } from 'drizzle-orm'
+import { eq, and, isNull, gt, ne, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { nanoid } from 'nanoid'
 import type { Database } from '../db/client'
 import { getPasswordRequirements, getSessionSettings } from '../lib/settings'
 import { createAuthMiddleware, createAdminMiddleware } from '../middleware/auth'
+import { rateLimit } from '../middleware/rate-limit'
+import { handleRouteError } from '../lib/error-handler'
+import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 export function createAuthRoutes(database: Database, settingsDb?: Database) {
   const auth = new Hono()
@@ -51,8 +55,8 @@ const createRegisterSchema = async () => {
   })
 }
 
-// Login
-auth.post('/login', async (c) => {
+// Login - rate limited for brute force protection (10 attempts per minute per IP)
+auth.post('/login', rateLimit(10, 60 * 1000), async (c) => {
   try {
     const body = await c.req.json()
     const { emailOrUsername, password } = loginSchema.parse(body)
@@ -79,6 +83,10 @@ auth.post('/login', async (c) => {
       return c.json({ error: 'Invalid credentials' }, 401)
     }
 
+    if (!user.approvedAt) {
+      return c.json({ error: 'Account pending approval' }, 401)
+    }
+
     // Get session settings
     const sessionSettings = await getSessionSettingsFromDb()
     if (!sessionSettings) {
@@ -99,7 +107,7 @@ auth.post('/login', async (c) => {
     // Update last login
     await database
       .update(users)
-      .set({ lastLogin: new Date().toISOString() })
+      .set({ lastLogin: utcNow() })
       .where(eq(users.id, user.id))
 
     setCookie(c, 'session_id', sessionId, {
@@ -123,7 +131,83 @@ auth.post('/login', async (c) => {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
+  }
+})
+
+// Self-register (public, rate-limited) - creates user with approvedAt=null
+const createSelfRegisterSchema = async () => {
+  const passwordRequirements = await getPasswordRequirementsFromDb()
+  if (!passwordRequirements) {
+    throw new Error('Password requirements are not configured. Please run database initialization.')
+  }
+  const minLength = passwordRequirements.minLength
+  return z.object({
+    email: z.string().email(),
+    name: z.string().min(1),
+    username: z.string().min(1).optional().nullable(),
+    password: z.string().min(minLength),
+  })
+}
+
+auth.post('/self-register', rateLimit(5, 60 * 1000), async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = await createSelfRegisterSchema()
+    const data = schema.parse(body)
+
+    const existingEmail = await database
+      .select()
+      .from(users)
+      .where(and(eq(users.email, data.email), isNull(users.deletedAt)))
+      .get()
+
+    if (existingEmail) {
+      return c.json({ error: 'Email already in use' }, 400)
+    }
+
+    if (data.username) {
+      const existingUsername = await database
+        .select()
+        .from(users)
+        .where(and(eq(users.username, data.username), isNull(users.deletedAt)))
+        .get()
+
+      if (existingUsername) {
+        return c.json({ error: 'Username already in use' }, 400)
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(data.password, 10)
+    const createdAt = utcNow()
+
+    const [user] = await database
+      .insert(users)
+      .values({
+        email: data.email,
+        username: data.username || null,
+        name: data.name,
+        passwordHash,
+        role: 'member',
+        createdAt,
+        approvedAt: null, // Pending admin approval
+      })
+      .returning()
+
+    return c.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username || undefined,
+        name: user.name,
+        role: user.role,
+      },
+    }, 201)
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    return handleRouteError(error, c)
   }
 })
 
@@ -169,7 +253,7 @@ auth.get('/me', authMiddleware, async (c) => {
 })
 
 // Register (admin only in production)
-auth.post('/register', async (c) => {
+auth.post('/register', adminMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const registerSchema = await createRegisterSchema()
@@ -201,8 +285,9 @@ auth.post('/register', async (c) => {
 
     // Hash password
     const passwordHash = await bcrypt.hash(data.password, 10)
+    const createdAt = utcNow()
 
-    // Create user
+    // Create user (admin-created users are immediately approved)
     const [user] = await database
       .insert(users)
       .values({
@@ -211,6 +296,8 @@ auth.post('/register', async (c) => {
         name: data.name,
         passwordHash,
         role: data.role,
+        createdAt,
+        approvedAt: createdAt,
       })
       .returning()
 
@@ -233,33 +320,37 @@ auth.post('/register', async (c) => {
 
 // Get current user (alias for /me for consistency, requires authentication)
 auth.get('/current', authMiddleware, async (c) => {
-  const user = c.get('user')!
-  // Fetch full user data including username
-  const fullUser = await database
-    .select({
-      id: users.id,
-      email: users.email,
-      username: users.username,
-      name: users.name,
-      role: users.role,
-    })
-    .from(users)
-    .where(eq(users.id, user.id))
-    .get()
-  
-  if (!fullUser) {
-    return c.json({ error: 'User not found' }, 404)
-  }
-  
-  return c.json({ 
-    user: {
-      id: fullUser.id,
-      email: fullUser.email,
-      username: fullUser.username || undefined,
-      name: fullUser.name,
-      role: fullUser.role,
+  try {
+    const user = c.get('user')!
+    // Fetch full user data including username
+    const fullUser = await database
+      .select({
+        id: users.id,
+        email: users.email,
+        username: users.username,
+        name: users.name,
+        role: users.role,
+      })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .get()
+    
+    if (!fullUser) {
+      return c.json({ error: 'User not found' }, 404)
     }
-  })
+    
+    return c.json({ 
+      user: {
+        id: fullUser.id,
+        email: fullUser.email,
+        username: fullUser.username || undefined,
+        name: fullUser.name,
+        role: fullUser.role,
+      }
+    })
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
 })
 
 // Update current user profile (self-service)
@@ -328,6 +419,10 @@ auth.patch('/me', authMiddleware, async (c) => {
       .where(eq(users.id, currentUser.id))
       .returning()
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+    if (!updated) {
+      return c.json({ error: 'User not found' }, 404)
+    }
     return c.json({
       user: {
         id: updated.id,
@@ -431,6 +526,7 @@ auth.get('/users', adminMiddleware, async (c) => {
         createdAt: users.createdAt,
         lastLogin: users.lastLogin,
         deletedAt: users.deletedAt,
+        approvedAt: users.approvedAt,
       })
       .from(users)
     
@@ -472,6 +568,10 @@ auth.post('/switch', authMiddleware, async (c) => {
     if (!targetUser) {
       return c.json({ error: 'User not found' }, 404)
     }
+
+    if (!targetUser.approvedAt) {
+      return c.json({ error: 'Account pending approval' }, 401)
+    }
     
     // Verify password for the target user
     const valid = await bcrypt.compare(password, targetUser.passwordHash)
@@ -505,7 +605,7 @@ auth.post('/switch', authMiddleware, async (c) => {
     // Update last login
     await database
       .update(users)
-      .set({ lastLogin: new Date().toISOString() })
+      .set({ lastLogin: utcNow() })
       .where(eq(users.id, targetUser.id))
     
     setCookie(c, 'session_id', newSessionId, {
@@ -536,7 +636,7 @@ auth.post('/switch', authMiddleware, async (c) => {
 // Update user (admin only)
 auth.put('/users/:id', adminMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid user ID' }, 400)
     }
@@ -600,15 +700,14 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
 
     // Prevent removing the last admin
     if (data.role && data.role !== 'admin' && existing.role === 'admin') {
-      const adminCount = await database
-        .select({ count: z.number() })
+      const countResult = await database
+        .select({ count: sql<number>`count(*)` })
         .from(users)
         .where(and(
           eq(users.role, 'admin'),
           isNull(users.deletedAt)
         ))
-        .then(rows => rows.length)
-
+      const adminCount = Number(countResult[0]?.count ?? 0)
       if (adminCount <= 1) {
         return c.json({ error: 'Cannot remove the last admin' }, 400)
       }
@@ -620,6 +719,10 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
       .where(eq(users.id, id))
       .returning()
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+    if (!updated) {
+      return c.json({ error: 'User not found' }, 404)
+    }
     return c.json({
       user: {
         id: updated.id,
@@ -630,6 +733,7 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
         createdAt: updated.createdAt,
         lastLogin: updated.lastLogin,
         deletedAt: updated.deletedAt,
+        approvedAt: updated.approvedAt ?? undefined,
       },
     })
   } catch (error) {
@@ -640,10 +744,52 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
   }
 })
 
+// Approve user (admin only) - allows pending self-registered users to log in
+auth.patch('/users/:id/approve', adminMiddleware, async (c) => {
+  try {
+    const id = parseInt(requireParam(c, 'id'))
+    if (isNaN(id)) {
+      return c.json({ error: 'Invalid user ID' }, 400)
+    }
+
+    const existing = await database
+      .select()
+      .from(users)
+      .where(and(
+        eq(users.id, id),
+        isNull(users.deletedAt)
+      ))
+      .get()
+
+    if (!existing) {
+      return c.json({ error: 'User not found' }, 404)
+    }
+
+    const approvedAt = utcNow()
+    await database
+      .update(users)
+      .set({ approvedAt })
+      .where(eq(users.id, id))
+
+    return c.json({
+      user: {
+        id: existing.id,
+        email: existing.email,
+        username: existing.username || undefined,
+        name: existing.name,
+        role: existing.role,
+        approvedAt,
+      },
+    })
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
 // Reset user password (admin only)
 auth.patch('/users/:id/password', adminMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid user ID' }, 400)
     }
@@ -700,7 +846,7 @@ auth.patch('/users/:id/password', adminMiddleware, async (c) => {
 // Soft delete user (admin only)
 auth.delete('/users/:id', adminMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid user ID' }, 400)
     }
@@ -736,12 +882,16 @@ auth.delete('/users/:id', adminMiddleware, async (c) => {
     }
 
     // Soft delete: set deletedAt timestamp
-    const deletedAt = new Date().toISOString()
-    await database
+    const deletedAt = utcNow()
+    const softDeleted = await database
       .update(users)
       .set({ deletedAt })
       .where(eq(users.id, id))
+      .returning()
 
+    if (softDeleted.length === 0) {
+      return c.json({ error: 'User not found' }, 404)
+    }
     // Revoke all existing sessions for this user
     await database.delete(sessions).where(eq(sessions.userId, id))
 
@@ -754,7 +904,7 @@ auth.delete('/users/:id', adminMiddleware, async (c) => {
 // Restore soft-deleted user (admin only)
 auth.post('/users/:id/restore', adminMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid user ID' }, 400)
     }
@@ -823,7 +973,7 @@ auth.post('/users/:id/restore', adminMiddleware, async (c) => {
 // Get active sessions for a user (admin only)
 auth.get('/users/:id/sessions', adminMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid user ID' }, 400)
     }
@@ -860,7 +1010,7 @@ auth.get('/users/:id/sessions', adminMiddleware, async (c) => {
 // Revoke a session (admin only)
 auth.delete('/sessions/:id', adminMiddleware, async (c) => {
   try {
-    const sessionId = c.req.param('id')
+    const sessionId = requireParam(c, 'id')
 
     const deleted = await database
       .delete(sessions)

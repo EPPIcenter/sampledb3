@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { authApi } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
 import { addRecentUser } from '../lib/localUserHistory'
@@ -7,23 +7,16 @@ import { addRecentUser } from '../lib/localUserHistory'
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, refreshUser, setUser } = useUser()
+  const { refreshUser, setUser } = useUser()
   const [emailOrUsername, setEmailOrUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [loginSuccess, setLoginSuccess] = useState(false)
 
   // Get redirect path from location state, or default to dashboard
-  const from = (location.state as any)?.from?.pathname || '/'
-
-  // Redirect after successful login when user is set
-  useEffect(() => {
-    if (loginSuccess && user) {
-      setLoading(false)
-      navigate(from, { replace: true })
-    }
-  }, [loginSuccess, user, navigate, from])
+  const state = location.state as { from?: { pathname?: string }; fromSetup?: boolean } | null
+  const from = state?.from?.pathname ?? '/'
+  const fromSetup = state?.fromSetup ?? false
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -33,43 +26,47 @@ export default function Login() {
     try {
       const response = await authApi.login(emailOrUsername, password)
       // The response structure from axios is: { data: { user: {...} } }
-      // So we access response.data.user
-      const userData = response.data?.user
-      if (userData) {
-        setUser(userData)
-        // Save to local user history
-        addRecentUser(userData)
-        setLoginSuccess(true)
-        // Don't set loading to false here - let the useEffect handle navigation
+      const userData = response.data.user
+      setUser(userData)
+      addRecentUser(userData)
+      setLoading(false)
+      navigate(from, { replace: true })
+    } catch (err: unknown) {
+      const message =
+        typeof err === 'object' && err !== null && 'response' in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : null
+      if (message === 'Account pending approval') {
+        setError('Your account is pending approval. An administrator will approve it before you can sign in.')
       } else {
-        // Fallback: refresh user context
-        await refreshUser()
-        setLoginSuccess(true)
-        setLoading(false)
+        setError(message || 'Login failed. Please check your credentials.')
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed. Please check your credentials.')
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-app-surface flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
           <div className="flex justify-center">
             <img src="/icon.png" alt="SampleDB" className="h-16 w-auto" />
           </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-app-text">
             Sign in to SampleDB
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
+          <p className="mt-2 text-center text-sm text-app-text-muted">
             Enter your credentials to access the application
           </p>
+          {fromSetup && (
+            <p className="mt-3 text-center text-sm text-app-trend-up font-medium">
+              Setup complete! Please sign in with your admin credentials.
+            </p>
+          )}
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+            <div className="bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded-md text-sm">
               {error}
             </div>
           )}
@@ -86,7 +83,7 @@ export default function Login() {
                 required
                 value={emailOrUsername}
                 onChange={(e) => setEmailOrUsername(e.target.value)}
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-app-border placeholder-app-text-muted text-app-text rounded-t-md focus:outline-none focus:ring-app-accent focus:border-app-accent focus:z-10 sm:text-sm"
                 placeholder="Email or Username"
                 autoFocus
               />
@@ -103,7 +100,7 @@ export default function Login() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-app-border placeholder-app-text-muted text-app-text rounded-b-md focus:outline-none focus:ring-app-accent focus:border-app-accent focus:z-10 sm:text-sm"
                 placeholder="Password"
               />
             </div>
@@ -113,19 +110,17 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-app-accent hover:bg-app-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-app-accent disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </div>
-
-          <div className="text-center text-sm text-gray-600">
-            <p>Test users available:</p>
-            <p className="mt-1 text-xs text-gray-500">
-              test@test.com, alice@test.com, bob@test.com, carol@test.com
-            </p>
-            <p className="mt-1 text-xs text-gray-500">Password: password123</p>
-          </div>
+          <p className="text-center text-sm text-app-text-muted">
+            Don&apos;t have an account?{' '}
+            <Link to="/register" className="font-medium text-app-accent hover:text-app-accent-hover">
+              Create account
+            </Link>
+          </p>
         </form>
       </div>
     </div>

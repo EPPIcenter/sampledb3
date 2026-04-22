@@ -4,6 +4,9 @@ import { reagent } from '../db/schema'
 import { eq, and, lte } from 'drizzle-orm'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create reagents routes with database injection
@@ -11,9 +14,11 @@ import { sql } from 'drizzle-orm'
  */
 export function createReagentsRoutes(database: Database): Hono {
   const reagents = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
   // List all reagents
-  reagents.get('/', async (c) => {
+  reagents.get('/', authMiddleware, async (c) => {
     const type = c.req.query('type')
     const expiringWithinDays = c.req.query('expiring_within_days')
     
@@ -47,8 +52,8 @@ export function createReagentsRoutes(database: Database): Hono {
 })
 
 // Get reagent by ID
-reagents.get('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'))
+reagents.get('/:id', authMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
   
   if (isNaN(id)) {
     return c.json({ error: 'Invalid reagent ID' }, 400)
@@ -68,7 +73,7 @@ reagents.get('/:id', async (c) => {
 })
 
 // Create reagent
-reagents.post('/', async (c) => {
+reagents.post('/', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -94,7 +99,11 @@ reagents.post('/', async (c) => {
         updatedBy: user?.id,
       })
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newReagent) {
+      throw new Error('Insert did not return reagent row')
+    }
     return c.json({ reagent: newReagent }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -105,9 +114,9 @@ reagents.post('/', async (c) => {
 })
 
 // Update reagent
-reagents.patch('/:id', async (c) => {
+reagents.patch('/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid reagent ID' }, 400)
     }
@@ -132,16 +141,16 @@ reagents.patch('/:id', async (c) => {
       .update(reagent)
       .set({
         ...data,
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: utcNow(),
         updatedBy: user?.id,
       })
       .where(eq(reagent.id, id))
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
     if (!updated) {
       return c.json({ error: 'Reagent not found' }, 404)
     }
-    
     return c.json({ reagent: updated })
   } catch (error) {
     if (error instanceof z.ZodError) {

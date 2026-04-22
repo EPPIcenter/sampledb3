@@ -7,6 +7,8 @@ import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import ContainerDerivationModal from '../components/ContainerDerivationModal'
 import ContainerEditModal from '../components/ContainerEditModal'
 import DerivationChainView from '../components/DerivationChainView'
+import { useUser } from '../contexts/UserContext'
+import '../styles/storage.css'
 
 interface ContainerDetail {
   id?: number
@@ -28,16 +30,17 @@ interface ContainerDetail {
 
 function statusColor(name: string): string {
   const key = name.toLowerCase()
-  if (key.includes('active') || key.includes('in use') || key.includes('in-use')) return 'bg-green-500'
-  if (key.includes('used')) return 'bg-blue-500'
+  if (key.includes('active') || key.includes('in use') || key.includes('in-use')) return 'bg-app-trend-up/100'
+  if (key.includes('used')) return 'bg-app-accent-muted0'
   if (key.includes('archived')) return 'bg-yellow-500'
-  if (key.includes('discard') || key.includes('destroy')) return 'bg-red-500'
+  if (key.includes('discard') || key.includes('destroy')) return 'bg-app-trend-down/100'
   return 'bg-gray-400'
 }
 
 export default function ContainerDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { canWrite } = useUser()
   const [data, setData] = useState<ContainerDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [derivations, setDerivations] = useState<Derivation[]>([])
@@ -53,6 +56,7 @@ export default function ContainerDetail() {
   } | null>(null)
   const [loadingDerivations, setLoadingDerivations] = useState(false)
   const [showDerivationModal, setShowDerivationModal] = useState(false)
+  const [derivationModalKey, setDerivationModalKey] = useState(0)
   const [showEditModal, setShowEditModal] = useState(false)
 
   useEffect(() => {
@@ -79,7 +83,7 @@ export default function ContainerDetail() {
     try {
       setLoadingDerivations(true)
       const response = await derivationsApi.listFromContainer(parseInt(id))
-      const derivationsList = response.data.derivations || []
+      const derivationsList = response.data.derivations
       setDerivations(derivationsList)
       
       // Load child container details for each derivation
@@ -129,13 +133,21 @@ export default function ContainerDetail() {
   }
 
   if (loading) {
-    return <SkeletonDetailPage sections={1} />
+    return (
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <SkeletonDetailPage sections={1} />
+        </div>
+      </div>
+    )
   }
 
   if (!data || (!data.container && !data.id)) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-8 text-red-600">Container not found</div>
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <div className="text-center py-8 text-app-trend-down">Container not found</div>
+        </div>
       </div>
     )
   }
@@ -153,12 +165,11 @@ export default function ContainerDetail() {
   const containerTypeName = getContainerTypeName(effectiveContainerType)
   const containerTypeIcon = getContainerTypeIcon(effectiveContainerType)
 
-  // Get identifier for header (position, barcode, or type)
-  const containerIdentifier = 
-    effectiveCollection?.position || 
-    effectiveCollection?.barcode || 
-    effectiveCollection?.label ||
-    containerTypeName
+  // Primary lab identifier for header: barcode (micronix/cryovial/paper when present), else position, else type
+  const hasBarcode = effectiveCollection?.barcode && (effectiveContainerType === 'micronix_tube' || effectiveContainerType === 'cryovial_tube' || effectiveContainerType === 'paper')
+  const containerIdentifier = hasBarcode
+    ? effectiveCollection.barcode
+    : effectiveCollection?.position || effectiveCollection?.label || containerTypeName
 
   // Build breadcrumbs - use identifier instead of ID
   const breadcrumbItems = []
@@ -205,37 +216,64 @@ export default function ContainerDetail() {
     }
   }
 
+  const buildCollectionUrlWithHighlight = (type: string, id: number, position?: string | null, containerId?: number) => {
+    const url = getCollectionUrl(type, id)
+    if (url === '#') return url
+    
+    const params = new URLSearchParams()
+    if (position) {
+      params.set('position', position)
+    }
+    // For paper containers without position, use container ID as fallback
+    if (type === 'sheet' && !position && containerId !== undefined) {
+      params.set('containerId', String(containerId))
+    }
+    
+    const queryString = params.toString()
+    return queryString ? `${url}?${queryString}` : url
+  }
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-4">
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
+      <div className="mb-4 storage-reveal storage-reveal-1">
         <EntityBreadcrumbs items={breadcrumbItems} />
       </div>
 
       {/* Main Container Information Card */}
-      <div className="bg-white rounded-lg border border-gray-100 shadow-sm">
+      <div className="storage-card storage-reveal storage-reveal-2">
         {/* Header with Title and Badges */}
-        <div className="px-6 py-4 border-b border-gray-100">
+        <div className="storage-card-divider px-6 py-4 border-b">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="text-2xl text-gray-600">{containerTypeIcon}</div>
+              <div className="text-2xl" style={{ color: 'rgb(var(--app-text-muted))' }}>{containerTypeIcon}</div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{containerTypeName}</h1>
+                <h1 className="text-2xl font-bold">{containerTypeName}</h1>
                 {(effectiveCollection?.position || effectiveCollection?.barcode || effectiveCollection?.label) && (
                   <div className="mt-1">
-                    <span className="text-sm font-mono text-gray-600">
-                      {effectiveCollection?.position || effectiveCollection?.barcode || effectiveCollection?.label}
+                    <span
+                      className={
+                        effectiveContainerType === 'micronix_tube' && effectiveCollection?.barcode
+                          ? 'storage-barcode text-lg'
+                          : 'text-sm font-mono'
+                      }
+                      style={effectiveContainerType === 'micronix_tube' && effectiveCollection?.barcode ? undefined : { color: 'rgb(var(--app-text-muted))' }}
+                    >
+                      {containerIdentifier}
                     </span>
                   </div>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowEditModal(true)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
-              >
-                Edit
-              </button>
+              {canWrite && (
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="storage-btn-primary px-4 py-2 text-sm font-medium"
+                >
+                  Edit
+                </button>
+              )}
               {container.state?.name && (
                 <span
                   className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-white ${statusColor(container.state.name)}`}
@@ -244,7 +282,7 @@ export default function ContainerDetail() {
                 </span>
               )}
               <span
-                className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-white ${container.remainingQuantity > 0 ? 'bg-green-500' : 'bg-red-500'}`}
+                className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-white ${container.remainingQuantity > 0 ? 'bg-app-trend-up/100' : 'bg-app-trend-down/100'}`}
               >
                 {container.remainingQuantity > 0 ? 'In Use' : 'Exhausted'}
               </span>
@@ -252,95 +290,117 @@ export default function ContainerDetail() {
           </div>
         </div>
 
-        {/* Information Grid */}
-        <div className="px-6 py-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Left Column */}
-            <div className="space-y-4">
-              {/* Container Details */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Container Details</h3>
-                <dl className="space-y-2">
-                  {container.id && (
-                    <div>
-                      <dt className="text-sm text-gray-500">Container ID</dt>
-                      <dd className="text-sm font-mono text-gray-900">{container.id}</dd>
-                    </div>
-                  )}
-                  {effectiveCollection && (
-                    <div>
-                      <dt className="text-sm text-gray-500">
-                        {getContainerTypeName(effectiveCollection.type)}
-                      </dt>
-                      <dd className="text-sm text-gray-900">
-                        <Link
-                          to={getCollectionUrl(effectiveCollection.type, effectiveCollection.id)}
-                          className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                        >
-                          {effectiveCollection.name}
-                        </Link>
-                      </dd>
-                    </div>
-                  )}
-                  {effectiveLocation && displayLocationPath && (
-                    <div>
-                      <dt className="text-sm text-gray-500">Storage Location</dt>
-                      <dd className="text-sm text-gray-900">
-                        <Link
-                          to={`/locations/${effectiveLocation.id}`}
-                          className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                        >
-                          {displayLocationPath}
-                        </Link>
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              </div>
-
-              {/* Quantity Information */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Quantity</h3>
-                <dl className="space-y-2">
+        {/* Dense lab-oriented grid: Identifier | Location | Quantity on row 1; Specimen | Source row 2; Tags/Notes/Audit */}
+        <div className="px-6 py-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            {/* 1. Identifier */}
+            <div className="min-w-0">
+              <h3 className="storage-subsection-title mb-2 text-sm font-semibold">Identifier</h3>
+              <dl className="space-y-1.5 text-sm">
+                {hasBarcode && (
                   <div>
-                    <dt className="text-sm text-gray-500">Remaining</dt>
-                    <dd className="text-lg font-semibold text-gray-900">
-                      {container.remainingQuantity?.toLocaleString() || '0'} {container.unit?.symbol || 'units'}
+                    <dt className="storage-detail-dt text-xs">Barcode</dt>
+                    <dd className="storage-detail-dd mt-0.5">
+                      <span className="storage-barcode font-mono text-base">{effectiveCollection!.barcode}</span>
                     </dd>
                   </div>
-                  {container.totalQuantity !== undefined && (
-                    <div>
-                      <dt className="text-sm text-gray-500">Total</dt>
-                      <dd className="text-sm text-gray-700">
-                        {container.totalQuantity?.toLocaleString() || '0'} {container.unit?.symbol || 'units'}
-                      </dd>
-                    </div>
-                  )}
-                  {container.totalQuantity && container.remainingQuantity !== undefined && (
-                    <div>
-                      <dt className="text-sm text-gray-500">Used</dt>
-                      <dd className="text-sm text-gray-700">
-                        {(container.totalQuantity - container.remainingQuantity).toLocaleString()} {container.unit?.symbol || 'units'}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              </div>
+                )}
+                {effectiveCollection?.position && (
+                  <div>
+                    <dt className="storage-detail-dt text-xs">{effectiveContainerType === 'static_well' ? 'Well' : 'Position'}</dt>
+                    <dd className="storage-detail-dd font-mono mt-0.5">{effectiveCollection.position}</dd>
+                  </div>
+                )}
+                {effectiveCollection && (
+                  <div>
+                    <dt className="storage-detail-dt text-xs">In collection</dt>
+                    <dd className="storage-detail-dd mt-0.5">
+                      <Link
+                        to={buildCollectionUrlWithHighlight(
+                          effectiveCollection.type,
+                          effectiveCollection.id,
+                          effectiveCollection.position,
+                          container.id
+                        )}
+                        className="dashboard-link hover:underline font-medium break-all"
+                      >
+                        {effectiveCollection.name}
+                      </Link>
+                      <span className="text-xs ml-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                        (View in {effectiveCollection.type === 'micronix_plate' ? 'plate' : effectiveCollection.type === 'cryovial_box' ? 'box' : 'sheet'})
+                      </span>
+                    </dd>
+                  </div>
+                )}
+              </dl>
             </div>
 
-            {/* Right Column */}
-            <div className="space-y-4">
-              {/* Specimen Information */}
-              {specimen && (
+            {/* 2. Storage location */}
+            {effectiveLocation && displayLocationPath && (
+              <div className="min-w-0">
+                <h3 className="storage-subsection-title mb-2 text-sm font-semibold">Storage location</h3>
+                <p className="storage-detail-dd text-sm mt-0.5">
+                  <Link
+                    to={`/locations/${effectiveLocation.id}`}
+                    className="dashboard-link hover:underline font-medium break-all"
+                  >
+                    {displayLocationPath}
+                  </Link>
+                </p>
+              </div>
+            )}
+
+            {/* 3. Quantity */}
+            <div className="min-w-0">
+              <h3 className="storage-subsection-title mb-2 text-sm font-semibold">Quantity</h3>
+              <dl className="grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Specimen</h3>
-                  <dl className="space-y-2">
+                  <dt className="storage-detail-dt text-xs">Remaining</dt>
+                  <dd className="storage-detail-dd font-semibold mt-0.5">
+                    {container.remainingQuantity?.toLocaleString() ?? '0'} {container.unit?.symbol || ''}
+                  </dd>
+                </div>
+                {container.totalQuantity != null && (
+                  <div>
+                    <dt className="storage-detail-dt text-xs">Total</dt>
+                    <dd className="storage-detail-dd mt-0.5">
+                      {container.totalQuantity.toLocaleString()} {container.unit?.symbol || ''}
+                    </dd>
+                  </div>
+                )}
+                {container.totalQuantity != null && container.remainingQuantity != null && (
+                  <div>
+                    <dt className="storage-detail-dt text-xs">Used</dt>
+                    <dd className="storage-detail-dd mt-0.5">
+                      {(container.totalQuantity - container.remainingQuantity).toLocaleString()} {container.unit?.symbol || ''}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+              {container.totalQuantity != null && container.totalQuantity > 0 && container.remainingQuantity != null && (
+                <div className="mt-1.5 h-1 w-full max-w-[12rem] rounded-full bg-app-surface overflow-hidden" role="presentation" aria-hidden>
+                  <div
+                    className="h-full rounded-full bg-app-trend-up/100"
+                    style={{ width: `${Math.min(100, (container.remainingQuantity / container.totalQuantity) * 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 4. Sample: Specimen | Source (same row, dense) */}
+          {(specimen || source) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-4 pt-4 border-t border-app-border">
+              {specimen && (
+                <div className="min-w-0">
+                  <h3 className="storage-subsection-title mb-2 text-sm font-semibold">Specimen</h3>
+                  <dl className="space-y-1.5 text-sm">
                     <div>
-                      <dt className="text-sm text-gray-500">Specimen Type</dt>
-                      <dd className="text-sm text-gray-900">
+                      <dt className="storage-detail-dt text-xs">Type</dt>
+                      <dd className="storage-detail-dd mt-0.5">
                         <Link
                           to={`/specimens/${specimen.id}`}
-                          className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                          className="dashboard-link inline-flex items-center gap-1.5 hover:underline font-medium"
                         >
                           <span>{getSpecimenTypeIcon(specimen.specimenType?.name || 'specimen')}</span>
                           <span>{specimen.specimenType?.name || 'Specimen'}</span>
@@ -349,40 +409,28 @@ export default function ContainerDetail() {
                     </div>
                     {specimen.collectionDate && (
                       <div>
-                        <dt className="text-sm text-gray-500">Collection Date</dt>
-                        <dd className="text-sm text-gray-900">
-                          {new Date(specimen.collectionDate).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          })}
+                        <dt className="storage-detail-dt text-xs">Collection date</dt>
+                        <dd className="storage-detail-dd mt-0.5">
+                          {new Date(specimen.collectionDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
                         </dd>
                       </div>
                     )}
                   </dl>
                 </div>
               )}
-
-              {/* Source Information */}
               {source && (
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Source</h3>
-                  <dl className="space-y-2">
+                <div className="min-w-0">
+                  <h3 className="storage-subsection-title mb-2 text-sm font-semibold">Source</h3>
+                  <dl className="space-y-1.5 text-sm">
                     <div>
-                      <dt className="text-sm text-gray-500 capitalize">{source.type}</dt>
-                      <dd className="text-sm text-gray-900">
+                      <dt className="storage-detail-dt text-xs capitalize">{source.type}</dt>
+                      <dd className="storage-detail-dd mt-0.5">
                         {source.type === 'subject' ? (
-                          <Link
-                            to={`/subjects/${source.id}`}
-                            className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                          >
+                          <Link to={`/subjects/${source.id}`} className="dashboard-link hover:underline font-medium break-all">
                             {source.name}
                           </Link>
                         ) : source.type === 'control' ? (
-                          <Link
-                            to={`/blood-controls/batches/${source.id}`}
-                            className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                          >
+                          <Link to={`/blood-controls/batches/${source.id}`} className="dashboard-link hover:underline font-medium break-all">
                             {source.name}
                           </Link>
                         ) : (
@@ -392,26 +440,20 @@ export default function ContainerDetail() {
                     </div>
                     {source.type === 'subject' && source.study && (
                       <div>
-                        <dt className="text-sm text-gray-500">Study</dt>
-                        <dd className="text-sm text-gray-900">
-                          <Link
-                            to={`/studies/${source.study.id}`}
-                            className="text-blue-600 hover:text-blue-800 hover:underline"
-                          >
+                        <dt className="storage-detail-dt text-xs">Study</dt>
+                        <dd className="storage-detail-dd mt-0.5">
+                          <Link to={`/studies/${source.study.id}`} className="dashboard-link hover:underline break-all">
                             {source.study.title}
-                            {source.study.code && <span className="text-gray-500"> ({source.study.code})</span>}
+                            {source.study.code && <span style={{ color: 'rgb(var(--app-text-muted))' }}> ({source.study.code})</span>}
                           </Link>
                         </dd>
                       </div>
                     )}
                     {source.type === 'control' && source.definition && (
                       <div>
-                        <dt className="text-sm text-gray-500">Control Definition</dt>
-                        <dd className="text-sm text-gray-900">
-                          <Link
-                            to={`/blood-controls/${source.definition.id}`}
-                            className="text-blue-600 hover:text-blue-800 hover:underline"
-                          >
+                        <dt className="storage-detail-dt text-xs">Definition</dt>
+                        <dd className="storage-detail-dd mt-0.5">
+                          <Link to={`/blood-controls/${source.definition.id}`} className="dashboard-link hover:underline break-all">
                             {source.definition.name}
                           </Link>
                         </dd>
@@ -421,13 +463,42 @@ export default function ContainerDetail() {
                 </div>
               )}
             </div>
-          </div>
+          )}
 
-          {/* Comment Section */}
-          {container.comment && (
-            <div className="mt-6 pt-6 border-t border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Notes</h3>
-              <p className="text-sm text-gray-900 whitespace-pre-wrap">{container.comment}</p>
+          {/* 5. Tags + 6. Notes (compact) + 7. Audit footer */}
+          {((container.tags && Array.isArray(container.tags) && container.tags.length > 0) || container.comment) && (
+            <div className="mt-4 pt-4 border-t border-app-border space-y-2">
+              {container.tags && Array.isArray(container.tags) && container.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {container.tags.map((tag: { id: number; name: string }) => (
+                    <span
+                      key={tag.id}
+                      className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-app-border bg-app-surface text-app-text"
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {container.comment && (
+                <div className="min-w-0">
+                  <span className="storage-detail-dt text-xs block mb-0.5">Notes</span>
+                  <p className="storage-detail-dd text-sm whitespace-pre-wrap break-words mt-0">{container.comment}</p>
+                </div>
+              )}
+            </div>
+          )}
+          {(container.created || container.lastUpdated) && (
+            <div className="mt-3 pt-3 border-t border-app-border flex justify-end">
+              <p className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>
+                {container.created && (
+                  <span>Created {new Date(container.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                )}
+                {container.created && container.lastUpdated && ' · '}
+                {container.lastUpdated && (
+                  <span>Updated {new Date(container.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                )}
+              </p>
             </div>
           )}
         </div>
@@ -437,14 +508,14 @@ export default function ContainerDetail() {
       <div className="mt-6 space-y-4">
         {/* Source Derivation Information (if this container is a child via derivation) */}
         {sourceDerivation && sourceDerivation.type === 'derivation' && sourceDerivation.derivation && (
-          <div className="bg-white rounded-lg border border-gray-100 shadow-sm">
-            <div className="px-6 py-4 border-b border-gray-100">
+          <div className="storage-card storage-reveal storage-reveal-3">
+            <div className="storage-card-divider px-6 py-4 border-b">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Source Derivation</h3>
+                <h3 className="text-lg font-semibold storage-section-title">Source Derivation</h3>
                 {sourceDerivation.parentContainer && (
                   <button
                     onClick={() => navigate(`/containers/${sourceDerivation.parentContainer.id}`)}
-                    className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                    className="dashboard-link text-sm hover:underline font-medium"
                   >
                     View Parent Container →
                   </button>
@@ -454,13 +525,13 @@ export default function ContainerDetail() {
             <div className="px-6 py-5">
               <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <dt className="text-sm text-gray-500 mb-1">Derivation Type</dt>
-                  <dd className="text-sm font-medium text-gray-900">{sourceDerivation.derivation.derivationType}</dd>
+                  <dt className="storage-detail-dt mb-1">Derivation Type</dt>
+                  <dd className="storage-detail-dd font-medium">{sourceDerivation.derivation.derivationType}</dd>
                 </div>
                 {sourceDerivation.derivation.derivationDate && (
                   <div>
-                    <dt className="text-sm text-gray-500 mb-1">Derivation Date</dt>
-                    <dd className="text-sm text-gray-900">
+                    <dt className="storage-detail-dt mb-1">Derivation Date</dt>
+                    <dd className="storage-detail-dd">
                       {new Date(sourceDerivation.derivation.derivationDate).toLocaleDateString('en-US', {
                         year: 'numeric',
                         month: 'long',
@@ -471,14 +542,14 @@ export default function ContainerDetail() {
                 )}
                 {sourceDerivation.derivation.protocol && (
                   <div className="md:col-span-2">
-                    <dt className="text-sm text-gray-500 mb-1">Protocol</dt>
-                    <dd className="text-sm text-gray-900">{sourceDerivation.derivation.protocol}</dd>
+                    <dt className="storage-detail-dt mb-1">Protocol</dt>
+                    <dd className="storage-detail-dd">{sourceDerivation.derivation.protocol}</dd>
                   </div>
                 )}
                 {sourceDerivation.derivation.notes && (
                   <div className="md:col-span-2">
-                    <dt className="text-sm text-gray-500 mb-1">Notes</dt>
-                    <dd className="text-sm text-gray-900 whitespace-pre-wrap">{sourceDerivation.derivation.notes}</dd>
+                    <dt className="storage-detail-dt mb-1">Notes</dt>
+                    <dd className="storage-detail-dd whitespace-pre-wrap">{sourceDerivation.derivation.notes}</dd>
                   </div>
                 )}
               </dl>
@@ -488,15 +559,18 @@ export default function ContainerDetail() {
 
         {/* Derived Containers (if this container is a parent) */}
         {derivations.length > 0 && (
-          <div className="bg-white rounded-lg border border-gray-100 shadow-sm">
-            <div className="px-6 py-4 border-b border-gray-100">
+          <div className="storage-card storage-reveal storage-reveal-4">
+            <div className="storage-card-divider px-6 py-4 border-b">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Derived Containers <span className="text-gray-500 font-normal">({derivations.length})</span>
+                <h3 className="text-lg font-semibold storage-section-title">
+                  Derived Containers <span style={{ color: 'rgb(var(--app-text-muted))', fontWeight: 400 }}>({derivations.length})</span>
                 </h3>
                 <button
-                  onClick={() => setShowDerivationModal(true)}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+                  onClick={() => {
+                    setDerivationModalKey((k) => k + 1)
+                    setShowDerivationModal(true)
+                  }}
+                  className="storage-btn-primary px-4 py-2 text-sm font-medium"
                 >
                   Create New Derivation
                 </button>
@@ -504,7 +578,7 @@ export default function ContainerDetail() {
             </div>
             <div className="px-6 py-5">
               {loadingDerivations ? (
-                <div className="text-sm text-gray-500 py-4">Loading derivations...</div>
+                <div className="storage-detail-dt py-4">Loading derivations...</div>
               ) : (
                 <div className="space-y-2">
                   {derivations.map((derivation) => {
@@ -522,23 +596,23 @@ export default function ContainerDetail() {
                     return (
                       <div
                         key={derivation.id}
-                        className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                        className="storage-sub-card p-3"
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2">
-                              {containerTypeIcon && <span className="text-gray-600">{containerTypeIcon}</span>}
-                              <span className="font-semibold text-gray-900">{containerTypeName}</span>
+                              {containerTypeIcon && <span style={{ color: 'rgb(var(--app-text-muted))' }}>{containerTypeIcon}</span>}
+                              <span className="font-semibold storage-detail-dd">{containerTypeName}</span>
                               {derivation.derivationType && (
-                                <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded border border-gray-300">
+                                <span className="text-xs storage-detail-dt bg-app-card px-2 py-0.5 rounded border storage-card-divider">
                                   {derivation.derivationType}
                                 </span>
                               )}
                               {container?.remainingQuantity !== undefined && (
                                 <span className={`text-xs px-2 py-0.5 rounded font-medium ${
                                   container.remainingQuantity > 0 
-                                    ? 'bg-green-100 text-green-700' 
-                                    : 'bg-red-100 text-red-700'
+                                    ? 'bg-app-trend-up/10 text-app-trend-up' 
+                                    : 'bg-app-trend-down/10 text-app-trend-down'
                                 }`}>
                                   {container.remainingQuantity > 0 ? 'In Use' : 'Exhausted'}
                                 </span>
@@ -547,20 +621,20 @@ export default function ContainerDetail() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-sm">
                               {container?.remainingQuantity !== undefined && container?.unit && (
                                 <div className="flex items-start gap-2">
-                                  <span className="text-gray-500 whitespace-nowrap">Quantity:</span>
-                                  <span className="text-gray-900 font-medium">
+                                  <span className="storage-detail-dt whitespace-nowrap">Quantity:</span>
+                                  <span className="storage-detail-dd font-medium">
                                     {container.remainingQuantity?.toLocaleString() || '0'} {container.unit?.symbol || 'units'}
                                   </span>
                                 </div>
                               )}
                               {effectiveCollection && (
                                 <div className="flex items-start gap-2">
-                                  <span className="text-gray-500 whitespace-nowrap">
+                                  <span className="storage-detail-dt whitespace-nowrap">
                                     {getContainerTypeName(effectiveCollection.type)}:
                                   </span>
-                                  <span className="text-gray-900 font-mono">{effectiveCollection.name}</span>
+                                  <span className="storage-detail-dd font-mono">{effectiveCollection.name}</span>
                                   {(effectiveCollection.position || effectiveCollection.barcode || effectiveCollection.label) && (
-                                    <span className="text-gray-600">
+                                    <span style={{ color: 'rgb(var(--app-text-muted))' }}>
                                       ({effectiveCollection.position || effectiveCollection.barcode || effectiveCollection.label})
                                     </span>
                                   )}
@@ -568,20 +642,20 @@ export default function ContainerDetail() {
                               )}
                               {displayLocationPath && (
                                 <div className="flex items-start gap-2 md:col-span-2">
-                                  <span className="text-gray-500 whitespace-nowrap">Location:</span>
-                                  <span className="text-gray-900 font-mono">{displayLocationPath}</span>
+                                  <span className="storage-detail-dt whitespace-nowrap">Location:</span>
+                                  <span className="storage-detail-dd font-mono">{displayLocationPath}</span>
                                 </div>
                               )}
                               {derivation.protocol && (
                                 <div className="flex items-start gap-2">
-                                  <span className="text-gray-500 whitespace-nowrap">Protocol:</span>
-                                  <span className="text-gray-900">{derivation.protocol}</span>
+                                  <span className="storage-detail-dt whitespace-nowrap">Protocol:</span>
+                                  <span className="storage-detail-dd">{derivation.protocol}</span>
                                 </div>
                               )}
                               {derivation.derivationDate && (
                                 <div className="flex items-start gap-2">
-                                  <span className="text-gray-500 whitespace-nowrap">Derived:</span>
-                                  <span className="text-gray-900">
+                                  <span className="storage-detail-dt whitespace-nowrap">Derived:</span>
+                                  <span className="storage-detail-dd">
                                     {new Date(derivation.derivationDate).toLocaleDateString('en-US', {
                                       month: 'short',
                                       day: 'numeric',
@@ -592,8 +666,8 @@ export default function ContainerDetail() {
                               )}
                               {derivation.notes && (
                                 <div className="flex items-start gap-2 md:col-span-2">
-                                  <span className="text-gray-500 whitespace-nowrap">Notes:</span>
-                                  <span className="text-gray-900">{derivation.notes}</span>
+                                  <span className="storage-detail-dt whitespace-nowrap">Notes:</span>
+                                  <span className="storage-detail-dd">{derivation.notes}</span>
                                 </div>
                               )}
                             </div>
@@ -601,7 +675,7 @@ export default function ContainerDetail() {
                           {derivation.childContainerId && (
                             <Link
                               to={`/containers/${derivation.childContainerId}`}
-                              className="flex-shrink-0 text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium whitespace-nowrap"
+                              className="dashboard-link flex-shrink-0 text-sm hover:underline font-medium whitespace-nowrap"
                             >
                               View →
                             </Link>
@@ -618,20 +692,25 @@ export default function ContainerDetail() {
 
         {/* Create Derivation Button (if no derivations yet) */}
         {!loadingDerivations && derivations.length === 0 && (
-          <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-6">
+          <div className="storage-card storage-reveal storage-reveal-4 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">No Derived Containers</h3>
-                <p className="text-sm text-gray-600">
+                <h3 className="text-lg font-semibold storage-section-title mb-1">No Derived Containers</h3>
+                <p className="storage-detail-dd">
                   This container has not been used to create any derived containers yet. Create a derivation to track materials derived from this container.
                 </p>
               </div>
-              <button
-                onClick={() => setShowDerivationModal(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium whitespace-nowrap ml-4"
-              >
-                Create Derivation
-              </button>
+              {canWrite && (
+                <button
+                  onClick={() => {
+                    setDerivationModalKey((k) => k + 1)
+                    setShowDerivationModal(true)
+                  }}
+                  className="storage-btn-primary px-4 py-2 font-medium whitespace-nowrap ml-4"
+                >
+                  Create Derivation
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -647,8 +726,13 @@ export default function ContainerDetail() {
             remainingQuantity: container.remainingQuantity,
             unit: container.unit,
             containerType: effectiveContainerType,
+            barcode: effectiveCollection?.barcode,
+            position: effectiveCollection?.position,
+            label: effectiveCollection?.label,
+            specimenTypeName: specimen?.specimenType?.name ?? specimen?.specimen_type?.name,
           }}
           onSuccess={handleDerivationCreated}
+          openKey={derivationModalKey}
         />
       )}
 
@@ -680,6 +764,7 @@ export default function ContainerDetail() {
             <DerivationChainView containerId={parseInt(id)} />
           </div>
         )}
+      </div>
     </div>
   )
 }

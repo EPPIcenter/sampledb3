@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { studiesApi, type Study } from '../lib/api'
 import { specimenTypesApi, type SpecimenType } from '../lib/api'
 import { tagsApi, type Tag } from '../lib/api'
 import LocationTreePicker, { type LocationSelection } from './LocationTreePicker'
+import ModalPortal from './ModalPortal'
 
 export interface StatisticsFilters {
   study?: string
@@ -23,6 +24,8 @@ interface StatisticsFilterProps {
   onChange: (filters: StatisticsFilters) => void
   onSubmit: (filters: StatisticsFilters) => void
   isLoading?: boolean
+  /** Optional class for the outer card (e.g. statistics-card when inside .statistics-page). */
+  className?: string
 }
 
 const SOURCE_TYPES = [
@@ -43,9 +46,10 @@ const CONTAINER_TYPES = [
   { value: 'static_well', label: 'Static Well' },
 ]
 
-export default function StatisticsFilter({ filters, onChange, onSubmit, isLoading = false }: StatisticsFilterProps) {
+export default function StatisticsFilter({ filters, onChange, onSubmit, isLoading = false, className }: StatisticsFilterProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [localFilters, setLocalFilters] = useState<StatisticsFilters>(filters)
+  const prevFiltersRef = useRef<StatisticsFilters>(filters)
   const [studies, setStudies] = useState<Study[]>([])
   const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
   const [tags, setTags] = useState<Tag[]>([])
@@ -54,10 +58,11 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
   const [studySearch, setStudySearch] = useState('')
   const [studyLoading, setStudyLoading] = useState(false)
 
-  // Sync local filters when external filters change
-  useEffect(() => {
+  // Sync local filters when external filters change (during render to avoid extra pass)
+  if (filters !== prevFiltersRef.current) {
+    prevFiltersRef.current = filters
     setLocalFilters(filters)
-  }, [filters])
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -99,7 +104,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
     try {
       setStudyLoading(true)
       const response = await studiesApi.list(studySearch || undefined)
-      setStudies(response.studies || [])
+      setStudies(response.studies)
     } catch (error) {
       console.error('Failed to load studies:', error)
     } finally {
@@ -153,11 +158,8 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
       newFilters.locationSelections = selections
       // For API compatibility, also set the first location selection as the primary filter
       // The API currently only supports single location, so we use the first one
-      const firstSelection = selections[0]
-
-      if (firstSelection && firstSelection.locationId) {
-        newFilters.locationId = firstSelection.locationId.toString()
-      }
+      const firstSelection = selections[0]!
+      newFilters.locationId = firstSelection.locationId.toString()
     } else {
       delete newFilters.locationSelections
     }
@@ -180,17 +182,19 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
   const hasActiveFilters = Object.keys(localFilters).length > 0
   const hasChanges = JSON.stringify(localFilters) !== JSON.stringify(filters)
 
+  const rootClassName = className ? `${className} overflow-hidden` : 'bg-app-card rounded-lg shadow mb-6'
+
   return (
-    <div className="bg-white rounded-lg shadow mb-6">
-      <div className="p-4 border-b border-gray-100">
+    <div className={rootClassName}>
+      <div className="p-4 border-b border-app-border">
         <div className="flex items-center justify-between">
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center text-lg font-semibold text-gray-900 hover:text-gray-700"
+            className="flex items-center text-lg font-semibold text-app-text hover:text-app-text"
           >
             <span>Filters</span>
             {hasActiveFilters && (
-              <span className="ml-2 px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">
+              <span className="ml-2 px-2 py-1 text-xs font-medium bg-app-accent-muted text-app-accent-hover rounded">
                 {Object.keys(localFilters).length}
               </span>
             )}
@@ -206,7 +210,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
-              className="text-sm text-blue-600 hover:text-blue-800"
+              className="text-sm text-app-accent hover:text-app-accent-hover"
             >
               Clear all
             </button>
@@ -217,13 +221,13 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
       {isOpen && (
         <div className="p-6 space-y-4">
           {loading && (
-            <div className="text-center py-4 text-gray-500">Loading filter options...</div>
+            <div className="text-center py-4 text-app-text-muted">Loading filter options...</div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Study Filter - Searchable */}
             <div>
-              <label htmlFor="filter-study" className="block text-sm font-medium mb-2 text-gray-700">
+              <label htmlFor="filter-study" className="block text-sm font-medium mb-2 text-app-text">
                 Study
               </label>
               <div className="relative">
@@ -231,14 +235,14 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                   type="button"
                   id="filter-study"
                   onClick={() => setStudyPickerOpen(true)}
-                  className="w-full px-3 py-2 border border-gray-100 rounded-md shadow-sm bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-app-border rounded-md shadow-sm bg-app-card text-left focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-app-accent"
                 >
                   {selectedStudy ? (
                     <span className="block truncate">
                       {selectedStudy.shortCode} - {selectedStudy.title}
                     </span>
                   ) : (
-                    <span className="text-gray-400">All Studies</span>
+                    <span className="text-app-text-muted">All Studies</span>
                   )}
                 </button>
                 {localFilters.study && (
@@ -248,7 +252,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                       e.stopPropagation()
                       updateFilter('study', '')
                     }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-app-text-muted hover:text-app-text"
                     aria-label="Clear study filter"
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -259,17 +263,18 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
               </div>
 
               {studyPickerOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center">
-                  <div
-                    className="fixed inset-0 transition-opacity bg-gray-900/40 backdrop-blur-md"
-                    onClick={() => setStudyPickerOpen(false)}
-                  />
-                  <div className="relative z-10 w-full max-w-3xl mx-4 bg-white rounded-lg shadow-xl p-6">
+                <ModalPortal>
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center">
+                    <div
+                      className="fixed inset-0 bg-black/40 backdrop-blur-md"
+                      onClick={() => setStudyPickerOpen(false)}
+                    />
+                  <div className="relative z-10 w-full max-w-3xl mx-4 bg-app-card rounded-lg shadow-xl p-6">
                     <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-lg font-semibold text-gray-900">Select Study</h2>
+                      <h2 className="text-lg font-semibold text-app-text">Select Study</h2>
                       <button
                         type="button"
-                        className="text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                        className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded"
                         onClick={() => setStudyPickerOpen(false)}
                         aria-label="Close study selection dialog"
                       >
@@ -294,17 +299,17 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                       />
                     </div>
 
-                    <div className="border border-gray-100 rounded-md max-h-80 overflow-y-auto">
+                    <div className="border border-app-border rounded-md max-h-80 overflow-y-auto">
                       {studyLoading ? (
-                        <div className="p-4 text-sm text-gray-500">Loading studies…</div>
+                        <div className="p-4 text-sm text-app-text-muted">Loading studies…</div>
                       ) : studies.length === 0 ? (
-                        <div className="p-4 text-sm text-gray-500">No studies found.</div>
+                        <div className="p-4 text-sm text-app-text-muted">No studies found.</div>
                       ) : (
-                        <ul className="divide-y divide-gray-100">
+                        <ul className="divide-y divide-app-border">
                           <li>
                             <button
                               type="button"
-                              className="w-full px-4 py-3 text-left hover:bg-gray-50 focus:outline-none focus:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                              className="w-full px-4 py-3 text-left hover:bg-app-surface focus:outline-none focus:bg-app-surface focus-visible:ring-2 focus-visible:ring-app-accent rounded"
                               onClick={() => {
                                 updateFilter('study', '')
                                 setStudyPickerOpen(false)
@@ -313,8 +318,8 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                             >
                               <div className="flex items-center justify-between">
                                 <div>
-                                  <p className="text-sm font-medium text-gray-900">All Studies</p>
-                                  <p className="text-xs text-gray-500">Clear study filter</p>
+                                  <p className="text-sm font-medium text-app-text">All Studies</p>
+                                  <p className="text-xs text-app-text-muted">Clear study filter</p>
                                 </div>
                               </div>
                             </button>
@@ -323,7 +328,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                             <li key={study.id}>
                               <button
                                 type="button"
-                                className="w-full px-4 py-3 text-left hover:bg-gray-50 focus:outline-none focus:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                                className="w-full px-4 py-3 text-left hover:bg-app-surface focus:outline-none focus:bg-app-surface focus-visible:ring-2 focus-visible:ring-app-accent rounded"
                                 onClick={() => {
                                   updateFilter('study', study.shortCode)
                                   setStudyPickerOpen(false)
@@ -332,10 +337,10 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                               >
                                 <div className="flex items-center justify-between">
                                   <div>
-                                    <p className="text-sm font-medium text-gray-900">
+                                    <p className="text-sm font-medium text-app-text">
                                       {study.title}
                                     </p>
-                                    <p className="text-xs text-gray-500">
+                                    <p className="text-xs text-app-text-muted">
                                       {study.shortCode}
                                       {study.leadPerson ? ` • Lead: ${study.leadPerson}` : ''}
                                     </p>
@@ -349,12 +354,13 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                     </div>
                   </div>
                 </div>
+                </ModalPortal>
               )}
             </div>
 
             {/* Source Type Filter */}
             <div>
-              <label htmlFor="filter-source-type" className="block text-sm font-medium mb-2 text-gray-700">
+              <label htmlFor="filter-source-type" className="block text-sm font-medium mb-2 text-app-text">
                 Source Type
               </label>
               <select
@@ -373,7 +379,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
 
             {/* Specimen Type Filter */}
             <div>
-              <label htmlFor="filter-specimen-type" className="block text-sm font-medium mb-2 text-gray-700">
+              <label htmlFor="filter-specimen-type" className="block text-sm font-medium mb-2 text-app-text">
                 Specimen Type
               </label>
               <select
@@ -393,7 +399,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
 
             {/* Container Type Filter */}
             <div>
-              <label htmlFor="filter-container-type" className="block text-sm font-medium mb-2 text-gray-700">
+              <label htmlFor="filter-container-type" className="block text-sm font-medium mb-2 text-app-text">
                 Container Type
               </label>
               <select
@@ -412,12 +418,12 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
 
             {/* Tag Filter (checkboxes) */}
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700">
+              <label className="block text-sm font-medium mb-2 text-app-text">
                 Tags (must have all selected)
               </label>
-              <div className="border border-gray-300 rounded-md p-2 max-h-40 overflow-y-auto">
+              <div className="border border-app-border rounded-md p-2 max-h-40 overflow-y-auto">
                 {tags.length === 0 ? (
-                  <p className="text-sm text-gray-500">No tags available</p>
+                  <p className="text-sm text-app-text-muted">No tags available</p>
                 ) : (
                   <div className="space-y-1.5">
                     {tags.map((tag) => {
@@ -425,7 +431,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                       return (
                         <label
                           key={tag.id}
-                          className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                          className="flex items-center space-x-2 cursor-pointer hover:bg-app-surface p-1 rounded"
                         >
                           <input
                             type="checkbox"
@@ -437,9 +443,9 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                                 : currentTagIds.filter(id => id !== tag.id.toString())
                               updateFilter('tagIds', newTagIds)
                             }}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="rounded border-app-border text-app-accent focus:ring-app-accent"
                           />
-                          <span className="text-sm text-gray-700">{tag.name}</span>
+                          <span className="text-sm text-app-text">{tag.name}</span>
                         </label>
                       )
                     })}
@@ -450,7 +456,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                 <button
                   type="button"
                   onClick={() => updateFilter('tagIds', [])}
-                  className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                  className="mt-2 text-xs text-app-accent hover:text-app-accent-hover underline"
                 >
                   Clear all tags
                 </button>
@@ -459,7 +465,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
 
             {/* Collection Date From */}
             <div>
-              <label htmlFor="filter-collection-date-from" className="block text-sm font-medium mb-2 text-gray-700">
+              <label htmlFor="filter-collection-date-from" className="block text-sm font-medium mb-2 text-app-text">
                 Collection Date From
               </label>
               <input
@@ -473,7 +479,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
 
             {/* Collection Date To */}
             <div>
-              <label htmlFor="filter-collection-date-to" className="block text-sm font-medium mb-2 text-gray-700">
+              <label htmlFor="filter-collection-date-to" className="block text-sm font-medium mb-2 text-app-text">
                 Collection Date To
               </label>
               <input
@@ -487,7 +493,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
 
             {/* Created From */}
             <div>
-              <label htmlFor="filter-created-from" className="block text-sm font-medium mb-2 text-gray-700">
+              <label htmlFor="filter-created-from" className="block text-sm font-medium mb-2 text-app-text">
                 Created From
               </label>
               <input
@@ -501,7 +507,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
 
             {/* Created To */}
             <div>
-              <label htmlFor="filter-created-to" className="block text-sm font-medium mb-2 text-gray-700">
+              <label htmlFor="filter-created-to" className="block text-sm font-medium mb-2 text-app-text">
                 Created To
               </label>
               <input
@@ -515,7 +521,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
 
             {/* Location Filter */}
             <div className="lg:col-span-3">
-              <label htmlFor="filter-location" className="block text-sm font-medium mb-2 text-gray-700">
+              <label htmlFor="filter-location" className="block text-sm font-medium mb-2 text-app-text">
                 Location
               </label>
               <LocationTreePicker
@@ -526,8 +532,8 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
           </div>
 
           {/* Submit Button */}
-          <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-            <div className="text-sm text-gray-500">
+          <div className="flex items-center justify-between pt-4 border-t border-app-border">
+            <div className="text-sm text-app-text-muted">
               {hasChanges && (
                 <span className="text-amber-600">You have unsaved filter changes</span>
               )}
@@ -540,7 +546,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-100 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  className="px-4 py-2 text-sm font-medium text-app-text bg-app-card border border-app-border rounded-md hover:bg-app-surface focus:outline-none focus:ring-2 focus:ring-app-accent focus:ring-offset-2"
                   disabled={isLoading}
                 >
                   Clear All
@@ -550,7 +556,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                 type="button"
                 onClick={handleSubmit}
                 disabled={isLoading || !hasChanges}
-                className="px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-6 py-2 text-sm font-medium text-white bg-app-accent border border-transparent rounded-md hover:bg-app-accent-hover focus:outline-none focus:ring-2 focus:ring-app-accent focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isLoading ? (
                   <>

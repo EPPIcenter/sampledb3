@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { 
   studySubject, 
   study, 
@@ -17,6 +18,10 @@ import {
   staticWell,
   location,
   bag,
+  qpcrExperiment,
+  qpcrExperimentWell,
+  qpcrRun,
+  qpcrWellResult,
   type Location,
 } from '../db/schema'
 import { eq, sql, and, inArray, or, isNull } from 'drizzle-orm'
@@ -28,7 +33,10 @@ import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } 
 import { resolveCollection } from '../lib/collection-resolution'
 import { resolveCollectionByName } from '../lib/collection-resolution'
 import type { ContainerData } from '../lib/container-creation'
+import { findExistingStudySpecimen } from '../lib/specimen-helpers'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 // Extended container data type for this endpoint (includes collectionLocationId)
 interface ExtendedContainerData extends ContainerData {
@@ -42,6 +50,8 @@ interface ExtendedContainerData extends ContainerData {
 export function createSubjectsRoutes(database: Database): Hono {
   const dbInstance = database
   const subjects = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
   // Wrapper functions that use dbInstance instead of global db
   async function resolveStudyByShortCodeLocal(shortCode: string): Promise<number | null> {
@@ -144,15 +154,8 @@ export function createSubjectsRoutes(database: Database): Hono {
     }
 
     // Type guard for ContainerDefaults
-    const defaults = defaultsRecord.value as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
-    if (!defaults) {
-      throw new Error('Container defaults are not configured. Please run database initialization.')
-    }
+    const defaults = defaultsRecord.value as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }>
     const containerDefaults = defaults[containerType]
-    if (!containerDefaults || !containerDefaults.defaultUnitSymbol) {
-      throw new Error(`Default unit symbol not configured for container type '${containerType}'. Please update settings.`)
-    }
-
     const unitSymbol = containerDefaults.defaultUnitSymbol
     const unitRecord = await dbInstance
       .select()
@@ -174,14 +177,9 @@ export function createSubjectsRoutes(database: Database): Hono {
       .from(settings)
       .where(and(eq(settings.key, 'container_defaults'), isNull(settings.userId)))
       .get()
-    
-    if (!defaultsRecord || !defaultsRecord.value) {
+    const defaults = (defaultsRecord?.value ?? null) as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
+    if (!defaults?.[containerType]) {
       throw new Error('Container defaults are not configured. Please run database initialization.')
-    }
-
-    const defaults = defaultsRecord.value as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
-    if (!defaults || !defaults[containerType]) {
-      throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
     }
     return defaults[containerType].totalQuantity
   }
@@ -193,20 +191,15 @@ export function createSubjectsRoutes(database: Database): Hono {
       .from(settings)
       .where(and(eq(settings.key, 'container_defaults'), isNull(settings.userId)))
       .get()
-    
-    if (!defaultsRecord || !defaultsRecord.value) {
+    const defaults = (defaultsRecord?.value ?? null) as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
+    if (!defaults?.[containerType]) {
       throw new Error('Container defaults are not configured. Please run database initialization.')
-    }
-
-    const defaults = defaultsRecord.value as Record<string, { totalQuantity: number; remainingQuantity: number; defaultUnitSymbol: string }> | null
-    if (!defaults || !defaults[containerType]) {
-      throw new Error(`Container defaults for container type '${containerType}' are not configured. Please run database initialization.`)
     }
     return defaults[containerType].remainingQuantity
   }
 
 // List all subjects (for counting)
-subjects.get('/', async (c) => {
+subjects.get('/', authMiddleware, async (c) => {
   try {
     const page = validatePage(c.req.query('page'))
     const limit = await validateLimit(dbInstance, c.req.query('limit'))
@@ -234,9 +227,9 @@ subjects.get('/', async (c) => {
 })
 
 // Get subject by ID
-subjects.get('/:id', async (c) => {
+subjects.get('/:id', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid subject ID' }, 400)
@@ -271,9 +264,9 @@ subjects.get('/:id', async (c) => {
 })
 
 // Get subject summary with enriched specimen data
-subjects.get('/:id/summary', async (c) => {
+subjects.get('/:id/summary', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid subject ID' }, 400)
@@ -347,6 +340,7 @@ subjects.get('/:id/summary', async (c) => {
       .select({
         id: storageContainer.id,
         specimenId: storageContainer.specimenId,
+        comment: storageContainer.comment,
         totalQuantity: storageContainer.totalQuantity,
         remainingQuantity: storageContainer.remainingQuantity,
         unitId: storageContainer.unitId,
@@ -359,7 +353,7 @@ subjects.get('/:id/summary', async (c) => {
     const containerIds = containers.map(c => c.id)
 
     // Count containers per specimen
-    const containersBySpecimen = new Map<number, Array<{ id: number; remainingQuantity: number; unit: string }>>()
+    const containersBySpecimen = new Map<number, Array<{ id: number; remainingQuantity: number; unit: string; comment: string | null }>>()
     containers.forEach(container => {
       if (!containersBySpecimen.has(container.specimenId)) {
         containersBySpecimen.set(container.specimenId, [])
@@ -367,7 +361,8 @@ subjects.get('/:id/summary', async (c) => {
       containersBySpecimen.get(container.specimenId)!.push({
         id: container.id,
         remainingQuantity: container.remainingQuantity ?? 0,
-        unit: (container.unitSymbol as string | null) || 'Unknown'
+        unit: (container.unitSymbol as string | null) || 'Unknown',
+        comment: container.comment ?? null
       })
     })
 
@@ -507,6 +502,7 @@ subjects.get('/:id/summary', async (c) => {
           type: info.type,
           remainingQuantity: c.remainingQuantity,
           unit: c.unit,
+          comment: c.comment ?? undefined,
           collectionName: info.collectionName,
           position: info.position,
           collectionId: info.id,
@@ -587,8 +583,78 @@ subjects.get('/:id/summary', async (c) => {
   }
 })
 
+// Get qPCR result summary for this subject (wells linked via specimen)
+subjects.get('/:id/qpcr-results', authMiddleware, async (c) => {
+  try {
+    const id = parseInt(requireParam(c, 'id'))
+    if (isNaN(id)) return c.json({ error: 'Invalid subject ID' }, 400)
+    const subjectRow = await dbInstance.select().from(studySubject).where(eq(studySubject.id, id)).get()
+    if (!subjectRow) return c.json({ error: 'Not found' }, 404)
+    const specimens = await dbInstance.select({ id: specimen.id }).from(specimen).where(eq(specimen.studySubjectId, id))
+    const specimenIds = specimens.map((s) => s.id)
+    if (specimenIds.length === 0) return c.json({ results: [] })
+    const wells = await dbInstance
+      .select({
+        qpcrExperimentId: qpcrExperimentWell.qpcrExperimentId,
+        wellPosition: qpcrExperimentWell.wellPosition,
+        specimenId: qpcrExperimentWell.specimenId,
+      })
+      .from(qpcrExperimentWell)
+      .where(inArray(qpcrExperimentWell.specimenId, specimenIds))
+    if (wells.length === 0) return c.json({ results: [] })
+    const experimentIds = [...new Set(wells.map((w) => w.qpcrExperimentId))]
+    const runs = await dbInstance
+      .select({ id: qpcrRun.id, qpcrExperimentId: qpcrRun.qpcrExperimentId, runStartedAt: qpcrRun.runStartedAt, fileName: qpcrRun.fileName })
+      .from(qpcrRun)
+      .where(inArray(qpcrRun.qpcrExperimentId, experimentIds))
+    const runIds = runs.map((r) => r.id)
+    if (runIds.length === 0) return c.json({ results: [] })
+    const wellResults = await dbInstance
+      .select({
+        id: qpcrWellResult.id,
+        qpcrRunId: qpcrWellResult.qpcrRunId,
+        wellPosition: qpcrWellResult.wellPosition,
+        targetName: qpcrWellResult.targetName,
+        cq: qpcrWellResult.cq,
+        quantity: qpcrWellResult.quantity,
+      })
+      .from(qpcrWellResult)
+      .where(inArray(qpcrWellResult.qpcrRunId, runIds))
+    const runMap = new Map(runs.map((r) => [r.id, r]))
+    const expMap = new Map<string, boolean>()
+    wells.forEach((w) => expMap.set(`${w.qpcrExperimentId}\t${w.wellPosition}`, true))
+    const experiments = await dbInstance
+      .select({ id: qpcrExperiment.id, name: qpcrExperiment.name })
+      .from(qpcrExperiment)
+      .where(inArray(qpcrExperiment.id, experimentIds))
+    const expNameMap = new Map(experiments.map((e) => [e.id, e.name]))
+    const results = wellResults
+      .filter((wr) => {
+        const run = runMap.get(wr.qpcrRunId)
+        return run && expMap.has(`${run.qpcrExperimentId}\t${wr.wellPosition}`)
+      })
+      .map((wr) => {
+        const run = runMap.get(wr.qpcrRunId)!
+        return {
+          experimentId: run.qpcrExperimentId,
+          experimentName: expNameMap.get(run.qpcrExperimentId) ?? null,
+          runId: run.id,
+          runStartedAt: run.runStartedAt,
+          fileName: run.fileName,
+          wellPosition: wr.wellPosition,
+          targetName: wr.targetName,
+          cq: wr.cq,
+          quantity: wr.quantity,
+        }
+      })
+    return c.json({ results })
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
 // Create single subject
-subjects.post('/', async (c) => {
+subjects.post('/', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -620,7 +686,7 @@ subjects.post('/', async (c) => {
     }
     
     const trimmedName = data.name.trim()
-    const now = new Date().toISOString()
+    const now = utcNow()
     const user = c.get('user')
     
     const [newSubject] = await dbInstance
@@ -642,7 +708,7 @@ subjects.post('/', async (c) => {
 })
 
 // Create multiple subjects (bulk)
-subjects.post('/bulk', async (c) => {
+subjects.post('/bulk', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -724,31 +790,79 @@ subjects.post('/bulk', async (c) => {
       }, 400)
     }
     
-    // Insert all subjects in a transaction
-    const now = new Date().toISOString()
+    // Insert all subjects in a single transaction (all-or-nothing)
+    const now = utcNow()
     const user = c.get('user')
-    const insertedSubjects = []
-    
-    for (const subject of validSubjects) {
-      const [newSubject] = await dbInstance
-        .insert(studySubject)
-        .values({
-          studyId: subject.studyId,
-          name: subject.name,
-          created: now,
-          lastUpdated: now,
-          createdBy: user?.id,
-          updatedBy: user?.id,
-        })
-        .returning()
-      
-      insertedSubjects.push(newSubject)
-    }
-    
+    const insertedSubjects = await dbInstance.transaction((tx) => {
+      const out: typeof studySubject.$inferSelect[] = []
+      for (const subject of validSubjects) {
+        const result = tx
+          .insert(studySubject)
+          .values({
+            studyId: subject.studyId,
+            name: subject.name,
+            created: now,
+            lastUpdated: now,
+            createdBy: user?.id,
+            updatedBy: user?.id,
+          })
+          .returning()
+          .get()
+        const newSubject = Array.isArray(result) ? result[0] : result
+        out.push(newSubject as typeof studySubject.$inferSelect)
+      }
+      return out
+    })
+
     return c.json({
       subjects: insertedSubjects,
       created: insertedSubjects.length,
     }, 201)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
+// Validate bulk subjects without creating (same body as POST /subjects/bulk)
+subjects.post('/bulk/validate', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      subjects: z.array(z.object({
+        studyShortCode: z.string().min(1),
+        name: z.string().min(1),
+      })),
+    })
+    const data = schema.parse(body)
+    if (data.subjects.length === 0) {
+      return c.json({ error: 'No subjects provided' }, 400)
+    }
+    const errors: Array<{ index: number; message: string }> = []
+    const validSubjects: Array<{ studyId: number; name: string }> = []
+    for (let i = 0; i < data.subjects.length; i++) {
+      const subject = data.subjects[i]
+      const trimmedName = subject.name.trim()
+      const studyValidation = await validateStudyShortCodeLocal(subject.studyShortCode)
+      if (!studyValidation.valid || !studyValidation.studyId) {
+        errors.push({ index: i, message: studyValidation.error || 'Invalid study' })
+        continue
+      }
+      const nameValidation = await validateSubjectNameLocal(studyValidation.studyId, trimmedName)
+      if (!nameValidation.valid) {
+        errors.push({ index: i, message: nameValidation.error || 'Invalid subject name' })
+        continue
+      }
+      validSubjects.push({ studyId: studyValidation.studyId, name: trimmedName })
+    }
+    const seen = new Set<string>()
+    for (let i = 0; i < validSubjects.length; i++) {
+      const key = `${validSubjects[i].studyId}:${validSubjects[i].name}`
+      if (seen.has(key)) {
+        errors.push({ index: i, message: `Duplicate subject name '${validSubjects[i].name}' in study` })
+      }
+      seen.add(key)
+    }
+    return c.json({ valid: errors.length === 0, errors })
   } catch (error) {
     return handleRouteError(error, c)
   }
@@ -772,7 +886,7 @@ function normalizePosition(position: string | null | undefined): string | null {
 }
 
 // Create subject with specimens atomically
-subjects.post('/with-specimens', async (c) => {
+subjects.post('/with-specimens', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     
@@ -852,7 +966,7 @@ subjects.post('/with-specimens', async (c) => {
       }
       
       // Validate container data if provided
-      if (spec.container && spec.container.containerType) {
+      if (spec.container?.containerType) {
         // Validate container type is allowed for specimen type
         const containerTypeValidation = await validateContainerTypeForSpecimenType(
           dbInstance,
@@ -880,10 +994,22 @@ subjects.post('/with-specimens', async (c) => {
               specimenIndex: i,
             }, 400)
           }
+          if (!spec.container.position || String(spec.container.position).trim() === '') {
+            return c.json({
+              error: 'Position (well) is required for micronix tubes.',
+              specimenIndex: i,
+            }, 400)
+          }
         } else if (spec.container.containerType === 'cryovial_tube') {
           if (!spec.container.collectionName && !spec.container.collectionBarcode) {
             return c.json({
               error: 'Collection name or barcode is required for cryovial tubes',
+              specimenIndex: i,
+            }, 400)
+          }
+          if (!spec.container.position || String(spec.container.position).trim() === '') {
+            return c.json({
+              error: 'Position (well) is required for cryovial tubes.',
               specimenIndex: i,
             }, 400)
           }
@@ -900,10 +1026,16 @@ subjects.post('/with-specimens', async (c) => {
               specimenIndex: i,
             }, 400)
           }
-        } else if (spec.container.containerType === 'static_well') {
+        } else {
           if (!spec.container.collectionName && !spec.container.collectionBarcode) {
             return c.json({
               error: 'Collection name or barcode is required for static wells',
+              specimenIndex: i,
+            }, 400)
+          }
+          if (!spec.container.position || String(spec.container.position).trim() === '') {
+            return c.json({
+              error: 'Position (well) is required for static wells.',
               specimenIndex: i,
             }, 400)
           }
@@ -920,7 +1052,7 @@ subjects.post('/with-specimens', async (c) => {
     // Resolve collections before transaction (for validation)
     const collectionMap = new Map<string, number>()
     for (const spec of resolvedSpecimens) {
-      if (spec.container && spec.container.containerType) {
+      if (spec.container?.containerType) {
         const container = spec.container as ExtendedContainerData
         const containerType = container.containerType
         const collectionName = container.collectionName
@@ -951,7 +1083,7 @@ subjects.post('/with-specimens', async (c) => {
               }, 400)
             }
           }
-        } else if (containerType === 'paper') {
+        } else {
           if (collectionName) {
             // Try to resolve existing collection
             let existingBoxId: number | null = null
@@ -982,7 +1114,7 @@ subjects.post('/with-specimens', async (c) => {
     }> = []
     
     for (const spec of resolvedSpecimens) {
-      if (spec.container && spec.container.containerType) {
+      if (spec.container?.containerType) {
         const container = spec.container as ExtendedContainerData
         const containerType = container.containerType
         
@@ -1017,12 +1149,108 @@ subjects.post('/with-specimens', async (c) => {
       }
     }
     
+    // Validate barcode uniqueness before transaction (DB + in-payload)
+    const seenBarcodes = new Set<string>()
+    for (let i = 0; i < resolvedSpecimens.length; i++) {
+      const spec = resolvedSpecimens[i]
+      if (spec.container?.containerType) {
+        const container = spec.container as ExtendedContainerData
+        const containerType = container.containerType
+        const barcode = container.barcode?.trim()
+        if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && barcode) {
+          if (seenBarcodes.has(barcode)) {
+            return c.json({
+              error: `Barcode '${barcode}' is used more than once in your request. Each barcode must be unique.`,
+              specimenIndex: i,
+            }, 400)
+          }
+          seenBarcodes.add(barcode)
+          const existing = containerType === 'micronix_tube'
+            ? dbInstance.select({ id: micronixTube.id }).from(micronixTube).where(eq(micronixTube.barcode, barcode)).get()
+            : dbInstance.select({ id: cryovialTube.id }).from(cryovialTube).where(eq(cryovialTube.barcode, barcode)).get()
+          if (existing) {
+            return c.json({
+              error: `Barcode '${barcode}' already exists`,
+              specimenIndex: i,
+            }, 400)
+          }
+        }
+      }
+    }
+    
+    // Validate position uniqueness before transaction (DB + in-payload)
+    const seenPositionByCollection = new Map<string, Set<string>>()
+    for (let i = 0; i < resolvedSpecimens.length; i++) {
+      const spec = resolvedSpecimens[i]
+      if (spec.container?.containerType) {
+        const container = spec.container as ExtendedContainerData
+        const containerType = container.containerType
+        const normalizedPosition = normalizePosition(container.position)
+        if (!normalizedPosition || (containerType !== 'micronix_tube' && containerType !== 'cryovial_tube' && containerType !== 'static_well')) {
+          continue
+        }
+        const identifier = container.collectionName || container.collectionBarcode
+        if (!identifier) continue
+        const collectionType = containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
+        const collectionKey = `${collectionType}-${identifier}`
+        const collectionId = collectionMap.get(collectionKey) ?? null
+        
+        // Check DB: position already used in this plate/box (only when collection exists)
+        if (collectionId != null) {
+          if (containerType === 'micronix_tube' || containerType === 'static_well') {
+            const existingTube = dbInstance
+              .select({ id: micronixTube.id })
+              .from(micronixTube)
+              .where(and(eq(micronixTube.collectionId, collectionId), eq(micronixTube.position, normalizedPosition)))
+              .get()
+            const existingWell = dbInstance
+              .select({ id: staticWell.id })
+              .from(staticWell)
+              .where(and(eq(staticWell.collectionId, collectionId), eq(staticWell.position, normalizedPosition)))
+              .get()
+            if (existingTube || existingWell) {
+              return c.json({
+                error: `Position ${normalizedPosition} is already used in this plate. Use a different position or plate.`,
+                specimenIndex: i,
+              }, 400)
+            }
+          } else {
+            const existing = dbInstance
+              .select({ id: cryovialTube.id })
+              .from(cryovialTube)
+              .where(and(eq(cryovialTube.collectionId, collectionId), eq(cryovialTube.position, normalizedPosition)))
+              .get()
+            if (existing) {
+              return c.json({
+                error: `Position ${normalizedPosition} is already used in this box. Use a different position or box.`,
+                specimenIndex: i,
+              }, 400)
+            }
+          }
+        }
+        
+        // Check in-payload: same position used twice for same collection
+        let positionSet = seenPositionByCollection.get(collectionKey)
+        if (!positionSet) {
+          positionSet = new Set<string>()
+          seenPositionByCollection.set(collectionKey, positionSet)
+        }
+        if (positionSet.has(normalizedPosition)) {
+          return c.json({
+            error: `Position ${normalizedPosition} in this plate/box is used more than once in your request. Each position can only be used once.`,
+            specimenIndex: i,
+          }, 400)
+        }
+        positionSet.add(normalizedPosition)
+      }
+    }
+    
     // Now execute everything in a synchronous transaction
     const user = c.get('user')
     let result
     try {
-      result = dbInstance.transaction((tx) => {
-      const now = new Date().toISOString()
+      result = await dbInstance.transaction((tx) => {
+      const now = utcNow()
       
       // Get or create subject
       let subjectId: number
@@ -1036,7 +1264,7 @@ subjects.post('/with-specimens', async (c) => {
           .where(eq(studySubject.id, existingSubjectId))
           .get()
         if (!existing) {
-          throw new Error('Subject not found')
+          throw new ValidationError('Subject not found')
         }
         subject = existing
         subjectId = existing.id
@@ -1055,42 +1283,61 @@ subjects.post('/with-specimens', async (c) => {
           .returning()
           .get()
         const newSubject = Array.isArray(newSubjectResult) ? newSubjectResult[0] : newSubjectResult
+        if (!newSubject) {
+          throw new Error('Insert did not return study subject row')
+        }
         subject = newSubject
         subjectId = newSubject.id
       }
       
-      // Create specimens and containers
+      // Create specimens and containers (get-or-create specimen, then create container if provided)
       const insertedSpecimens: Array<{
         specimen: typeof specimen.$inferSelect
         containerCreated: boolean
         containerId?: number
+        specimenCreated: boolean
       }> = []
       
       for (let i = 0; i < resolvedSpecimens.length; i++) {
         const spec = resolvedSpecimens[i]
         const prepared = preparedContainers[i]
         
-        // Create specimen
-        const newSpecimenResult = tx
-          .insert(specimen)
-          .values({
-            studySubjectId: subjectId,
-            specimenTypeId: spec.specimenTypeId,
-            collectionDate: spec.collectionDate,
-            created: now,
-            lastUpdated: now,
-            createdBy: user?.id,
-            updatedBy: user?.id,
-          })
-          .returning()
-          .get()
-        const newSpecimen = Array.isArray(newSpecimenResult) ? newSpecimenResult[0] : newSpecimenResult
+        // Get existing specimen or create new one (same subject + type + collection date = one specimen)
+        const existingSpecimen = findExistingStudySpecimen(
+          tx as unknown as Database,
+          subjectId,
+          spec.specimenTypeId,
+          spec.collectionDate
+        )
+        let specimenRecord: typeof specimen.$inferSelect
+        let specimenCreated: boolean
+        if (existingSpecimen) {
+          specimenRecord = existingSpecimen
+          specimenCreated = false
+        } else {
+          const newSpecimenResult = tx
+            .insert(specimen)
+            .values({
+              studySubjectId: subjectId,
+              specimenTypeId: spec.specimenTypeId,
+              collectionDate: spec.collectionDate,
+              created: now,
+              lastUpdated: now,
+              createdBy: user?.id,
+              updatedBy: user?.id,
+            })
+            .returning()
+            .get()
+          specimenRecord = Array.isArray(newSpecimenResult) ? newSpecimenResult[0] : newSpecimenResult
+          specimenCreated = true
+        }
+        const specimenId = specimenRecord.id
         
         let containerCreated = false
         let containerId: number | undefined
         
         // Create container if provided
-        if (spec.container && spec.container.containerType) {
+        if (spec.container?.containerType) {
           const container = spec.container as ExtendedContainerData
           const containerType = container.containerType
           
@@ -1098,7 +1345,7 @@ subjects.post('/with-specimens', async (c) => {
           const storageContainerResult = tx
             .insert(storageContainer)
             .values({
-              specimenId: newSpecimen.id,
+              specimenId,
               unitId: prepared.unitId,
               totalQuantity: prepared.totalQuantity,
               remainingQuantity: prepared.remainingQuantity,
@@ -1150,7 +1397,7 @@ subjects.post('/with-specimens', async (c) => {
                 .where(eq(micronixTube.barcode, container.barcode))
                 .get()
               if (existing) {
-                throw new Error(`Barcode '${container.barcode}' already exists`)
+                throw new ValidationError(`Barcode '${container.barcode}' already exists`)
               }
             }
             
@@ -1196,7 +1443,7 @@ subjects.post('/with-specimens', async (c) => {
                 .where(eq(cryovialTube.barcode, container.barcode))
                 .get()
               if (existing) {
-                throw new Error(`Barcode '${container.barcode}' already exists`)
+                throw new ValidationError(`Barcode '${container.barcode}' already exists`)
               }
             }
             
@@ -1269,8 +1516,8 @@ subjects.post('/with-specimens', async (c) => {
               barcode: container.barcode || null,
               position: normalizePosition(container.position),
             }).run()
-          } else if (containerType === 'static_well') {
-            // Resolve or create collection (same as micronix)
+          } else {
+            // Resolve or create collection (same as micronix) - containerType is 'static_well'
             let collectionId: number
             const identifier = container.collectionName || container.collectionBarcode!
             const key = `micronix_plate-${identifier}`
@@ -1306,9 +1553,10 @@ subjects.post('/with-specimens', async (c) => {
         }
         
         insertedSpecimens.push({
-          specimen: newSpecimen,
+          specimen: specimenRecord,
           containerCreated,
           containerId,
+          specimenCreated,
         })
       }
       
@@ -1327,11 +1575,11 @@ subjects.post('/with-specimens', async (c) => {
       throw transactionError
     }
     
-    // Calculate summary
+    // Calculate summary (specimensCreated = newly inserted only)
     const summary = {
       subjectsCreated: result.subjectCreated ? 1 : 0,
       subjectsUpdated: result.subjectCreated ? 0 : 1,
-      specimensCreated: result.specimens.length,
+      specimensCreated: result.specimens.filter(s => s.specimenCreated).length,
       containersCreated: result.specimens.filter(s => s.containerCreated).length,
     }
     
@@ -1426,9 +1674,9 @@ subjects.post('/with-specimens', async (c) => {
   }
 
 // Merge subjects endpoint
-subjects.post('/:targetId/merge', async (c) => {
+subjects.post('/:targetId/merge', memberMiddleware, async (c) => {
   try {
-    const targetId = parseInt(c.req.param('targetId'))
+    const targetId = parseInt(requireParam(c, 'targetId'))
     
     if (isNaN(targetId)) {
       return c.json({ error: 'Invalid target subject ID' }, 400)
@@ -1458,8 +1706,8 @@ subjects.post('/:targetId/merge', async (c) => {
 
     // Process merge in a transaction
     const user = c.get('user')
-    const result = dbInstance.transaction((tx) => {
-      const now = new Date().toISOString()
+    const result = await dbInstance.transaction((tx) => {
+      const now = utcNow()
 
       // Statistics (declared inside transaction)
       let specimensTransferred = 0
@@ -1586,9 +1834,9 @@ subjects.post('/:targetId/merge', async (c) => {
 })
 
 // Update subject
-subjects.put('/:id', async (c) => {
+subjects.put('/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid subject ID' }, 400)
@@ -1644,7 +1892,7 @@ subjects.put('/:id', async (c) => {
       .update(studySubject)
       .set({
         name: trimmedName,
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: utcNow(),
         updatedBy: user?.id,
       })
       .where(eq(studySubject.id, id))

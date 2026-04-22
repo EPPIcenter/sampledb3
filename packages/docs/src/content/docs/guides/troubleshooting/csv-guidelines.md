@@ -71,6 +71,10 @@ Specimen type names must exist in your Reference Data and match exactly, includi
 
 Collection names should be alphanumeric with hyphens or underscores. Examples include "PLATE-001" or "BOX-001". Use descriptive names that help identify collections, and be consistent with your naming conventions.
 
+## Units
+
+CSV templates do **not** include a unit column. The system uses the **default unit for that container or specimen type**, configured in Settings (Container Defaults). You do not need to type unit symbols (e.g. µL, spots) in your CSV. Where a flow provides a preview or configuration step (e.g. control batch wizard, bulk derivations), you can adjust quantity and unit in the interface before submitting if needed.
+
 ## Common CSV Errors and Solutions
 
 Understanding common errors helps you avoid them and fix them quickly when they occur.
@@ -105,10 +109,14 @@ Testing with a small file first saves time and prevents problems. Import just 2-
 
 Before importing, open the file in spreadsheet software to verify it opens correctly. Check that column names match the template. Review a few sample rows to ensure data looks correct. Use the system's validation feature before importing to catch problems early.
 
+## Where Template Values Come From
+
+Downloaded CSV templates (control batch, derivations, etc.) are generated from your current database and settings. Templates do not include a unit column; the system uses the default unit for the container type (Settings → Container Defaults). **Specimen type names** in examples come from your **Reference Data** (specimen types and their allowed container types). **Position** examples use the normalized format (e.g. A01, B02) expected by the system. Using a fresh template ensures column names and example values match what your system expects.
+
 ## Getting Help with CSV Issues
 
 If you're having CSV issues, start by downloading a fresh template from the system to ensure you have the correct format. Compare your file with the template to identify differences. Check error messages carefully—they indicate specific problems that need to be fixed. Review this guide for relevant sections that address your specific issue. If problems persist, contact support with details about the errors you're seeing.
 
 ## What's Next?
 
-Now that you understand CSV file requirements, you might want to explore [Bulk Import](/guides/bulk-operations/import/) to learn about the import process, check [Common Issues](/guides/troubleshooting/common-issues/) for troubleshooting help, or review [Best Practices](/guides/troubleshooting/best-practices/) for recommended workflows.
+Now that you understand CSV file requirements, you might want to explore [Bulk Import](/docs/guides/bulk-operations/import/) to learn about the import process, check [Common Issues](/docs/guides/troubleshooting/common-issues/) for troubleshooting help, or review [Best Practices](/docs/guides/troubleshooting/best-practices/) for recommended workflows.

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { settingsApi, type PaginationSettings } from '../lib/api'
 import { useUser } from '../contexts/UserContext'
 import InfoTooltip from './InfoTooltip'
@@ -30,34 +30,19 @@ export default function PaginationSettingsForm({
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
+  const prevDataRef = useRef<PaginationSettings | null>(data)
 
-  // Fetch system default to compare
-  useEffect(() => {
-    const fetchSystemDefault = async () => {
-      try {
-        // Get system default by making a request as admin would (or we could add a specific endpoint)
-        // For now, we'll check if current data matches what we'd expect as default
-        // In a real implementation, you might want an endpoint to get system defaults
-        const response = await settingsApi.get('pagination_settings')
-        // If the response includes userId, it's user-specific
-        // Otherwise, we need to check differently
-      } catch (err) {
-        // Ignore errors
-      }
-    }
-    fetchSystemDefault()
-  }, [])
-
-  useEffect(() => {
+  // Sync form when data prop changes (during render to avoid extra pass)
+  if (data !== prevDataRef.current) {
+    prevDataRef.current = data
     if (data) {
       setFormData(data)
       setSavedFormData(data)
-      // Check if this is user-specific by comparing with system default
-      // For now, we'll assume it's user-specific if user is not admin
-      // In a real implementation, the API should indicate this
       setIsUserSpecific(user?.role !== 'admin')
     }
-  }, [data, user])
+  }
+
+  // System default fetch removed: was a no-op (did not set state). Use handleResetToDefault or a dedicated endpoint if comparison is needed.
 
   const handleChange = (field: keyof PaginationSettings, value: string) => {
     const numValue = parseInt(value, 10)
@@ -123,20 +108,20 @@ export default function PaginationSettingsForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       {validationError && (
-        <div className="rounded-md bg-red-50 p-2">
-          <p className="text-xs font-medium text-red-800">{validationError}</p>
+        <div className="rounded-md bg-app-trend-down/10 p-2">
+          <p className="text-xs font-medium text-app-trend-down">{validationError}</p>
         </div>
       )}
 
       {/* User-specific indicator */}
       {isUserSpecific && (
-        <div className="rounded-md bg-blue-50 border border-blue-200 p-2">
+        <div className="rounded-md bg-app-accent-muted border border-app-accent p-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4 text-app-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
-              <p className="text-xs font-medium text-blue-800">
+              <p className="text-xs font-medium text-app-accent-hover">
                 Using your personal pagination settings
               </p>
             </div>
@@ -144,7 +129,7 @@ export default function PaginationSettingsForm({
               type="button"
               onClick={handleResetToDefault}
               disabled={resetting}
-              className="text-xs text-blue-600 hover:text-blue-800 underline disabled:opacity-50"
+              className="text-xs text-app-accent hover:text-app-accent-hover underline disabled:opacity-50"
             >
               {resetting ? 'Resetting...' : 'Reset to Default'}
             </button>
@@ -153,12 +138,12 @@ export default function PaginationSettingsForm({
       )}
 
       {!isUserSpecific && (
-        <div className="rounded-md bg-gray-50 border border-gray-200 p-2">
+        <div className="rounded-md bg-app-surface border border-app-border p-2">
           <div className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4 text-app-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
-            <p className="text-xs font-medium text-gray-700">
+            <p className="text-xs font-medium text-app-text">
               Using system default pagination settings
             </p>
           </div>
@@ -181,7 +166,7 @@ export default function PaginationSettingsForm({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <div className="flex items-center gap-1.5 mb-1">
-            <label className="block text-xs font-medium text-gray-700">
+            <label className="block text-xs font-medium text-app-text">
               Default Page Size
             </label>
             <InfoTooltip text="Number of items shown per page by default in list views (studies, specimens, etc.)" />
@@ -191,14 +176,14 @@ export default function PaginationSettingsForm({
             min="1"
             value={formData.defaultPageSize}
             onChange={(e) => handleChange('defaultPageSize', e.target.value)}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-2 py-1.5 text-sm border border-app-border rounded-md focus:ring-app-accent focus:border-app-accent"
             required
           />
         </div>
 
         <div>
           <div className="flex items-center gap-1.5 mb-1">
-            <label className="block text-xs font-medium text-gray-700">
+            <label className="block text-xs font-medium text-app-text">
               Maximum Page Size
             </label>
             <InfoTooltip text="Maximum number of items that can be requested per page. Prevents performance issues with very large page sizes." />
@@ -208,7 +193,7 @@ export default function PaginationSettingsForm({
             min="1"
             value={formData.maxPageSize}
             onChange={(e) => handleChange('maxPageSize', e.target.value)}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-2 py-1.5 text-sm border border-app-border rounded-md focus:ring-app-accent focus:border-app-accent"
             required
           />
         </div>
@@ -220,8 +205,8 @@ export default function PaginationSettingsForm({
           disabled={saving || !!validationError || !hasUnsavedChanges}
           className={`px-3 py-1.5 text-xs rounded transition-all ${
             hasUnsavedChanges && !validationError
-              ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              ? 'bg-app-accent text-white hover:bg-app-accent-hover shadow-md'
+              : 'bg-app-surface text-app-text-muted cursor-not-allowed'
           } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {saving ? (

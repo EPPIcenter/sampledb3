@@ -1,0 +1,444 @@
+/**
+ * Storage / Containers & Collections pages – "Modern precision lab" theme
+ * Scoped to .storage-page. Uses app design tokens (see tokens.css).
+ */
+
+.storage-page {
+  font-family: var(--app-font-sans);
+  background: linear-gradient(180deg, rgb(var(--app-bg)) 0%, rgb(var(--app-surface)) 100%);
+  min-height: 100%;
+  position: relative;
+}
+
+/* Subtle grid background for lab feel */
+.storage-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--app-bg-grid) / 0.15) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.storage-page h1,
+.storage-page h2,
+.storage-page h3 {
+  font-family: var(--app-font-display);
+  letter-spacing: -0.02em;
+  color: rgb(var(--app-text));
+}
+
+/* Card surface – use .dashboard-card or .storage-card inside .storage-page */
+.storage-page .dashboard-card,
+.storage-page .storage-card {
+  background: rgb(var(--app-card));
+  border: 1px solid rgb(var(--app-border));
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.storage-page .dashboard-card:hover,
+.storage-page .storage-card:hover {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07);
+  border-color: rgb(var(--app-accent) / 0.3);
+}
+
+/* Section title */
+.storage-page .dashboard-section-title,
+.storage-page .storage-section-title {
+  font-family: var(--app-font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: rgb(var(--app-text));
+}
+
+/* Accent link */
+.storage-page .dashboard-link,
+.storage-page .storage-link {
+  color: rgb(var(--app-accent));
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.storage-page .dashboard-link:hover,
+.storage-page .storage-link:hover {
+  color: rgb(var(--app-accent-hover));
+}
+
+.storage-page .dashboard-link:focus-visible,
+.storage-page .storage-link:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* Only show outline when the card itself is the focus target (e.g. card-as-link), not when a child has focus */
+.storage-page a.dashboard-card:focus-visible,
+.storage-page a.storage-card:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* For focusable div cards, no outline on mouse click */
+.storage-page .dashboard-card:focus:not(:focus-visible),
+.storage-page .storage-card:focus:not(:focus-visible) {
+  outline: none;
+}
+.storage-page .dashboard-card:focus-visible,
+.storage-page .storage-card:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* Staggered reveal on load */
+.storage-page .storage-reveal {
+  animation: storageReveal 0.4s ease-out forwards;
+  opacity: 0;
+}
+
+.storage-page .storage-reveal-1 { animation-delay: 0.05s; }
+.storage-page .storage-reveal-2 { animation-delay: 0.1s; }
+.storage-page .storage-reveal-3 { animation-delay: 0.15s; }
+.storage-page .storage-reveal-4 { animation-delay: 0.2s; }
+.storage-page .storage-reveal-5 { animation-delay: 0.25s; }
+.storage-page .storage-reveal-6 { animation-delay: 0.3s; }
+.storage-page .storage-reveal-7 { animation-delay: 0.35s; }
+.storage-page .storage-reveal-8 { animation-delay: 0.4s; }
+
+@keyframes storageReveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Form controls and buttons: teal focus ring when inside storage-page */
+.storage-page input:focus,
+.storage-page select:focus,
+.storage-page textarea:focus {
+  border-color: rgb(var(--app-accent) / 0.5);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
+}
+
+/* Radio and checkbox use teal when checked (Export/BarcodeExport format and CSV options) */
+.storage-page input[type="radio"],
+.storage-page input[type="checkbox"] {
+  accent-color: rgb(var(--app-accent));
+}
+
+.storage-page button:focus-visible,
+.storage-page a:focus-visible {
+  outline: 2px solid rgb(var(--app-accent));
+  outline-offset: 2px;
+}
+
+/* Collection tree picker: location row (full-row expand target) inside storage-page */
+.storage-page .storage-tree-picker-row {
+  min-height: 44px;
+}
+.storage-page button.storage-tree-picker-row:hover {
+  background: rgb(var(--app-surface));
+  border-color: rgb(var(--app-border));
+}
+.storage-page button.storage-tree-picker-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--app-accent));
+}
+
+.storage-page .form-input:focus,
+.storage-page .form-select:focus {
+  border-color: rgb(var(--app-accent) / 0.5);
+  box-shadow: 0 0 0 3px rgb(var(--app-accent) / 0.2);
+}
+
+/* Breadcrumb inside storage-page */
+.storage-page nav[aria-label="Breadcrumb navigation"] a {
+  color: rgb(var(--app-accent));
+}
+
+.storage-page nav[aria-label="Breadcrumb navigation"] a:hover {
+  color: rgb(var(--app-accent-hover));
+}
+
+/* Primary (accent) and secondary buttons */
+.storage-page .storage-btn-primary {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  background: rgb(var(--app-accent));
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.storage-page .storage-btn-primary:hover {
+  background: rgb(var(--app-accent-hover));
+}
+
+.storage-page .storage-btn-secondary {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-text));
+  border: 1px solid rgb(var(--app-border));
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.storage-page .storage-btn-secondary:hover {
+  background: rgb(var(--app-surface));
+  border-color: rgb(var(--app-accent) / 0.3);
+}
+
+/* Collection-type badges: lab-friendly palette */
+.storage-page .storage-badge-plate {
+  background: rgb(var(--app-accent-muted));
+  color: rgb(var(--app-accent-hover));
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.storage-page .storage-badge-cryovial {
+  background: rgb(var(--app-accent-muted) / 0.6);
+  color: rgb(var(--app-accent-hover));
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.storage-page .storage-badge-box {
+  background: rgb(var(--app-trend-up) / 0.15);
+  color: rgb(var(--app-trend-up));
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.storage-page .storage-badge-bag {
+  background: rgb(var(--app-standard-muted));
+  color: rgb(var(--app-standard));
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+/* Scan-friendly barcode (container detail primary identifier) */
+.storage-page .storage-barcode {
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
+  font-size: 1.125rem;
+  letter-spacing: 0.05em;
+  color: rgb(var(--app-text));
+}
+
+/* Collection grid (plate/box) when used inside storage theme */
+.storage-page .storage-grid-table th {
+  background: rgb(var(--app-surface));
+  border-color: rgb(var(--app-border));
+  color: rgb(var(--app-text-muted));
+}
+
+.storage-page .storage-grid-table td {
+  border-color: rgb(var(--app-border));
+}
+
+.storage-page .storage-grid-table .storage-grid-cell-empty {
+  background: rgb(var(--app-surface) / 0.5);
+}
+
+/* Skeleton pulse color when used inside storage-page */
+.storage-page .storage-skeleton [class*='bg-gray-200'] {
+  background: rgb(var(--app-border)) !important;
+}
+
+/* LocationHierarchyStats inner cards when used inside storage-page */
+.storage-page .storage-hierarchy-stats .bg-white.rounded-lg {
+  background: rgb(var(--app-card)) !important;
+  border: 1px solid rgb(var(--app-border));
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+}
+
+/* Subsection title (small uppercase label inside cards) */
+.storage-page .storage-subsection-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgb(var(--app-text-muted));
+  margin-bottom: 0.75rem;
+}
+
+/* Definition list terms and details – use storage tokens */
+.storage-page .storage-detail-dt {
+  font-size: 0.875rem;
+  color: rgb(var(--app-text-muted));
+}
+
+.storage-page .storage-detail-dd {
+  font-size: 0.875rem;
+  color: rgb(var(--app-text));
+}
+
+/* Card inner dividers – use with border-b or border-t */
+.storage-page .storage-card-divider {
+  border-color: rgb(var(--app-border));
+}
+
+/* Sub-card (e.g. derivation row inside a storage-card) */
+.storage-page .storage-sub-card {
+  background: rgb(var(--app-surface));
+  border: 1px solid rgb(var(--app-border));
+  border-radius: 0.5rem;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.storage-page .storage-sub-card:hover {
+  background: rgb(var(--app-surface) / 1.2);
+  border-color: rgb(var(--app-accent) / 0.3);
+}
+
+/* Wizard step indicator – shared by Import, DerivationsBulkImport, CollectionMove, ContainerMove* */
+.storage-page .storage-step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.storage-page .storage-step-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgb(var(--app-text-muted));
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.storage-page .storage-step-item--active {
+  color: rgb(var(--app-accent));
+  font-weight: 600;
+}
+
+.storage-page .storage-step-item__circle {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(var(--app-border));
+  color: rgb(var(--app-text-muted));
+  font-size: 0.875rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.storage-page .storage-step-item--active .storage-step-item__circle {
+  background: rgb(var(--app-accent));
+  color: white;
+}
+
+.storage-page .storage-step-connector {
+  flex: 1;
+  height: 2px;
+  min-width: 1rem;
+  background: rgb(var(--app-border));
+}
+
+/* StatCard / StatChart number styling */
+.storage-page .stat-card-title {
+  color: rgb(var(--app-text-muted));
+}
+.storage-page .stat-card-value {
+  color: rgb(var(--app-text));
+  font-variant-numeric: tabular-nums;
+}
+.storage-page .stat-chart-title {
+  color: rgb(var(--app-text));
+}
+.storage-page .stat-chart-empty {
+  color: rgb(var(--app-text-muted));
+}
+.storage-page .dashboard-stat-value {
+  color: rgb(var(--app-text));
+  font-variant-numeric: tabular-nums;
+}
+.storage-page .dashboard-stat-muted {
+  color: rgb(var(--app-text-muted));
+}
+
+/* Override blue to teal when inside storage-page (LocationTreePicker, LocationPicker, etc.) */
+.storage-page .bg-blue-50,
+.storage-page .bg-blue-100 {
+  background-color: rgb(var(--app-accent-muted));
+}
+
+.storage-page .border-blue-200,
+.storage-page .border-blue-300,
+.storage-page .border-blue-500 {
+  border-color: rgb(var(--app-accent) / 0.5);
+}
+
+.storage-page .text-blue-600,
+.storage-page .text-blue-700,
+.storage-page .text-blue-800,
+.storage-page .text-blue-900 {
+  color: rgb(var(--app-accent-hover));
+}
+
+.storage-page .bg-blue-600,
+.storage-page .bg-blue-700 {
+  background-color: rgb(var(--app-accent));
+}
+
+.storage-page .hover\:bg-blue-700:hover {
+  background-color: rgb(var(--app-accent-hover));
+}
+
+.storage-page .hover\:bg-blue-50:hover,
+.storage-page .hover\:border-blue-200:hover,
+.storage-page .hover\:border-blue-300:hover {
+  background-color: rgb(var(--app-accent-muted));
+  border-color: rgb(var(--app-accent) / 0.5);
+}
+
+.storage-page .hover\:text-blue-800:hover,
+.storage-page .hover\:text-blue-900:hover {
+  color: rgb(var(--app-accent-hover));
+}
+
+.storage-page .focus\:ring-blue-500:focus,
+.storage-page .focus\:border-blue-500:focus,
+.storage-page .focus-visible\:ring-blue-500:focus-visible {
+  --tw-ring-color: rgb(var(--app-accent) / 0.5);
+  border-color: rgb(var(--app-accent) / 0.5);
+}
+
+.storage-page .border-b-2.border-blue-600 {
+  border-color: rgb(var(--app-accent));
+}
+
+.storage-page .bg-blue-100.text-blue-800 {
+  background-color: rgb(var(--app-accent-muted));
+  color: rgb(var(--app-accent-hover));
+}
+
+/* File input "Choose file" button: high-contrast text on teal-100 (accent-muted) */
+.storage-page .file-input-accent::file-selector-button {
+  color: rgb(var(--app-accent-on-tint));
+}

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '../lib/api'
 import { specimensApi, type Specimen } from '../lib/api'
 import { useToast } from '../contexts/ToastContext'
 
@@ -13,6 +14,7 @@ export const specimenKeys = {
   }) => [...specimenKeys.lists(), filters] as const,
   details: () => [...specimenKeys.all, 'detail'] as const,
   detail: (id: number) => [...specimenKeys.details(), id] as const,
+  containers: (specimenId: string | number) => ['containers', 'specimen', specimenId] as const,
 }
 
 export function useSpecimens(filters?: {
@@ -38,6 +40,20 @@ export function useSpecimen(id: number) {
       return res.specimen
     },
     enabled: !!id,
+  })
+}
+
+export function useContainersForSpecimen(specimenId: string | number | undefined) {
+  return useQuery({
+    queryKey: specimenKeys.containers(specimenId!),
+    queryFn: async () => {
+      const res = await api.get<{ containers: unknown[] }>('/containers', {
+        params: { specimen_id: specimenId },
+      })
+      const data = res.data as { containers?: unknown[] } | undefined
+      return data?.containers ?? []
+    },
+    enabled: !!specimenId,
   })
 }
 

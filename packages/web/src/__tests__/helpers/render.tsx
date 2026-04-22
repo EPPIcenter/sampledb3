@@ -1,8 +1,10 @@
 import { ReactElement } from 'react'
-import { render, RenderOptions } from '@testing-library/react'
+import { act, render, RenderOptions } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, MemoryRouter } from 'react-router-dom'
+import { ThemeProvider } from '../../contexts/ThemeContext'
 import { ToastProvider } from '../../contexts/ToastContext'
+import { UserProvider } from '../../contexts/UserContext'
 
 // Create a test query client
 function createTestQueryClient() {
@@ -21,28 +23,45 @@ function createTestQueryClient() {
 
 interface CustomRenderOptions extends Omit<RenderOptions, 'wrapper'> {
   queryClient?: QueryClient
+  /** When set, use MemoryRouter with these entries so useSearchParams() etc. see the given URL */
+  initialEntries?: string[]
 }
 
-export function renderWithProviders(
+export async function renderWithProviders(
   ui: ReactElement,
-  { queryClient = createTestQueryClient(), ...renderOptions }: CustomRenderOptions = {}
+  { queryClient = createTestQueryClient(), initialEntries, ...renderOptions }: CustomRenderOptions = {}
 ) {
   function Wrapper({ children }: { children: React.ReactNode }) {
-    return (
-      <QueryClientProvider client={queryClient}>
+    const router =
+      initialEntries !== undefined ? (
+        <MemoryRouter initialEntries={initialEntries}>
+          <ThemeProvider>
+            <UserProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </UserProvider>
+          </ThemeProvider>
+        </MemoryRouter>
+      ) : (
         <BrowserRouter>
-          <ToastProvider>
-            {children}
-          </ToastProvider>
+          <ThemeProvider>
+            <UserProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </UserProvider>
+          </ThemeProvider>
         </BrowserRouter>
-      </QueryClientProvider>
-    )
+      )
+    return <QueryClientProvider client={queryClient}>{router}</QueryClientProvider>
   }
 
-  return {
+  const result = {
     ...render(ui, { wrapper: Wrapper, ...renderOptions }),
     queryClient,
   }
+  // Flush microtasks so UserProvider's getCurrentUser().then(...) runs inside act
+  await act(async () => {
+    await Promise.resolve()
+  })
+  return result
 }
 
 // Re-export everything

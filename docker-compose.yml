@@ -1,0 +1,27 @@
+services:
+  demo-seed:
+    build: .
+    container_name: sampledb-demo-seed
+    profiles: ["demo-seed"]
+    entrypoint: ["sh", "-c", "cd /app/packages/api && bun dist/lib/demo-seed.js"]
+    environment:
+      DATABASE_PATH: ${DATABASE_PATH:-/data/sampledb.sqlite}
+    volumes:
+      - ${HOST_DATA_DIR:-./data}:/data
+
+  sampledb:
+    build: .
+    container_name: sampledb
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      DATABASE_PATH: ${DATABASE_PATH:-/data/sampledb.sqlite}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      ERROR_LOG_ENABLED: ${ERROR_LOG_ENABLED:-true}
+      ERROR_LOG_LEVEL: ${ERROR_LOG_LEVEL:-error}
+      ERROR_LOG_RETENTION_DAYS: ${ERROR_LOG_RETENTION_DAYS:-}
+    volumes:
+      - ${HOST_DATA_DIR:-./data}:/data
+

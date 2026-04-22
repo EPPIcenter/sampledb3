@@ -5,6 +5,9 @@ import { eq, and, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import type { CollectionInfo } from '../types/collections'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create containers routes with database injection
@@ -12,6 +15,8 @@ import type { CollectionInfo } from '../types/collections'
  */
 export function createContainersRoutes(database: Database): Hono {
   const containers = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
 // Helper function to build full location path
 function buildLocationPath(loc: Location | null | undefined, parentName?: string): string {
@@ -125,7 +130,7 @@ async function enrichContainerDetailed(container: StorageContainer) {
 }
 
 // List containers with filters
-containers.get('/', async (c) => {
+containers.get('/', authMiddleware, async (c) => {
   try {
     const specimenId = c.req.query('specimen_id')
     const locationId = c.req.query('location_id')
@@ -205,9 +210,9 @@ containers.get('/', async (c) => {
 })
 
 // Get container by ID with full details
-containers.get('/:id', async (c) => {
+containers.get('/:id', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
@@ -318,9 +323,9 @@ containers.get('/:id', async (c) => {
 })
 
 // Update container
-containers.patch('/:id', async (c) => {
+containers.patch('/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
@@ -368,7 +373,7 @@ containers.patch('/:id', async (c) => {
       if (containerType) {
         // Validate unit is allowed for container type
         const { validateUnitForContainerType } = await import('../lib/validation')
-        const validation = await validateUnitForContainerType(containerType, unitId)
+        const validation = await validateUnitForContainerType(database, containerType, unitId)
         if (!validation.valid) {
           return c.json({ error: validation.error }, 400)
         }
@@ -383,12 +388,13 @@ containers.patch('/:id', async (c) => {
       .update(storageContainer)
       .set({
         ...updateData,
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: utcNow(),
         updatedBy: user?.id,
       })
       .where(eq(storageContainer.id, id))
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
     if (!updated) {
       return c.json({ error: 'Container not found' }, 404)
     }
@@ -422,9 +428,9 @@ containers.patch('/:id', async (c) => {
 })
 
 // Get container tags
-containers.get('/:id/tags', async (c) => {
+containers.get('/:id/tags', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
@@ -445,9 +451,9 @@ containers.get('/:id/tags', async (c) => {
 })
 
 // Add tag to container
-containers.post('/:id/tags', async (c) => {
+containers.post('/:id/tags', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
@@ -495,23 +501,27 @@ containers.post('/:id/tags', async (c) => {
 })
 
 // Remove tag from container
-containers.delete('/:id/tags/:tagId', async (c) => {
+containers.delete('/:id/tags/:tagId', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
-    const tagId = parseInt(c.req.param('tagId'))
+    const id = parseInt(requireParam(c, 'id'))
+    const tagId = parseInt(requireParam(c, 'tagId'))
     
     if (isNaN(id) || isNaN(tagId)) {
       return c.json({ error: 'Invalid container ID or tag ID' }, 400)
     }
 
-    await database.delete(storageContainerTag)
+    const deleted = await database.delete(storageContainerTag)
       .where(
         and(
           eq(storageContainerTag.storageContainerId, id),
           eq(storageContainerTag.tagId, tagId)
         )
       )
+      .returning()
 
+    if (deleted.length === 0) {
+      return c.json({ error: 'Tag association not found' }, 404)
+    }
     return c.json({ success: true })
   } catch (error: unknown) {
     console.error('Error removing container tag:', error)

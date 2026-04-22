@@ -39,6 +39,7 @@ export interface BatchMoveRequest {
   collectionType?: CollectionType
   mappings: CollectionMapping[]
   moves: MoveOperation[]
+  atomicMode?: 'all_or_nothing' | 'best_effort'
 }
 
 export interface ValidationError {
@@ -304,147 +305,179 @@ export function inferCollectionTypeFromContainers(containers: ContainerInfo[]): 
 }
 
 export async function executeMoves(database: Database, request: BatchMoveRequest): Promise<MoveResult> {
-  // Simple implementation for brevity, following the transaction pattern
   try {
-    const { moves, mappings } = request
-    const containersWithInfo = await Promise.all(moves.map(async m => ({ move: m, info: await resolveContainerByIdentifier(database, m.identifier) })))
-    const validMoves = containersWithInfo.filter(m => m.info !== null)
-    
-    const collectionTypeRes = inferCollectionTypeFromContainers(validMoves.map(m => m.info!))
-    if (!collectionTypeRes.valid) return { success: false, moved: 0, errors: [{ row: 0, error: collectionTypeRes.error! }] }
-    const collectionType = collectionTypeRes.collectionType!
-
-    // Validate that targetPosition is provided for containers that require it
+    const { moves, mappings, atomicMode = 'all_or_nothing' } = request
     const errors: ValidationError[] = []
-    for (let i = 0; i < validMoves.length; i++) {
-      const { move, info } = validMoves[i]
-      const requiresPosition = info!.containerType === 'micronix_tube' || info!.containerType === 'cryovial_tube' || info!.containerType === 'static_well'
-      if (requiresPosition && (!move.targetPosition || typeof move.targetPosition !== 'string' || move.targetPosition.trim() === '')) {
-        errors.push({ row: i + 1, error: `target_position is required for ${info!.containerType}` })
+
+    const resolvedMoves = await Promise.all(moves.map(async (move, index) => ({
+      row: index + 1,
+      move,
+      info: await resolveContainerByIdentifier(database, move.identifier),
+    })))
+
+    const validResolvedMoves: Array<{
+      row: number
+      move: MoveOperation
+      info: ContainerInfo
+      targetCollectionId?: number
+    }> = []
+
+    for (const resolved of resolvedMoves) {
+      if (!resolved.info) {
+        errors.push({ row: resolved.row, error: 'Container not found' })
+        continue
+      }
+      validResolvedMoves.push({
+        row: resolved.row,
+        move: resolved.move,
+        info: resolved.info,
+      })
+    }
+
+    if (validResolvedMoves.length === 0) {
+      return { success: false, moved: 0, errors: errors.length > 0 ? errors : [{ row: 0, error: 'No valid containers provided' }] }
+    }
+
+    const collectionTypeRes = inferCollectionTypeFromContainers(validResolvedMoves.map(m => m.info))
+    if (!collectionTypeRes.valid || !collectionTypeRes.collectionType) {
+      errors.push({ row: 0, error: collectionTypeRes.error || 'Unable to determine collection type from containers' })
+      return { success: false, moved: 0, errors }
+    }
+    const collectionType = collectionTypeRes.collectionType
+
+    for (const m of validResolvedMoves) {
+      const requiresPosition = m.info.containerType === 'micronix_tube' || m.info.containerType === 'cryovial_tube' || m.info.containerType === 'static_well'
+      if (requiresPosition && (!m.move.targetPosition || typeof m.move.targetPosition !== 'string' || m.move.targetPosition.trim() === '')) {
+        errors.push({ row: m.row, error: `target_position is required for ${m.info.containerType}` })
       }
     }
-    if (errors.length > 0) {
+
+    if (atomicMode === 'all_or_nothing' && errors.length > 0) {
       return { success: false, moved: 0, errors }
     }
 
-    // Validate mappings
     const mappingMap = new Map<number, number>()
-    const missingMappings: string[] = []
+    const mappingErrors: string[] = []
     for (const m of mappings) {
       const fromId = await resolveCollection(m.fromCollectionName, collectionType, database)
       const toId = await resolveCollection(m.toCollectionName, collectionType, database)
       if (fromId && toId) {
         mappingMap.set(fromId, toId)
       } else {
-        if (!fromId) missingMappings.push(`Source collection "${m.fromCollectionName}" not found`)
-        if (!toId) missingMappings.push(`Target collection "${m.toCollectionName}" not found`)
+        if (!fromId) mappingErrors.push(`Source collection "${m.fromCollectionName}" not found`)
+        if (!toId) mappingErrors.push(`Target collection "${m.toCollectionName}" not found`)
       }
-    }
-    
-    // Check if all source collections have mappings
-    const sourceCollectionIds = new Set(validMoves.map(m => m.info!.currentCollectionId).filter(Boolean))
-    for (const sourceId of sourceCollectionIds) {
-      if (!mappingMap.has(sourceId!)) {
-        const sourceCollection = validMoves.find(m => m.info!.currentCollectionId === sourceId)
-        if (sourceCollection) {
-          missingMappings.push(`No mapping configured for source collection "${sourceCollection.info!.currentCollectionName}"`)
-        }
-      }
-    }
-    
-    if (missingMappings.length > 0) {
-      return { success: false, moved: 0, errors: [{ row: 0, error: `Missing collection mappings: ${missingMappings.join('; ')}` }] }
     }
 
-    // Validate position conflicts before executing
-    // Build a map of target positions to check for conflicts
-    const positionConflicts = new Map<string, { row: number; containerId: number; barcode?: string }[]>()
-    
-    for (let i = 0; i < validMoves.length; i++) {
-      const { move, info } = validMoves[i]
-      const targetCollectionId = mappingMap.get(info!.currentCollectionId!)
-      if (!targetCollectionId) {
-        errors.push({ row: i + 1, error: `No target collection mapping found for container ${info!.barcode || info!.containerId}` })
+    if (mappingErrors.length > 0) {
+      errors.push({ row: 0, error: `Invalid collection mappings: ${mappingErrors.join('; ')}` })
+    }
+
+    for (const m of validResolvedMoves) {
+      const sourceId = m.info.currentCollectionId
+      if (!sourceId || !mappingMap.has(sourceId)) {
+        errors.push({
+          row: m.row,
+          error: `No target collection mapping found for source collection "${m.info.currentCollectionName || 'unknown'}"`,
+        })
         continue
       }
+      m.targetCollectionId = mappingMap.get(sourceId)
+    }
 
-      // Check if target position is already occupied (excluding the container being moved if it's a same-position move)
-      const requiresPosition = info!.containerType === 'micronix_tube' || info!.containerType === 'cryovial_tube' || info!.containerType === 'static_well'
-      if (requiresPosition && move.targetPosition) {
+    if (atomicMode === 'all_or_nothing' && errors.length > 0) {
+      return { success: false, moved: 0, errors }
+    }
+
+    const erroredRows = new Set(errors.map(e => e.row).filter(r => r > 0))
+    const executableMoves = validResolvedMoves.filter(m => !erroredRows.has(m.row) && !!m.targetCollectionId)
+
+    if (executableMoves.length === 0) {
+      return { success: false, moved: 0, errors: errors.length > 0 ? errors : [{ row: 0, error: 'No valid moves to execute' }] }
+    }
+
+    const positionConflicts = new Map<string, { row: number; containerId: number; barcode?: string }[]>()
+
+    for (const { row, move, info, targetCollectionId } of executableMoves) {
+      const requiresPosition = info.containerType === 'micronix_tube' || info.containerType === 'cryovial_tube' || info.containerType === 'static_well'
+      if (requiresPosition && move.targetPosition && targetCollectionId) {
         const positionKey = `${targetCollectionId}:${move.targetPosition}`
         if (!positionConflicts.has(positionKey)) {
           positionConflicts.set(positionKey, [])
         }
         positionConflicts.get(positionKey)!.push({
-          row: i + 1,
-          containerId: info!.containerId,
-          barcode: info!.barcode || undefined,
+          row,
+          containerId: info.containerId,
+          barcode: info.barcode || undefined,
         })
       }
     }
-    
-    // Check for multiple containers trying to move to the same position
+
     for (const [positionKey, containers] of positionConflicts.entries()) {
       if (containers.length > 1) {
         const [, position] = positionKey.split(':')
         const containerList = containers.map(c => c.barcode || `ID ${c.containerId}`).join(', ')
         for (const container of containers) {
-          errors.push({ 
-            row: container.row, 
-            error: `Multiple containers (${containerList}) are trying to move to position ${position}. Only one container can occupy each position.` 
+          errors.push({
+            row: container.row,
+            error: `Multiple containers (${containerList}) are trying to move to position ${position}. Only one container can occupy each position.`,
           })
         }
       } else {
-        // Check if position is occupied by another container (not being moved)
         const container = containers[0]
-        const moveIndex = validMoves.findIndex(m => m.info!.containerId === container.containerId)
-        if (moveIndex >= 0) {
-          const { move, info } = validMoves[moveIndex]
-          const targetCollectionId = mappingMap.get(info!.currentCollectionId!)
-          if (targetCollectionId) {
-            const excludeIds = validMoves.map(m => m.info!.containerId)
-            const availability = await checkPositionAvailability(database, targetCollectionId, collectionType, move.targetPosition, excludeIds)
-            
-            if (availability.occupied && availability.containerId && !excludeIds.includes(availability.containerId)) {
-              errors.push({ 
-                row: container.row, 
-                error: `Target position ${move.targetPosition} is already occupied by another container (ID: ${availability.containerId})` 
-              })
-            }
+        const moveRec = executableMoves.find(m => m.info.containerId === container.containerId)
+        if (moveRec?.targetCollectionId) {
+          const excludeIds = executableMoves.map(m => m.info.containerId)
+          const availability = await checkPositionAvailability(database, moveRec.targetCollectionId, collectionType, moveRec.move.targetPosition || null, excludeIds)
+
+          if (availability.occupied && availability.containerId && !excludeIds.includes(availability.containerId)) {
+            errors.push({
+              row: container.row,
+              error: `Target position ${moveRec.move.targetPosition} is already occupied by another container (ID: ${availability.containerId})`,
+            })
           }
         }
       }
     }
-    
-    if (errors.length > 0) {
+
+    if (atomicMode === 'all_or_nothing' && errors.length > 0) {
       return { success: false, moved: 0, errors }
     }
 
-    // All validation passed, execute the moves
+    const finalErroredRows = new Set(errors.map(e => e.row).filter(r => r > 0))
+    const finalMoves = executableMoves.filter(m => !finalErroredRows.has(m.row))
+
+    if (finalMoves.length === 0) {
+      return { success: false, moved: 0, errors }
+    }
+
     await database.transaction(async (tx) => {
-      for (const { move, info } of validMoves) {
-        const targetCollectionId = mappingMap.get(info!.currentCollectionId!)
+      for (const { move, info, targetCollectionId } of finalMoves) {
         if (!targetCollectionId) continue
 
-        switch (info!.containerType) {
+        switch (info.containerType) {
           case 'micronix_tube':
-            tx.update(micronixTube).set({ collectionId: targetCollectionId, position: move.targetPosition }).where(eq(micronixTube.id, info!.containerId)).run()
+            tx.update(micronixTube).set({ collectionId: targetCollectionId, position: move.targetPosition }).where(eq(micronixTube.id, info.containerId)).run()
             break
           case 'cryovial_tube':
-            tx.update(cryovialTube).set({ collectionId: targetCollectionId, position: move.targetPosition }).where(eq(cryovialTube.id, info!.containerId)).run()
+            tx.update(cryovialTube).set({ collectionId: targetCollectionId, position: move.targetPosition }).where(eq(cryovialTube.id, info.containerId)).run()
             break
           case 'paper':
-            tx.update(paper).set({ sheetId: targetCollectionId, position: move.targetPosition }).where(eq(paper.id, info!.containerId)).run()
+            tx.update(paper).set({ sheetId: targetCollectionId, position: move.targetPosition }).where(eq(paper.id, info.containerId)).run()
             break
           case 'static_well':
-            tx.update(staticWell).set({ collectionId: targetCollectionId, position: move.targetPosition }).where(eq(staticWell.id, info!.containerId)).run()
+            tx.update(staticWell).set({ collectionId: targetCollectionId, position: move.targetPosition }).where(eq(staticWell.id, info.containerId)).run()
             break
         }
       }
     })
 
-    return { success: true, moved: validMoves.length }
-  } catch (error: any) {
-    return { success: false, moved: 0, errors: [{ row: 0, error: error.message }] }
+    if (errors.length > 0) {
+      return { success: false, moved: finalMoves.length, errors }
+    }
+
+    return { success: true, moved: finalMoves.length }
+  } catch (error) {
+    throw error
   }
 }

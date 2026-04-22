@@ -12,6 +12,8 @@ import {
   useStorageTypes,
 } from '../useReferenceData'
 import * as api from '../../lib/api'
+import type { SpecimenType, StorageType } from '../../lib/api'
+import type { AxiosResponse } from 'axios'
 
 // Mock the API module
 vi.mock('../../lib/api', () => ({
@@ -60,19 +62,13 @@ describe('useReferenceData Hooks', () => {
   describe('useSpecimenTypes', () => {
     it('should fetch and return specimen types', async () => {
       const mockData = {
-        specimenTypes: [
+        data: [
           { id: 1, name: 'Whole Blood', created: '2024-01-01', lastUpdated: '2024-01-01' },
           { id: 2, name: 'Plasma', created: '2024-01-01', lastUpdated: '2024-01-01' },
         ],
       }
 
-      vi.mocked(api.specimenTypesApi.list).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.specimenTypesApi.list).mockResolvedValue(mockData as Awaited<ReturnType<typeof api.specimenTypesApi.list>>)
 
       const { result } = renderHook(() => useSpecimenTypes(), {
         wrapper: createWrapper(),
@@ -84,7 +80,7 @@ describe('useReferenceData Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(result.current.data).toEqual(mockData)
+      expect(result.current.data).toEqual(mockData.data)
       expect(api.specimenTypesApi.list).toHaveBeenCalledOnce()
     })
 
@@ -106,21 +102,13 @@ describe('useReferenceData Hooks', () => {
   describe('useSpecimenType', () => {
     it('should fetch a single specimen type by ID', async () => {
       const mockData = {
-        specimenType: {
-          id: 1,
-          name: 'Whole Blood',
-          created: '2024-01-01',
-          lastUpdated: '2024-01-01',
-        },
+        id: 1,
+        name: 'Whole Blood',
+        created: '2024-01-01',
+        lastUpdated: '2024-01-01',
       }
 
-      vi.mocked(api.specimenTypesApi.get).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.specimenTypesApi.get).mockResolvedValue(mockData as Awaited<ReturnType<typeof api.specimenTypesApi.get>>)
 
       const { result } = renderHook(() => useSpecimenType(1), {
         wrapper: createWrapper(),
@@ -130,7 +118,7 @@ describe('useReferenceData Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(result.current.data?.data?.specimenType).toEqual(mockData.specimenType)
+      expect(result.current.data).toEqual(mockData)
       expect(api.specimenTypesApi.get).toHaveBeenCalledWith(1)
     })
 
@@ -147,21 +135,13 @@ describe('useReferenceData Hooks', () => {
   describe('useCreateSpecimenType', () => {
     it('should create a specimen type and invalidate queries', async () => {
       const mockCreated = {
-        specimenType: {
-          id: 3,
-          name: 'New Type',
-          created: '2024-01-01',
-          lastUpdated: '2024-01-01',
-        },
+        id: 3,
+        name: 'New Type',
+        created: '2024-01-01',
+        lastUpdated: '2024-01-01',
       }
 
-      vi.mocked(api.specimenTypesApi.create).mockResolvedValue({
-        data: mockCreated,
-        status: 201,
-        statusText: 'Created',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.specimenTypesApi.create).mockResolvedValue(mockCreated as Awaited<ReturnType<typeof api.specimenTypesApi.create>>)
 
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -191,7 +171,7 @@ describe('useReferenceData Hooks', () => {
       })
 
       expect(api.specimenTypesApi.create).toHaveBeenCalledWith({ name: 'New Type' })
-      expect(result.current.data?.data?.specimenType).toEqual(mockCreated.specimenType)
+      expect(result.current.data).toEqual(mockCreated)
       expect(invalidateSpy).toHaveBeenCalled()
     })
   })
@@ -199,21 +179,13 @@ describe('useReferenceData Hooks', () => {
   describe('useUpdateSpecimenType', () => {
     it('should update a specimen type and invalidate queries', async () => {
       const mockUpdated = {
-        specimenType: {
-          id: 1,
-          name: 'Updated Name',
-          created: '2024-01-01',
-          lastUpdated: '2024-01-02',
-        },
+        id: 1,
+        name: 'Updated Name',
+        created: '2024-01-01',
+        lastUpdated: '2024-01-02',
       }
 
-      vi.mocked(api.specimenTypesApi.update).mockResolvedValue({
-        data: mockUpdated,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.specimenTypesApi.update).mockResolvedValue(mockUpdated as Awaited<ReturnType<typeof api.specimenTypesApi.update>>)
 
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -243,7 +215,7 @@ describe('useReferenceData Hooks', () => {
       })
 
       expect(api.specimenTypesApi.update).toHaveBeenCalledWith(1, { name: 'Updated Name' })
-      expect(result.current.data?.data?.specimenType).toEqual(mockUpdated.specimenType)
+      expect(result.current.data).toEqual(mockUpdated)
       expect(invalidateSpy).toHaveBeenCalled()
     })
   })
@@ -255,7 +227,7 @@ describe('useReferenceData Hooks', () => {
         status: 200,
         statusText: 'OK',
         headers: {},
-        config: {} as any,
+        config: {} as AxiosResponse['config'],
       })
 
       const queryClient = new QueryClient({
@@ -296,19 +268,13 @@ describe('useReferenceData Hooks', () => {
   describe('useStorageTypes', () => {
     it('should fetch and return storage types', async () => {
       const mockData = {
-        storageTypes: [
+        data: [
           { id: 1, name: 'Freezer', description: 'Cold storage' },
-          { id: 2, name: 'Refrigerator', description: 'Cool storage' },
+          { id: 2, name: 'Room Temp', description: 'Room temperature' },
         ],
       }
 
-      vi.mocked(api.storageTypesApi.list).mockResolvedValue({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      })
+      vi.mocked(api.storageTypesApi.list).mockResolvedValue(mockData as Awaited<ReturnType<typeof api.storageTypesApi.list>>)
 
       const { result } = renderHook(() => useStorageTypes(), {
         wrapper: createWrapper(),
@@ -318,7 +284,7 @@ describe('useReferenceData Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(result.current.data).toEqual(mockData)
+      expect(result.current.data).toEqual(mockData.data)
     })
   })
 })

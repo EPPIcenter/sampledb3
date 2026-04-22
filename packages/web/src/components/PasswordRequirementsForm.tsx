@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { settingsApi, type PasswordRequirements } from '../lib/api'
 import InfoTooltip from './InfoTooltip'
 
@@ -22,13 +22,16 @@ export default function PasswordRequirementsForm({
     minLength: 8,
   })
   const [saving, setSaving] = useState(false)
+  const prevDataRef = useRef<PasswordRequirements | null>(data)
 
-  useEffect(() => {
+  // Sync form when data prop changes (during render to avoid extra pass)
+  if (data !== prevDataRef.current) {
+    prevDataRef.current = data
     if (data) {
       setFormData(data)
       setSavedFormData(data)
     }
-  }, [data])
+  }
 
   const handleChange = (value: string) => {
     const numValue = parseInt(value, 10)
@@ -72,7 +75,7 @@ export default function PasswordRequirementsForm({
       <div className="grid grid-cols-2 gap-4 items-end">
         <div>
           <div className="flex items-center gap-1.5 mb-1">
-            <label className="block text-xs font-medium text-gray-700">
+            <label className="block text-xs font-medium text-app-text">
               Minimum Password Length
             </label>
             <InfoTooltip text="Minimum number of characters required for user passwords. Applies to new user registration and password changes." />
@@ -82,11 +85,11 @@ export default function PasswordRequirementsForm({
             min="1"
             value={formData.minLength}
             onChange={(e) => handleChange(e.target.value)}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-2 py-1.5 text-sm border border-app-border rounded-md focus:ring-app-accent focus:border-app-accent"
             required
           />
         </div>
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-app-text-muted">
           Passwords must be at least {formData.minLength} character{formData.minLength !== 1 ? 's' : ''} long
         </div>
       </div>
@@ -97,8 +100,8 @@ export default function PasswordRequirementsForm({
           disabled={saving || !hasUnsavedChanges}
           className={`px-3 py-1.5 text-xs rounded transition-all ${
             hasUnsavedChanges
-              ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              ? 'bg-app-accent text-white hover:bg-app-accent-hover shadow-md'
+              : 'bg-app-surface text-app-text-muted cursor-not-allowed'
           } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {saving ? (

@@ -27,8 +27,8 @@ function getLocationStats(locations: Location[], locationCounts: Record<string, 
 export default function StorageOverview({ locations, locationCounts, loading }: StorageOverviewProps) {
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
-        <h2 className="text-xl font-semibold mb-4 text-gray-900">Storage Overview</h2>
+      <div className="bg-app-card rounded-lg shadow p-6 mb-8">
+        <h2 className="text-xl font-semibold mb-4 text-app-text">Storage Overview</h2>
         <SkeletonCard height="h-48" />
       </div>
     )
@@ -38,12 +38,12 @@ export default function StorageOverview({ locations, locationCounts, loading }: 
   const stats = getLocationStats(locations, locationCounts)
 
   return (
-    <div className="bg-white rounded-lg shadow p-6 mb-8">
+    <div className="bg-app-card rounded-lg shadow p-6 mb-8">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold text-gray-900">Storage Overview</h2>
+        <h2 className="text-xl font-semibold text-app-text">Storage Overview</h2>
         <Link
           to="/locations"
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          className="text-sm text-app-accent hover:text-app-accent-hover font-medium"
           aria-label="View all locations"
         >
           View All Locations →
@@ -52,24 +52,24 @@ export default function StorageOverview({ locations, locationCounts, loading }: 
 
       {/* Storage Health Indicators */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="p-4 bg-blue-50 rounded-lg">
-          <div className="text-sm font-medium text-gray-600 mb-1">Total Locations</div>
-          <div className="text-2xl font-bold text-blue-600">{stats.totalLocations}</div>
+        <div className="p-4 bg-app-accent-muted rounded-lg">
+          <div className="text-sm font-medium text-app-text-muted mb-1">Total Locations</div>
+          <div className="text-2xl font-bold text-app-accent">{stats.totalLocations}</div>
         </div>
-        <div className="p-4 bg-green-50 rounded-lg">
-          <div className="text-sm font-medium text-gray-600 mb-1">With Containers</div>
-          <div className="text-2xl font-bold text-green-600">{stats.locationsWithContainers}</div>
+        <div className="p-4 bg-app-trend-up/10 rounded-lg">
+          <div className="text-sm font-medium text-app-text-muted mb-1">With Containers</div>
+          <div className="text-2xl font-bold text-app-trend-up">{stats.locationsWithContainers}</div>
         </div>
-        <div className="p-4 bg-gray-50 rounded-lg">
-          <div className="text-sm font-medium text-gray-600 mb-1">Empty</div>
-          <div className="text-2xl font-bold text-gray-600">{stats.emptyLocations}</div>
+        <div className="p-4 bg-app-surface rounded-lg">
+          <div className="text-sm font-medium text-app-text-muted mb-1">Empty</div>
+          <div className="text-2xl font-bold text-app-text-muted">{stats.emptyLocations}</div>
         </div>
       </div>
 
       {/* Root Locations */}
       {rootLocations.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Root Locations</h3>
+          <h3 className="text-sm font-semibold text-app-text mb-3">Root Locations</h3>
           <div className="space-y-2">
             {rootLocations.slice(0, 10).map((location) => {
               // Match by location name (byRootLocation uses names as keys)
@@ -78,7 +78,7 @@ export default function StorageOverview({ locations, locationCounts, loading }: 
                 <Link
                   key={location.id}
                   to={`/locations/${location.id}`}
-                  className="flex items-center justify-between p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex items-center justify-between p-3 border border-app-border rounded-lg hover:bg-app-surface transition-colors"
                   aria-label={`View location ${location.name}`}
                 >
                   <div className="flex items-center gap-3">
@@ -104,15 +104,15 @@ export default function StorageOverview({ locations, locationCounts, loading }: 
                       </svg>
                     </div>
                     <div>
-                      <div className="font-medium text-gray-900">{location.name}</div>
+                      <div className="font-medium text-app-text">{location.name}</div>
                       {location.storageTypeName && (
-                        <div className="text-sm text-gray-500">{location.storageTypeName}</div>
+                        <div className="text-sm text-app-text-muted">{location.storageTypeName}</div>
                       )}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-medium text-gray-900">{containerCount.toLocaleString()}</div>
-                    <div className="text-xs text-gray-500">containers</div>
+                    <div className="text-sm font-medium text-app-text">{containerCount.toLocaleString()}</div>
+                    <div className="text-xs text-app-text-muted">containers</div>
                   </div>
                 </Link>
               )
@@ -122,7 +122,7 @@ export default function StorageOverview({ locations, locationCounts, loading }: 
       )}
 
       {rootLocations.length === 0 && (
-        <div className="text-center py-8 text-gray-500">No locations found</div>
+        <div className="text-center py-8 text-app-text-muted">No locations found</div>
       )}
     </div>
   )

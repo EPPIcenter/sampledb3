@@ -1,8 +1,7 @@
 import { Database as SQLiteDatabase } from 'bun:sqlite'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
-import { migrate } from 'drizzle-orm/bun-sqlite/migrator'
 import * as schema from './schema'
-import { join, resolve } from 'path'
+import { isAbsolute, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import { existsSync, readFileSync } from 'fs'
@@ -10,17 +9,12 @@ import { existsSync, readFileSync } from 'fs'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-// Find project root by looking for root package.json
-function findProjectRoot(): string {
-  // If DATABASE_PATH is set, use its directory as project root
-  if (process.env.DATABASE_PATH) {
-    // Resolve relative paths from current working directory
-    const dbPath = process.env.DATABASE_PATH.startsWith('/')
-      ? process.env.DATABASE_PATH
-      : resolve(process.cwd(), process.env.DATABASE_PATH)
-    return dirname(dbPath)
-  }
-
+/**
+ * Repo root (package name `sampledb`). Used to resolve relative DATABASE_PATH —
+ * `bun --filter @sampledb/api dev` runs with cwd `packages/api`, so paths must
+ * not be resolved with `process.cwd()` alone.
+ */
+function getMonorepoRoot(): string {
   // Try multiple strategies to find the project root
   const strategies = [
     // Strategy 1: Go up from current file location (works for both src and dist)
@@ -88,6 +82,10 @@ function findProjectRoot(): string {
   return resolve(__dirname, '../../..')
 }
 
+function resolveDatabaseFilePath(relativeOrAbsolute: string): string {
+  return isAbsolute(relativeOrAbsolute) ? relativeOrAbsolute : resolve(getMonorepoRoot(), relativeOrAbsolute)
+}
+
 /**
  * Create a database connection instance
  * @param dbPath - Optional database path. If not provided, uses DATABASE_PATH env var or default dev database
@@ -98,123 +96,163 @@ export function createDatabase(dbPath?: string): { db: ReturnType<typeof drizzle
   let resolvedPath: string
 
   if (dbPath) {
-    // If path is provided, resolve it (absolute or relative to cwd)
-    resolvedPath = dbPath.startsWith('/')
-      ? dbPath
-      : resolve(process.cwd(), dbPath)
+    resolvedPath = resolveDatabaseFilePath(dbPath)
   } else if (process.env.DATABASE_PATH) {
-    // If DATABASE_PATH is set, resolve it (absolute or relative to cwd)
-    resolvedPath = process.env.DATABASE_PATH.startsWith('/')
-      ? process.env.DATABASE_PATH
-      : resolve(process.cwd(), process.env.DATABASE_PATH)
+    resolvedPath = resolveDatabaseFilePath(process.env.DATABASE_PATH)
   } else {
     // Default: use empty dev database in project root
     // This allows testing setup functionality with a fresh empty database
-    const projectRoot = findProjectRoot()
-    resolvedPath = resolve(projectRoot, 'sampledb_dev.sqlite')
+    resolvedPath = resolve(getMonorepoRoot(), 'sampledb_dev.sqlite')
   }
 
-  console.log(`📁 Project root: ${findProjectRoot()}`)
-  console.log(`📁 Connecting to database at: ${resolvedPath}`)
-  console.log(`📁 Database exists: ${existsSync(resolvedPath)}`)
-  console.log(`📁 DATABASE_PATH env: ${process.env.DATABASE_PATH || 'not set (using default: sampledb_dev.sqlite)'}`)
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`📁 Monorepo root: ${getMonorepoRoot()}`)
+    console.log(`📁 process.cwd(): ${process.cwd()}`)
+    console.log(`📁 Connecting to database at: ${resolvedPath}`)
+    console.log(`📁 Database exists: ${existsSync(resolvedPath)}`)
+    console.log(`📁 DATABASE_PATH env: ${process.env.DATABASE_PATH || 'not set (using default: sampledb_dev.sqlite)'}`)
+  }
 
   const sqlite = new SQLiteDatabase(resolvedPath)
   sqlite.exec('PRAGMA journal_mode = WAL')
 
-  // Check if database has tables and run migrations if needed
-  let needsMigration = false
+  // Check if database has tables and run initial schema if needed
+  let needsSchema = false
   try {
     const studyTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='study'").get()
     const settingsTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='settings'").get()
+    const errorLogsTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='error_logs'").get()
     
     if (!studyTable) {
       const allTables = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
       const tableCount = allTables.length
       if (tableCount === 0) {
-        needsMigration = true
-        console.log(`📝 Database is empty - running migrations to initialize schema...`)
+        needsSchema = true
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`📝 Database is empty - running initial schema...`)
+        }
       } else {
-        console.warn(`⚠️  Warning: 'study' table not found in database.`)
-        console.warn(`   Tables found: ${allTables.map(t => t.name).join(', ') || 'none'}`)
-        // Still try to run migrations in case schema is incomplete
-        needsMigration = true
-        console.log(`📝 Running migrations to ensure schema is up to date...`)
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(`⚠️  Warning: 'study' table not found in database.`)
+          console.warn(`   Tables found: ${allTables.map(t => t.name).join(', ') || 'none'}`)
+          console.log(`📝 Running initial schema to ensure schema is complete...`)
+        }
+        needsSchema = true
       }
     } else if (!settingsTable) {
-      // Database has some tables but is missing critical ones like 'settings'
-      // This indicates migrations are incomplete
-      needsMigration = true
-      console.log(`📝 Database schema is incomplete (missing 'settings' table) - running migrations...`)
+      needsSchema = true
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`📝 Database schema is incomplete (missing 'settings' table) - running initial schema...`)
+      }
+    } else if (!errorLogsTable) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`📝 Database missing 'error_logs' table - creating it...`)
+      }
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS error_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          source TEXT NOT NULL,
+          level TEXT NOT NULL,
+          message TEXT NOT NULL,
+          error_code TEXT,
+          stack TEXT,
+          context TEXT,
+          user_id INTEGER,
+          url TEXT,
+          user_agent TEXT,
+          resolved INTEGER NOT NULL DEFAULT 0,
+          resolved_at TEXT,
+          resolved_by INTEGER
+        )
+      `)
+      sqlite.exec('CREATE INDEX IF NOT EXISTS error_logs_timestamp_idx ON error_logs(timestamp)')
+      sqlite.exec('CREATE INDEX IF NOT EXISTS error_logs_source_idx ON error_logs(source)')
+      sqlite.exec('CREATE INDEX IF NOT EXISTS error_logs_level_idx ON error_logs(level)')
+      sqlite.exec('CREATE INDEX IF NOT EXISTS error_logs_resolved_idx ON error_logs(resolved)')
     } else {
-      console.log(`✅ Database connected successfully`)
+      console.log(`✅ Database connected`)
     }
-  } catch (error: any) {
-    // Distinguish between expected cases (empty DB, missing tables) and actual errors
-    // If the error is about the database file not existing, that's expected for new setups
-    // If it's a different error (corruption, permissions, etc.), throw it
-    const errorMessage = error?.message || String(error)
-    
+
+    // Migration: add approved_at to users if missing (for self-registration approval flow)
+    const usersTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get()
+    if (usersTable) {
+      const userTableInfo = sqlite.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>
+      const hasApprovedAt = userTableInfo.some((col) => col.name === 'approved_at')
+      if (!hasApprovedAt) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`📝 Adding 'approved_at' column to users table...`)
+        }
+        sqlite.exec('ALTER TABLE users ADD COLUMN approved_at TEXT')
+        sqlite.exec("UPDATE users SET approved_at = created WHERE approved_at IS NULL")
+      }
+    }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
     if (errorMessage.includes('no such file') || errorMessage.includes('ENOENT')) {
-      // Database file doesn't exist - this is expected for new setups
-      needsMigration = true
-      console.log(`📝 Database file does not exist - will create and run migrations...`)
+      needsSchema = true
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`📝 Database file does not exist - will create and run initial schema...`)
+      }
     } else {
-      // This is an unexpected error - throw it instead of silently assuming migrations needed
       console.error(`❌ Error checking database: ${errorMessage}`)
       throw new Error(`Failed to check database: ${errorMessage}. This may indicate database corruption or permission issues.`)
     }
   }
 
-  // Create drizzle instance for migrations
   const db = drizzle(sqlite, { schema })
 
-  // Run migrations if needed
-  if (needsMigration) {
-    try {
-      // Find migrations folder
-      // This file is in: packages/api/src/db/client.ts (or dist/db/client.js when compiled)
-      // Migrations are in: packages/api/drizzle
-      // Find the API package root by looking for package.json with name '@sampledb/api'
-      let migrationsFolder: string | null = null
-      let currentDir = __dirname
-      
-      // Search up the directory tree to find the API package root
-      for (let i = 0; i < 5; i++) {
-        const packageJson = join(currentDir, 'package.json')
-        if (existsSync(packageJson)) {
-          try {
-            const pkg = JSON.parse(readFileSync(packageJson, 'utf-8'))
-            if (pkg.name === '@sampledb/api') {
-              migrationsFolder = join(currentDir, 'drizzle')
+  if (needsSchema) {
+    let schemaPath: string | null = null
+    let currentDir = __dirname
+    const pathsTried: string[] = []
+
+    for (let i = 0; i < 5; i++) {
+      const packageJson = join(currentDir, 'package.json')
+      if (existsSync(packageJson)) {
+        try {
+          const pkg = JSON.parse(readFileSync(packageJson, 'utf-8'))
+          if (pkg.name === '@sampledb/api') {
+            const candidate = join(currentDir, 'initial_schema.sql')
+            pathsTried.push(candidate)
+            if (existsSync(candidate)) {
+              schemaPath = candidate
               break
             }
-          } catch (error) {
-            // Expected: package.json may be unreadable or malformed during migrations folder search
-            // Log in development mode for debugging, but don't throw - this is expected behavior
-            if (process.env.NODE_ENV === 'development') {
-              console.debug(`Could not parse ${packageJson} during migrations folder detection:`, error)
-            }
           }
+        } catch {
+          // ignore
         }
-        const parent = dirname(currentDir)
-        if (parent === currentDir) break
-        currentDir = parent
       }
-      
-      // Fallback: try relative path (works when running from source)
-      if (!migrationsFolder || !existsSync(migrationsFolder)) {
-        migrationsFolder = join(__dirname, '../../drizzle')
+      const parent = dirname(currentDir)
+      if (parent === currentDir) break
+      currentDir = parent
+    }
+
+    if (!schemaPath) {
+      const fallback = join(__dirname, '../../initial_schema.sql')
+      pathsTried.push(fallback)
+      if (existsSync(fallback)) schemaPath = fallback
+    }
+
+    if (!schemaPath) {
+      throw new Error(`initial_schema.sql not found. Tried: ${pathsTried.join(', ')}`)
+    }
+
+    try {
+      const sql = readFileSync(schemaPath, 'utf-8')
+      const statements = sql.split('--> statement-breakpoint').map((s) => s.trim()).filter(Boolean)
+      for (const statement of statements) {
+        if (statement.length > 0) {
+          sqlite.exec(statement)
+        }
       }
-      
-      if (!migrationsFolder || !existsSync(migrationsFolder)) {
-        throw new Error(`Migrations folder not found. Tried: ${migrationsFolder}`)
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`✅ Initial schema completed successfully`)
       }
-      
-      migrate(db, { migrationsFolder })
-      console.log(`✅ Migrations completed successfully`)
-    } catch (error: any) {
-      console.error(`❌ Error running migrations: ${error.message}`)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`❌ Error running initial schema: ${message}`)
       throw error
     }
   }

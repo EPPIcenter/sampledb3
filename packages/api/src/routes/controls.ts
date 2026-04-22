@@ -22,10 +22,14 @@ import {
 } from '../db/schema'
 import { eq, and, like, desc, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
+import { parseControlProperties } from '../lib/control-properties'
 import { validateControlBatchName, generateUniqueBatchName } from '../lib/validation'
 import { generateControlDefinitionName, generateUniqueControlDefinitionName } from '../lib/control-name-generation'
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
-import type { BloodControlProperties, ParsedControlProperties } from '../types/properties'
+import type { BloodControlProperties } from '../types/properties'
+import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create controls routes with database injection
@@ -34,57 +38,13 @@ import type { BloodControlProperties, ParsedControlProperties } from '../types/p
 export function createControlsRoutes(database: Database): Hono {
   const dbInstance = database
   const controls = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
 
-// Helper function to extract strain/density data from properties JSON
-function parseControlProperties(properties: unknown, strainMap?: Map<number, { name: string }>): ParsedControlProperties {
-  if (!properties) return { strains: [], targetDensity: undefined, unitSymbol: undefined, targetDensityUnitId: undefined }
-  
-  let props: BloodControlProperties
-  try {
-    const parsed = typeof properties === 'string' ? JSON.parse(properties) : properties
-    props = parsed as BloodControlProperties
-  } catch (e) {
-    // If parsing fails, return empty data
-    return { strains: [], targetDensity: undefined, unitSymbol: undefined, targetDensityUnitId: undefined }
-  }
-  
-  const strains = (props.strains || []).map((s: number | { id: number; name?: string; percentage?: number }) => {
-    if (typeof s === 'number') {
-      // Just strain ID - look up name if available
-      return { id: s, name: strainMap?.get(s)?.name || `Strain ${s}` }
-    }
-    // Full strain object with id, name, percentage
-    return { id: s.id, name: s.name || `Strain ${s.id}`, percentage: s.percentage }
-  })
-  
-  // Extract target density - handle both number and string formats
-  const targetDensity = props.targetDensity !== undefined && props.targetDensity !== null
-    ? (typeof props.targetDensity === 'string' ? parseFloat(props.targetDensity) : props.targetDensity)
-    : undefined
-  
-  // Extract unit symbol - check multiple possible locations
-  const unitSymbol = (typeof props.targetDensityUnit === 'object' && props.targetDensityUnit !== null && 'symbol' in props.targetDensityUnit)
-    ? (props.targetDensityUnit as { symbol: string }).symbol
-    : props.targetDensityUnitSymbol 
-    || (typeof props.targetDensityUnit === 'string' ? props.targetDensityUnit : undefined)
-  
-  // Extract unit ID
-  const targetDensityUnitId = props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null
-    ? (typeof props.targetDensityUnitId === 'string' ? parseInt(props.targetDensityUnitId) : props.targetDensityUnitId)
-    : undefined
-  
-  return {
-    strains,
-    targetDensity,
-    unitSymbol,
-    targetDensityUnitId,
-  }
-}
-
-// --- Control Batches ---
+  // --- Control Batches ---
 
 // List all control batches
-controls.get('/batches', async (c) => {
+controls.get('/batches', authMiddleware, async (c) => {
   const spotCountSubquery = dbInstance
     .select({
       batchId: specimen.controlBatchId,
@@ -95,6 +55,39 @@ controls.get('/batches', async (c) => {
     .innerJoin(paper, eq(storageContainer.id, paper.id))
     .groupBy(specimen.controlBatchId)
     .as('spot_counts')
+
+  const micronixCountSubquery = dbInstance
+    .select({
+      batchId: specimen.controlBatchId,
+      count: sql<number>`count(*)`.as('micronix_count'),
+    })
+    .from(specimen)
+    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
+    .innerJoin(micronixTube, eq(storageContainer.id, micronixTube.id))
+    .groupBy(specimen.controlBatchId)
+    .as('micronix_counts')
+
+  const cryovialCountSubquery = dbInstance
+    .select({
+      batchId: specimen.controlBatchId,
+      count: sql<number>`count(*)`.as('cryovial_count'),
+    })
+    .from(specimen)
+    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
+    .innerJoin(cryovialTube, eq(storageContainer.id, cryovialTube.id))
+    .groupBy(specimen.controlBatchId)
+    .as('cryovial_counts')
+
+  const staticWellCountSubquery = dbInstance
+    .select({
+      batchId: specimen.controlBatchId,
+      count: sql<number>`count(*)`.as('static_well_count'),
+    })
+    .from(specimen)
+    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
+    .innerJoin(staticWell, eq(storageContainer.id, staticWell.id))
+    .groupBy(specimen.controlBatchId)
+    .as('static_well_counts')
 
   const tubeCountSubquery = dbInstance
     .select({
@@ -135,6 +128,9 @@ controls.get('/batches', async (c) => {
       properties: controlDefinition.properties,
       specimenCount: sql<number>`COALESCE(${specimenCountSubquery.count}, 0)`,
       spotCount: sql<number>`COALESCE(${spotCountSubquery.count}, 0)`,
+      micronixCount: sql<number>`COALESCE(${micronixCountSubquery.count}, 0)`,
+      cryovialCount: sql<number>`COALESCE(${cryovialCountSubquery.count}, 0)`,
+      staticWellCount: sql<number>`COALESCE(${staticWellCountSubquery.count}, 0)`,
       tubeCount: sql<number>`COALESCE(${tubeCountSubquery.count}, 0)`,
       inventoryTotal: sql<number>`COALESCE(${spotCountSubquery.count}, 0) + COALESCE(${tubeCountSubquery.count}, 0)`,
     })
@@ -142,6 +138,9 @@ controls.get('/batches', async (c) => {
     .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
     .leftJoin(specimenCountSubquery, eq(controlBatch.id, specimenCountSubquery.batchId))
     .leftJoin(spotCountSubquery, eq(controlBatch.id, spotCountSubquery.batchId))
+    .leftJoin(micronixCountSubquery, eq(controlBatch.id, micronixCountSubquery.batchId))
+    .leftJoin(cryovialCountSubquery, eq(controlBatch.id, cryovialCountSubquery.batchId))
+    .leftJoin(staticWellCountSubquery, eq(controlBatch.id, staticWellCountSubquery.batchId))
     .leftJoin(tubeCountSubquery, eq(controlBatch.id, tubeCountSubquery.batchId))
     .where(eq(controlDefinition.controlType, 'blood'))
     .orderBy(desc(controlBatch.created))
@@ -162,8 +161,8 @@ controls.get('/batches', async (c) => {
 })
 
 // Get batch detail (only for blood control batches)
-controls.get('/batches/:id', async (c) => {
-  const id = parseInt(c.req.param('id'))
+controls.get('/batches/:id', authMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
   const result = await dbInstance
@@ -184,9 +183,65 @@ controls.get('/batches/:id', async (c) => {
   return c.json({ batch: result.batch })
 })
 
+// Update batch (rename, change production date, etc.)
+controls.patch('/batches/:id', memberMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
+  if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
+
+  try {
+    const batchWithDefinition = await dbInstance
+      .select({ batch: controlBatch, definition: controlDefinition })
+      .from(controlBatch)
+      .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
+      .where(and(eq(controlBatch.id, id), eq(controlDefinition.controlType, 'blood')))
+      .get()
+
+    if (!batchWithDefinition) {
+      return c.json({ error: 'Blood control batch not found' }, 404)
+    }
+
+    const body = await c.req.json()
+    const schema = z.object({
+      name: z.string().min(1).max(255).optional(),
+      productionDate: z.string().optional(),
+      properties: z.record(z.string(), z.any()).optional(),
+    })
+    const data = schema.parse(body)
+
+    if (data.name) {
+      const validation = await validateControlBatchName(dbInstance, data.name, id)
+      if (!validation.valid) {
+        return c.json({ error: validation.error, suggestion: validation.suggestion }, 400)
+      }
+    }
+
+    const user = c.get('user')
+    const updates: Record<string, unknown> = {
+      lastUpdated: utcNow(),
+      updatedBy: user?.id,
+    }
+    if (data.name !== undefined) updates.name = data.name
+    if (data.productionDate !== undefined) updates.productionDate = data.productionDate
+    if (data.properties !== undefined) updates.properties = data.properties
+
+    const [updated] = await dbInstance
+      .update(controlBatch)
+      .set(updates)
+      .where(eq(controlBatch.id, id))
+      .returning()
+
+    return c.json({ batch: updated })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    }
+    return handleRouteError(error, c)
+  }
+})
+
 // Delete batch and all associated data
-controls.delete('/batches/:id', async (c) => {
-  const id = parseInt(c.req.param('id'))
+controls.delete('/batches/:id', memberMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
   try {
@@ -230,7 +285,7 @@ controls.delete('/batches/:id', async (c) => {
     }
 
     // Delete in transaction to ensure atomicity
-    dbInstance.transaction((tx) => {
+    await dbInstance.transaction(async (tx) => {
       // 1. Delete storageContainerTag records for all containers
       if (containerIds.length > 0) {
         tx.delete(storageContainerTag)
@@ -276,9 +331,12 @@ controls.delete('/batches/:id', async (c) => {
       }
 
       // 5. Delete controlBatch record
-      tx.delete(controlBatch)
+      const deleted = await tx.delete(controlBatch)
         .where(eq(controlBatch.id, id))
-        .run()
+        .returning()
+      if (deleted.length === 0) {
+        throw new NotFoundError('Blood control batch', id)
+      }
     })
 
     return c.json({ message: 'Batch deleted successfully' })
@@ -288,9 +346,9 @@ controls.delete('/batches/:id', async (c) => {
 })
 
 // Get batch summary with enriched specimen data
-controls.get('/batches/:id/summary', async (c) => {
+controls.get('/batches/:id/summary', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
     // Get batch with definition (filtered to blood controls)
@@ -681,7 +739,7 @@ controls.get('/batches/:id/summary', async (c) => {
 // --- Control Definitions ---
 
 // List all control definitions (filtered to blood controls)
-controls.get('/', async (c) => {
+controls.get('/', authMiddleware, async (c) => {
   const batchCountSubquery = dbInstance
     .select({
       definitionId: controlBatch.controlDefinitionId,
@@ -712,6 +770,42 @@ controls.get('/', async (c) => {
     .innerJoin(paper, eq(storageContainer.id, paper.id))
     .groupBy(controlBatch.controlDefinitionId)
     .as('spot_counts')
+
+  const micronixCountSubquery = dbInstance
+    .select({
+      definitionId: controlBatch.controlDefinitionId,
+      count: sql<number>`count(*)`.as('micronix_count'),
+    })
+    .from(specimen)
+    .innerJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
+    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
+    .innerJoin(micronixTube, eq(storageContainer.id, micronixTube.id))
+    .groupBy(controlBatch.controlDefinitionId)
+    .as('micronix_counts')
+
+  const cryovialCountSubquery = dbInstance
+    .select({
+      definitionId: controlBatch.controlDefinitionId,
+      count: sql<number>`count(*)`.as('cryovial_count'),
+    })
+    .from(specimen)
+    .innerJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
+    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
+    .innerJoin(cryovialTube, eq(storageContainer.id, cryovialTube.id))
+    .groupBy(controlBatch.controlDefinitionId)
+    .as('cryovial_counts')
+
+  const staticWellCountSubquery = dbInstance
+    .select({
+      definitionId: controlBatch.controlDefinitionId,
+      count: sql<number>`count(*)`.as('static_well_count'),
+    })
+    .from(specimen)
+    .innerJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
+    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
+    .innerJoin(staticWell, eq(storageContainer.id, staticWell.id))
+    .groupBy(controlBatch.controlDefinitionId)
+    .as('static_well_counts')
 
   const tubeCountSubquery = dbInstance
     .select({
@@ -744,6 +838,9 @@ controls.get('/', async (c) => {
       batchCount: sql<number>`COALESCE(${batchCountSubquery.count}, 0)`,
       specimenCount: sql<number>`COALESCE(${specimenCountSubquery.count}, 0)`,
       spotCount: sql<number>`COALESCE(${spotCountSubquery.count}, 0)`,
+      micronixCount: sql<number>`COALESCE(${micronixCountSubquery.count}, 0)`,
+      cryovialCount: sql<number>`COALESCE(${cryovialCountSubquery.count}, 0)`,
+      staticWellCount: sql<number>`COALESCE(${staticWellCountSubquery.count}, 0)`,
       tubeCount: sql<number>`COALESCE(${tubeCountSubquery.count}, 0)`,
       inventoryTotal: sql<number>`COALESCE(${spotCountSubquery.count}, 0) + COALESCE(${tubeCountSubquery.count}, 0)`,
     })
@@ -751,6 +848,9 @@ controls.get('/', async (c) => {
     .leftJoin(batchCountSubquery, eq(controlDefinition.id, batchCountSubquery.definitionId))
     .leftJoin(specimenCountSubquery, eq(controlDefinition.id, specimenCountSubquery.definitionId))
     .leftJoin(spotCountSubquery, eq(controlDefinition.id, spotCountSubquery.definitionId))
+    .leftJoin(micronixCountSubquery, eq(controlDefinition.id, micronixCountSubquery.definitionId))
+    .leftJoin(cryovialCountSubquery, eq(controlDefinition.id, cryovialCountSubquery.definitionId))
+    .leftJoin(staticWellCountSubquery, eq(controlDefinition.id, staticWellCountSubquery.definitionId))
     .leftJoin(tubeCountSubquery, eq(controlDefinition.id, tubeCountSubquery.definitionId))
     .where(eq(controlDefinition.controlType, 'blood'))
   
@@ -772,8 +872,8 @@ controls.get('/', async (c) => {
 })
 
 // Get control definition by ID (filtered to blood controls)
-controls.get('/:id', async (c) => {
-  const id = parseInt(c.req.param('id'))
+controls.get('/:id', authMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
   
   if (isNaN(id)) {
     return c.json({ error: 'Invalid blood control ID' }, 400)
@@ -796,8 +896,8 @@ controls.get('/:id', async (c) => {
 })
 
 // Get control definition summary with composition and batches
-controls.get('/:id/summary', async (c) => {
-  const id = parseInt(c.req.param('id'))
+controls.get('/:id/summary', authMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid control ID' }, 400)
 
   try {
@@ -857,6 +957,42 @@ controls.get('/:id/summary', async (c) => {
       .groupBy(specimen.controlBatchId)
       .as('batch_spot_counts')
 
+    const micronixCountSubquery = dbInstance
+      .select({
+        batchId: specimen.controlBatchId,
+        count: sql<number>`count(*)`.as('micronix_count'),
+      })
+      .from(specimen)
+      .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
+      .innerJoin(micronixTube, eq(storageContainer.id, micronixTube.id))
+      .where(sql`${storageContainer.remainingQuantity} > 0`)
+      .groupBy(specimen.controlBatchId)
+      .as('batch_micronix_counts')
+
+    const cryovialCountSubquery = dbInstance
+      .select({
+        batchId: specimen.controlBatchId,
+        count: sql<number>`count(*)`.as('cryovial_count'),
+      })
+      .from(specimen)
+      .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
+      .innerJoin(cryovialTube, eq(storageContainer.id, cryovialTube.id))
+      .where(sql`${storageContainer.remainingQuantity} > 0`)
+      .groupBy(specimen.controlBatchId)
+      .as('batch_cryovial_counts')
+
+    const staticWellCountSubquery = dbInstance
+      .select({
+        batchId: specimen.controlBatchId,
+        count: sql<number>`count(*)`.as('static_well_count'),
+      })
+      .from(specimen)
+      .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
+      .innerJoin(staticWell, eq(storageContainer.id, staticWell.id))
+      .where(sql`${storageContainer.remainingQuantity} > 0`)
+      .groupBy(specimen.controlBatchId)
+      .as('batch_static_well_counts')
+
     const tubeCountSubquery = dbInstance
       .select({
         batchId: specimen.controlBatchId,
@@ -882,11 +1018,17 @@ controls.get('/:id/summary', async (c) => {
         productionDate: controlBatch.productionDate,
         created: controlBatch.created,
         spotCount: sql<number>`COALESCE(${spotCountSubquery.count}, 0)`,
+        micronixCount: sql<number>`COALESCE(${micronixCountSubquery.count}, 0)`,
+        cryovialCount: sql<number>`COALESCE(${cryovialCountSubquery.count}, 0)`,
+        staticWellCount: sql<number>`COALESCE(${staticWellCountSubquery.count}, 0)`,
         tubeCount: sql<number>`COALESCE(${tubeCountSubquery.count}, 0)`,
         inventoryTotal: sql<number>`COALESCE(${spotCountSubquery.count}, 0) + COALESCE(${tubeCountSubquery.count}, 0)`,
       })
       .from(controlBatch)
       .leftJoin(spotCountSubquery, eq(controlBatch.id, spotCountSubquery.batchId))
+      .leftJoin(micronixCountSubquery, eq(controlBatch.id, micronixCountSubquery.batchId))
+      .leftJoin(cryovialCountSubquery, eq(controlBatch.id, cryovialCountSubquery.batchId))
+      .leftJoin(staticWellCountSubquery, eq(controlBatch.id, staticWellCountSubquery.batchId))
       .leftJoin(tubeCountSubquery, eq(controlBatch.id, tubeCountSubquery.batchId))
       .where(eq(controlBatch.controlDefinitionId, id))
       .orderBy(desc(controlBatch.productionDate))
@@ -900,6 +1042,9 @@ controls.get('/:id/summary', async (c) => {
           .where(eq(specimen.controlBatchId, batch.id))
           .get()
 
+        if (!specimensCount) {
+          throw new Error('Failed to get specimen count for batch')
+        }
         // Get total remaining quantity and unit for summary badges
         const inventory = await dbInstance
           .select({
@@ -914,14 +1059,17 @@ controls.get('/:id/summary', async (c) => {
 
         return {
           ...batch,
-          specimenCount: specimensCount?.count || 0,
-          inventory: inventory || [],
+          specimenCount: specimensCount.count,
+          inventory,
         }
       })
     )
 
     // 4. Calculate aggregate stats
     const totalSpots = enrichedBatches.reduce((sum, b) => sum + (b.spotCount || 0), 0)
+    const totalMicronix = enrichedBatches.reduce((sum, b) => sum + (b.micronixCount || 0), 0)
+    const totalCryovial = enrichedBatches.reduce((sum, b) => sum + (b.cryovialCount || 0), 0)
+    const totalStaticWells = enrichedBatches.reduce((sum, b) => sum + (b.staticWellCount || 0), 0)
     const totalTubes = enrichedBatches.reduce((sum, b) => sum + (b.tubeCount || 0), 0)
     const totalSpecimens = enrichedBatches.reduce((sum, b) => sum + (b.specimenCount || 0), 0)
     const inStockBatchesCount = enrichedBatches.filter(b => (b.inventoryTotal || 0) > 0).length
@@ -990,6 +1138,9 @@ controls.get('/:id/summary', async (c) => {
         totalBatches: enrichedBatches.length,
         totalContainers: totalSpots + totalTubes,
         totalSpots,
+        totalMicronix,
+        totalCryovial,
+        totalStaticWells,
         totalTubes,
         totalSpecimens,
         inStockBatchesCount,
@@ -1003,7 +1154,7 @@ controls.get('/:id/summary', async (c) => {
 })
 
 // Check for duplicate control definition (only checks blood controls)
-controls.post('/check-unique', async (c) => {
+controls.post('/check-unique', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1042,7 +1193,7 @@ controls.post('/check-unique', async (c) => {
       if (data.targetDensityUnitId !== undefined) {
         if (props.targetDensityUnitId !== data.targetDensityUnitId) continue
       } else {
-        if (props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null) continue
+        if (props.targetDensityUnitId !== undefined) continue
       }
       
       // Check strain composition match
@@ -1068,7 +1219,7 @@ controls.post('/check-unique', async (c) => {
         const percentagesMatch = strainIds.every(id => {
           const pct = strainMap.get(id)
           const defPct = defStrainMap.get(id)
-          return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+          return pct !== undefined && defPct !== undefined && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
         })
         
         if (percentagesMatch) {
@@ -1093,7 +1244,7 @@ controls.post('/check-unique', async (c) => {
 })
 
 // Suggest name for control definition (preview without creating)
-controls.post('/suggest-name', async (c) => {
+controls.post('/suggest-name', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1112,13 +1263,8 @@ controls.post('/suggest-name', async (c) => {
     const controlType = 'blood' // Only blood controls are created through this system
     
     // Validate strains are provided
-    if (!data.strains || data.strains.length === 0) {
+    if (data.strains.length === 0) {
       return c.json({ error: 'At least one strain is required' }, 400)
-    }
-    
-    // Validate targetDensity is provided
-    if (data.targetDensity === undefined || data.targetDensity === null) {
-      return c.json({ error: 'Target density is required' }, 400)
     }
     
     // Get strain names
@@ -1160,7 +1306,7 @@ controls.post('/suggest-name', async (c) => {
       if (data.targetDensityUnitId !== undefined) {
         if (props.targetDensityUnitId !== data.targetDensityUnitId) continue
       } else {
-        if (props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null) continue
+        if (props.targetDensityUnitId !== undefined) continue
       }
       
       // Check strain composition match
@@ -1185,7 +1331,7 @@ controls.post('/suggest-name', async (c) => {
       const percentagesMatch = strainIds.every(id => {
         const pct = strainMap.get(id)
         const defPct = defStrainMap.get(id)
-        return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+        return pct !== undefined && defPct !== undefined && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
       })
       
       if (percentagesMatch) {
@@ -1216,8 +1362,250 @@ controls.post('/suggest-name', async (c) => {
   }
 })
 
+// Find control definition by composition + density (lookup only; 404 when no match)
+controls.post('/definitions/find', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      strains: z.array(z.object({
+        strainId: z.number().int(),
+        percentage: z.number().min(0).max(100),
+      })),
+      targetDensity: z.number(),
+      targetDensityUnitId: z.number().int().optional(),
+    })
+    const data = schema.parse(body)
+    const controlType = 'blood'
+    const { strains, targetDensity, targetDensityUnitId } = data
+
+    if (strains.length === 0) {
+      return c.json({ error: 'At least one strain is required' }, 400)
+    }
+
+    const strainIds = strains.map(s => s.strainId)
+    const strainRecords = await dbInstance.select().from(strain).where(inArray(strain.id, strainIds))
+    const strainMap = new Map(strainRecords.map(s => [s.id, { name: s.name }]))
+    const missingStrains = strainIds.filter(id => !strainMap.has(id))
+    if (missingStrains.length > 0) {
+      return c.json({ error: `Invalid strain IDs: ${missingStrains.join(', ')}` }, 400)
+    }
+
+    const allDefinitions = await dbInstance
+      .select()
+      .from(controlDefinition)
+      .where(eq(controlDefinition.controlType, controlType))
+
+    for (const def of allDefinitions) {
+      let props = def.properties
+      if (typeof props === 'string') {
+        try {
+          props = JSON.parse(props) as Record<string, unknown>
+        } catch (e) {
+          console.error('Invalid definition properties JSON', { definitionId: def.id, error: e })
+          continue
+        }
+      }
+      const propsObj = props as Record<string, unknown>
+      if (propsObj.targetDensity !== targetDensity) continue
+      if (targetDensityUnitId !== undefined) {
+        if (propsObj.targetDensityUnitId !== targetDensityUnitId) continue
+      } else {
+        if (propsObj.targetDensityUnitId !== undefined) continue
+      }
+      const defStrains = (propsObj.strains || []) as Array<{ id: number; percentage?: number } | number>
+      if (defStrains.length !== strains.length) continue
+      const sortedStrainIds = strainIds.slice().sort()
+      const defStrainIds = defStrains.map((s) => (typeof s === 'object' ? s.id : s)).sort()
+      if (!sortedStrainIds.every((id, idx) => id === defStrainIds[idx])) continue
+      const strainPctMap = new Map(strains.map(s => [s.strainId, s.percentage]))
+      const defPctMap = new Map(defStrains.map((s) => [typeof s === 'object' ? s.id : s, typeof s === 'object' ? s.percentage : undefined]))
+      const percentagesMatch = sortedStrainIds.every(id => {
+        const pct = strainPctMap.get(id)
+        const defPct = defPctMap.get(id)
+        return pct !== undefined && defPct !== undefined && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+      })
+      if (percentagesMatch) {
+        const parsed = parseControlProperties(propsObj, strainMap)
+        return c.json({
+          control: {
+            ...def,
+            strains: parsed.strains,
+            targetDensity: parsed.targetDensity,
+            targetDensityUnitId: parsed.targetDensityUnitId,
+            unitSymbol: parsed.unitSymbol,
+          },
+        })
+      }
+    }
+
+    return c.json(
+      { error: 'No control definition found for this composition and density. Create it first from Blood Controls.' },
+      404
+    )
+  } catch (error) {
+    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    console.error('Error finding control definition:', error)
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// Bulk create or get control definitions (same composition, multiple densities)
+controls.post('/definitions/bulk', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const schema = z.object({
+      strains: z.array(z.object({
+        strainId: z.number().int(),
+        percentage: z.number().min(0).max(100),
+      })),
+      targetDensities: z.array(z.number()).min(1),
+      targetDensityUnitId: z.number().int().optional(),
+      names: z.array(z.string()),
+    }).refine((d) => d.names.length === d.targetDensities.length, {
+      message: 'names length must match targetDensities length',
+    })
+    const data = schema.parse(body)
+    const controlType = 'blood'
+    const { strains, targetDensities, targetDensityUnitId } = data
+
+    if (strains.length === 0) {
+      return c.json({ error: 'At least one strain is required' }, 400)
+    }
+
+    const strainIds = strains.map(s => s.strainId)
+    const strainRecords = await dbInstance.select().from(strain).where(inArray(strain.id, strainIds))
+    const strainMap = new Map(strainRecords.map(s => [s.id, { name: s.name }]))
+    const missingStrains = strainIds.filter(id => !strainMap.has(id))
+    if (missingStrains.length > 0) {
+      return c.json({ error: `Invalid strain IDs: ${missingStrains.join(', ')}` }, 400)
+    }
+    const strainsWithNames = strains.map(s => ({
+      id: s.strainId,
+      name: strainMap.get(s.strainId)!.name,
+      percentage: s.percentage,
+    }))
+
+    const allDefinitions = await dbInstance
+      .select()
+      .from(controlDefinition)
+      .where(eq(controlDefinition.controlType, controlType))
+
+    const findExisting = (targetDensity: number) => {
+      for (const def of allDefinitions) {
+        let props = def.properties
+        if (typeof props === 'string') {
+          try {
+            props = JSON.parse(props) as any
+          } catch (e) {
+            console.error('Invalid definition properties JSON', { definitionId: def.id, error: e })
+            continue
+          }
+        }
+        const propsObj = props as any
+        if (!propsObj) continue
+        if (propsObj.targetDensity !== targetDensity) continue
+        if (targetDensityUnitId !== undefined) {
+          if (propsObj.targetDensityUnitId !== targetDensityUnitId) continue
+        } else {
+          if (propsObj.targetDensityUnitId !== undefined && propsObj.targetDensityUnitId !== null) continue
+        }
+        const defStrains = propsObj.strains || []
+        if (defStrains.length !== strains.length) continue
+        const sortedStrainIds = strainIds.slice().sort()
+        const defStrainIds = defStrains.map((s: any) => (typeof s === 'object' ? s.id : s)).sort()
+        if (!sortedStrainIds.every((id, idx) => id === defStrainIds[idx])) continue
+        const strainPctMap = new Map(strains.map(s => [s.strainId, s.percentage]))
+        const defPctMap = new Map(defStrains.map((s: any) => [typeof s === 'object' ? s.id : s, typeof s === 'object' ? s.percentage : undefined]))
+        const percentagesMatch = sortedStrainIds.every(id => {
+          const pct = strainPctMap.get(id)
+          const defPct = defPctMap.get(id)
+          return pct !== undefined && defPct !== undefined && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+        })
+        if (percentagesMatch) {
+          return { def, propsObj }
+        }
+      }
+      return null
+    }
+
+    const user = c.get('user')
+    const results: Array<ReturnType<typeof parseControlProperties> & { id: number; name: string; controlType: string; properties: unknown; created: string | null; lastUpdated: string | null; createdBy: number | null; updatedBy: number | null }> = []
+    const providedNames = data.names
+
+    for (let i = 0; i < targetDensities.length; i++) {
+      const targetDensity = targetDensities[i]
+      const existing = findExisting(targetDensity)
+      if (existing) {
+        const parsed = parseControlProperties(existing.propsObj, strainMap)
+        results.push({
+          ...existing.def,
+          strains: parsed.strains,
+          targetDensity: parsed.targetDensity,
+          targetDensityUnitId: parsed.targetDensityUnitId,
+          unitSymbol: parsed.unitSymbol,
+        })
+        continue
+      }
+      const props: Record<string, unknown> = {
+        strains: strainsWithNames,
+        targetDensity,
+      }
+      if (targetDensityUnitId !== undefined) {
+        const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
+        if (!unitRecord) return c.json({ error: `Invalid unit ID: ${targetDensityUnitId}` }, 400)
+        props.targetDensityUnitId = targetDensityUnitId
+        props.targetDensityUnitSymbol = unitRecord.symbol
+      }
+      let finalName: string
+      const customName = providedNames[i]?.trim()
+      if (customName) {
+        const existingByName = await dbInstance
+          .select({ id: controlDefinition.id })
+          .from(controlDefinition)
+          .where(eq(controlDefinition.name, customName))
+          .get()
+        if (existingByName) {
+          return c.json({ error: `Control definition name "${customName}" is already in use` }, 400)
+        }
+        finalName = customName
+      } else {
+        finalName = await generateUniqueControlDefinitionName(dbInstance, {
+          controlType,
+          targetDensity,
+          targetDensityUnitId,
+          strains: strainsWithNames,
+        })
+      }
+      const [newControl] = await dbInstance
+        .insert(controlDefinition)
+        .values({
+          name: finalName,
+          controlType,
+          properties: props,
+          createdBy: user?.id,
+          updatedBy: user?.id,
+        })
+        .returning()
+      const parsed = parseControlProperties(newControl.properties, strainMap)
+      results.push({
+        ...newControl,
+        strains: parsed.strains,
+        targetDensity: parsed.targetDensity,
+        targetDensityUnitId: parsed.targetDensityUnitId,
+        unitSymbol: parsed.unitSymbol,
+      })
+    }
+
+    return c.json({ controls: results }, 201)
+  } catch (error) {
+    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
+    console.error('Error bulk creating control definitions:', error)
+    return c.json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) }, 500)
+  }
+})
+
 // Create control definition (defaults to blood)
-controls.post('/', async (c) => {
+controls.post('/', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1238,13 +1626,8 @@ controls.post('/', async (c) => {
     const { strains, targetDensity, targetDensityUnitId, properties, name, ...baseData } = data
     
     // Validate strains are provided (required)
-    if (!strains || strains.length === 0) {
+    if (strains.length === 0) {
       return c.json({ error: 'At least one strain is required' }, 400)
-    }
-    
-    // Validate targetDensity is provided (required)
-    if (targetDensity === undefined || targetDensity === null) {
-      return c.json({ error: 'Target density is required' }, 400)
     }
     
     // Check if definition with same combination already exists
@@ -1264,7 +1647,7 @@ controls.post('/', async (c) => {
       if (targetDensityUnitId !== undefined) {
         if (props.targetDensityUnitId !== targetDensityUnitId) continue
       } else {
-        if (props.targetDensityUnitId !== undefined && props.targetDensityUnitId !== null) continue
+        if (props.targetDensityUnitId !== undefined) continue
       }
       
       // Check strain composition match
@@ -1289,7 +1672,7 @@ controls.post('/', async (c) => {
       const percentagesMatch = strainIds.every(id => {
         const pct = strainMap.get(id)
         const defPct = defStrainMap.get(id)
-        return pct !== undefined && defPct !== undefined && defPct !== null && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
+        return pct !== undefined && defPct !== undefined && typeof defPct === 'number' && Math.abs(pct - defPct) < 0.01
       })
       
       if (percentagesMatch) {
@@ -1325,7 +1708,7 @@ controls.post('/', async (c) => {
     }))
     
     // For blood controls, add strains and density to properties
-    if (controlType === 'blood') {
+    {
       props.strains = strainsWithNames
       props.targetDensity = targetDensity
       if (targetDensityUnitId !== undefined) {
@@ -1375,10 +1758,10 @@ controls.post('/', async (c) => {
       .returning()
     
     const newControl = result[0]
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
     if (!newControl) {
-      throw new Error('Failed to create control definition: insert returned no result')
+      throw new Error('Insert did not return control definition row')
     }
-    
     return c.json({ control: newControl }, 201)
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -1394,9 +1777,9 @@ controls.post('/', async (c) => {
 })
 
 // Update control definition (only blood controls)
-controls.patch('/:id', async (c) => {
+controls.patch('/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
 
     // Get existing control to merge properties (filtered to blood controls)
@@ -1436,7 +1819,7 @@ controls.patch('/:id', async (c) => {
     // Ensure controlType remains 'blood' (don't allow changing it)
     const controlType = 'blood'
     // For blood controls, update strains and density in properties
-    if (controlType === 'blood') {
+    {
       if (strains !== undefined) {
         if (strains.length > 0) {
           // Get strain names
@@ -1458,22 +1841,13 @@ controls.patch('/:id', async (c) => {
         }
       }
       if (targetDensity !== undefined) {
-        if (targetDensity === null) {
-          delete newProps.targetDensity
-        } else {
-          newProps.targetDensity = targetDensity
-        }
+        newProps.targetDensity = targetDensity
       }
       if (targetDensityUnitId !== undefined) {
-        if (targetDensityUnitId === null) {
-          delete newProps.targetDensityUnitId
-          delete newProps.targetDensityUnitSymbol
-        } else {
-          newProps.targetDensityUnitId = targetDensityUnitId
-          const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
-          if (unitRecord) {
-            newProps.targetDensityUnitSymbol = unitRecord.symbol
-          }
+        newProps.targetDensityUnitId = targetDensityUnitId
+        const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
+        if (unitRecord) {
+          newProps.targetDensityUnitSymbol = unitRecord.symbol
         }
       }
     }
@@ -1490,7 +1864,11 @@ controls.patch('/:id', async (c) => {
       })
       .where(eq(controlDefinition.id, id))
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+    if (!updatedControl) {
+      return c.json({ error: 'Blood control definition not found' }, 404)
+    }
     return c.json({ control: updatedControl })
   } catch (error) {
     return handleRouteError(error, c)
@@ -1498,8 +1876,8 @@ controls.patch('/:id', async (c) => {
 })
 
 // List batches for a definition (filtered to blood controls)
-controls.get('/:id/batches', async (c) => {
-  const id = parseInt(c.req.param('id'))
+controls.get('/:id/batches', authMiddleware, async (c) => {
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
 
   // Verify definition is a blood control
@@ -1526,7 +1904,7 @@ controls.get('/:id/batches', async (c) => {
 })
 
 // Validate batch name
-controls.post('/batches/validate-name', async (c) => {
+controls.post('/batches/validate-name', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1535,7 +1913,7 @@ controls.post('/batches/validate-name', async (c) => {
     })
     
     const data = schema.parse(body)
-    const validation = await validateControlBatchName(data.name, data.excludeId)
+    const validation = await validateControlBatchName(database, data.name, data.excludeId)
     
     return c.json(validation)
   } catch (error: any) {
@@ -1548,7 +1926,7 @@ controls.post('/batches/validate-name', async (c) => {
 })
 
 // Generate suggested batch name
-controls.post('/batches/suggest-name', async (c) => {
+controls.post('/batches/suggest-name', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -1582,8 +1960,8 @@ controls.post('/batches/suggest-name', async (c) => {
 })
 
 // Create a new batch (only for blood controls)
-controls.post('/:id/batches', async (c) => {
-  const definitionId = parseInt(c.req.param('id'))
+controls.post('/:id/batches', memberMiddleware, async (c) => {
+  const definitionId = parseInt(requireParam(c, 'id'))
   if (isNaN(definitionId)) return c.json({ error: 'Invalid blood control ID' }, 400)
 
   let body: any
@@ -1615,7 +1993,7 @@ controls.post('/:id/batches', async (c) => {
     let batchName: string
     if (data.name) {
       // Validate provided name
-      const nameValidation = await validateControlBatchName(data.name)
+      const nameValidation = await validateControlBatchName(database, data.name)
       if (!nameValidation.valid) {
         return c.json({ 
           error: nameValidation.error,
@@ -1640,7 +2018,11 @@ controls.post('/:id/batches', async (c) => {
         updatedBy: user?.id,
       })
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newBatch) {
+      throw new Error('Insert did not return control batch row')
+    }
     return c.json({ batch: newBatch }, 201)
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -1665,7 +2047,7 @@ controls.post('/:id/batches', async (c) => {
 })
 
 // Create batch with specimens
-controls.post('/batches/create-with-specimens', async (c) => {
+controls.post('/batches/create-with-specimens', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const { createBatchWithSpecimens } = await import('../lib/control-batch-creation')
@@ -1677,9 +2059,9 @@ controls.post('/batches/create-with-specimens', async (c) => {
 })
 
 // Add specimens to existing batch
-controls.post('/batches/:id/specimens/bulk', async (c) => {
+controls.post('/batches/:id/specimens/bulk', memberMiddleware, async (c) => {
   try {
-    const batchId = parseInt(c.req.param('id'))
+    const batchId = parseInt(requireParam(c, 'id'))
     if (isNaN(batchId)) return c.json({ error: 'Invalid batch ID' }, 400)
 
     const body = await c.req.json()
@@ -1692,8 +2074,53 @@ controls.post('/batches/:id/specimens/bulk', async (c) => {
   }
 })
 
+// Delete a single specimen from a batch
+controls.delete('/batches/:batchId/specimens/:specimenId', memberMiddleware, async (c) => {
+  const batchId = parseInt(requireParam(c, 'batchId'))
+  const specimenId = parseInt(requireParam(c, 'specimenId'))
+  if (isNaN(batchId) || isNaN(specimenId)) return c.json({ error: 'Invalid ID' }, 400)
+
+  try {
+    const spec = await dbInstance
+      .select()
+      .from(specimen)
+      .where(and(eq(specimen.id, specimenId), eq(specimen.controlBatchId, batchId)))
+      .get()
+
+    if (!spec) {
+      return c.json({ error: 'Specimen not found in this batch' }, 404)
+    }
+
+    await dbInstance.transaction((tx) => {
+      const containerRows = tx
+        .select({ id: storageContainer.id })
+        .from(storageContainer)
+        .where(eq(storageContainer.specimenId, specimenId))
+        .all()
+      const containerIds = containerRows.map(r => r.id)
+
+      if (containerIds.length > 0) {
+        for (const cId of containerIds) {
+          tx.delete(storageContainerTag).where(eq(storageContainerTag.storageContainerId, cId)).run()
+          tx.delete(micronixTube).where(eq(micronixTube.id, cId)).run()
+          tx.delete(cryovialTube).where(eq(cryovialTube.id, cId)).run()
+          tx.delete(paper).where(eq(paper.id, cId)).run()
+          tx.delete(staticWell).where(eq(staticWell.id, cId)).run()
+        }
+        tx.delete(storageContainer).where(eq(storageContainer.specimenId, specimenId)).run()
+      }
+
+      tx.delete(specimen).where(eq(specimen.id, specimenId)).run()
+    })
+
+    return c.json({ message: 'Specimen deleted successfully' })
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
 // Validate CSV
-controls.post('/batches/validate-csv', async (c) => {
+controls.post('/batches/validate-csv', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const { csvText } = body

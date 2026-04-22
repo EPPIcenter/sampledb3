@@ -65,4 +65,4 @@ Coordinate reference data changes with your team, especially for items that are 
 
 ## What's Next?
 
-Now that you understand reference data, you might want to explore specific types: [Specimen Types](/guides/reference-data/specimen-types/) to manage your sample types, [Units](/guides/reference-data/units/) to configure measurement units, [Storage Types](/guides/reference-data/storage-types/) to define storage equipment, or [Locations](/guides/reference-data/locations-ref/) to manage your storage hierarchy.
+Now that you understand reference data, you might want to explore specific types: [Specimen Types](/docs/guides/reference-data/specimen-types/) to manage your sample types, [Units](/docs/guides/reference-data/units/) to configure measurement units, [Storage Types](/docs/guides/reference-data/storage-types/) to define storage equipment, or [Locations](/docs/guides/reference-data/locations-ref/) to manage your storage hierarchy.

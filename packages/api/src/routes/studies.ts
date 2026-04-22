@@ -7,6 +7,8 @@ import {
   specimen, 
   specimenType, 
   storageContainer,
+  storageContainerTag,
+  containerDerivation,
   micronixTube,
   cryovialTube,
   paper,
@@ -16,6 +18,12 @@ import { eq, and, like, sql, or, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from '../lib/error-handler'
+import { createAuthMiddleware, createMemberMiddleware, createAdminMiddleware } from '../middleware/auth'
+import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
+
+/** Short code prefix for tutorial namespace. Any study whose short code starts with this (case-insensitive) may be deleted by any authenticated user. */
+const TUTORIAL_SHORT_CODE_PREFIX = 'TUT'
 
 /**
  * Create studies routes with database injection
@@ -24,9 +32,12 @@ import { handleRouteError, NotFoundError, ConflictError, ValidationError } from 
  */
 export function createStudiesRoutes(database: Database, sqliteDatabase: SQLiteDatabase): Hono {
   const studies = new Hono()
+  const authMiddleware = createAuthMiddleware(database)
+  const memberMiddleware = createMemberMiddleware(database)
+  const adminMiddleware = createAdminMiddleware(database)
 
 // List all studies
-studies.get('/', async (c) => {
+studies.get('/', authMiddleware, async (c) => {
   try {
     const search = c.req.query('search')
     const page = validatePage(c.req.query('page'))
@@ -66,7 +77,7 @@ studies.get('/', async (c) => {
 
 // Get batch summaries for multiple studies (lightweight version)
 // NOTE: This must come before /:id route to avoid matching "summaries" as an ID
-studies.get('/summaries', async (c) => {
+studies.get('/summaries', authMiddleware, async (c) => {
   try {
     const idsParam = c.req.query('ids')
     if (!idsParam) {
@@ -231,9 +242,9 @@ studies.get('/summaries', async (c) => {
 })
 
 // Get study by ID
-studies.get('/:id', async (c) => {
+studies.get('/:id', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid study ID' }, 400)
@@ -256,22 +267,35 @@ studies.get('/:id', async (c) => {
 })
 
 // Get subjects for a study
-studies.get('/:id/subjects', async (c) => {
+studies.get('/:id/subjects', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid study ID' }, 400)
     }
 
-    const page = validatePage(c.req.query('page'))
-    const limit = await validateLimit(database, c.req.query('limit'))
-    const offset = (page - 1) * limit
+    const pageParam = c.req.query('page')
+    const limitParam = c.req.query('limit')
+    
+    // If no pagination params provided, return all subjects (for client-side pagination)
+    const returnAll = !pageParam && !limitParam
+    
+    const page = pageParam ? validatePage(pageParam) : 1
+    let limit: number | undefined
+    if (returnAll) {
+      limit = undefined
+    } else if (limitParam) {
+      limit = await validateLimit(database, limitParam)
+    } else {
+      limit = 50 // Default limit when page is provided but limit is not
+    }
+    const offset = returnAll ? undefined : (page - 1) * limit!
 
     const whereClause = eq(studySubject.studyId, id)
     
-    // First get the subjects
-    const subjectsList = await database
+    // Get all subjects or paginated subset
+    let query = database
       .select({
         id: studySubject.id,
         studyId: studySubject.studyId,
@@ -281,10 +305,14 @@ studies.get('/:id/subjects', async (c) => {
       })
       .from(studySubject)
       .where(whereClause)
-      .limit(limit)
-      .offset(offset)
+    
+    if (!returnAll) {
+      query = query.limit(limit!).offset(offset!) as any
+    }
+    
+    const subjectsList = await query
 
-    // Get total count for pagination
+    // Get total count for pagination info (even when returning all)
     const countResult = await database
       .select({ count: sql<number>`COUNT(*)`.as('count') })
       .from(studySubject)
@@ -292,7 +320,7 @@ studies.get('/:id/subjects', async (c) => {
 
     const total = countResult[0]?.count || 0
 
-    // Get specimen counts for all subjects in this page using a batch query
+    // Get specimen counts for all subjects using a batch query
     const subjectIds = subjectsList.map(s => s.id)
     const specimenCounts: Record<number, number> = {}
     
@@ -325,11 +353,11 @@ studies.get('/:id/subjects', async (c) => {
 
     return c.json({
       subjects: subjectsWithCounts,
-      pagination: {
+      pagination: returnAll ? undefined : {
         page,
-        limit,
+        limit: limit!,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / limit!),
       },
     })
   } catch (error) {
@@ -338,9 +366,9 @@ studies.get('/:id/subjects', async (c) => {
 })
 
 // Get study summary
-studies.get('/:id/summary', async (c) => {
+studies.get('/:id/summary', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid study ID' }, 400)
@@ -580,9 +608,9 @@ studies.get('/:id/summary', async (c) => {
 })
 
 // Get study timeline data
-studies.get('/:id/timeline', async (c) => {
+studies.get('/:id/timeline', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid study ID' }, 400)
@@ -701,7 +729,7 @@ studies.get('/:id/timeline', async (c) => {
 })
 
 // Create study
-studies.post('/', async (c) => {
+studies.post('/', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
     const schema = z.object({
@@ -719,13 +747,17 @@ studies.post('/', async (c) => {
       .insert(study)
       .values({
         ...data,
-        created: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
+        created: utcNow(),
+        lastUpdated: utcNow(),
         createdBy: user?.id,
         updatedBy: user?.id,
       })
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
+    if (!newStudy) {
+      throw new Error('Insert did not return study row')
+    }
     return c.json({ study: newStudy }, 201)
   } catch (error) {
     return handleRouteError(error, c)
@@ -733,9 +765,9 @@ studies.post('/', async (c) => {
 })
 
 // Update study
-studies.put('/:id', async (c) => {
+studies.put('/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid study ID' }, 400)
@@ -794,13 +826,123 @@ studies.put('/:id', async (c) => {
       .update(study)
       .set({
         ...data,
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: utcNow(),
         updatedBy: user?.id,
       })
       .where(eq(study.id, id))
       .returning()
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: update must return row
+    if (!updatedStudy) {
+      return c.json({ error: 'Study not found' }, 404)
+    }
     return c.json({ study: updatedStudy })
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
+// Delete study and all dependent data (cascade). Tutorial studies (short code in TUT* namespace) may be deleted by any user; others require admin.
+studies.delete('/:id', authMiddleware, async (c) => {
+  try {
+    const id = parseInt(requireParam(c, 'id'))
+    if (isNaN(id)) {
+      return c.json({ error: 'Invalid study ID' }, 400)
+    }
+
+    const existingStudy = await database
+      .select()
+      .from(study)
+      .where(eq(study.id, id))
+      .get()
+
+    if (!existingStudy) {
+      throw new NotFoundError('Study', id)
+    }
+
+    const isTutorialStudy = existingStudy.shortCode.toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX)
+    if (!isTutorialStudy) {
+      const user = c.get('user')
+      if (!user || user.role !== 'admin') {
+        return c.json({ error: 'Only administrators can delete non-tutorial studies.' }, 403)
+      }
+    }
+
+    const subjects = await database
+      .select({ id: studySubject.id })
+      .from(studySubject)
+      .where(eq(studySubject.studyId, id))
+
+    const subjectIds = subjects.map((s) => s.id)
+    let specimenIds: number[] = []
+    if (subjectIds.length > 0) {
+      const specimens = await database
+        .select({ id: specimen.id })
+        .from(specimen)
+        .where(inArray(specimen.studySubjectId, subjectIds))
+      specimenIds = specimens.map((s) => s.id)
+    }
+
+    let containerIds: number[] = []
+    if (specimenIds.length > 0) {
+      const containers = await database
+        .select({ id: storageContainer.id })
+        .from(storageContainer)
+        .where(inArray(storageContainer.specimenId, specimenIds))
+      containerIds = containers.map((c) => c.id)
+    }
+
+    const SQLITE_BATCH = 500
+    const runBatch = <T>(ids: number[], fn: (batch: number[]) => void) => {
+      for (let i = 0; i < ids.length; i += SQLITE_BATCH) {
+        fn(ids.slice(i, i + SQLITE_BATCH))
+      }
+    }
+
+    await database.transaction(async (tx) => {
+      if (containerIds.length > 0) {
+        runBatch(containerIds, (batch) => {
+          tx.delete(storageContainerTag)
+            .where(inArray(storageContainerTag.storageContainerId, batch))
+            .run()
+        })
+        runBatch(containerIds, (batch) => {
+          tx.delete(containerDerivation)
+            .where(
+              or(
+                inArray(containerDerivation.parentContainerId, batch),
+                inArray(containerDerivation.childContainerId, batch)
+              )
+            )
+            .run()
+        })
+        runBatch(containerIds, (batch) => {
+          tx.delete(paper).where(inArray(paper.id, batch)).run()
+          tx.delete(micronixTube).where(inArray(micronixTube.id, batch)).run()
+          tx.delete(cryovialTube).where(inArray(cryovialTube.id, batch)).run()
+          tx.delete(staticWell).where(inArray(staticWell.id, batch)).run()
+        })
+        runBatch(containerIds, (batch) => {
+          tx.delete(storageContainer).where(inArray(storageContainer.id, batch)).run()
+        })
+      }
+      if (specimenIds.length > 0) {
+        runBatch(specimenIds, (batch) => {
+          tx.delete(specimen).where(inArray(specimen.id, batch)).run()
+        })
+      }
+      if (subjectIds.length > 0) {
+        runBatch(subjectIds, (batch) => {
+          tx.delete(studySubject).where(inArray(studySubject.id, batch)).run()
+        })
+      }
+      const deleted = await tx.delete(study).where(eq(study.id, id)).returning()
+      if (deleted.length === 0) {
+        throw new NotFoundError('Study', id)
+      }
+    })
+
+    return c.json({ message: 'Study deleted successfully' })
   } catch (error) {
     return handleRouteError(error, c)
   }

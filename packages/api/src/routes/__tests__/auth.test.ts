@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { createTestClient, loginAndGetCookie, authenticatedRequest, extractSessionId } from '../../__tests__/helpers/test-client'
+import { createTestClient, loginAndGetCookie, authenticatedRequest, extractSessionId, createAuthenticatedClientWrapper } from '../../__tests__/helpers/test-client'
 import { Hono } from 'hono'
 import { createAuthRoutes } from '../auth'
+import { handleRouteError } from '../../lib/error-handler'
+import { utcNow } from '../../lib/datetime'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import { users, sessions } from '../../db/schema'
 import { eq } from 'drizzle-orm'
@@ -12,11 +14,13 @@ import {
   setupPasswordRequirements,
   setupSessionSettings,
 } from '../../__tests__/helpers/auth-helpers'
+import type { ErrorResponse, UserResponse, ValidationErrorResponse, SuccessResponse } from '../../__tests__/helpers/test-types'
 
 describe('Auth API', () => {
   let app: Hono
   let testDb: Database
   let sqlite: any
+  let adminCookieHeader: string
 
   beforeEach(async () => {
     const setup = await setupTestDatabase()
@@ -27,10 +31,26 @@ describe('Auth API', () => {
     await setupPasswordRequirements(testDb, 8)
     await setupSessionSettings(testDb, 604800) // 7 days
 
+    // Create an admin user for registration tests
+    await createTestUser(testDb, {
+      email: 'admin@test.com',
+      name: 'Admin User',
+      password: 'password123',
+      role: 'admin',
+    })
+
     // Pass testDb as both database and settingsDb for tests
     const authRoutes = createAuthRoutes(testDb, testDb)
     app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
+    app.onError((err, c) => handleRouteError(err, c))
     app.route('/api/auth', authRoutes)
+
+    // Login as admin to get cookie for registration tests
+    adminCookieHeader = await loginAndGetCookie(app, 'admin@test.com', 'password123')
   })
 
   afterEach(() => {
@@ -41,8 +61,9 @@ describe('Auth API', () => {
 
   describe('POST /api/auth/register', () => {
     it('should register a new user', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'test@example.com',
           name: 'Test User',
@@ -52,7 +73,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user).toBeDefined()
       expect(data.user.email).toBe('test@example.com')
       expect(data.user.name).toBe('Test User')
@@ -60,8 +81,9 @@ describe('Auth API', () => {
     })
 
     it('should reject invalid email', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'invalid-email',
           name: 'Test User',
@@ -73,8 +95,9 @@ describe('Auth API', () => {
     })
 
     it('should reject short password', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'test@example.com',
           name: 'Test User',
@@ -86,10 +109,10 @@ describe('Auth API', () => {
     })
 
     it('should reject duplicate email', async () => {
-      const client = createTestClient(app) as any
-
       // Register first user
-      await client.api.auth.register.$post({
+      await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'duplicate@example.com',
           name: 'User 1',
@@ -98,7 +121,9 @@ describe('Auth API', () => {
       })
 
       // Try to register with same email
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'duplicate@example.com',
           name: 'User 2',
@@ -112,19 +137,21 @@ describe('Auth API', () => {
 
   describe('POST /api/auth/login', () => {
     beforeEach(async () => {
-      // Create a test user
+      // Create a test user (approved so they can log in)
+      const createdAt = utcNow()
       const passwordHash = await bcrypt.hash('password123', 10)
       await testDb.insert(users).values({
         email: 'login@example.com',
         name: 'Login Test User',
         passwordHash,
         role: 'member',
-        createdAt: new Date().toISOString(),
+        createdAt,
+        approvedAt: createdAt,
       })
     })
 
     it('should login with valid email credentials', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
         json: {
           emailOrUsername: 'login@example.com',
@@ -133,7 +160,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user).toBeDefined()
       expect(data.user.email).toBe('login@example.com')
 
@@ -143,7 +170,7 @@ describe('Auth API', () => {
     })
 
     it('should reject invalid email', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
         json: {
           emailOrUsername: 'nonexistent@example.com',
@@ -155,7 +182,7 @@ describe('Auth API', () => {
     })
 
     it('should reject invalid password', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
         json: {
           emailOrUsername: 'login@example.com',
@@ -164,6 +191,138 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('POST /api/auth/login rejects unapproved user', () => {
+    it('should reject login when account is pending approval', async () => {
+      await createTestUser(testDb, {
+        email: 'pending@example.com',
+        name: 'Pending User',
+        password: 'password123',
+        approvedAt: null,
+      })
+
+      const client = createTestClient(app)
+      const res = await client.api.auth.login.$post({
+        json: {
+          emailOrUsername: 'pending@example.com',
+          password: 'password123',
+        },
+      })
+
+      expect(res.status).toBe(401)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toBe('Account pending approval')
+    })
+  })
+
+  describe('POST /api/auth/self-register', () => {
+    it('should create user with approvedAt null', async () => {
+      const client = createTestClient(app)
+      const res = await client.api.auth['self-register'].$post({
+        json: {
+          email: 'selfreg@example.com',
+          name: 'Self Reg User',
+          password: 'password123',
+        },
+      })
+
+      expect(res.status).toBe(201)
+      const data = await res.json() as UserResponse
+      expect(data.user).toBeDefined()
+      expect(data.user.email).toBe('selfreg@example.com')
+      expect(data.user.name).toBe('Self Reg User')
+      expect(data.user).not.toHaveProperty('passwordHash')
+
+      const dbUser = await testDb.select().from(users).where(eq(users.email, 'selfreg@example.com')).get()
+      expect(dbUser?.approvedAt).toBeNull()
+    })
+
+    it('should reject duplicate email', async () => {
+      await createTestUser(testDb, {
+        email: 'exists@example.com',
+        name: 'Existing User',
+        password: 'password123',
+      })
+
+      const client = createTestClient(app)
+      const res = await client.api.auth['self-register'].$post({
+        json: {
+          email: 'exists@example.com',
+          name: 'Another User',
+          password: 'password123',
+        },
+      })
+
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toContain('Email already in use')
+    })
+
+    it('should validate password length', async () => {
+      const client = createTestClient(app)
+      const res = await client.api.auth['self-register'].$post({
+        json: {
+          email: 'shortpw@example.com',
+          name: 'Short PW User',
+          password: 'short',
+        },
+      })
+
+      expect(res.status).toBe(400)
+    })
+  })
+
+  describe('PATCH /api/auth/users/:id/approve', () => {
+    it('should approve pending user', async () => {
+      const pendingUser = await createTestUser(testDb, {
+        email: 'pending@example.com',
+        name: 'Pending User',
+        password: 'password123',
+        approvedAt: null,
+      })
+
+      const res = await authenticatedRequest(app, `/api/auth/users/${pendingUser.id}/approve`, {
+        method: 'PATCH',
+        cookie: adminCookieHeader,
+      })
+
+      expect(res.status).toBe(200)
+      const data = await res.json() as UserResponse
+      expect(data.user.approvedAt).toBeDefined()
+
+      const dbUser = await testDb.select().from(users).where(eq(users.id, pendingUser.id)).get()
+      expect(dbUser?.approvedAt).not.toBeNull()
+
+      const loginRes = await createTestClient(app).api.auth.login.$post({
+        json: { emailOrUsername: 'pending@example.com', password: 'password123' },
+      })
+      expect(loginRes.status).toBe(200)
+    })
+
+    it('should reject when not admin', async () => {
+      const member = await createTestUser(testDb, {
+        email: 'member@example.com',
+        name: 'Member User',
+        password: 'password123',
+        role: 'member',
+      })
+      const memberCookie = await loginAndGetCookie(app, 'member@example.com', 'password123')
+
+      const pendingUser = await createTestUser(testDb, {
+        email: 'pending2@example.com',
+        name: 'Pending 2',
+        password: 'password123',
+        approvedAt: null,
+      })
+
+      const res = await authenticatedRequest(app, `/api/auth/users/${pendingUser.id}/approve`, {
+        method: 'PATCH',
+        cookie: memberCookie,
+      })
+
+      expect(res.status).toBe(403)
     })
   })
 
@@ -179,7 +338,7 @@ describe('Auth API', () => {
     })
 
     it('should login with username', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
         json: {
           emailOrUsername: 'testuser',
@@ -188,7 +347,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user).toBeDefined()
       expect(data.user.email).toBe('user@example.com')
       expect(data.user.username).toBe('testuser')
@@ -199,7 +358,7 @@ describe('Auth API', () => {
     })
 
     it('should reject invalid username', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
         json: {
           emailOrUsername: 'nonexistentuser',
@@ -219,7 +378,7 @@ describe('Auth API', () => {
         password: 'password123',
       })
 
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
         json: {
           emailOrUsername: 'nousername@example.com', // Should use email, not username
@@ -234,8 +393,9 @@ describe('Auth API', () => {
 
   describe('POST /api/auth/register with username', () => {
     it('should register a new user with username', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'newuser@example.com',
           name: 'New User',
@@ -246,15 +406,16 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user).toBeDefined()
       expect(data.user.email).toBe('newuser@example.com')
       expect(data.user.username).toBe('newuser')
     })
 
     it('should register a user without username (username optional)', async () => {
-      const client = createTestClient(app) as any
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'nousername@example.com',
           name: 'No Username',
@@ -264,16 +425,16 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user).toBeDefined()
       expect(data.user.username).toBeUndefined()
     })
 
     it('should reject duplicate username during registration', async () => {
-      const client = createTestClient(app) as any
-
       // Register first user with username
-      await client.api.auth.register.$post({
+      await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'first@example.com',
           name: 'First User',
@@ -283,7 +444,9 @@ describe('Auth API', () => {
       })
 
       // Try to register with same username
-      const res = await client.api.auth.register.$post({
+      const res = await authenticatedRequest(app, '/api/auth/register', {
+        method: 'POST',
+        cookie: adminCookieHeader,
         json: {
           email: 'second@example.com',
           name: 'Second User',
@@ -293,7 +456,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('Username already in use')
     })
   })
@@ -325,7 +488,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user.name).toBe('Updated Name')
       expect(data.user.email).toBe('profile@example.com')
       expect(data.user.username).toBe('profileuser')
@@ -341,7 +504,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user.email).toBe('newemail@example.com')
       expect(data.user.name).toBe('Profile User')
     })
@@ -356,7 +519,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user.username).toBe('newusername')
     })
 
@@ -372,7 +535,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user.name).toBe('New Name')
       expect(data.user.email).toBe('newemail@example.com')
       expect(data.user.username).toBe('newusername')
@@ -388,7 +551,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user.username).toBeUndefined()
     })
 
@@ -409,7 +572,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('Email already in use')
     })
 
@@ -431,7 +594,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('Username already in use')
     })
 
@@ -460,7 +623,7 @@ describe('Auth API', () => {
     })
 
     it('should require authentication (401 without session)', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth.me.$patch({
         json: {
           name: 'New Name',
@@ -480,7 +643,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as UserResponse
       expect(data.user).toHaveProperty('id')
       expect(data.user).toHaveProperty('email')
       expect(data.user).toHaveProperty('username')
@@ -517,11 +680,11 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await res.json()
+      const data = await res.json() as SuccessResponse
       expect(data.message).toContain('Password changed successfully')
 
       // Verify we can login with new password
-      const loginClient = createTestClient(app) as any
+      const loginClient = createTestClient(app)
       const loginRes = await loginClient.api.auth.login.$post({
         json: {
           emailOrUsername: 'password@example.com',
@@ -543,7 +706,7 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(401)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('Current password is incorrect')
     })
 
@@ -558,12 +721,12 @@ describe('Auth API', () => {
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json()
+      const data = await res.json() as ErrorResponse
       expect(data.error).toContain('Password must be at least')
     })
 
     it('should require authentication (401 without session)', async () => {
-      const client = createTestClient(app) as any
+      const client = createTestClient(app)
       const res = await client.api.auth['me/password'].$patch({
         json: {
           currentPassword: 'oldpassword123',
@@ -643,6 +806,42 @@ describe('Auth API', () => {
 
       expect(remainingSessions.length).toBe(1)
       expect(remainingSessions[0].id).toBe(currentSessionId)
+    })
+  })
+
+  describe('PUT /api/auth/users/:id - Admin Update User (role)', () => {
+    it('should return 400 when demoting the only admin to member', async () => {
+      const admins = await testDb
+        .select()
+        .from(users)
+        .where(eq(users.role, 'admin'))
+      const admin = admins[0]
+      if (!admin) throw new Error('No admin user')
+      const res = await authenticatedRequest(app, `/api/auth/users/${admin.id}`, {
+        method: 'PUT',
+        cookie: adminCookieHeader,
+        json: { role: 'member' },
+      })
+      expect(res.status).toBe(400)
+      const data = await res.json() as ErrorResponse
+      expect(data.error).toBe('Cannot remove the last admin')
+    })
+
+    it('should return 200 when demoting one of two admins to member', async () => {
+      const secondAdmin = await createTestUser(testDb, {
+        email: 'admin2@test.com',
+        name: 'Second Admin',
+        password: 'password123',
+        role: 'admin',
+      })
+      const res = await authenticatedRequest(app, `/api/auth/users/${secondAdmin.id}`, {
+        method: 'PUT',
+        cookie: adminCookieHeader,
+        json: { role: 'member' },
+      })
+      expect(res.status).toBe(200)
+      const data = await res.json() as UserResponse
+      expect(data.user.role).toBe('member')
     })
   })
 })

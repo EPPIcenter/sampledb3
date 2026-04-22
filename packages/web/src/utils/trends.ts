@@ -21,39 +21,3 @@ export function calculateTrend(current: number, previous: number): {
   }
 }
 
-/**
- * Get date range for previous period
- * @param days Number of days to look back
- * @returns Object with from and to dates in ISO format
- */
-export function getPreviousPeriod(days: number): { from: string; to: string } {
-  const now = new Date()
-  const to = new Date(now)
-  to.setDate(to.getDate() - days)
-  
-  const from = new Date(to)
-  from.setDate(from.getDate() - days)
-
-  return {
-    from: from.toISOString().split('T')[0],
-    to: to.toISOString().split('T')[0],
-  }
-}
-
-/**
- * Get date range for current period
- * @param days Number of days to look back from today
- * @returns Object with from and to dates in ISO format
- */
-export function getCurrentPeriod(days: number): { from: string; to: string } {
-  const now = new Date()
-  const to = new Date(now)
-  const from = new Date(now)
-  from.setDate(from.getDate() - days)
-
-  return {
-    from: from.toISOString().split('T')[0],
-    to: to.toISOString().split('T')[0],
-  }
-}
-

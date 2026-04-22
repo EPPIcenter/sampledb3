@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
 import { BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { getAppTooltipStyles } from '../lib/chart-colors'
+import { useTheme } from '../contexts/ThemeContext'
 
 interface ChartData {
   name: string
@@ -18,6 +20,8 @@ interface StatChartProps {
   colors?: string[]
   labelThreshold?: number // Percentage threshold below which labels are hidden (default: 5)
   showPercentageList?: boolean // Show percentage list for pie charts
+  /** Optional class for the card wrapper (e.g. dashboard-card p-6 for dashboard theme) */
+  cardClassName?: string
 }
 
 const DEFAULT_COLORS = [
@@ -41,13 +45,17 @@ export default function StatChart({
   dateKey,
   colors = DEFAULT_COLORS,
   labelThreshold = 5,
-  showPercentageList = false
+  showPercentageList = false,
+  cardClassName = 'bg-app-card rounded-lg shadow p-6',
 }: StatChartProps) {
+  const { theme } = useTheme()
+  const tooltipStyles = useMemo(() => getAppTooltipStyles(), [theme])
+
   if (data.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        {title && <h3 className="text-lg font-semibold mb-4 text-gray-900">{title}</h3>}
-        <div className="flex items-center justify-center h-64 text-gray-500">
+      <div className={cardClassName}>
+        {title && <h3 className="stat-chart-title text-lg font-semibold mb-4 text-app-text">{title}</h3>}
+        <div className="stat-chart-empty flex items-center justify-center h-64 text-app-text-muted">
           No data available
         </div>
       </div>
@@ -72,9 +80,7 @@ export default function StatChart({
     const map = new Map<number, string>()
     data.forEach(entry => {
       const dateValue = entry[dateKey] as number
-      if (dateValue != null) {
-        map.set(dateValue, entry.name)
-      }
+      map.set(dateValue, entry.name)
     })
     return map
   }, [data, dateKey])
@@ -83,7 +89,8 @@ export default function StatChart({
   // Limit to reasonable number of ticks to avoid overcrowding
   const dateTicks = useMemo(() => {
     if (!dateKey) return undefined
-    const allTicks = data.map(entry => entry[dateKey] as number).filter((val): val is number => val != null)
+    // Filter for defined values; entry[dateKey] can be missing at runtime
+    const allTicks = data.map(entry => entry[dateKey] as number | undefined).filter((val): val is number => val != null)  
     if (allTicks.length === 0) return undefined
 
     // Limit to max 8 ticks for better readability
@@ -117,7 +124,7 @@ export default function StatChart({
   // Calculate domain with padding for date-based axes
   const dateDomain = useMemo(() => {
     if (!dateKey) return undefined
-    const dateValues = data.map(entry => entry[dateKey] as number).filter((val): val is number => val != null)
+    const dateValues = data.map(entry => entry[dateKey] as number | undefined).filter((val): val is number => val != null)  
     if (dateValues.length === 0) return undefined
 
     const min = Math.min(...dateValues)
@@ -161,6 +168,8 @@ export default function StatChart({
           />
           <YAxis />
           <Tooltip
+            contentStyle={tooltipStyles.contentStyle}
+            labelStyle={tooltipStyles.labelStyle}
             formatter={dateKey ? ((value: any) => [value] as [number]) : undefined}
             labelFormatter={dateKey ? (label: any) => {
               const name = dateValueToNameMap.get(label as number)
@@ -187,10 +196,14 @@ export default function StatChart({
               <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
             ))}
           </Pie>
-          <Tooltip formatter={(value: any, name: any) => {
-            const percentage = total > 0 ? (value / total) * 100 : 0
-            return [`${value} (${percentage.toFixed(1)}%)`, name]
-          }} />
+          <Tooltip
+            contentStyle={tooltipStyles.contentStyle}
+            labelStyle={tooltipStyles.labelStyle}
+            formatter={(value: any, name: any) => {
+              const percentage = total > 0 ? (value / total) * 100 : 0
+              return [`${value} (${percentage.toFixed(1)}%)`, name]
+            }}
+          />
         </PieChart>
       )}
       {type === 'line' && (
@@ -208,6 +221,8 @@ export default function StatChart({
           />
           <YAxis />
           <Tooltip
+            contentStyle={tooltipStyles.contentStyle}
+            labelStyle={tooltipStyles.labelStyle}
             formatter={dateKey ? ((value: any) => [value] as [number]) : undefined}
             labelFormatter={dateKey ? (label: any) => {
               const name = dateValueToNameMap.get(label as number)
@@ -222,13 +237,13 @@ export default function StatChart({
   )
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      {title && <h3 className="text-lg font-semibold mb-4 text-gray-900">{title}</h3>}
+    <div className={cardClassName}>
+      {title && <h3 className="stat-chart-title text-lg font-semibold mb-4 text-app-text">{title}</h3>}
       <div className={showPercentageList && type === 'pie' ? 'flex gap-6 items-start' : ''}>
         {chartContent}
         {showPercentageList && type === 'pie' && (
           <div className="flex-shrink-0 min-w-[200px]">
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Percentages</h4>
+            <h4 className="text-sm font-medium text-app-text mb-2">Percentages</h4>
             <div className="space-y-1">
               {pieDataWithPercentages
                 .sort((a, b) => b.percentage - a.percentage)
@@ -238,8 +253,8 @@ export default function StatChart({
                       className="w-3 h-3 rounded-full flex-shrink-0"
                       style={{ backgroundColor: entry.color }}
                     />
-                    <span className="text-gray-600 flex-1">{entry.name}</span>
-                    <span className="text-gray-900 font-medium">
+                    <span className="text-app-text-muted flex-1">{entry.name}</span>
+                    <span className="text-app-text font-medium">
                       {entry.percentage.toFixed(1)}%
                     </span>
                   </div>

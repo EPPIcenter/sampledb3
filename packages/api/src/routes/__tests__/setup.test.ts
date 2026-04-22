@@ -2,18 +2,25 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import type { Database } from '../../db/client'
-import { Database } from 'bun:sqlite'
+import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { createSetupRoutes } from '../setup'
+import { handleRouteError } from '../../lib/error-handler'
+import { utcNow } from '../../lib/datetime'
 import { users, unit, specimenType, storageType, location, containerTypeUnit, specimenTypeContainerType } from '../../db/schema'
 
 describe('Setup Route', () => {
   let testDb: Database
-  let sqlite: Database
+  let sqlite: SQLiteDatabase
 
   function createTestApp(): Hono {
     // Create a fresh app instance for each test to avoid state leakage
     const setupRoutes = createSetupRoutes(testDb)
     const app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
+    app.onError((err, c) => handleRouteError(err, c))
     app.route('/setup', setupRoutes)
     return app
   }
@@ -189,7 +196,7 @@ describe('Setup Route', () => {
         email: 'existing@test.com',
         passwordHash: 'hash',
         role: 'admin',
-        createdAt: new Date().toISOString(),
+        createdAt: utcNow(),
       })
 
       const setupData = {

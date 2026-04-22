@@ -51,4 +51,4 @@ If you can't delete a unit, it's because the unit is in use. Check where it's be
 
 ## What's Next?
 
-Now that you understand units, you might want to explore [Specimen Types](/guides/reference-data/specimen-types/) to see how units relate to specimen management, check out [Container Management](/guides/workflows/containers/) to see how units are used with containers, or review [Reference Data Overview](/guides/reference-data/overview/) to understand the broader reference data system.
+Now that you understand units, you might want to explore [Specimen Types](/docs/guides/reference-data/specimen-types/) to see how units relate to specimen management, check out [Container Management](/docs/guides/workflows/containers/) to see how units are used with containers, or review [Reference Data Overview](/docs/guides/reference-data/overview/) to understand the broader reference data system.

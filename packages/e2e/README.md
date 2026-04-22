@@ -1,112 +1,64 @@
-# E2E Test Suite
+# E2E tests (Playwright)
 
-This directory contains end-to-end tests for SampleDB using Playwright.
+End-to-end tests run against the real API and Vite dev server. The harness uses a dedicated database file at the repo root: `sampledb_e2e.sqlite` (gitignored via `*.sqlite`).
 
-## Test Structure
+## First-time setup
 
-### Test Files
-
-- **`initialization.spec.ts`** - Tests the initial system setup flow
-- **`setup-comprehensive.spec.ts`** - Comprehensive setup flow with validation tests
-- **`tags.spec.ts`** - Tag management (CRUD operations, validation)
-- **`containers-tags.spec.ts`** - Container tag assignment and filtering
-- **`reference-data.spec.ts`** - Reference data management (specimen types, units, storage types, tags, strains)
-- **`bootstrap.spec.ts`** - Empty state and bootstrap scenarios
-- **`initial-setup.spec.ts`** - Basic initial setup verification
-
-### Utilities
-
-- **`db-reset.ts`** - Database reset utility for test isolation
-- **`test-helpers.ts`** - Reusable helper functions for common test operations
-
-## Running Tests
+From the monorepo root (after `bun install`):
 
 ```bash
-# Run all tests
-bun test
-
-# Run tests in UI mode (interactive)
-bun test:ui
-
-# Run specific test file
-bun test src/tests/tags.spec.ts
-
-# Run tests with codegen (record new tests)
-bun codegen
+cd packages/e2e && bunx playwright install
 ```
 
-## Test Database
+To install only Chromium:
 
-Tests use a separate database file: `sampledb_e2e.sqlite` in the e2e package directory. This database is automatically reset before each test suite runs.
-
-## Test Coverage
-
-### Setup Flow
-- ✅ Complete setup wizard (all 4 steps)
-- ✅ Validation of required fields
-- ✅ Navigation between steps
-- ✅ Data persistence verification
-
-### Tag Management
-- ✅ Create tags
-- ✅ Edit tags
-- ✅ Delete tags
-- ✅ Prevent duplicate tag names
-- ✅ Prevent deletion of tags in use
-
-### Reference Data
-- ✅ Specimen types management
-- ✅ Units management
-- ✅ Storage types management
-- ✅ Tags management
-- ✅ Strains management
-- ✅ Tab navigation
-
-### Container Management
-- ✅ Tag assignment to containers (placeholder)
-- ✅ Filtering containers by tags (placeholder)
-
-## Writing New Tests
-
-### Using Test Helpers
-
-```typescript
-import { completeSetup, createTag } from '../utils/test-helpers';
-
-test('my test', async ({ page }) => {
-    // Complete setup automatically
-    await completeSetup(page);
-    
-    // Create a tag
-    await createTag(page, 'My Tag');
-    
-    // Your test logic here
-});
+```bash
+cd packages/e2e && bunx playwright install chromium
 ```
 
-### Best Practices
+## Screenshots and report
 
-1. **Use `beforeAll` for database reset** - Ensures clean state
-2. **Use `beforeEach` for setup** - Complete system initialization if needed
-3. **Use test helpers** - Reuse common operations
-4. **Wait for elements** - Use `waitForSelector` or `expect().toBeVisible()`
-5. **Use meaningful selectors** - Prefer text content over CSS selectors when possible
-6. **Clean up** - Tests should be independent and not rely on previous test state
+Every test run captures a **viewport screenshot** after each test (`screenshot: 'on'`). They are attached to the **HTML report** and stored under `packages/e2e/test-results/` (gitignored).
 
-## Configuration
+After a run, open the report:
 
-See `playwright.config.ts` for:
-- Test directory
-- Web server configuration (API and Web)
-- Browser configuration
-- Reporter settings
+```bash
+cd packages/e2e && bunx playwright show-report
+```
 
-## CI/CD
+To skip screenshots for a faster local run: `E2E_SCREENSHOTS=0 bun run test:e2e`.
 
-Tests are configured to:
-- Run with retries in CI (2 retries)
-- Use single worker to avoid database conflicts
-- Generate HTML reports
-- Run in Chromium by default
+## Run tests
 
+From the repo root (starts API + web dev servers in parallel, then runs Playwright):
 
+```bash
+bun run test:e2e
+```
+
+From this package:
+
+```bash
+bun run test
+```
+
+### Optional: all desktop browsers (local)
+
+CI runs Chromium only. Locally, to run Firefox and WebKit as well:
+
+```bash
+PLAYWRIGHT_BROWSERS=all bun run test:e2e
+```
+
+## Specs
+
+- `tests/example.spec.ts` — app title, Studies route
+- `tests/critical-flows.spec.ts` — login page, home/setup/dashboard
+- `tests/public-routes.spec.ts` — register page, API metadata
+- `tests/authenticated.spec.ts` — login as seeded admin, core pages (dashboard, studies, specimens, locations)
+
+Global setup seeds an empty database via `POST /api/setup/initialize` using credentials in `helpers/e2e-seed.ts`. **CI** removes `sampledb_e2e.sqlite` before starting the server so the admin user always matches. Locally, if you already had a different database in that file, authenticated tests may fail until you stop any dev server using port 5173, delete `sampledb_e2e.sqlite` at the repo root, and run `bun run test:e2e` again. Alternatively run `E2E_FRESH_DB=1 bun run test:e2e` to remove that file automatically before boot (same as CI).
+
+## CI
+
+A scheduled and manually triggered workflow runs E2E in GitHub Actions (see `.github/workflows/e2e.yml`).

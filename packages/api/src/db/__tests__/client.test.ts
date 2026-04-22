@@ -3,6 +3,7 @@ import { Database } from 'bun:sqlite'
 import { existsSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import { createDatabase } from '../client'
 
 describe('Database Client', () => {
   let testDbPath: string
@@ -23,56 +24,21 @@ describe('Database Client', () => {
     }
   })
 
-  it('should throw error if database check fails unexpectedly', async () => {
-    // This test verifies that unexpected database errors are thrown
-    // rather than silently converted to needsMigration = true
-    
-    // Create a database file but make it unreadable (simulate corruption)
-    // Note: In a real scenario, we'd need to mock the database connection
-    // For now, this test documents the expected behavior
-    
-    // The actual implementation in client.ts now distinguishes between:
-    // - Expected cases (file doesn't exist) -> needsMigration = true
-    // - Unexpected errors -> throw error
-    
-    expect(true).toBe(true) // Placeholder - actual test would require mocking
-  })
-
-  it('should correctly identify empty database', () => {
-    // Create an empty database file
+  it('creates error_logs table when missing even if study and settings exist', () => {
+    // Simulate database created before error_logs was added to schema
     const db = new Database(testDbPath)
-    db.close()
-
-    // The client should detect empty database and set needsMigration = true
-    // This is tested indirectly through the setup tests
-    expect(existsSync(testDbPath)).toBe(true)
-  })
-
-  it('should correctly identify missing critical tables', () => {
-    // Create database with some tables but missing critical ones
-    const db = new Database(testDbPath)
-    
-    // Create a non-critical table
-    db.exec('CREATE TABLE test_table (id INTEGER PRIMARY KEY)')
-    db.close()
-
-    // The client should detect missing critical tables and set needsMigration = true
-    // This is tested indirectly through the setup tests
-    expect(existsSync(testDbPath)).toBe(true)
-  })
-
-  it('should correctly identify valid database', () => {
-    // Create database with all required tables
-    const db = new Database(testDbPath)
-    
-    // Create critical tables
     db.exec('CREATE TABLE study (id INTEGER PRIMARY KEY)')
-    db.exec('CREATE TABLE settings (id INTEGER PRIMARY KEY)')
+    db.exec('CREATE TABLE settings (key TEXT, user_id INTEGER, value TEXT, PRIMARY KEY (key, user_id))')
+    // Intentionally do NOT create error_logs
+    const before = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='error_logs'").get()
+    expect(before).toBeNull()
     db.close()
 
-    // The client should detect valid database and set needsMigration = false
-    // This is tested indirectly through the setup tests
-    expect(existsSync(testDbPath)).toBe(true)
+    const { sqlite } = createDatabase(testDbPath)
+    const after = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='error_logs'").get()
+    expect(after).toBeDefined()
+    expect((after as { name: string }).name).toBe('error_logs')
+    sqlite.close()
   })
 })
 

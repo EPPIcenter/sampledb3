@@ -1,45 +1,53 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
-import dotenv from 'dotenv'; // E2E package doesn't have dotenv yet, need to install it? Yes, added to package.json plan.
+import { fileURLToPath } from 'url';
 
-// Load environment variables from .env file if it exists, though largely we rely on direct config
-dotenv.config();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '../..');
+const e2eDatabasePath = path.join(repoRoot, 'sampledb_e2e.sqlite');
 
-const API_PORT = 3001;
-const WEB_PORT = 5174;
-const DATABASE_PATH = path.resolve(__dirname, 'sampledb_e2e.sqlite');
+const isCi = !!process.env.CI;
+const useAllBrowsers = process.env.PLAYWRIGHT_BROWSERS === 'all';
+
+/** Fresh DB so global-setup seed matches E2E_ADMIN_* credentials (CI always; local opt-in via E2E_FRESH_DB=1) */
+const wantFreshDb = isCi || process.env.E2E_FRESH_DB === '1';
+const webServerCommand = wantFreshDb
+  ? `rm -f "${e2eDatabasePath}" && bun --filter @sampledb/api --filter @sampledb/web --parallel dev`
+  : `bun --filter @sampledb/api --filter @sampledb/web --parallel dev`;
 
 export default defineConfig({
-    testDir: './src/tests',
-    fullyParallel: false,
-    forbidOnly: !!process.env.CI,
-    retries: process.env.CI ? 2 : 0,
-    workers: 1,
-    reporter: 'html',
-    use: {
-        baseURL: `http://localhost:${WEB_PORT}`,
-        trace: 'on-first-retry',
+  testDir: './tests',
+  globalSetup: path.join(__dirname, 'global-setup.ts'),
+  timeout: 30_000,
+  expect: { timeout: 10_000 },
+  fullyParallel: true,
+  forbidOnly: isCi,
+  retries: isCi ? 2 : 0,
+  workers: isCi ? 1 : undefined,
+  reporter: [['list'], ['html', { open: 'never' }]],
+  use: {
+    baseURL: 'http://localhost:5173',
+    trace: 'on-first-retry',
+    /** Set `E2E_SCREENSHOTS=0` to skip (faster local runs). Otherwise captures after each test. */
+    screenshot: process.env.E2E_SCREENSHOTS === '0' ? 'off' : 'on',
+  },
+  projects:
+    useAllBrowsers && !isCi
+      ? [
+          { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+          { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+          { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+        ]
+      : [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  webServer: {
+    cwd: repoRoot,
+    command: webServerCommand,
+    env: {
+      ...process.env,
+      DATABASE_PATH: e2eDatabasePath,
     },
-    projects: [
-        {
-            name: 'chromium',
-            use: { ...devices['Desktop Chrome'] },
-        },
-    ],
-    webServer: [
-        {
-            command: `cd ../api && PORT=${API_PORT} DATABASE_PATH=${DATABASE_PATH} bun --watch src/index.ts`,
-            url: `http://localhost:${API_PORT}/health`,
-            reuseExistingServer: !process.env.CI,
-            stdout: 'pipe',
-            stderr: 'pipe',
-        },
-        {
-            command: `cd ../web && PORT=${WEB_PORT} API_TARGET=http://localhost:${API_PORT} bun dev --port ${WEB_PORT}`,
-            url: `http://localhost:${WEB_PORT}`,
-            reuseExistingServer: !process.env.CI,
-            stdout: 'pipe',
-            stderr: 'pipe',
-        }
-    ],
+    url: 'http://localhost:5173',
+    reuseExistingServer: !isCi,
+    timeout: 120_000,
+  },
 });

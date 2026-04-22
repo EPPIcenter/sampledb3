@@ -2,6 +2,9 @@
 node_modules/
 .pnpm-store
 
+design/
+shareholder-overview/
+
 # Build & Compilation
 dist/
 build/
@@ -11,6 +14,7 @@ build/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+litestream-replicas/
 
 # Python
 __pycache__/
@@ -29,6 +33,7 @@ __pycache__/
 .env.production.local
 
 # IDE & Editor
+.cursor/
 .vscode/
 .idea/
 *.swp
@@ -54,6 +59,10 @@ Desktop.ini
 coverage/
 .nyc_output/
 .jest/
+packages/e2e/test-results/
+packages/e2e/playwright-report/
+packages/e2e/blob-report/
+packages/e2e/sampledb_e2e.sqlite
 
 # Temporary Files
 *.tmp
@@ -62,5 +71,7 @@ coverage/
 .temp/
 
 scripts/
+!packages/api/scripts/
+!packages/api/scripts/seed-table-view-config.ts
 
 test-csvs/

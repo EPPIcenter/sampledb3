@@ -49,4 +49,4 @@ Coordinate location updates with your team, especially when making significant c
 
 ## What's Next?
 
-Now that you understand location management in Reference Data, you might want to explore [Location Management](/guides/workflows/locations/) to learn about the main locations interface, check out [Storage Types](/guides/reference-data/storage-types/) to understand how storage types relate to locations, or review [Reference Data Overview](/guides/reference-data/overview/) to understand the broader reference data system.
+Now that you understand location management in Reference Data, you might want to explore [Location Management](/docs/guides/workflows/locations/) to learn about the main locations interface, check out [Storage Types](/docs/guides/reference-data/storage-types/) to understand how storage types relate to locations, or review [Reference Data Overview](/docs/guides/reference-data/overview/) to understand the broader reference data system.

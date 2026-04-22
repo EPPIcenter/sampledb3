@@ -1,20 +1,46 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { collectionsApi, locationsApi, type Location } from '../lib/api'
 import CollectionMoveTreePicker, { type Collection } from '../components/CollectionMoveTreePicker'
 import LocationTreePicker, { type LocationSelection } from '../components/LocationTreePicker'
+import { useUser } from '../contexts/UserContext'
+import '../styles/storage.css'
 
-type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
-type Step = 'select-type' | 'select-collections' | 'select-destination' | 'confirm' | 'execute'
+export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+type Step = 'select-collections' | 'select-destination' | 'confirm' | 'execute'
+type CollectionMoveAtomicMode = 'all_or_nothing' | 'best_effort'
+
+function toKey(c: { type: CollectionType; id: number }): string {
+  return `${c.type}:${c.id}`
+}
+
+function fromKey(key: string): { type: CollectionType; id: number } {
+  const [type, idStr] = key.split(':')
+  return { type: type as CollectionType, id: Number(idStr) }
+}
 
 export default function CollectionMove() {
-  const [currentStep, setCurrentStep] = useState<Step>('select-type')
+  const navigate = useNavigate()
+  const { canWrite } = useUser()
+  const [currentStep, setCurrentStep] = useState<Step>('select-collections')
+  
+  // Redirect if user doesn't have write permissions
+  useEffect(() => {
+    if (!canWrite) {
+      navigate('/', { replace: true })
+    }
+  }, [canWrite, navigate])
+  
+  if (!canWrite) {
+    return null
+  }
   const [loading, setLoading] = useState(false)
-  const [collectionType, setCollectionType] = useState<CollectionType | null>(null)
   const [locations, setLocations] = useState<Location[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
-  const [selectedCollectionIds, setSelectedCollectionIds] = useState<Set<number>>(new Set())
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState<Set<string>>(new Set())
   const [targetLocationId, setTargetLocationId] = useState<number | null>(null)
   const [targetLocationPath, setTargetLocationPath] = useState<string>('')
+  const [atomicMode, setAtomicMode] = useState<CollectionMoveAtomicMode>('all_or_nothing')
   const [moveResult, setMoveResult] = useState<{
     success: boolean
     moved: number
@@ -26,7 +52,7 @@ export default function CollectionMove() {
     const loadLocations = async () => {
       try {
         const response = await locationsApi.list()
-        setLocations(response.data.locations || [])
+        setLocations(response.data.locations)
       } catch (error) {
         console.error('Failed to load locations:', error)
       }
@@ -34,25 +60,24 @@ export default function CollectionMove() {
     loadLocations()
   }, [])
 
-  // Load collections when type is selected
+  // Load collections on mount
   useEffect(() => {
-    if (collectionType && currentStep === 'select-collections') {
+    if (currentStep === 'select-collections') {
       loadCollections()
     }
-  }, [collectionType, currentStep])
+  }, [currentStep])
 
   const loadCollections = async () => {
-    if (!collectionType) return
-
     setLoading(true)
     try {
-      const response = await collectionsApi.listCollectionsByType(collectionType)
-      const collectionsData = response.data?.collections || []
+      // Use optimized endpoint that loads all collections in a single request
+      const response = await collectionsApi.listAllCollections()
+      const collectionsData = response.data.collections
 
-      const formattedCollections: Collection[] = collectionsData.map((c: any) => ({
+      const allCollections: Collection[] = collectionsData.map((c: any) => ({
         id: c.id,
         name: c.name,
-        type: collectionType,
+        type: c.type,
         itemCount: c.itemCount || 0,
         locationId: c.locationId,
         location: c.location
@@ -64,7 +89,7 @@ export default function CollectionMove() {
         barcode: c.barcode || null,
       }))
 
-      setCollections(formattedCollections)
+      setCollections(allCollections)
     } catch (error) {
       console.error('Failed to load collections:', error)
     } finally {
@@ -72,28 +97,36 @@ export default function CollectionMove() {
     }
   }
 
-  const handleCollectionTypeSelect = (type: CollectionType) => {
-    setCollectionType(type)
-    setSelectedCollectionIds(new Set())
-    setCurrentStep('select-collections')
-  }
-
-  const handleCollectionToggle = (id: number) => {
+  const handleCollectionToggle = (id: number, type: CollectionType) => {
+    const key = toKey({ type, id })
     const newSelected = new Set(selectedCollectionIds)
-    if (newSelected.has(id)) {
-      newSelected.delete(id)
+    if (newSelected.has(key)) {
+      newSelected.delete(key)
     } else {
-      newSelected.add(id)
+      newSelected.add(key)
     }
     setSelectedCollectionIds(newSelected)
   }
 
   const handleSelectAll = () => {
-    setSelectedCollectionIds(new Set(collections.map((c) => c.id)))
+    setSelectedCollectionIds(new Set(collections.map((c) => toKey(c))))
   }
 
   const handleDeselectAll = () => {
     setSelectedCollectionIds(new Set())
+  }
+
+  const handleSelectAllAtLocation = (locationId: number) => {
+    const collectionsAtLocation = collections.filter((c) => c.locationId === locationId)
+    const allSelected = collectionsAtLocation.every((c) => selectedCollectionIds.has(toKey(c)))
+    
+    const newSelected = new Set(selectedCollectionIds)
+    if (allSelected) {
+      collectionsAtLocation.forEach((c) => newSelected.delete(toKey(c)))
+    } else {
+      collectionsAtLocation.forEach((c) => newSelected.add(toKey(c)))
+    }
+    setSelectedCollectionIds(newSelected)
   }
 
   const handleDestinationSelect = (selections: LocationSelection[]) => {
@@ -117,7 +150,7 @@ export default function CollectionMove() {
   }
 
   const handleExecuteMove = async () => {
-    if (!collectionType || selectedCollectionIds.size === 0 || !targetLocationId) {
+    if (selectedCollectionIds.size === 0 || !targetLocationId) {
       return
     }
 
@@ -125,45 +158,98 @@ export default function CollectionMove() {
     setMoveResult(null)
 
     try {
-      const moves = Array.from(selectedCollectionIds).map((id) => {
-        const collection = collections.find((c) => c.id === id)
-        return {
+      // Group selected collections by type (each key is "type:id")
+      const collectionsByType = new Map<CollectionType, Array<{ id: number; collection: Collection }>>()
+      
+      Array.from(selectedCollectionIds).forEach((key) => {
+        const { type, id } = fromKey(key)
+        const collection = collections.find((c) => c.type === type && c.id === id)
+        if (collection) {
+          if (!collectionsByType.has(type)) {
+            collectionsByType.set(type, [])
+          }
+          collectionsByType.get(type)!.push({ id, collection })
+        }
+      })
+
+      // Execute moves for each type
+      const allErrors: Array<{ row: number; error: string }> = []
+      let totalMoved = 0
+      let allSuccess = true
+
+      for (const [collectionType, typeCollections] of collectionsByType.entries()) {
+        const moves = typeCollections.map(({ id }) => ({
           identifier: {
             type: 'id' as const,
             id,
           },
           targetLocationId,
+        }))
+
+        try {
+          const response = await collectionsApi.moveCollections({
+            collectionType,
+            atomicMode,
+            moves,
+          })
+
+          if (response.data.success) {
+            totalMoved += response.data.moved
+          } else {
+            allSuccess = false
+            totalMoved += response.data.moved || 0
+            if (response.data.errors) {
+              // Adjust row numbers to account for previous moves
+              const baseRow = allErrors.length
+              allErrors.push(
+                ...response.data.errors.map((err) => ({
+                  row: err.row + baseRow,
+                  error: err.error,
+                }))
+              )
+            }
+          }
+        } catch (error: any) {
+          allSuccess = false
+          const apiErrors = error.response?.data?.errors
+          if (Array.isArray(apiErrors) && apiErrors.length > 0) {
+            const baseRow = allErrors.length
+            apiErrors.forEach((e: { row: number; error: string }) => {
+              allErrors.push({ row: baseRow + e.row, error: e.error })
+            })
+          } else {
+            allErrors.push({
+              row: allErrors.length,
+              error: error.response?.data?.error || error.message || `Failed to move ${collectionType} collections`,
+            })
+          }
+          // In strict mode, stop after the first failing type-group
+          if (atomicMode === 'all_or_nothing') {
+            break
+          }
         }
-      })
-
-      const response = await collectionsApi.moveCollections({
-        collectionType,
-        moves,
-      })
-
-      if (response.data.success) {
-        setMoveResult({
-          success: true,
-          moved: response.data.moved,
-        })
-        setCurrentStep('execute')
-      } else {
-        setMoveResult({
-          success: false,
-          moved: response.data.moved || 0,
-          errors: response.data.errors,
-        })
       }
+
+      setMoveResult({
+        success: allSuccess,
+        moved: totalMoved,
+        errors: allErrors.length > 0 ? allErrors : undefined,
+      })
+      setCurrentStep('execute')
     } catch (error: any) {
+      const apiErrors = error.response?.data?.errors
       setMoveResult({
         success: false,
         moved: 0,
-        errors: [
-          {
-            row: 0,
-            error: error.response?.data?.error || error.message || 'Failed to move collections',
-          },
-        ],
+        errors:
+          Array.isArray(apiErrors) && apiErrors.length > 0
+            ? apiErrors.map((e: { row: number; error: string }) => ({ row: e.row, error: e.error }))
+            : [
+                {
+                  row: 0,
+                  error: error.response?.data?.error || error.message || 'Failed to move collections',
+                },
+              ],
       })
     } finally {
       setLoading(false)
@@ -171,12 +257,13 @@ export default function CollectionMove() {
   }
 
   const handleStartOver = () => {
-    setCurrentStep('select-type')
-    setCollectionType(null)
-    setSelectedCollectionIds(new Set())
+    setCurrentStep('select-collections')
+    setSelectedCollectionIds(new Set<string>())
     setTargetLocationId(null)
     setTargetLocationPath('')
     setMoveResult(null)
+    // Reload collections
+    loadCollections()
   }
 
   const getCollectionTypeLabel = (type: CollectionType) => {
@@ -193,148 +280,59 @@ export default function CollectionMove() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="storage-page">
+      <div className="container mx-auto px-4 py-8 relative z-10">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Move Collections</h1>
 
         {/* Step indicator */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div
-              className={`flex items-center ${
-                currentStep === 'select-type' ? 'text-blue-600 font-semibold' : 'text-gray-500'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  currentStep === 'select-type' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                }`}
-              >
-                1
-              </div>
-              <span className="ml-2">Select Type</span>
+        <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
+          <div className="storage-step-indicator">
+            <div className={`storage-step-item ${currentStep === 'select-collections' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">1</span>
+              <span>Select Collections</span>
             </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div
-              className={`flex items-center ${
-                currentStep === 'select-collections'
-                  ? 'text-blue-600 font-semibold'
-                  : ['select-type'].includes(currentStep)
-                  ? 'text-gray-500'
-                  : 'text-gray-400'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  currentStep === 'select-collections' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                }`}
-              >
-                2
-              </div>
-              <span className="ml-2">Select Collections</span>
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep === 'select-destination' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">2</span>
+              <span>Choose Destination</span>
             </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div
-              className={`flex items-center ${
-                currentStep === 'select-destination'
-                  ? 'text-blue-600 font-semibold'
-                  : ['select-type', 'select-collections'].includes(currentStep)
-                  ? 'text-gray-500'
-                  : 'text-gray-400'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  currentStep === 'select-destination' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                }`}
-              >
-                3
-              </div>
-              <span className="ml-2">Choose Destination</span>
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep === 'confirm' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">3</span>
+              <span>Review & Confirm</span>
             </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div
-              className={`flex items-center ${
-                currentStep === 'confirm'
-                  ? 'text-blue-600 font-semibold'
-                  : ['select-type', 'select-collections', 'select-destination'].includes(currentStep)
-                  ? 'text-gray-500'
-                  : 'text-gray-400'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  currentStep === 'confirm' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                }`}
-              >
-                4
-              </div>
-              <span className="ml-2">Review & Confirm</span>
-            </div>
-            <div className="flex-1 h-1 bg-gray-200 mx-4"></div>
-            <div
-              className={`flex items-center ${
-                currentStep === 'execute' ? 'text-blue-600 font-semibold' : 'text-gray-500'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  currentStep === 'execute' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                }`}
-              >
-                5
-              </div>
-              <span className="ml-2">Complete</span>
+            <div className="storage-step-connector" />
+            <div className={`storage-step-item ${currentStep === 'execute' ? 'storage-step-item--active' : ''}`}>
+              <span className="storage-step-item__circle">4</span>
+              <span>Complete</span>
             </div>
           </div>
         </div>
 
-        {/* Step 1: Select Collection Type */}
-        {currentStep === 'select-type' && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Select Collection Type</h2>
-            <p className="text-gray-700 mb-6">
-              Choose the type of collection you want to move.
-            </p>
-
-            <div className="grid grid-cols-2 gap-4">
-              {(['micronix_plate', 'cryovial_box', 'box', 'bag'] as CollectionType[]).map(
-                (type) => (
-                  <button
-                    key={type}
-                    onClick={() => handleCollectionTypeSelect(type)}
-                    className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors text-left"
-                  >
-                    <div className="font-semibold text-gray-900">{getCollectionTypeLabel(type)}</div>
-                  </button>
-                )
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Select Collections */}
-        {currentStep === 'select-collections' && collectionType && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
+        {/* Step 1: Select Collections */}
+        {currentStep === 'select-collections' && (
+          <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             <div className="mb-4">
               <h2 className="text-xl font-semibold">Select Collections to Move</h2>
-              <p className="text-sm text-gray-600 mt-1">
-                Type: {getCollectionTypeLabel(collectionType)}
+              <p className="text-sm text-app-text-muted mt-1">
+                Select any collections you want to move together, regardless of type.
               </p>
             </div>
 
             {loading ? (
               <div className="text-center py-8">Loading collections...</div>
             ) : collections.length === 0 ? (
-              <p className="text-sm text-gray-500">No collections of this type found.</p>
+              <p className="text-sm text-app-text-muted">No collections of this type found.</p>
             ) : (
               <CollectionMoveTreePicker
                 locations={locations}
                 collections={collections}
-                selectedIds={selectedCollectionIds}
+                selectedKeys={selectedCollectionIds}
                 onToggle={handleCollectionToggle}
                 onSelectAll={handleSelectAll}
                 onDeselectAll={handleDeselectAll}
+                onSelectAllAtLocation={handleSelectAllAtLocation}
                 loading={loading}
                 filterEmptyLocations={true}
               />
@@ -344,7 +342,7 @@ export default function CollectionMove() {
               <div className="mt-4 flex justify-end">
                 <button
                   onClick={() => setCurrentStep('select-destination')}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="storage-btn-primary"
                 >
                   Continue with {selectedCollectionIds.size} collection
                   {selectedCollectionIds.size !== 1 ? 's' : ''}
@@ -354,76 +352,133 @@ export default function CollectionMove() {
           </div>
         )}
 
-        {/* Step 3: Select Destination Location */}
+        {/* Step 2: Select Destination Location */}
         {currentStep === 'select-destination' && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             <h2 className="text-xl font-semibold mb-4">Choose Destination Location</h2>
-            <p className="text-gray-700 mb-6">
+            <p className="text-app-text mb-6">
               Select the target location where the collections will be moved.
             </p>
 
             <LocationTreePicker
               selected={
                 targetLocationId
-                  ? [
-                      {
-                        locationId: targetLocationId,
-                        path: targetLocationPath,
-                        name: locations.find(l => l.id === targetLocationId)?.name || '',
-                      },
-                    ]
+                  ? (() => {
+                      const loc = locations.find(l => l.id === targetLocationId)
+                      return [
+                        {
+                          locationId: targetLocationId,
+                          path: targetLocationPath,
+                          name: loc?.name || '',
+                          effectiveStorageTypeName: loc?.effectiveStorageTypeName ?? loc?.storageTypeName ?? null,
+                        },
+                      ]
+                    })()
                   : []
               }
               onChange={handleDestinationSelect}
+              filterCollectionsOnly={true}
             />
           </div>
         )}
 
-        {/* Step 4: Confirm */}
+        {/* Step 3: Confirm */}
         {currentStep === 'confirm' && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             <h2 className="text-xl font-semibold mb-4">Review & Confirm</h2>
 
             <div className="space-y-4">
               <div>
-                <h3 className="font-medium text-gray-700 mb-2">Collections to Move:</h3>
-                <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                  {Array.from(selectedCollectionIds).map((id) => {
-                    const collection = collections.find((c) => c.id === id)
+                <h3 className="font-medium text-app-text mb-2">Atomicity Mode:</h3>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="collection-move-atomicity"
+                      checked={atomicMode === 'all_or_nothing'}
+                      onChange={() => setAtomicMode('all_or_nothing')}
+                      className="form-radio"
+                    />
+                    <span>All-or-nothing (default)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="collection-move-atomicity"
+                      checked={atomicMode === 'best_effort'}
+                      onChange={() => setAtomicMode('best_effort')}
+                      className="form-radio"
+                    />
+                    <span>Best effort</span>
+                  </label>
+                </div>
+                <p className="text-xs text-app-text-muted mt-2">
+                  {atomicMode === 'all_or_nothing'
+                    ? 'For each collection type request, any validation error blocks moves for that type.'
+                    : 'Valid moves are applied and invalid rows are returned as errors.'}
+                </p>
+              </div>
+
+              <div>
+                <h3 className="font-medium text-app-text mb-2">Collections to Move:</h3>
+                <ul className="list-disc list-inside text-sm text-app-text-muted space-y-1">
+                  {Array.from(selectedCollectionIds).map((key) => {
+                    const { type, id } = fromKey(key)
+                    const collection = collections.find((c) => c.type === type && c.id === id)
                     if (!collection) return null
+                    const collectionLoc = collection.locationId ? locations.find(l => l.id === collection.locationId) : null
+                    const storageTypeLabel = collectionLoc?.effectiveStorageTypeName || collectionLoc?.storageTypeName
+                    const locationDisplay = collection.location?.path
+                      ? (storageTypeLabel ? ` - ${collection.location.path} (${storageTypeLabel})` : ` - ${collection.location.path}`)
+                      : ''
                     return (
-                      <li key={id}>
-                        {collection.name}
-                        {collection.location?.path && (
-                          <span className="text-gray-400"> ({collection.location.path})</span>
-                        )}
+                      <li key={key}>
+                        {collection.name} <span className="text-app-text-muted">({getCollectionTypeLabel(collection.type)})</span>
+                        {locationDisplay && <span className="text-app-text-muted">{locationDisplay}</span>}
                       </li>
                     )
                   })}
                 </ul>
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-app-text-muted mt-2">
                   Total: {selectedCollectionIds.size} collection
                   {selectedCollectionIds.size !== 1 ? 's' : ''}
                 </p>
               </div>
 
               <div>
-                <h3 className="font-medium text-gray-700 mb-2">Destination Location:</h3>
-                <p className="text-sm text-gray-600">{targetLocationPath || `Location ID: ${targetLocationId}`}</p>
+                <h3 className="font-medium text-app-text mb-2">Destination Location:</h3>
+                {(() => {
+                  const destLoc = targetLocationId ? locations.find(l => l.id === targetLocationId) : null
+                  if (!destLoc) {
+                    return <p className="text-sm text-app-text-muted">{targetLocationPath || `Location ID: ${targetLocationId}`}</p>
+                  }
+                  const storageTypeLabel = destLoc.effectiveStorageTypeName || destLoc.storageTypeName
+                  return (
+                    <div className="text-sm text-app-text-muted space-y-1">
+                      <p className="font-medium">{destLoc.path || destLoc.name}</p>
+                      {storageTypeLabel && (
+                        <p className="text-app-text-muted">Storage type: {storageTypeLabel}</p>
+                      )}
+                      {destLoc.description && (
+                        <p className="text-app-text-muted truncate max-w-xl" title={destLoc.description}>{destLoc.description}</p>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             </div>
 
             <div className="mt-6 flex gap-3 justify-end">
               <button
                 onClick={() => setCurrentStep('select-destination')}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                className="storage-btn-secondary"
               >
                 Back
               </button>
               <button
                 onClick={handleExecuteMove}
                 disabled={loading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Moving...' : 'Confirm & Move'}
               </button>
@@ -431,13 +486,13 @@ export default function CollectionMove() {
           </div>
         )}
 
-        {/* Step 5: Results */}
+        {/* Step 4: Results */}
         {currentStep === 'execute' && moveResult && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             {moveResult.success ? (
               <>
                 <div className="mb-4">
-                  <div className="flex items-center text-green-600 mb-2">
+                  <div className="flex items-center text-app-trend-up mb-2">
                     <svg
                       className="w-6 h-6 mr-2"
                       fill="none"
@@ -453,7 +508,7 @@ export default function CollectionMove() {
                     </svg>
                     <h2 className="text-xl font-semibold">Move Completed Successfully</h2>
                   </div>
-                  <p className="text-gray-700">
+                  <p className="text-app-text">
                     Successfully moved {moveResult.moved} collection
                     {moveResult.moved !== 1 ? 's' : ''} to {targetLocationPath || `location ${targetLocationId}`}.
                   </p>
@@ -462,7 +517,7 @@ export default function CollectionMove() {
             ) : (
               <>
                 <div className="mb-4">
-                  <div className="flex items-center text-red-600 mb-2">
+                  <div className="flex items-center text-app-trend-down mb-2">
                     <svg
                       className="w-6 h-6 mr-2"
                       fill="none"
@@ -478,15 +533,15 @@ export default function CollectionMove() {
                     </svg>
                     <h2 className="text-xl font-semibold">Move Failed</h2>
                   </div>
-                  <p className="text-gray-700 mb-4">
+                  <p className="text-app-text mb-4">
                     {moveResult.moved > 0
                       ? `Moved ${moveResult.moved} collection${moveResult.moved !== 1 ? 's' : ''}, but some errors occurred.`
                       : 'Failed to move collections.'}
                   </p>
                   {moveResult.errors && moveResult.errors.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded p-4">
-                      <h3 className="font-medium text-red-800 mb-2">Errors:</h3>
-                      <ul className="list-disc list-inside text-sm text-red-700 space-y-1">
+                    <div className="bg-app-trend-down/10 border border-app-trend-down rounded p-4">
+                      <h3 className="font-medium text-app-trend-down mb-2">Errors:</h3>
+                      <ul className="list-disc list-inside text-sm text-app-trend-down space-y-1">
                         {moveResult.errors.map((error, idx) => (
                           <li key={idx}>
                             Row {error.row + 1}: {error.error}
@@ -502,13 +557,14 @@ export default function CollectionMove() {
             <div className="mt-6">
               <button
                 onClick={handleStartOver}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="storage-btn-primary"
               >
                 Move More Collections
               </button>
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   )
