@@ -1,0 +1,47 @@
+name: Cleanup Old Container Versions
+
+# Prunes orphaned/untagged GHCR image versions on a weekly schedule.
+#
+# What this safely deletes:
+#   - Untagged image versions (typically per-arch manifests left over after
+#     a multi-arch manifest list is replaced, or builds that never got a tag).
+#
+# What this never touches:
+#   - Versions tagged with `latest`, `vX.Y.Z`, `X.Y`, `X`, or `sha-*`
+#     (anything tagged stays put).
+#
+# To also prune old `sha-*` tagged versions, switch
+# `delete-only-untagged-versions` to 'false' and bump
+# `min-versions-to-keep` to a value you're comfortable with (oldest tagged
+# versions beyond that count will be deleted).
+
+on:
+  schedule:
+    # Sundays 05:00 UTC
+    - cron: "0 5 * * 0"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "If true, list versions that would be deleted without deleting them."
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+permissions:
+  packages: write
+
+jobs:
+  prune-untagged:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Delete untagged container versions
+        uses: actions/delete-package-versions@v5
+        with:
+          owner: ${{ github.repository_owner }}
+          package-name: ${{ github.event.repository.name }}
+          package-type: container
+          delete-only-untagged-versions: "true"
+          min-versions-to-keep: 5
+          dry-run: ${{ inputs.dry-run || 'false' }}
