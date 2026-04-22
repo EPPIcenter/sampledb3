@@ -18,6 +18,7 @@ import {
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create locations routes with database injection
@@ -119,7 +120,7 @@ locations.get('/', authMiddleware, async (c) => {
 
 // Get location by ID
 locations.get('/:id', authMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   
   if (isNaN(id)) {
     return c.json({ error: 'Invalid location ID' }, 400)
@@ -358,7 +359,7 @@ locations.post('/', adminMiddleware, async (c) => {
 
 // Update location
 locations.put('/:id', adminMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   
   if (isNaN(id)) {
     return c.json({ error: 'Invalid location ID' }, 400)
@@ -496,7 +497,7 @@ locations.put('/:id', adminMiddleware, async (c) => {
 
 // Delete location
 locations.delete('/:id', adminMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   
   if (isNaN(id)) {
     return c.json({ error: 'Invalid location ID' }, 400)

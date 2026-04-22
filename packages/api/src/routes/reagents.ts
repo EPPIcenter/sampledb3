@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create reagents routes with database injection
@@ -52,7 +53,7 @@ export function createReagentsRoutes(database: Database): Hono {
 
 // Get reagent by ID
 reagents.get('/:id', authMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   
   if (isNaN(id)) {
     return c.json({ error: 'Invalid reagent ID' }, 400)
@@ -115,7 +116,7 @@ reagents.post('/', memberMiddleware, async (c) => {
 // Update reagent
 reagents.patch('/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid reagent ID' }, 400)
     }

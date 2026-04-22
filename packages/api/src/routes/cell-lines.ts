@@ -3,6 +3,7 @@ import type { Database } from '../db/client'
 import { cellLine } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { createAuthMiddleware } from '../middleware/auth'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create cell lines routes with database injection
@@ -25,7 +26,7 @@ export function createCellLinesRoutes(database: Database): Hono {
 
   // Get cell line by ID
   cellLines.get('/:id', authMiddleware, async (c) => {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid cell line ID' }, 400)

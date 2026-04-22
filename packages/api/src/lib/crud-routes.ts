@@ -6,6 +6,7 @@ import type { InferSelectModel } from 'drizzle-orm'
 import type { Database } from '../db/client'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from './error-handler'
 import { listResponse, successResponse, createdResponse } from './response-helpers'
+import { requireParam } from './common-validators'
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 
 export interface CrudRouteConfig<
@@ -159,7 +160,7 @@ export function createCrudRoutes<
 
   // GET /:id - Get one
   routes.get('/:id', authMiddleware, async (c) => {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: `Invalid ${entityName} ID` }, 400)
@@ -243,7 +244,7 @@ export function createCrudRoutes<
 
   // PUT /:id - Update (admin only)
   routes.put('/:id', adminMiddleware, async (c) => {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: `Invalid ${entityName} ID` }, 400)
@@ -322,7 +323,7 @@ export function createCrudRoutes<
 
   // DELETE /:id - Delete (admin only)
   routes.delete('/:id', adminMiddleware, async (c) => {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: `Invalid ${entityName} ID` }, 400)

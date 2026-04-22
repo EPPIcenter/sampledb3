@@ -3,6 +3,7 @@ import type { Database } from '../db/client'
 import { plasmid } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { createAuthMiddleware } from '../middleware/auth'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create plasmids routes with database injection
@@ -25,7 +26,7 @@ export function createPlasmidsRoutes(database: Database): Hono {
 
   // Get plasmid by ID
   plasmids.get('/:id', authMiddleware, async (c) => {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid plasmid ID' }, 400)

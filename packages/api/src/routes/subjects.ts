@@ -36,6 +36,7 @@ import type { ContainerData } from '../lib/container-creation'
 import { findExistingStudySpecimen } from '../lib/specimen-helpers'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 // Extended container data type for this endpoint (includes collectionLocationId)
 interface ExtendedContainerData extends ContainerData {
@@ -228,7 +229,7 @@ subjects.get('/', authMiddleware, async (c) => {
 // Get subject by ID
 subjects.get('/:id', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid subject ID' }, 400)
@@ -265,7 +266,7 @@ subjects.get('/:id', authMiddleware, async (c) => {
 // Get subject summary with enriched specimen data
 subjects.get('/:id/summary', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid subject ID' }, 400)
@@ -585,7 +586,7 @@ subjects.get('/:id/summary', authMiddleware, async (c) => {
 // Get qPCR result summary for this subject (wells linked via specimen)
 subjects.get('/:id/qpcr-results', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) return c.json({ error: 'Invalid subject ID' }, 400)
     const subjectRow = await dbInstance.select().from(studySubject).where(eq(studySubject.id, id)).get()
     if (!subjectRow) return c.json({ error: 'Not found' }, 404)
@@ -1675,7 +1676,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
 // Merge subjects endpoint
 subjects.post('/:targetId/merge', memberMiddleware, async (c) => {
   try {
-    const targetId = parseInt(c.req.param('targetId'))
+    const targetId = parseInt(requireParam(c, 'targetId'))
     
     if (isNaN(targetId)) {
       return c.json({ error: 'Invalid target subject ID' }, 400)
@@ -1835,7 +1836,7 @@ subjects.post('/:targetId/merge', memberMiddleware, async (c) => {
 // Update subject
 subjects.put('/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid subject ID' }, 400)

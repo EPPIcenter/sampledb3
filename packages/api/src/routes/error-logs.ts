@@ -8,6 +8,7 @@ import { eq, and, desc, sql, like, or } from 'drizzle-orm'
 import { createAdminMiddleware, createAuthMiddleware, createOptionalAuthMiddleware } from '../middleware/auth'
 import { rateLimit } from '../middleware/rate-limit'
 import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 // Schema for frontend error submission
 const frontendErrorSchema = z.object({
@@ -183,7 +184,7 @@ export function createErrorLogsRoutes(database: Database): Hono {
   // GET /api/error-logs/:id - Get a specific error log
   errorLogsRoutes.get('/:id', adminMiddleware, async (c) => {
     try {
-      const id = parseInt(c.req.param('id'))
+      const id = parseInt(requireParam(c, 'id'))
       
       if (isNaN(id)) {
         return c.json({ error: 'Invalid error log ID' }, 400)
@@ -208,7 +209,7 @@ export function createErrorLogsRoutes(database: Database): Hono {
   // PATCH /api/error-logs/:id/resolve - Mark error as resolved
   errorLogsRoutes.patch('/:id/resolve', adminMiddleware, async (c) => {
     try {
-      const id = parseInt(c.req.param('id'))
+      const id = parseInt(requireParam(c, 'id'))
       
       if (isNaN(id)) {
         return c.json({ error: 'Invalid error log ID' }, 400)

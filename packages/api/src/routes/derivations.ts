@@ -19,6 +19,7 @@ import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create derivations routes with database injection
@@ -178,7 +179,7 @@ async function createCollectionIfNeeded(database: Database, input: z.infer<typeo
 // Create derivation from parent container
 derivations.post('/containers/:id/derive', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
     }
@@ -207,7 +208,7 @@ derivations.post('/containers/:id/derive', memberMiddleware, async (c) => {
 // List derivations from a parent container
 derivations.get('/containers/:id/derivations', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
     }
@@ -239,7 +240,7 @@ derivations.get('/containers/:id/derivations', authMiddleware, async (c) => {
 // Get derivation source for a child container, or original source if not derived
 derivations.get('/containers/:id/source', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
     }
@@ -372,7 +373,7 @@ derivations.get('/containers/:id/source', authMiddleware, async (c) => {
 // Simple derivation chain: ancestors and direct descendants
 derivations.get('/containers/:id/derivation-chain', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
     }
@@ -437,7 +438,7 @@ derivations.get('/containers/:id/derivation-chain', authMiddleware, async (c) =>
 // Update derivation metadata
 derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid derivation ID' }, 400)
     }
@@ -479,7 +480,7 @@ derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
 // Delete derivation (relationship only)
 derivations.delete('/derivations/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid derivation ID' }, 400)
     }

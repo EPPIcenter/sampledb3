@@ -30,6 +30,7 @@ import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth
 import { handleRouteError } from '../lib/error-handler'
 import { utcNow } from '../lib/datetime'
 import { validatePlateScan, inferPlateOrGetReport } from '../lib/plate-scan-validation'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create collections routes with database injection
@@ -200,7 +201,7 @@ async function enrichContainer(containerId: number) {
 
 // Micronix plate detail
 collections.get('/plates/micronix/:id', authMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid plate ID' }, 400)
 
   const plate = await database.select().from(micronixPlate).where(eq(micronixPlate.id, id)).get()
@@ -304,7 +305,7 @@ collections.post('/plates/micronix/validate-scan', authMiddleware, memberMiddlew
 
 // Cryovial box detail
 collections.get('/boxes/cryovial/:id', authMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid box ID' }, 400)
 
   const boxRecord = await database.select().from(cryovialBox).where(eq(cryovialBox.id, id)).get()
@@ -353,7 +354,7 @@ collections.get('/boxes/cryovial/:id', authMiddleware, async (c) => {
 
 // Generic box detail
 collections.get('/boxes/:id', authMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid box ID' }, 400)
 
   const boxRecord = await database.select().from(box).where(eq(box.id, id)).get()
@@ -401,7 +402,7 @@ collections.get('/boxes/:id', authMiddleware, async (c) => {
 
 // Bag detail
 collections.get('/bags/:id', authMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid bag ID' }, 400)
 
   const bagRecord = await database.select().from(bag).where(eq(bag.id, id)).get()
@@ -449,7 +450,7 @@ collections.get('/bags/:id', authMiddleware, async (c) => {
 
 // Sheet detail (Replaces DBS bag detail)
 collections.get('/sheets/:id', authMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid sheet ID' }, 400)
 
   const sheetRecord = await database.select().from(sheet).where(eq(sheet.id, id)).get()
@@ -984,7 +985,7 @@ collections.get('/list-all', authMiddleware, async (c) => {
 // List collections by type
 collections.get('/list/:type', authMiddleware, async (c) => {
   try {
-    const type = c.req.param('type') as any
+    const type = requireParam(c, 'type') as any
     let result: any[] = []
 
     switch (type) {

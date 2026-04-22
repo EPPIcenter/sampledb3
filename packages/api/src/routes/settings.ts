@@ -35,6 +35,7 @@ import {
   type ScannerConfigurations,
   type TableViewConfigurations,
 } from '../lib/settings'
+import { requireParam } from '../lib/common-validators'
 
 export function createSettingsRoutes(database: Database) {
   const settings = new Hono()
@@ -94,7 +95,7 @@ export function createSettingsRoutes(database: Database) {
   // GET /api/settings/:key - Get specific setting (user-aware)
   settings.get('/:key', authMiddleware, async (c) => {
     try {
-      const key = c.req.param('key')
+      const key = requireParam(c, 'key')
       const user = c.get('user')
       const userId = user?.id
 
@@ -217,7 +218,7 @@ const tableViewConfigurationsSchema = z.object({
   // Non-admin users can only set their own user-specific settings (for allowed keys)
   settings.put('/:key', memberMiddleware, async (c) => {
   try {
-    const key = c.req.param('key')
+    const key = requireParam(c, 'key')
     const body = await c.req.json()
     const user = c.get('user')
     const userId = user?.id
@@ -329,7 +330,7 @@ const tableViewConfigurationsSchema = z.object({
   // DELETE /api/settings/:key/user - Reset user-specific setting to system default
   settings.delete('/:key/user', authMiddleware, async (c) => {
     try {
-      const key = c.req.param('key')
+      const key = requireParam(c, 'key')
       const user = c.get('user')
       const userId = user?.id
 
@@ -536,7 +537,7 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
   // GET /api/settings/container-types/:containerType/units - Get allowed units for a container type
   settings.get('/container-types/:containerType/units', async (c) => {
     try {
-      const containerType = c.req.param('containerType')
+      const containerType = requireParam(c, 'containerType')
       
       if (!containerTypeSchema.safeParse(containerType).success) {
         return c.json({ error: 'Invalid container type' }, 400)
@@ -563,7 +564,7 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
   // POST /api/settings/container-types/:containerType/units - Add allowed unit for a container type (admin only)
   settings.post('/container-types/:containerType/units', adminMiddleware, async (c) => {
     try {
-      const containerType = c.req.param('containerType')
+      const containerType = requireParam(c, 'containerType')
       
       if (!containerTypeSchema.safeParse(containerType).success) {
         return c.json({ error: 'Invalid container type' }, 400)
@@ -596,8 +597,8 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
   // DELETE /api/settings/container-types/:containerType/units/:unitId - Remove allowed unit (admin only)
   settings.delete('/container-types/:containerType/units/:unitId', adminMiddleware, async (c) => {
     try {
-      const containerType = c.req.param('containerType')
-      const unitId = parseInt(c.req.param('unitId'))
+      const containerType = requireParam(c, 'containerType')
+      const unitId = parseInt(requireParam(c, 'unitId'))
       
       if (!containerTypeSchema.safeParse(containerType).success) {
         return c.json({ error: 'Invalid container type' }, 400)
@@ -630,7 +631,7 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
   // GET /api/settings/units/container-types/:containerType - Get all units allowed for a container type (alias for above)
   settings.get('/units/container-types/:containerType', authMiddleware, async (c) => {
     try {
-      const containerType = c.req.param('containerType')
+      const containerType = requireParam(c, 'containerType')
       
       if (!containerTypeSchema.safeParse(containerType).success) {
         return c.json({ error: 'Invalid container type' }, 400)

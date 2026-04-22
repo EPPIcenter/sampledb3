@@ -13,7 +13,7 @@ import {
 } from '../db/schema'
 import { eq, and, inArray } from 'drizzle-orm'
 import { z } from 'zod'
-import { parseId } from '../lib/common-validators'
+import { parseId, requireParam } from '../lib/common-validators'
 import { handleRouteError, NotFoundError } from '../lib/error-handler'
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
@@ -209,7 +209,7 @@ export function createSpecimenTypesRoutes(database: Database): Hono {
   // GET /specimen-types/:id/container-types - Get allowed container types for a specimen type
   specimenTypes.get('/:id/container-types', authMiddleware, async (c) => {
     try {
-      const id = parseId(c.req.param('id'))
+      const id = parseId(requireParam(c, 'id'))
     if (!id) {
       return c.json({ error: 'Invalid specimen type ID' }, 400)
     }
@@ -240,7 +240,7 @@ export function createSpecimenTypesRoutes(database: Database): Hono {
 // POST /specimen-types/:id/container-types - Add allowed container type (admin only)
 specimenTypes.post('/:id/container-types', adminMiddleware, async (c) => {
   try {
-    const id = parseId(c.req.param('id'))
+    const id = parseId(requireParam(c, 'id'))
     if (!id) {
       return c.json({ error: 'Invalid specimen type ID' }, 400)
     }
@@ -268,8 +268,8 @@ specimenTypes.post('/:id/container-types', adminMiddleware, async (c) => {
 // DELETE /specimen-types/:id/container-types/:containerType - Remove allowed container type (admin only)
 specimenTypes.delete('/:id/container-types/:containerType', adminMiddleware, async (c) => {
   try {
-    const id = parseId(c.req.param('id'))
-    const containerType = c.req.param('containerType')
+    const id = parseId(requireParam(c, 'id'))
+    const containerType = requireParam(c, 'containerType')
     
     if (!id) {
       return c.json({ error: 'Invalid specimen type ID' }, 400)
@@ -311,7 +311,7 @@ specimenTypes.delete('/:id/container-types/:containerType', adminMiddleware, asy
   // GET /specimen-types/container-types/:containerType - Get all specimen types allowed for a container type
   specimenTypes.get('/container-types/:containerType', authMiddleware, async (c) => {
     try {
-      const containerType = c.req.param('containerType')
+      const containerType = requireParam(c, 'containerType')
       
       if (!containerTypeSchema.safeParse(containerType).success) {
         return c.json({ error: 'Invalid container type' }, 400)

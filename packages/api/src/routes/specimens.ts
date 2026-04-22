@@ -15,6 +15,7 @@ import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-h
 import { containerSchema, containerSchemaRequired, containerSchemaWithLocation } from '../lib/schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create specimens routes with database injection
@@ -208,7 +209,7 @@ specimens.get('/', authMiddleware, async (c) => {
 // Get specimen by ID
 specimens.get('/:id', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid specimen ID' }, 400)
@@ -246,7 +247,7 @@ specimens.get('/:id', authMiddleware, async (c) => {
 // Add container to existing specimen
 specimens.post('/:id/containers', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid specimen ID' }, 400)
     }

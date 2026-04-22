@@ -11,6 +11,7 @@ import { createAuthMiddleware, createAdminMiddleware } from '../middleware/auth'
 import { rateLimit } from '../middleware/rate-limit'
 import { handleRouteError } from '../lib/error-handler'
 import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 export function createAuthRoutes(database: Database, settingsDb?: Database) {
   const auth = new Hono()
@@ -635,7 +636,7 @@ auth.post('/switch', authMiddleware, async (c) => {
 // Update user (admin only)
 auth.put('/users/:id', adminMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid user ID' }, 400)
     }
@@ -746,7 +747,7 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
 // Approve user (admin only) - allows pending self-registered users to log in
 auth.patch('/users/:id/approve', adminMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid user ID' }, 400)
     }
@@ -788,7 +789,7 @@ auth.patch('/users/:id/approve', adminMiddleware, async (c) => {
 // Reset user password (admin only)
 auth.patch('/users/:id/password', adminMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid user ID' }, 400)
     }
@@ -845,7 +846,7 @@ auth.patch('/users/:id/password', adminMiddleware, async (c) => {
 // Soft delete user (admin only)
 auth.delete('/users/:id', adminMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid user ID' }, 400)
     }
@@ -903,7 +904,7 @@ auth.delete('/users/:id', adminMiddleware, async (c) => {
 // Restore soft-deleted user (admin only)
 auth.post('/users/:id/restore', adminMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid user ID' }, 400)
     }
@@ -972,7 +973,7 @@ auth.post('/users/:id/restore', adminMiddleware, async (c) => {
 // Get active sessions for a user (admin only)
 auth.get('/users/:id/sessions', adminMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid user ID' }, 400)
     }
@@ -1009,7 +1010,7 @@ auth.get('/users/:id/sessions', adminMiddleware, async (c) => {
 // Revoke a session (admin only)
 auth.delete('/sessions/:id', adminMiddleware, async (c) => {
   try {
-    const sessionId = c.req.param('id')
+    const sessionId = requireParam(c, 'id')
 
     const deleted = await database
       .delete(sessions)

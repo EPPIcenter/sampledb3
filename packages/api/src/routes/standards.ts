@@ -3,6 +3,7 @@ import type { Database } from '../db/client'
 import { standard } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { createAuthMiddleware } from '../middleware/auth'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create standards routes with database injection
@@ -25,7 +26,7 @@ export function createStandardsRoutes(database: Database): Hono {
 
   // Get standard by ID
   standards.get('/:id', authMiddleware, async (c) => {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid standard ID' }, 400)

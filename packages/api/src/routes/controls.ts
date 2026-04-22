@@ -29,6 +29,7 @@ import { handleRouteError, NotFoundError } from '../lib/error-handler'
 import type { BloodControlProperties } from '../types/properties'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create controls routes with database injection
@@ -161,7 +162,7 @@ controls.get('/batches', authMiddleware, async (c) => {
 
 // Get batch detail (only for blood control batches)
 controls.get('/batches/:id', authMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
   const result = await dbInstance
@@ -184,7 +185,7 @@ controls.get('/batches/:id', authMiddleware, async (c) => {
 
 // Update batch (rename, change production date, etc.)
 controls.patch('/batches/:id', memberMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
   try {
@@ -240,7 +241,7 @@ controls.patch('/batches/:id', memberMiddleware, async (c) => {
 
 // Delete batch and all associated data
 controls.delete('/batches/:id', memberMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
   try {
@@ -347,7 +348,7 @@ controls.delete('/batches/:id', memberMiddleware, async (c) => {
 // Get batch summary with enriched specimen data
 controls.get('/batches/:id/summary', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
     // Get batch with definition (filtered to blood controls)
@@ -872,7 +873,7 @@ controls.get('/', authMiddleware, async (c) => {
 
 // Get control definition by ID (filtered to blood controls)
 controls.get('/:id', authMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   
   if (isNaN(id)) {
     return c.json({ error: 'Invalid blood control ID' }, 400)
@@ -896,7 +897,7 @@ controls.get('/:id', authMiddleware, async (c) => {
 
 // Get control definition summary with composition and batches
 controls.get('/:id/summary', authMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid control ID' }, 400)
 
   try {
@@ -1778,7 +1779,7 @@ controls.post('/', memberMiddleware, async (c) => {
 // Update control definition (only blood controls)
 controls.patch('/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
 
     // Get existing control to merge properties (filtered to blood controls)
@@ -1876,7 +1877,7 @@ controls.patch('/:id', memberMiddleware, async (c) => {
 
 // List batches for a definition (filtered to blood controls)
 controls.get('/:id/batches', authMiddleware, async (c) => {
-  const id = parseInt(c.req.param('id'))
+  const id = parseInt(requireParam(c, 'id'))
   if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
 
   // Verify definition is a blood control
@@ -1960,7 +1961,7 @@ controls.post('/batches/suggest-name', memberMiddleware, async (c) => {
 
 // Create a new batch (only for blood controls)
 controls.post('/:id/batches', memberMiddleware, async (c) => {
-  const definitionId = parseInt(c.req.param('id'))
+  const definitionId = parseInt(requireParam(c, 'id'))
   if (isNaN(definitionId)) return c.json({ error: 'Invalid blood control ID' }, 400)
 
   let body: any
@@ -2060,7 +2061,7 @@ controls.post('/batches/create-with-specimens', memberMiddleware, async (c) => {
 // Add specimens to existing batch
 controls.post('/batches/:id/specimens/bulk', memberMiddleware, async (c) => {
   try {
-    const batchId = parseInt(c.req.param('id'))
+    const batchId = parseInt(requireParam(c, 'id'))
     if (isNaN(batchId)) return c.json({ error: 'Invalid batch ID' }, 400)
 
     const body = await c.req.json()
@@ -2075,8 +2076,8 @@ controls.post('/batches/:id/specimens/bulk', memberMiddleware, async (c) => {
 
 // Delete a single specimen from a batch
 controls.delete('/batches/:batchId/specimens/:specimenId', memberMiddleware, async (c) => {
-  const batchId = parseInt(c.req.param('batchId'))
-  const specimenId = parseInt(c.req.param('specimenId'))
+  const batchId = parseInt(requireParam(c, 'batchId'))
+  const specimenId = parseInt(requireParam(c, 'specimenId'))
   if (isNaN(batchId) || isNaN(specimenId)) return c.json({ error: 'Invalid ID' }, 400)
 
   try {

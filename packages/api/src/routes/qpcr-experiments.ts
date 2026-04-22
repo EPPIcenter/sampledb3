@@ -26,6 +26,7 @@ import type { ScannerConfiguration } from '../lib/settings'
 import { resolveMicronixBarcodesToContainers } from '../lib/export-helpers'
 import { normalizeWellPosition, parsePlateCSV, validateWellPosition } from '../lib/plate-csv'
 import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 type WellSource =
   | { type: 'subject'; id: number; name: string; study: { id: number; title: string; code: string } }
@@ -239,7 +240,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
   // GET /:id - Detail with wells and resolved source, and targets
   qpcr.get('/:id', authMiddleware, async (c) => {
     try {
-      const id = parseInt(c.req.param('id'))
+      const id = parseInt(requireParam(c, 'id'))
       if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400)
       const exp = await database.select().from(qpcrExperiment).where(eq(qpcrExperiment.id, id)).get()
       if (!exp) return c.json({ error: 'Not found' }, 404)
@@ -277,7 +278,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
   // DELETE /:id - Delete experiment and all related data (wells, runs, well results, amplification data)
   qpcr.delete('/:id', authMiddleware, memberMiddleware, async (c) => {
     try {
-      const id = parseInt(c.req.param('id'))
+      const id = parseInt(requireParam(c, 'id'))
       if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400)
       const exp = await database.select().from(qpcrExperiment).where(eq(qpcrExperiment.id, id)).get()
       if (!exp) return c.json({ error: 'Not found' }, 404)
@@ -318,7 +319,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
   // PATCH /:id - Update experiment (targets locked when status is results_uploaded)
   qpcr.patch('/:id', authMiddleware, memberMiddleware, async (c) => {
     try {
-      const id = parseInt(c.req.param('id'))
+      const id = parseInt(requireParam(c, 'id'))
       if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400)
       const body = await c.req.json()
       const data = updateSchema.parse(body)
@@ -391,7 +392,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
   // POST /:id/plate - Upload plate layout (CSV with barcode + position); resolve barcodes, upsert wells
   qpcr.post('/:id/plate', authMiddleware, memberMiddleware, async (c) => {
     try {
-      const id = parseInt(c.req.param('id'))
+      const id = parseInt(requireParam(c, 'id'))
       if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400)
       const body = await c.req.json()
       const data = plateUploadSchema.parse(body)
@@ -569,7 +570,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
   // PATCH /:id/wells - Set empty wells to NTC or empty (single or bulk)
   qpcr.patch('/:id/wells', authMiddleware, memberMiddleware, async (c) => {
     try {
-      const id = parseInt(c.req.param('id'))
+      const id = parseInt(requireParam(c, 'id'))
       if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400)
       const body = await c.req.json()
       const data = wellsPatchSchema.parse(body)
@@ -674,7 +675,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
   // POST /:id/results - Upload result file (Biorad CSV or QuantStudio XLS)
   qpcr.post('/:id/results', authMiddleware, memberMiddleware, async (c) => {
     try {
-      const id = parseInt(c.req.param('id'))
+      const id = parseInt(requireParam(c, 'id'))
       if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400)
       const body = await c.req.json()
       const data = resultsUploadSchema.parse(body)
@@ -837,7 +838,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       ).catch((err) => console.error('[qpcr template] Failed to log error:', err))
     }
     try {
-      const id = parseInt(c.req.param('id'))
+      const id = parseInt(requireParam(c, 'id'))
       if (isNaN(id)) {
         logTemplateError(400, 'Invalid ID')
         return c.json({ error: 'Invalid ID' }, 400)

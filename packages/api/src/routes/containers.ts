@@ -7,6 +7,7 @@ import { validatePage, validateLimit } from '../lib/constants'
 import type { CollectionInfo } from '../types/collections'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 /**
  * Create containers routes with database injection
@@ -211,7 +212,7 @@ containers.get('/', authMiddleware, async (c) => {
 // Get container by ID with full details
 containers.get('/:id', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
@@ -324,7 +325,7 @@ containers.get('/:id', authMiddleware, async (c) => {
 // Update container
 containers.patch('/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
@@ -429,7 +430,7 @@ containers.patch('/:id', memberMiddleware, async (c) => {
 // Get container tags
 containers.get('/:id/tags', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
@@ -452,7 +453,7 @@ containers.get('/:id/tags', authMiddleware, async (c) => {
 // Add tag to container
 containers.post('/:id/tags', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid container ID' }, 400)
@@ -502,8 +503,8 @@ containers.post('/:id/tags', memberMiddleware, async (c) => {
 // Remove tag from container
 containers.delete('/:id/tags/:tagId', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
-    const tagId = parseInt(c.req.param('tagId'))
+    const id = parseInt(requireParam(c, 'id'))
+    const tagId = parseInt(requireParam(c, 'tagId'))
     
     if (isNaN(id) || isNaN(tagId)) {
       return c.json({ error: 'Invalid container ID or tag ID' }, 400)

@@ -20,6 +20,7 @@ import { validatePage, validateLimit } from '../lib/constants'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from '../lib/error-handler'
 import { createAuthMiddleware, createMemberMiddleware, createAdminMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
+import { requireParam } from '../lib/common-validators'
 
 /** Short code prefix for tutorial namespace. Any study whose short code starts with this (case-insensitive) may be deleted by any authenticated user. */
 const TUTORIAL_SHORT_CODE_PREFIX = 'TUT'
@@ -243,7 +244,7 @@ studies.get('/summaries', authMiddleware, async (c) => {
 // Get study by ID
 studies.get('/:id', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid study ID' }, 400)
@@ -268,7 +269,7 @@ studies.get('/:id', authMiddleware, async (c) => {
 // Get subjects for a study
 studies.get('/:id/subjects', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid study ID' }, 400)
@@ -367,7 +368,7 @@ studies.get('/:id/subjects', authMiddleware, async (c) => {
 // Get study summary
 studies.get('/:id/summary', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid study ID' }, 400)
@@ -609,7 +610,7 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
 // Get study timeline data
 studies.get('/:id/timeline', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid study ID' }, 400)
@@ -766,7 +767,7 @@ studies.post('/', memberMiddleware, async (c) => {
 // Update study
 studies.put('/:id', memberMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid study ID' }, 400)
@@ -844,7 +845,7 @@ studies.put('/:id', memberMiddleware, async (c) => {
 // Delete study and all dependent data (cascade). Tutorial studies (short code in TUT* namespace) may be deleted by any user; others require admin.
 studies.delete('/:id', authMiddleware, async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
       return c.json({ error: 'Invalid study ID' }, 400)
     }
