@@ -11,10 +11,15 @@ SampleDB can be deployed using Docker or fly.io. Backups are **external** to the
 
 ### Build and run
 
+The repo `docker-compose.yml` pins a published image on `ghcr.io` (see the `image:` lines for the current tag). Run `docker compose pull` before starting, or `docker compose up` will fetch the image. If the org’s GHCR package is private, `docker login ghcr.io` first with a token that includes `read:packages`.
+
+To build the image from source instead, add a `docker-compose.override.yml` (or a separate compose file) that sets `build: .` and removes the `image:` for the `sampledb` and `demo-seed` services, then run the same commands below.
+
 Optional: copy `.env.example` from the repo root to `.env` and adjust variables; `docker compose` reads `.env` automatically.
 
 ```bash
 cp .env.example .env   # optional
+docker compose pull
 docker compose up -d
 ```
 
