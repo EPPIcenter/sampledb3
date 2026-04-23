@@ -2,18 +2,17 @@ name: Cleanup Old Container Versions
 
 # Prunes orphaned/untagged GHCR image versions on a weekly schedule.
 #
-# What this safely deletes:
-#   - Untagged image versions (typically per-arch manifests left over after
-#     a multi-arch manifest list is replaced, or builds that never got a tag).
+# Nightly: only the tag `nightly` is published. Each new `main` build moves that
+# tag to a new digest; the previous build usually becomes *untagged* and is a
+# candidate for removal here, so you do not accumulate a history of nightly
+# images. Semver, `latest`, and release `sha-*` always stay tagged and are not
+# deleted by this job (only untagged package versions are selected).
 #
-# What this never touches:
-#   - Versions tagged with `latest`, `vX.Y.Z`, `X.Y`, `X`, or `sha-*`
-#     (anything tagged stays put).
+# This job deletes: untagged package versions, subject to
+# `min-versions-to-keep`. It never deletes a version that still has a tag.
 #
-# To also prune old `sha-*` tagged versions, switch
-# `delete-only-untagged-versions` to 'false' and bump
-# `min-versions-to-keep` to a value you're comfortable with (oldest tagged
-# versions beyond that count will be deleted).
+# To also prune *tagged* old versions, change package settings or a different
+# process; this action is untagged-only by design.
 
 on:
   schedule:

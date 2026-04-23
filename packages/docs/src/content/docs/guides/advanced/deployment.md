@@ -13,6 +13,8 @@ SampleDB can be deployed using Docker or fly.io. Backups are **external** to the
 
 The repo `docker-compose.yml` pins a published image on `ghcr.io` (see the `image:` lines for the current tag). Run `docker compose pull` before starting, or `docker compose up` will fetch the image. If the org’s GHCR package is private, `docker login ghcr.io` first with a token that includes `read:packages`.
 
+**Bleeding edge (pre-release):** Every push to the default branch **rebuilds and moves** a single `nightly` tag in GHCR—there is no long-lived per-commit name for `main` builds, so the registry does not keep a full history of nightlies (old digests become **untagged** and are pruned in the background on a schedule). For **stable** production deploys, use a **versioned** image from a GitHub release (semver tags, `latest`, and release `sha-*` are all retained). Set `image:` to e.g. `ghcr.io/<org>/<repo>:nightly` to always pull the current `main` build, or a semver tag to pin a release.
+
 To build the image from source instead, add a `docker-compose.override.yml` (or a separate compose file) that sets `build: .` and removes the `image:` for the `sampledb` and `demo-seed` services, then run the same commands below.
 
 Optional: copy `.env.example` from the repo root to `.env` and adjust variables; `docker compose` reads `.env` automatically.

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # SampleDB - Multi-stage build
 # Stage 1: Dependencies
 FROM oven/bun:1-alpine AS deps
@@ -14,7 +15,9 @@ COPY packages/e2e/package.json packages/e2e/
 # --ignore-scripts skips postinstalls (e.g. @playwright/test in the e2e
 # workspace tries to download browsers, which fails on alpine and isn't
 # needed for the api/web/docs build).
-RUN bun install --frozen-lockfile --ignore-scripts
+# Cache the Bun install cache so dependency-only changes reuse downloads across builds.
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile --ignore-scripts
 
 # Stage 2: Build
 FROM oven/bun:1-alpine AS build
@@ -24,7 +27,8 @@ COPY --from=deps /app/packages/api/node_modules ./packages/api/node_modules
 COPY --from=deps /app/packages/web/node_modules ./packages/web/node_modules
 COPY --from=deps /app/packages/docs/node_modules ./packages/docs/node_modules
 COPY . .
-RUN bun run build:api && bun run build:web && bun run build:docs
+# `bun run build` runs workspace builds in parallel (e2e has no `build` script); faster wall-clock than a chained `&&` sequence.
+RUN bun run build
 
 # Stage 3: Runtime
 FROM oven/bun:1-alpine AS runtime

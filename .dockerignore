@@ -4,6 +4,7 @@ packages/e2e/*
 !packages/e2e/package.json
 *.sqlite
 .git
+.github
 .gitignore
 .env*
 design
@@ -11,3 +12,7 @@ examples
 shareholder-overview
 *.md
 !README.md
+**/coverage
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
