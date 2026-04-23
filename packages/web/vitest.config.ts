@@ -2,6 +2,8 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+const appBuildId = process.env.VITE_APP_BUILD_ID || process.env.APP_BUILD_ID || 'local-dev'
+
 /**
  * Vitest Configuration
  * 
@@ -18,6 +20,9 @@ import path from 'path'
  * See: packages/web/src/__tests__/README.md for more details
  */
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_APP_BUILD_ID': JSON.stringify(appBuildId),
+  },
   plugins: [react()],
   test: {
     globals: true,

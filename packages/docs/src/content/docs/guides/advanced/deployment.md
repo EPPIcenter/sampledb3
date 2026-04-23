@@ -41,8 +41,11 @@ The API serves the frontend and uses SPA fallback: reloading or opening subpages
 | `ERROR_LOG_LEVEL` | `error` | Minimum level: `info`, `warning`, `error`. |
 | `ERROR_LOG_RETENTION_DAYS` | — | Days to retain error logs before cleanup. |
 | `OPENAPI_ENABLED` | `false` (in prod) | Set to `true` to expose OpenAPI docs at `/api/docs` in production. |
+| `APP_BUILD_ID` | `dev` (in the official image) | Identifies a deployment for the **web** bundle and the API. CI images set this to the Git commit SHA. The SPA compares this value to `GET /api/app-version` to show a **refresh** banner if the user’s tab is behind the server. Override in compose if you build the image with a custom tag. |
 
 The database lives at `$HOST_DATA_DIR/sampledb.sqlite` on the host, so your backup script can read it directly when run from cron or systemd.
+
+**After deploys:** the browser UI is notified when a new build is on the server via `GET /api/app-version` (and `X-App-Build-Id`). Long‑lived tabs re-check on a timer and when the tab is focused, so users are prompted to refresh instead of running an old client against a new API. Local development uses a default `local-dev` id so the banner does not appear during `vite` dev.
 
 For existing databases created before the error-logging feature, the `error_logs` table is created automatically on startup when missing. No manual migration is needed.
 

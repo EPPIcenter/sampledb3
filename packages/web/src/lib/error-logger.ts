@@ -20,11 +20,9 @@ let queueTimeout: ReturnType<typeof setTimeout> | null = null
 function getApiBaseUrl(): string {
   // In production, use relative URL
   // In development, use the API server URL
-  // @ts-expect-error - import.meta.env is provided by Vite
   if (import.meta.env.PROD) {
     return '/api'
   }
-  // @ts-expect-error - import.meta.env is provided by Vite
   return import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 }
 

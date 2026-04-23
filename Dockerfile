@@ -20,7 +20,11 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --frozen-lockfile --ignore-scripts
 
 # Stage 2: Build
+# APP_BUILD_ID is baked into the web bundle (VITE_*) and read at API runtime; pass via --build-arg in CI.
 FROM oven/bun:1-alpine AS build
+ARG APP_BUILD_ID=dev
+ENV APP_BUILD_ID=$APP_BUILD_ID
+ENV VITE_APP_BUILD_ID=$APP_BUILD_ID
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/api/node_modules ./packages/api/node_modules
@@ -30,8 +34,10 @@ COPY . .
 # `bun run build` runs workspace builds in parallel (e2e has no `build` script); faster wall-clock than a chained `&&` sequence.
 RUN bun run build
 
-# Stage 3: Runtime
+# Stage 3: Runtime (re-declare APP_BUILD_ID so the final image has the same id as the embedded web bundle)
 FROM oven/bun:1-alpine AS runtime
+ARG APP_BUILD_ID=dev
+ENV APP_BUILD_ID=$APP_BUILD_ID
 RUN apk add --no-cache sqlite
 
 WORKDIR /app

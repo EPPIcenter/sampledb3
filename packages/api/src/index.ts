@@ -39,12 +39,26 @@ import { createErrorLogsRoutes } from './routes/error-logs'
 import { createDataAuditRoutes } from './routes/data-audit'
 import { createQpcrExperimentsRoutes } from './routes/qpcr-experiments'
 import { handleRouteError } from './lib/error-handler'
+import { getAppBuildId } from './lib/app-build-id'
+import type { Context } from 'hono'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 // Create database instance
 const { db, sqlite } = createDatabase()
+
+/** long-lived hashed bundles vs HTML vs other static (favicon, etc.) */
+function setStaticCachePolicy(filePath: string, c: Context): void {
+  const p = filePath.replace(/\\/g, '/')
+  if (p.includes('/assets/') || p.includes('/_astro/')) {
+    c.header('Cache-Control', 'public, max-age=31536000, immutable')
+  } else if (p.endsWith('.html') || p.endsWith('index.html')) {
+    c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  } else {
+    c.header('Cache-Control', 'public, max-age=3600')
+  }
+}
 
 const app = new Hono()
 
@@ -71,12 +85,14 @@ app.get('/health', async (c) => {
     timestamp: string
     uptime: number
     database: { status: 'ok' | 'error'; latency?: number }
+    buildId: string
     version: string
   } = {
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     database: { status: 'ok' },
+    buildId: getAppBuildId(),
     version: '1.0.0',
   }
 
@@ -104,7 +120,14 @@ app.get('/health', async (c) => {
 
 // API routes
 app.get('/api', (c) => {
-  return c.json({ message: 'SampleDB API', version: '1.0.0' })
+  return c.json({ message: 'SampleDB API', version: '1.0.0', buildId: getAppBuildId() })
+})
+
+// Same-origin JSON for SPA "new build available" detection (not cached; compare to import.meta.env.VITE_APP_BUILD_ID in web)
+app.get('/api/app-version', (c) => {
+  c.header('Cache-Control', 'no-store, must-revalidate')
+  c.header('X-App-Build-Id', getAppBuildId())
+  return c.json({ buildId: getAppBuildId() })
 })
 
 // OpenAPI documentation - disabled in production unless OPENAPI_ENABLED=true
@@ -180,8 +203,14 @@ if (process.env.NODE_ENV === 'production') {
     }
     return sub
   }
-  app.use('/docs', serveStatic({ root: docsStaticPath, rewriteRequestPath: docsRewrite, onNotFound: () => {} }))
-  app.use('/docs/*', serveStatic({ root: docsStaticPath, rewriteRequestPath: docsRewrite, onNotFound: () => {} }))
+  const docsStaticOpts = {
+    root: docsStaticPath,
+    rewriteRequestPath: docsRewrite,
+    onNotFound: () => {},
+    onFound: (path: string, c: Context) => setStaticCachePolicy(path, c),
+  }
+  app.use('/docs', serveStatic(docsStaticOpts))
+  app.use('/docs/*', serveStatic(docsStaticOpts))
 
   // Serve any file that exists in web dist (assets/, favicon, icons, etc.); onNotFound falls through
   // rewriteRequestPath: strip leading slash so path.join doesn't treat it as absolute
@@ -191,11 +220,13 @@ if (process.env.NODE_ENV === 'production') {
       root: webStaticPath,
       rewriteRequestPath: (p) => (p.startsWith('/') ? p.slice(1) : p),
       onNotFound: () => {},
+      onFound: (path, c) => setStaticCachePolicy(path, c),
     }),
   )
   // SPA fallback: serve index.html when no static file found so React Router handles routing on reload
   app.get('*', async (c) => {
     const html = await readFile(join(webStaticPath, 'index.html'), 'utf-8')
+    c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
     return c.html(html)
   })
 }

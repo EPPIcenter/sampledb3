@@ -68,6 +68,7 @@ import { useClickOutside } from './hooks/useClickOutside'
 import HotkeyHelpModal from './components/HotkeyHelpModal'
 import CommandPalette from './components/CommandPalette'
 import SearchModal from './components/SearchModal'
+import { BuildVersionBanner } from './components/BuildVersionBanner'
 import { ToastContainer } from './components/Toast'
 import { useHotkey, useModifierHotkey, useModifierShiftHotkey } from './hooks/useHotkey'
 import { useBrowserShortcutBlocker } from './hooks/useBrowserShortcutBlocker'
@@ -587,6 +588,7 @@ function App() {
         <ThemeProvider>
           <UserProvider>
             <BrowserRouter>
+              <BuildVersionBanner />
               <AppContent />
             </BrowserRouter>
           </UserProvider>
