@@ -96,6 +96,20 @@ export function handleRouteError(error: unknown, c: Context): Response {
         errorCode: 'CONFLICT'
       }, 409)
     }
+
+    if (error instanceof CollectionDeleteBlockedError) {
+      logError(database, 'backend', 'warning', error.message, error, errorContext).catch((logErr) => {
+        console.error('[ERROR_HANDLER] Failed to log error:', logErr)
+      })
+      return c.json(
+        {
+          error: error.summary,
+          errorCode: 'CONFLICT',
+          blockers: error.blockers,
+        },
+        409
+      )
+    }
     
     if (error instanceof ValidationError) {
       // Log error asynchronously (non-blocking)
@@ -152,6 +166,37 @@ export class ConflictError extends Error {
     this.name = 'ConflictError'
   }
 }
+
+/** 409 for bulk collection delete preflight: client must read `summary` and `blockers` */
+export class CollectionDeleteBlockedError extends Error {
+  constructor(
+    public readonly summary: string,
+    public readonly blockers: readonly CollectionDeleteBlocker[]
+  ) {
+    super(summary)
+    this.name = 'CollectionDeleteBlockedError'
+  }
+}
+
+export type CollectionDeleteBlocker = {
+  code: CollectionDeleteBlockerCode
+  message: string
+} & {
+  qpcrExperimentId?: number
+  qpcrWellId?: number
+  wellPosition?: string
+  storageContainerId?: number
+  specimenId?: number
+  containerDerivationId?: number
+  inCollectionContainerId?: number
+  outsideContainerId?: number
+  outsideRole?: 'parent' | 'child'
+}
+
+export type CollectionDeleteBlockerCode =
+  | 'qpcr_wells_link_storage_containers'
+  | 'qpcr_wells_link_specimens'
+  | 'container_derivation_spans_outside_collection'
 
 export class ValidationError extends Error {
   constructor(message: string, public details?: any) {

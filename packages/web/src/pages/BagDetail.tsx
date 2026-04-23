@@ -12,6 +12,7 @@ import {
   type CollectionTableEntry,
 } from '../lib/collection-table-columns'
 import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
+import CollectionDeleteDialog from '../components/CollectionDeleteDialog'
 import '../styles/storage.css'
 
 export default function BagDetail() {
@@ -20,6 +21,7 @@ export default function BagDetail() {
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'sheets' | 'table'>('sheets')
+  const [showDeleteCollection, setShowDeleteCollection] = useState(false)
   const [expandedSheets, setExpandedSheets] = useState<Set<number>>(new Set())
   const initializedSheets = useRef(false)
   const {
@@ -152,10 +154,21 @@ export default function BagDetail() {
     <div className="storage-page">
       <div className="container mx-auto px-4 py-8 relative z-10">
       <div className="mb-4 storage-reveal storage-reveal-1">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
         <EntityBreadcrumbs items={breadcrumbItems} />
         <h1 className="text-2xl font-bold">
           Bag {bag.name}
         </h1>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowDeleteCollection(true)}
+            className="shrink-0 px-3 py-1.5 text-sm rounded border text-app-trend-down border-app-trend-down/50 hover:bg-app-trend-down/10"
+          >
+            Delete collection…
+          </button>
+        </div>
         {bag.locationPath && (
           <p className="mt-1 text-xs font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>{bag.locationPath}</p>
         )}
@@ -320,6 +333,15 @@ export default function BagDetail() {
         })}
       </div>
       </div>
+      <CollectionDeleteDialog
+        isOpen={showDeleteCollection}
+        onClose={() => setShowDeleteCollection(false)}
+        collectionType="bag"
+        id={parseInt(id || '0', 10)}
+        collectionName={String(bag.name)}
+        kindLabel="Bag"
+        onDeleted={() => navigate('/collections')}
+      />
     </div>
   )
 }

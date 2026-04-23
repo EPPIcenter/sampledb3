@@ -1,19 +1,10 @@
 services:
-  demo-seed:
+  sampledb3:
     image: ghcr.io/eppicenter/sampledb3:1.0.0
-    container_name: sampledb-demo-seed
-    profiles: ["demo-seed"]
-    entrypoint: ["sh", "-c", "cd /app/packages/api && bun dist/lib/demo-seed.js"]
-    environment:
-      DATABASE_PATH: ${DATABASE_PATH:-/data/sampledb.sqlite}
-    volumes:
-      - ${HOST_DATA_DIR:-./data}:/data
-
-  sampledb:
-    image: ghcr.io/eppicenter/sampledb3:1.0.0
-    container_name: sampledb
+    container_name: sampledb3
+    restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      - "127.0.0.1:${PORT:-3000}:3000"
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: 3000
@@ -24,4 +15,14 @@ services:
       ERROR_LOG_RETENTION_DAYS: ${ERROR_LOG_RETENTION_DAYS:-}
     volumes:
       - ${HOST_DATA_DIR:-./data}:/data
-
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:3000/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

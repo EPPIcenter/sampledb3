@@ -115,6 +115,31 @@ Sheet detail pages show information about a specific sheet and list all the pape
 
 On each of these collection detail pages (plates, cryovial boxes, boxes, bags, and sheets), you can switch to a **Table** view that lists every position or item in a tabular format. Use the **Export CSV** button in the table view to download the current list as a CSV file for use in spreadsheets or other tools.
 
+On **plates, cryovial boxes, general boxes, and bags** (not the sheet-only page), you can use **Delete collection** when you need to remove an entire collection at once. This is intended for fixing a bad import or starting over on a single plate or box, before those containers have been tied into the rest of your work.
+
+## Deleting a collection (entire import rollback)
+
+From a collection detail page for a Micronix plate, cryovial box, box, or bag, open **Delete collection** to remove:
+
+- The collection record itself
+- **Every** container in that collection (tubes, wells, papers, etc.)
+- **Specimen** records that would have **no** storage left after the operation (if a specimen still has another container somewhere else, that specimen is **kept**)
+- Optionally, with the **Also remove study participants (subjects) that have no specimens left** checkbox, **study subjects** who would end up with no specimens (control batches are never removed automatically this way; only subject-linked data)
+
+You must type the **exact** collection name to confirm. The operation is **all or nothing**: it either completes fully, or the system makes **no** changes (see below if something blocks it).
+
+### When deletion is blocked (and support codes)
+
+The system refuses to delete a collection if it would break existing links. You will see a short message plus a list of specific reasons, each with a support **code** you can share or search for in this documentation:
+
+| Code | What it means | What to do next |
+|------|---------------|-----------------|
+| `qpcr_wells_link_storage_containers` | A physical container in this collection is still assigned on a [qPCR](/docs/guides/features/qpcr-experiments/) experiment well. | In the qPCR workflow, remove that container (or the well’s assignment) from the relevant experiment, then try again. |
+| `qpcr_wells_link_specimens` | A specimen you are about to remove is still linked on a qPCR well. | Clear the specimen (or the well) on the qPCR side, then try again. |
+| `container_derivation_spans_outside_collection` | A [derivation](/docs/guides/features/derivations/)’s **parent** container is in this collection, but the **child** (derived) container is stored in another collection. Deleting the parent would leave a dangling downstream reference. | Before deleting: move or remove the child, or reassign the derivation, so the parent in this collection is not required for that child. **Note:** Deleting a collection that only contains **child** side(s) of derivations (while the parent lives in another box/plate) is **allowed**—removing a derived aliquot does not break the chain above it. |
+
+If a future product version adds new checks, they will appear with new codes in the same list in the app response. Nothing is partially deleted when you see these errors; fix the listed items and submit again.
+
 ## Moving Containers Between Collections
 
 As your laboratory work progresses, you may need to reorganize containers by moving them from one collection to another. This might happen when you're consolidating samples, reorganizing storage, or moving containers to new locations. The system provides tools for moving containers, which are covered in detail in the [Container Movement Guide](/docs/guides/bulk-operations/container-movement/). These tools support moving individual containers or bulk moves using CSV files, depending on your needs.

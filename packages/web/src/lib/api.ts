@@ -1084,6 +1084,34 @@ export const collectionsApi = {
       '/collections/move',
       data
     ),
+  /** Remove a collection, all of its child containers, orphan specimens, and optionally empty study subjects. */
+  deleteWithContents: (data: {
+    collectionType: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+    id: number
+    removeEmptySubjects?: boolean
+  }) =>
+    api.post<{
+      containersDeleted: number
+      specimensDeleted: number
+      sheetsDeleted: number
+      collectionDeleted: true
+      subjectsDeleted: number
+    }>('/collections/delete-with-contents', data),
+}
+
+export type CollectionDeleteWithContentsBlocker = {
+  code: string
+  message: string
+} & {
+  qpcrExperimentId?: number
+  qpcrWellId?: number
+  wellPosition?: string
+  storageContainerId?: number
+  specimenId?: number
+  containerDerivationId?: number
+  inCollectionContainerId?: number
+  outsideContainerId?: number
+  outsideRole?: 'parent' | 'child'
 }
 
 export interface ExportFilters {

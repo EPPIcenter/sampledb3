@@ -28,6 +28,7 @@ import { resolveCollection, resolveCollectionByName, getCollectionLocation } fro
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
+import { deleteCollectionWithContents } from '../lib/collection-delete-cascade'
 import { utcNow } from '../lib/datetime'
 import { validatePlateScan, inferPlateOrGetReport } from '../lib/plate-scan-validation'
 import { requireParam } from '../lib/common-validators'
@@ -1299,6 +1300,27 @@ collections.post('/move', memberMiddleware, async (c) => {
     return handleRouteError(error, c)
   }
 })
+
+  const deleteWithContentsBody = z.object({
+    collectionType: z.enum(['micronix_plate', 'cryovial_box', 'box', 'bag']),
+    id: z.number().int().positive(),
+    removeEmptySubjects: z.boolean().optional().default(false),
+  })
+
+  collections.post('/delete-with-contents', memberMiddleware, async (c) => {
+    try {
+      const body = await c.req.json()
+      const parsed = deleteWithContentsBody.parse(body)
+      const result = await deleteCollectionWithContents(database, {
+        type: parsed.collectionType,
+        id: parsed.id,
+        removeEmptySubjects: parsed.removeEmptySubjects,
+      })
+      return c.json(result)
+    } catch (error) {
+      return handleRouteError(error, c)
+    }
+  })
 
   return collections
 }

@@ -14,6 +14,7 @@ import {
 } from '../lib/collection-table-columns'
 import { useTableViewConfigurations } from '../hooks/useTableViewConfigurations'
 import { Link } from 'react-router-dom'
+import CollectionDeleteDialog from '../components/CollectionDeleteDialog'
 import '../styles/storage.css'
 
 function statusColor(name: string): string {
@@ -32,6 +33,7 @@ export default function CryovialBoxDetail() {
   const [data, setData] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
+  const [showDeleteCollection, setShowDeleteCollection] = useState(false)
   const {
     configurations: viewConfigurations,
     selectedConfigId,
@@ -187,10 +189,21 @@ export default function CryovialBoxDetail() {
     <div className="storage-page">
       <div className="container mx-auto px-4 py-8 relative z-10">
       <div className="mb-6 storage-reveal storage-reveal-1">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
         <EntityBreadcrumbs items={breadcrumbItems} />
         <h1 className="text-3xl font-bold">
           Cryovial Box {box.name}
         </h1>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowDeleteCollection(true)}
+            className="shrink-0 px-3 py-1.5 text-sm rounded border text-app-trend-down border-app-trend-down/50 hover:bg-app-trend-down/10"
+          >
+            Delete collection…
+          </button>
+        </div>
         {box.barcode && (
           <p className="mt-1 text-sm font-mono" style={{ color: 'rgb(var(--app-text-muted))' }}>Barcode: {box.barcode}</p>
         )}
@@ -386,6 +399,15 @@ export default function CryovialBoxDetail() {
         </div>
       )}
       </div>
+      <CollectionDeleteDialog
+        isOpen={showDeleteCollection}
+        onClose={() => setShowDeleteCollection(false)}
+        collectionType="cryovial_box"
+        id={parseInt(id || '0', 10)}
+        collectionName={String(box.name)}
+        kindLabel="Cryovial box"
+        onDeleted={() => navigate('/collections')}
+      />
     </div>
   )
 }
