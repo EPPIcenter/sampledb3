@@ -7,6 +7,8 @@ import {
   getLocationChildren,
   getLocationAncestors,
   getLocationDescendants,
+  parseLocationPathSegments,
+  getLocationSearchHighlightQuery,
 } from '../location-tree'
 import type { Location } from '../api'
 
@@ -71,6 +73,119 @@ describe('location-tree', () => {
       expect(names).toContain('Shelf A')
       expect(names).toContain('Freezer')
       expect(names).toContain('Root')
+    })
+  })
+
+  describe('parseLocationPathSegments and path filter', () => {
+    it('returns null for single-segment (flat) queries', () => {
+      expect(parseLocationPathSegments('Soper')).toBeNull()
+      expect(parseLocationPathSegments('  a  ')).toBeNull()
+    })
+
+    it('splits on > and / and trims', () => {
+      expect(parseLocationPathSegments('Soper > 5 > A')).toEqual(['Soper', '5', 'A'])
+      expect(parseLocationPathSegments('Soper/5/A')).toEqual(['Soper', '5', 'A'])
+      expect(parseLocationPathSegments('Soper > 5/A')).toEqual(['Soper', '5', 'A'])
+    })
+
+    it('getLocationSearchHighlightQuery returns last path segment in path mode', () => {
+      expect(getLocationSearchHighlightQuery('X > Y > z')).toBe('z')
+      expect(getLocationSearchHighlightQuery('plain')).toBe('plain')
+    })
+
+    it('path mode narrows to a subtree: Soper > 5 > A', () => {
+      const locations: Location[] = [
+        mockLocation(1, 'Soper', null),
+        mockLocation(2, 'Shelf 5', 1),
+        mockLocation(3, 'A-01', 2),
+        mockLocation(4, 'A-02', 2),
+        mockLocation(5, 'Other', null),
+        mockLocation(6, 'A-99', 5),
+      ]
+      const tree = buildLocationTree(locations)
+      const filtered = filterLocationTree(tree, 'Soper > 5 > A')
+      const allLocs = Array.from(filtered.values()).flat()
+      const names = allLocs.map((l) => l.name)
+      expect(names).toEqual(expect.arrayContaining(['A-01', 'A-02', 'Shelf 5', 'Soper']))
+      expect(names).not.toContain('A-99')
+      expect(names).not.toContain('Other')
+    })
+
+    it('path with slashes matches the same as >', () => {
+      const locations: Location[] = [
+        mockLocation(1, 'Soper', null),
+        mockLocation(2, '5', 1),
+        mockLocation(3, 'A1', 2),
+      ]
+      const tree = buildLocationTree(locations)
+      const a = filterLocationTree(tree, 'Soper/5/A')
+      const b = filterLocationTree(tree, 'Soper > 5 > A')
+      const setA = new Set(Array.from(a.values()).flat().map((l) => l.id))
+      const setB = new Set(Array.from(b.values()).flat().map((l) => l.id))
+      expect(setA).toEqual(setB)
+    })
+
+    it('flat search "A" still can match in another branch; path "Soper > 5 > A" does not pull Other', () => {
+      const locations: Location[] = [
+        mockLocation(1, 'Soper', null),
+        mockLocation(2, '5', 1),
+        mockLocation(3, 'Axel', 2),
+        mockLocation(10, 'SoperB', null),
+        mockLocation(11, 'X', 10),
+        mockLocation(12, 'Afar', 11),
+      ]
+      const tree = buildLocationTree(locations)
+      const pathFiltered = filterLocationTree(tree, 'Soper > 5 > A')
+      const pathNames = Array.from(pathFiltered.values())
+        .flat()
+        .map((l) => l.name)
+      expect(pathNames).toContain('Axel')
+      expect(pathNames).not.toContain('Afar')
+
+      const flat = filterLocationTree(tree, 'A')
+      const flatNames = new Set(
+        Array.from(flat.values())
+          .flat()
+          .map((l) => l.name)
+      )
+      expect(flatNames.has('Axel') && flatNames.has('Afar')).toBe(true)
+    })
+
+    it('digit segment 5 does not match name 15 as a sibling', () => {
+      const locations: Location[] = [
+        mockLocation(1, 'Soper', null),
+        mockLocation(2, '5', 1),
+        mockLocation(3, '15', 1),
+        mockLocation(4, 'A01', 2),
+        mockLocation(5, 'A01', 3),
+      ]
+      const tree = buildLocationTree(locations)
+      const pathFiltered = filterLocationTree(tree, 'Soper > 5 > A01')
+      const names = new Set(
+        Array.from(pathFiltered.values())
+          .flat()
+          .map((l) => l.name)
+      )
+      expect(names).toContain('5')
+      expect(names).toContain('A01')
+      expect(names.has('15')).toBe(false)
+    })
+
+    it('path with only two levels includes full subtree under the last match', () => {
+      const locations: Location[] = [
+        mockLocation(1, 'Soper', null),
+        mockLocation(2, '5', 1),
+        mockLocation(3, 'A01', 2),
+        mockLocation(4, 'Deep-child', 3),
+      ]
+      const tree = buildLocationTree(locations)
+      const filtered = filterLocationTree(tree, 'Soper > 5')
+      const names = new Set(
+        Array.from(filtered.values())
+          .flat()
+          .map((l) => l.name)
+      )
+      expect([...names].sort()).toEqual(['5', 'A01', 'Deep-child', 'Soper'].sort())
     })
   })
 

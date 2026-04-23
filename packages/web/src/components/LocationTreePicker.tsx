@@ -1,6 +1,13 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { locationsApi, type Location } from '../lib/api'
-import { buildLocationTree, filterLocationTree, getLocationLabel, getRootLocations, getLocationChildren, getLocationAncestors } from '../lib/location-tree'
+import {
+  buildLocationTree,
+  filterLocationTree,
+  getLocationLabel,
+  getLocationSearchHighlightQuery,
+  getRootLocations,
+  getLocationAncestors,
+} from '../lib/location-tree'
 import ModalPortal from './ModalPortal'
 
 export interface LocationSelection {
@@ -88,6 +95,10 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
     () => (search.trim() ? filterLocationTree(tree, search) : tree),
     [tree, search]
   )
+  const highlightQuery = useMemo(
+    () => (search.trim() ? getLocationSearchHighlightQuery(search) : ''),
+    [search]
+  )
 
   // Auto-expand when selected, search, or locations change (adjust during render)
   const selectedKey = selected.map((s) => s.locationId).sort().join(',')
@@ -156,10 +167,11 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
     })
   }, [])
 
-  // Highlight search term in text
+  // Highlight search term in text (escape for regex; query is last path segment in path search)
   const highlightText = useCallback((text: string, searchTerm: string) => {
     if (!searchTerm.trim()) return text
-    const parts = text.split(new RegExp(`(${searchTerm})`, 'gi'))
+    const safe = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const parts = text.split(new RegExp(`(${safe})`, 'gi'))
     return parts.map((part, i) =>
       part.toLowerCase() === searchTerm.toLowerCase() ? (
         <mark key={i} className="rounded px-0.5 bg-app-accent-muted text-app-accent-on-tint">
@@ -172,7 +184,9 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
   }, [])
 
   const renderLocationNode = useCallback((loc: Location, depth: number = 0): React.ReactNode => {
-    const children = locationChildrenMap.get(loc.id) || []
+    const children = search.trim()
+      ? Array.from(filteredTree.get(loc.id) || [])
+      : locationChildrenMap.get(loc.id) || []
     const hasChildren = children.length > 0
     const isExpanded = expandedIds.has(loc.id)
     const locSelected = isSelected(loc.id)
@@ -219,11 +233,11 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`font-medium ${locSelected ? 'text-app-accent-hover' : canContainCollections ? 'text-app-text' : 'text-app-text-muted'}`}>
-                    {search.trim() ? highlightText(locationLabel, search) : locationLabel}
+                    {search.trim() ? highlightText(locationLabel, highlightQuery) : locationLabel}
                   </span>
                   {loc.path && loc.path !== loc.name && (
                     <span className={`text-xs font-mono truncate ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
-                      {search.trim() ? highlightText(loc.path, search) : loc.path}
+                      {search.trim() ? highlightText(loc.path, highlightQuery) : loc.path}
                     </span>
                   )}
                   {(loc.effectiveStorageTypeName || loc.storageTypeName) && (
@@ -242,7 +256,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
                 </div>
                 {loc.description && (
                   <div className={`text-xs mt-0.5 truncate ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
-                    {search.trim() ? highlightText(loc.description, search) : loc.description}
+                    {search.trim() ? highlightText(loc.description, highlightQuery) : loc.description}
                   </div>
                 )}
               </div>
@@ -253,11 +267,11 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`font-medium ${locSelected ? 'text-app-accent-hover' : canContainCollections ? 'text-app-text' : 'text-app-text-muted'}`}>
-                    {search.trim() ? highlightText(locationLabel, search) : locationLabel}
+                    {search.trim() ? highlightText(locationLabel, highlightQuery) : locationLabel}
                   </span>
                   {loc.path && loc.path !== loc.name && (
                     <span className={`text-xs font-mono truncate ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
-                      {search.trim() ? highlightText(loc.path, search) : loc.path}
+                      {search.trim() ? highlightText(loc.path, highlightQuery) : loc.path}
                     </span>
                   )}
                   {(loc.effectiveStorageTypeName || loc.storageTypeName) && (
@@ -276,7 +290,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
                 </div>
                 {loc.description && (
                   <div className={`text-xs mt-0.5 truncate ${canContainCollections ? 'text-app-text-muted' : 'text-app-text-muted'}`}>
-                    {search.trim() ? highlightText(loc.description, search) : loc.description}
+                    {search.trim() ? highlightText(loc.description, highlightQuery) : loc.description}
                   </div>
                 )}
               </div>
@@ -306,7 +320,17 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
         )}
       </div>
     )
-  }, [expandedIds, isSelected, toggleSelection, toggleExpanded, locationChildrenMap, search, highlightText])
+  }, [
+    expandedIds,
+    isSelected,
+    toggleSelection,
+    toggleExpanded,
+    locationChildrenMap,
+    filteredTree,
+    search,
+    highlightQuery,
+    highlightText,
+  ])
 
   const renderTree = useCallback(() => {
     const rootLocations = getRootLocations(locations)
@@ -385,7 +409,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by name, path, or description…"
+                  placeholder="Name, path, or description, or a path: Bldg > floor > shelf (or Bldg/floor/shelf)"
                   className="w-full px-4 py-2 border border-app-border rounded-lg shadow-sm bg-app-card text-app-text focus:ring-2 focus:ring-app-accent focus:border-app-accent"
                   autoFocus
                 />

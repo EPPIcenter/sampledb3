@@ -73,6 +73,8 @@ For moving multiple collections at once, the system provides bulk movement tools
 
 The Locations page includes search functionality that helps you find locations quickly, even in large hierarchies. Simply type in the search box, and the system will find locations whose names or paths match your search term. The results show matching locations, and you can click any result to navigate directly to that location in the tree.
 
+In location **pickers** (e.g. wherever you open the “Select location” dialog), you can type a **path** with more than one level, separated by `>` or `/`, to narrow the tree to that branch. A two-part path (e.g. `Bldg > 5`) shows that branch and **everything under it**; add another segment to filter deeper (e.g. `Bldg > 5 > A` matches *A* as a name prefix on the next level). A segment that is **only digits** matches a whole “word” in the name—`5` matches `Shelf 5` or a location named `5`, but not `15`. A single search term without those separators still searches names, full paths, and descriptions as before.
+
 This search is particularly helpful when you know a location's name but aren't sure where it sits in the hierarchy, or when you're working with a very large location structure and need to jump to a specific place quickly.
 
 ## Designing Your Location Hierarchy

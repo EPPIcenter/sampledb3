@@ -310,7 +310,7 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name, path, or description…"
+                placeholder="Name, path, or description, or a path: Bldg > floor > shelf (or Bldg/floor/shelf)"
                 className="w-full form-input"
                 autoFocus
               />
