@@ -15,11 +15,20 @@ import {
 } from '../lib/bulk-import-validation'
 import { getCollectionNameColumn } from '../lib/container-columns'
 import { type ContainerType } from './ContainerRegistration'
+import {
+  buildBulkCombinedRequestPayload,
+  buildCollectionLocationMap,
+  buildSpecimensWithLocationIds,
+} from '../lib/bulk-import-payload'
+import {
+  formatBulkImportSuccessMessage,
+  type BulkImportCombinedSummary,
+} from '../lib/bulk-import-success-message'
 import LocationPicker from './LocationPicker'
 import '../styles/storage.css'
 
 export type ImportType = LibImportType
-type Step = 'upload' | 'collections' | 'review' | 'import'
+type Step = 'upload' | 'collections' | 'import'
 
 interface MissingCollection {
   name: string
@@ -39,7 +48,12 @@ export interface BulkImportFlowProps {
 
 export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkImportFlowProps) {
   const [searchParams, setSearchParams] = useSearchParams()
-  const currentStep = (searchParams.get('step') ?? 'upload') as Step
+  const currentStep: Step = (() => {
+    const s = searchParams.get('step') ?? 'upload'
+    if (s === 'review') return 'import' // legacy URL: review merged into import
+    if (s === 'upload' || s === 'collections' || s === 'import') return s
+    return 'upload'
+  })()
 
   const setCurrentStep = (step: Step) => {
     setSearchParams((prev) => {
@@ -56,6 +70,15 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     currentStep !== 'upload' && !file ? 'upload' : currentStep
 
   useEffect(() => {
+    if (searchParams.get('step') === 'review') {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('step', 'import')
+        return next
+      })
+    }
+  }, [searchParams, setSearchParams])
+  useEffect(() => {
     if (effectiveStep === 'upload' && currentStep !== 'upload') {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
@@ -69,15 +92,15 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
   const [validationErrors, setValidationErrors] = useState<BulkImportValidationError[]>([])
   const [importResult, setImportResult] = useState<{
     success: boolean
-    created: number
+    /** Subjects- or specimens-only; omitted when using combinedSummary. */
+    created?: number
     containersCreated?: number
+    combinedSummary?: BulkImportCombinedSummary
     errors?: Array<{ index: number; error: string }>
   } | null>(null)
   const [csvRows, setCsvRows] = useState<CSVRow[]>([])
   const [missingCollections, setMissingCollections] = useState<MissingCollection[]>([])
   const [validatedData, setValidatedData] = useState<Record<string, unknown>[]>([])
-  /** Editable copy of validated data for the review step; same shape as validatedData. */
-  const [reviewData, setReviewData] = useState<Record<string, unknown>[]>([])
   const [atomicMode, setAtomicMode] = useState<BulkCombinedAtomicMode>('full_file')
 
   const getCollectionType = () =>
@@ -91,49 +114,6 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
   const getSpecimenOptionalFields = (): string[] => {
     if (importType === 'specimens' || importType === 'combined') return ['collection_date']
     return []
-  }
-
-  /** Column config for the review step editable table: key, label, get value from row, set value on row. */
-  const getReviewColumns = (): Array<{ key: string; label: string; get: (row: Record<string, unknown>) => string; set: (row: Record<string, unknown>, value: string) => void }> => {
-    if (importType === 'subjects') {
-      const cols: Array<{ key: string; label: string; get: (row: Record<string, unknown>) => string; set: (row: Record<string, unknown>, value: string) => void }> = []
-      if (!fixedStudyShortCode) {
-        cols.push({
-          key: 'studyShortCode',
-          label: 'Study',
-          get: (r) => String(r.studyShortCode ?? ''),
-          set: (r, v) => { r.studyShortCode = v }
-        })
-      }
-      cols.push({ key: 'name', label: 'Subject name', get: (r) => String(r.name ?? ''), set: (r, v) => { r.name = v } })
-      return cols
-    }
-    const cols: Array<{ key: string; label: string; get: (row: Record<string, unknown>) => string; set: (row: Record<string, unknown>, value: string) => void }> = []
-    if (!fixedStudyShortCode) {
-      cols.push({
-        key: 'studyShortCode',
-        label: 'Study',
-        get: (r) => String(r.studyShortCode ?? ''),
-        set: (r, v) => { r.studyShortCode = v }
-      })
-    }
-    cols.push(
-      { key: 'subjectName', label: 'Subject', get: (r) => String(r.subjectName ?? ''), set: (r, v) => { r.subjectName = v } },
-      { key: 'specimenTypeName', label: 'Specimen type', get: (r) => String(r.specimenTypeName ?? ''), set: (r, v) => { r.specimenTypeName = v } },
-      { key: 'collectionDate', label: 'Collection date', get: (r) => String(r.collectionDate ?? ''), set: (r, v) => { r.collectionDate = v || undefined } }
-    )
-    if (containerType && containerType !== 'none') {
-      const containerLabel = containerType === 'paper' ? 'Bag/Collection' : containerType === 'cryovial_tube' ? 'Box' : 'Plate'
-      const getContainer = (r: Record<string, unknown>): Record<string, unknown> => (typeof r.container === 'object' && r.container !== null ? (r.container as Record<string, unknown>) : {})
-      cols.push(
-        { key: 'collectionName', label: containerLabel, get: (r) => String(getContainer(r).collectionName ?? ''), set: (r, v) => { const c = getContainer(r); r.container = { ...c, collectionName: v || undefined } } },
-        { key: 'barcode', label: 'Barcode', get: (r) => String(getContainer(r).barcode ?? ''), set: (r, v) => { const c = getContainer(r); r.container = { ...c, barcode: v || undefined } } },
-        { key: 'position', label: 'Position', get: (r) => String(getContainer(r).position ?? ''), set: (r, v) => { const c = getContainer(r); r.container = { ...c, position: v || undefined } } },
-        { key: 'label', label: 'Label', get: (r) => String(getContainer(r).label ?? ''), set: (r, v) => { const c = getContainer(r); r.container = { ...c, label: v || undefined } } },
-        { key: 'comment', label: 'Comment', get: (r) => String(getContainer(r).comment ?? ''), set: (r, v) => { const c = getContainer(r); r.container = { ...c, comment: v || undefined } } }
-      )
-    }
-    return cols
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -220,6 +200,50 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     a.download = filename
     a.click()
     window.URL.revokeObjectURL(url)
+  }
+
+  const runPreReviewServerValidation = async (
+    data: Record<string, unknown>[],
+    missing: MissingCollection[]
+  ): Promise<BulkImportValidationError[]> => {
+    if (importType === 'subjects') {
+      const validateRes = await subjectsApi.validateBulk({
+        subjects: data as Array<{ studyShortCode: string; name: string }>,
+      })
+      if (validateRes.data.valid || validateRes.data.errors.length === 0) {
+        return []
+      }
+      return validateRes.data.errors.map((e) => ({ row: e.index + 1, error: e.message }))
+    }
+    if (importType === 'specimens') {
+      const map = buildCollectionLocationMap(missing)
+      const specimensWithLocations = buildSpecimensWithLocationIds(data, map)
+      type SpecimenBulkItem = Parameters<typeof specimensApi.createBulk>[0]['specimens'][number]
+      const validateRes = await specimensApi.validateBulk({
+        specimens: specimensWithLocations as SpecimenBulkItem[],
+      })
+      if (validateRes.valid) {
+        return []
+      }
+      return validateRes.errors.map((e) => ({ row: e.index + 1, error: e.message }))
+    }
+    if (importType === 'combined') {
+      const payload = buildBulkCombinedRequestPayload(data, {
+        containerType,
+        fixedStudyShortCode,
+        missingCollections: missing,
+        atomicMode,
+      })
+      const validateRes = await importsApi.bulkCombinedValidate(payload)
+      if (validateRes.data.valid || validateRes.data.errors.length === 0) {
+        return []
+      }
+      return validateRes.data.errors.map((e) => ({
+        row: e.rowIndex ?? e.subjectIndex + 1,
+        error: e.message,
+      }))
+    }
+    return []
   }
 
   const checkCollections = async (rows: CSVRow[]): Promise<MissingCollection[]> => {
@@ -314,7 +338,6 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       }
 
       setValidatedData(validation.data)
-      setReviewData(validation.data.map((r) => ({ ...r, container: r.container ? { ...(r.container as object) } : undefined })))
 
       if (importType !== 'subjects' && containerType !== 'none') {
         const missing = await checkCollections(rows)
@@ -322,12 +345,19 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
         if (missing.length > 0) {
           setCurrentStep('collections')
-        } else {
-          setCurrentStep('review')
+          setLoading(false)
+          return
         }
-      } else {
-        setCurrentStep('review')
       }
+
+      const preErrors = await runPreReviewServerValidation(validation.data, [])
+      if (preErrors.length > 0) {
+        setValidationErrors(preErrors)
+        setLoading(false)
+        return
+      }
+
+      await handleImport(validation.data)
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Validation failed'
       setValidationErrors([{ row: 0, error: message }])
@@ -349,7 +379,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
     for (let i = 0; i < updated.length; i++) {
       const collection = updated[i]
-      if (collection.status === 'success' || !collection.locationId) continue
+      if (collection.status === 'success' || collection.locationId == null) continue
 
       updated[i].status = 'creating'
       setMissingCollections([...updated])
@@ -395,14 +425,20 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     setMissingCollections(updated)
 
     if (allSuccess && updated.every(c => c.status === 'success' || c.status === 'pending')) {
-      setReviewData(validatedData.map((r) => ({ ...r, container: r.container ? { ...(r.container as object) } : undefined })))
-      setCurrentStep('review')
+      const preErrors = await runPreReviewServerValidation(validatedData, updated)
+      if (preErrors.length > 0) {
+        setValidationErrors(preErrors)
+        setLoading(false)
+        return
+      }
+      await handleImport(validatedData)
     } else {
       setLoading(false)
     }
   }
 
   const handleImport = async (data: Record<string, unknown>[]) => {
+    setCurrentStep('import')
     setLoading(true)
     setImportResult(null)
     setValidationErrors([])
@@ -423,25 +459,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           errors: response.data.errors,
         })
       } else if (importType === 'specimens') {
-        const collectionLocationMap = new Map<string, number>()
-        for (const coll of missingCollections) {
-          if (coll.locationId && coll.name) collectionLocationMap.set(coll.name, coll.locationId)
-          if (coll.locationId && coll.barcode) collectionLocationMap.set(coll.barcode, coll.locationId)
-        }
-        const specimensWithLocations = data.map((spec: Record<string, unknown>) => {
-          if (!spec.container) return spec
-          const container = spec.container as Record<string, unknown>
-          const locationId = container.collectionName
-            ? collectionLocationMap.get(container.collectionName as string)
-            : container.collectionBarcode
-              ? collectionLocationMap.get(container.collectionBarcode as string)
-              : undefined
-          if (!locationId) return spec
-          return {
-            ...spec,
-            container: { ...container, collectionLocationId: locationId },
-          }
-        })
+        const collectionLocationMap = buildCollectionLocationMap(missingCollections)
+        const specimensWithLocations = buildSpecimensWithLocationIds(data, collectionLocationMap)
         type SpecimenBulkItem = Parameters<typeof specimensApi.createBulk>[0]['specimens'][number]
         const validateRes = await specimensApi.validateBulk({ specimens: specimensWithLocations as SpecimenBulkItem[] })
         if (!validateRes.valid && validateRes.errors.length > 0) {
@@ -458,86 +477,19 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           errors: response.errors,
         })
       } else {
-        const subjectMap = new Map<string, Record<string, unknown>[]>()
-        const collectionLocationMap = new Map<string, number>()
-        for (const coll of missingCollections) {
-          if (coll.locationId && coll.name) {
-            collectionLocationMap.set(coll.name, coll.locationId)
+        const { studyShortCode, atomicMode: am, createCollections, subjects } = buildBulkCombinedRequestPayload(
+          data,
+          {
+            containerType,
+            fixedStudyShortCode,
+            missingCollections,
+            atomicMode,
           }
-          if (coll.locationId && coll.barcode) {
-            collectionLocationMap.set(coll.barcode, coll.locationId)
-          }
-        }
-
-        for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
-          const spec = data[rowIndex]
-          const studyShortCode = (spec.studyShortCode as string | undefined) ?? fixedStudyShortCode ?? ''
-          const subjectName = spec.subjectName as string
-          const key = `${studyShortCode}:${subjectName}`
-          if (!subjectMap.has(key)) {
-            subjectMap.set(key, [])
-          }
-
-          let containerData = spec.container as Record<string, unknown> | undefined
-          if (containerData && containerData.collectionName) {
-            const locationId = collectionLocationMap.get(containerData.collectionName as string)
-            if (locationId) {
-              containerData = {
-                ...containerData,
-                collectionLocationId: locationId,
-              }
-            }
-          } else if (containerData && containerData.collectionBarcode) {
-            const locationId = collectionLocationMap.get(containerData.collectionBarcode as string)
-            if (locationId) {
-              containerData = {
-                ...containerData,
-                collectionLocationId: locationId,
-              }
-            }
-          }
-
-          subjectMap.get(key)!.push({
-            specimenTypeName: spec.specimenTypeName,
-            collectionDate: spec.collectionDate,
-            container: containerData,
-            rowIndex: rowIndex + 1,
-          })
-        }
-
-        const studyShortCode = fixedStudyShortCode ?? (data[0] ? (data[0].studyShortCode as string) : undefined) ?? ''
-        const subjects = Array.from(subjectMap.entries()).map(([key, specimens]) => {
-          const [, subjectName] = key.split(':')
-          return {
-            subjectName,
-            specimens: specimens.map((s) => ({
-              specimenTypeName: s.specimenTypeName as string,
-              collectionDate: s.collectionDate as string | undefined,
-              container: s.container as Parameters<typeof importsApi.bulkCombined>[0]['subjects'][0]['specimens'][0]['container'] | undefined,
-              rowIndex: (s as { rowIndex?: number }).rowIndex,
-            })),
-          }
-        })
-
-        const createCollections =
-          atomicMode === 'full_file' && missingCollections.some((c) => c.locationId)
-            ? missingCollections
-                .filter((c) => c.locationId != null)
-                .map((c) => {
-                  const name = c.name || (c.barcode ? `Collection-${c.barcode}` : `Collection-${Date.now()}`)
-                  const colType = getCollectionType()
-                  return {
-                    type: colType! as 'box' | 'bag' | 'micronix_plate' | 'cryovial_box',
-                    name,
-                    locationId: c.locationId!,
-                    barcode: c.barcode ?? c.collectionBarcode,
-                  }
-                })
-            : undefined
+        )
 
         const validateRes = await importsApi.bulkCombinedValidate({
           studyShortCode,
-          atomicMode,
+          atomicMode: am,
           createCollections,
           subjects,
         })
@@ -556,14 +508,13 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         try {
           const response = await importsApi.bulkCombined({
             studyShortCode,
-            atomicMode,
+            atomicMode: am,
             createCollections,
             subjects,
           })
-          const summary = response.data.summary
           setImportResult({
             success: !response.data.errors?.length,
-            created: summary.subjectsCreated + summary.specimensCreated + summary.containersCreated,
+            combinedSummary: response.data.summary,
             errors: response.data.errors,
           })
           setCurrentStep('import')
@@ -698,14 +649,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                 <span>Create Collections{missingCollections.length === 0 && effectiveStep === 'upload' ? ' (if needed)' : ''}</span>
               </div>
               <div className="storage-step-connector" />
-              <div className="storage-step-connector" />
-              <div className={`storage-step-item ${effectiveStep === 'review' ? 'storage-step-item--active' : ''}`}>
-                <span className="storage-step-item__circle">3</span>
-                <span>Review & Edit</span>
-              </div>
-              <div className="storage-step-connector" />
               <div className={`storage-step-item ${effectiveStep === 'import' ? 'storage-step-item--active' : ''}`}>
-                <span className="storage-step-item__circle">4</span>
+                <span className="storage-step-item__circle">3</span>
                 <span>Import</span>
               </div>
             </div>
@@ -916,6 +861,23 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                 </p>
               </div>
 
+              {validationErrors.length > 0 && (
+                <div className="bg-app-trend-down/10 border border-app-trend-down rounded p-4">
+                  <h3 className="font-semibold text-app-trend-down mb-2">Validation errors</h3>
+                  <p className="text-sm text-app-trend-down mb-2">
+                    Fix your CSV and run Validate & Continue again, or adjust the fields below, before continuing to import.
+                  </p>
+                  <ul className="list-disc list-inside text-app-trend-down space-y-1">
+                    {validationErrors.map((error, i) => (
+                      <li key={i}>
+                        {error.row > 0 ? `Row ${error.row}: ` : ''}
+                        {error.error}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="space-y-4">
                 {missingCollections.map((collection, index) => (
                   <div key={index} className="border rounded-lg p-4">
@@ -976,97 +938,51 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <button type="button" onClick={() => setCurrentStep('upload')} className="storage-btn-secondary">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setValidationErrors([])
+                    setCurrentStep('upload')
+                  }}
+                  className="storage-btn-secondary"
+                >
                   Back
                 </button>
                 {importType === 'combined' && atomicMode === 'full_file' ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      setReviewData(validatedData.map((r) => ({ ...r, container: r.container ? { ...(r.container as object) } : undefined })))
-                      setCurrentStep('review')
+                    onClick={async () => {
+                      setLoading(true)
+                      setValidationErrors([])
+                      try {
+                        const preErrors = await runPreReviewServerValidation(
+                          validatedData,
+                          missingCollections
+                        )
+                        if (preErrors.length > 0) {
+                          setValidationErrors(preErrors)
+                          return
+                        }
+                        await handleImport(validatedData)
+                      } finally {
+                        setLoading(false)
+                      }
                     }}
-                    disabled={loading || missingCollections.some((c) => !c.locationId)}
+                    disabled={loading || missingCollections.some((c) => c.locationId == null)}
                     className="storage-btn-primary py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   >
-                    Continue to Review
+                    {loading ? 'Validating...' : 'Continue to Import'}
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={handleCreateCollections}
-                    disabled={loading || missingCollections.some((c) => !c.locationId && c.status !== 'success')}
+                    disabled={loading || missingCollections.some((c) => c.locationId == null && c.status !== 'success')}
                     className="storage-btn-primary flex-1 py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   >
                     {loading ? 'Creating Collections...' : 'Create Collections & Continue'}
                   </button>
                 )}
-              </div>
-            </div>
-          )}
-
-          {effectiveStep === 'review' && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold mb-2 text-app-text">Review and edit data</h2>
-                <p className="text-sm text-app-text-muted mb-4">
-                  Edit any values below before importing. Changes are applied when you click Import.
-                </p>
-              </div>
-              <div className="overflow-x-auto border border-app-border rounded-lg">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-app-surface border-b border-app-border">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium text-app-text w-10">#</th>
-                      {getReviewColumns().map((col) => (
-                        <th key={col.key} className="px-3 py-2 text-left font-medium text-app-text">
-                          {col.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-app-border">
-                    {reviewData.map((row, rowIndex) => (
-                      <tr key={rowIndex} className="hover:bg-app-surface">
-                        <td className="px-3 py-1.5 text-app-text-muted">{rowIndex + 1}</td>
-                        {getReviewColumns().map((col) => (
-                          <td key={col.key} className="px-3 py-1.5">
-                            <input
-                              type="text"
-                              value={col.get(row)}
-                              onChange={(e) => {
-                                const value = e.target.value
-                                setReviewData((prev) => {
-                                  const next = prev.map((r, i) => (i === rowIndex ? { ...r, container: r.container ? { ...(r.container as object) } : undefined } : r))
-                                  const target = next[rowIndex]!
-                                  col.set(target, value)
-                                  return next
-                                })
-                              }}
-                              className="w-full px-2 py-1 border border-app-border rounded text-app-text bg-app-card focus:ring-1 focus:ring-app-accent focus:border-app-accent"
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <button type="button" onClick={() => setCurrentStep(missingCollections.length > 0 ? 'collections' : 'upload')} className="storage-btn-secondary">
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCurrentStep('import')
-                    handleImport(reviewData)
-                  }}
-                  disabled={loading}
-                  className="storage-btn-primary py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                >
-                  {loading ? 'Importing...' : 'Import'}
-                </button>
               </div>
             </div>
           )}
@@ -1099,11 +1015,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                     Import {importResult.success ? 'Successful' : 'Completed with Errors'}
                   </h3>
                   <p className={importResult.success ? 'text-app-trend-up' : 'text-yellow-700'}>
-                    {importResult.created === 0 && importResult.errors && importResult.errors.length > 0
-                      ? 'No items were created. Please fix the errors below and try again.'
-                      : importResult.containersCreated != null && importResult.containersCreated > 0
-                        ? `Created: ${importResult.created} ${importResult.created === 1 ? 'specimen' : 'specimens'} and ${importResult.containersCreated} ${importResult.containersCreated === 1 ? 'container' : 'containers'}`
-                        : `Created: ${importResult.created} ${importResult.created === 1 ? 'item' : 'items'}`}
+                    {formatBulkImportSuccessMessage(importResult, importType)}
                   </p>
                   {importResult.errors && importResult.errors.length > 0 && (
                     <div className="mt-2">
@@ -1142,7 +1054,6 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                     setCsvRows([])
                     setMissingCollections([])
                     setValidatedData([])
-                    setReviewData([])
                   }}
                   className="storage-btn-primary py-2 font-medium"
                 >

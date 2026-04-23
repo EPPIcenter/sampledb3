@@ -127,13 +127,48 @@ describe('bulk-import-validation', () => {
   })
 
   describe('getBulkImportRowCollectionName', () => {
-    it('returns plate_name value for micronix when present', () => {
-      const row = { plate_name: 'Plate1', collection_name: '' }
-      expect(getBulkImportRowCollectionName(row, 'micronix_tube')).toBe('Plate1')
+    it('returns plate_name for micronix_tube from type-specific column', () => {
+      expect(getBulkImportRowCollectionName({ plate_name: 'Plate1' }, 'micronix_tube')).toBe('Plate1')
     })
-    it('falls back to collection_name when plate_name empty', () => {
-      const row = { plate_name: '', collection_name: 'Col1' }
-      expect(getBulkImportRowCollectionName(row, 'micronix_tube')).toBe('Col1')
+    it('returns box_name for cryovial_tube', () => {
+      expect(
+        getBulkImportRowCollectionName({ box_name: 'BOX-1' }, 'cryovial_tube')
+      ).toBe('BOX-1')
+    })
+    it('returns undefined when type-specific column is empty', () => {
+      expect(getBulkImportRowCollectionName({ plate_name: '' }, 'micronix_tube')).toBeUndefined()
+    })
+    it('does not use collection_name; legacy column is ignored', () => {
+      expect(
+        getBulkImportRowCollectionName(
+          { collection_name: 'LegacyOnly' } as { [k: string]: string },
+          'micronix_tube'
+        )
+      ).toBeUndefined()
+    })
+  })
+
+  describe('validateBulkImportCSV optional container columns', () => {
+    it('validates cryovial_tube when barcode and comment headers are omitted', () => {
+      const rows = [
+        {
+          study_short_code: 'ST1',
+          subject_name: 'Subj1',
+          specimen_type_name: 'WB',
+          box_name: 'B1',
+          position: 'A01',
+        },
+      ] as { [key: string]: string }[]
+      const result = validateBulkImportCSV(rows, {
+        importType: 'specimens',
+        containerType: 'cryovial_tube',
+      })
+      expect(result.valid).toBe(true)
+      expect(result.data).toHaveLength(1)
+      const container = (result.data[0] as { container?: Record<string, unknown> }).container
+      expect(container?.collectionName).toBe('B1')
+      expect(container?.barcode).toBeUndefined()
+      expect(container?.comment).toBeUndefined()
     })
   })
 })

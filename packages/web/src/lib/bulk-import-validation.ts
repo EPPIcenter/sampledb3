@@ -75,6 +75,10 @@ export function getBulkImportOptionalFields(
   return optionalFields[containerType]
 }
 
+function trimCell(s: string | undefined): string {
+  return (s ?? '').trim()
+}
+
 function normalizeHeader(header: string): string {
   const lower = header.trim().toLowerCase()
   if (lower === 'well_position' || lower === 'well') return 'position'
@@ -100,17 +104,15 @@ export function parseBulkImportCSV(text: string): CSVRow[] {
   return rows
 }
 
-/** Get collection name/identifier from a CSV row for the given container type (used by checkCollections). */
+/** Get collection name/identifier from a CSV row (type-specific column only: plate_name, box_name, or bag_name). */
 export function getBulkImportRowCollectionName(
   row: CSVRow,
   containerType: ContainerType | 'none' | ''
 ): string | undefined {
   const column = getCollectionNameColumn(containerType)
-  const value = column ? row[column] : undefined
-  const collectionNameValue = row.collection_name
-  const v = value ? value.trim() : ''
-  const c = collectionNameValue.trim()
-  return v || c || undefined
+  if (!column) return undefined
+  const t = trimCell(row[column])
+  return t || undefined
 }
 
 function getRowCollectionName(
@@ -138,18 +140,7 @@ export function validateBulkImportCSV(
   }
 
   const headers = Object.keys(rows[0] as object)
-  const collectionNameColumn =
-    containerType && containerType !== 'none' ? getCollectionNameColumn(containerType) : null
-  const missingColumns = requiredFields.filter((col) => {
-    if (headers.includes(col)) return false
-    if (
-      collectionNameColumn &&
-      col === collectionNameColumn &&
-      headers.includes('collection_name')
-    )
-      return false
-    return true
-  })
+  const missingColumns = requiredFields.filter((col) => !headers.includes(col))
 
   if (missingColumns.length > 0) {
     return {
@@ -182,29 +173,21 @@ export function validateBulkImportCSV(
     const rowErrors: string[] = []
 
     for (const field of requiredFields) {
-      const value = row[field]
-      const hasCollectionName =
-        collectionNameColumn &&
-        field === collectionNameColumn &&
-        String((row as Record<string, unknown>).collection_name ?? '').trim() !== ''
-      if (
-        !hasCollectionName &&
-        (!value || (typeof value === 'string' && value.trim() === ''))
-      ) {
+      if (!trimCell(row[field])) {
         rowErrors.push(`Missing required field: ${field}`)
       }
     }
 
     if (containerType !== 'none' && containerType !== '') {
       if (containerType === 'micronix_tube') {
-        if (!row.barcode.trim()) rowErrors.push('Barcode is required for micronix tubes')
-        if (!row.position.trim()) rowErrors.push('Position is required for micronix tubes')
+        if (!trimCell(row.barcode)) rowErrors.push('Barcode is required for micronix tubes')
+        if (!trimCell(row.position)) rowErrors.push('Position is required for micronix tubes')
       } else if (containerType === 'cryovial_tube') {
-        if (!row.position.trim()) rowErrors.push('Position is required for cryovial tubes')
+        if (!trimCell(row.position)) rowErrors.push('Position is required for cryovial tubes')
       } else if (containerType === 'static_well') {
-        if (!row.position.trim()) rowErrors.push('Position is required for static wells')
+        if (!trimCell(row.position)) rowErrors.push('Position is required for static wells')
       } else {
-        if (!row.label.trim()) rowErrors.push('Label is required for papers')
+        if (!trimCell(row.label)) rowErrors.push('Label is required for papers')
       }
     }
 
@@ -228,11 +211,11 @@ export function validateBulkImportCSV(
           spec.container = {
             containerType,
             collectionName: getRowCollectionName(row, containerType),
-            collectionBarcode: row.collection_barcode.trim() ? row.collection_barcode : undefined,
-            barcode: row.barcode.trim() ? row.barcode : undefined,
-            position: row.position.trim() ? row.position : undefined,
-            label: row.label.trim() ? row.label : undefined,
-            comment: row.comment.trim() ? row.comment : undefined,
+            collectionBarcode: trimCell(row.collection_barcode) || undefined,
+            barcode: trimCell(row.barcode) || undefined,
+            position: trimCell(row.position) || undefined,
+            label: trimCell(row.label) || undefined,
+            comment: trimCell(row.comment) || undefined,
           }
         }
         data.push(spec)
