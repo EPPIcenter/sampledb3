@@ -8,6 +8,7 @@ import type { CollectionInfo } from '../types/collections'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
+import { resolveContainerByBarcode } from '../lib/identifier-resolution'
 
 /**
  * Create containers routes with database injection
@@ -337,39 +338,33 @@ containers.patch('/:id', memberMiddleware, async (c) => {
       remainingQuantity: z.number().optional(),
       unitId: z.number().int().optional(),
       tagIds: z.array(z.number().int()).optional(), // Replace tags
+      barcode: z.union([z.string(), z.null()]).optional(),
     })
     
     const data = schema.parse(body)
-    const { tagIds, unitId, ...restData } = data
+    const { tagIds, unitId, barcode: rawBarcode, ...restData } = data
     const updateData: { comment?: string; remainingQuantity?: number; unitId?: number } = { ...restData }
-    
+
+    const [container, micronixInfo, cryovialInfo, paperInfo, staticWellInfo] = await Promise.all([
+      database.select().from(storageContainer).where(eq(storageContainer.id, id)).get(),
+      database.select().from(micronixTube).where(eq(micronixTube.id, id)).get(),
+      database.select().from(cryovialTube).where(eq(cryovialTube.id, id)).get(),
+      database.select().from(paper).where(eq(paper.id, id)).get(),
+      database.select().from(staticWell).where(eq(staticWell.id, id)).get(),
+    ])
+
+    if (!container) {
+      return c.json({ error: 'Container not found' }, 404)
+    }
+
+    let containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well' | null = null
+    if (micronixInfo) containerType = 'micronix_tube'
+    else if (cryovialInfo) containerType = 'cryovial_tube'
+    else if (paperInfo) containerType = 'paper'
+    else if (staticWellInfo) containerType = 'static_well'
+
     // Validate unit if provided
     if (unitId !== undefined) {
-      // Get container to determine container type
-      const container = await database
-        .select()
-        .from(storageContainer)
-        .where(eq(storageContainer.id, id))
-        .get()
-      
-      if (!container) {
-        return c.json({ error: 'Container not found' }, 404)
-      }
-      
-      // Determine container type
-      const [micronixInfo, cryovialInfo, paperInfo, staticWellInfo] = await Promise.all([
-        database.select().from(micronixTube).where(eq(micronixTube.id, id)).get(),
-        database.select().from(cryovialTube).where(eq(cryovialTube.id, id)).get(),
-        database.select().from(paper).where(eq(paper.id, id)).get(),
-        database.select().from(staticWell).where(eq(staticWell.id, id)).get(),
-      ])
-      
-      let containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well' | null = null
-      if (micronixInfo) containerType = 'micronix_tube'
-      else if (cryovialInfo) containerType = 'cryovial_tube'
-      else if (paperInfo) containerType = 'paper'
-      else if (staticWellInfo) containerType = 'static_well'
-      
       if (containerType) {
         // Validate unit is allowed for container type
         const { validateUnitForContainerType } = await import('../lib/validation')
@@ -378,11 +373,43 @@ containers.patch('/:id', memberMiddleware, async (c) => {
           return c.json({ error: validation.error }, 400)
         }
       }
-      
+
       updateData.unitId = unitId
     }
-    
-    // Update container fields (excluding tagIds)
+
+    let newBarcode: string | null | undefined
+    if (rawBarcode !== undefined) {
+      if (containerType === 'static_well' || !containerType) {
+        return c.json({ error: 'Barcode cannot be set for this container type' }, 400)
+      }
+
+      if (containerType === 'micronix_tube') {
+        if (rawBarcode === null) {
+          return c.json({ error: 'Micronix tube barcode cannot be cleared' }, 400)
+        }
+        const trimmed = rawBarcode.trim()
+        if (trimmed.length === 0) {
+          return c.json({ error: 'Micronix tube barcode cannot be empty' }, 400)
+        }
+        newBarcode = trimmed
+      } else {
+        if (rawBarcode === null) {
+          newBarcode = null
+        } else {
+          const trimmed = rawBarcode.trim()
+          newBarcode = trimmed.length === 0 ? null : trimmed
+        }
+      }
+
+      if (newBarcode !== null && newBarcode !== undefined) {
+        const takenBy = await resolveContainerByBarcode(database, newBarcode)
+        if (takenBy !== null && takenBy !== id) {
+          return c.json({ error: `Barcode '${newBarcode}' is already in use` }, 400)
+        }
+      }
+    }
+
+    // Update container fields (excluding tagIds and barcode on subtype)
     const user = c.get('user')
     const [updated] = await database
       .update(storageContainer)
@@ -415,7 +442,17 @@ containers.patch('/:id', memberMiddleware, async (c) => {
         )
       }
     }
-    
+
+    if (rawBarcode !== undefined) {
+      if (containerType === 'micronix_tube' && newBarcode != null) {
+        await database.update(micronixTube).set({ barcode: newBarcode }).where(eq(micronixTube.id, id))
+      } else if (containerType === 'cryovial_tube' && newBarcode !== undefined) {
+        await database.update(cryovialTube).set({ barcode: newBarcode }).where(eq(cryovialTube.id, id))
+      } else if (containerType === 'paper' && newBarcode !== undefined) {
+        await database.update(paper).set({ barcode: newBarcode }).where(eq(paper.id, id))
+      }
+    }
+
     // Return enriched container
     const enriched = await enrichContainerDetailed(updated)
     return c.json({ container: enriched })

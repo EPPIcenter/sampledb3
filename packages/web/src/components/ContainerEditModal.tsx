@@ -13,11 +13,19 @@ interface ContainerEditModalProps {
     tags?: Array<{ id: number; name: string }>
     unit?: { id: number; symbol: string }
     containerType?: string
+    /** Subtype barcode; editable for micronix_tube, cryovial_tube, paper (not static_well) */
+    barcode?: string | null
   }
   onSuccess: () => void
 }
 
 type ContainerForEdit = ContainerEditModalProps['container']
+
+function canEditBarcode(containerType: string | undefined): boolean {
+  return (
+    containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'paper'
+  )
+}
 
 function ContainerEditModalForm({
   container,
@@ -41,6 +49,7 @@ function ContainerEditModalForm({
     remainingQuantity: container.remainingQuantity?.toString() || '',
     unitId: container.unit?.id || undefined,
     tagIds: container.tags?.map(t => t.id) || [],
+    barcode: container.barcode ?? '',
   })
 
   // Load tags and units when form mounts (key={container.id} resets form per container)
@@ -88,6 +97,7 @@ function ContainerEditModalForm({
         remainingQuantity?: number
         unitId?: number
         tagIds?: number[]
+        barcode?: string | null
       } = {}
 
       // Only include fields that have changed
@@ -124,6 +134,24 @@ function ContainerEditModalForm({
 
       if (tagsChanged) {
         updateData.tagIds = formData.tagIds
+      }
+
+      if (canEditBarcode(container.containerType)) {
+        const t = formData.barcode.trim()
+        const previous = (container.barcode && container.barcode.trim()) || null
+        if (container.containerType === 'micronix_tube') {
+          if (t.length === 0) {
+            throw new Error('Barcode is required for this container type')
+          }
+          if (t !== (container.barcode ?? '').trim()) {
+            updateData.barcode = t
+          }
+        } else {
+          const next = t.length > 0 ? t : null
+          if (next !== previous) {
+            updateData.barcode = next
+          }
+        }
       }
 
       // Only send request if there are changes
@@ -197,6 +225,28 @@ function ContainerEditModalForm({
             )}
 
             <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
+              {canEditBarcode(container.containerType) && (
+                <div>
+                  <label htmlFor="barcode" className="block text-sm font-medium text-app-text mb-1">
+                    Barcode
+                    {container.containerType === 'micronix_tube' && (
+                      <span className="text-app-trend-down text-xs font-normal ml-1">(required)</span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    id="barcode"
+                    value={formData.barcode}
+                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                    className="w-full px-3 py-2 border border-app-border rounded-md shadow-sm font-mono focus:ring-app-accent focus:border-app-accent"
+                    disabled={loading}
+                    autoComplete="off"
+                    placeholder="Scan or type barcode"
+                  />
+                  <p className="mt-1 text-xs text-app-text-muted">To change grid position, use Move containers in the app menu.</p>
+                </div>
+              )}
+
               {/* Unit */}
               {container.containerType && (
                 <div>

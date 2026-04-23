@@ -748,6 +748,7 @@ export default function ContainerDetail() {
             tags: container.tags,
             unit: container.unit,
             containerType: effectiveContainerType,
+            barcode: effectiveCollection?.barcode,
           }}
           onSuccess={() => {
             loadContainer()
