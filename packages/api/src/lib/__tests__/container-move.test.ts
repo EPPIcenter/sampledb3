@@ -207,6 +207,69 @@ describe('container-move', () => {
       expect(result.moved).toBe(0)
     })
 
+    it('swaps two micronix tubes on the same plate in one batch', async () => {
+      const storageType = await createTestStorageType(testDb, { name: 'FreezerSwap' })
+      const location = await createTestLocation(testDb, { name: 'LocSwap', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(testDb, { name: 'SwapPlate', locationId: location.id })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'BloodSwap' })
+      const specimenA = await createTestSpecimen(testDb, specimenType.id)
+      const specimenB = await createTestSpecimen(testDb, specimenType.id)
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const now = utcNow()
+
+      const [containerA] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: specimenA.id,
+          unitId: unit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+      const [containerB] = await testDb
+        .insert(storageContainer)
+        .values({
+          specimenId: specimenB.id,
+          unitId: unit.id,
+          totalQuantity: 1.0,
+          remainingQuantity: 1.0,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      await testDb.insert(micronixTube).values({
+        id: containerA!.id,
+        collectionId: plate.id,
+        barcode: 'MT-SWAP-A',
+        position: 'A01',
+      })
+      await testDb.insert(micronixTube).values({
+        id: containerB!.id,
+        collectionId: plate.id,
+        barcode: 'MT-SWAP-B',
+        position: 'A02',
+      })
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: 'SwapPlate', toCollectionName: 'SwapPlate' }],
+        moves: [
+          { identifier: { type: 'barcode', barcode: 'MT-SWAP-A' }, targetPosition: 'A02' },
+          { identifier: { type: 'barcode', barcode: 'MT-SWAP-B' }, targetPosition: 'A01' },
+        ],
+      })
+
+      expect(result.success).toBe(true)
+      expect(result.moved).toBe(2)
+
+      const atA01 = await resolveContainerByPosition(testDb, 'SwapPlate', 'micronix_plate', 'A01')
+      const atA02 = await resolveContainerByPosition(testDb, 'SwapPlate', 'micronix_plate', 'A02')
+      expect(atA01?.barcode).toBe('MT-SWAP-B')
+      expect(atA02?.barcode).toBe('MT-SWAP-A')
+    })
+
     it('moves micronix tube to new position within same plate', async () => {
       const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
       const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })

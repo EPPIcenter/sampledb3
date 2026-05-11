@@ -13,6 +13,13 @@ import {
 import { eq, and, isNull } from 'drizzle-orm'
 import { resolveCollection, type CollectionType } from './collection-resolution'
 
+/** Staging prefix for position updates so swaps on one plate do not violate UNIQUE(collection_id, position) mid-transaction. */
+const MOVE_STAGING_PREFIX = '__mv_'
+
+function stagingPositionForContainer(containerId: number): string {
+  return `${MOVE_STAGING_PREFIX}${containerId}`
+}
+
 export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'static_well' | 'paper'
 
 export interface ContainerInfo {
@@ -452,6 +459,21 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
     }
 
     await database.transaction(async (tx) => {
+      for (const { info, targetCollectionId } of finalMoves) {
+        if (!targetCollectionId) continue
+        switch (info.containerType) {
+          case 'micronix_tube':
+            tx.update(micronixTube).set({ position: stagingPositionForContainer(info.containerId) }).where(eq(micronixTube.id, info.containerId)).run()
+            break
+          case 'cryovial_tube':
+            tx.update(cryovialTube).set({ position: stagingPositionForContainer(info.containerId) }).where(eq(cryovialTube.id, info.containerId)).run()
+            break
+          case 'static_well':
+            tx.update(staticWell).set({ position: stagingPositionForContainer(info.containerId) }).where(eq(staticWell.id, info.containerId)).run()
+            break
+        }
+      }
+
       for (const { move, info, targetCollectionId } of finalMoves) {
         if (!targetCollectionId) continue
 
