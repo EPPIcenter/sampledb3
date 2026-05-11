@@ -308,7 +308,8 @@ function createSchema(sqlite: Database) {
       id INTEGER PRIMARY KEY REFERENCES storage_container(id),
       collection_id INTEGER NOT NULL REFERENCES micronix_plate(id),
       barcode TEXT NOT NULL UNIQUE,
-      position TEXT
+      position TEXT,
+      UNIQUE(collection_id, position)
     )
   `)
 
@@ -332,7 +333,8 @@ function createSchema(sqlite: Database) {
       id INTEGER PRIMARY KEY REFERENCES storage_container(id),
       collection_id INTEGER NOT NULL REFERENCES cryovial_box(id),
       barcode TEXT,
-      position TEXT
+      position TEXT,
+      UNIQUE(collection_id, position)
     )
   `)
 
@@ -392,7 +394,8 @@ function createSchema(sqlite: Database) {
     CREATE TABLE IF NOT EXISTS static_well (
       id INTEGER PRIMARY KEY REFERENCES storage_container(id),
       collection_id INTEGER NOT NULL REFERENCES micronix_plate(id),
-      position TEXT
+      position TEXT,
+      UNIQUE(collection_id, position)
     )
   `)
 
