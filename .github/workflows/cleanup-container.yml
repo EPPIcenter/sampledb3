@@ -28,6 +28,7 @@ on:
         options: ["false", "true"]
 
 permissions:
+  contents: read
   packages: write
 
 jobs:
@@ -35,12 +36,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Delete untagged container versions
-        uses: actions/delete-package-versions@v5
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Prune untagged container versions
+        uses: ./.github/actions/prune-untagged-ghcr
         with:
           owner: ${{ github.repository_owner }}
           package-name: ${{ github.event.repository.name }}
-          package-type: container
-          delete-only-untagged-versions: "true"
-          min-versions-to-keep: 5
-          dry-run: ${{ inputs.dry-run || 'false' }}
+          min-versions-to-keep: "5"
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry-run || 'false' }}
