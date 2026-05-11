@@ -1,4 +1,5 @@
 # Publishes only a rolling `nightly` tag on GHCR (replaced on every push to `main`).
+# Image is linux/amd64 only for faster CI; release-container.yml publishes multi-arch.
 # Previous nightly digests become untagged; cleanup-container prunes them. For stable
 # pins, use a semver image from a GitHub release. Unstable: use `nightly` for pre-release.
 
@@ -31,11 +32,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -60,7 +56,7 @@ jobs:
             org.opencontainers.image.version=nightly
             org.opencontainers.image.description=Nightly build from the latest commit on the default branch
 
-      - name: Build and push (multi-arch)
+      - name: Build and push (linux/amd64)
         id: build
         uses: docker/build-push-action@v6
         with:
@@ -68,7 +64,7 @@ jobs:
             APP_BUILD_ID=${{ github.sha }}
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -98,7 +94,7 @@ jobs:
             echo ""
             echo "**Digest:** \`${{ steps.build.outputs.digest }}\`"
             echo ""
-            echo "**Platforms:** linux/amd64, linux/arm64"
+            echo "**Platform:** linux/amd64 (ARM: use a **semver** release image from release-container)"
             echo ""
             echo '**Tag:** `nightly` only (latest `main`); no per-commit tags. After each push, older nightlies are left untagged; see cleanup workflow. Pin in production with a **semver** release image, or (short-term) the digest printed above.'
             echo ""
