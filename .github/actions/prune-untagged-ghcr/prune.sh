@@ -28,6 +28,23 @@ fi
 pkg_lc="${PACKAGE_NAME,,}"
 owner_lc="${OWNER,,}"
 
+# GitHub REST expects the package name segment URL-encoded (e.g. owner/repo -> owner%2Frepo).
+pkg_enc_path_segment() {
+  printf '%s' "$1" | jq -sRr @uri
+}
+
+graphql_repo_container_names() {
+  local owner="$1" repo="$2" resp
+  resp="$(gh api graphql \
+    -f query='query($owner:String!,$name:String!){repository(owner:$owner,name:$name){packages(first:50,packageType:CONTAINER){nodes{name}}}}' \
+    -f owner="$owner" \
+    -f name="$repo" 2>/dev/null)" || return 1
+  if [[ "$(echo "$resp" | jq -r '.data.repository // empty')" == "null" ]]; then
+    return 1
+  fi
+  echo "$resp" | jq -r '.data.repository.packages.nodes[]?.name // empty'
+}
+
 versions_reachable() {
   gh api "${1}?per_page=1" --silent >/dev/null 2>&1
 }
@@ -36,7 +53,7 @@ discover_versions_path() {
   local want_lc="$1"
   shift
   local -a owner_candidates=("$@")
-  local o prefix ptype page resp n match
+  local o prefix ptype page resp n match match_enc
 
   for o in "${owner_candidates[@]}"; do
     [[ -z "$o" ]] && continue
@@ -48,9 +65,10 @@ discover_versions_path() {
           [[ "$(echo "$resp" | jq -r 'type')" != "array" ]] && break
           n="$(echo "$resp" | jq 'length')"
           [[ "${n:-0}" -eq 0 ]] && break
-          match="$(echo "$resp" | jq -r --arg w "$want_lc" '[.[] | select(.name | ascii_downcase == $w)][0].name // empty')"
+          match="$(echo "$resp" | jq -r --arg w "$want_lc" '[.[] | select((.name | ascii_downcase == $w) or (.name | ascii_downcase | endswith("/" + $w)))][0].name // empty')"
           if [[ -n "$match" ]]; then
-            echo "${prefix}/packages/${ptype}/${match}/versions"
+            match_enc="$(pkg_enc_path_segment "$match")"
+            echo "${prefix}/packages/${ptype}/${match_enc}/versions"
             return 0
           fi
           [[ "$n" -lt 100 ]] && break
@@ -68,14 +86,17 @@ resolve_versions_base() {
 
   local -a pkgs=("$pkg_lc")
   [[ "$PACKAGE_NAME" != "$pkg_lc" ]] && pkgs+=("$PACKAGE_NAME")
+  pkgs+=("${owner_lc}/${pkg_lc}")
+  [[ "${OWNER}/${PACKAGE_NAME}" != "${owner_lc}/${pkg_lc}" ]] && pkgs+=("${OWNER}/${PACKAGE_NAME}")
 
-  local o pkg ptype prefix trial
-
-  for o in "${owners[@]}"; do
-    for pkg in "${pkgs[@]}"; do
+  try_pkg_locations() {
+    local pkg_raw="$1"
+    local pkg_enc o ptype prefix trial
+    pkg_enc="$(pkg_enc_path_segment "$pkg_raw")"
+    for o in "${owners[@]}"; do
       for ptype in container docker; do
         for prefix in orgs users; do
-          trial="${prefix}/${o}/packages/${ptype}/${pkg}/versions"
+          trial="${prefix}/${o}/packages/${ptype}/${pkg_enc}/versions"
           if versions_reachable "$trial"; then
             echo "$trial"
             return 0
@@ -83,14 +104,35 @@ resolve_versions_base() {
         done
       done
     done
+    return 1
+  }
+
+  local pkg
+  for pkg in "${pkgs[@]}"; do
+    if try_pkg_locations "$pkg"; then
+      return 0
+    fi
   done
+
+  if [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
+    local ro rn gn
+    ro="${GITHUB_REPOSITORY%%/*}"
+    rn="${GITHUB_REPOSITORY##*/}"
+    while IFS= read -r gn; do
+      [[ -z "$gn" ]] && continue
+      if try_pkg_locations "$gn"; then
+        return 0
+      fi
+    done < <(graphql_repo_container_names "$ro" "$rn" || true)
+  fi
 
   discover_versions_path "$pkg_lc" "${owners[@]}" || return 1
 }
 
 BASE="$(resolve_versions_base)" || {
   echo "::error::Could not resolve package '${PACKAGE_NAME}' for owner '${OWNER}'."
-  echo "::error::Check GHCR Packages (container name is usually lowercase). Token needs packages:read/write for this repo's package."
+  echo "::error::Confirm the workflow uses the latest prune.sh from this repo (error text mentioning only orgs/users/ is from an older revision)."
+  echo "::error::If the package exists under GHCR, ensure Actions can read org packages (packages: write on this workflow) or use a PAT with read:packages + SSO authorized if your org requires it."
   exit 1
 }
 
