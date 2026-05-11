@@ -1,6 +1,6 @@
 services:
   sampledb3:
-    image: ghcr.io/eppicenter/sampledb3:1.0.0
+    image: ghcr.io/eppicenter/sampledb3:1.1.0
     container_name: sampledb3
     restart: unless-stopped
     ports:

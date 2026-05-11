@@ -6,7 +6,7 @@ describe('openapi', () => {
     it('has openapi 3.0.0 and info', () => {
       expect(openApiInfo.openapi).toBe('3.0.0')
       expect(openApiInfo.info?.title).toBe('SampleDB API')
-      expect(openApiInfo.info?.version).toBe('1.0.0')
+      expect(openApiInfo.info?.version).toBe('1.1.0')
     })
     it('has Error schema', () => {
       expect(openApiInfo.components?.schemas?.Error).toBeDefined()

@@ -94,7 +94,7 @@ app.get('/health', async (c) => {
     uptime: process.uptime(),
     database: { status: 'ok' },
     buildId: getAppBuildId(),
-    version: '1.0.0',
+    version: '1.1.0',
   }
 
   // Check database connectivity
@@ -121,7 +121,7 @@ app.get('/health', async (c) => {
 
 // API routes
 app.get('/api', (c) => {
-  return c.json({ message: 'SampleDB API', version: '1.0.0', buildId: getAppBuildId() })
+  return c.json({ message: 'SampleDB API', version: '1.1.0', buildId: getAppBuildId() })
 })
 
 // Same-origin JSON for SPA "new build available" detection (not cached; compare to import.meta.env.VITE_APP_BUILD_ID in web)

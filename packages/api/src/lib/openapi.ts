@@ -11,7 +11,7 @@ export const openApiInfo = {
   openapi: '3.0.0',
   info: {
     title: 'SampleDB API',
-    version: '1.0.0',
+    version: '1.1.0',
     description: 'API documentation for SampleDB - Laboratory sample management system',
   },
   servers: [
