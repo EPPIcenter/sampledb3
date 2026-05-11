@@ -18,6 +18,12 @@ inputs:
     description: If "true", print IDs that would be deleted without calling DELETE
     required: false
     default: "false"
+  github-token:
+    description: >
+      Token for gh api (needs packages read/delete). Defaults to GITHUB_TOKEN when empty.
+      Use a PAT with read:packages (+ delete:packages) and org SSO authorized if GITHUB_TOKEN cannot see the package.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -25,6 +31,7 @@ runs:
     - shell: bash
       run: bash "${GITHUB_ACTION_PATH}/prune.sh"
       env:
+        GH_TOKEN: ${{ inputs.github-token || github.token }}
         OWNER: ${{ inputs.owner }}
         PACKAGE_NAME: ${{ inputs.package-name }}
         MIN_KEEP: ${{ inputs.min-versions-to-keep }}

@@ -34,15 +34,43 @@ pkg_enc_path_segment() {
 }
 
 graphql_repo_container_names() {
-  local owner="$1" repo="$2" resp
-  resp="$(gh api graphql \
-    -f query='query($owner:String!,$name:String!){repository(owner:$owner,name:$name){packages(first:50,packageType:CONTAINER){nodes{name}}}}' \
-    -f owner="$owner" \
-    -f name="$repo" 2>/dev/null)" || return 1
-  if [[ "$(echo "$resp" | jq -r '.data.repository // empty')" == "null" ]]; then
-    return 1
-  fi
-  echo "$resp" | jq -r '.data.repository.packages.nodes[]?.name // empty'
+  local owner="$1" repo="$2" resp ptype
+  for ptype in CONTAINER DOCKER; do
+    resp="$(gh api graphql \
+      -f query='query($owner:String!,$name:String!,$ptype:PackageType!){repository(owner:$owner,name:$name){packages(first:50,packageType:$ptype){nodes{name}}}}' \
+      -f owner="$owner" \
+      -f name="$repo" \
+      -f ptype="$ptype" 2>/dev/null)" || continue
+    if [[ "$(echo "$resp" | jq -r '.data.repository // empty')" == "null" ]]; then
+      continue
+    fi
+    echo "$resp" | jq -r '.data.repository.packages.nodes[]?.name // empty'
+  done
+}
+
+# Org/user GraphQL can surface GHCR names when REST probes return 404 for the workflow token.
+graphql_org_packages_matching() {
+  local login="$1" want_lc="$2" resp ptype
+  for ptype in CONTAINER DOCKER; do
+    resp="$(gh api graphql \
+      -f query='query($login:String!,$ptype:PackageType!){organization(login:$login){packages(first:100,packageType:$ptype){nodes{name}}}}' \
+      -f login="$login" \
+      -f ptype="$ptype" 2>/dev/null)" || continue
+    [[ "$(echo "$resp" | jq -r '.data.organization // empty')" == "null" ]] && continue
+    echo "$resp" | jq -r --arg w "$want_lc" '.data.organization.packages.nodes[]?.name | select((ascii_downcase == $w) or (ascii_downcase | endswith("/" + $w)))'
+  done
+}
+
+graphql_user_packages_matching() {
+  local login="$1" want_lc="$2" resp ptype
+  for ptype in CONTAINER DOCKER; do
+    resp="$(gh api graphql \
+      -f query='query($login:String!,$ptype:PackageType!){user(login:$login){packages(first:100,packageType:$ptype){nodes{name}}}}' \
+      -f login="$login" \
+      -f ptype="$ptype" 2>/dev/null)" || continue
+    [[ "$(echo "$resp" | jq -r '.data.user // empty')" == "null" ]] && continue
+    echo "$resp" | jq -r --arg w "$want_lc" '.data.user.packages.nodes[]?.name | select((ascii_downcase == $w) or (ascii_downcase | endswith("/" + $w)))'
+  done
 }
 
 versions_reachable() {
@@ -126,13 +154,28 @@ resolve_versions_base() {
     done < <(graphql_repo_container_names "$ro" "$rn" || true)
   fi
 
+  local ol gn
+  for ol in "$OWNER" "$owner_lc"; do
+    while IFS= read -r gn; do
+      [[ -z "$gn" ]] && continue
+      if try_pkg_locations "$gn"; then
+        return 0
+      fi
+    done < <(graphql_org_packages_matching "$ol" "$pkg_lc" || true)
+    while IFS= read -r gn; do
+      [[ -z "$gn" ]] && continue
+      if try_pkg_locations "$gn"; then
+        return 0
+      fi
+    done < <(graphql_user_packages_matching "$ol" "$pkg_lc" || true)
+  done
+
   discover_versions_path "$pkg_lc" "${owners[@]}" || return 1
 }
 
 BASE="$(resolve_versions_base)" || {
   echo "::error::Could not resolve package '${PACKAGE_NAME}' for owner '${OWNER}'."
-  echo "::error::Confirm the workflow uses the latest prune.sh from this repo (error text mentioning only orgs/users/ is from an older revision)."
-  echo "::error::If the package exists under GHCR, ensure Actions can read org packages (packages: write on this workflow) or use a PAT with read:packages + SSO authorized if your org requires it."
+  echo "::error::If the image exists on GHCR: org policies may block GITHUB_TOKEN from the Packages API—add a repo secret PAT with read:packages (+ delete:packages to prune) and SSO authorized, then pass it via the action input github-token."
   exit 1
 }
 
