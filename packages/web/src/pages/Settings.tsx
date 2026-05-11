@@ -13,10 +13,26 @@ import ExportConfigurationsManager from '../components/ExportConfigurationsManag
 import TableViewConfigurationsManager from '../components/TableViewConfigurationsManager'
 import ScannerConfigurationsManager from '../components/ScannerConfigurationsManager'
 import SkeletonCard from '../components/SkeletonCard'
+import { SettingsBuildVersions } from '../components/SettingsBuildVersions'
 import '../styles/settings.css'
 
 type SettingsCategory = 'application' | 'security' | 'data-management'
-type SettingsSection = 'appearance' | 'container-defaults' | 'container-type-units' | 'pagination' | 'password' | 'session' | 'export-configurations' | 'table-view-configurations' | 'scanner-configurations'
+type SettingsSection =
+  | 'appearance'
+  | 'about'
+  | 'container-defaults'
+  | 'container-type-units'
+  | 'pagination'
+  | 'password'
+  | 'session'
+  | 'export-configurations'
+  | 'table-view-configurations'
+  | 'scanner-configurations'
+
+/** Sections that render without the bulk settings payload from GET /api/settings */
+function sectionUsesSettingsPayload(section: SettingsSection): boolean {
+  return section !== 'appearance' && section !== 'about'
+}
 
 interface SettingsStructure {
   id: SettingsCategory
@@ -62,6 +78,12 @@ const settingsStructure: SettingsStructure[] = [
         id: 'pagination',
         label: 'Pagination',
         tooltip: 'Configure how many items are displayed per page in list views',
+      },
+      {
+        id: 'about',
+        label: 'About',
+        tooltip:
+          'Web and API build identifiers for this deployment. Useful when reporting issues or confirming a release after an upgrade.',
       },
     ],
   },
@@ -256,7 +278,7 @@ export default function Settings() {
   }
 
   const renderForm = () => {
-    if (!settings && activeSection !== 'appearance') return null
+    if (!settings && sectionUsesSettingsPayload(activeSection)) return null
     if (activeSection === 'appearance') {
       return (
         <div className="space-y-3">
@@ -279,6 +301,9 @@ export default function Settings() {
           </div>
         </div>
       )
+    }
+    if (activeSection === 'about') {
+      return <SettingsBuildVersions />
     }
     if (!settings) return null
     switch (activeSection) {
@@ -423,7 +448,7 @@ export default function Settings() {
     )
   }
 
-  if (!settings) {
+  if (!settings && sectionUsesSettingsPayload(activeSection)) {
     return (
       <div className="settings-page">
         <div className="container mx-auto px-4 py-8 relative z-10">

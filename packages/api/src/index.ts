@@ -40,6 +40,7 @@ import { createDataAuditRoutes } from './routes/data-audit'
 import { createQpcrExperimentsRoutes } from './routes/qpcr-experiments'
 import { handleRouteError } from './lib/error-handler'
 import { getAppBuildId } from './lib/app-build-id'
+import { shouldServeSpaFallback } from './lib/spa-fallback-path'
 import type { Context } from 'hono'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -225,6 +226,10 @@ if (process.env.NODE_ENV === 'production') {
   )
   // SPA fallback: serve index.html when no static file found so React Router handles routing on reload
   app.get('*', async (c) => {
+    const pathOnly = new URL(c.req.url).pathname
+    if (!shouldServeSpaFallback(pathOnly)) {
+      return c.text('Not Found', 404)
+    }
     const html = await readFile(join(webStaticPath, 'index.html'), 'utf-8')
     c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
     return c.html(html)
