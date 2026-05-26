@@ -28,9 +28,10 @@ import {
   buildContainerQueryByMicronixBarcodes,
   type ExportFilters,
   type ExportSummary,
-  type MultiStudyExportEntry,
   type CSVExportOptions,
+  type MultiStudyExportEntry,
 } from '../lib/export-helpers'
+import { exportSpecimensCsv } from '../lib/export/specimens-csv'
 import { resolveSubjectNamesByStudy } from '../lib/identifier-resolution'
 import { resolveStudyByShortCode } from '../lib/identifier-resolution'
 import { createAuthMiddleware } from '../middleware/auth'
@@ -71,79 +72,19 @@ export function createExportRoutes(database: Database): Hono {
 // Export specimens as CSV
 export_.get('/specimens.csv', authMiddleware, async (c) => {
   try {
-    const studyCode = c.req.query('study')
-    const sourceType = c.req.query('source_type')
-    
-    // Parse CSV options from query params
     const csvOptions: CSVExportOptions = {
       delimiter: (c.req.query('csv_delimiter') as ',' | ';' | '\t' | undefined) ?? ',',
-      includeBOM: c.req.query('csv_bom') !== 'false', // Default to true
+      includeBOM: c.req.query('csv_bom') !== 'false',
       lineEnding: (c.req.query('csv_line_ending') as 'LF' | 'CRLF' | undefined) ?? 'CRLF',
     }
-    
-    let query = database
-      .select({
-        id: specimen.id,
-        studySubjectId: specimen.studySubjectId,
-        controlBatchId: specimen.controlBatchId,
-        specimenType: specimenType.name,
-        collectionDate: specimen.collectionDate,
-        created: specimen.created,
-      })
-      .from(specimen)
-      .leftJoin(specimenType, eq(specimen.specimenTypeId, specimenType.id))
-    
-    const conditions = []
-    
-    if (sourceType === 'subject') {
-      conditions.push(sql`${specimen.studySubjectId} IS NOT NULL`)
-    } else if (sourceType === 'control') {
-      conditions.push(sql`${specimen.controlBatchId} IS NOT NULL`)
-    }
-    
-    if (studyCode) {
-      const studyRecord = await database
-        .select()
-        .from(study)
-        .where(eq(study.shortCode, studyCode))
-        .get()
-      
-      if (studyRecord) {
-        const subjects = await database
-          .select({ id: studySubject.id })
-          .from(studySubject)
-          .where(eq(studySubject.studyId, studyRecord.id))
-        
-        const subjectIds = subjects.map(s => s.id)
-        if (subjectIds.length > 0) {
-          if (subjectIds.length === 1) {
-            conditions.push(eq(specimen.studySubjectId, subjectIds[0]))
-          } else {
-            conditions.push(inArray(specimen.studySubjectId, subjectIds))
-          }
-        }
-      }
-    }
-    
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions) as any) as any
-    }
-    
-    const specimens = await query
-  
-    // Convert to CSV using the helper function
-    const headers = ['id', 'subject_id', 'control_batch_id', 'specimen_type', 'collection_date', 'created']
-    const rows = specimens.map(s => [
-      s.id,
-      s.studySubjectId || '',
-      s.controlBatchId || '',
-      s.specimenType || '',
-      s.collectionDate || '',
-      s.created,
-    ])
-    
-    const csv = formatSimpleCSV(headers, rows, csvOptions)
-    
+    const csv = await exportSpecimensCsv(
+      database,
+      {
+        studyCode: c.req.query('study'),
+        sourceType: c.req.query('source_type') as 'subject' | 'control' | undefined,
+      },
+      csvOptions
+    )
     c.header('Content-Type', 'text/csv')
     c.header('Content-Disposition', `attachment; filename="specimens_${formatLocalDateTime()}.csv"`)
     return c.text(csv)
