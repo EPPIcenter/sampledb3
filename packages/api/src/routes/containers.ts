@@ -1,15 +1,14 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
-import { storageContainer, specimen, location, unit, micronixTube, cryovialTube, micronixPlate, cryovialBox, studySubject, study, specimenType, controlBatch, controlDefinition, box, paper, sheet, bag, staticWell, tag, storageContainerTag, type Location, type StorageContainer, type Unit, type Tag } from '../db/schema'
+import { storageContainer, specimen, unit, micronixTube, cryovialTube, paper, staticWell, studySubject, study, specimenType, controlBatch, controlDefinition, tag, storageContainerTag } from '../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
-import type { CollectionInfo } from '../types/collections'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { resolveContainerByBarcode } from '../lib/identifier-resolution'
-import { formatLocationPath } from '../lib/container-enrichment'
+import { enrichContainerForApi, enrichContainersForApi } from '../lib/container-api-enrichment'
 
 /**
  * Create containers routes with database injection
@@ -19,107 +18,6 @@ export function createContainersRoutes(database: Database): Hono {
   const containers = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const memberMiddleware = createMemberMiddleware(database)
-
-async function enrichContainerDetailed(container: StorageContainer) {
-  const id = container.id
-
-  // Get unit and tags
-  const [containerUnit, containerTags] = await Promise.all([
-    database.select().from(unit).where(eq(unit.id, container.unitId)).get(),
-    database.select({ id: tag.id, name: tag.name })
-      .from(tag)
-      .innerJoin(storageContainerTag, eq(tag.id, storageContainerTag.tagId))
-      .where(eq(storageContainerTag.storageContainerId, id)),
-  ])
-
-  // Check all possible subtypes
-  const [micronixInfo, cryovialInfo, paperInfo, staticWellInfo] = await Promise.all([
-    database.select({
-      barcode: micronixTube.barcode,
-      position: micronixTube.position,
-      plateId: micronixPlate.id,
-      plateName: micronixPlate.name,
-      locationId: micronixPlate.locationId,
-    }).from(micronixTube).leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id)).where(eq(micronixTube.id, id)).get(),
-
-    database.select({
-      barcode: cryovialTube.barcode,
-      position: cryovialTube.position,
-      boxId: cryovialBox.id,
-      boxName: cryovialBox.name,
-      locationId: cryovialBox.locationId,
-    }).from(cryovialTube).leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id)).where(eq(cryovialTube.id, id)).get(),
-
-    database.select({
-      barcode: paper.barcode,
-      position: paper.position,
-      sheetId: sheet.id,
-      sheetName: sheet.name,
-      boxId: sheet.boxId,
-      bagId: sheet.bagId,
-    }).from(paper).leftJoin(sheet, eq(paper.sheetId, sheet.id)).where(eq(paper.id, id)).get(),
-
-    database.select({
-      position: staticWell.position,
-      plateId: micronixPlate.id,
-      plateName: micronixPlate.name,
-      locationId: micronixPlate.locationId,
-    }).from(staticWell).leftJoin(micronixPlate, eq(staticWell.collectionId, micronixPlate.id)).where(eq(staticWell.id, id)).get(),
-  ])
-
-  let containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well' | 'unknown' = 'unknown'
-  let locationId: number | null = null
-  let collectionInfo: CollectionInfo | null = null
-  let parentContainerName: string | undefined
-
-  if (micronixInfo) {
-    containerType = 'micronix_tube'
-    locationId = micronixInfo.locationId || null
-    collectionInfo = { type: 'micronix_plate', id: micronixInfo.plateId!, name: micronixInfo.plateName!, position: micronixInfo.position, barcode: micronixInfo.barcode }
-  } else if (cryovialInfo) {
-    containerType = 'cryovial_tube'
-    locationId = cryovialInfo.locationId || null
-    collectionInfo = { type: 'cryovial_box', id: cryovialInfo.boxId!, name: cryovialInfo.boxName!, position: cryovialInfo.position, barcode: cryovialInfo.barcode }
-  } else if (paperInfo) {
-    containerType = 'paper'
-    collectionInfo = { type: 'sheet', id: paperInfo.sheetId!, name: paperInfo.sheetName!, position: paperInfo.position, barcode: paperInfo.barcode }
-    
-    // For paper, location is on the parent box or bag
-    if (paperInfo.boxId) {
-      const parentBox = await database.select({ locationId: box.locationId, name: box.name }).from(box).where(eq(box.id, paperInfo.boxId)).get()
-      locationId = parentBox?.locationId || null
-      parentContainerName = parentBox?.name
-    } else if (paperInfo.bagId) {
-      const parentBag = await database.select({ locationId: bag.locationId, name: bag.name }).from(bag).where(eq(bag.id, paperInfo.bagId)).get()
-      locationId = parentBag?.locationId || null
-      parentContainerName = parentBag?.name
-    }
-  } else if (staticWellInfo) {
-    containerType = 'static_well'
-    locationId = staticWellInfo.locationId || null
-    collectionInfo = { type: 'micronix_plate', id: staticWellInfo.plateId!, name: staticWellInfo.plateName!, position: staticWellInfo.position }
-  }
-
-  // Get location details
-  let locationInfo: Location | null = null
-  if (locationId) {
-    locationInfo = await database.select().from(location).where(eq(location.id, locationId)).get() || null
-  }
-
-  return {
-    ...container,
-    containerType,
-    tags: containerTags,
-    unit: containerUnit,
-    location: locationInfo,
-    locationPath: formatLocationPath(locationInfo, parentContainerName) ?? '',
-    collection: collectionInfo,
-    micronixTube: micronixInfo,
-    cryovialTube: cryovialInfo,
-    paper: paperInfo,
-    staticWell: staticWellInfo,
-  }
-}
 
 // List containers with filters
 containers.get('/', authMiddleware, async (c) => {
@@ -181,9 +79,7 @@ containers.get('/', authMiddleware, async (c) => {
     const total = countResult[0]?.count || 0
     
     // Enrich containers with location and tags info
-    const enrichedContainers = await Promise.all(
-      containersList.map(container => enrichContainerDetailed(container))
-    )
+    const enrichedContainers = await enrichContainersForApi(database, containersList)
     
     return c.json({
       containers: enrichedContainers,
@@ -221,7 +117,7 @@ containers.get('/:id', authMiddleware, async (c) => {
       return c.json({ error: 'Container not found' }, 404)
     }
 
-    const enriched = await enrichContainerDetailed(container)
+    const enriched = await enrichContainerForApi(database, container)
 
     // Get specimen details with type
     const spec = await database
@@ -445,7 +341,7 @@ containers.patch('/:id', memberMiddleware, async (c) => {
     }
 
     // Return enriched container
-    const enriched = await enrichContainerDetailed(updated)
+    const enriched = await enrichContainerForApi(database, updated)
     return c.json({ container: enriched })
   } catch (error) {
     if (error instanceof z.ZodError) {
