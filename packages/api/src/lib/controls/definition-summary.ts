@@ -14,12 +14,15 @@ import {
   bag,
   sheet,
   paper,
-  staticWell,
   location,
 } from '../../db/schema'
 import { eq, and, inArray, desc, sql } from 'drizzle-orm'
 import { parseControlProperties } from '../control-properties'
 import { NotFoundError } from '../error-handler'
+import {
+  buildControlInventoryCountSubqueries,
+  controlInventoryCountSelectFields,
+} from './control-inventory-counts'
 
 export type BloodControlDefinitionSummaryResult = {
   control: Record<string, unknown>
@@ -84,70 +87,18 @@ export async function getBloodControlDefinitionSummary(
   }
   const compositionDetails = parsed.strains.length > 0 ? { strains: parsed.strains } : null
 
-  const spotCountSubquery = database
-    .select({
-      batchId: specimen.controlBatchId,
-      count: sql<number>`SUM(${storageContainer.remainingQuantity})`.as('spot_count'),
-    })
-    .from(specimen)
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .innerJoin(paper, eq(storageContainer.id, paper.id))
-    .groupBy(specimen.controlBatchId)
-    .as('batch_spot_counts')
-
-  const micronixCountSubquery = database
-    .select({
-      batchId: specimen.controlBatchId,
-      count: sql<number>`count(*)`.as('micronix_count'),
-    })
-    .from(specimen)
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .innerJoin(micronixTube, eq(storageContainer.id, micronixTube.id))
-    .where(sql`${storageContainer.remainingQuantity} > 0`)
-    .groupBy(specimen.controlBatchId)
-    .as('batch_micronix_counts')
-
-  const cryovialCountSubquery = database
-    .select({
-      batchId: specimen.controlBatchId,
-      count: sql<number>`count(*)`.as('cryovial_count'),
-    })
-    .from(specimen)
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .innerJoin(cryovialTube, eq(storageContainer.id, cryovialTube.id))
-    .where(sql`${storageContainer.remainingQuantity} > 0`)
-    .groupBy(specimen.controlBatchId)
-    .as('batch_cryovial_counts')
-
-  const staticWellCountSubquery = database
-    .select({
-      batchId: specimen.controlBatchId,
-      count: sql<number>`count(*)`.as('static_well_count'),
-    })
-    .from(specimen)
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .innerJoin(staticWell, eq(storageContainer.id, staticWell.id))
-    .where(sql`${storageContainer.remainingQuantity} > 0`)
-    .groupBy(specimen.controlBatchId)
-    .as('batch_static_well_counts')
-
-  const tubeCountSubquery = database
-    .select({
-      batchId: specimen.controlBatchId,
-      count: sql<number>`count(*)`.as('tube_count'),
-    })
-    .from(specimen)
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .where(
-      and(
-        sql`EXISTS (SELECT 1 FROM micronix_tube WHERE micronix_tube.id = ${storageContainer.id}) OR 
-            EXISTS (SELECT 1 FROM cryovial_tube WHERE cryovial_tube.id = ${storageContainer.id}) OR
-            EXISTS (SELECT 1 FROM static_well WHERE static_well.id = ${storageContainer.id})`,
-        sql`${storageContainer.remainingQuantity} > 0`,
-      ),
-    )
-    .groupBy(specimen.controlBatchId)
-    .as('batch_tube_counts')
+  const inventoryCounts = buildControlInventoryCountSubqueries(database, {
+    groupBy: 'batch',
+    countScope: 'in_stock',
+  })
+  const {
+    spotCount,
+    micronixCount,
+    cryovialCount,
+    staticWellCount,
+    tubeCount,
+    inventoryTotal,
+  } = controlInventoryCountSelectFields(inventoryCounts)
 
   const batchesList = await database
     .select({
@@ -155,19 +106,19 @@ export async function getBloodControlDefinitionSummary(
       name: controlBatch.name,
       productionDate: controlBatch.productionDate,
       created: controlBatch.created,
-      spotCount: sql<number>`COALESCE(${spotCountSubquery.count}, 0)`,
-      micronixCount: sql<number>`COALESCE(${micronixCountSubquery.count}, 0)`,
-      cryovialCount: sql<number>`COALESCE(${cryovialCountSubquery.count}, 0)`,
-      staticWellCount: sql<number>`COALESCE(${staticWellCountSubquery.count}, 0)`,
-      tubeCount: sql<number>`COALESCE(${tubeCountSubquery.count}, 0)`,
-      inventoryTotal: sql<number>`COALESCE(${spotCountSubquery.count}, 0) + COALESCE(${tubeCountSubquery.count}, 0)`,
+      spotCount,
+      micronixCount,
+      cryovialCount,
+      staticWellCount,
+      tubeCount,
+      inventoryTotal,
     })
     .from(controlBatch)
-    .leftJoin(spotCountSubquery, eq(controlBatch.id, spotCountSubquery.batchId))
-    .leftJoin(micronixCountSubquery, eq(controlBatch.id, micronixCountSubquery.batchId))
-    .leftJoin(cryovialCountSubquery, eq(controlBatch.id, cryovialCountSubquery.batchId))
-    .leftJoin(staticWellCountSubquery, eq(controlBatch.id, staticWellCountSubquery.batchId))
-    .leftJoin(tubeCountSubquery, eq(controlBatch.id, tubeCountSubquery.batchId))
+    .leftJoin(inventoryCounts.spotCounts, eq(controlBatch.id, inventoryCounts.spotCounts.batchId))
+    .leftJoin(inventoryCounts.micronixCounts, eq(controlBatch.id, inventoryCounts.micronixCounts.batchId))
+    .leftJoin(inventoryCounts.cryovialCounts, eq(controlBatch.id, inventoryCounts.cryovialCounts.batchId))
+    .leftJoin(inventoryCounts.staticWellCounts, eq(controlBatch.id, inventoryCounts.staticWellCounts.batchId))
+    .leftJoin(inventoryCounts.tubeCounts, eq(controlBatch.id, inventoryCounts.tubeCounts.batchId))
     .where(eq(controlBatch.controlDefinitionId, definitionId))
     .orderBy(desc(controlBatch.productionDate))
 
