@@ -28,6 +28,7 @@ import {
 import { eq, and, or, sql, gte, lte, inArray, isNull, gt } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { cache, cacheKeys } from '../lib/cache'
+import { resolveContainerTypes } from '../lib/container-placement'
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 
 /**
@@ -59,43 +60,6 @@ function chunkArray<T>(array: T[], chunkSize: number): T[][] {
     chunks.push(array.slice(i, i + chunkSize))
   }
   return chunks
-}
-
-// Helper to get container types for multiple container IDs (batched to avoid SQLite variable limit)
-// Optimized to use parallel queries instead of sequential
-async function getContainerTypes(containerIds: number[]): Promise<Map<number, string>> {
-  if (containerIds.length === 0) return new Map()
-  
-  const BATCH_SIZE = 500 // SQLite limit is ~999, use 500 to be safe
-  const chunks = chunkArray(containerIds, BATCH_SIZE)
-  
-  const typeMap = new Map<number, string>()
-  
-  // Process all chunks in parallel for better performance
-  const chunkResults = await Promise.all(
-    chunks.map(async (chunk) => {
-      const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
-        database.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, chunk)),
-        database.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, chunk)),
-        database.select({ id: paper.id }).from(paper).where(inArray(paper.id, chunk)),
-        database.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, chunk)),
-      ])
-
-      const chunkMap = new Map<number, string>()
-      micronixTubes.forEach(t => chunkMap.set(t.id, 'micronix_tube'))
-      cryovialTubes.forEach(t => chunkMap.set(t.id, 'cryovial_tube'))
-      papers.forEach(t => chunkMap.set(t.id, 'paper'))
-      staticWells.forEach(t => chunkMap.set(t.id, 'static_well'))
-      return chunkMap
-    })
-  )
-  
-  // Merge all chunk maps
-  chunkResults.forEach(chunkMap => {
-    chunkMap.forEach((type, id) => typeMap.set(id, type))
-  })
-  
-  return typeMap
 }
 
 statistics.get('/', authMiddleware, async (c) => {
@@ -598,7 +562,7 @@ statistics.get('/', authMiddleware, async (c) => {
 
     // Get container types in batch
     const containerIds = filteredContainers.map(c => c.id)
-    const containerTypeMap = await getContainerTypes(containerIds)
+    const containerTypeMap = await resolveContainerTypes(database, containerIds)
 
     // Filter by container type if specified (before calculating totals)
     let finalContainers = filteredContainers
