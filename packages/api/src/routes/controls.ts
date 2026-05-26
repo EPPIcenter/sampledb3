@@ -3,23 +3,14 @@ import type { Database } from '../db/client'
 import {
   controlDefinition,
   controlBatch,
-  strain,
   unit,
-  specimen,
-  storageContainer,
-  micronixPlate,
-  micronixTube,
-  cryovialBox,
-  cryovialTube,
-  paper,
-  staticWell,
 } from '../db/schema'
-import { eq, and, like, desc, inArray, sql } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { parseControlProperties } from '../lib/control-properties'
 import { validateControlBatchName, generateUniqueBatchName } from '../lib/validation'
 import { generateControlDefinitionName, generateUniqueControlDefinitionName } from '../lib/control-name-generation'
-import { handleRouteError, NotFoundError } from '../lib/error-handler'
+import { handleRouteError } from '../lib/error-handler'
 import type { BloodControlProperties } from '../types/properties'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
@@ -39,6 +30,13 @@ import {
 } from '../lib/controls/batch-with-specimens'
 import { getBloodControlBatchSummary } from '../lib/controls/batch-summary'
 import { getBloodControlDefinitionSummary } from '../lib/controls/definition-summary'
+import {
+  getBloodControlBatch,
+  getBloodControlDefinition,
+  listBatchesForBloodControlDefinition,
+  listBloodControlBatches,
+  listBloodControlDefinitions,
+} from '../lib/controls/control-read'
 import {
   strainCompositionEntrySchema,
   resolveStrainComposition,
@@ -61,142 +59,25 @@ export function createControlsRoutes(database: Database): Hono {
 
 // List all control batches
 controls.get('/batches', authMiddleware, async (c) => {
-  const spotCountSubquery = dbInstance
-    .select({
-      batchId: specimen.controlBatchId,
-      count: sql<number>`SUM(${storageContainer.remainingQuantity})`.as('spot_count'),
-    })
-    .from(specimen)
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .innerJoin(paper, eq(storageContainer.id, paper.id))
-    .groupBy(specimen.controlBatchId)
-    .as('spot_counts')
-
-  const micronixCountSubquery = dbInstance
-    .select({
-      batchId: specimen.controlBatchId,
-      count: sql<number>`count(*)`.as('micronix_count'),
-    })
-    .from(specimen)
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .innerJoin(micronixTube, eq(storageContainer.id, micronixTube.id))
-    .groupBy(specimen.controlBatchId)
-    .as('micronix_counts')
-
-  const cryovialCountSubquery = dbInstance
-    .select({
-      batchId: specimen.controlBatchId,
-      count: sql<number>`count(*)`.as('cryovial_count'),
-    })
-    .from(specimen)
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .innerJoin(cryovialTube, eq(storageContainer.id, cryovialTube.id))
-    .groupBy(specimen.controlBatchId)
-    .as('cryovial_counts')
-
-  const staticWellCountSubquery = dbInstance
-    .select({
-      batchId: specimen.controlBatchId,
-      count: sql<number>`count(*)`.as('static_well_count'),
-    })
-    .from(specimen)
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .innerJoin(staticWell, eq(storageContainer.id, staticWell.id))
-    .groupBy(specimen.controlBatchId)
-    .as('static_well_counts')
-
-  const tubeCountSubquery = dbInstance
-    .select({
-      batchId: specimen.controlBatchId,
-      count: sql<number>`count(*)`.as('tube_count'),
-    })
-    .from(specimen)
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .where(
-      sql`EXISTS (SELECT 1 FROM micronix_tube WHERE micronix_tube.id = ${storageContainer.id}) OR 
-          EXISTS (SELECT 1 FROM cryovial_tube WHERE cryovial_tube.id = ${storageContainer.id}) OR
-          EXISTS (SELECT 1 FROM static_well WHERE static_well.id = ${storageContainer.id})`
-    )
-    .groupBy(specimen.controlBatchId)
-    .as('tube_counts')
-
-  const specimenCountSubquery = dbInstance
-    .select({
-      batchId: specimen.controlBatchId,
-      count: sql<number>`count(*)`.as('specimen_count'),
-    })
-    .from(specimen)
-    .groupBy(specimen.controlBatchId)
-    .as('specimen_counts')
-
-  // Strains are now stored in properties JSON, so we'll parse them in the response
-
-  const batchesResults = await dbInstance
-    .select({
-      id: controlBatch.id,
-      controlDefinitionId: controlBatch.controlDefinitionId,
-      name: controlBatch.name,
-      productionDate: controlBatch.productionDate,
-      created: controlBatch.created,
-      lastUpdated: controlBatch.lastUpdated,
-      definitionName: controlDefinition.name,
-      controlType: controlDefinition.controlType,
-      properties: controlDefinition.properties,
-      specimenCount: sql<number>`COALESCE(${specimenCountSubquery.count}, 0)`,
-      spotCount: sql<number>`COALESCE(${spotCountSubquery.count}, 0)`,
-      micronixCount: sql<number>`COALESCE(${micronixCountSubquery.count}, 0)`,
-      cryovialCount: sql<number>`COALESCE(${cryovialCountSubquery.count}, 0)`,
-      staticWellCount: sql<number>`COALESCE(${staticWellCountSubquery.count}, 0)`,
-      tubeCount: sql<number>`COALESCE(${tubeCountSubquery.count}, 0)`,
-      inventoryTotal: sql<number>`COALESCE(${spotCountSubquery.count}, 0) + COALESCE(${tubeCountSubquery.count}, 0)`,
-    })
-    .from(controlBatch)
-    .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
-    .leftJoin(specimenCountSubquery, eq(controlBatch.id, specimenCountSubquery.batchId))
-    .leftJoin(spotCountSubquery, eq(controlBatch.id, spotCountSubquery.batchId))
-    .leftJoin(micronixCountSubquery, eq(controlBatch.id, micronixCountSubquery.batchId))
-    .leftJoin(cryovialCountSubquery, eq(controlBatch.id, cryovialCountSubquery.batchId))
-    .leftJoin(staticWellCountSubquery, eq(controlBatch.id, staticWellCountSubquery.batchId))
-    .leftJoin(tubeCountSubquery, eq(controlBatch.id, tubeCountSubquery.batchId))
-    .where(eq(controlDefinition.controlType, 'blood'))
-    .orderBy(desc(controlBatch.created))
-
-  // Parse strains from properties JSON
-  const batches = batchesResults.map(row => {
-    const props = row.properties as any
-    const strains = props?.strains || []
-    return {
-      ...row,
-      strains: strains.map((s: any) => typeof s === 'number' ? { id: s } : s),
-      targetDensity: props?.targetDensity,
-      unitSymbol: props?.targetDensityUnit?.symbol || props?.targetDensityUnitSymbol,
-    }
-  })
-
-  return c.json({ batches })
+  try {
+    const result = await listBloodControlBatches(dbInstance)
+    return c.json(result)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
 })
 
 // Get batch detail (only for blood control batches)
 controls.get('/batches/:id', authMiddleware, async (c) => {
-  const id = parseInt(requireParam(c, 'id'))
-  if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
+  try {
+    const id = parseInt(requireParam(c, 'id'))
+    if (isNaN(id)) return c.json({ error: 'Invalid batch ID' }, 400)
 
-  const result = await dbInstance
-    .select({
-      batch: controlBatch,
-      definition: controlDefinition,
-    })
-    .from(controlBatch)
-    .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
-    .where(and(
-      eq(controlBatch.id, id),
-      eq(controlDefinition.controlType, 'blood')
-    ))
-    .get()
-
-  if (!result) throw new NotFoundError('Blood control batch', id)
-
-  return c.json({ batch: result.batch })
+    const result = await getBloodControlBatch(dbInstance, id)
+    return c.json(result)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
 })
 
 // Update batch (rename, change production date, etc.)
@@ -285,159 +166,27 @@ controls.get('/batches/:id/summary', authMiddleware, async (c) => {
 
 // List all control definitions (filtered to blood controls)
 controls.get('/', authMiddleware, async (c) => {
-  const batchCountSubquery = dbInstance
-    .select({
-      definitionId: controlBatch.controlDefinitionId,
-      count: sql<number>`count(*)`.as('batch_count'),
-    })
-    .from(controlBatch)
-    .groupBy(controlBatch.controlDefinitionId)
-    .as('batch_counts')
-
-  const specimenCountSubquery = dbInstance
-    .select({
-      definitionId: controlBatch.controlDefinitionId,
-      count: sql<number>`count(*)`.as('specimen_count'),
-    })
-    .from(specimen)
-    .innerJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
-    .groupBy(controlBatch.controlDefinitionId)
-    .as('specimen_counts')
-
-  const spotCountSubquery = dbInstance
-    .select({
-      definitionId: controlBatch.controlDefinitionId,
-      count: sql<number>`SUM(${storageContainer.remainingQuantity})`.as('spot_count'),
-    })
-    .from(specimen)
-    .innerJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .innerJoin(paper, eq(storageContainer.id, paper.id))
-    .groupBy(controlBatch.controlDefinitionId)
-    .as('spot_counts')
-
-  const micronixCountSubquery = dbInstance
-    .select({
-      definitionId: controlBatch.controlDefinitionId,
-      count: sql<number>`count(*)`.as('micronix_count'),
-    })
-    .from(specimen)
-    .innerJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .innerJoin(micronixTube, eq(storageContainer.id, micronixTube.id))
-    .groupBy(controlBatch.controlDefinitionId)
-    .as('micronix_counts')
-
-  const cryovialCountSubquery = dbInstance
-    .select({
-      definitionId: controlBatch.controlDefinitionId,
-      count: sql<number>`count(*)`.as('cryovial_count'),
-    })
-    .from(specimen)
-    .innerJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .innerJoin(cryovialTube, eq(storageContainer.id, cryovialTube.id))
-    .groupBy(controlBatch.controlDefinitionId)
-    .as('cryovial_counts')
-
-  const staticWellCountSubquery = dbInstance
-    .select({
-      definitionId: controlBatch.controlDefinitionId,
-      count: sql<number>`count(*)`.as('static_well_count'),
-    })
-    .from(specimen)
-    .innerJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .innerJoin(staticWell, eq(storageContainer.id, staticWell.id))
-    .groupBy(controlBatch.controlDefinitionId)
-    .as('static_well_counts')
-
-  const tubeCountSubquery = dbInstance
-    .select({
-      definitionId: controlBatch.controlDefinitionId,
-      count: sql<number>`count(*)`.as('tube_count'),
-    })
-    .from(specimen)
-    .innerJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
-    .innerJoin(storageContainer, eq(specimen.id, storageContainer.specimenId))
-    .where(
-      sql`EXISTS (SELECT 1 FROM micronix_tube WHERE micronix_tube.id = ${storageContainer.id}) OR 
-          EXISTS (SELECT 1 FROM cryovial_tube WHERE cryovial_tube.id = ${storageContainer.id}) OR
-          EXISTS (SELECT 1 FROM static_well WHERE static_well.id = ${storageContainer.id})`
-    )
-    .groupBy(controlBatch.controlDefinitionId)
-    .as('tube_counts')
-
-  // Get all strains for name lookup
-  const allStrains = await dbInstance.select().from(strain)
-  const strainMap = new Map(allStrains.map(s => [s.id, { name: s.name }]))
-
-  const query = dbInstance
-    .select({
-      id: controlDefinition.id,
-      name: controlDefinition.name,
-      controlType: controlDefinition.controlType,
-      properties: controlDefinition.properties,
-      created: controlDefinition.created,
-      lastUpdated: controlDefinition.lastUpdated,
-      batchCount: sql<number>`COALESCE(${batchCountSubquery.count}, 0)`,
-      specimenCount: sql<number>`COALESCE(${specimenCountSubquery.count}, 0)`,
-      spotCount: sql<number>`COALESCE(${spotCountSubquery.count}, 0)`,
-      micronixCount: sql<number>`COALESCE(${micronixCountSubquery.count}, 0)`,
-      cryovialCount: sql<number>`COALESCE(${cryovialCountSubquery.count}, 0)`,
-      staticWellCount: sql<number>`COALESCE(${staticWellCountSubquery.count}, 0)`,
-      tubeCount: sql<number>`COALESCE(${tubeCountSubquery.count}, 0)`,
-      inventoryTotal: sql<number>`COALESCE(${spotCountSubquery.count}, 0) + COALESCE(${tubeCountSubquery.count}, 0)`,
-    })
-    .from(controlDefinition)
-    .leftJoin(batchCountSubquery, eq(controlDefinition.id, batchCountSubquery.definitionId))
-    .leftJoin(specimenCountSubquery, eq(controlDefinition.id, specimenCountSubquery.definitionId))
-    .leftJoin(spotCountSubquery, eq(controlDefinition.id, spotCountSubquery.definitionId))
-    .leftJoin(micronixCountSubquery, eq(controlDefinition.id, micronixCountSubquery.definitionId))
-    .leftJoin(cryovialCountSubquery, eq(controlDefinition.id, cryovialCountSubquery.definitionId))
-    .leftJoin(staticWellCountSubquery, eq(controlDefinition.id, staticWellCountSubquery.definitionId))
-    .leftJoin(tubeCountSubquery, eq(controlDefinition.id, tubeCountSubquery.definitionId))
-    .where(eq(controlDefinition.controlType, 'blood'))
-  
-  const results = await query
-
-  // Parse properties to extract strains and density
-  const controls = results.map(row => {
-    const parsed = parseControlProperties(row.properties, strainMap)
-    return {
-      ...row,
-      strains: parsed.strains,
-      targetDensity: parsed.targetDensity,
-      targetDensityUnitId: parsed.targetDensityUnitId,
-      unitSymbol: parsed.unitSymbol,
-    }
-  })
-  
-  return c.json({ controls })
+  try {
+    const result = await listBloodControlDefinitions(dbInstance)
+    return c.json(result)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
 })
 
 // Get control definition by ID (filtered to blood controls)
 controls.get('/:id', authMiddleware, async (c) => {
-  const id = parseInt(requireParam(c, 'id'))
-  
-  if (isNaN(id)) {
-    return c.json({ error: 'Invalid blood control ID' }, 400)
+  try {
+    const id = parseInt(requireParam(c, 'id'))
+    if (isNaN(id)) {
+      return c.json({ error: 'Invalid blood control ID' }, 400)
+    }
+
+    const result = await getBloodControlDefinition(dbInstance, id)
+    return c.json(result)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
-
-  const control = await dbInstance
-    .select()
-    .from(controlDefinition)
-    .where(and(
-      eq(controlDefinition.id, id),
-      eq(controlDefinition.controlType, 'blood')
-    ))
-    .get()
-
-  if (!control) {
-    return c.json({ error: 'Blood control not found' }, 404)
-  }
-
-  return c.json({ control })
 })
 
 // Get control definition summary with composition and batches
@@ -882,30 +631,15 @@ controls.patch('/:id', memberMiddleware, async (c) => {
 
 // List batches for a definition (filtered to blood controls)
 controls.get('/:id/batches', authMiddleware, async (c) => {
-  const id = parseInt(requireParam(c, 'id'))
-  if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
+  try {
+    const id = parseInt(requireParam(c, 'id'))
+    if (isNaN(id)) return c.json({ error: 'Invalid blood control ID' }, 400)
 
-  // Verify definition is a blood control
-  const definition = await dbInstance
-    .select()
-    .from(controlDefinition)
-    .where(and(
-      eq(controlDefinition.id, id),
-      eq(controlDefinition.controlType, 'blood')
-    ))
-    .get()
-
-  if (!definition) {
-    return c.json({ error: 'Blood control definition not found' }, 404)
+    const result = await listBatchesForBloodControlDefinition(dbInstance, id)
+    return c.json(result)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
-
-  const batches = await dbInstance
-    .select()
-    .from(controlBatch)
-    .where(eq(controlBatch.controlDefinitionId, id))
-    .orderBy(desc(controlBatch.productionDate))
-
-  return c.json({ batches })
 })
 
 // Validate batch name
