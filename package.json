@@ -2,7 +2,7 @@
   "name": "sampledb",
   "version": "1.1.0",
   "private": true,
-  "description": "Laboratory Information Management System for sample tracking, experiment management, and SRA submissions",
+  "description": "Specimen inventory and workflow system for research and clinical labs",
   "scripts": {
     "dev": "bun --env-file=.env --env-file=.env.local --filter '*' --parallel dev",
     "dev:api": "bun --env-file=.env --env-file=.env.local --filter @sampledb/api dev",

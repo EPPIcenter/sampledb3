@@ -3,15 +3,25 @@ title: Derivations
 description: Track sample processing and transformations
 ---
 
-Derivations track relationships between containers when materials are processed, extracted, diluted, or otherwise transformed. In laboratory work, samples often go through multiple processing steps—whole blood might be processed to extract DNA, DNA might be diluted for assays, or samples might be aliquoted for distribution. Derivations help you maintain a complete chain of custody and processing history, showing exactly how each sample was created and what processing it has undergone.
+Derivations track relationships between containers when materials are processed, extracted, diluted, or otherwise transformed. In laboratory work, specimens often go through multiple processing steps—whole blood might be processed to extract DNA, DNA might be diluted for assays, or material might be distributed into new containers as a tracked step. Derivations help you maintain a complete chain of custody and processing history, showing exactly how each specimen was created and what processing it has undergone.
 
-This tracking is valuable for several reasons. It provides a complete audit trail showing where samples came from and what was done to them. It helps you understand processing history when analyzing results. It enables quality control by tracking protocols and processing dates. And it maintains relationships that are important for regulatory compliance and scientific reproducibility.
+This tracking is valuable for several reasons. It provides a complete audit trail showing where specimens came from and what was done to them. It helps you understand processing history when analyzing results. It enables quality control by tracking protocols and processing dates. And it maintains relationships that are important for regulatory compliance and scientific reproducibility.
+
+## Aliquots vs derivations
+
+SampleDB uses **Aliquot** and **Derivation** for two different operations. Do not confuse them.
+
+**Aliquot (same specimen)** — When you divide material from one collection event across multiple physical containers without a transformation step. Example: one blood draw registered as a single **Specimen**, split into three tubes. Each tube is a **Container** (an aliquot); all three reference the same specimen. Use specimen registration with multiple containers, or **Add container** on the specimen detail page. No derivation record is created.
+
+**Derivation (transformation)** — When material in a **parent container** is processed into a **child container**, usually creating a new **Specimen** (for example, DNA extracted from whole blood). SampleDB records a parent→child derivation with a derivation type, protocol, and date. This is what the rest of this guide describes.
+
+The derivation type **Distribution** in the UI (stored as `aliquot` in CSV imports) means distribution as a *tracked processing step*—creating a child container and new specimen from a parent—not the same as adding a second container to the same specimen.
 
 ## Understanding How Derivations Work
 
-A derivation represents a processing step that creates a new sample from an existing one. Think of it as a transformation: you start with a parent container (the source material), perform some processing (like DNA extraction or dilution), and create a derived container (the result). The derivation record links these containers together and documents what processing was done.
+A derivation represents a processing step that creates a new specimen from material in an existing container. Think of it as a transformation: you start with a parent container (the source material), perform some processing (like DNA extraction or dilution), and create a child container (the result). The derivation record links these containers together and documents what processing was done.
 
-The system supports several derivation types that cover common laboratory workflows. DNA Extraction represents extracting DNA from a source sample, which is common in molecular biology work. Dilution represents diluting a sample to a different concentration, which is frequently needed for assay preparation. Aliquot represents creating smaller portions from a larger sample, useful for sample distribution. And Other allows you to document any other type of processing or transformation that doesn't fit the standard categories.
+The system supports several derivation types that cover common laboratory workflows. DNA Extraction represents extracting DNA from a source specimen, which is common in molecular biology work. Dilution represents diluting a specimen to a different concentration, which is frequently needed for assay preparation. Distribution represents creating a child container from a parent as a tracked distribution step (distinct from same-specimen aliquoting). And Other allows you to document any other type of processing or transformation that doesn't fit the standard categories.
 
 ## Derivation Chains and Relationships
 
@@ -26,7 +36,7 @@ When you need to create a derivation for a single container, the process starts 
 Click **Create Derivation** to open the derivation form. The form shows:
 
 - **Source container** — A read-only summary of the container you're deriving from (e.g. barcode, position, specimen type).
-- **Derivation type** — What kind of processing you're performing: DNA Extraction, Dilution, Aliquot, or Other.
+- **Derivation type** — What kind of processing you're performing: DNA Extraction, Dilution, Distribution, or Other.
 - **Derived specimen type** — The specimen type of the result (e.g. DNA when extracting from DBS).
 - **Derived container type** — The container that will hold the derived sample: Micronix Tube, Cryovial Tube, or Paper.
 - **Collection (existing)** — Search and select an **existing** collection (plate, box, or sheet) where the new container will go. Create new plates or boxes from Storage first if needed; the single-derivation form only places into existing collections.
@@ -66,6 +76,8 @@ When you're processing many samples at once—perhaps extracting DNA from an ent
 - After the run, you see success/error counts and a per-row result table, plus a link **Back to Derivations**.
 
 For micronix tube derivations, **plate_name or collection_barcode** is required in each row. For cryovial tube derivations, **box_name or collection_barcode** is required. For paper derivations, **bag_name** is required. These columns tell the system where the derived containers belong. For micronix tube derivations, **container_barcode** is also required in each row; barcodes are scanned and provided by you—the system does not assign them.
+
+When providing **derivation_type** in CSV, use the stored value (for example `aliquot` for Distribution, `dna_extraction` for DNA Extraction). The UI shows human-readable labels.
 
 **Example: Derivation from controls (DBS to DNA in micronix tubes)** — See `examples/derivation-control-dbs-to-dna/` in the repo for a sample CSV and README. To generate a CSV from your production database, run `scripts/generate_derivation_control_dbs_to_dna_example.sh`.
 

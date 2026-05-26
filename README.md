@@ -1,6 +1,6 @@
-# SampleDB - Laboratory Information Management System
+# SampleDB
 
-A modern LIMS built with Hono (TypeScript API) + React for tracking samples, experiments, and SRA submissions.
+A specimen inventory and workflow system for research and clinical labs — tracking studies, specimens, containers, and storage locations with bulk import/export, quality controls, derivations, and assay prep workflows. Built with Hono (TypeScript API) + React.
 
 ## Architecture
 

@@ -10,7 +10,7 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'SampleDB User Guide',
-			description: 'Complete user guide for SampleDB laboratory sample management system',
+			description: 'User guide for SampleDB — specimen inventory and workflow for research and clinical labs',
 			logo: {
 				src: './src/assets/icon.png',
 				alt: 'SampleDB',

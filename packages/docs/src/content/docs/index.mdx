@@ -1,9 +1,9 @@
 ---
 title: Welcome to SampleDB
-description: Complete user guide for SampleDB laboratory sample management system
+description: User guide for SampleDB — specimen inventory and workflow for research and clinical labs
 template: splash
 hero:
-  tagline: Your complete guide to managing laboratory samples with SampleDB
+  tagline: Track specimens, storage, and lab workflows from study setup to the freezer
   actions:
     - text: Get Started
       link: /docs/guides/getting-started/setup/
@@ -18,25 +18,39 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## What is SampleDB?
 
-SampleDB is a comprehensive laboratory sample management system designed to help wet lab teams track and manage biological samples, containers, and storage locations efficiently. Whether you're working with research studies, control batches, or specimen derivations, SampleDB provides the tools you need to maintain accurate records and streamline your workflows.
+SampleDB is a specimen inventory and workflow system for research and clinical labs. It helps lab staff and biobank operators track biological samples from study enrollment through physical storage — with bulk CSV import and export, quality controls, container derivations, and assay preparation workflows such as qPCR plate layout.
 
-The system helps you organize everything from initial sample collection through long-term storage, tracking each specimen's journey from subject to container to location. With features for bulk import, export, and container management, SampleDB scales from small pilot studies to large multi-site research projects.
+SampleDB also tracks **quality control specimens** — reference materials produced in defined batches, separate from study subjects. Once specimens are registered, the same storage tools apply whether the material came from a study subject or a control batch.
 
 ## Understanding the Core Concepts
 
-Before diving into the guides, it's helpful to understand how SampleDB organizes your laboratory data. The system is built around a few key concepts that work together to create a complete picture of your sample inventory.
+SampleDB organizes laboratory data around two related hierarchies. Most day-to-day work starts with provenance — *where did this material come from?* — and then moves to storage — *where is it now?*
 
-**Studies** form the foundation of your organization. Think of a study as a research project or clinical trial that brings together related work. Each study has a unique short code (like "NAM15" or "TCC08") that you'll use throughout the system to identify which study a sample belongs to. Studies can contain many subjects, and you can track statistics and progress at the study level.
+### Where did it come from? (Provenance)
 
-**Subjects** are the individual participants or sample sources within a study. If you're running a clinical trial, each subject might be a patient. In a research study, subjects might be animals, cell lines, or other sample sources. Each subject can have multiple specimens collected over time, especially in longitudinal studies where you track samples across multiple timepoints.
+**Studies** are the top-level unit for research projects and clinical trials. Each study has a unique short code (like "NAM15" or "TCC08") used in imports, exports, and searches.
 
-**Specimens** are the actual biological samples you're managing—the blood, plasma, DNA, or other materials collected from subjects or control batches. Each specimen has a type (like Whole Blood or Plasma), a collection date, and can be associated with a physical container for storage tracking.
+**Subjects** are participants or sample sources within a study. Each subject has a unique name within that study and can have many specimens collected over time.
 
-**Containers** are the physical storage units that hold your specimens. SampleDB supports several container types to match your laboratory's storage methods. Micronix tubes are small tubes typically stored in 96-well plates, perfect for DNA samples or small volumes. Cryovial tubes are standard vials stored in boxes, ideal for larger liquid samples. Papers represent dried blood spot (DBS) sheets stored in boxes or bags. Static wells are fixed-position containers in plates, useful for specific assay formats.
+**Specimens** are the collected unit — the registered record of biological material from a specific collection event (whole blood, plasma, DNA, and so on). In casual conversation you might say "sample"; in SampleDB the domain term is **Specimen**. Each specimen has a type, an optional collection date, and a **source** — typically a subject, or alternatively a control batch.
 
-**Collections** group containers together for organization. A Micronix plate holds multiple micronix tubes in a grid layout. A cryovial box organizes cryovial tubes. Boxes and bags can hold paper sheets or other items. This hierarchical organization—collections containing containers containing specimens—helps you quickly locate any sample in your inventory.
+Quality control specimens follow a parallel path: **Control definition → Control batch → Specimen**. Strain-mixture controls (synthetic parasite mixtures) add a **Composition** layer above definitions. See the [Blood Controls](/docs/guides/features/blood-controls/) guide for details.
 
-**Locations** represent your physical storage infrastructure in a hierarchical structure. You might organize locations as Building → Room → Freezer → Shelf, or any structure that matches your lab's physical layout. This allows you to track exactly where each collection is stored, making it easy to find samples and plan storage capacity.
+### Where is it stored? (Physical storage)
+
+**Containers** are the physical storage units that hold specimen material — micronix tubes, cryovials, dried blood spot papers, and other types. One specimen can have multiple containers; each container holding part of the same specimen is an **aliquot**.
+
+**Collections** group containers handled together as one physical unit — a micronix plate, cryovial box, or bag. A collection is not the act of collecting a sample from a subject.
+
+**Locations** are places in your storage hierarchy where collections are kept (building → room → freezer → shelf, or whatever matches your lab). Locations are configured in [Reference Data](/docs/guides/reference-data/overview/) and referenced when placing collections.
+
+A specimen may exist without a container until it is physically stored. When it is stored, the chain is: **Specimen → Container → Collection → Location**.
+
+### Processing and configuration
+
+**Derivations** track transformations — when material in a parent container is processed into a child container (for example, DNA extraction), usually creating a new specimen. This is distinct from aliquoting, which divides the same specimen across multiple containers without a transformation record. See [Derivations](/docs/guides/features/derivations/).
+
+**Reference data** is system-wide configuration — specimen types, units, storage types, locations, strains, and related lookup data — set up during initial configuration and updated as your lab evolves. Day-to-day records (studies, specimens, containers, controls) are **operational data**.
 
 ## Getting Started
 
@@ -73,7 +87,7 @@ This documentation is organized to help you whether you're just getting started 
 
 **Bulk Operations** help you work efficiently with large datasets. Whether you're importing hundreds of subjects from a spreadsheet, exporting containers for analysis, or reorganizing containers between collections, these guides show you how to handle bulk operations safely and effectively.
 
-**Specialized Features** dive into advanced functionality for specific use cases. Blood controls help you manage quality control samples with definitions and batches. Derivations track how samples are processed and transformed. Collection movement helps you reorganize your storage as your lab grows.
+**Specialized Features** dive into advanced functionality for specific use cases. [Blood Controls](/docs/guides/features/blood-controls/) covers control definitions, batches, and inventory — including strain-mixture controls with composition tracking. [Derivations](/docs/guides/features/derivations/) track how specimens are processed and transformed. Collection movement helps you reorganize your storage as your lab grows.
 
 **Reference Data** management guides show you how to configure the system-wide settings that define what types of information SampleDB can store. You'll learn how to manage specimen types, units, storage types, locations, and other foundational data.
 
