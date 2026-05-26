@@ -29,7 +29,7 @@ import {
   setScannerConfigurations,
 } from './settings'
 import { runBulkCombinedImport } from './bulk-combined-import'
-import { createBatchWithSpecimens } from './control-batch-creation'
+import { createBatchWithSpecimens } from './controls/batch-with-specimens'
 import { createDerivation } from './derivations'
 import { utcNow } from './datetime'
 import { controlDefinition, box, sheet, micronixPlate, strain } from '../db/schema'

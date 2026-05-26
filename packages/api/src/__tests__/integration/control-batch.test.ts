@@ -38,6 +38,10 @@ describe('Control Batch Creation Integration Tests', () => {
     })
 
     app = new Hono()
+    app.use('*', (c, next) => {
+      c.set('db', testDb)
+      return next()
+    })
     // Use factory pattern with test database
     const controlsRoutes = createControlsRoutes(testDb)
     const authRoutes = createAuthRoutes(testDb, testDb)

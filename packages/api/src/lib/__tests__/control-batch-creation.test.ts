@@ -9,7 +9,7 @@ import {
   createTestUnit,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
-import { createBatchWithSpecimens } from '../control-batch-creation'
+import { createBatchWithSpecimens } from '../controls/batch-with-specimens'
 import { specimenTypeContainerType, containerTypeUnit, storageContainer, box } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
