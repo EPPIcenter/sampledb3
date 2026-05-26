@@ -1,7 +1,7 @@
 import { Context } from 'hono'
 import { z } from 'zod'
 import { logBackendError, logError, type ErrorLogContext } from './error-logger'
-import { db } from '../db/client'
+import { getRequestDatabase } from './db-context'
 
 export interface ErrorResponse {
   error: string
@@ -22,8 +22,7 @@ function isZodError(error: unknown): error is z.ZodError {
 }
 
 export function handleRouteError(error: unknown, c: Context): Response {
-  // Get database from context if available, otherwise use default
-  const database = (c.get('db') as typeof db | undefined) || db
+  const database = getRequestDatabase(c)
   
   // Extract context for error logging
   const user = c.get('user') as { id: number } | undefined

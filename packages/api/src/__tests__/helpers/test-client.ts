@@ -2,6 +2,7 @@ import { expect } from 'vitest'
 import { Hono } from 'hono'
 import { testClient } from 'hono/testing'
 import type { Database } from '../../db/client'
+import { setRequestDatabase } from '../../lib/db-context'
 
 /**
  * Creates a test client for Hono routes
@@ -19,6 +20,10 @@ export function createTestAppWithDb(
   routeFactory: (db: Database) => Hono
 ) {
   const app = new Hono()
+  app.use('*', async (c, next) => {
+    setRequestDatabase(c, db)
+    await next()
+  })
   const route = routeFactory(db)
   app.route('/api', route)
   return createTestClient(app)

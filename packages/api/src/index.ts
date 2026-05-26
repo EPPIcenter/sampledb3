@@ -9,6 +9,7 @@ import { dirname } from 'path'
 import { readFile } from 'fs/promises'
 import { rateLimit } from './middleware/rate-limit'
 import { createDatabase } from './db/client'
+import { setRequestDatabase } from './lib/db-context'
 import { study } from './db/schema'
 import { createAuthRoutes } from './routes/auth'
 import { createStudiesRoutes } from './routes/studies'
@@ -64,6 +65,10 @@ function setStaticCachePolicy(filePath: string, c: Context): void {
 const app = new Hono()
 
 // Middleware
+app.use('*', async (c, next) => {
+  setRequestDatabase(c, db)
+  await next()
+})
 app.use('*', logger())
 app.use('*', secureHeaders())
 app.use('*', cors({

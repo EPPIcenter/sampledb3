@@ -10,6 +10,16 @@ import { getPasswordRequirements, getSessionSettings } from '../lib/settings'
 import { createAuthMiddleware, createAdminMiddleware } from '../middleware/auth'
 import { rateLimit } from '../middleware/rate-limit'
 import { handleRouteError } from '../lib/error-handler'
+import {
+  toPublicUser,
+  verifyLoginCredentials,
+  createUserSession,
+  registerApprovedUser,
+} from '../lib/auth/auth-service'
+
+function publicUserResponse(user: ReturnType<typeof toPublicUser>) {
+  return { user: { ...user, username: user.username || undefined } }
+}
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 
@@ -61,48 +71,8 @@ auth.post('/login', rateLimit(10, 60 * 1000), async (c) => {
     const body = await c.req.json()
     const { emailOrUsername, password } = loginSchema.parse(body)
 
-    // Try to find user by email or username
-    const user = await database
-      .select()
-      .from(users)
-      .where(and(
-        or(
-          eq(users.email, emailOrUsername),
-          eq(users.username, emailOrUsername)
-        ),
-        isNull(users.deletedAt) // Exclude soft-deleted users
-      ))
-      .get()
-
-    if (!user) {
-      return c.json({ error: 'Invalid credentials' }, 401)
-    }
-
-    const valid = await bcrypt.compare(password, user.passwordHash)
-    if (!valid) {
-      return c.json({ error: 'Invalid credentials' }, 401)
-    }
-
-    if (!user.approvedAt) {
-      return c.json({ error: 'Account pending approval' }, 401)
-    }
-
-    // Get session settings
-    const sessionSettings = await getSessionSettingsFromDb()
-    if (!sessionSettings) {
-      return c.json({ error: 'Session settings are not configured. Please run database initialization.' }, 500)
-    }
-    const maxAgeSeconds = sessionSettings.maxAgeSeconds
-
-    // Create session
-    const sessionId = nanoid()
-    const expiresAt = Math.floor(Date.now() / 1000) + maxAgeSeconds
-
-    await database.insert(sessions).values({
-      id: sessionId,
-      userId: user.id,
-      expiresAt,
-    })
+    const user = await verifyLoginCredentials(database, emailOrUsername, password)
+    const { sessionId, maxAgeSeconds } = await createUserSession(database, user.id)
 
     // Update last login
     await database
@@ -118,13 +88,11 @@ auth.post('/login', rateLimit(10, 60 * 1000), async (c) => {
       path: '/',
     })
 
+    const publicUser = toPublicUser(user)
     return c.json({
       user: {
-        id: user.id,
-        email: user.email,
-        username: user.username || undefined,
-        name: user.name,
-        role: user.role,
+        ...publicUser,
+        username: publicUser.username || undefined,
       },
     })
   } catch (error) {
@@ -224,31 +192,13 @@ auth.post('/logout', async (c) => {
 // Get current user (requires authentication)
 auth.get('/me', authMiddleware, async (c) => {
   const user = c.get('user')!
-  // Fetch full user data including username
-  const fullUser = await database
-    .select({
-      id: users.id,
-      email: users.email,
-      username: users.username,
-      name: users.name,
-      role: users.role,
-    })
-    .from(users)
-    .where(eq(users.id, user.id))
-    .get()
-  
+  const fullUser = await database.select().from(users).where(eq(users.id, user.id)).get()
   if (!fullUser) {
     return c.json({ error: 'User not found' }, 404)
   }
-  
-  return c.json({ 
-    user: {
-      id: fullUser.id,
-      email: fullUser.email,
-      username: fullUser.username || undefined,
-      name: fullUser.name,
-      role: fullUser.role,
-    }
+  const publicUser = toPublicUser(fullUser)
+  return c.json({
+    user: { ...publicUser, username: publicUser.username || undefined },
   })
 })
 
@@ -258,99 +208,33 @@ auth.post('/register', adminMiddleware, async (c) => {
     const body = await c.req.json()
     const registerSchema = await createRegisterSchema()
     const data = registerSchema.parse(body)
-
-    // Check if email already exists
-    const existingEmail = await database
-      .select()
-      .from(users)
-      .where(eq(users.email, data.email))
-      .get()
-
-    if (existingEmail) {
-      return c.json({ error: 'Email already in use' }, 400)
-    }
-
-    // Check if username already exists (if provided)
-    if (data.username) {
-      const existingUsername = await database
-        .select()
-        .from(users)
-        .where(eq(users.username, data.username))
-        .get()
-
-      if (existingUsername) {
-        return c.json({ error: 'Username already in use' }, 400)
-      }
-    }
-
-    // Hash password
-    const passwordHash = await bcrypt.hash(data.password, 10)
-    const createdAt = utcNow()
-
-    // Create user (admin-created users are immediately approved)
-    const [user] = await database
-      .insert(users)
-      .values({
-        email: data.email,
-        username: data.username || null,
-        name: data.name,
-        passwordHash,
-        role: data.role,
-        createdAt,
-        approvedAt: createdAt,
-      })
-      .returning()
-
-    return c.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username || undefined,
-        name: user.name,
-        role: user.role,
-      },
-    }, 201)
+    const user = await registerApprovedUser(database, {
+      email: data.email,
+      name: data.name,
+      username: data.username,
+      password: data.password,
+      role: data.role,
+    })
+    return c.json(publicUserResponse(toPublicUser(user)), 201)
   } catch (error) {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
     }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
   })
 
-// Get current user (alias for /me for consistency, requires authentication)
+// Get current user (alias for /me)
 auth.get('/current', authMiddleware, async (c) => {
-  try {
-    const user = c.get('user')!
-    // Fetch full user data including username
-    const fullUser = await database
-      .select({
-        id: users.id,
-        email: users.email,
-        username: users.username,
-        name: users.name,
-        role: users.role,
-      })
-      .from(users)
-      .where(eq(users.id, user.id))
-      .get()
-    
-    if (!fullUser) {
-      return c.json({ error: 'User not found' }, 404)
-    }
-    
-    return c.json({ 
-      user: {
-        id: fullUser.id,
-        email: fullUser.email,
-        username: fullUser.username || undefined,
-        name: fullUser.name,
-        role: fullUser.role,
-      }
-    })
-  } catch (error) {
-    return handleRouteError(error, c)
+  const user = c.get('user')!
+  const fullUser = await database.select().from(users).where(eq(users.id, user.id)).get()
+  if (!fullUser) {
+    return c.json({ error: 'User not found' }, 404)
   }
+  const publicUser = toPublicUser(fullUser)
+  return c.json({
+    user: { ...publicUser, username: publicUser.username || undefined },
+  })
 })
 
 // Update current user profile (self-service)
