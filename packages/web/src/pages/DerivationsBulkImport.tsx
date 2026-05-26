@@ -15,6 +15,7 @@ import { getCollectionNameColumn } from '../lib/container-columns'
 import { generateDerivationsTemplate, type TemplateOptions } from '../lib/template-generator'
 import { useUser } from '../contexts/UserContext'
 import LocationPicker from '../components/LocationPicker'
+import { DERIVATION_TYPES } from '../lib/derivation-types'
 import '../styles/storage.css'
 
 interface MissingDerivationCollection {
@@ -25,13 +26,6 @@ interface MissingDerivationCollection {
   status: 'pending' | 'creating' | 'success' | 'error'
   error?: string
 }
-
-const DERIVATION_TYPES = [
-  { value: 'dna_extraction', label: 'DNA Extraction' },
-  { value: 'dilution', label: 'Dilution' },
-  { value: 'aliquot', label: 'Aliquot' },
-  { value: 'other', label: 'Other' },
-]
 
 const CONTAINER_TYPES = [
   { value: 'micronix_tube', label: 'Micronix Tube' },

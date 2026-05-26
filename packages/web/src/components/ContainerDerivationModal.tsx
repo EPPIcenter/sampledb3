@@ -3,6 +3,7 @@ import { derivationsApi, specimenTypesApi, collectionsApi, type SpecimenType, ty
 import type { CollectionOption, CollectionSelectValue } from './CollectionSelectOrCreate'
 import CollectionSelectOrCreate from './CollectionSelectOrCreate'
 import ModalPortal from './ModalPortal'
+import { DERIVATION_TYPES } from '../lib/derivation-types'
 import '../styles/storage.css'
 
 interface ContainerDerivationModalProps {
@@ -22,13 +23,6 @@ interface ContainerDerivationModalProps {
   /** Pass a key that increments when opening to reset inner state; parent should increment in the open handler. */
   openKey?: number
 }
-
-const DERIVATION_TYPES = [
-  { value: 'dna_extraction', label: 'DNA Extraction' },
-  { value: 'dilution', label: 'Dilution' },
-  { value: 'aliquot', label: 'Aliquot' },
-  { value: 'other', label: 'Other' },
-]
 
 const CONTAINER_TYPES = [
   { value: 'micronix_tube', label: 'Micronix Tube' },

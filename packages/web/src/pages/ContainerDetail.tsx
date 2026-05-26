@@ -8,6 +8,7 @@ import ContainerDerivationModal from '../components/ContainerDerivationModal'
 import ContainerEditModal from '../components/ContainerEditModal'
 import DerivationChainView from '../components/DerivationChainView'
 import { useUser } from '../contexts/UserContext'
+import { formatDerivationType } from '../lib/derivation-types'
 import '../styles/storage.css'
 
 interface ContainerDetail {
@@ -526,7 +527,7 @@ export default function ContainerDetail() {
               <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <dt className="storage-detail-dt mb-1">Derivation Type</dt>
-                  <dd className="storage-detail-dd font-medium">{sourceDerivation.derivation.derivationType}</dd>
+                  <dd className="storage-detail-dd font-medium">{formatDerivationType(sourceDerivation.derivation.derivationType)}</dd>
                 </div>
                 {sourceDerivation.derivation.derivationDate && (
                   <div>
@@ -605,7 +606,7 @@ export default function ContainerDetail() {
                               <span className="font-semibold storage-detail-dd">{containerTypeName}</span>
                               {derivation.derivationType && (
                                 <span className="text-xs storage-detail-dt bg-app-card px-2 py-0.5 rounded border storage-card-divider">
-                                  {derivation.derivationType}
+                                  {formatDerivationType(derivation.derivationType)}
                                 </span>
                               )}
                               {container?.remainingQuantity !== undefined && (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { derivationsApi, type Derivation } from '../lib/api'
+import { formatDerivationType } from '../lib/derivation-types'
 import { getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
 
 interface DerivationChainViewProps {
@@ -98,7 +99,7 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
                         {getContainerTypeName(item.container?.containerType)}
                       </span>
                       <span className="text-xs text-app-text-muted">
-                        ({item.derivation.derivationType})
+                        ({formatDerivationType(item.derivation.derivationType)})
                       </span>
                     </div>
                     {item.container?.collection?.barcode && (
@@ -178,7 +179,7 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
                         {getContainerTypeName(item.container?.containerType)}
                       </span>
                       <span className="text-xs text-app-text-muted">
-                        ({item.derivation.derivationType})
+                        ({formatDerivationType(item.derivation.derivationType)})
                       </span>
                     </div>
                     {item.container?.collection?.barcode && (
