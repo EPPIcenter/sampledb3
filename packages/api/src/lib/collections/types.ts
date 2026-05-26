@@ -1,0 +1,64 @@
+export type ContainerSource =
+  | {
+      type: 'subject'
+      id: number
+      name: string
+      study: {
+        id: number
+        title: string
+        code: string
+        leadPerson: string
+      }
+    }
+  | {
+      type: 'control'
+      id: number
+      name: string
+      definitionName: string | null
+      controlType: string
+      targetDensity: number | null
+      targetDensityUnit: string | null
+      strainComposition: string | null
+    }
+  | null
+
+export type EnrichedStorageContainer = {
+  id: number
+  specimenId: number
+  unit: typeof import('../../db/schema').unit.$inferSelect | null
+  totalQuantity: number | null
+  remainingQuantity: number | null
+  comment: string | null
+  created: string
+  lastUpdated: string
+  specimen: typeof import('../../db/schema').specimen.$inferSelect | null
+  specimenTypeName: string | null
+  source: ContainerSource
+}
+
+export type CollectionLocationSummary = {
+  id: number
+  path: string | undefined
+} | null
+
+export type CollectionListEntry = {
+  id: number
+  name: string
+  barcode?: string | null
+  locationId: number | null
+  itemCount: number
+  location: CollectionLocationSummary
+}
+
+export type CollectionListAllEntry = CollectionListEntry & {
+  type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+}
+
+export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' | 'sheet'
+
+export type CreateCollectionInput = {
+  name: string
+  locationId: number
+  barcode?: string
+  userId?: number
+}
