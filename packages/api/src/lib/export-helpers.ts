@@ -9,14 +9,8 @@ import {
   controlDefinition,
   unit,
   strain,
-  location,
   micronixTube,
-  micronixPlate,
   cryovialTube,
-  cryovialBox,
-  box,
-  bag,
-  sheet,
   paper,
   staticWell,
 } from '../db/schema'
@@ -24,6 +18,7 @@ import { eq, and, or, inArray, gte, lte, sql } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
 import { resolveSubjectsByStudyGrouped } from './identifier-resolution'
 import { getDefaultExportConfiguration } from './settings'
+import { buildContainerInfoMap } from './container-enrichment'
 
 type StudyType = InferSelectModel<typeof study>
 
@@ -81,19 +76,6 @@ export interface CSVExportOptions {
   delimiter?: string  // Default: ','
   includeBOM?: boolean  // Default: true
   lineEnding?: 'LF' | 'CRLF'  // Default: 'CRLF'
-}
-
-// Helper to build location path string
-function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | undefined {
-  if (!loc) return undefined
-  // Use the materialized path if available, otherwise use name
-  if (loc.path) {
-    return loc.path
-  }
-  if (loc.name) {
-    return loc.name
-  }
-  return undefined
 }
 
 // Build the base query with all necessary joins
@@ -501,97 +483,37 @@ export async function enrichContainerData(
     }
   }
 
-  // Get container type information - only query types we need if filter is specified
-  // If no filter or empty filter, query all types. Otherwise, only query filtered types.
+  // Resolve placement (type, collection, position, location) via shared enrichment
+  const containerInfoMap = await buildContainerInfoMap(database, containerIds)
+
+  // Barcodes are not part of placement info — fetch only when needed for export columns
   const shouldQueryType = (type: string) => {
     if (!containerTypeFilter || containerTypeFilter.length === 0) return true
     return containerTypeFilter.includes(type)
   }
-  
-  const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
-    shouldQueryType('micronix_tube') ? database.select().from(micronixTube).where(inArray(micronixTube.id, containerIds)) : [],
-    shouldQueryType('cryovial_tube') ? database.select().from(cryovialTube).where(inArray(cryovialTube.id, containerIds)) : [],
-    shouldQueryType('paper') ? database.select().from(paper).where(inArray(paper.id, containerIds)) : [],
-    shouldQueryType('static_well') ? database.select().from(staticWell).where(inArray(staticWell.id, containerIds)) : [],
+
+  const [micronixTubes, cryovialTubes, papers] = await Promise.all([
+    shouldQueryType('micronix_tube')
+      ? database.select({ id: micronixTube.id, barcode: micronixTube.barcode }).from(micronixTube).where(inArray(micronixTube.id, containerIds))
+      : [],
+    shouldQueryType('cryovial_tube')
+      ? database.select({ id: cryovialTube.id, barcode: cryovialTube.barcode }).from(cryovialTube).where(inArray(cryovialTube.id, containerIds))
+      : [],
+    shouldQueryType('paper')
+      ? database.select({ id: paper.id, barcode: paper.barcode }).from(paper).where(inArray(paper.id, containerIds))
+      : [],
   ])
 
-  // Create container type maps
-  const micronixMap = new Map(micronixTubes.map(t => [t.id, { type: 'micronix_tube', barcode: t.barcode, position: t.position, collectionId: t.collectionId }]))
-  const cryovialMap = new Map(cryovialTubes.map(t => [t.id, { type: 'cryovial_tube', barcode: t.barcode, position: t.position, collectionId: t.collectionId }]))
-  const paperMap = new Map(papers.map(p => [p.id, { type: 'paper', barcode: p.barcode, position: p.position, sheetId: p.sheetId }]))
-  const staticWellMap = new Map(staticWells.map(w => [w.id, { type: 'static_well', position: w.position, collectionId: w.collectionId }]))
-
-  // Get location information for collections
-  const collectionIds = new Set<number>()
-  micronixTubes.forEach(t => collectionIds.add(t.collectionId))
-  cryovialTubes.forEach(t => collectionIds.add(t.collectionId))
-
-  // Get sheet IDs for paper containers
-  const sheetIds = new Set<number>()
-  papers.forEach(p => {
-    if (p.sheetId) sheetIds.add(p.sheetId)
-  })
-
-  const [micronixPlates, cryovialBoxes, sheets] = await Promise.all([
-    collectionIds.size > 0 ? database.select().from(micronixPlate).where(inArray(micronixPlate.id, Array.from(collectionIds))) : [],
-    collectionIds.size > 0 ? database.select().from(cryovialBox).where(inArray(cryovialBox.id, Array.from(collectionIds))) : [],
-    sheetIds.size > 0 ? database.select().from(sheet).where(inArray(sheet.id, Array.from(sheetIds))) : [],
-  ])
-
-  // Get box and bag IDs from sheets
-  const sheetBoxIds = new Set<number>()
-  const sheetBagIds = new Set<number>()
-  sheets.forEach(s => {
-    if (s.boxId) sheetBoxIds.add(s.boxId)
-    if (s.bagId) sheetBagIds.add(s.bagId)
-  })
-
-  // Get boxes and bags for sheets
-  const [sheetBoxes, sheetBags] = await Promise.all([
-    sheetBoxIds.size > 0 ? database.select().from(box).where(inArray(box.id, Array.from(sheetBoxIds))) : [],
-    sheetBagIds.size > 0 ? database.select().from(bag).where(inArray(bag.id, Array.from(sheetBagIds))) : [],
-  ])
-
-  // Combine all boxes (from sheets)
-  const allBoxes = [...sheetBoxes]
-
-  const locationIds = new Set<number>()
-  micronixPlates.forEach(p => {
-    if (p.locationId) locationIds.add(p.locationId)
-  })
-  cryovialBoxes.forEach(b => {
-    if (b.locationId) locationIds.add(b.locationId)
-  })
-  allBoxes.forEach(b => {
-    if (b.locationId) locationIds.add(b.locationId)
-  })
-  sheetBags.forEach(b => {
-    if (b.locationId) locationIds.add(b.locationId)
-  })
-
-  const locations = locationIds.size > 0
-    ? await database.select().from(location).where(inArray(location.id, Array.from(locationIds)))
-    : []
-  const locationMap = new Map(locations.map(l => [l.id, l]))
-
-  // Create sheet to location map (for paper containers)
-  // Sheets can be in boxes or bags, so we need to look up their parent's location
-  const sheetLocationMap = new Map<number, any>()
-  sheets.forEach(s => {
-    if (s.boxId) {
-      const box = allBoxes.find(b => b.id === s.boxId)
-      if (box?.locationId) {
-        const loc = locationMap.get(box.locationId)
-        if (loc) sheetLocationMap.set(s.id, loc)
-      }
-    } else if (s.bagId) {
-      const bag = sheetBags.find(b => b.id === s.bagId)
-      if (bag?.locationId) {
-        const loc = locationMap.get(bag.locationId)
-        if (loc) sheetLocationMap.set(s.id, loc)
-      }
-    }
-  })
+  const barcodeMap = new Map<number, string>()
+  for (const tube of micronixTubes) {
+    if (tube.barcode) barcodeMap.set(tube.id, tube.barcode)
+  }
+  for (const tube of cryovialTubes) {
+    if (tube.barcode) barcodeMap.set(tube.id, tube.barcode)
+  }
+  for (const p of papers) {
+    if (p.barcode) barcodeMap.set(p.id, p.barcode)
+  }
 
   // Build enriched data
   const enriched: ContainerExportData[] = []
@@ -600,64 +522,15 @@ export async function enrichContainerData(
     const spec = specimenMap.get(container.specimenId)
     if (!spec) continue
 
-    // Determine container type and metadata
-    let containerType = 'unknown'
-    let barcode: string | undefined
-    let position: string | undefined
-    let label: string | undefined
-    let collectionName: string | undefined
-    let locationInfo: typeof location.$inferSelect | null = null
-
-    if (micronixMap.has(container.id)) {
-      const info = micronixMap.get(container.id)!
-      containerType = info.type
-      barcode = info.barcode || undefined
-      position = info.position || undefined
-      // Direct lookup: find the micronix plate and get its location and name
-      const micronixPlate = micronixPlates.find(p => p.id === info.collectionId)
-      if (micronixPlate) {
-        collectionName = micronixPlate.name || undefined
-        if (micronixPlate.locationId) {
-          locationInfo = locationMap.get(micronixPlate.locationId) || null
-        }
-      }
-    } else if (cryovialMap.has(container.id)) {
-      const info = cryovialMap.get(container.id)!
-      containerType = info.type
-      barcode = info.barcode || undefined
-      position = info.position || undefined
-      // Direct lookup: find the cryovial box and get its location and name
-      const cryovialBox = cryovialBoxes.find(b => b.id === info.collectionId)
-      if (cryovialBox) {
-        collectionName = cryovialBox.name || undefined
-        if (cryovialBox.locationId) {
-          locationInfo = locationMap.get(cryovialBox.locationId) || null
-        }
-      }
-    } else if (paperMap.has(container.id)) {
-      const info = paperMap.get(container.id)!
-      containerType = info.type
-      barcode = info.barcode || undefined
-      position = info.position || undefined
-      // Find the sheet and get its name
-      const sheet = sheets.find(s => s.id === info.sheetId)
-      if (sheet) {
-        collectionName = sheet.name || undefined
-      }
-      locationInfo = info.sheetId ? sheetLocationMap.get(info.sheetId) : null
-    } else if (staticWellMap.has(container.id)) {
-      const info = staticWellMap.get(container.id)!
-      containerType = info.type
-      position = info.position || undefined
-      // Direct lookup: find the micronix plate and get its location and name
-      const micronixPlate = micronixPlates.find(p => p.id === info.collectionId)
-      if (micronixPlate) {
-        collectionName = micronixPlate.name || undefined
-        if (micronixPlate.locationId) {
-          locationInfo = locationMap.get(micronixPlate.locationId) || null
-        }
-      }
-    }
+    const placement = containerInfoMap.get(container.id)
+    const containerType = placement?.type ?? 'unknown'
+    const barcode = barcodeMap.get(container.id)
+    const position = placement?.position
+    const collectionName =
+      placement?.collectionName && placement.collectionName !== 'Unknown'
+        ? placement.collectionName
+        : undefined
+    const locationPath = placement?.locationPath
 
     const subjectId = spec.studySubjectId || undefined
     const controlBatchId = spec.controlBatchId || undefined
@@ -709,7 +582,6 @@ export async function enrichContainerData(
       container_type: containerType,
       barcode,
       position,
-      label,
       collection_name: collectionName,
       state: '',
       status:
@@ -735,9 +607,9 @@ export async function enrichContainerData(
       study_title: containerStudy.title,
       study_code: containerStudy.shortCode,
       study_lead_person: containerStudy.leadPerson,
-      location_path: buildLocationPath(locationInfo),
-      location_id: locationInfo?.id,
-      location_name: locationInfo?.name,
+      location_path: locationPath,
+      location_id: placement?.locationId,
+      location_name: placement?.locationName,
       created: container.created,
       last_updated: container.lastUpdated,
     })

@@ -10,6 +10,7 @@ import { eq, and } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
 import { resolveCollectionByName, resolveCollectionByBarcode, type CollectionType } from './collection-resolution'
 import { utcNow } from './datetime'
+import { formatLocationPath } from './container-enrichment'
 
 export type MoveableCollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
 
@@ -51,21 +52,6 @@ export interface CollectionMoveResult {
   success: boolean
   moved: number
   errors?: ValidationError[]
-}
-
-/**
- * Build location path string from location record
- */
-function buildLocationPath(loc: typeof location.$inferSelect | null | undefined): string | null {
-  if (!loc) return null
-  // Use the materialized path if available, otherwise use name
-  if (loc.path) {
-    return loc.path
-  }
-  if (loc.name) {
-    return loc.name
-  }
-  return null
 }
 
 /**
@@ -119,7 +105,7 @@ async function resolveCollectionByNameAndLocation(
           name: plate.name,
           barcode: plate.barcode,
           currentLocationId: plate.locationId,
-          currentLocationPath: buildLocationPath(loc),
+          currentLocationPath: formatLocationPath(loc) ?? null,
         }
       }
 
@@ -138,7 +124,7 @@ async function resolveCollectionByNameAndLocation(
         name: plate.name,
         barcode: plate.barcode,
         currentLocationId: plate.locationId,
-        currentLocationPath: buildLocationPath(loc),
+        currentLocationPath: formatLocationPath(loc) ?? null,
       }
     }
 
@@ -155,7 +141,7 @@ async function resolveCollectionByNameAndLocation(
           name: boxRecord.name,
           barcode: boxRecord.barcode,
           currentLocationId: boxRecord.locationId,
-          currentLocationPath: buildLocationPath(loc),
+          currentLocationPath: formatLocationPath(loc) ?? null,
         }
       }
 
@@ -174,7 +160,7 @@ async function resolveCollectionByNameAndLocation(
         name: boxRecord.name,
         barcode: boxRecord.barcode,
         currentLocationId: boxRecord.locationId,
-        currentLocationPath: buildLocationPath(loc),
+        currentLocationPath: formatLocationPath(loc) ?? null,
       }
     }
 
@@ -199,7 +185,7 @@ async function resolveCollectionByNameAndLocation(
         name: boxRecord.name,
         barcode: null,
         currentLocationId: boxRecord.locationId,
-        currentLocationPath: buildLocationPath(loc),
+        currentLocationPath: formatLocationPath(loc) ?? null,
       }
     }
 
@@ -224,7 +210,7 @@ async function resolveCollectionByNameAndLocation(
         name: bagRecord.name,
         barcode: null,
         currentLocationId: bagRecord.locationId,
-        currentLocationPath: buildLocationPath(loc),
+        currentLocationPath: formatLocationPath(loc) ?? null,
       }
     }
   }
@@ -273,7 +259,7 @@ async function resolveCollectionByBarcodeAndLocation(
         name: plate.name,
         barcode: plate.barcode,
         currentLocationId: plate.locationId,
-        currentLocationPath: buildLocationPath(loc),
+        currentLocationPath: formatLocationPath(loc) ?? null,
       }
     }
 
@@ -298,7 +284,7 @@ async function resolveCollectionByBarcodeAndLocation(
         name: boxRecord.name,
         barcode: boxRecord.barcode,
         currentLocationId: boxRecord.locationId,
-        currentLocationPath: buildLocationPath(loc),
+        currentLocationPath: formatLocationPath(loc) ?? null,
       }
     }
 
@@ -333,7 +319,7 @@ async function resolveCollectionById(
         name: plate.name,
         barcode: plate.barcode,
         currentLocationId: plate.locationId,
-        currentLocationPath: buildLocationPath(loc),
+        currentLocationPath: formatLocationPath(loc) ?? null,
       }
     }
 
@@ -353,7 +339,7 @@ async function resolveCollectionById(
         name: boxRecord.name,
         barcode: boxRecord.barcode,
         currentLocationId: boxRecord.locationId,
-        currentLocationPath: buildLocationPath(loc),
+        currentLocationPath: formatLocationPath(loc) ?? null,
       }
     }
 
@@ -373,7 +359,7 @@ async function resolveCollectionById(
         name: boxRecord.name,
         barcode: null,
         currentLocationId: boxRecord.locationId,
-        currentLocationPath: buildLocationPath(loc),
+        currentLocationPath: formatLocationPath(loc) ?? null,
       }
     }
 
@@ -393,7 +379,7 @@ async function resolveCollectionById(
         name: bagRecord.name,
         barcode: null,
         currentLocationId: bagRecord.locationId,
-        currentLocationPath: buildLocationPath(loc),
+        currentLocationPath: formatLocationPath(loc) ?? null,
       }
     }
   }

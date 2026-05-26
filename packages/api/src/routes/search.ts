@@ -3,6 +3,7 @@ import type { Database } from '../db/client'
 import { specimen, study, studySubject, micronixTube, cryovialTube, micronixPlate, cryovialBox, box, bag, location, controlBatch, controlDefinition, type Location } from '../db/schema'
 import { eq, or, like, sql } from 'drizzle-orm'
 import { createAuthMiddleware } from '../middleware/auth'
+import { formatLocationPath } from '../lib/container-enrichment'
 
 /**
  * Create search routes with database injection
@@ -28,16 +29,6 @@ search.get('/', authMiddleware, async (c) => {
       ? 'collection' 
       : type
     const searchTypes = normalizedType ? [normalizedType] : ['specimen', 'container', 'study', 'subject']
-    
-    // Helper to build location path string
-    function buildLocationPath(loc: { path?: string | null; locationPath?: string | null; name?: string; locationName?: string | null } | null | undefined): string | undefined {
-      if (!loc) return undefined
-      // Use the materialized path if available, otherwise use name
-      if (loc.path || loc.locationPath) {
-        return loc.path || loc.locationPath || undefined
-      }
-      return loc.name || loc.locationName || undefined
-    }
 
     // Search specimens by ID or source info
     if (searchTypes.includes('specimen') || searchTypes.includes('all')) {
@@ -245,7 +236,7 @@ search.get('/', authMiddleware, async (c) => {
         .limit(10)
 
       for (const plate of micronixPlates) {
-        const locationPath = buildLocationPath(plate)
+        const locationPath = formatLocationPath(plate)
         const subtitle = [locationPath, plate.barcode].filter(Boolean).join(' • ')
         
         results.push({
@@ -285,7 +276,7 @@ search.get('/', authMiddleware, async (c) => {
         .limit(10)
 
       for (const box of cryovialBoxes) {
-        const locationPath = buildLocationPath(box)
+        const locationPath = formatLocationPath(box)
         const subtitle = [locationPath, box.barcode].filter(Boolean).join(' • ')
         
         results.push({
@@ -321,7 +312,7 @@ search.get('/', authMiddleware, async (c) => {
         .limit(10)
 
       for (const b of boxes) {
-        const locationPath = buildLocationPath(b)
+        const locationPath = formatLocationPath(b)
         
         results.push({
           type: 'box',
@@ -352,7 +343,7 @@ search.get('/', authMiddleware, async (c) => {
         .limit(10)
 
       for (const b of bags) {
-        const locationPath = buildLocationPath(b)
+        const locationPath = formatLocationPath(b)
         
         results.push({
           type: 'bag',

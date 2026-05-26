@@ -9,6 +9,7 @@ import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { resolveContainerByBarcode } from '../lib/identifier-resolution'
+import { formatLocationPath } from '../lib/container-enrichment'
 
 /**
  * Create containers routes with database injection
@@ -18,16 +19,6 @@ export function createContainersRoutes(database: Database): Hono {
   const containers = new Hono()
   const authMiddleware = createAuthMiddleware(database)
   const memberMiddleware = createMemberMiddleware(database)
-
-// Helper function to build full location path
-function buildLocationPath(loc: Location | null | undefined, parentName?: string): string {
-  if (!loc) return parentName || ''
-  // Use the materialized path if available, otherwise use name
-  if (loc.path) {
-    return parentName ? `${loc.path} → ${parentName}` : loc.path
-  }
-  return parentName ? `${loc.name} → ${parentName}` : loc.name
-}
 
 async function enrichContainerDetailed(container: StorageContainer) {
   const id = container.id
@@ -121,7 +112,7 @@ async function enrichContainerDetailed(container: StorageContainer) {
     tags: containerTags,
     unit: containerUnit,
     location: locationInfo,
-    locationPath: buildLocationPath(locationInfo, parentContainerName),
+    locationPath: formatLocationPath(locationInfo, parentContainerName) ?? '',
     collection: collectionInfo,
     micronixTube: micronixInfo,
     cryovialTube: cryovialInfo,

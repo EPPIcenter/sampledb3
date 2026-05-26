@@ -19,6 +19,8 @@ export type ContainerPlacementInfo = {
   position?: string
   id: number
   locationPath?: string
+  locationId?: number
+  locationName?: string
 }
 
 export type StorageContainerSummaryRow = {
@@ -131,6 +133,7 @@ export async function buildContainerInfoMap(
         collectionName: micronixPlate.name,
         locationPath: location.path,
         locationName: location.name,
+        locationId: location.id,
       })
       .from(micronixTube)
       .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
@@ -144,6 +147,7 @@ export async function buildContainerInfoMap(
         collectionName: cryovialBox.name,
         locationPath: location.path,
         locationName: location.name,
+        locationId: location.id,
       })
       .from(cryovialTube)
       .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
@@ -169,6 +173,7 @@ export async function buildContainerInfoMap(
         collectionName: micronixPlate.name,
         locationPath: location.path,
         locationName: location.name,
+        locationId: location.id,
       })
       .from(staticWell)
       .leftJoin(micronixPlate, eq(staticWell.collectionId, micronixPlate.id))
@@ -183,6 +188,8 @@ export async function buildContainerInfoMap(
       position: t.position || undefined,
       id: t.collectionId,
       locationPath: formatLocationPath(t),
+      locationId: t.locationId ?? undefined,
+      locationName: t.locationName ?? undefined,
     })
   }
 
@@ -193,35 +200,45 @@ export async function buildContainerInfoMap(
       position: t.position || undefined,
       id: t.collectionId,
       locationPath: formatLocationPath(t),
+      locationId: t.locationId ?? undefined,
+      locationName: t.locationName ?? undefined,
     })
   }
 
   for (const t of papersList) {
     let locPath: string | undefined
+    let locationId: number | undefined
+    let locationName: string | undefined
     if (t.boxId) {
       const res = await database
         .select({
           box: box,
           locationPath: location.path,
           locationName: location.name,
+          locationId: location.id,
         })
         .from(box)
         .leftJoin(location, eq(box.locationId, location.id))
         .where(eq(box.id, t.boxId))
         .get()
       locPath = formatLocationPath(res, res?.box.name)
+      locationId = res?.locationId ?? undefined
+      locationName = res?.locationName ?? undefined
     } else if (t.bagId) {
       const res = await database
         .select({
           bag: bag,
           locationPath: location.path,
           locationName: location.name,
+          locationId: location.id,
         })
         .from(bag)
         .leftJoin(location, eq(bag.locationId, location.id))
         .where(eq(bag.id, t.bagId))
         .get()
       locPath = formatLocationPath(res, res?.bag.name)
+      locationId = res?.locationId ?? undefined
+      locationName = res?.locationName ?? undefined
     }
     containerInfoMap.set(t.id, {
       type: 'paper',
@@ -229,6 +246,8 @@ export async function buildContainerInfoMap(
       position: t.position || undefined,
       id: t.sheetId,
       locationPath: locPath,
+      locationId,
+      locationName,
     })
   }
 
@@ -239,6 +258,8 @@ export async function buildContainerInfoMap(
       position: t.position || undefined,
       id: t.collectionId,
       locationPath: formatLocationPath(t),
+      locationId: t.locationId ?? undefined,
+      locationName: t.locationName ?? undefined,
     })
   }
 
