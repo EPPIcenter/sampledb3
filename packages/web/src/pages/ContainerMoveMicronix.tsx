@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { useSearchParams, Link, useNavigate, Navigate } from 'react-router-dom'
+import { Link, useNavigate, Navigate } from 'react-router-dom'
+import { useContainerMoveStep, type ContainerMoveAtomicMode } from '../hooks/useContainerMoveStep'
 import { collectionsApi, locationsApi, scannerConfigurationsApi, type Location, type ScannerConfiguration } from '../lib/api'
 import type { PlateCandidate } from '../lib/plate-filename-match'
 import { inferDestinationPlateForScan } from '../lib/plate-destination-inference'
@@ -51,27 +52,11 @@ interface FileData {
   preview: CSVRow[]
 }
 
-type Step = 'upload' | 'resolve' | 'execute'
-type ContainerMoveAtomicMode = 'all_or_nothing' | 'best_effort'
-
 export default function ContainerMoveMicronix() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const currentStep = (searchParams.get('step') as Step | null) ?? 'upload'
   const [files, setFiles] = useState<FileData[]>([])
-  const effectiveStep: Step =
-    currentStep !== 'upload' && files.length === 0 ? 'upload' : currentStep
-
-  useEffect(() => {
-    if (effectiveStep === 'upload' && currentStep !== 'upload') {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev)
-        next.set('step', 'upload')
-        return next
-      })
-    }
-  }, [effectiveStep, currentStep, setSearchParams])
+  const { currentStep: effectiveStep, setStep: setSearchStep } = useContainerMoveStep(files.length)
 
   const [loading, setLoading] = useState(false)
   const [availablePlates, setAvailablePlates] = useState<MicronixPlate[]>([])
@@ -185,13 +170,7 @@ export default function ContainerMoveMicronix() {
     })
   }
 
-  const setCurrentStep = (step: Step) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.set('step', step)
-      return next
-    })
-  }
+  const setCurrentStep = setSearchStep
 
   if (!canWrite) {
     return <Navigate to="/" replace />

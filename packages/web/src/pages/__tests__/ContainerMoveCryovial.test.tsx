@@ -21,15 +21,15 @@ import { collectionsApi, locationsApi } from '../../lib/api'
 let initialSearchParams = new URLSearchParams()
 const mockSetSearchParams = vi.fn()
 
-vi.mock('react-router-dom', async () => {
-    const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
+vi.mock('react-router-dom', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('react-router-dom')>()
     const React = await import('react')
     return {
         ...actual,
         useSearchParams: function useSearchParamsMock() {
             const [params, setParams] = React.useState(initialSearchParams)
             const setSearchParams = React.useCallback((updater: (prev: URLSearchParams) => URLSearchParams) => {
-                setParams((prev) => {
+                setParams((prev: URLSearchParams) => {
                     const next = updater(new URLSearchParams(prev))
                     mockSetSearchParams(updater)
                     return next
