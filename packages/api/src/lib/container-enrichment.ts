@@ -1,27 +1,8 @@
 import type { Database } from '../db/client'
 import {
-  micronixPlate,
-  micronixTube,
-  cryovialBox,
-  cryovialTube,
-  box,
-  bag,
-  paper,
-  sheet,
-  staticWell,
-  location,
-} from '../db/schema'
-import { eq, inArray } from 'drizzle-orm'
-
-export type ContainerPlacementInfo = {
-  type: string
-  collectionName: string
-  position?: string
-  id: number
-  locationPath?: string
-  locationId?: number
-  locationName?: string
-}
+  resolveContainerPlacements,
+  type ContainerPlacement,
+} from './container-placement'
 
 export type StorageContainerSummaryRow = {
   id: number
@@ -93,188 +74,15 @@ export type SpecimenCollectionSummary = {
   timeline: SpecimenTimelineEntry[]
 }
 
-type LocationPathInput = {
-  path?: string | null
-  locationPath?: string | null
-  name?: string | null
-  locationName?: string | null
-} | null | undefined
-
-/** Format a location path with optional parent collection name (box, bag, plate). */
-export function formatLocationPath(loc: LocationPathInput, parentName?: string): string | undefined {
-  if (!loc) return parentName || undefined
-  const path = loc.path ?? loc.locationPath
-  const name = loc.name ?? loc.locationName
-  if (path) {
-    return parentName ? `${path} → ${parentName}` : path
-  }
-  if (name) {
-    return parentName ? `${name} → ${parentName}` : name
-  }
-  return parentName || undefined
-}
-
-/** Resolve container type, collection, position, and location for storage container ids. */
-export async function buildContainerInfoMap(
-  database: Database,
-  containerIds: number[],
-): Promise<Map<number, ContainerPlacementInfo>> {
-  const containerInfoMap = new Map<number, ContainerPlacementInfo>()
-  if (containerIds.length === 0) {
-    return containerInfoMap
-  }
-
-  const [micronixTubesList, cryovialTubesList, papersList, staticWellsList] = await Promise.all([
-    database
-      .select({
-        id: micronixTube.id,
-        collectionId: micronixTube.collectionId,
-        position: micronixTube.position,
-        collectionName: micronixPlate.name,
-        locationPath: location.path,
-        locationName: location.name,
-        locationId: location.id,
-      })
-      .from(micronixTube)
-      .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
-      .leftJoin(location, eq(micronixPlate.locationId, location.id))
-      .where(inArray(micronixTube.id, containerIds)),
-    database
-      .select({
-        id: cryovialTube.id,
-        collectionId: cryovialTube.collectionId,
-        position: cryovialTube.position,
-        collectionName: cryovialBox.name,
-        locationPath: location.path,
-        locationName: location.name,
-        locationId: location.id,
-      })
-      .from(cryovialTube)
-      .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
-      .leftJoin(location, eq(cryovialBox.locationId, location.id))
-      .where(inArray(cryovialTube.id, containerIds)),
-    database
-      .select({
-        id: paper.id,
-        sheetId: paper.sheetId,
-        position: paper.position,
-        collectionName: sheet.name,
-        boxId: sheet.boxId,
-        bagId: sheet.bagId,
-      })
-      .from(paper)
-      .leftJoin(sheet, eq(paper.sheetId, sheet.id))
-      .where(inArray(paper.id, containerIds)),
-    database
-      .select({
-        id: staticWell.id,
-        collectionId: staticWell.collectionId,
-        position: staticWell.position,
-        collectionName: micronixPlate.name,
-        locationPath: location.path,
-        locationName: location.name,
-        locationId: location.id,
-      })
-      .from(staticWell)
-      .leftJoin(micronixPlate, eq(staticWell.collectionId, micronixPlate.id))
-      .leftJoin(location, eq(micronixPlate.locationId, location.id))
-      .where(inArray(staticWell.id, containerIds)),
-  ])
-
-  for (const t of micronixTubesList) {
-    containerInfoMap.set(t.id, {
-      type: 'micronix_tube',
-      collectionName: t.collectionName || 'Unknown',
-      position: t.position || undefined,
-      id: t.collectionId,
-      locationPath: formatLocationPath(t),
-      locationId: t.locationId ?? undefined,
-      locationName: t.locationName ?? undefined,
-    })
-  }
-
-  for (const t of cryovialTubesList) {
-    containerInfoMap.set(t.id, {
-      type: 'cryovial_tube',
-      collectionName: t.collectionName || 'Unknown',
-      position: t.position || undefined,
-      id: t.collectionId,
-      locationPath: formatLocationPath(t),
-      locationId: t.locationId ?? undefined,
-      locationName: t.locationName ?? undefined,
-    })
-  }
-
-  for (const t of papersList) {
-    let locPath: string | undefined
-    let locationId: number | undefined
-    let locationName: string | undefined
-    if (t.boxId) {
-      const res = await database
-        .select({
-          box: box,
-          locationPath: location.path,
-          locationName: location.name,
-          locationId: location.id,
-        })
-        .from(box)
-        .leftJoin(location, eq(box.locationId, location.id))
-        .where(eq(box.id, t.boxId))
-        .get()
-      locPath = formatLocationPath(res, res?.box.name)
-      locationId = res?.locationId ?? undefined
-      locationName = res?.locationName ?? undefined
-    } else if (t.bagId) {
-      const res = await database
-        .select({
-          bag: bag,
-          locationPath: location.path,
-          locationName: location.name,
-          locationId: location.id,
-        })
-        .from(bag)
-        .leftJoin(location, eq(bag.locationId, location.id))
-        .where(eq(bag.id, t.bagId))
-        .get()
-      locPath = formatLocationPath(res, res?.bag.name)
-      locationId = res?.locationId ?? undefined
-      locationName = res?.locationName ?? undefined
-    }
-    containerInfoMap.set(t.id, {
-      type: 'paper',
-      collectionName: t.collectionName || 'Unknown',
-      position: t.position || undefined,
-      id: t.sheetId,
-      locationPath: locPath,
-      locationId,
-      locationName,
-    })
-  }
-
-  for (const t of staticWellsList) {
-    containerInfoMap.set(t.id, {
-      type: 'static_well',
-      collectionName: t.collectionName || 'Unknown',
-      position: t.position || undefined,
-      id: t.collectionId,
-      locationPath: formatLocationPath(t),
-      locationId: t.locationId ?? undefined,
-      locationName: t.locationName ?? undefined,
-    })
-  }
-
-  return containerInfoMap
-}
-
-function defaultPlacementInfo(): ContainerPlacementInfo {
-  return { type: 'unknown', collectionName: 'Unknown', id: 0, position: undefined, locationPath: undefined }
+function collectionNameFromPlacement(placement: ContainerPlacement): string {
+  return placement.collection?.name ?? 'Unknown'
 }
 
 /** Build per-specimen container breakdown from storage rows and placement info. */
 export function enrichSpecimensWithContainers(
   specimens: SpecimenSummaryInput[],
   containers: StorageContainerSummaryRow[],
-  containerInfoMap: Map<number, ContainerPlacementInfo>,
+  placementMap: Map<number, ContainerPlacement>,
   specimenTypeMap: Map<number, string>,
   options?: { includeComment?: boolean; defaultUnit?: string },
 ): EnrichedSpecimenSummary[] {
@@ -295,19 +103,19 @@ export function enrichSpecimensWithContainers(
     const containersDetailed: EnrichedContainerDetail[] = []
 
     for (const c of specContainers) {
-      const info = containerInfoMap.get(c.id) ?? defaultPlacementInfo()
-      containerBreakdown[info.type] = (containerBreakdown[info.type] || 0) + 1
+      const placement = placementMap.get(c.id)!
+      containerBreakdown[placement.containerType] = (containerBreakdown[placement.containerType] || 0) + 1
       const unit = (c.unitSymbol as string | null) ?? defaultUnit
       unitBreakdown[unit] = (unitBreakdown[unit] || 0) + (c.remainingQuantity ?? 0)
       const detail: EnrichedContainerDetail = {
         id: c.id,
-        type: info.type,
+        type: placement.containerType,
         remainingQuantity: c.remainingQuantity ?? 0,
         unit,
-        collectionName: info.collectionName,
-        position: info.position,
-        collectionId: info.id,
-        locationPath: info.locationPath,
+        collectionName: collectionNameFromPlacement(placement),
+        position: placement.collection?.position ?? undefined,
+        collectionId: placement.collection?.id,
+        locationPath: placement.locationPath,
       }
       if (includeComment) {
         detail.comment = c.comment ?? undefined
@@ -333,7 +141,7 @@ export function enrichSpecimensWithContainers(
 /** Aggregate inventory by container type and unit. */
 export function buildInventoryBreakdown(
   containers: StorageContainerSummaryRow[],
-  containerInfoMap: Map<number, ContainerPlacementInfo>,
+  placementMap: Map<number, ContainerPlacement>,
 ): InventoryBreakdownEntry[] {
   const inventoryMap = new Map<string, {
     totalQuantity: number
@@ -344,9 +152,9 @@ export function buildInventoryBreakdown(
   }>()
 
   for (const container of containers) {
-    const info = containerInfoMap.get(container.id) ?? defaultPlacementInfo()
+    const placement = placementMap.get(container.id)!
     const unitSymbol = container.unitSymbol || 'units'
-    const key = `${info.type}|${unitSymbol}`
+    const key = `${placement.containerType}|${unitSymbol}`
     const current = inventoryMap.get(key) ?? {
       totalQuantity: 0,
       remainingQuantity: 0,
@@ -354,11 +162,12 @@ export function buildInventoryBreakdown(
       collections: new Set<string>(),
       locationPaths: new Set<string>(),
     }
-    if (info.collectionName && info.collectionName !== 'Unknown') {
-      current.collections.add(info.collectionName)
+    const collectionName = collectionNameFromPlacement(placement)
+    if (collectionName && collectionName !== 'Unknown') {
+      current.collections.add(collectionName)
     }
-    if (info.locationPath) {
-      current.locationPaths.add(info.locationPath)
+    if (placement.locationPath) {
+      current.locationPaths.add(placement.locationPath)
     }
     inventoryMap.set(key, {
       totalQuantity: current.totalQuantity + (container.totalQuantity || 0),
@@ -387,7 +196,7 @@ export function buildInventoryBreakdown(
 export function buildSpecimenCollectionSummary(
   enrichedSpecimens: EnrichedSpecimenSummary[],
   containers: StorageContainerSummaryRow[],
-  containerInfoMap: Map<number, ContainerPlacementInfo>,
+  placementMap: Map<number, ContainerPlacement>,
   options?: { includeInventory?: boolean },
 ): SpecimenCollectionSummary {
   const specimenTypeCounts: Record<string, number> = {}
@@ -397,8 +206,8 @@ export function buildSpecimenCollectionSummary(
 
   const containerTypeCounts: Record<string, number> = {}
   for (const container of containers) {
-    const info = containerInfoMap.get(container.id) ?? defaultPlacementInfo()
-    containerTypeCounts[info.type] = (containerTypeCounts[info.type] || 0) + 1
+    const placement = placementMap.get(container.id)!
+    containerTypeCounts[placement.containerType] = (containerTypeCounts[placement.containerType] || 0) + 1
   }
 
   const collectionDates = enrichedSpecimens
@@ -429,7 +238,7 @@ export function buildSpecimenCollectionSummary(
 
   if (options?.includeInventory) {
     summary.totalRemainingQuantity = containers.reduce((sum, c) => sum + (c.remainingQuantity || 0), 0)
-    summary.inventory = buildInventoryBreakdown(containers, containerInfoMap)
+    summary.inventory = buildInventoryBreakdown(containers, placementMap)
   }
 
   return summary
@@ -444,25 +253,25 @@ export async function buildSpecimenSummaryData(
   options?: { includeComment?: boolean; defaultUnit?: string; includeInventory?: boolean },
 ): Promise<{
   enrichedSpecimens: EnrichedSpecimenSummary[]
-  containerInfoMap: Map<number, ContainerPlacementInfo>
+  placementMap: Map<number, ContainerPlacement>
   summary: SpecimenCollectionSummary
 }> {
   const containerIds = containers.map((c) => c.id)
-  const containerInfoMap = await buildContainerInfoMap(database, containerIds)
+  const placementMap = await resolveContainerPlacements(database, containerIds)
   const enrichedSpecimens = enrichSpecimensWithContainers(
     specimens,
     containers,
-    containerInfoMap,
+    placementMap,
     specimenTypeMap,
     { includeComment: options?.includeComment, defaultUnit: options?.defaultUnit },
   )
   const summary = buildSpecimenCollectionSummary(
     enrichedSpecimens,
     containers,
-    containerInfoMap,
+    placementMap,
     { includeInventory: options?.includeInventory },
   )
-  return { enrichedSpecimens, containerInfoMap, summary }
+  return { enrichedSpecimens, placementMap, summary }
 }
 
 export const emptySpecimenCollectionSummary = (): SpecimenCollectionSummary => ({
@@ -473,3 +282,6 @@ export const emptySpecimenCollectionSummary = (): SpecimenCollectionSummary => (
   collectionDateRange: null,
   timeline: [],
 })
+
+// Re-export placement helpers used by summary callers and legacy imports during migration.
+export { formatLocationPath, resolveContainerPlacements, type ContainerPlacement } from './container-placement'

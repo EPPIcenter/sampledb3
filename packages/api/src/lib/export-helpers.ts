@@ -18,7 +18,7 @@ import { eq, and, or, inArray, gte, lte, sql } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
 import { resolveSubjectsByStudyGrouped } from './identifier-resolution'
 import { getDefaultExportConfiguration } from './settings'
-import { buildContainerInfoMap } from './container-enrichment'
+import { resolveContainerPlacements } from './container-placement'
 
 type StudyType = InferSelectModel<typeof study>
 
@@ -484,7 +484,7 @@ export async function enrichContainerData(
   }
 
   // Resolve placement (type, collection, position, location) via shared enrichment
-  const containerInfoMap = await buildContainerInfoMap(database, containerIds)
+  const placementMap = await resolveContainerPlacements(database, containerIds)
 
   // Barcodes are not part of placement info — fetch only when needed for export columns
   const shouldQueryType = (type: string) => {
@@ -522,15 +522,15 @@ export async function enrichContainerData(
     const spec = specimenMap.get(container.specimenId)
     if (!spec) continue
 
-    const placement = containerInfoMap.get(container.id)
-    const containerType = placement?.type ?? 'unknown'
+    const placement = placementMap.get(container.id)!
+    const containerType = placement.containerType
     const barcode = barcodeMap.get(container.id)
-    const position = placement?.position
+    const position = placement.collection?.position ?? undefined
     const collectionName =
-      placement?.collectionName && placement.collectionName !== 'Unknown'
-        ? placement.collectionName
+      placement.collection?.name && placement.collection.name !== 'Unknown'
+        ? placement.collection.name
         : undefined
-    const locationPath = placement?.locationPath
+    const locationPath = placement.locationPath
 
     const subjectId = spec.studySubjectId || undefined
     const controlBatchId = spec.controlBatchId || undefined
@@ -608,8 +608,8 @@ export async function enrichContainerData(
       study_code: containerStudy.shortCode,
       study_lead_person: containerStudy.leadPerson,
       location_path: locationPath,
-      location_id: placement?.locationId,
-      location_name: placement?.locationName,
+      location_id: placement.location?.id,
+      location_name: placement.location?.name,
       created: container.created,
       last_updated: container.lastUpdated,
     })

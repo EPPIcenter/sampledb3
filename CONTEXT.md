@@ -107,6 +107,10 @@ _Avoid_: Sample collection, plate (when you mean the collection entity), batch (
 A place in the storage hierarchy where collections are kept (e.g. freezer, shelf, room).
 _Avoid_: Site (unless referring to an external facility), storage (too vague)
 
+**Container placement**:
+Where a **Container** sits in the physical storage hierarchy — its position within a **Collection**, the collection it belongs to, and the **Location** path where that collection is stored. Distinct from specimen provenance (**Source**, study/control context) and from container identity metadata (barcodes, tags).
+_Avoid_: Enrichment (implementation term); conflating placement with specimen or source lookups
+
 ### System
 
 **SampleDB**:
