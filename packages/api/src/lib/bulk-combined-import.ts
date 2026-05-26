@@ -33,6 +33,9 @@ import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } 
 import { utcNow } from './datetime'
 import { resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
 import { ValidationError } from './error-handler'
+import { validateContainerData, type ContainerData } from './container-creation'
+import { validateContainerPlacementInPayload } from './container-placement-validation'
+import { normalizePosition } from './normalize-position'
 
 export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
@@ -50,17 +53,7 @@ export interface ExtendedContainerData {
   collectionLocationId?: number
 }
 
-export function normalizePosition(position: string | null | undefined): string | null {
-  if (!position || !position.trim()) return null
-  const trimmed = position.trim()
-  const match = trimmed.match(/^([A-Z]+)(\d+)$/i)
-  if (match) {
-    const row = match[1].toUpperCase()
-    const col = match[2]
-    return `${row}${col.padStart(2, '0')}`
-  }
-  return trimmed
-}
+export { normalizePosition } from './normalize-position'
 
 const LOCATION_CANNOT_CONTAIN_COLLECTIONS =
   'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.'
@@ -204,11 +197,11 @@ export async function prepareSubjectWithSpecimens(
     const spec = specimens[i]
     const specimenTypeId = await resolveSpecimenTypeByName(database, spec.specimenTypeName)
     if (!specimenTypeId) {
-      throw new ValidationError(`Specimen type '${spec.specimenTypeName}' not found`)
+      throw new ValidationError(`Specimen type '${spec.specimenTypeName}' not found`, { specimenIndex: i })
     }
     const dateValidation = validateCollectionDate(spec.collectionDate)
     if (!dateValidation.valid) {
-      throw new ValidationError(dateValidation.error ?? 'Invalid collection date')
+      throw new ValidationError(dateValidation.error ?? 'Invalid collection date', { specimenIndex: i })
     }
     if (spec.container?.containerType) {
       const containerTypeValidation = await validateContainerTypeForSpecimenType(
@@ -217,7 +210,18 @@ export async function prepareSubjectWithSpecimens(
         spec.container.containerType
       )
       if (!containerTypeValidation.valid) {
-        throw new ValidationError(containerTypeValidation.error ?? 'Invalid container type for specimen type')
+        throw new ValidationError(
+          containerTypeValidation.error ?? 'Invalid container type for specimen type',
+          { specimenIndex: i }
+        )
+      }
+      const containerValidation = await validateContainerData(
+        database,
+        spec.container.containerType,
+        spec.container as ContainerData
+      )
+      if (!containerValidation.valid) {
+        throw new ValidationError(containerValidation.error ?? 'Invalid container', { specimenIndex: i })
       }
     }
     resolvedSpecimens.push({
@@ -251,6 +255,8 @@ export async function prepareSubjectWithSpecimens(
       }
     }
   }
+
+  await validateContainerPlacementInPayload(database, resolvedSpecimens, collectionMap)
 
   const preparedContainers: PreparedSubject['preparedContainers'] = []
   for (const spec of resolvedSpecimens) {
@@ -393,7 +399,9 @@ export function createSubjectWithSpecimensInTx(
         } else throw new ValidationError('Collection not found and no location provided')
         if (container.barcode) {
           const existing = tx.select({ id: micronixTube.id }).from(micronixTube).where(eq(micronixTube.barcode, container.barcode)).get()
-          if (existing) throw new ValidationError(`Barcode '${container.barcode}' already exists`)
+          if (existing) {
+            throw new ValidationError(`Barcode '${container.barcode}' already exists`, { specimenIndex: i })
+          }
         }
         tx.insert(micronixTube).values({
           id: containerId,
@@ -425,7 +433,9 @@ export function createSubjectWithSpecimensInTx(
         } else throw new ValidationError('Collection not found and no location provided')
         if (container.barcode) {
           const existing = tx.select({ id: cryovialTube.id }).from(cryovialTube).where(eq(cryovialTube.barcode, container.barcode)).get()
-          if (existing) throw new ValidationError(`Barcode '${container.barcode}' already exists`)
+          if (existing) {
+            throw new ValidationError(`Barcode '${container.barcode}' already exists`, { specimenIndex: i })
+          }
         }
         tx.insert(cryovialTube).values({
           id: containerId,
@@ -707,4 +717,18 @@ export async function runBulkCombinedImport(
     { subjectsCreated: 0, subjectsUpdated: 0, specimensCreated: 0, containersCreated: 0 }
   )
   return { summary, results: fullResults }
+}
+
+/** HTTP response shape for POST /subjects/with-specimens */
+export function formatOneSubjectWithSpecimensResponse(result: OneSubjectResult) {
+  return {
+    subject: result.subject,
+    subjectCreated: result.subjectCreated,
+    specimens: result.specimens.map((s) => ({
+      ...s.specimen,
+      containerCreated: s.containerCreated,
+      containerId: s.containerId,
+    })),
+    summary: result.summary,
+  }
 }

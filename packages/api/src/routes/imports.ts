@@ -6,7 +6,10 @@ import { runBulkCombinedImport, type ExtendedContainerData } from '../lib/bulk-c
 import { validateBulkCombinedPayload } from '../lib/bulk-combined-validate'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
-import { containerSchemaWithLocation } from '../lib/schemas'
+import {
+  bulkCombinedRequestSchema,
+  bulkCombinedValidateRequestSchema,
+} from '../lib/schemas'
 
 /**
  * Create imports routes with database injection
@@ -76,25 +79,7 @@ imports.post('/derivations-csv/validate', memberMiddleware, async (c) => {
 imports.post('/bulk-combined', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
-    const schema = z.object({
-      studyShortCode: z.string().min(1),
-      atomicMode: z.enum(['full_file', 'per_subject']),
-      createCollections: z.array(z.object({
-        type: z.enum(['box', 'bag', 'micronix_plate', 'cryovial_box']),
-        name: z.string().min(1),
-        locationId: z.number().int(),
-        barcode: z.string().optional(),
-      })).optional(),
-      subjects: z.array(z.object({
-        subjectName: z.string().min(1),
-        specimens: z.array(z.object({
-          specimenTypeName: z.string().min(1),
-          collectionDate: z.string().optional(),
-          container: containerSchemaWithLocation,
-        })),
-      })),
-    })
-    const data = schema.parse(body)
+    const data = bulkCombinedRequestSchema.parse(body)
     if (data.subjects.length === 0) {
       return c.json({ error: 'No subjects provided' }, 400)
     }
@@ -134,26 +119,7 @@ imports.post('/bulk-combined', memberMiddleware, async (c) => {
 imports.post('/bulk-combined/validate', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
-    const schema = z.object({
-      studyShortCode: z.string().min(1),
-      atomicMode: z.enum(['full_file', 'per_subject']),
-      createCollections: z.array(z.object({
-        type: z.enum(['box', 'bag', 'micronix_plate', 'cryovial_box']),
-        name: z.string().min(1),
-        locationId: z.number().int(),
-        barcode: z.string().optional(),
-      })).optional(),
-      subjects: z.array(z.object({
-        subjectName: z.string().min(1),
-        specimens: z.array(z.object({
-          specimenTypeName: z.string().min(1),
-          collectionDate: z.string().optional(),
-          container: containerSchemaWithLocation,
-          rowIndex: z.number().int().optional(),
-        })),
-      })),
-    })
-    const data = schema.parse(body)
+    const data = bulkCombinedValidateRequestSchema.parse(body)
     if (data.subjects.length === 0) {
       return c.json({ error: 'No subjects provided' }, 400)
     }
