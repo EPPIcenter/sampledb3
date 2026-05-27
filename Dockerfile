@@ -29,6 +29,7 @@ ENV VITE_APP_BUILD_ID=$APP_BUILD_ID
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/api/node_modules ./packages/api/node_modules
+COPY --from=deps /app/packages/contract/node_modules ./packages/contract/node_modules
 COPY --from=deps /app/packages/web/node_modules ./packages/web/node_modules
 COPY --from=deps /app/packages/docs/node_modules ./packages/docs/node_modules
 COPY . .
@@ -52,6 +53,7 @@ COPY --from=build /app/packages/api/package.json ./packages/api/
 COPY --from=build /app/packages/api/initial_schema.sql ./packages/api/
 
 COPY --from=build /app/packages/contract ./packages/contract
+COPY --from=build /app/packages/contract/node_modules ./packages/contract/node_modules
 
 COPY --from=build /app/packages/web/dist ./packages/web/dist
 COPY --from=build /app/packages/docs/dist ./packages/docs/dist
