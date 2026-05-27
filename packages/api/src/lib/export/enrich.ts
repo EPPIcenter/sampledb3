@@ -8,12 +8,9 @@ import {
   controlDefinition,
   unit,
   strain,
-  micronixTube,
-  cryovialTube,
-  paper,
 } from '../../db/schema'
 import { eq, inArray } from 'drizzle-orm'
-import { resolveContainerPlacements } from '../container-placement'
+import { resolveContainerPlacementBundle } from '../container-placement'
 import type { ContainerExportData, StudyRecord } from './types'
 
 export async function enrichContainerData(
@@ -166,36 +163,15 @@ export async function enrichContainerData(
     }
   }
 
-  // Resolve placement (type, collection, position, location) via shared enrichment
-  const placementMap = await resolveContainerPlacements(database, containerIds)
+  const { placements: placementMap, subtypes } = await resolveContainerPlacementBundle(database, containerIds)
 
-  // Barcodes are not part of placement info — fetch only when needed for export columns
-  const shouldQueryType = (type: string) => {
-    if (!containerTypeFilter || containerTypeFilter.length === 0) return true
-    return containerTypeFilter.includes(type)
-  }
-
-  const [micronixTubes, cryovialTubes, papers] = await Promise.all([
-    shouldQueryType('micronix_tube')
-      ? database.select({ id: micronixTube.id, barcode: micronixTube.barcode }).from(micronixTube).where(inArray(micronixTube.id, containerIds))
-      : [],
-    shouldQueryType('cryovial_tube')
-      ? database.select({ id: cryovialTube.id, barcode: cryovialTube.barcode }).from(cryovialTube).where(inArray(cryovialTube.id, containerIds))
-      : [],
-    shouldQueryType('paper')
-      ? database.select({ id: paper.id, barcode: paper.barcode }).from(paper).where(inArray(paper.id, containerIds))
-      : [],
-  ])
-
-  const barcodeMap = new Map<number, string>()
-  for (const tube of micronixTubes) {
-    if (tube.barcode) barcodeMap.set(tube.id, tube.barcode)
-  }
-  for (const tube of cryovialTubes) {
-    if (tube.barcode) barcodeMap.set(tube.id, tube.barcode)
-  }
-  for (const p of papers) {
-    if (p.barcode) barcodeMap.set(p.id, p.barcode)
+  function barcodeForContainer(containerId: number): string | undefined {
+    return (
+      subtypes.micronixById.get(containerId)?.barcode ??
+      subtypes.cryovialById.get(containerId)?.barcode ??
+      subtypes.paperById.get(containerId)?.barcode ??
+      undefined
+    )
   }
 
   // Build enriched data
@@ -207,7 +183,7 @@ export async function enrichContainerData(
 
     const placement = placementMap.get(container.id)!
     const containerType = placement.containerType
-    const barcode = barcodeMap.get(container.id)
+    const barcode = barcodeForContainer(container.id)
     const position = placement.collection?.position ?? undefined
     const collectionName =
       placement.collection?.name && placement.collection.name !== 'Unknown'

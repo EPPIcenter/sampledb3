@@ -1,6 +1,6 @@
 import type { Database } from '../db/client'
 import {
-  resolveContainerPlacements,
+  resolveContainerPlacementBundle,
   type ContainerPlacement,
 } from './container-placement'
 
@@ -257,7 +257,7 @@ export async function buildSpecimenSummaryData(
   summary: SpecimenCollectionSummary
 }> {
   const containerIds = containers.map((c) => c.id)
-  const placementMap = await resolveContainerPlacements(database, containerIds)
+  const { placements: placementMap } = await resolveContainerPlacementBundle(database, containerIds)
   const enrichedSpecimens = enrichSpecimensWithContainers(
     specimens,
     containers,
@@ -284,4 +284,9 @@ export const emptySpecimenCollectionSummary = (): SpecimenCollectionSummary => (
 })
 
 // Re-export placement helpers used by summary callers and legacy imports during migration.
-export { formatLocationPath, resolveContainerPlacements, type ContainerPlacement } from './container-placement'
+export {
+  formatLocationPath,
+  resolveContainerPlacements,
+  resolveContainerPlacementBundle,
+  type ContainerPlacement,
+} from './container-placement'

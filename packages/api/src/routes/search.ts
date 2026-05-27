@@ -3,6 +3,7 @@ import type { Database } from '../db/client'
 import { parseSearchFilters } from '../lib/search/parse-filters'
 import { searchUnified } from '../lib/search/unified-search'
 import { createAuthMiddleware } from '../middleware/auth'
+import { handleRouteError, RouteError, searchFailedBody } from '../lib/error-handler'
 
 /**
  * Create search routes with database injection
@@ -23,23 +24,9 @@ export function createSearchRoutes(database: Database): Hono {
       const data = await searchUnified(database, q, type)
       return c.json(data)
     } catch (error: unknown) {
-      console.error('Error in search:', error)
-      const isDevelopment = process.env.NODE_ENV !== 'production'
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      const errorStack = error instanceof Error ? error.stack : undefined
-      return c.json(
-        {
-          error: 'Search failed',
-          query: c.req.query('q') || '',
-          ...(isDevelopment && {
-            details: errorMessage,
-            stack: errorStack,
-          }),
-          ...(!isDevelopment && {
-            errorCode: 'SEARCH_ERROR',
-          }),
-        },
-        500,
+      return handleRouteError(
+        new RouteError(500, searchFailedBody(c.req.query('q') || '', error)),
+        c,
       )
     }
   })

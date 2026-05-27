@@ -7,6 +7,9 @@ import {
   NotFoundError,
   ConflictError,
   ValidationError,
+  RouteError,
+  searchFailedBody,
+  containersFetchFailedBody,
 } from '../error-handler'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import type { Database } from '../../db/client'
@@ -127,6 +130,27 @@ describe('error-handler', () => {
       expect(res.status).toBe(500)
       expect(data.error).toBeDefined()
       expect(data.errorCode).toBeDefined()
+    })
+
+    it('returns custom body for RouteError (search shape)', async () => {
+      const body = searchFailedBody('flu', new Error('db down'))
+      const app = createAppWithError(new RouteError(500, body))
+      const res = await app.request('http://localhost/test')
+      expect(res.status).toBe(500)
+      const data = await getJson(res)
+      expect(data.error).toBe('Search failed')
+      expect(data.query).toBe('flu')
+      expect(data.details).toBe('db down')
+    })
+
+    it('returns custom body for RouteError (containers shape)', async () => {
+      const body = containersFetchFailedBody('Failed to fetch containers', new Error('timeout'))
+      const app = createAppWithError(new RouteError(500, body))
+      const res = await app.request('http://localhost/test')
+      const data = await getJson(res)
+      expect(res.status).toBe(500)
+      expect(data.error).toBe('Failed to fetch containers')
+      expect(data.details).toBe('timeout')
     })
   })
 })

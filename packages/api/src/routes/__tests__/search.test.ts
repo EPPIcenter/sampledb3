@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { authenticatedRequest } from '../../__tests__/helpers/test-client'
 import {
   setupAuthenticatedRouteTest,
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createSearchRoutes } from '../search'
+import * as unifiedSearch from '../../lib/search/unified-search'
 
 describe('Search API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -42,6 +43,22 @@ describe('Search API', () => {
         method: 'GET',
       })
       expect(res.status).toBe(401)
+    })
+
+    it('returns 500 with search error shape when search fails', async () => {
+      vi.spyOn(unifiedSearch, 'searchUnified').mockRejectedValueOnce(new Error('db down'))
+      const res = await ctx.request('/api/search?q=flu')
+      expect(res.status).toBe(500)
+      const data = (await res.json()) as {
+        error: string
+        query: string
+        details?: string
+        errorCode?: string
+      }
+      expect(data.error).toBe('Search failed')
+      expect(data.query).toBe('flu')
+      expect(data.details).toBe('db down')
+      vi.restoreAllMocks()
     })
   })
 })

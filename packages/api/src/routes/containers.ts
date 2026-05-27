@@ -9,6 +9,7 @@ import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { resolveContainerByBarcode } from '../lib/identifier-resolution'
 import { enrichContainerForApi, enrichContainersForApi } from '../lib/container-api-enrichment'
+import { handleRouteError, RouteError, containersFetchFailedBody } from '../lib/error-handler'
 
 /**
  * Create containers routes with database injection
@@ -91,9 +92,10 @@ containers.get('/', authMiddleware, async (c) => {
       },
     })
   } catch (error: unknown) {
-    console.error('Error fetching containers:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    return c.json({ error: 'Failed to fetch containers', details: errorMessage }, 500)
+    return handleRouteError(
+      new RouteError(500, containersFetchFailedBody('Failed to fetch containers', error)),
+      c,
+    )
   }
 })
 
@@ -203,9 +205,10 @@ containers.get('/:id', authMiddleware, async (c) => {
       source: sourceInfo,
     })
   } catch (error: unknown) {
-    console.error('Error fetching container:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    return c.json({ error: 'Failed to fetch container', details: errorMessage }, 500)
+    return handleRouteError(
+      new RouteError(500, containersFetchFailedBody('Failed to fetch container', error)),
+      c,
+    )
   }
 })
 
@@ -367,9 +370,10 @@ containers.get('/:id/tags', authMiddleware, async (c) => {
 
     return c.json({ tags })
   } catch (error: unknown) {
-    console.error('Error fetching container tags:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    return c.json({ error: 'Failed to fetch container tags', details: errorMessage }, 500)
+    return handleRouteError(
+      new RouteError(500, containersFetchFailedBody('Failed to fetch container tags', error)),
+      c,
+    )
   }
 })
 
@@ -447,9 +451,10 @@ containers.delete('/:id/tags/:tagId', memberMiddleware, async (c) => {
     }
     return c.json({ success: true })
   } catch (error: unknown) {
-    console.error('Error removing container tag:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    return c.json({ error: 'Failed to remove tag', details: errorMessage }, 500)
+    return handleRouteError(
+      new RouteError(500, containersFetchFailedBody('Failed to remove tag', error)),
+      c,
+    )
   }
 })
 

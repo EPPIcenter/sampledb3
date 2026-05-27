@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { authenticatedRequest } from '../../__tests__/helpers/test-client'
 import {
   setupAuthenticatedRouteTest,
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createContainersRoutes } from '../containers'
+import * as containerEnrichment from '../../lib/container-api-enrichment'
 import { utcNow } from '../../lib/datetime'
 import {
   createTestStudy,
@@ -54,6 +55,18 @@ describe('Containers API', () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/containers', { method: 'GET' })
       expect(res.status).toBe(401)
     })
+
+    it('returns 500 with containers error shape when list fails', async () => {
+      vi.spyOn(containerEnrichment, 'enrichContainersForApi').mockRejectedValueOnce(
+        new Error('enrichment failed'),
+      )
+      const res = await ctx.request('/api/containers')
+      expect(res.status).toBe(500)
+      const data = (await res.json()) as { error: string; details: string }
+      expect(data.error).toBe('Failed to fetch containers')
+      expect(data.details).toBe('enrichment failed')
+      vi.restoreAllMocks()
+    })
   })
 
   describe('GET /api/containers/:id', () => {
@@ -65,6 +78,39 @@ describe('Containers API', () => {
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/containers/1', { method: 'GET' })
       expect(res.status).toBe(401)
+    })
+
+    it('returns 500 with container error shape when get fails', async () => {
+      vi.spyOn(containerEnrichment, 'enrichContainerForApi').mockRejectedValueOnce(
+        new Error('enrichment failed'),
+      )
+      const now = utcNow()
+      const testStudy = await createTestStudy(ctx.db, { title: 'Err Study', shortCode: 'ERR' + Date.now() })
+      const subj = await createTestStudySubject(ctx.db, { studyId: testStudy.id, name: 'S1' })
+      const st = await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const unit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const [spec] = await ctx.db
+        .insert(specimen)
+        .values({ studySubjectId: subj.id, specimenTypeId: st.id, created: now, lastUpdated: now })
+        .returning()
+      const [container] = await ctx.db
+        .insert(storageContainer)
+        .values({
+          specimenId: spec.id,
+          unitId: unit.id,
+          totalQuantity: 1,
+          remainingQuantity: 1,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const res = await ctx.request(`/api/containers/${container.id}`)
+      expect(res.status).toBe(500)
+      const data = (await res.json()) as { error: string; details: string }
+      expect(data.error).toBe('Failed to fetch container')
+      expect(data.details).toBe('enrichment failed')
+      vi.restoreAllMocks()
     })
   })
 

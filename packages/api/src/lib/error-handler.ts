@@ -1,4 +1,5 @@
 import { Context } from 'hono'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { z } from 'zod'
 import { logBackendError, logError, type ErrorLogContext } from './error-logger'
 import { getRequestDatabase } from './db-context'
@@ -39,6 +40,14 @@ export function handleRouteError(error: unknown, c: Context): Response {
     },
   }
   
+  // Preserve route-specific JSON bodies (search, containers read paths, etc.)
+  if (error instanceof RouteError) {
+    logBackendError(database, error, errorContext).catch((logErr) => {
+      console.error('[ERROR_HANDLER] Failed to log error:', logErr)
+    })
+    return c.json(error.body, error.status as ContentfulStatusCode)
+  }
+
   // Handle Zod validation errors
   if (isZodError(error)) {
     // Log validation errors as warnings (they're expected user input errors, but still worth tracking)
@@ -210,3 +219,40 @@ export class UnauthorizedError extends Error {
     this.name = 'UnauthorizedError'
   }
 }
+
+/** Fixed JSON error body for routes that must keep legacy client-visible shapes */
+export class RouteError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly body: ErrorResponse & Record<string, unknown>,
+  ) {
+    super(typeof body.error === 'string' ? body.error : 'Route error')
+    this.name = 'RouteError'
+  }
+}
+
+function searchFailedBody(
+  query: string,
+  cause: unknown,
+): ErrorResponse & Record<string, unknown> {
+  const isDevelopment = process.env.NODE_ENV !== 'production'
+  const errorMessage = cause instanceof Error ? cause.message : 'Unknown error'
+  const errorStack = cause instanceof Error ? cause.stack : undefined
+  return {
+    error: 'Search failed',
+    query,
+    ...(isDevelopment
+      ? { details: errorMessage, stack: errorStack }
+      : { errorCode: 'SEARCH_ERROR' }),
+  }
+}
+
+function containersFetchFailedBody(
+  message: string,
+  cause: unknown,
+): ErrorResponse & Record<string, unknown> {
+  const errorMessage = cause instanceof Error ? cause.message : 'Unknown error'
+  return { error: message, details: errorMessage }
+}
+
+export { searchFailedBody, containersFetchFailedBody }
