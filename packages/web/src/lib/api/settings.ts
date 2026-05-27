@@ -1,4 +1,5 @@
 import { api } from './client'
+import { parseSettingsEnvelope } from './parse-response'
 import type { Unit } from './types'
 // Settings interfaces
 export interface ContainerDefaults {
@@ -80,6 +81,9 @@ export type SettingValue =
   | { type: 'table_view_configurations'; value: TableViewConfigurations }
 
 // Helper type to extract setting value by key
+/** How to resolve export/scanner settings on GET /settings/:key (default: effective = merged for current user). */
+export type SettingsValueScope = 'effective' | 'shared' | 'personal'
+
 export type SettingValueByKey<T extends string> =
   T extends 'container_defaults' ? ContainerDefaults :
   T extends 'pagination_settings' ? PaginationSettings :
@@ -95,18 +99,32 @@ export const settingsApi = {
   get: <T extends keyof AllSettings>(key: T) =>
     api.get<{ key: T; value: AllSettings[T] }>(`/settings/${key}`),
   /** Unwrapped value from GET /settings/:key. Prefer this over assuming a direct body shape. */
-  getValue: async <T extends keyof AllSettings>(key: T): Promise<AllSettings[T]> => {
-    const res = await api.get<{ key: T; value: AllSettings[T] }>(`/settings/${key}`)
-    return res.value
+  getValue: async <T extends keyof AllSettings>(
+    key: T,
+    options?: { scope?: SettingsValueScope },
+  ): Promise<AllSettings[T]> => {
+    const scope = options?.scope
+    const query = scope && scope !== 'effective' ? `?scope=${scope}` : ''
+    const body = await api.get<unknown>(`/settings/${key}${query}`)
+    return parseSettingsEnvelope<AllSettings[T]>(body, key, `GET /settings/${key}`).value
   },
-  update: <T extends keyof AllSettings>(key: T, value: AllSettings[T], userId?: number | null) =>
-    api.put<{ key: T; value: AllSettings[T]; userId?: number | null }>(`/settings/${key}`, {
-      ...value,
-      userId,
-    }),
+  /** Unwrapped value from PUT /settings/:key. Prefer this over typing the body as the setting value directly. */
+  putValue: async <T extends keyof AllSettings>(
+    key: T,
+    value: AllSettings[T],
+    userId?: number | null,
+  ): Promise<AllSettings[T]> => {
+    const body = await api.put<unknown>(`/settings/${key}`, { ...value, userId })
+    return parseSettingsEnvelope<AllSettings[T]>(body, key, `PUT /settings/${key}`).value
+  },
+  /** Alias for {@link settingsApi.putValue} — same unwrapped return type. */
+  update: async <T extends keyof AllSettings>(
+    key: T,
+    value: AllSettings[T],
+    userId?: number | null,
+  ): Promise<AllSettings[T]> => settingsApi.putValue(key, value, userId),
   resetUserSetting: (key: string) =>
     api.delete<{ success: boolean; message: string }>(`/settings/${key}/user`),
-  getUnits: () => api.get<Unit[]>('/settings/units'),
   getContainerTypeUnits: (containerType: string) =>
     api.get<{ units: Unit[] }>(`/settings/container-types/${containerType}/units`),
   addContainerTypeUnit: (containerType: string, unitId: number) =>
@@ -118,10 +136,8 @@ export const settingsApi = {
 }
 
 export const exportConfigurationsApi = {
-  getShared: () => api.get<ExportConfigurations>('/settings/export-configurations/shared'),
-  getPersonal: () => api.get<ExportConfigurations>('/settings/export-configurations/personal'),
-  update: (configs: ExportConfigurations, userId?: number | null) => 
-    api.put<ExportConfigurations>('/settings/export_configurations', { ...configs, userId }),
+  update: (configs: ExportConfigurations, userId?: number | null) =>
+    settingsApi.putValue('export_configurations', configs, userId),
   createPersonal: (config: ExportConfiguration) => 
     api.post<{ success: boolean; config: ExportConfiguration }>('/settings/export-configurations/personal', config),
   updatePersonal: (configs: ExportConfigurations) => 
@@ -129,16 +145,13 @@ export const exportConfigurationsApi = {
 }
 
 export const tableViewConfigurationsApi = {
-  get: () => settingsApi.get('table_view_configurations'),
   update: (configs: TableViewConfigurations) =>
-    api.put<TableViewConfigurations>('/settings/table_view_configurations', configs),
+    settingsApi.putValue('table_view_configurations', configs),
 }
 
 export const scannerConfigurationsApi = {
-  getShared: () => api.get<ScannerConfigurations>('/settings/scanner-configurations/shared'),
-  getPersonal: () => api.get<ScannerConfigurations>('/settings/scanner-configurations/personal'),
-  update: (configs: ScannerConfigurations, userId?: number | null) => 
-    api.put<ScannerConfigurations>('/settings/scanner_configurations', { ...configs, userId }),
+  update: (configs: ScannerConfigurations, userId?: number | null) =>
+    settingsApi.putValue('scanner_configurations', configs, userId),
   createPersonal: (config: ScannerConfiguration) => 
     api.post<{ success: boolean; config: ScannerConfiguration }>('/settings/scanner-configurations/personal', config),
   updatePersonal: (configs: ScannerConfigurations) => 

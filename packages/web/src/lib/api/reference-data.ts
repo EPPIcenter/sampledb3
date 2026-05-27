@@ -24,17 +24,17 @@ export const specimenTypesApi = {
     const response = await api.get<ApiResponse<SpecimenType[]>>('/specimen-types')
     return { data: extractData(response), meta: response.meta }
   },
-  get: async (id: number) => {
+  get: async (id: number): Promise<SpecimenType> => {
     const response = await api.get<ApiResponse<SpecimenType>>(`/specimen-types/${id}`)
-    return extractData(response)
+    return extractData<SpecimenType>(response)
   },
-  create: async (data: Omit<SpecimenType, 'id' | 'created' | 'lastUpdated'>) => {
+  create: async (data: Omit<SpecimenType, 'id' | 'created' | 'lastUpdated'>): Promise<SpecimenType> => {
     const response = await api.post<ApiResponse<SpecimenType>>('/specimen-types', data)
-    return extractData(response)
+    return extractData<SpecimenType>(response)
   },
-  update: async (id: number, data: Partial<SpecimenType>) => {
+  update: async (id: number, data: Partial<SpecimenType>): Promise<SpecimenType> => {
     const response = await api.put<ApiResponse<SpecimenType>>(`/specimen-types/${id}`, data)
-    return extractData(response)
+    return extractData<SpecimenType>(response)
   },
   delete: (id: number) => api.delete<{ message: string }>(`/specimen-types/${id}`),
   getContainerTypes: (id: number) => api.get<{ containerTypes: string[]; usageInfo?: Record<string, boolean> }>(`/specimen-types/${id}/container-types`),
@@ -52,17 +52,17 @@ export const tagsApi = {
     const response = await api.get<ApiResponse<Tag[]>>('/tags')
     return { data: extractData(response), meta: response.meta }
   },
-  get: async (id: number) => {
+  get: async (id: number): Promise<Tag> => {
     const response = await api.get<ApiResponse<Tag>>(`/tags/${id}`)
-    return extractData(response)
+    return extractData<Tag>(response)
   },
-  create: async (data: Omit<Tag, 'id'>) => {
+  create: async (data: Omit<Tag, 'id'>): Promise<Tag> => {
     const response = await api.post<ApiResponse<Tag>>('/tags', data)
-    return extractData(response)
+    return extractData<Tag>(response)
   },
-  update: async (id: number, data: Partial<Tag>) => {
+  update: async (id: number, data: Partial<Tag>): Promise<Tag> => {
     const response = await api.put<ApiResponse<Tag>>(`/tags/${id}`, data)
-    return extractData(response)
+    return extractData<Tag>(response)
   },
   delete: (id: number) => api.delete<{ message: string }>(`/tags/${id}`),
 }
@@ -72,17 +72,17 @@ export const storageTypesApi = {
     const response = await api.get<ApiResponse<StorageType[]>>('/storage-types')
     return { data: extractData(response), meta: response.meta }
   },
-  get: async (id: number) => {
+  get: async (id: number): Promise<StorageType> => {
     const response = await api.get<ApiResponse<StorageType>>(`/storage-types/${id}`)
-    return extractData(response)
+    return extractData<StorageType>(response)
   },
-  create: async (data: Omit<StorageType, 'id'>) => {
+  create: async (data: Omit<StorageType, 'id'>): Promise<StorageType> => {
     const response = await api.post<ApiResponse<StorageType>>('/storage-types', data)
-    return extractData(response)
+    return extractData<StorageType>(response)
   },
-  update: async (id: number, data: Partial<StorageType>) => {
+  update: async (id: number, data: Partial<StorageType>): Promise<StorageType> => {
     const response = await api.put<ApiResponse<StorageType>>(`/storage-types/${id}`, data)
-    return extractData(response)
+    return extractData<StorageType>(response)
   },
   delete: (id: number) => api.delete<{ message: string }>(`/storage-types/${id}`),
 }
@@ -92,17 +92,17 @@ export const strainsApi = {
     const response = await api.get<ApiResponse<Strain[]>>('/strains')
     return { data: extractData(response), meta: response.meta }
   },
-  get: async (id: number) => {
+  get: async (id: number): Promise<Strain> => {
     const response = await api.get<ApiResponse<Strain>>(`/strains/${id}`)
-    return extractData(response)
+    return extractData<Strain>(response)
   },
-  create: async (data: Omit<Strain, 'id'>) => {
+  create: async (data: Omit<Strain, 'id'>): Promise<Strain> => {
     const response = await api.post<ApiResponse<Strain>>('/strains', data)
-    return extractData(response)
+    return extractData<Strain>(response)
   },
-  update: async (id: number, data: Partial<Strain>) => {
+  update: async (id: number, data: Partial<Strain>): Promise<Strain> => {
     const response = await api.put<ApiResponse<Strain>>(`/strains/${id}`, data)
-    return extractData(response)
+    return extractData<Strain>(response)
   },
   delete: (id: number) => api.delete<{ message: string }>(`/strains/${id}`),
 }
@@ -112,17 +112,22 @@ export const unitsApi = {
     const response = await api.get<ApiResponse<Unit[]>>('/units')
     return { data: extractData(response), meta: response.meta }
   },
-  get: async (id: number) => {
+  /** All units as a plain array — for dropdowns and form bootstrap. */
+  listAll: async (): Promise<Unit[]> => {
+    const { data } = await unitsApi.list()
+    return data
+  },
+  get: async (id: number): Promise<Unit> => {
     const response = await api.get<ApiResponse<Unit>>(`/units/${id}`)
-    return extractData(response)
+    return extractData<Unit>(response)
   },
-  create: async (data: Omit<Unit, 'id'>) => {
+  create: async (data: Omit<Unit, 'id'>): Promise<Unit> => {
     const response = await api.post<ApiResponse<Unit>>('/units', data)
-    return extractData(response)
+    return extractData<Unit>(response)
   },
-  update: async (id: number, data: Partial<Unit>) => {
+  update: async (id: number, data: Partial<Unit>): Promise<Unit> => {
     const response = await api.put<ApiResponse<Unit>>(`/units/${id}`, data)
-    return extractData(response)
+    return extractData<Unit>(response)
   },
   delete: (id: number) => api.delete<{ message: string }>(`/units/${id}`),
 }

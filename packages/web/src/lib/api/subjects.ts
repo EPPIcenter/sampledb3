@@ -59,7 +59,14 @@ export interface SubjectSummaryResponse {
 
 type SubjectResponse = { subject: StudySubject }
 
+type SubjectsListResponse = {
+  subjects: StudySubject[]
+  pagination?: { page: number; limit: number; total: number; totalPages: number }
+}
+
 export const subjectsApi = {
+  list: (params?: { page?: number; limit?: number }) =>
+    api.get<SubjectsListResponse>('/subjects', { params }),
   get: (id: number) => api.get<SubjectResponse>(`/subjects/${id}`),
   getSummary: (id: number) => api.get<SubjectSummaryResponse>(`/subjects/${id}/summary`),
   create: (data: { studyId?: number; studyShortCode?: string; name: string }) =>
