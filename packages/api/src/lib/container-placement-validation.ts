@@ -1,6 +1,6 @@
 /**
- * Barcode and well-position uniqueness checks for specimen containers in one request.
- * Shared by bulk-combined-import and POST /subjects/with-specimens.
+ * Barcode, well-position, and sheet-name uniqueness checks for containers in one request.
+ * Shared by bulk specimen validate, bulk-combined validate/import, and POST /subjects/with-specimens.
  */
 import type { Database } from '../db/client'
 import { micronixTube, cryovialTube, staticWell } from '../db/schema'
@@ -8,12 +8,30 @@ import { eq, and } from 'drizzle-orm'
 import { ValidationError } from './error-handler'
 import { normalizePosition } from './normalize-position'
 
+export type PlacementContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+
+export type ContainerPlacementCheckRow = {
+  containerType: PlacementContainerType
+  collectionId: number | null
+  collectionKey: string
+  normalizedPosition: string | null
+  barcode: string | null
+  boxKey?: string | null
+  sheetName?: string | null
+}
+
+export type ContainerPlacementError = {
+  rowIndex: number
+  message: string
+}
+
 type PlacementContainer = {
-  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+  containerType: PlacementContainerType
   collectionName?: string
   collectionBarcode?: string
   barcode?: string
   position?: string
+  label?: string
 }
 
 export type ResolvedSpecimenForPlacement = {
@@ -22,46 +40,79 @@ export type ResolvedSpecimenForPlacement = {
   container?: PlacementContainer
 }
 
-export async function validateContainerPlacementInPayload(
+export function buildContainerPlacementCheckRow(
+  container: PlacementContainer,
+  collectionId: number | null,
+  collectionKey: string
+): ContainerPlacementCheckRow {
+  const containerType = container.containerType
+  return {
+    containerType,
+    collectionId,
+    collectionKey,
+    normalizedPosition: normalizePosition(container.position),
+    barcode: container.barcode?.trim() || null,
+    boxKey: containerType === 'paper' ? collectionKey : null,
+    sheetName: containerType === 'paper' ? (container.label ?? 'Sheet-1').trim() : null,
+  }
+}
+
+export function collectionKeyForContainer(container: PlacementContainer): string {
+  const containerType = container.containerType
+  if (containerType === 'paper') {
+    return `box-${container.collectionName ?? ''}`
+  }
+  const collectionType = containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
+  const identifier = container.collectionName || container.collectionBarcode
+  return `${collectionType}-${identifier ?? ''}`
+}
+
+export async function collectContainerPlacementErrors(
   database: Database,
-  resolvedSpecimens: ResolvedSpecimenForPlacement[],
-  collectionMap: Map<string, number>
-): Promise<void> {
+  rows: ContainerPlacementCheckRow[]
+): Promise<ContainerPlacementError[]> {
+  const errors: ContainerPlacementError[] = []
   const seenBarcodes = new Set<string>()
   const seenPositionByCollection = new Map<string, Set<string>>()
+  const seenSheetByBox = new Map<string, Set<string>>()
 
-  for (let specimenIndex = 0; specimenIndex < resolvedSpecimens.length; specimenIndex++) {
-    const spec = resolvedSpecimens[specimenIndex]
-    if (!spec.container?.containerType) continue
-
-    const container = spec.container
-    const containerType = container.containerType
-    const normalizedPosition = normalizePosition(container.position)
-
-    let collectionKey = ''
-    let collectionId: number | null = null
-    if (containerType === 'cryovial_tube') {
-      const identifier = container.collectionName || container.collectionBarcode
-      if (identifier) {
-        collectionKey = `cryovial_box-${identifier}`
-        collectionId = collectionMap.get(collectionKey) ?? null
-      }
-    } else if (containerType === 'micronix_tube' || containerType === 'static_well') {
-      const identifier = container.collectionName || container.collectionBarcode
-      if (identifier) {
-        collectionKey = `micronix_plate-${identifier}`
-        collectionId = collectionMap.get(collectionKey) ?? null
-      }
-    }
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const row = rows[rowIndex]
+    const {
+      containerType,
+      collectionId,
+      collectionKey,
+      normalizedPosition,
+      barcode,
+      boxKey,
+      sheetName,
+    } = row
 
     if (containerType === 'micronix_tube' || containerType === 'cryovial_tube') {
-      const barcode = container.barcode?.trim()
       if (barcode) {
+        const existingInDb =
+          containerType === 'micronix_tube'
+            ? await database
+                .select({ id: micronixTube.id })
+                .from(micronixTube)
+                .where(eq(micronixTube.barcode, barcode))
+                .get()
+            : await database
+                .select({ id: cryovialTube.id })
+                .from(cryovialTube)
+                .where(eq(cryovialTube.barcode, barcode))
+                .get()
+        if (existingInDb) {
+          errors.push({
+            rowIndex,
+            message: `Barcode '${barcode}' already exists. Use a different barcode.`,
+          })
+        }
         if (seenBarcodes.has(barcode)) {
-          throw new ValidationError(
-            `Barcode '${barcode}' is used more than once in your file. Each barcode must be unique.`,
-            { specimenIndex }
-          )
+          errors.push({
+            rowIndex,
+            message: `Barcode '${barcode}' is used more than once in your file. Each barcode must be unique.`,
+          })
         }
         seenBarcodes.add(barcode)
       }
@@ -69,57 +120,95 @@ export async function validateContainerPlacementInPayload(
 
     if (
       normalizedPosition &&
-      collectionId !== null &&
       (containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'static_well')
     ) {
-      if (containerType === 'micronix_tube' || containerType === 'static_well') {
-        const existingTube = await database
-          .select({ id: micronixTube.id })
-          .from(micronixTube)
-          .where(and(eq(micronixTube.collectionId, collectionId), eq(micronixTube.position, normalizedPosition)))
-          .get()
-        const existingWell =
-          containerType === 'static_well'
-            ? await database
-                .select({ id: staticWell.id })
-                .from(staticWell)
-                .where(and(eq(staticWell.collectionId, collectionId), eq(staticWell.position, normalizedPosition)))
-                .get()
-            : null
-        if (existingTube || existingWell) {
-          throw new ValidationError(
-            `Position ${normalizedPosition} is already used in this plate. Use a different position or plate.`,
-            { specimenIndex }
-          )
-        }
-      } else {
-        const existing = await database
-          .select({ id: cryovialTube.id })
-          .from(cryovialTube)
-          .where(and(eq(cryovialTube.collectionId, collectionId), eq(cryovialTube.position, normalizedPosition)))
-          .get()
-        if (existing) {
-          throw new ValidationError(
-            `Position ${normalizedPosition} is already used in this box. Use a different position or box.`,
-            { specimenIndex }
-          )
+      if (collectionId !== null) {
+        if (containerType === 'micronix_tube' || containerType === 'static_well') {
+          const existingTube = await database
+            .select({ id: micronixTube.id })
+            .from(micronixTube)
+            .where(and(eq(micronixTube.collectionId, collectionId), eq(micronixTube.position, normalizedPosition)))
+            .get()
+          const existingWell =
+            containerType === 'static_well'
+              ? await database
+                  .select({ id: staticWell.id })
+                  .from(staticWell)
+                  .where(and(eq(staticWell.collectionId, collectionId), eq(staticWell.position, normalizedPosition)))
+                  .get()
+              : null
+          if (existingTube || existingWell) {
+            errors.push({
+              rowIndex,
+              message: `Position ${normalizedPosition} is already used in this plate. Use a different position or plate.`,
+            })
+          }
+        } else {
+          const existing = await database
+            .select({ id: cryovialTube.id })
+            .from(cryovialTube)
+            .where(and(eq(cryovialTube.collectionId, collectionId), eq(cryovialTube.position, normalizedPosition)))
+            .get()
+          if (existing) {
+            errors.push({
+              rowIndex,
+              message: `Position ${normalizedPosition} is already used in this box. Use a different position or box.`,
+            })
+          }
         }
       }
 
-      if (collectionKey) {
-        let positionSet = seenPositionByCollection.get(collectionKey)
-        if (!positionSet) {
-          positionSet = new Set()
-          seenPositionByCollection.set(collectionKey, positionSet)
-        }
-        if (positionSet.has(normalizedPosition)) {
-          throw new ValidationError(
-            `Position ${normalizedPosition} in this plate/box is used more than once in your file. Each position can only be used once.`,
-            { specimenIndex }
-          )
-        }
-        positionSet.add(normalizedPosition)
+      let positionSet = seenPositionByCollection.get(collectionKey)
+      if (!positionSet) {
+        positionSet = new Set()
+        seenPositionByCollection.set(collectionKey, positionSet)
       }
+      if (positionSet.has(normalizedPosition)) {
+        errors.push({
+          rowIndex,
+          message: `Position ${normalizedPosition} in this plate/box is used more than once in your file. Each position can only be used once.`,
+        })
+      }
+      positionSet.add(normalizedPosition)
     }
+
+    if (containerType === 'paper' && boxKey && sheetName) {
+      let sheetSet = seenSheetByBox.get(boxKey)
+      if (!sheetSet) {
+        sheetSet = new Set()
+        seenSheetByBox.set(boxKey, sheetSet)
+      }
+      if (sheetSet.has(sheetName)) {
+        errors.push({
+          rowIndex,
+          message: `Sheet name '${sheetName}' in box is used more than once in your file.`,
+        })
+      }
+      sheetSet.add(sheetName)
+    }
+  }
+
+  return errors
+}
+
+export async function validateContainerPlacementInPayload(
+  database: Database,
+  resolvedSpecimens: ResolvedSpecimenForPlacement[],
+  collectionMap: Map<string, number>
+): Promise<void> {
+  const rows: ContainerPlacementCheckRow[] = []
+
+  for (const spec of resolvedSpecimens) {
+    if (!spec.container?.containerType) continue
+
+    const container = spec.container
+    const collectionKey = collectionKeyForContainer(container)
+    const collectionId = collectionMap.get(collectionKey) ?? null
+    rows.push(buildContainerPlacementCheckRow(container, collectionId, collectionKey))
+  }
+
+  const errors = await collectContainerPlacementErrors(database, rows)
+  if (errors.length > 0) {
+    throw new ValidationError(errors[0].message, { specimenIndex: errors[0].rowIndex })
   }
 }

@@ -3,16 +3,8 @@
  * without performing any inserts; returns all errors for display.
  */
 import type { Database } from '../db/client'
-import {
-  location,
-  micronixTube,
-  cryovialTube,
-  staticWell,
-  box,
-  sheet,
-} from '../db/schema'
-import { eq, and } from 'drizzle-orm'
-import { resolveCollection } from './collection-resolution'
+import { location } from '../db/schema'
+import { eq } from 'drizzle-orm'
 import {
   validateStudyShortCode,
   validateSubjectName,
@@ -27,6 +19,12 @@ import {
   type ExtendedContainerData,
   type BulkCombinedPayload,
 } from './bulk-combined-import'
+import { resolveContainerCollection, bulkCombinedCollectionMessages } from './registration-orchestrator'
+import {
+  buildContainerPlacementCheckRow,
+  collectContainerPlacementErrors,
+  type ContainerPlacementCheckRow,
+} from './container-placement-validation'
 
 const LOCATION_CANNOT_CONTAIN_COLLECTIONS =
   'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.'
@@ -56,17 +54,10 @@ export type BulkCombinedValidatePayload = Omit<BulkCombinedPayload, 'subjects'> 
   }>
 }
 
-interface ContainerRowForSecondPass {
+interface ContainerRowContext {
   subjectIndex: number
   specimenIndex: number
   rowIndex?: number
-  collectionKey: string
-  collectionId: number | null
-  normalizedPosition: string | null
-  barcode: string | null
-  containerType: ExtendedContainerData['containerType']
-  boxKey: string | null
-  sheetName: string | null
 }
 
 export async function validateBulkCombinedPayload(
@@ -102,7 +93,8 @@ export async function validateBulkCombinedPayload(
     studyId = studyValidation.studyId
   }
 
-  const containerRowsForSecondPass: ContainerRowForSecondPass[] = []
+  const placementRows: ContainerPlacementCheckRow[] = []
+  const placementContexts: ContainerRowContext[] = []
   const collectionKeyToId = new Map<string, number>()
   const toBeCreatedKeys = new Set<string>()
   for (const coll of createCollections) {
@@ -152,46 +144,28 @@ export async function validateBulkCombinedPayload(
           containerType
         )
         if (!containerTypeValidation.valid) {
-          add(subjectIndex, specimenIndex, containerTypeValidation.error ?? 'Invalid container type for specimen type', rowIndex)
+          add(
+            subjectIndex,
+            specimenIndex,
+            containerTypeValidation.error ?? 'Invalid container type for specimen type',
+            rowIndex
+          )
         }
       }
 
-      let collectionKey: string
-      let collectionId: number | null = null
-      const collectionType = containerType === 'cryovial_tube' ? 'cryovial_box' : containerType === 'paper' ? 'box' : 'micronix_plate'
-      const identifier = container.collectionName || container.collectionBarcode
+      const collectionResolution = await resolveContainerCollection(database, containerType, container, {
+        messages: bulkCombinedCollectionMessages,
+      })
+      if (collectionResolution.error) {
+        add(subjectIndex, specimenIndex, collectionResolution.error, rowIndex)
+        continue
+      }
 
-      if (containerType === 'paper') {
-        if (!container.collectionName) {
-          add(subjectIndex, specimenIndex, 'Box name (collection name) is required for paper', rowIndex)
-        }
-        const boxName = container.collectionName ?? ''
-        collectionKey = `box-${boxName}`
-        if (boxName) {
-          collectionId = await resolveCollection(boxName, 'box', database)
-          if (!collectionId && !container.collectionLocationId) {
-            add(subjectIndex, specimenIndex, `Box '${boxName}' not found. Provide collectionLocationId to create it.`, rowIndex)
-          }
-          if (container.collectionLocationId) {
-            toBeCreatedKeys.add(collectionKey)
-          }
-        }
-      } else {
-        if (!identifier) {
-          add(subjectIndex, specimenIndex, 'Plate/box name or barcode is required', rowIndex)
-        }
-        collectionKey = `${collectionType}-${identifier ?? ''}`
-        if (identifier) {
-          collectionId = await resolveCollection(identifier, collectionType, database)
-          if (!collectionId && !container.collectionLocationId) {
-            add(subjectIndex, specimenIndex, `Collection '${identifier}' not found. Provide collectionLocationId to create it.`, rowIndex)
-          }
-          if (container.collectionLocationId) {
-            toBeCreatedKeys.add(collectionKey)
-          } else if (collectionId) {
-            collectionKeyToId.set(collectionKey, collectionId)
-          }
-        }
+      const { collectionKey, collectionId } = collectionResolution
+      if (container.collectionLocationId) {
+        toBeCreatedKeys.add(collectionKey)
+      } else if (collectionId !== null) {
+        collectionKeyToId.set(collectionKey, collectionId)
       }
 
       if (containerType !== 'paper') {
@@ -207,7 +181,10 @@ export async function validateBulkCombinedPayload(
       }
 
       const normalizedPosition = normalizePosition(container.position)
-      if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'static_well') && !normalizedPosition) {
+      if (
+        (containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'static_well') &&
+        !normalizedPosition
+      ) {
         add(subjectIndex, specimenIndex, 'Position is required for this container type (e.g. A01)', rowIndex)
       }
       if (containerType === 'paper' && !container.label?.trim()) {
@@ -217,105 +194,19 @@ export async function validateBulkCombinedPayload(
         add(subjectIndex, specimenIndex, 'Barcode is required for micronix tubes', rowIndex)
       }
 
-      const resolvedId = collectionId ?? (collectionKeyToId.get(collectionKey) ?? null)
-      containerRowsForSecondPass.push({
-        subjectIndex,
-        specimenIndex,
-        rowIndex,
-        collectionKey,
-        collectionId: resolvedId,
-        normalizedPosition,
-        barcode: container.barcode?.trim() || null,
-        containerType,
-        boxKey: containerType === 'paper' ? `box-${container.collectionName ?? ''}` : null,
-        sheetName: containerType === 'paper' ? (container.label ?? 'Sheet-1').trim() : null,
-      })
+      const resolvedId = collectionId ?? collectionKeyToId.get(collectionKey) ?? null
+      placementRows.push(
+        buildContainerPlacementCheckRow(container, resolvedId, collectionKey)
+      )
+      placementContexts.push({ subjectIndex, specimenIndex, rowIndex })
     }
   }
 
-  // 4. Second pass: barcode uniqueness (DB + in-payload), position uniqueness (DB + in-payload), sheet+box for paper
-  const seenBarcodes = new Set<string>()
-  const seenPositionByCollection = new Map<string, Set<string>>()
-  const seenSheetByBox = new Map<string, Set<string>>()
-
-  for (const row of containerRowsForSecondPass) {
-    const { subjectIndex, specimenIndex, rowIndex, collectionKey, collectionId, normalizedPosition, barcode, containerType, boxKey, sheetName } = row
-
-    if (containerType === 'micronix_tube' || containerType === 'cryovial_tube') {
-      if (barcode) {
-        const existingInDb = containerType === 'micronix_tube'
-          ? await database.select({ id: micronixTube.id }).from(micronixTube).where(eq(micronixTube.barcode, barcode)).get()
-          : await database.select({ id: cryovialTube.id }).from(cryovialTube).where(eq(cryovialTube.barcode, barcode)).get()
-        if (existingInDb) {
-          add(subjectIndex, specimenIndex, `Barcode '${barcode}' already exists. Use a different barcode.`, rowIndex)
-        }
-        if (seenBarcodes.has(barcode)) {
-          add(subjectIndex, specimenIndex, `Barcode '${barcode}' is used more than once in your file. Each barcode must be unique.`, rowIndex)
-        }
-        seenBarcodes.add(barcode)
-      }
-    }
-
-    if (normalizedPosition && (containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'static_well')) {
-      if (collectionId !== null) {
-        if (containerType === 'micronix_tube' || containerType === 'static_well') {
-          const existingTube = await database
-            .select({ id: micronixTube.id })
-            .from(micronixTube)
-            .where(and(eq(micronixTube.collectionId, collectionId), eq(micronixTube.position, normalizedPosition)))
-            .get()
-          const existingWell = containerType === 'static_well'
-            ? await database
-                .select({ id: staticWell.id })
-                .from(staticWell)
-                .where(and(eq(staticWell.collectionId, collectionId), eq(staticWell.position, normalizedPosition)))
-                .get()
-            : null
-          if (existingTube || existingWell) {
-            add(subjectIndex, specimenIndex, `Position ${normalizedPosition} is already used in this plate. Use a different position or plate.`, rowIndex)
-          }
-        } else {
-          const existing = await database
-            .select({ id: cryovialTube.id })
-            .from(cryovialTube)
-            .where(and(eq(cryovialTube.collectionId, collectionId), eq(cryovialTube.position, normalizedPosition)))
-            .get()
-          if (existing) {
-            add(subjectIndex, specimenIndex, `Position ${normalizedPosition} is already used in this box. Use a different position or box.`, rowIndex)
-          }
-        }
-      }
-      let positionSet = seenPositionByCollection.get(collectionKey)
-      if (!positionSet) {
-        positionSet = new Set()
-        seenPositionByCollection.set(collectionKey, positionSet)
-      }
-      if (positionSet.has(normalizedPosition)) {
-        add(subjectIndex, specimenIndex, `Position ${normalizedPosition} in this plate/box is used more than once in your file. Each position can only be used once.`, rowIndex)
-      }
-      positionSet.add(normalizedPosition)
-    }
-
-    if (containerType === 'paper' && boxKey && sheetName) {
-      if (collectionId !== null) {
-        const existingSheet = await database
-          .select({ id: sheet.id })
-          .from(sheet)
-          .where(and(eq(sheet.name, sheetName), eq(sheet.boxId, collectionId)))
-          .get()
-        if (existingSheet) {
-          // Reusing existing sheet - no error
-        }
-      }
-      let sheetSet = seenSheetByBox.get(boxKey)
-      if (!sheetSet) {
-        sheetSet = new Set()
-        seenSheetByBox.set(boxKey, sheetSet)
-      }
-      if (sheetSet.has(sheetName)) {
-        add(subjectIndex, specimenIndex, `Sheet name '${sheetName}' in box is used more than once in your file.`, rowIndex)
-      }
-      sheetSet.add(sheetName)
+  const placementErrors = await collectContainerPlacementErrors(database, placementRows)
+  for (const placementError of placementErrors) {
+    const context = placementContexts[placementError.rowIndex]
+    if (context) {
+      add(context.subjectIndex, context.specimenIndex, placementError.message, context.rowIndex)
     }
   }
 

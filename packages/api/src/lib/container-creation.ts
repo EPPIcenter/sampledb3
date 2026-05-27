@@ -59,13 +59,12 @@ export interface ContainerData {
 }
 
 /**
- * Validate container data based on container type
+ * Validate required container fields by type (no DB uniqueness checks).
  */
-export async function validateContainerData(
-  database: Database,
+export function validateContainerFieldRequirements(
   containerType: ContainerType,
   data: ContainerData
-): Promise<{ valid: boolean; error?: string }> {
+): { valid: boolean; error?: string } {
   if (containerType === 'micronix_tube') {
     if (!data.barcode) {
       return { valid: false, error: 'Barcode is required for micronix tubes' }
@@ -76,32 +75,12 @@ export async function validateContainerData(
     if (!data.position || String(data.position).trim() === '') {
       return { valid: false, error: 'Position (well) is required for micronix tubes.' }
     }
-    // Validate barcode uniqueness
-    const existing = await database
-      .select({ id: micronixTube.id })
-      .from(micronixTube)
-      .where(eq(micronixTube.barcode, data.barcode))
-      .get()
-    if (existing) {
-      return { valid: false, error: `Barcode '${data.barcode}' already exists` }
-    }
   } else if (containerType === 'cryovial_tube') {
     if (!data.collectionName && !data.collectionBarcode) {
       return { valid: false, error: 'Collection name or barcode is required' }
     }
     if (!data.position || String(data.position).trim() === '') {
       return { valid: false, error: 'Position (well) is required for cryovial tubes.' }
-    }
-    // Validate barcode uniqueness if provided
-    if (data.barcode) {
-      const existing = await database
-        .select({ id: cryovialTube.id })
-        .from(cryovialTube)
-        .where(eq(cryovialTube.barcode, data.barcode))
-        .get()
-      if (existing) {
-        return { valid: false, error: `Barcode '${data.barcode}' already exists` }
-      }
     }
   } else if (containerType === 'paper') {
     if (!data.collectionName) {
@@ -116,6 +95,45 @@ export async function validateContainerData(
     }
     if (!data.position || String(data.position).trim() === '') {
       return { valid: false, error: 'Position (well) is required for static wells.' }
+    }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Validate container data based on container type
+ */
+export async function validateContainerData(
+  database: Database,
+  containerType: ContainerType,
+  data: ContainerData,
+  options?: { skipDbUniqueness?: boolean }
+): Promise<{ valid: boolean; error?: string }> {
+  const fieldValidation = validateContainerFieldRequirements(containerType, data)
+  if (!fieldValidation.valid) return fieldValidation
+
+  if (options?.skipDbUniqueness) {
+    return { valid: true }
+  }
+
+  if (containerType === 'micronix_tube') {
+    const existing = await database
+      .select({ id: micronixTube.id })
+      .from(micronixTube)
+      .where(eq(micronixTube.barcode, data.barcode!))
+      .get()
+    if (existing) {
+      return { valid: false, error: `Barcode '${data.barcode}' already exists` }
+    }
+  } else if (containerType === 'cryovial_tube' && data.barcode) {
+    const existing = await database
+      .select({ id: cryovialTube.id })
+      .from(cryovialTube)
+      .where(eq(cryovialTube.barcode, data.barcode))
+      .get()
+    if (existing) {
+      return { valid: false, error: `Barcode '${data.barcode}' already exists` }
     }
   }
 
