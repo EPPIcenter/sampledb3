@@ -17,7 +17,7 @@ if (!File.prototype.text) {
 import ContainerMoveMicronix from '../ContainerMoveMicronix'
 import { collectionsApi } from '../../lib/api/collections'
 import { locationsApi } from '../../lib/api/locations'
-import { scannerConfigurationsApi } from '../../lib/api/settings'
+import { settingsApi } from '../../lib/api/settings'
 
 // Mock react-router-dom: stateful so setSearchParams triggers re-renders and get() returns current params.
 let initialSearchParams = new URLSearchParams()
@@ -98,7 +98,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         initialSearchParams = new URLSearchParams()
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
         vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
-        vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
+        vi.mocked(settingsApi.getValue).mockResolvedValue({
                 configurations: [mockScannerConfig]
             } as any)
         vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({ plate: { id: 1, name: 'PLATE1' }, wells: {} } as any)
@@ -113,11 +113,21 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         expect(screen.getByText('Upload CSV Files')).toBeInTheDocument()
     })
 
+    it('shows PageError with retry when bootstrap load fails', async () => {
+        vi.mocked(collectionsApi.listCollectionsByType).mockRejectedValue(new Error('fail'))
+        await renderWithProviders(<ContainerMoveMicronix />)
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toBeInTheDocument()
+            expect(screen.getByText(/Could not load collections/i)).toBeInTheDocument()
+            expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+        })
+    })
+
     it('resets to upload step and updates URL when step=resolve in URL but no files (reload)', async () => {
         initialSearchParams = new URLSearchParams({ step: 'resolve' })
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
         vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
-        vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
+        vi.mocked(settingsApi.getValue).mockResolvedValue({
             configurations: [mockScannerConfig],
         } as any)
 
@@ -372,7 +382,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             skipRows: 0,
             isDefault: false,
         }
-        vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
+        vi.mocked(settingsApi.getValue).mockResolvedValue({
                 configurations: [configWithTargetPosition, configWithPositionColumn],
             } as any)
 
@@ -426,7 +436,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             skipRows: 0,
             isDefault: false,
         }
-        vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
+        vi.mocked(settingsApi.getValue).mockResolvedValue({
                 configurations: [configWithTargetPosition, configWithPositionColumn],
             } as any)
 
@@ -477,7 +487,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             skipRows: 0,
             isDefault: false,
         }
-        vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
+        vi.mocked(settingsApi.getValue).mockResolvedValue({
                 configurations: [configWithTargetPosition, configWithPositionColumn],
             } as any)
 
@@ -532,7 +542,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             skipRows: 0,
             isDefault: false,
         }
-        vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
+        vi.mocked(settingsApi.getValue).mockResolvedValue({
                 configurations: [configWithTargetPosition, configWithPositionColumn],
             } as any)
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({

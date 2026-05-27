@@ -116,6 +116,16 @@ describe('ContainerMoveCryovial', () => {
         })
     })
 
+    it('shows PageError with retry when bootstrap load fails', async () => {
+        vi.mocked(collectionsApi.listCollectionsByType).mockRejectedValue(new Error('fail'))
+        await renderWithProviders(<ContainerMoveCryovial />)
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toBeInTheDocument()
+            expect(screen.getByText(/Could not load collections/i)).toBeInTheDocument()
+            expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+        })
+    })
+
     it('resets to upload step and updates URL when step=resolve in URL but no files (reload)', async () => {
         initialSearchParams = new URLSearchParams({ step: 'resolve' })
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)

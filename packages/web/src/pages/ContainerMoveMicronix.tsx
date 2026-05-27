@@ -1,16 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, Navigate } from 'react-router-dom'
 import { useContainerMoveStep, type ContainerMoveAtomicMode } from '../hooks/useContainerMoveStep'
+import { useMicronixMoveBootstrap } from '../hooks/useMoveWorkflow'
 import { collectionsApi } from '../lib/api/collections';
-import { locationsApi } from '../lib/api/locations';
-import { scannerConfigurationsApi } from '../lib/api/settings';
-import type { ScannerConfiguration } from '../lib/api/settings';
-import type { Location } from '../lib/api/types';
 import type { PlateCandidate } from '../lib/plate-filename-match'
 import { inferDestinationPlateForScan } from '../lib/plate-destination-inference'
 import { parseScannerPlateCsv, validateScannerPlateCsv } from '../lib/scanner-plate-csv'
 import MicronixPlatePicker, { type MicronixPlate } from '../components/MicronixPlatePicker'
 import { useUser } from '../contexts/UserContext'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/storage.css'
 
 interface CSVRow {
@@ -63,8 +61,11 @@ export default function ContainerMoveMicronix() {
   const { currentStep: effectiveStep, setStep: setSearchStep } = useContainerMoveStep(files.length)
 
   const [loading, setLoading] = useState(false)
-  const [availablePlates, setAvailablePlates] = useState<MicronixPlate[]>([])
-  const [locations, setLocations] = useState<Location[]>([])
+  const bootstrapQuery = useMicronixMoveBootstrap()
+  const bootstrapStatus = fromQuery(bootstrapQuery)
+  const availablePlates = (bootstrapQuery.data?.plates ?? []) as MicronixPlate[]
+  const locations = bootstrapQuery.data?.locations ?? []
+  const scannerConfigurations = bootstrapQuery.data?.scannerConfigurations ?? []
   const [moveResult, setMoveResult] = useState<{
     success: boolean
     moved: number
@@ -78,48 +79,17 @@ export default function ContainerMoveMicronix() {
   } | null>(null)
   const [atomicMode, setAtomicMode] = useState<ContainerMoveAtomicMode>('all_or_nothing')
   const [instructionsExpanded, setInstructionsExpanded] = useState(false)
-  const [scannerConfigurations, setScannerConfigurations] = useState<ScannerConfiguration[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Load available plates, locations, and scanner configurations on mount
   useEffect(() => {
-    Promise.all([
-      collectionsApi.listCollectionsByType('micronix_plate'),
-      locationsApi.list(),
-      scannerConfigurationsApi.getAll(),
-    ]).then(([collectionsResponse, locationsResponse, scannerConfigsResponse]) => {
-      const collections = collectionsResponse.collections as any[]
-      setAvailablePlates(
-        collections.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          barcode: c.barcode || null,
-          locationId: c.locationId || null,
-          itemCount: c.itemCount || 0,
-          locationPath: c.location?.path || null,
-        }))
-      )
-      setLocations(locationsResponse.locations)
-      
-      // Load scanner configurations
-      // The API returns { key, value } format, where value is ScannerConfigurations
-      // Handle both direct ScannerConfigurations and { key, value } wrapper
-      const configs = scannerConfigsResponse.configurations
-      if (configs) {
-        setScannerConfigurations(configs)
-        // Auto-select default configuration
-        const defaultConfig = configs.find((c: ScannerConfiguration) => c.isDefault === true)
-        if (defaultConfig) {
-          setSelectedConfigId(defaultConfig.id)
-        } else if (configs.length > 0) {
-          setSelectedConfigId(configs[0].id)
-        }
-      }
-    }).catch((error) => {
-      console.error('Failed to load collections, locations, or scanner configurations:', error)
-    })
-  }, [])
+    if (scannerConfigurations.length === 0 || selectedConfigId !== null) return
+    const defaultConfig =
+      scannerConfigurations.find((c) => c.isDefault === true) ?? scannerConfigurations[0]
+    if (defaultConfig) {
+      setSelectedConfigId(defaultConfig.id)
+    }
+  }, [scannerConfigurations, selectedConfigId])
 
   const configRevalidateRequestIdRef = useRef<string | null>(null)
 
@@ -629,6 +599,17 @@ export default function ContainerMoveMicronix() {
       <div className="container mx-auto px-4 py-8 relative z-10">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Move Micronix Tubes</h1>
+
+        {bootstrapStatus === 'error' && (
+          <PageError
+            title="Could not load collections"
+            message={getQueryErrorMessage(
+              bootstrapQuery.error,
+              'Failed to load plates, locations, and scanner configurations'
+            )}
+            onRetry={() => void bootstrapQuery.refetch()}
+          />
+        )}
 
         {/* Step indicator */}
         <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">

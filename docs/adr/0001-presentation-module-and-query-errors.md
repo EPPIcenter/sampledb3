@@ -26,10 +26,11 @@ We rejected coupling the presentation seam to React Query types (callers still n
 - Reference Data (per-tab list load + specimen-type container types via `useQueries`)
 - Admin dashboard, system statistics, users, error logs, data-integrity overview/report/empty collections
 - Collection move and paper (sheet) move workflows (initial bootstrap reads)
+- Container move cryovial and micronix (initial bootstrap reads)
 
 ## Intentionally not migrated (workflows, auth, heavy editors)
 
-- Container move (micronix/cryovial), export/import, plate-scan validation, derivations bulk import
+- Export/import, plate-scan validation, derivations bulk import (container move CSV upload steps remain mutation-local)
 - Login, Register, Setup
 - Bulk-import and wizard steps
 - Reference Data tab dependency loads (inline `useEffect`; failures logged)

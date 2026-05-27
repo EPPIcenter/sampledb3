@@ -1,13 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { useContainerMoveStep, type ContainerMoveAtomicMode } from '../hooks/useContainerMoveStep'
+import { useCryovialMoveBootstrap } from '../hooks/useMoveWorkflow'
 import { collectionsApi } from '../lib/api/collections';
-import { locationsApi } from '../lib/api/locations';
-import type { Location } from '../lib/api/types';
 import { downloadCsv } from '../lib/csv'
 import { generateCryovialMoveTemplate } from '../lib/cryovial-move-template'
 import CryovialBoxPicker, { type CryovialBox } from '../components/CryovialBoxPicker'
 import { useUser } from '../contexts/UserContext'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/storage.css'
 
 interface CSVRow {
@@ -59,8 +59,10 @@ export default function ContainerMoveCryovial() {
   const [files, setFiles] = useState<FileData[]>([])
   const { currentStep: effectiveStep, setStep: setSearchStep } = useContainerMoveStep(files.length)
   const [loading, setLoading] = useState(false)
-  const [availableBoxes, setAvailableBoxes] = useState<CryovialBox[]>([])
-  const [locations, setLocations] = useState<Location[]>([])
+  const bootstrapQuery = useCryovialMoveBootstrap()
+  const bootstrapStatus = fromQuery(bootstrapQuery)
+  const availableBoxes = (bootstrapQuery.data?.boxes ?? []) as CryovialBox[]
+  const locations = bootstrapQuery.data?.locations ?? []
   const [moveResult, setMoveResult] = useState<{
     success: boolean
     moved: number
@@ -75,29 +77,6 @@ export default function ContainerMoveCryovial() {
   const [atomicMode, setAtomicMode] = useState<ContainerMoveAtomicMode>('all_or_nothing')
   const [instructionsExpanded, setInstructionsExpanded] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // Load available boxes and locations on mount
-  useEffect(() => {
-    Promise.all([
-      collectionsApi.listCollectionsByType('cryovial_box'),
-      locationsApi.list(),
-    ]).then(([collectionsResponse, locationsResponse]) => {
-      const collections = collectionsResponse.collections as any[]
-      setAvailableBoxes(
-        collections.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          barcode: c.barcode || null,
-          locationId: c.locationId || null,
-          itemCount: c.itemCount || 0,
-          locationPath: c.location?.path || null,
-        }))
-      )
-      setLocations(locationsResponse.locations)
-    }).catch((error) => {
-      console.error('Failed to load collections or locations:', error)
-    })
-  }, [])
 
   const setCurrentStep = setSearchStep
 
@@ -576,6 +555,17 @@ export default function ContainerMoveCryovial() {
       <div className="container mx-auto px-4 py-8 relative z-10">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Move Cryovial Tubes</h1>
+
+        {bootstrapStatus === 'error' && (
+          <PageError
+            title="Could not load collections"
+            message={getQueryErrorMessage(
+              bootstrapQuery.error,
+              'Failed to load cryovial boxes and locations'
+            )}
+            onRetry={() => void bootstrapQuery.refetch()}
+          />
+        )}
 
         {/* Step indicator */}
         <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
