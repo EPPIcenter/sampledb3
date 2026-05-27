@@ -184,7 +184,7 @@ describe('ReferenceData Page', () => {
         isSuccess: false,
         error: new Error('fail'),
         refetch: vi.fn(),
-      })
+      } as unknown as ReturnType<typeof mockUseReferenceDataTab>)
       await render(<ReferenceData />, { initialEntries: ['/reference-data?tab=specimen-types'] })
       await waitFor(() => {
         expect(screen.getByRole('alert')).toBeInTheDocument()
