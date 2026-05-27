@@ -4,17 +4,17 @@ import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import AdminErrorLogs from '../AdminErrorLogs'
 import { formatErrorLogForLLM } from '../../lib/error-log-prompt'
-import { errorLogsApi, type ErrorLog, type ErrorLogsResponse } from '../../lib/api'
+import { errorLogsApi, type ErrorLog, type ErrorLogsResponse } from '../../lib/api/error-logs'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/error-logs', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('error-logs', {
   errorLogsApi: {
     list: vi.fn().mockResolvedValue({ data: { logs: [] } }),
     get: vi.fn(),
     resolve: vi.fn().mockResolvedValue(undefined),
-  },
-})
+  }
+  })
 })
 
 const mockErrorLog: ErrorLog = {

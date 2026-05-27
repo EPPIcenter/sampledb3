@@ -3,11 +3,11 @@ import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import { fireEvent } from '@testing-library/react'
 import LocationForm from '../LocationForm'
-import * as api from '../../lib/api'
+import { storageTypesApi } from '../../lib/api/reference-data'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('reference-data', {
   locationsApi: {},
   storageTypesApi: {
     list: vi.fn().mockResolvedValue({
@@ -20,13 +20,28 @@ vi.mock('../../lib/api', async () => {
 })
 })
 
+vi.mock('../../lib/api/locations', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('locations', {
+  locationsApi: {},
+  storageTypesApi: {
+    list: vi.fn().mockResolvedValue({
+      data: [
+        { id: 1, name: 'Freezer', description: '-80°C' },
+        { id: 2, name: 'Fridge', description: '4°C' },
+      ],
+    }),
+  }
+  })
+})
+
 describe('LocationForm', () => {
   const onSave = vi.fn()
   const onCancel = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(api.storageTypesApi.list).mockResolvedValue({
+    vi.mocked(storageTypesApi.list).mockResolvedValue({
       data: [
         { id: 1, name: 'Freezer', description: '-80°C' },
         { id: 2, name: 'Fridge', description: '4°C' },

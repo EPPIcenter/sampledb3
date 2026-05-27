@@ -2,16 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '../../__tests__/helpers/render'
 import LocationPicker from '../LocationPicker'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/locations', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('locations', {
   locationsApi: {
     list: vi.fn(),
-  },
-})
+  }
+  })
 })
 
-import { locationsApi } from '../../lib/api'
+import { locationsApi } from '../../lib/api/locations'
 
 const mockList = locationsApi.list as ReturnType<typeof vi.fn>
 

@@ -3,9 +3,9 @@ import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import ExportModal from '../ExportModal'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('reference-data', {
   exportApi: {
     validate: vi.fn(),
     export: vi.fn(),
@@ -21,6 +21,46 @@ vi.mock('../../lib/api', async () => {
   specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
   tagsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
 })
+})
+
+vi.mock('../../lib/api/export', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('export', {
+  exportApi: {
+    validate: vi.fn(),
+    export: vi.fn(),
+    availableTypes: vi.fn().mockResolvedValue({ data: { specimen_types: [], container_types: [] } }),
+    getCount: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+    containersCount: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+    containersCountByNames: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+  },
+  exportConfigurationsApi: {
+    getShared: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
+    getPersonal: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
+  },
+  specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
+  tagsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
+})
+})
+
+vi.mock('../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('settings', {
+  exportApi: {
+    validate: vi.fn(),
+    export: vi.fn(),
+    availableTypes: vi.fn().mockResolvedValue({ data: { specimen_types: [], container_types: [] } }),
+    getCount: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+    containersCount: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+    containersCountByNames: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+  },
+  exportConfigurationsApi: {
+    getShared: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
+    getPersonal: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
+  },
+  specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
+  tagsApi: { list: vi.fn().mockResolvedValue({ data: [] }) }
+  })
 })
 
 describe('ExportModal', () => {

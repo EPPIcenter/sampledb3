@@ -2,23 +2,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import ExportConfigurationsManager from '../ExportConfigurationsManager'
-import * as api from '../../lib/api'
+import { exportConfigurationsApi } from '../../lib/api/settings'
 
 const sharedConfigs = [
   { name: 'Shared One', columns: ['container_id', 'barcode'], isDefault: true },
   { name: 'Shared Two', columns: ['barcode', 'position'], isDefault: false },
 ]
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('settings', {
   exportConfigurationsApi: {
     getShared: vi.fn(),
     getPersonal: vi.fn(),
     update: vi.fn(),
     updatePersonal: vi.fn(),
-  },
-})
+  }
+  })
 })
 
 vi.mock('../../contexts/UserContext', async () => {
@@ -34,21 +34,21 @@ vi.mock('../../contexts/UserContext', async () => {
 describe('ExportConfigurationsManager', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(api.exportConfigurationsApi.getShared).mockResolvedValue({
+    vi.mocked(exportConfigurationsApi.getShared).mockResolvedValue({
       data: { configurations: sharedConfigs },
     } as never)
-    vi.mocked(api.exportConfigurationsApi.getPersonal).mockResolvedValue({
+    vi.mocked(exportConfigurationsApi.getPersonal).mockResolvedValue({
       data: { configurations: [] },
     } as never)
-    vi.mocked(api.exportConfigurationsApi.update).mockResolvedValue({} as never)
-    vi.mocked(api.exportConfigurationsApi.updatePersonal).mockResolvedValue({} as never)
+    vi.mocked(exportConfigurationsApi.update).mockResolvedValue({} as never)
+    vi.mocked(exportConfigurationsApi.updatePersonal).mockResolvedValue({} as never)
   })
 
   it('loads shared and personal configurations on mount', async () => {
     await render(<ExportConfigurationsManager data={null} />)
     await waitFor(() => {
-      expect(api.exportConfigurationsApi.getShared).toHaveBeenCalled()
-      expect(api.exportConfigurationsApi.getPersonal).toHaveBeenCalled()
+      expect(exportConfigurationsApi.getShared).toHaveBeenCalled()
+      expect(exportConfigurationsApi.getPersonal).toHaveBeenCalled()
     })
   })
 
@@ -74,7 +74,7 @@ describe('ExportConfigurationsManager', () => {
     await user.click(saveButton)
 
     await waitFor(() => {
-      expect(api.exportConfigurationsApi.update).toHaveBeenCalledWith(
+      expect(exportConfigurationsApi.update).toHaveBeenCalledWith(
         {
           configurations: [
             { name: 'Shared One Updated', columns: ['container_id', 'barcode'], isDefault: true },
@@ -106,7 +106,7 @@ describe('ExportConfigurationsManager', () => {
     await user.click(addButton)
 
     await waitFor(() => {
-      expect(api.exportConfigurationsApi.update).toHaveBeenCalledWith(
+      expect(exportConfigurationsApi.update).toHaveBeenCalledWith(
         expect.objectContaining({
           configurations: expect.arrayContaining([
             expect.objectContaining({ name: 'New Shared Config' }),
@@ -129,7 +129,7 @@ describe('ExportConfigurationsManager', () => {
     await user.click(deleteButtons[1])
 
     await waitFor(() => {
-      expect(api.exportConfigurationsApi.update).toHaveBeenCalledWith(
+      expect(exportConfigurationsApi.update).toHaveBeenCalledWith(
         {
           configurations: [
             { name: 'Shared One', columns: ['container_id', 'barcode'], isDefault: true },
@@ -151,7 +151,7 @@ describe('ExportConfigurationsManager', () => {
     await user.click(setDefaultButtons[0])
 
     await waitFor(() => {
-      expect(api.exportConfigurationsApi.update).toHaveBeenCalledWith(
+      expect(exportConfigurationsApi.update).toHaveBeenCalledWith(
         {
           configurations: [
             { name: 'Shared One', columns: ['container_id', 'barcode'], isDefault: false },

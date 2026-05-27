@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import Setup from '../Setup'
-import * as api from '../../lib/api'
+import { setupApi } from '../../lib/api/settings'
 
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', async () => {
@@ -10,14 +10,14 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate }
 })
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('settings', {
   setupApi: {
     status: vi.fn().mockResolvedValue({ data: { initialized: false } }),
     initialize: vi.fn().mockResolvedValue(undefined),
-  },
-})
+  }
+  })
 })
 
 vi.mock('../../contexts/UserContext', async () => {
@@ -28,7 +28,7 @@ vi.mock('../../contexts/UserContext', async () => {
 describe('Setup', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(api.setupApi.status).mockResolvedValue({ data: { initialized: false } } as never)
+    vi.mocked(setupApi.status).mockResolvedValue({ data: { initialized: false } } as never)
   })
 
   it('shows setup-related content', async () => {
@@ -39,7 +39,7 @@ describe('Setup', () => {
   })
 
   it('navigates to / when already initialized', async () => {
-    vi.mocked(api.setupApi.status).mockResolvedValue({ data: { initialized: true } } as never)
+    vi.mocked(setupApi.status).mockResolvedValue({ data: { initialized: true } } as never)
     await render(<Setup />)
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/')
@@ -47,7 +47,7 @@ describe('Setup', () => {
   })
 
   it('shows error when status check fails', async () => {
-    vi.mocked(api.setupApi.status).mockRejectedValue(new Error('Network error'))
+    vi.mocked(setupApi.status).mockRejectedValue(new Error('Network error'))
     await render(<Setup />)
     await waitFor(() => {
       expect(screen.getByText(/network error|failed to check/i)).toBeInTheDocument()
@@ -104,7 +104,7 @@ describe('Setup', () => {
 
   it('calls initialize and navigates when Finish Setup succeeds', async () => {
     const user = userEvent.setup()
-    vi.mocked(api.setupApi.initialize).mockResolvedValue(undefined as never)
+    vi.mocked(setupApi.initialize).mockResolvedValue(undefined as never)
     await render(<Setup />)
     // Go to step 1 and fill
     await user.type(screen.getByLabelText(/full name/i), 'Admin User')
@@ -120,14 +120,14 @@ describe('Setup', () => {
     const finishButton = screen.getByRole('button', { name: /finish setup/i })
     await user.click(finishButton)
     await waitFor(() => {
-      expect(api.setupApi.initialize).toHaveBeenCalled()
+      expect(setupApi.initialize).toHaveBeenCalled()
       expect(mockNavigate).toHaveBeenCalledWith('/login', { state: { fromSetup: true } })
     })
   })
 
   it('shows error and stops loading when initialize fails', async () => {
     const user = userEvent.setup()
-    vi.mocked(api.setupApi.initialize).mockRejectedValue(new Error('Setup failed'))
+    vi.mocked(setupApi.initialize).mockRejectedValue(new Error('Setup failed'))
     await render(<Setup />)
     await user.type(screen.getByLabelText(/full name/i), 'Admin User')
     await user.type(screen.getByLabelText(/email address/i), 'admin@example.com')

@@ -43,13 +43,13 @@ const mockCollections: CollectionListItem[] = [
   },
 ]
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+vi.mock('../../lib/api/collections', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { collectionsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(collectionsPageMock())
+  return createMockedDomainModule('collections', collectionsPageMock())
 })
 
-import { collectionsApi } from '../../lib/api'
+import { collectionsApi } from '../../lib/api/collections'
 
 describe('Collections page', () => {
   beforeEach(() => {

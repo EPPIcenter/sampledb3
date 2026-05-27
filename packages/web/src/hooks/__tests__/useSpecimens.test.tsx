@@ -8,13 +8,13 @@ import {
   useSpecimen,
   useCreateSpecimen,
 } from '../useSpecimens'
-import * as api from '../../lib/api'
+import { specimensApi } from '../../lib/api/specimens'
 
 // Mock the API module
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+vi.mock('../../lib/api/specimens', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { specimensHooksMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(specimensHooksMock())
+  return createMockedDomainModule('specimens', specimensHooksMock())
 })
 
 function createWrapper() {
@@ -53,7 +53,7 @@ describe('useSpecimens Hooks', () => {
         ],
       }
 
-      vi.mocked(api.specimensApi.search).mockResolvedValue(mockData)
+      vi.mocked(specimensApi.search).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useSpecimens(), {
         wrapper: createWrapper(),
@@ -64,13 +64,13 @@ describe('useSpecimens Hooks', () => {
       })
 
       expect(result.current.data).toEqual(mockData.specimens)
-      expect(api.specimensApi.search).toHaveBeenCalledWith(undefined)
+      expect(specimensApi.search).toHaveBeenCalledWith(undefined)
     })
 
     it('should pass filters to search', async () => {
       const mockData = { specimens: [] }
 
-      vi.mocked(api.specimensApi.search).mockResolvedValue(mockData)
+      vi.mocked(specimensApi.search).mockResolvedValue(mockData)
 
       const filters = { source_type: 'subject', study: 'ST1' }
       const { result } = renderHook(() => useSpecimens(filters), {
@@ -81,7 +81,7 @@ describe('useSpecimens Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(api.specimensApi.search).toHaveBeenCalledWith(filters)
+      expect(specimensApi.search).toHaveBeenCalledWith(filters)
     })
   })
 
@@ -96,7 +96,7 @@ describe('useSpecimens Hooks', () => {
         },
       }
 
-      vi.mocked(api.specimensApi.get).mockResolvedValue(mockData)
+      vi.mocked(specimensApi.get).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useSpecimen(1), {
         wrapper: createWrapper(),
@@ -107,7 +107,7 @@ describe('useSpecimens Hooks', () => {
       })
 
       expect(result.current.data).toEqual(mockData.specimen)
-      expect(api.specimensApi.get).toHaveBeenCalledWith(1)
+      expect(specimensApi.get).toHaveBeenCalledWith(1)
     })
   })
 
@@ -122,7 +122,7 @@ describe('useSpecimens Hooks', () => {
         },
       }
 
-      vi.mocked(api.specimensApi.create).mockResolvedValue(mockCreated)
+      vi.mocked(specimensApi.create).mockResolvedValue(mockCreated)
 
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -154,7 +154,7 @@ describe('useSpecimens Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(api.specimensApi.create).toHaveBeenCalled()
+      expect(specimensApi.create).toHaveBeenCalled()
       expect(result.current.data).toEqual(mockCreated.specimen)
       expect(invalidateSpy).toHaveBeenCalled()
     })

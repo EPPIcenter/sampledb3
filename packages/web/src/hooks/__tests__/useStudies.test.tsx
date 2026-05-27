@@ -10,12 +10,12 @@ import {
   useCreateStudy,
   useUpdateStudy,
 } from '../useStudies'
-import * as api from '../../lib/api'
+import { studiesApi } from '../../lib/api/studies'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+vi.mock('../../lib/api/studies', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { studiesHooksMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(studiesHooksMock())
+  return createMockedDomainModule('studies', studiesHooksMock())
 })
 
 function createWrapper() {
@@ -55,7 +55,7 @@ describe('useStudies Hooks', () => {
         pagination: { total: 2, page: 1, limit: 10, totalPages: 1 },
       }
 
-      vi.mocked(api.studiesApi.list).mockResolvedValue(mockData)
+      vi.mocked(studiesApi.list).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useStudies(), {
         wrapper: createWrapper(),
@@ -66,13 +66,13 @@ describe('useStudies Hooks', () => {
       })
 
       expect(result.current.data).toEqual(mockData)
-      expect(api.studiesApi.list).toHaveBeenCalledWith(undefined, undefined)
+      expect(studiesApi.list).toHaveBeenCalledWith(undefined, undefined)
     })
 
     it('should pass search and pagination parameters', async () => {
       const mockData = { studies: [], pagination: { total: 0, page: 1, limit: 10, totalPages: 0 } }
 
-      vi.mocked(api.studiesApi.list).mockResolvedValue(mockData)
+      vi.mocked(studiesApi.list).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useStudies('test', { page: 2, limit: 20 }), {
         wrapper: createWrapper(),
@@ -82,7 +82,7 @@ describe('useStudies Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(api.studiesApi.list).toHaveBeenCalledWith('test', { page: 2, limit: 20 })
+      expect(studiesApi.list).toHaveBeenCalledWith('test', { page: 2, limit: 20 })
     })
   })
 
@@ -100,7 +100,7 @@ describe('useStudies Hooks', () => {
         },
       }
 
-      vi.mocked(api.studiesApi.get).mockResolvedValue(mockData)
+      vi.mocked(studiesApi.get).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useStudy(1), {
         wrapper: createWrapper(),
@@ -111,7 +111,7 @@ describe('useStudies Hooks', () => {
       })
 
       expect(result.current.data).toEqual(mockData.study)
-      expect(api.studiesApi.get).toHaveBeenCalledWith(1)
+      expect(studiesApi.get).toHaveBeenCalledWith(1)
     })
 
     it('should not fetch when ID is falsy', () => {
@@ -120,7 +120,7 @@ describe('useStudies Hooks', () => {
       })
 
       expect(result.current.isFetching).toBe(false)
-      expect(api.studiesApi.get).not.toHaveBeenCalled()
+      expect(studiesApi.get).not.toHaveBeenCalled()
     })
   })
 
@@ -133,7 +133,7 @@ describe('useStudies Hooks', () => {
         pagination: { total: 1, page: 1, limit: 10, totalPages: 1 },
       }
 
-      vi.mocked(api.studiesApi.getSubjects).mockResolvedValue(mockData)
+      vi.mocked(studiesApi.getSubjects).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useStudySubjects(1), {
         wrapper: createWrapper(),
@@ -144,7 +144,7 @@ describe('useStudies Hooks', () => {
       })
 
       expect(result.current.data).toEqual(mockData)
-      expect(api.studiesApi.getSubjects).toHaveBeenCalledWith(1, undefined)
+      expect(studiesApi.getSubjects).toHaveBeenCalledWith(1, undefined)
     })
   })
 
@@ -162,7 +162,7 @@ describe('useStudies Hooks', () => {
         },
       }
 
-      vi.mocked(api.studiesApi.create).mockResolvedValue(mockCreated)
+      vi.mocked(studiesApi.create).mockResolvedValue(mockCreated)
 
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -196,7 +196,7 @@ describe('useStudies Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(api.studiesApi.create).toHaveBeenCalled()
+      expect(studiesApi.create).toHaveBeenCalled()
       expect(result.current.data).toEqual(mockCreated.study)
       expect(invalidateSpy).toHaveBeenCalled()
     })
@@ -216,7 +216,7 @@ describe('useStudies Hooks', () => {
         },
       }
 
-      vi.mocked(api.studiesApi.update).mockResolvedValue(mockUpdated)
+      vi.mocked(studiesApi.update).mockResolvedValue(mockUpdated)
 
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -248,7 +248,7 @@ describe('useStudies Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(api.studiesApi.update).toHaveBeenCalledWith(1, { title: 'Updated Study' })
+      expect(studiesApi.update).toHaveBeenCalledWith(1, { title: 'Updated Study' })
       expect(result.current.data).toEqual(mockUpdated.study)
       expect(invalidateSpy).toHaveBeenCalled()
     })

@@ -15,7 +15,9 @@ if (!File.prototype.text) {
 }
 
 import ContainerMoveMicronix from '../ContainerMoveMicronix'
-import { collectionsApi, locationsApi, scannerConfigurationsApi } from '../../lib/api'
+import { collectionsApi } from '../../lib/api/collections'
+import { locationsApi } from '../../lib/api/locations'
+import { scannerConfigurationsApi } from '../../lib/api/settings'
 
 // Mock react-router-dom: stateful so setSearchParams triggers re-renders and get() returns current params.
 let initialSearchParams = new URLSearchParams()
@@ -41,27 +43,28 @@ vi.mock('react-router-dom', async (importOriginal) => {
 })
 
 // Mock API (authApi required for UserProvider in renderWithProviders)
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
-    authApi: {
-        getCurrentUser: vi.fn().mockResolvedValue({
-            data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
-        }),
-    },
-    collectionsApi: {
-        resolveContainers: vi.fn(),
-        listCollectionsByType: vi.fn(),
-        moveContainers: vi.fn(),
-        getMicronixPlate: vi.fn()
-    },
-    locationsApi: {
-        list: vi.fn()
-    },
-    scannerConfigurationsApi: {
-        getAll: vi.fn()
-    }
+vi.mock('../../lib/api/auth', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { micronixMoveAuthMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('auth', micronixMoveAuthMock())
 })
+
+vi.mock('../../lib/api/collections', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { micronixMovePageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('collections', micronixMovePageMock())
+})
+
+vi.mock('../../lib/api/locations', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { micronixMovePageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('locations', micronixMovePageMock())
+})
+
+vi.mock('../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { micronixMovePageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('settings', micronixMovePageMock())
 })
 
 /** Build a full 96-well CSV (container_barcode,target_position). Overrides: position -> barcode (empty = empty well). */
@@ -79,7 +82,7 @@ function fullPlateCSV(overrides: Record<string, string> = {}): string {
     return 'container_barcode,target_position\n' + lines.join('\n')
 }
 
-describe('ContainerMoveMicronix', { timeout: 15000 }, () => {
+describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
     const mockScannerConfig = {
         id: 'test-config-1',
         name: 'Test Config',

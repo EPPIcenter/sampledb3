@@ -1,4 +1,4 @@
-import type { BulkDerivationSettings } from './api'
+import type { BulkDerivationSettings } from './api/derivations'
 import { buildCsv } from './csv'
 import { getCollectionNameColumn } from './container-columns'
 

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/studies', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('studies', {
   authApi: {
     getCurrentUser: vi.fn().mockResolvedValue({
       data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
@@ -13,6 +13,20 @@ vi.mock('../../lib/api', async () => {
     list: vi.fn().mockResolvedValue({ studies: [], pagination: { total: 0, totalPages: 0 } }),
   },
 })
+})
+
+vi.mock('../../lib/api/auth', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('auth', {
+  authApi: {
+    getCurrentUser: vi.fn().mockResolvedValue({
+      data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
+    }),
+  },
+  studiesApi: {
+    list: vi.fn().mockResolvedValue({ studies: [], pagination: { total: 0, totalPages: 0 } }),
+  }
+  })
 })
 
 vi.mock('../../contexts/UserContext', async () => {

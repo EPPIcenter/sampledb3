@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 import QpcrExperiments from '../QpcrExperiments'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+vi.mock('../../lib/api/qpcr', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { qpcrExperimentsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(qpcrExperimentsPageMock())
+  return createMockedDomainModule('qpcr', qpcrExperimentsPageMock())
 })
 
 vi.mock('../../contexts/UserContext', async () => {

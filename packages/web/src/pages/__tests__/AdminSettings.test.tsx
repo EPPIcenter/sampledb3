@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import AdminSettings from '../AdminSettings'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('settings', {
   settingsApi: {
     getAll: vi.fn().mockResolvedValue({
       data: {
@@ -18,8 +18,8 @@ vi.mock('../../lib/api', async () => {
     }),
     getUnits: vi.fn().mockResolvedValue({ data: [] }),
     getContainerTypeUnits: vi.fn().mockResolvedValue({ data: { units: [] } }),
-  },
-})
+  }
+  })
 })
 
 vi.mock('../../contexts/UserContext', async () => {

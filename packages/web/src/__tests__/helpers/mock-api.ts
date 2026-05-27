@@ -1,5 +1,6 @@
 import { vi } from 'vitest'
 import type { AxiosInstance } from 'axios'
+import { moduleApiKeys, type ApiModuleId } from './mock-api-domains'
 
 const defaultUser = {
   id: 1,
@@ -8,7 +9,8 @@ const defaultUser = {
   role: 'admin' as const,
 }
 
-/** Resolves in the same tick so UserProvider updates run inside React act. */
+const API_ROOT = '../../lib/api'
+
 function syncThenable<T>(value: T) {
   return {
     then: (onFulfilled: (v: T) => void) => {
@@ -19,15 +21,35 @@ function syncThenable<T>(value: T) {
   }
 }
 
-function globalApiDefaults(actual: typeof import('../../lib/api')) {
+/** Overrides for domain mocks. Each `*Api` key replaces the whole export object. `default` stubs axios client. */
+export type MockApiOverrides = {
+  default?: Partial<Pick<AxiosInstance, 'get' | 'post' | 'put' | 'patch' | 'delete'>>
+} & Record<string, unknown>
+
+function applyAuthDefaults(
+  actual: Record<string, unknown>,
+  overrides: MockApiOverrides
+): Record<string, unknown> {
+  const authApi = actual.authApi as Record<string, unknown>
   return {
-    authApi: {
-      ...actual.authApi,
+    ...actual,
+    authApi: overrides.authApi ?? {
+      ...authApi,
       getCurrentUser: vi.fn().mockImplementation(() =>
         syncThenable({ data: { user: defaultUser } })
       ),
     },
-    tableViewConfigurationsApi: {
+  }
+}
+
+function applySettingsDefaults(
+  actual: Record<string, unknown>,
+  overrides: MockApiOverrides
+): Record<string, unknown> {
+  const tableViewConfigurationsApi = actual.tableViewConfigurationsApi as Record<string, unknown>
+  return {
+    ...actual,
+    tableViewConfigurationsApi: overrides.tableViewConfigurationsApi ?? {
       get: vi.fn().mockResolvedValue({
         data: {
           key: 'table_view_configurations',
@@ -59,23 +81,33 @@ function globalApiDefaults(actual: typeof import('../../lib/api')) {
 }
 
 /**
- * Overrides for `vi.mock('../../lib/api', async () => createMockedApi({ ... }))`.
- * Each `*Api` key replaces the whole export object. `default` replaces the axios instance stub.
- * Non-overridden exports keep `importActual` implementations plus global auth/table-view defaults.
+ * Vitest factory for `vi.mock('../../lib/api/<domain>', ...)`.
+ * Loads only the target module (avoids loading the full API graph per mock).
  */
-export type MockApiOverrides = {
-  default?: Partial<Pick<AxiosInstance, 'get' | 'post' | 'put' | 'patch' | 'delete'>>
-} & Record<string, unknown>
+export async function createMockedDomainModule(
+  moduleId: ApiModuleId,
+  overrides: MockApiOverrides = {}
+): Promise<Record<string, unknown>> {
+  const actual = await vi.importActual<Record<string, unknown>>(`${API_ROOT}/${moduleId}`)
+  const out: Record<string, unknown> = { ...actual }
 
-/**
- * Build a partial mock of `lib/api` for Vitest. Use in setup and per-file `vi.mock` factories.
- */
-export async function createMockedApi(overrides: MockApiOverrides = {}) {
-  const actual = await vi.importActual<typeof import('../../lib/api')>('../../lib/api')
-  const mocked = {
-    ...actual,
-    ...globalApiDefaults(actual),
-    ...overrides,
+  for (const key of moduleApiKeys(moduleId)) {
+    if (key in overrides) {
+      out[key] = overrides[key]
+    }
   }
-  return mocked
+
+  if (moduleId === 'client') {
+    const clientApi = actual.api as AxiosInstance
+    out.api = overrides.default
+      ? ({ ...clientApi, ...overrides.default } as AxiosInstance)
+      : clientApi
+  }
+
+  if (moduleId === 'auth') return applyAuthDefaults(out, overrides)
+  if (moduleId === 'settings') return applySettingsDefaults(out, overrides)
+
+  return out
 }
+
+export { modulesForOverrides, type ApiModuleId } from './mock-api-domains'

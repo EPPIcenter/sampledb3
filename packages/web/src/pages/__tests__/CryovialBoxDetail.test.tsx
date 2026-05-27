@@ -32,13 +32,13 @@ const mockPositions: Record<string, Array<{ kind: 'cryovial_tube'; id: number; b
   ],
 }
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/collections', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('collections', {
   collectionsApi: {
     getCryovialBox: vi.fn(),
-  },
-})
+  }
+  })
 })
 
 vi.mock('../../hooks/useTableViewConfigurations', () => ({
@@ -54,7 +54,7 @@ vi.mock('../../hooks/useTableViewConfigurations', () => ({
   }),
 }))
 
-import { collectionsApi } from '../../lib/api'
+import { collectionsApi } from '../../lib/api/collections'
 
 describe('CryovialBoxDetail', () => {
   beforeEach(() => {

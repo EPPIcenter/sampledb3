@@ -2,19 +2,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import DerivationsBulkImport from '../DerivationsBulkImport'
-import * as api from '../../lib/api'
+import { specimenTypesApi, unitsApi } from '../../lib/api/reference-data'
+import { derivationsApi } from '../../lib/api/derivations'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
-  derivationsApi: { validateCsv: vi.fn(), importCsv: vi.fn() },
-  collectionsApi: { createMicronixPlate: vi.fn(), createCryovialBox: vi.fn() },
-  specimenTypesApi: {
-    list: vi.fn().mockResolvedValue({ data: [] }),
-    getContainerTypes: vi.fn().mockResolvedValue({ data: { containerTypes: ['micronix_tube'] } }),
-  },
-  unitsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { derivationsBulkImportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('reference-data', derivationsBulkImportPageMock())
 })
+
+vi.mock('../../lib/api/collections', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { derivationsBulkImportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('collections', derivationsBulkImportPageMock())
+})
+
+vi.mock('../../lib/api/derivations', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { derivationsBulkImportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('derivations', derivationsBulkImportPageMock())
 })
 
 vi.mock('../../contexts/UserContext', async () => {
@@ -28,8 +34,8 @@ vi.mock('../../contexts/UserContext', async () => {
 describe('DerivationsBulkImport', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(api.specimenTypesApi.list as unknown as { mockResolvedValue: (value: unknown) => unknown }).mockResolvedValue({ data: [] })
-    ;(api.unitsApi.list as unknown as { mockResolvedValue: (value: unknown) => unknown }).mockResolvedValue({ data: [] })
+    vi.mocked(specimenTypesApi.list).mockResolvedValue({ data: [] })
+    vi.mocked(unitsApi.list).mockResolvedValue({ data: [] })
   })
 
   it('shows derivation import content', async () => {
@@ -76,7 +82,7 @@ describe('DerivationsBulkImport', () => {
   })
 
   it('shows error when validation fails', async () => {
-    ;(api.derivationsApi.validateCsv as unknown as { mockRejectedValue: (value: unknown) => unknown }).mockRejectedValue(new Error('Invalid CSV'))
+    vi.mocked(derivationsApi.validateCsv).mockRejectedValue(new Error('Invalid CSV'))
     const user = userEvent.setup()
     await render(<DerivationsBulkImport />)
     const file = new File(['col1,col2\na,b'], 'test.csv', { type: 'text/csv' })
@@ -93,7 +99,7 @@ describe('DerivationsBulkImport', () => {
   })
 
   it('calls validateCsv and advances when validation succeeds with no missing collections', async () => {
-    ;(api.derivationsApi.validateCsv as unknown as { mockResolvedValue: (value: unknown) => unknown }).mockResolvedValue({
+    vi.mocked(derivationsApi.validateCsv).mockResolvedValue({
       data: {
         rows: [],
         collections: [],
@@ -112,7 +118,7 @@ describe('DerivationsBulkImport', () => {
     }, { timeout: 2000 })
     await user.click(screen.getByRole('button', { name: /validate & continue/i }))
     await waitFor(() => {
-      expect(api.derivationsApi.validateCsv).toHaveBeenCalled()
+      expect(derivationsApi.validateCsv).toHaveBeenCalled()
     }, { timeout: 3000 })
   })
 

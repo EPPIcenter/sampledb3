@@ -259,6 +259,18 @@ export function derivationsBulkImportMock(): MockApiOverrides {
   }
 }
 
+export function derivationsBulkImportPageMock(): MockApiOverrides {
+  return {
+    derivationsApi: { validateCsv: vi.fn(), importCsv: vi.fn() },
+    collectionsApi: { createMicronixPlate: vi.fn(), createCryovialBox: vi.fn() },
+    specimenTypesApi: {
+      list: vi.fn().mockResolvedValue({ data: [] }),
+      getContainerTypes: vi.fn().mockResolvedValue({ data: { containerTypes: ['micronix_tube'] } }),
+    },
+    unitsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
+  }
+}
+
 export function adminDashboardMock(): MockApiOverrides {
   return {
     adminApi: {
@@ -334,6 +346,127 @@ export function qpcrExperimentsPageMock(): MockApiOverrides {
   return {
     qpcrExperimentsApi: {
       list: vi.fn().mockResolvedValue({ data: { experiments: [] } }),
+    },
+  }
+}
+
+export function specimenDetailPageMock(
+  addContainer: (...args: unknown[]) => unknown
+): MockApiOverrides {
+  return {
+    default: { get: vi.fn() },
+    specimensApi: {
+      get: vi.fn().mockResolvedValue({
+        specimen: {
+          id: 1,
+          specimenTypeId: 1,
+          specimenType: { name: 'Blood' },
+          studySubjectId: 1,
+          collectionDate: null,
+        },
+      }),
+      addContainer,
+    },
+    settingsApi: {
+      get: vi.fn().mockResolvedValue({ data: { value: null } }),
+      getContainerTypeUnits: vi.fn().mockResolvedValue({ data: { units: [] } }),
+      getUnits: vi.fn().mockResolvedValue({ data: [] }),
+    },
+    collectionsApi: {
+      listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
+    },
+    specimenTypesApi: {
+      getContainerTypes: vi.fn().mockResolvedValue({
+        data: { containerTypes: ['micronix_tube', 'cryovial_tube'] },
+      }),
+    },
+  }
+}
+
+export function specimenFormMock(): MockApiOverrides {
+  return {
+    collectionsApi: {
+      listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
+    },
+    studiesApi: {
+      list: vi.fn().mockResolvedValue({ studies: [{ id: 1, title: 'Study A', shortCode: 'SA' }] }),
+      getSubjects: vi.fn().mockResolvedValue({ subjects: [] }),
+    },
+    specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Blood' }] }) },
+    specimensApi: { create: vi.fn().mockResolvedValue({ data: { id: 1 } }) },
+    controlsApi: { list: vi.fn().mockResolvedValue({ data: { controls: [] } }) },
+    reagentsApi: { list: vi.fn().mockResolvedValue({ data: { reagents: [] } }) },
+    cellLinesApi: { list: vi.fn().mockResolvedValue({ data: { cellLines: [] } }) },
+    plasmidsApi: { list: vi.fn().mockResolvedValue({ data: { plasmids: [] } }) },
+    standardsApi: { list: vi.fn().mockResolvedValue({ data: { standards: [] } }) },
+    subjectsApi: { create: vi.fn().mockResolvedValue({ data: { id: 1 } }) },
+    settingsApi: {
+      getUnits: vi.fn().mockResolvedValue({
+        data: [{ id: 1, symbol: 'uL', name: 'microliter', category: 'volume' }],
+      }),
+      getContainerTypeUnits: vi.fn().mockResolvedValue({ data: [] }),
+      get: vi.fn().mockResolvedValue({ data: {} }),
+    },
+  }
+}
+
+const micronixMoveApis = {
+  collectionsApi: {
+    resolveContainers: vi.fn(),
+    listCollectionsByType: vi.fn(),
+    moveContainers: vi.fn(),
+    getMicronixPlate: vi.fn(),
+  },
+  locationsApi: { list: vi.fn() },
+  scannerConfigurationsApi: { getAll: vi.fn() },
+}
+
+export function micronixMovePageMock(): MockApiOverrides {
+  return { ...micronixMoveApis }
+}
+
+export function micronixMoveAuthMock(): MockApiOverrides {
+  return {
+    authApi: {
+      getCurrentUser: vi.fn().mockResolvedValue({
+        data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
+      }),
+    },
+  }
+}
+
+export function bulkImportFlowMock(): MockApiOverrides {
+  return {
+    specimenTypesApi: {
+      list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Serum' }, { id: 2, name: 'Plasma' }] }),
+      getByContainerType: vi.fn().mockResolvedValue({
+        data: { specimenTypes: [{ id: 1, name: 'Whole Blood', created: '', lastUpdated: '' }] },
+      }),
+    },
+    subjectsApi: {
+      createBulk: vi.fn().mockResolvedValue({ data: { created: 2, subjects: [] } }),
+      validateBulk: vi.fn().mockResolvedValue({ data: { valid: true, errors: [] } }),
+    },
+    specimensApi: {
+      createBulk: vi.fn().mockResolvedValue({ data: { created: 0, specimens: [] } }),
+      validateBulk: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
+    },
+    importsApi: {
+      bulkCombined: vi.fn().mockResolvedValue({
+        data: {
+          summary: { subjectsCreated: 1, specimensCreated: 1, containersCreated: 0, subjectsUpdated: 0 },
+          results: [],
+          errors: [],
+        },
+      }),
+      bulkCombinedValidate: vi.fn().mockResolvedValue({ data: { valid: true, errors: [] } }),
+    },
+    collectionsApi: {
+      check: vi.fn().mockResolvedValue({ data: { results: [] } }),
+      listMicronixPlates: vi.fn().mockResolvedValue({ data: [] }),
+      listCryovialBoxes: vi.fn().mockResolvedValue({ data: [] }),
+      listBoxes: vi.fn().mockResolvedValue({ data: [] }),
+      listBags: vi.fn().mockResolvedValue({ data: [] }),
     },
   }
 }

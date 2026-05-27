@@ -2,43 +2,37 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import BulkImportFlow from '../BulkImportFlow'
-import { importsApi, specimenTypesApi } from '../../lib/api'
+import { importsApi } from '../../lib/api/imports'
+import { specimenTypesApi } from '../../lib/api/reference-data'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
-  specimenTypesApi: {
-    list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Serum' }, { id: 2, name: 'Plasma' }] }),
-    getByContainerType: vi.fn().mockResolvedValue({
-      data: { specimenTypes: [{ id: 1, name: 'Whole Blood', created: '', lastUpdated: '' }] },
-    }),
-  },
-  subjectsApi: {
-    createBulk: vi.fn().mockResolvedValue({ data: { created: 2, subjects: [] } }),
-    validateBulk: vi.fn().mockResolvedValue({ data: { valid: true, errors: [] } }),
-  },
-  specimensApi: {
-    createBulk: vi.fn().mockResolvedValue({ data: { created: 0, specimens: [] } }),
-    validateBulk: vi.fn().mockResolvedValue({ valid: true, errors: [] }),
-  },
-  importsApi: {
-    bulkCombined: vi.fn().mockResolvedValue({
-      data: {
-        summary: { subjectsCreated: 1, specimensCreated: 1, containersCreated: 0, subjectsUpdated: 0 },
-        results: [],
-        errors: [],
-      },
-    }),
-    bulkCombinedValidate: vi.fn().mockResolvedValue({ data: { valid: true, errors: [] } }),
-  },
-  collectionsApi: {
-    check: vi.fn().mockResolvedValue({ data: { results: [] } }),
-    listMicronixPlates: vi.fn().mockResolvedValue({ data: [] }),
-    listCryovialBoxes: vi.fn().mockResolvedValue({ data: [] }),
-    listBoxes: vi.fn().mockResolvedValue({ data: [] }),
-    listBags: vi.fn().mockResolvedValue({ data: [] }),
-  },
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { bulkImportFlowMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('reference-data', bulkImportFlowMock())
 })
+
+vi.mock('../../lib/api/subjects', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { bulkImportFlowMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('subjects', bulkImportFlowMock())
+})
+
+vi.mock('../../lib/api/specimens', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { bulkImportFlowMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('specimens', bulkImportFlowMock())
+})
+
+vi.mock('../../lib/api/imports', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { bulkImportFlowMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('imports', bulkImportFlowMock())
+})
+
+vi.mock('../../lib/api/collections', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { bulkImportFlowMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('collections', bulkImportFlowMock())
 })
 
 describe('BulkImportFlow', () => {

@@ -11,9 +11,9 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/subjects', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('subjects', {
   subjectsApi: {
     getSummary: vi.fn().mockResolvedValue({
       subject: { id: 1, name: 'Subject 1', studyId: 1, study: { id: 1, title: 'Study', shortCode: 'ST1' } },
@@ -26,8 +26,8 @@ vi.mock('../../lib/api', async () => {
         timeline: [],
       },
     }),
-  },
-})
+  }
+  })
 })
 
 vi.mock('../../contexts/UserContext', async () => {

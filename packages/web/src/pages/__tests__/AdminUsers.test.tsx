@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import AdminUsers from '../AdminUsers'
-import * as api from '../../lib/api'
+import { adminApi } from '../../lib/api/admin'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/admin', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('admin', {
   adminApi: {
     getUsers: vi.fn().mockResolvedValue({ data: { users: [] } }),
     createUser: vi.fn().mockResolvedValue(undefined),
@@ -14,14 +14,14 @@ vi.mock('../../lib/api', async () => {
     restoreUser: vi.fn().mockResolvedValue(undefined),
     resetPassword: vi.fn().mockResolvedValue(undefined),
     getUserSessions: vi.fn().mockResolvedValue({ data: { sessions: [] } }),
-  },
-})
+  }
+  })
 })
 
 describe('AdminUsers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(api.adminApi.getUsers).mockResolvedValue({ data: { users: [] } } as never)
+    vi.mocked(adminApi.getUsers).mockResolvedValue({ data: { users: [] } } as never)
   })
 
   it('shows User Management heading', async () => {
@@ -33,12 +33,12 @@ describe('AdminUsers', () => {
   it('calls getUsers on mount', async () => {
     await render(<AdminUsers />)
     await waitFor(() => {
-      expect(api.adminApi.getUsers).toHaveBeenCalled()
+      expect(adminApi.getUsers).toHaveBeenCalled()
     })
   })
 
   it('shows user rows when getUsers returns users', async () => {
-    vi.mocked(api.adminApi.getUsers).mockResolvedValue({
+    vi.mocked(adminApi.getUsers).mockResolvedValue({
       data: {
         users: [
           { id: 1, name: 'Admin User', email: 'admin@test.com', role: 'admin', active: true, createdAt: '', updatedAt: '' },

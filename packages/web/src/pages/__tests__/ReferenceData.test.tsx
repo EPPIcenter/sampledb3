@@ -55,10 +55,10 @@ vi.mock('../../config/reference-data-config', () => {
   }
 })
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+vi.mock('../../lib/api/locations', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { referenceDataLocationsMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(referenceDataLocationsMock())
+  return createMockedDomainModule('locations', referenceDataLocationsMock())
 })
 
 // Mock the hooks

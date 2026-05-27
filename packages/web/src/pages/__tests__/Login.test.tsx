@@ -16,10 +16,10 @@ vi.mock('react-router-dom', async () => {
 })
 
 // Mock the API module
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+vi.mock('../../lib/api/auth', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { loginPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(loginPageMock())
+  return createMockedDomainModule('auth', loginPageMock())
 })
 
 // Mock the UserContext
@@ -45,7 +45,7 @@ vi.mock('../../lib/localUserHistory', () => ({
   addRecentUser: vi.fn(),
 }))
 
-import { authApi } from '../../lib/api'
+import { authApi } from '../../lib/api/auth'
 import { addRecentUser } from '../../lib/localUserHistory'
 
 describe('Login Page', () => {

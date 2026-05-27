@@ -71,7 +71,7 @@ Put local overrides in **`.env.local`** (gitignored) at the repo root. Bun’s a
 - **Unit tests (API + web)**: `bun run test`
 - **End-to-end (Playwright)**: `bun run test:e2e`
 - **API**: `bun --filter @sampledb/api test` (Bun). Coverage: `bun --filter @sampledb/api test:coverage` (report in `packages/api/coverage/`). Target 90% lines; see `packages/api/src/__tests__/README.md`.
-- **Web**: `bun --filter @sampledb/web test` (Vitest). Coverage: `bun --filter @sampledb/web test:coverage`. Coverage excludes `src/lib/api.ts` and `src/**/*.css` so the 90% target applies to testable code. Thresholds in `packages/web/vitest.config.ts` can be raised in steps toward 90%.
+- **Web**: `bun --filter @sampledb/web test` (Vitest). Coverage: `bun --filter @sampledb/web test:coverage`. Coverage excludes `src/lib/api/**` and `src/**/*.css` so the 90% target applies to testable code. Thresholds in `packages/web/vitest.config.ts` can be raised in steps toward 90%.
 
 ## Database Configuration
 

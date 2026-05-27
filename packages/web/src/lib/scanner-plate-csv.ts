@@ -1,4 +1,4 @@
-import type { ScannerConfiguration } from './api'
+import type { ScannerConfiguration } from './api/settings'
 import { normalizeWellPosition, validateFullPlatePositions } from './micronix-plate-positions'
 
 export type ScannerPlateCsvRow = Record<string, string>

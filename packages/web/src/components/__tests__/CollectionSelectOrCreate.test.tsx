@@ -32,19 +32,19 @@ vi.mock('../LocationPicker', () => ({
   ),
 }))
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
-  collectionsApi: {
-    createBox: vi.fn(),
-    createBag: vi.fn(),
-    createMicronixPlate: vi.fn(),
-    createCryovialBox: vi.fn(),
-  },
-})
+vi.mock('../../lib/api/collections', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('collections', {
+    collectionsApi: {
+      createBox: vi.fn(),
+      createBag: vi.fn(),
+      createMicronixPlate: vi.fn(),
+      createCryovialBox: vi.fn(),
+    },
+  })
 })
 
-import { collectionsApi } from '../../lib/api'
+import { collectionsApi } from '../../lib/api/collections'
 
 describe('CollectionSelectOrCreate', () => {
   const defaultProps = {

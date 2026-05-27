@@ -3,16 +3,16 @@ import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import LocationTreePicker from '../LocationTreePicker'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/locations', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('locations', {
   locationsApi: {
     list: vi.fn(),
-  },
-})
+  }
+  })
 })
 
-import { locationsApi } from '../../lib/api'
+import { locationsApi } from '../../lib/api/locations'
 
 const mockAxiosResponse = (data: { locations: Array<Record<string, unknown>> }) => ({
   data,

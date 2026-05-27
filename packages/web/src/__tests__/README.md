@@ -59,51 +59,47 @@ it('renders component', () => {
 
 ### Mocking API Calls
 
-Use `createMockedApi` so tests get `importActual` types/exports, global auth + table-view mocks, and only the domains you override:
+Mock the **domain module** your component imports (`lib/api/studies`, `lib/api/client`, etc.). `setup.ts` provides default `auth` and `settings` (table view) mocks; override per file as needed.
 
 ```typescript
 import { vi } from 'vitest'
-import * as api from '../../lib/api'
+import { studiesApi } from '../../lib/api/studies'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
-    studiesApi: {
-      list: vi.fn(),
-      get: vi.fn(),
-    },
+vi.mock('../../lib/api/studies', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('studies', {
+    studiesApi: { list: vi.fn(), get: vi.fn() },
   })
 })
 
-// studiesApi methods return unwrapped data (not AxiosResponse)
-vi.mocked(api.studiesApi.list).mockResolvedValue({
+vi.mocked(studiesApi.list).mockResolvedValue({
   studies: [],
   pagination: { total: 0, page: 1, limit: 10, totalPages: 0 },
 })
 ```
 
-Replace whole `*Api` objects in overrides (do not patch single methods on the real object). For pages that use `import api from '../lib/api'`, pass a `default` stub:
+Replace whole `*Api` objects in overrides (do not patch single methods on the real object). For raw axios usage, mock `lib/api/client` and pass `{ default: { get: vi.fn() } }`:
 
 ```typescript
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
-    default: { get: vi.fn() },
-    derivationsApi: { listFromContainer: vi.fn().mockResolvedValue({ derivations: [] }) },
-  })
+vi.mock('../../lib/api/client', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('client', { default: { get: vi.fn() } })
 })
 ```
 
-Use dynamic `import()` inside the factory (not a top-level `createMockedApi` import) when the test file also imports `helpers/render` — Vitest hoists `vi.mock` and causes a TDZ error otherwise.
+Use dynamic `import()` inside the factory (not a top-level import of `createMockedDomainModule`) when the test file also imports `helpers/render` — Vitest hoists `vi.mock` and causes a TDZ error otherwise.
 
-All `lib/api` mocks in page, component, and hook tests use this pattern (see any `*.test.tsx` under `src/`). Prefer `mock-api-templates` for repeated page setups:
+Prefer `mock-api-templates` for repeated page setups (one `vi.mock` per affected domain):
 
 ```typescript
-const { statisticsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-return createMockedApi(statisticsPageMock())
+vi.mock('../../lib/api/statistics', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { statisticsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('statistics', statisticsPageMock())
+})
 ```
 
-Production code should import from domain modules (`../lib/api/studies`, `../lib/api/client`, etc.). `src/lib/api.ts` remains a deprecated barrel re-export. Vitest aliases domain paths to the barrel so `vi.mock('../../lib/api')` still applies in tests.
+Production and tests both import from domain modules under `src/lib/api/`. There is no aggregate barrel.
 
 ## Writing Tests
 
@@ -141,11 +137,11 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactNode } from 'react'
 import { useStudies } from '../useStudies'
-import * as api from '../../lib/api'
+import { studiesApi } from '../../lib/api/studies'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({ studiesApi: { list: vi.fn() } })
+vi.mock('../../lib/api/studies', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('studies', { studiesApi: { list: vi.fn() } })
 })
 
 function createWrapper() {
@@ -165,7 +161,7 @@ function createWrapper() {
 
 describe('useStudies', () => {
   it('should fetch studies', async () => {
-    vi.mocked(api.studiesApi.list).mockResolvedValue({
+    vi.mocked(studiesApi.list).mockResolvedValue({
       studies: [],
       pagination: { total: 0, page: 1, limit: 10, totalPages: 0 },
     })

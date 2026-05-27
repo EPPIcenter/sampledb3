@@ -35,4 +35,4 @@ export * from './admin'
 export * from './qpcr'
 export * from './error-logs'
 
-export { api as default } from './client'
+export { api } from './client'

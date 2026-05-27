@@ -2,11 +2,12 @@ import { screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { renderWithProviders } from '../../__tests__/helpers/render'
 import PlateScanValidation from '../PlateScanValidation'
-import { collectionsApi, scannerConfigurationsApi } from '../../lib/api'
+import { collectionsApi } from '../../lib/api/collections'
+import { scannerConfigurationsApi } from '../../lib/api/settings'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/collections', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('collections', {
   collectionsApi: {
     listCollectionsByType: vi.fn(),
     validatePlateScan: vi.fn(),
@@ -15,6 +16,19 @@ vi.mock('../../lib/api', async () => {
     getAll: vi.fn(),
   },
 })
+})
+
+vi.mock('../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('settings', {
+  collectionsApi: {
+    listCollectionsByType: vi.fn(),
+    validatePlateScan: vi.fn(),
+  },
+  scannerConfigurationsApi: {
+    getAll: vi.fn(),
+  }
+  })
 })
 
 const mockPlateList = [

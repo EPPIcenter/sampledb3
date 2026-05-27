@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+vi.mock('../../lib/api/studies', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { studiesPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(studiesPageMock())
+  return createMockedDomainModule('studies', studiesPageMock())
 })
 
 vi.mock('../../contexts/UserContext', async () => {

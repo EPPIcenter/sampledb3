@@ -12,36 +12,35 @@ vi.mock('react-router-dom', async () => {
 })
 
 const mockAddContainer = vi.fn()
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
-    default: { get: vi.fn() },
-    specimensApi: {
-      get: vi.fn().mockResolvedValue({
-        specimen: {
-          id: 1,
-          specimenTypeId: 1,
-          specimenType: { name: 'Blood' },
-          studySubjectId: 1,
-          collectionDate: null,
-        },
-      }),
-      addContainer: (...args: unknown[]) => mockAddContainer(...args),
-    },
-    settingsApi: {
-      get: vi.fn().mockResolvedValue({ data: { value: null } }),
-      getContainerTypeUnits: vi.fn().mockResolvedValue({ data: { units: [] } }),
-      getUnits: vi.fn().mockResolvedValue({ data: [] }),
-    },
-    collectionsApi: {
-      listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
-    },
-    specimenTypesApi: {
-      getContainerTypes: vi.fn().mockResolvedValue({
-        data: { containerTypes: ['micronix_tube', 'cryovial_tube'] },
-      }),
-    },
-  })
+
+vi.mock('../../lib/api/client', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { specimenDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('client', specimenDetailPageMock((...args: unknown[]) => mockAddContainer(...args)))
+})
+
+vi.mock('../../lib/api/specimens', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { specimenDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('specimens', specimenDetailPageMock((...args: unknown[]) => mockAddContainer(...args)))
+})
+
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { specimenDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('reference-data', specimenDetailPageMock((...args: unknown[]) => mockAddContainer(...args)))
+})
+
+vi.mock('../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { specimenDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('settings', specimenDetailPageMock((...args: unknown[]) => mockAddContainer(...args)))
+})
+
+vi.mock('../../lib/api/collections', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { specimenDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('collections', specimenDetailPageMock((...args: unknown[]) => mockAddContainer(...args)))
 })
 
 vi.mock('../../contexts/UserContext', async () => {
@@ -49,7 +48,7 @@ vi.mock('../../contexts/UserContext', async () => {
   return { ...actual, useUser: () => ({ canWrite: true }) }
 })
 
-import api from '../../lib/api'
+import { api } from '../../lib/api/client'
 
 describe('SpecimenDetail', () => {
   beforeEach(() => {

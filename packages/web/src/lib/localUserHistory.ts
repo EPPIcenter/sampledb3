@@ -1,4 +1,4 @@
-import type { User } from './api'
+import type { User } from './api/auth'
 
 const STORAGE_KEY = 'sampledb_recent_users'
 const MAX_RECENT_USERS = 10

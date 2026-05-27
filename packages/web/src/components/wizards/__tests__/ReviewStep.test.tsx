@@ -2,14 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import ReviewStep from '../ReviewStep'
 import type { BatchInfo, CSVFileData, CompositionStrains } from '../../../pages/ControlBatchWizard'
-import type { ControlDefinition } from '../../../lib/api'
+import type { ControlDefinition } from '../../../lib/api/controls'
 
 const mockCreateBatchWithSpecimens = vi.fn()
 const mockSuggestBatchName = vi.fn()
 
-vi.mock('../../../lib/api', async () => {
-  const { createMockedApi } = await import('../../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../../lib/api/controls', async () => {
+  const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('controls', {
   controlsApi: {
     createBatchWithSpecimens: (...args: unknown[]) => mockCreateBatchWithSpecimens(...args),
     suggestBatchName: (...args: unknown[]) => mockSuggestBatchName(...args),
@@ -32,6 +32,33 @@ vi.mock('../../../lib/api', async () => {
     }),
   },
 })
+})
+
+vi.mock('../../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('settings', {
+  controlsApi: {
+    createBatchWithSpecimens: (...args: unknown[]) => mockCreateBatchWithSpecimens(...args),
+    suggestBatchName: (...args: unknown[]) => mockSuggestBatchName(...args),
+  },
+  settingsApi: {
+    get: vi.fn((key: string) => {
+      if (key === 'container_defaults') {
+        return Promise.resolve({
+          data: {
+            value: {
+              paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+              cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
+              micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
+              static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+            },
+          },
+        })
+      }
+      return Promise.resolve({ data: { value: null } })
+    }),
+  }
+  })
 })
 
 function makeBatchInfo(overrides: Partial<BatchInfo> = {}): BatchInfo {

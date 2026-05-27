@@ -17,16 +17,25 @@ vi.mock('../../../lib/control-batch-csv', () => ({
   inferSheetName: vi.fn(() => undefined),
 }))
 
-vi.mock('../../../lib/api', async () => {
-  const { createMockedApi } = await import('../../../__tests__/helpers/mock-api')
-  return createMockedApi({
-  specimenTypesApi: {
-    getByContainerType: vi.fn(),
-  },
-  settingsApi: {
-    get: vi.fn().mockResolvedValue({ data: { value: null } }),
-  },
+vi.mock('../../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('reference-data', {
+    specimenTypesApi: {
+      getByContainerType: vi.fn(),
+    },
+    settingsApi: {
+      get: vi.fn().mockResolvedValue({ data: { value: null } }),
+    },
+  })
 })
+
+vi.mock('../../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('settings', {
+    settingsApi: {
+      get: vi.fn().mockResolvedValue({ data: { value: null } }),
+    },
+  })
 })
 
 const defaultSpecimenTypes = [

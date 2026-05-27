@@ -1,4 +1,4 @@
-import type { ScannerConfiguration } from './api'
+import type { ScannerConfiguration } from './api/settings'
 import { extractPlateStemFromFilename, findPlateCandidatesFromStem, type PlateCandidate } from './plate-filename-match'
 
 export interface PlateInferenceErrors {

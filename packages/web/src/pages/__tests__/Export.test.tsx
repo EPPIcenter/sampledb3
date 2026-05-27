@@ -1,19 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import Export from '../Export'
-import * as api from '../../lib/api'
+import { exportConfigurationsApi } from '../../lib/api/settings'
+import { specimenTypesApi, tagsApi } from '../../lib/api/reference-data'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+vi.mock('../../lib/api/export', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { exportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(exportPageMock())
+  return createMockedDomainModule('export', exportPageMock())
+})
+
+vi.mock('../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { exportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('settings', exportPageMock())
+})
+
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { exportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('reference-data', exportPageMock())
 })
 
 describe('Export', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(api.exportConfigurationsApi.getShared).mockResolvedValue({ data: { configurations: [] } } as never)
-    vi.mocked(api.exportConfigurationsApi.getPersonal).mockResolvedValue({ data: { configurations: [] } } as never)
+    vi.mocked(exportConfigurationsApi.getShared).mockResolvedValue({ data: { configurations: [] } } as never)
+    vi.mocked(exportConfigurationsApi.getPersonal).mockResolvedValue({ data: { configurations: [] } } as never)
   })
 
   it('shows export-related content', async () => {
@@ -25,25 +38,25 @@ describe('Export', () => {
   })
 
   it('shows studies and specimen types when configs load', async () => {
-    vi.mocked(api.specimenTypesApi.list).mockResolvedValue({
+    vi.mocked(specimenTypesApi.list).mockResolvedValue({
       data: [{ id: 1, name: 'Blood', created: '', lastUpdated: '' }],
     } as never)
     await render(<Export />)
     await waitFor(() => {
-      expect(api.specimenTypesApi.list).toHaveBeenCalled()
+      expect(specimenTypesApi.list).toHaveBeenCalled()
     })
   })
 
   it('calls tagsApi.list when loading reference data', async () => {
-    vi.mocked(api.tagsApi.list).mockResolvedValue({ data: [] } as never)
+    vi.mocked(tagsApi.list).mockResolvedValue({ data: [] } as never)
     await render(<Export />)
     await waitFor(() => {
-      expect(api.tagsApi.list).toHaveBeenCalled()
+      expect(tagsApi.list).toHaveBeenCalled()
     })
   })
 
   it('shows error when reference data fails to load', async () => {
-    vi.mocked(api.specimenTypesApi.list).mockRejectedValue(new Error('Network error'))
+    vi.mocked(specimenTypesApi.list).mockRejectedValue(new Error('Network error'))
     await render(<Export />)
     await waitFor(() => {
       expect(screen.getByText(/network error|failed to load/i)).toBeInTheDocument()

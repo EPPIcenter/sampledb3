@@ -1,4 +1,4 @@
-import { authApi } from '../../api'
+import { authApi } from '../../api/auth'
 import type { Command } from '../../commands'
 import type { CommandDependencies } from '../command-deps'
 import { THEME_IDS, THEME_LABELS, type Theme } from '../../../contexts/ThemeContext'

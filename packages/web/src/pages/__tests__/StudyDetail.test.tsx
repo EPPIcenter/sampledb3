@@ -12,18 +12,21 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
-  default: { get: vi.fn() },
-  studiesApi: {
-    get: vi.fn(),
-    getSummary: vi.fn(),
-    getTimeline: vi.fn(),
-    getSubjects: vi.fn(),
-    delete: vi.fn().mockResolvedValue(undefined),
-  },
+vi.mock('../../lib/api/client', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('client', { default: { get: vi.fn() } })
 })
+
+vi.mock('../../lib/api/studies', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { studyDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('studies', studyDetailPageMock())
+})
+
+vi.mock('../../lib/api/subjects', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { studyDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('subjects', studyDetailPageMock())
 })
 
 vi.mock('../../contexts/UserContext', async () => {
@@ -39,7 +42,8 @@ vi.mock('../../contexts/UserContext', async () => {
   }
 })
 
-import api, { studiesApi } from '../../lib/api'
+import { api } from '../../lib/api/client'
+import { studiesApi } from '../../lib/api/studies'
 
 describe('StudyDetail page', () => {
   beforeEach(() => {
@@ -97,10 +101,7 @@ describe('StudyDetail page', () => {
     })
   })
 
-  it(
-    'renders study header and key sections',
-    { timeout: 12000 },
-    async () => {
+  it('renders study header and key sections', async () => {
       await render(
         <DateFilterProvider>
           <StudyDetail />
@@ -112,7 +113,7 @@ describe('StudyDetail page', () => {
           expect(heading).toHaveTextContent('Test Study')
           expect(screen.getByText('ST1')).toBeInTheDocument()
         },
-        { timeout: 8000 }
+        { timeout: 3000 }
       )
       expect(studiesApi.get).toHaveBeenCalled()
     }

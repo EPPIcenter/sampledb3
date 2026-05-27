@@ -3,7 +3,7 @@ import { render, screen, act } from '../../__tests__/helpers/render'
 import { waitFor } from '@testing-library/react'
 import type { AxiosResponse } from 'axios'
 import SetupGuard from '../SetupGuard'
-import { setupApi } from '../../lib/api'
+import { setupApi } from '../../lib/api/settings'
 
 function createStatusResponse(initialized: boolean): AxiosResponse<{ initialized: boolean }> {
   return {
@@ -15,9 +15,9 @@ function createStatusResponse(initialized: boolean): AxiosResponse<{ initialized
   }
 }
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('settings', {
   setupApi: {
     status: vi.fn().mockResolvedValue({
       data: { initialized: true },
@@ -26,8 +26,8 @@ vi.mock('../../lib/api', async () => {
       headers: {},
       config: { headers: {} } as AxiosResponse<{ initialized: boolean }>['config'],
     } as AxiosResponse<{ initialized: boolean }>),
-  },
-})
+  }
+  })
 })
 
 describe('SetupGuard', () => {

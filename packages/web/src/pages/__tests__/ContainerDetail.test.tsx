@@ -10,10 +10,16 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+vi.mock('../../lib/api/client', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { containerDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(containerDetailPageMock())
+  return createMockedDomainModule('client', containerDetailPageMock())
+})
+
+vi.mock('../../lib/api/derivations', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { containerDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('derivations', containerDetailPageMock())
 })
 
 vi.mock('../../contexts/UserContext', async () => {
@@ -24,7 +30,7 @@ vi.mock('../../contexts/UserContext', async () => {
   }
 })
 
-import api from '../../lib/api'
+import { api } from '../../lib/api/client'
 
 describe('ContainerDetail', () => {
   beforeEach(() => {

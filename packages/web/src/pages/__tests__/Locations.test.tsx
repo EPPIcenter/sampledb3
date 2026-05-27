@@ -2,10 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 import Locations from '../Locations'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+vi.mock('../../lib/api/locations', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { locationsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(locationsPageMock())
+  return createMockedDomainModule('locations', locationsPageMock())
+})
+
+vi.mock('../../lib/api/search', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { locationsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('search', locationsPageMock())
 })
 
 vi.mock('../../contexts/UserContext', async () => {
@@ -20,7 +26,7 @@ vi.mock('../../contexts/UserContext', async () => {
   }
 })
 
-import { locationsApi } from '../../lib/api'
+import { locationsApi } from '../../lib/api/locations'
 
 describe('Locations page', () => {
   beforeEach(() => {

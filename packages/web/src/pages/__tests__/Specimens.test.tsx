@@ -2,19 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 import Specimens from '../Specimens'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  const { specimensPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(specimensPageMock())
-})
-
-vi.mock('../../lib/api/client', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  const { specimensPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  const mocked = await createMockedApi(specimensPageMock())
-  return { api: mocked.default }
-})
-
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')
   return {
@@ -25,6 +12,25 @@ vi.mock('../../contexts/UserContext', async () => {
       canWrite: true,
     }),
   }
+})
+
+vi.mock('../../lib/api/client', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { specimensPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('client', specimensPageMock())
+})
+
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { specimensPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('reference-data', specimensPageMock())
+})
+
+vi.mock('../../lib/api/studies', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('studies', {
+    studiesApi: { list: vi.fn().mockResolvedValue({ studies: [] }) },
+  })
 })
 
 import { api } from '../../lib/api/client'

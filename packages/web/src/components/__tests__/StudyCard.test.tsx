@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 import StudyCard from '../StudyCard'
-import type { Study } from '../../lib/api'
+import type { Study } from '../../lib/api/studies'
 
 const mockStudy: Study = {
   id: 1,

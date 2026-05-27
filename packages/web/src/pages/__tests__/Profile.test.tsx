@@ -4,15 +4,15 @@ import userEvent from '@testing-library/user-event'
 import Profile from '../Profile'
 
 // Mock the API module
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/auth', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('auth', {
   authApi: {
     updateProfile: vi.fn(),
     changePassword: vi.fn(),
     getCurrentUser: vi.fn(),
-  },
-})
+  }
+  })
 })
 
 // Mock the UserContext
@@ -41,7 +41,7 @@ vi.mock('../../contexts/UserContext', async () => {
   }
 })
 
-import { authApi } from '../../lib/api'
+import { authApi } from '../../lib/api/auth'
 
 describe('Profile Page', () => {
   beforeEach(() => {

@@ -2,15 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../../__tests__/helpers/render'
 import SubjectForm from '../SubjectForm'
 
-vi.mock('../../../lib/api', async () => {
-  const { createMockedApi } = await import('../../../__tests__/helpers/mock-api')
-  return createMockedApi({
-  studiesApi: { list: vi.fn().mockResolvedValue({ studies: [{ id: 1, title: 'Study A', shortCode: 'SA' }] }) },
-  subjectsApi: {
-    create: vi.fn().mockResolvedValue({ data: { id: 1 } }),
-    update: vi.fn().mockResolvedValue({ data: {} }),
-  },
+vi.mock('../../../lib/api/studies', async () => {
+  const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
+  const { specimenFormMock } = await import('../../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('studies', specimenFormMock())
 })
+
+vi.mock('../../../lib/api/subjects', async () => {
+  const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
+  const { specimenFormMock } = await import('../../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('subjects', specimenFormMock())
 })
 
 vi.mock('../../../contexts/UserContext', async () => {
@@ -23,21 +24,14 @@ describe('SubjectForm', () => {
     vi.clearAllMocks()
   })
 
-  it('renders with studyId and onCancel', async () => {
+  it('renders with onCancel', async () => {
     const onCancel = vi.fn()
-    await render(
-      <SubjectForm studyId={1} onCancel={onCancel} />
-    )
+    await render(<SubjectForm onCancel={onCancel} />)
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument()
   })
 
-  it('shows name input or submit', async () => {
-    const onCancel = vi.fn()
-    await render(
-      <SubjectForm studyId={1} onCancel={onCancel} />
-    )
-    const nameInput = screen.queryByLabelText(/name/i)
-    const submit = screen.queryByRole('button', { name: /save|create|submit/i })
-    expect(nameInput ?? submit).toBeTruthy()
+  it('shows subject name field', async () => {
+    await render(<SubjectForm onCancel={vi.fn()} studyId={1} />)
+    expect(screen.getByLabelText(/subject name \*/i)).toBeInTheDocument()
   })
 })

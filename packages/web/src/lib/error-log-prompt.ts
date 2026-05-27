@@ -1,4 +1,4 @@
-import type { ErrorLog } from './api'
+import type { ErrorLog } from './api/error-logs'
 
 /**
  * Format an error log as a single, well-structured prompt suitable for pasting into an LLM

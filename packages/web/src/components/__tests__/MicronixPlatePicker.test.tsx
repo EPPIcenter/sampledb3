@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, within } from '../../__tests__/helpers/render'
 import MicronixPlatePicker, { type MicronixPlate } from '../MicronixPlatePicker'
-import type { Location } from '../../lib/api'
+import type { Location } from '../../lib/api/types'
 
 const mockLocations: Location[] = [
   {

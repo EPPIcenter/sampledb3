@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 import ContainerDerivationModal from '../ContainerDerivationModal'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('reference-data', {
   derivationsApi: {
     create: vi.fn().mockResolvedValue({ data: { derivation: {}, parentContainer: {}, childContainer: {}, specimen: {}, warnings: [] } }),
   },
@@ -16,6 +16,38 @@ vi.mock('../../lib/api', async () => {
     listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
   },
 })
+})
+
+vi.mock('../../lib/api/collections', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('collections', {
+  derivationsApi: {
+    create: vi.fn().mockResolvedValue({ data: { derivation: {}, parentContainer: {}, childContainer: {}, specimen: {}, warnings: [] } }),
+  },
+  specimenTypesApi: {
+    list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'DNA' }] }),
+    getContainerTypes: vi.fn().mockResolvedValue({ data: { containerTypes: ['micronix_tube'] } }),
+  },
+  collectionsApi: {
+    listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
+  },
+})
+})
+
+vi.mock('../../lib/api/derivations', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('derivations', {
+  derivationsApi: {
+    create: vi.fn().mockResolvedValue({ data: { derivation: {}, parentContainer: {}, childContainer: {}, specimen: {}, warnings: [] } }),
+  },
+  specimenTypesApi: {
+    list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'DNA' }] }),
+    getContainerTypes: vi.fn().mockResolvedValue({ data: { containerTypes: ['micronix_tube'] } }),
+  },
+  collectionsApi: {
+    listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
+  }
+  })
 })
 
 describe('ContainerDerivationModal', () => {

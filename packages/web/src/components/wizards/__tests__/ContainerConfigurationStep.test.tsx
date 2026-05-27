@@ -29,18 +29,29 @@ const mockUnitsByType: Record<string, Array<{ id: number; symbol: string; name: 
   ],
 }
 
-vi.mock('../../../lib/api', async () => {
-  const { createMockedApi } = await import('../../../__tests__/helpers/mock-api')
-  return createMockedApi({
-  collectionsApi: {
-    listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
-  },
-  settingsApi: {
-    getContainerTypeUnits: vi.fn((ct: string) =>
-      Promise.resolve({ data: { units: mockUnitsByType[ct] ?? [] } })
-    ),
-  },
+vi.mock('../../../lib/api/collections', async () => {
+  const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('collections', {
+    collectionsApi: {
+      listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
+    },
+    settingsApi: {
+      getContainerTypeUnits: vi.fn((ct: string) =>
+        Promise.resolve({ data: { units: mockUnitsByType[ct] ?? [] } })
+      ),
+    },
+  })
 })
+
+vi.mock('../../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('settings', {
+    settingsApi: {
+      getContainerTypeUnits: vi.fn((ct: string) =>
+        Promise.resolve({ data: { units: mockUnitsByType[ct] ?? [] } })
+      ),
+    },
+  })
 })
 
 const specimenTypesWithCollectionConfig: SpecimenTypeConfig[] = [

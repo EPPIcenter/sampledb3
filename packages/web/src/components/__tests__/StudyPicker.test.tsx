@@ -3,9 +3,9 @@ import { render, screen } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import StudyPicker from '../StudyPicker'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/studies', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('studies', {
   studiesApi: {
     list: vi.fn().mockResolvedValue({
       studies: [
@@ -13,8 +13,8 @@ vi.mock('../../lib/api', async () => {
         { id: 2, title: 'Study B', shortCode: 'SB', description: null, isLongitudinal: false, leadPerson: 'Lead', created: '', lastUpdated: '', createdBy: null, updatedBy: null },
       ],
     }),
-  },
-})
+  }
+  })
 })
 
 describe('StudyPicker', () => {

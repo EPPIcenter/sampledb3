@@ -9,13 +9,13 @@ import {
   useCreateSubject,
   useUpdateSubject,
 } from '../useSubjects'
-import * as api from '../../lib/api'
+import { subjectsApi } from '../../lib/api/subjects'
 
 // Mock the API module
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+vi.mock('../../lib/api/subjects', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { subjectsHooksMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(subjectsHooksMock())
+  return createMockedDomainModule('subjects', subjectsHooksMock())
 })
 
 function createWrapper() {
@@ -57,7 +57,7 @@ describe('useSubjects Hooks', () => {
         },
       }
 
-      vi.mocked(api.subjectsApi.get).mockResolvedValue(mockData)
+      vi.mocked(subjectsApi.get).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useSubject(1), {
         wrapper: createWrapper(),
@@ -68,7 +68,7 @@ describe('useSubjects Hooks', () => {
       })
 
       expect(result.current.data).toEqual(mockData.subject)
-      expect(api.subjectsApi.get).toHaveBeenCalledWith(1)
+      expect(subjectsApi.get).toHaveBeenCalledWith(1)
     })
   })
 
@@ -80,7 +80,7 @@ describe('useSubjects Hooks', () => {
         summary: { specimenCount: 5, totalSpecimens: 5, totalContainers: 10, specimenTypes: [], timeline: [], collectionDateRange: null },
       }
 
-      vi.mocked(api.subjectsApi.getSummary).mockResolvedValue(mockData)
+      vi.mocked(subjectsApi.getSummary).mockResolvedValue(mockData)
 
       const { result } = renderHook(() => useSubjectSummary(1), {
         wrapper: createWrapper(),
@@ -106,7 +106,7 @@ describe('useSubjects Hooks', () => {
         },
       }
 
-      vi.mocked(api.subjectsApi.create).mockResolvedValue(mockCreated)
+      vi.mocked(subjectsApi.create).mockResolvedValue(mockCreated)
 
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -136,7 +136,7 @@ describe('useSubjects Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(api.subjectsApi.create).toHaveBeenCalled()
+      expect(subjectsApi.create).toHaveBeenCalled()
       expect(result.current.data).toEqual(mockCreated.subject)
       expect(invalidateSpy).toHaveBeenCalled()
     })
@@ -154,7 +154,7 @@ describe('useSubjects Hooks', () => {
         },
       }
 
-      vi.mocked(api.subjectsApi.update).mockResolvedValue(mockUpdated)
+      vi.mocked(subjectsApi.update).mockResolvedValue(mockUpdated)
 
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -184,7 +184,7 @@ describe('useSubjects Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(api.subjectsApi.update).toHaveBeenCalledWith(1, { name: 'Updated Subject' })
+      expect(subjectsApi.update).toHaveBeenCalledWith(1, { name: 'Updated Subject' })
       expect(result.current.data).toEqual(mockUpdated.subject)
       expect(invalidateSpy).toHaveBeenCalled()
     })

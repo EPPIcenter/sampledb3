@@ -2,7 +2,7 @@
  * Build API payloads for bulk import in one place so validate and import stay aligned.
  */
 import { getBulkImportCollectionType } from './bulk-import-validation'
-import { importsApi, type BulkCombinedAtomicMode } from './api'
+import { importsApi, type BulkCombinedAtomicMode } from './api/imports'
 import type { ContainerType } from './container-types'
 
 type BulkCombinedImportRequest = Parameters<typeof importsApi.bulkCombined>[0]

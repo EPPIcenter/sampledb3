@@ -11,14 +11,14 @@ import {
   useDeleteSpecimenType,
   useStorageTypes,
 } from '../useReferenceData'
-import * as api from '../../lib/api'
-import type { SpecimenType, StorageType } from '../../lib/api'
+import { specimenTypesApi, storageTypesApi } from '../../lib/api/reference-data'
+import type { SpecimenType, StorageType } from '../../lib/api/types'
 import type { AxiosResponse } from 'axios'
 
 // Mock the API module
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('reference-data', {
   specimenTypesApi: {
     list: vi.fn(),
     get: vi.fn(),
@@ -31,8 +31,8 @@ vi.mock('../../lib/api', async () => {
   },
   storageTypesApi: {
     list: vi.fn(),
-  },
-})
+  }
+  })
 })
 
 function createWrapper() {
@@ -71,7 +71,7 @@ describe('useReferenceData Hooks', () => {
         ],
       }
 
-      vi.mocked(api.specimenTypesApi.list).mockResolvedValue(mockData as Awaited<ReturnType<typeof api.specimenTypesApi.list>>)
+      vi.mocked(specimenTypesApi.list).mockResolvedValue(mockData as Awaited<ReturnType<typeof specimenTypesApi.list>>)
 
       const { result } = renderHook(() => useSpecimenTypes(), {
         wrapper: createWrapper(),
@@ -84,11 +84,11 @@ describe('useReferenceData Hooks', () => {
       })
 
       expect(result.current.data).toEqual(mockData.data)
-      expect(api.specimenTypesApi.list).toHaveBeenCalledOnce()
+      expect(specimenTypesApi.list).toHaveBeenCalledOnce()
     })
 
     it('should handle errors', async () => {
-      vi.mocked(api.specimenTypesApi.list).mockRejectedValue(new Error('API Error'))
+      vi.mocked(specimenTypesApi.list).mockRejectedValue(new Error('API Error'))
 
       const { result } = renderHook(() => useSpecimenTypes(), {
         wrapper: createWrapper(),
@@ -111,7 +111,7 @@ describe('useReferenceData Hooks', () => {
         lastUpdated: '2024-01-01',
       }
 
-      vi.mocked(api.specimenTypesApi.get).mockResolvedValue(mockData as Awaited<ReturnType<typeof api.specimenTypesApi.get>>)
+      vi.mocked(specimenTypesApi.get).mockResolvedValue(mockData as Awaited<ReturnType<typeof specimenTypesApi.get>>)
 
       const { result } = renderHook(() => useSpecimenType(1), {
         wrapper: createWrapper(),
@@ -122,7 +122,7 @@ describe('useReferenceData Hooks', () => {
       })
 
       expect(result.current.data).toEqual(mockData)
-      expect(api.specimenTypesApi.get).toHaveBeenCalledWith(1)
+      expect(specimenTypesApi.get).toHaveBeenCalledWith(1)
     })
 
     it('should not fetch when ID is falsy', () => {
@@ -131,7 +131,7 @@ describe('useReferenceData Hooks', () => {
       })
 
       expect(result.current.isFetching).toBe(false)
-      expect(api.specimenTypesApi.get).not.toHaveBeenCalled()
+      expect(specimenTypesApi.get).not.toHaveBeenCalled()
     })
   })
 
@@ -144,7 +144,7 @@ describe('useReferenceData Hooks', () => {
         lastUpdated: '2024-01-01',
       }
 
-      vi.mocked(api.specimenTypesApi.create).mockResolvedValue(mockCreated as Awaited<ReturnType<typeof api.specimenTypesApi.create>>)
+      vi.mocked(specimenTypesApi.create).mockResolvedValue(mockCreated as Awaited<ReturnType<typeof specimenTypesApi.create>>)
 
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -173,7 +173,7 @@ describe('useReferenceData Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(api.specimenTypesApi.create).toHaveBeenCalledWith({ name: 'New Type' })
+      expect(specimenTypesApi.create).toHaveBeenCalledWith({ name: 'New Type' })
       expect(result.current.data).toEqual(mockCreated)
       expect(invalidateSpy).toHaveBeenCalled()
     })
@@ -188,7 +188,7 @@ describe('useReferenceData Hooks', () => {
         lastUpdated: '2024-01-02',
       }
 
-      vi.mocked(api.specimenTypesApi.update).mockResolvedValue(mockUpdated as Awaited<ReturnType<typeof api.specimenTypesApi.update>>)
+      vi.mocked(specimenTypesApi.update).mockResolvedValue(mockUpdated as Awaited<ReturnType<typeof specimenTypesApi.update>>)
 
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -217,7 +217,7 @@ describe('useReferenceData Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(api.specimenTypesApi.update).toHaveBeenCalledWith(1, { name: 'Updated Name' })
+      expect(specimenTypesApi.update).toHaveBeenCalledWith(1, { name: 'Updated Name' })
       expect(result.current.data).toEqual(mockUpdated)
       expect(invalidateSpy).toHaveBeenCalled()
     })
@@ -225,7 +225,7 @@ describe('useReferenceData Hooks', () => {
 
   describe('useDeleteSpecimenType', () => {
     it('should delete a specimen type and invalidate queries', async () => {
-      vi.mocked(api.specimenTypesApi.delete).mockResolvedValue({
+      vi.mocked(specimenTypesApi.delete).mockResolvedValue({
         data: { message: 'Deleted' },
         status: 200,
         statusText: 'OK',
@@ -260,7 +260,7 @@ describe('useReferenceData Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(api.specimenTypesApi.delete).toHaveBeenCalledWith(1)
+      expect(specimenTypesApi.delete).toHaveBeenCalledWith(1)
       expect(invalidateSpy).toHaveBeenCalled()
     })
   })
@@ -277,7 +277,7 @@ describe('useReferenceData Hooks', () => {
         ],
       }
 
-      vi.mocked(api.storageTypesApi.list).mockResolvedValue(mockData as Awaited<ReturnType<typeof api.storageTypesApi.list>>)
+      vi.mocked(storageTypesApi.list).mockResolvedValue(mockData as Awaited<ReturnType<typeof storageTypesApi.list>>)
 
       const { result } = renderHook(() => useStorageTypes(), {
         wrapper: createWrapper(),

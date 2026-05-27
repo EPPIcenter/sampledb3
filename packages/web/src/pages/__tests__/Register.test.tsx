@@ -16,16 +16,16 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/auth', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('auth', {
   authApi: {
     selfRegister: vi.fn(),
-  },
-})
+  }
+  })
 })
 
-import { authApi } from '../../lib/api'
+import { authApi } from '../../lib/api/auth'
 
 describe('Register Page', () => {
   beforeEach(() => {

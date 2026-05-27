@@ -1,7 +1,6 @@
 import '@testing-library/jest-dom'
 import { cleanup } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
-import { createMockedApi } from './helpers/mock-api'
 
 // In-memory localStorage so addRecentUser in UserContext never throws and console stays clean.
 const storage: Record<string, string> = {}
@@ -22,16 +21,13 @@ if (typeof window !== 'undefined') {
 }
 
 // Default auth + table view mocks so UserProvider and table views resolve without real HTTP.
-// Per-file vi.mock('../../lib/api', async () => createMockedApi({ ... })) replaces this module mock.
-vi.mock('../lib/api', async () => createMockedApi())
-
-// Production code may import domain paths (lib/api/studies); keep axios mock aligned with the barrel default.
-vi.mock('../lib/api/client', async () => {
-  const actual = await vi.importActual<typeof import('../lib/api/client')>('../lib/api/client')
-  const mocked = await createMockedApi()
-  return {
-    api: (mocked as { default?: typeof actual.api }).default ?? actual.api,
-  }
+vi.mock('../lib/api/auth', async () => {
+  const { createMockedDomainModule } = await import('./helpers/mock-api')
+  return createMockedDomainModule('auth')
+})
+vi.mock('../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('./helpers/mock-api')
+  return createMockedDomainModule('settings')
 })
 
 // jsdom does not provide IntersectionObserver; mock it for components that use it (must be a constructor)

@@ -1,4 +1,4 @@
-import { type Location } from './api'
+import { type Location } from './api/types'
 
 /**
  * Location tree structure built from parent-child relationships.

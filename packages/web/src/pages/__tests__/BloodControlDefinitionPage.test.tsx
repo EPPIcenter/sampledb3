@@ -18,14 +18,34 @@ vi.mock('../../contexts/UserContext', async () => {
   }
 })
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('reference-data', {
   controlsApi: { listDefinitions: vi.fn().mockResolvedValue({ data: { definitions: [] } }) },
   specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
   strainsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
   settingsApi: { getUnits: vi.fn().mockResolvedValue({ data: [] }) },
 })
+})
+
+vi.mock('../../lib/api/controls', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('controls', {
+  controlsApi: { listDefinitions: vi.fn().mockResolvedValue({ data: { definitions: [] } }) },
+  specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
+  strainsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
+  settingsApi: { getUnits: vi.fn().mockResolvedValue({ data: [] }) },
+})
+})
+
+vi.mock('../../lib/api/settings', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('settings', {
+  controlsApi: { listDefinitions: vi.fn().mockResolvedValue({ data: { definitions: [] } }) },
+  specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
+  strainsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
+  settingsApi: { getUnits: vi.fn().mockResolvedValue({ data: [] }) }
+  })
 })
 
 describe('BloodControlDefinitionPage', () => {

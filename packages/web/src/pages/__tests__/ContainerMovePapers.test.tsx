@@ -1,13 +1,14 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import ContainerMovePapers from '../ContainerMovePapers'
-import { collectionsApi, locationsApi } from '../../lib/api'
+import { collectionsApi } from '../../lib/api/collections'
+import { locationsApi } from '../../lib/api/locations'
 import { renderWithProviders } from '../../__tests__/helpers/render'
 
 // Mock API (authApi required for UserProvider in renderWithProviders)
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../lib/api/locations', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('locations', {
     authApi: {
         getCurrentUser: vi.fn().mockResolvedValue({
             data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
@@ -23,6 +24,46 @@ vi.mock('../../lib/api', async () => {
         list: vi.fn()
     }
 })
+})
+
+vi.mock('../../lib/api/collections', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('collections', {
+    authApi: {
+        getCurrentUser: vi.fn().mockResolvedValue({
+            data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
+        }),
+    },
+    collectionsApi: {
+        listCollectionsByType: vi.fn(),
+        getBox: vi.fn(),
+        getBag: vi.fn(),
+        moveSheets: vi.fn()
+    },
+    locationsApi: {
+        list: vi.fn()
+    }
+})
+})
+
+vi.mock('../../lib/api/auth', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('auth', {
+    authApi: {
+        getCurrentUser: vi.fn().mockResolvedValue({
+            data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
+        }),
+    },
+    collectionsApi: {
+        listCollectionsByType: vi.fn(),
+        getBox: vi.fn(),
+        getBag: vi.fn(),
+        moveSheets: vi.fn()
+    },
+    locationsApi: {
+        list: vi.fn()
+    },
+  })
 })
 
 describe('ContainerMovePapers', () => {

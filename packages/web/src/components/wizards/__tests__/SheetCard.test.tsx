@@ -8,13 +8,13 @@ vi.mock('../../LocationPicker', () => ({
   default: () => <div data-testid="location-picker-mock">Location Picker</div>,
 }))
 
-vi.mock('../../../lib/api', async () => {
-  const { createMockedApi } = await import('../../../__tests__/helpers/mock-api')
-  return createMockedApi({
+vi.mock('../../../lib/api/collections', async () => {
+  const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('collections', {
   collectionsApi: {
     listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
-  },
-})
+  }
+  })
 })
 
 const sheetContainers: ContainerConfig[] = [

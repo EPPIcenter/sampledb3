@@ -2,10 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import BloodControls from '../BloodControls'
 
-vi.mock('../../lib/api', async () => {
-  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+vi.mock('../../lib/api/controls', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   const { bloodControlsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
-  return createMockedApi(bloodControlsPageMock())
+  return createMockedDomainModule('controls', bloodControlsPageMock())
+})
+
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { bloodControlsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('reference-data', bloodControlsPageMock())
 })
 
 vi.mock('../../contexts/UserContext', async () => {
