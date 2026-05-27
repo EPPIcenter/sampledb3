@@ -1,10 +1,14 @@
-interface SkeletonTableProps {
+export interface SkeletonTableProps {
   rows?: number
   columns?: number
   density?: 'normal' | 'compact'
 }
 
-export default function SkeletonTable({ rows = 5, columns = 4, density = 'normal' }: SkeletonTableProps) {
+export function SkeletonTable({
+  rows = 5,
+  columns = 4,
+  density = 'normal',
+}: SkeletonTableProps) {
   const paddingClass = density === 'compact' ? 'px-3 py-2' : 'px-6 py-3'
   const textSizeClass = density === 'compact' ? 'text-xs' : 'text-sm'
 
@@ -16,7 +20,7 @@ export default function SkeletonTable({ rows = 5, columns = 4, density = 'normal
             <tr>
               {Array.from({ length: columns }).map((_, i) => (
                 <th key={i} className={`${paddingClass} text-left`}>
-                  <div className="h-4 app-skeleton-bar rounded w-20"></div>
+                  <div className="h-4 app-skeleton-bar rounded w-20" />
                 </th>
               ))}
             </tr>
@@ -26,7 +30,7 @@ export default function SkeletonTable({ rows = 5, columns = 4, density = 'normal
               <tr key={rowIndex}>
                 {Array.from({ length: columns }).map((_, colIndex) => (
                   <td key={colIndex} className={`${paddingClass} ${textSizeClass}`}>
-                    <div className="h-4 app-skeleton-bar rounded w-full"></div>
+                    <div className="h-4 app-skeleton-bar rounded w-full" />
                   </td>
                 ))}
               </tr>
@@ -37,4 +41,3 @@ export default function SkeletonTable({ rows = 5, columns = 4, density = 'normal
     </div>
   )
 }
-

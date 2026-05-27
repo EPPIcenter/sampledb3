@@ -8,3 +8,10 @@ export { Modal, type ModalProps, type ModalSize } from './Modal'
 export { StudyCardSkeleton } from './skeleton/StudyCardSkeleton'
 export { DetailPageSkeleton } from './skeleton/DetailPageSkeleton'
 export { StudyListSkeleton } from './skeleton/StudyListSkeleton'
+export { SkeletonList, type SkeletonListProps } from './skeleton/SkeletonList'
+export { SkeletonCard, type SkeletonCardProps } from './skeleton/SkeletonCard'
+export { SkeletonTable, type SkeletonTableProps } from './skeleton/SkeletonTable'
+export {
+  LocationDetailsSkeleton,
+  type LocationDetailsSkeletonProps,
+} from './skeleton/LocationDetailsSkeleton'
