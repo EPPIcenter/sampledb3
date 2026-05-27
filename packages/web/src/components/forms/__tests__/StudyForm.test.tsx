@@ -3,8 +3,19 @@ import userEvent from '@testing-library/user-event'
 import { render, screen } from '../../../__tests__/helpers/render'
 import StudyForm from '../StudyForm'
 
-const mockCreate = vi.fn().mockResolvedValue(undefined)
-const mockUpdate = vi.fn().mockResolvedValue(undefined)
+const mockStudy = {
+  id: 42,
+  title: 'My Study',
+  shortCode: 'MS1',
+  description: '',
+  isLongitudinal: false,
+  leadPerson: 'Jane',
+  created: '',
+  lastUpdated: '',
+}
+
+const mockCreate = vi.fn().mockResolvedValue({ study: mockStudy })
+const mockUpdate = vi.fn().mockResolvedValue({ study: mockStudy })
 vi.mock('../../../lib/api/studies', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   return createMockedDomainModule('studies', {

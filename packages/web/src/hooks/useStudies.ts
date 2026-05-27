@@ -9,6 +9,7 @@ import {
 import { studiesApi, type Study, type StudySummaryBasic } from '../lib/api/studies'
 import { api } from '../lib/api/client'
 import { useToast } from '../contexts/ToastContext'
+import { dashboardKeys } from './useDashboard'
 
 export const studyKeys = {
   all: ['studies'] as const,
@@ -221,6 +222,7 @@ export function useCreateStudy() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: studyKeys.lists() })
       queryClient.invalidateQueries({ queryKey: studyKeys.infinite() })
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.all })
       success('Study created successfully')
     },
   })
@@ -256,6 +258,7 @@ export function useUpdateStudy() {
       queryClient.invalidateQueries({ queryKey: studyKeys.detail(data.id) })
       queryClient.invalidateQueries({ queryKey: studyKeys.lists() })
       queryClient.invalidateQueries({ queryKey: studyKeys.infinite() })
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.all })
       success('Study updated successfully')
     },
   })

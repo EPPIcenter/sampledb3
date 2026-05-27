@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api/client'
 import { studiesApi, type Study, type StudySummaryBasic } from '../lib/api/studies'
 import { activityApi } from '../lib/api/search'
@@ -56,6 +56,11 @@ async function fetchCountSafe(path: string, arrayKey: string): Promise<number> {
   } catch {
     return 0
   }
+}
+
+/** Refetch dashboard widgets after creates/updates elsewhere in the app. */
+export function invalidateDashboardQueries(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: dashboardKeys.all })
 }
 
 export function useDashboardCritical() {

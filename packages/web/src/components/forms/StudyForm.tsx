@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
-import { studiesApi } from '../../lib/api/studies';
-import type { Study } from '../../lib/api/studies';
+import type { Study } from '../../lib/api/studies'
 import { useNavigate } from 'react-router-dom'
+import { useCreateStudy, useUpdateStudy } from '../../hooks/useStudies'
 import { useModifierHotkey } from '../../hooks/useHotkey'
 import { TUTORIAL_SHORT_CODE_PREFIX } from '../../lib/constants'
 import UserBadge from '../UserBadge'
@@ -16,9 +16,24 @@ function isTutorialNamespace(shortCode: string): boolean {
   return shortCode.trim().toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX)
 }
 
+function getApiErrorMessage(err: unknown, fallback: string): string {
+  if (
+    err &&
+    typeof err === 'object' &&
+    'response' in err &&
+    err.response &&
+    typeof (err.response as { data?: { error?: string } }).data?.error === 'string'
+  ) {
+    return (err.response as { data: { error: string } }).data.error
+  }
+  return fallback
+}
+
 export default function StudyForm({ study, onSuccess, onCancel }: StudyFormProps) {
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(false)
+  const createStudy = useCreateStudy()
+  const updateStudy = useUpdateStudy()
+  const loading = createStudy.isPending || updateStudy.isPending
   const [error, setError] = useState<string | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const [formData, setFormData] = useState({
@@ -31,40 +46,27 @@ export default function StudyForm({ study, onSuccess, onCancel }: StudyFormProps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError(null)
 
     try {
       if (study) {
-        // Update existing study (exclude isLongitudinal - cannot be changed after creation)
         const { isLongitudinal, ...updateData } = formData
-        await studiesApi.update(study.id, updateData)
+        await updateStudy.mutateAsync({ id: study.id, data: updateData })
         if (onSuccess) {
           onSuccess()
         } else {
           navigate('/studies')
         }
       } else {
-        // Create new study
-        const res = await studiesApi.create(formData)
+        const created = await createStudy.mutateAsync(formData)
         if (onSuccess) {
           onSuccess()
         } else {
-          navigate(`/studies/${res.study.id}`)
+          navigate(`/studies/${created.id}`)
         }
       }
     } catch (err: unknown) {
-      const message =
-        err &&
-        typeof err === 'object' &&
-        'response' in err &&
-        err.response &&
-        typeof (err.response as { data?: { error?: string } }).data?.error === 'string'
-          ? (err.response as { data: { error: string } }).data.error
-          : 'Failed to save study'
-      setError(message)
-    } finally {
-      setLoading(false)
+      setError(getApiErrorMessage(err, 'Failed to save study'))
     }
   }
 

@@ -8,6 +8,8 @@ SampleDB’s web client uses `packages/web/src/ui/` as a presentation module: a 
 
 **Read-path errors** on migrated screens are shown inline (`PageError` with retry, or section-level `SectionMessage` on secondary queries). Query hooks used there do not toast on fetch failure. **Write-path errors** (mutations) continue to use toast notifications or inline mutation banners where already present.
 
+**Mutations** should go through domain hooks (e.g. `useCreateStudy`, `useCreateQpcrExperiment`) so `queryClient.invalidateQueries` refreshes list pages and dashboard widgets (`dashboardKeys`) that use separate query keys from the main list.
+
 We rejected coupling the presentation seam to React Query types (callers still need per-section status outside a single query boundary) and rejected toast-only read errors (several list pages previously failed silently with `console.error` only).
 
 ## Migrated routes (read paths)
