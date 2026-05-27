@@ -7,7 +7,10 @@ import {
   useSpecimens,
   useSpecimen,
   useCreateSpecimen,
+  specimenKeys,
 } from '../useSpecimens'
+import { dashboardKeys } from '../useDashboard'
+import { studyKeys } from '../useStudies'
 import { specimensApi } from '../../lib/api/specimens'
 
 // Mock the API module
@@ -112,10 +115,12 @@ describe('useSpecimens Hooks', () => {
   })
 
   describe('useCreateSpecimen', () => {
-    it('should create a specimen and invalidate queries', async () => {
+    it('should create a specimen and invalidate list and dashboard queries', async () => {
       const mockCreated = {
         specimen: {
           id: 3,
+          studySubjectId: 10,
+          studyId: 5,
           specimenTypeId: 1,
           created: '2024-01-01',
           lastUpdated: '2024-01-01',
@@ -147,6 +152,7 @@ describe('useSpecimens Hooks', () => {
 
       result.current.mutate({
         sourceType: 'subject',
+        sourceId: 10,
         specimenTypeId: 1,
       })
 
@@ -156,7 +162,11 @@ describe('useSpecimens Hooks', () => {
 
       expect(specimensApi.create).toHaveBeenCalled()
       expect(result.current.data).toEqual(mockCreated.specimen)
-      expect(invalidateSpy).toHaveBeenCalled()
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: specimenKeys.lists() })
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: dashboardKeys.all })
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: [...studyKeys.detail(5), 'subjects'],
+      })
     })
   })
 })

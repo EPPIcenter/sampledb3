@@ -201,23 +201,22 @@ export function useStudySpecimenCount(shortCode: string | undefined) {
   })
 }
 
-export function useCreateStudy() {
+export function useCreateStudy(options?: { silent?: boolean }) {
   const queryClient = useQueryClient()
   const { success, error: showError } = useToast()
 
   return useMutation({
     mutationFn: async (data: Omit<Study, 'id' | 'created' | 'lastUpdated'>) => {
-      try {
-        const res = await studiesApi.create(data)
-        return res.study
-      } catch (err: unknown) {
-        const message =
-          err && typeof err === 'object' && 'response' in err
-            ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-            : undefined
-        showError(message || 'Failed to create study')
-        throw err
-      }
+      const res = await studiesApi.create(data)
+      return res.study
+    },
+    onError: (err: unknown) => {
+      if (options?.silent) return
+      const message =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : undefined
+      showError(message || 'Failed to create study')
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: studyKeys.lists() })
@@ -228,7 +227,7 @@ export function useCreateStudy() {
   })
 }
 
-export function useUpdateStudy() {
+export function useUpdateStudy(options?: { silent?: boolean }) {
   const queryClient = useQueryClient()
   const { success, error: showError } = useToast()
 
@@ -242,17 +241,16 @@ export function useUpdateStudy() {
         Pick<Study, 'title' | 'leadPerson' | 'shortCode' | 'description' | 'isLongitudinal'>
       >
     }) => {
-      try {
-        const res = await studiesApi.update(id, data)
-        return res.study
-      } catch (err: unknown) {
-        const message =
-          err && typeof err === 'object' && 'response' in err
-            ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-            : undefined
-        showError(message || 'Failed to update study')
-        throw err
-      }
+      const res = await studiesApi.update(id, data)
+      return res.study
+    },
+    onError: (err: unknown) => {
+      if (options?.silent) return
+      const message =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : undefined
+      showError(message || 'Failed to update study')
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: studyKeys.detail(data.id) })

@@ -1,8 +1,13 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api/client'
 import { specimensApi, type SpecimenListParams } from '../lib/api/specimens'
 import type { Specimen } from '../lib/api/types'
+import type { ContainerData } from '../components/ContainerRegistration'
 import { useToast } from '../contexts/ToastContext'
+import { invalidateDashboardQueries } from './useDashboard'
+import { studyKeys } from './useStudies'
+import { subjectKeys } from './useSubjects'
+import { controlKeys } from './useControls'
 
 export type SpecimenSourceInfo = {
   type: string
@@ -27,6 +32,61 @@ export const specimenKeys = {
   detail: (id: number) => [...specimenKeys.details(), id] as const,
   sourceInfo: (id: number) => [...specimenKeys.detail(id), 'source-info'] as const,
   containers: (specimenId: string | number) => ['containers', 'specimen', specimenId] as const,
+}
+
+export type CreateSpecimenInput = {
+  sourceType: 'subject' | 'control' | 'reagent' | 'cell_line' | 'plasmid' | 'standard'
+  sourceId?: number
+  studyShortCode?: string
+  subjectName?: string
+  specimenTypeId?: number
+  specimenTypeName?: string
+  collectionDate?: string
+  containerBarcode?: string
+  container?: ContainerData
+  /** When known before create (e.g. form state); API response studyId takes precedence. */
+  studyId?: number
+}
+
+function getMutationErrorMessage(err: unknown, fallback: string): string {
+  if (
+    err &&
+    typeof err === 'object' &&
+    'response' in err &&
+    err.response &&
+    typeof (err.response as { data?: { error?: string } }).data?.error === 'string'
+  ) {
+    return (err.response as { data: { error: string } }).data.error
+  }
+  return fallback
+}
+
+/** Refresh list, dashboard, and contextual detail queries after specimen writes. */
+export function invalidateSpecimenQueries(
+  queryClient: QueryClient,
+  ctx: {
+    specimen: Specimen
+    studyId?: number
+  }
+) {
+  void queryClient.invalidateQueries({ queryKey: specimenKeys.lists() })
+  invalidateDashboardQueries(queryClient)
+
+  const studyId = ctx.specimen.studyId ?? ctx.studyId
+  const subjectId = ctx.specimen.studySubjectId
+  if (subjectId != null) {
+    void queryClient.invalidateQueries({ queryKey: subjectKeys.detail(subjectId) })
+    void queryClient.invalidateQueries({ queryKey: subjectKeys.summary(subjectId) })
+  }
+  if (studyId != null) {
+    void queryClient.invalidateQueries({ queryKey: [...studyKeys.detail(studyId), 'subjects'] })
+    void queryClient.invalidateQueries({ queryKey: [...studyKeys.detail(studyId), 'summary'] })
+  }
+  const controlBatchId = ctx.specimen.controlBatchId
+  if (controlBatchId != null) {
+    void queryClient.invalidateQueries({ queryKey: controlKeys.batchSummary(controlBatchId) })
+    void queryClient.invalidateQueries({ queryKey: controlKeys.overview() })
+  }
 }
 
 export function useSpecimens(filters?: SpecimenListParams) {
@@ -109,35 +169,24 @@ export function useContainersForSpecimen(specimenId: string | number | undefined
   })
 }
 
-export function useCreateSpecimen() {
+export function useCreateSpecimen(options?: { silent?: boolean }) {
   const queryClient = useQueryClient()
   const { success, error: showError } = useToast()
 
   return useMutation({
-    mutationFn: async (data: {
-      sourceType: 'subject' | 'control' | 'reagent' | 'cell_line' | 'plasmid' | 'standard'
-      sourceId?: number
-      studyShortCode?: string
-      subjectName?: string
-      specimenTypeId?: number
-      specimenTypeName?: string
-      collectionDate?: string
-      containerBarcode?: string
-    }) => {
-      try {
-        const res = await specimensApi.create(data)
-        return res.specimen
-      } catch (err: unknown) {
-        const message =
-          err && typeof err === 'object' && 'response' in err
-            ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-            : undefined
-        showError(message || 'Failed to create specimen')
-        throw err
-      }
+    mutationFn: async ({ studyId: _studyIdHint, ...data }: CreateSpecimenInput) => {
+      const res = await specimensApi.create(data)
+      return res.specimen
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: specimenKeys.lists() })
+    onError: (err: unknown) => {
+      if (options?.silent) return
+      showError(getMutationErrorMessage(err, 'Failed to create specimen'))
+    },
+    onSuccess: (specimen, variables) => {
+      invalidateSpecimenQueries(queryClient, {
+        specimen,
+        studyId: variables.studyId,
+      })
       success('Specimen created successfully')
     },
   })

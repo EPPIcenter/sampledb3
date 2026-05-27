@@ -31,8 +31,8 @@ function getApiErrorMessage(err: unknown, fallback: string): string {
 
 export default function StudyForm({ study, onSuccess, onCancel }: StudyFormProps) {
   const navigate = useNavigate()
-  const createStudy = useCreateStudy()
-  const updateStudy = useUpdateStudy()
+  const createStudy = useCreateStudy({ silent: true })
+  const updateStudy = useUpdateStudy({ silent: true })
   const loading = createStudy.isPending || updateStudy.isPending
   const [error, setError] = useState<string | null>(null)
   const formRef = useRef<HTMLFormElement>(null)

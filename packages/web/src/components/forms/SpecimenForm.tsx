@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { specimensApi } from '../../lib/api/specimens';
 import type { Specimen, SpecimenType, StudySubject } from '../../lib/api/types';
 import { specimenTypesApi, cellLinesApi, plasmidsApi, standardsApi } from '../../lib/api/reference-data';
 import type { CellLine, Plasmid, Standard } from '../../lib/api/reference-data';
@@ -12,8 +11,22 @@ import type { Reagent } from '../../lib/api/reagents';
 import { useNavigate } from 'react-router-dom'
 import StudyPicker from '../StudyPicker'
 import ContainerRegistration, { type ContainerData } from '../ContainerRegistration'
-import { subjectsApi } from '../../lib/api/subjects';
 import { useModifierHotkey } from '../../hooks/useHotkey'
+import { useCreateSpecimen, type CreateSpecimenInput } from '../../hooks/useSpecimens'
+import { useCreateSubject } from '../../hooks/useSubjects'
+
+function getApiErrorMessage(err: unknown, fallback: string): string {
+  if (
+    err &&
+    typeof err === 'object' &&
+    'response' in err &&
+    err.response &&
+    typeof (err.response as { data?: { error?: string } }).data?.error === 'string'
+  ) {
+    return (err.response as { data: { error: string } }).data.error
+  }
+  return fallback
+}
 
 interface SpecimenFormProps {
   specimen?: Specimen
@@ -39,7 +52,9 @@ export default function SpecimenForm({
   onCancel
 }: SpecimenFormProps) {
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(false)
+  const createSpecimen = useCreateSpecimen({ silent: true })
+  const createSubject = useCreateSubject()
+  const loading = createSpecimen.isPending || createSubject.isPending
   const [error, setError] = useState<string | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const [studies, setStudies] = useState<Study[]>([])
@@ -145,13 +160,11 @@ export default function SpecimenForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError(null)
 
     try {
       if (specimen) {
         setError('Update not yet implemented')
-        setLoading(false)
         return
       }
 
@@ -160,46 +173,43 @@ export default function SpecimenForm({
       if (formData.sourceType === 'subject' && formData.createNewSubject) {
         if (!formData.studyId || !formData.subjectName.trim()) {
           setError('Please select a study and enter a subject name')
-          setLoading(false)
           return
         }
 
         try {
-          const subjectResponse = await subjectsApi.create({
+          const subject = await createSubject.mutateAsync({
             studyId: formData.studyId,
             name: formData.subjectName.trim(),
           })
-          sourceId = subjectResponse.subject.id
-        } catch (err: any) {
-          setError(err.response?.data?.error || 'Failed to create subject')
-          setLoading(false)
+          sourceId = subject.id
+        } catch (err: unknown) {
+          setError(getApiErrorMessage(err, 'Failed to create subject'))
           return
         }
       }
 
-      // Build specimen data using human-readable identifiers
-      const data: any = {
+      const data: CreateSpecimenInput = {
         sourceType: formData.sourceType,
       }
 
+      const effectiveStudyId = formData.studyId || studyId
+
       if (formData.sourceType === 'subject') {
         if (subjectId) {
-          // Use the subjectId provided as prop (from context)
           data.sourceId = subjectId
         } else if (formData.createNewSubject) {
-          // Use the newly created subject ID
           data.sourceId = sourceId
         } else if (formData.sourceId) {
-          // Use existing subject ID
           data.sourceId = formData.sourceId
         } else if (formData.studyShortCode && formData.subjectName) {
-          // Use human-readable identifiers
           data.studyShortCode = formData.studyShortCode
           data.subjectName = formData.subjectName
         } else {
           setError('Please select or create a subject')
-          setLoading(false)
           return
+        }
+        if (effectiveStudyId) {
+          data.studyId = effectiveStudyId
         }
       } else if (formData.sourceType === 'control') {
         data.sourceId = controlBatchId || formData.sourceId
@@ -207,14 +217,12 @@ export default function SpecimenForm({
         data.sourceId = formData.sourceId
       }
 
-      // Use specimen type name if available, otherwise use ID
       if (formData.specimenTypeName) {
         data.specimenTypeName = formData.specimenTypeName
       } else if (formData.specimenTypeId) {
         data.specimenTypeId = formData.specimenTypeId
       } else {
         setError('Please select a specimen type')
-        setLoading(false)
         return
       }
 
@@ -222,26 +230,20 @@ export default function SpecimenForm({
         data.collectionDate = formData.collectionDate
       }
 
-      // Add container data if provided
       if (containerData) {
         data.container = containerData
       }
 
-      const response = await specimensApi.create(data)
+      const created = await createSpecimen.mutateAsync(data)
       if (onSuccess) {
         onSuccess()
+      } else if (created.id) {
+        navigate(`/specimens/${created.id}`)
       } else {
-        // Navigate to the newly created specimen's detail page
-        if (response.specimen.id) {
-          navigate(`/specimens/${response.specimen.id}`)
-        } else {
-          navigate('/statistics')
-        }
+        navigate('/statistics')
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save specimen')
-    } finally {
-      setLoading(false)
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Failed to save specimen'))
     }
   }
 

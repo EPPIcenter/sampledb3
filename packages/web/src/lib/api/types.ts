@@ -21,6 +21,8 @@ export interface StudySubject {
 export interface Specimen {
   id: number
   studySubjectId?: number
+  /** Present on create responses when the specimen source is a study subject. */
+  studyId?: number
   controlBatchId?: number
   specimenTypeId: number
   collectionDate?: string

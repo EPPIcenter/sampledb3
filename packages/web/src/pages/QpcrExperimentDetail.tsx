@@ -380,6 +380,7 @@ export default function QpcrExperimentDetail() {
         })),
         instrumentType: instrumentType.trim() || null,
       })
+      invalidateQpcrExperimentQueries(queryClient)
       loadData()
     } catch (err: unknown) {
       const msg =
@@ -609,6 +610,7 @@ export default function QpcrExperimentDetail() {
                         if (res.unresolved && res.unresolved.length > 0) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- show error when unresolved present
                           setPlateError(`${res.unresolved.length} unresolved barcode(s): ${res.unresolved.map((u) => `${u.wellPosition}:${u.barcode}`).join(', ')}`)
                         }
+                        invalidateQpcrExperimentQueries(queryClient)
                         loadData()
                       } catch (err: unknown) {
                         const msg = err && typeof err === 'object' && 'response' in err
@@ -986,6 +988,7 @@ export default function QpcrExperimentDetail() {
                         const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
                         const resultInstrument = (instrumentSelectRef.current?.value as 'Biorad_CFX' | 'QuantStudio' | undefined) ?? 'Biorad_CFX'
                         await qpcrExperimentsApi.uploadResults(parseInt(id), { fileContent: base64, fileName: file.name, instrumentType: resultInstrument })
+                        invalidateQpcrExperimentQueries(queryClient)
                         loadData()
                       } catch (err: unknown) {
                         const msg = err && typeof err === 'object' && 'response' in err
