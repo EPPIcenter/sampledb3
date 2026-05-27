@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api/client'
+import { containersApi, type ContainerDetail } from '../lib/api/containers'
 import { qpcrExperimentsApi } from '../lib/api/qpcr'
 import type { QpcrExperimentDetailResponse, QpcrExperimentWell } from '../lib/api/qpcr'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
@@ -27,31 +28,6 @@ function allPlatePositions(): string[] {
     }
   }
   return positions
-}
-
-/** Container API response shape (GET /containers/:id) */
-interface WellDetailContainerResponse {
-  container: {
-    id: number
-    containerType?: string
-    collection?: { type: string; id: number; name: string; position?: string; barcode?: string }
-    locationPath?: string
-    [key: string]: unknown
-  }
-  specimen: {
-    id: number
-    specimenType?: { id: number; name: string }
-    collectionDate?: string
-    [key: string]: unknown
-  } | null
-  source: {
-    type: 'subject' | 'control'
-    id: number
-    name: string
-    study?: { id: number; title: string; code: string }
-    definition?: { id: number; name: string }
-    [key: string]: unknown
-  } | null
 }
 
 const INSTRUMENTS = [
@@ -174,7 +150,7 @@ export default function QpcrExperimentDetail() {
   const [instrumentType, setInstrumentType] = useState(DEFAULT_INSTRUMENT_TYPE)
   const [savingSettings, setSavingSettings] = useState(false)
   const selectedWellPosition = normalizeWellParam(searchParams.get('well'))
-  const [wellDetails, setWellDetails] = useState<WellDetailContainerResponse | null>(null)
+  const [wellDetails, setWellDetails] = useState<ContainerDetail | null>(null)
   const [wellDetailsLoading, setWellDetailsLoading] = useState(false)
   const [wellDetailsError, setWellDetailsError] = useState<string | null>(null)
   const prevExperimentSyncRef = useRef<{ id: number; targetsSig: string; instrumentType: string } | null>(null)
@@ -231,8 +207,8 @@ export default function QpcrExperimentDetail() {
     if (containerId != null) {
       setWellDetailsLoading(true)
       setWellDetails(null)
-      api
-        .get<WellDetailContainerResponse>(`/containers/${containerId}`)
+      containersApi
+        .get(containerId)
         .then((res) => {
           setWellDetails(res)
           setWellDetailsError(null)

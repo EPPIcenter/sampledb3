@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { settingsApi } from '../lib/api/settings';
+import { unitsApi } from '../lib/api/reference-data';
 import type { ContainerDefaults } from '../lib/api/settings';
 import type { Unit } from '../lib/api/types';
 import InfoTooltip from './InfoTooltip'
@@ -155,7 +156,7 @@ export default function ContainerDefaultsForm({
     try {
       setUnitsError(null)
       // Load all units
-      const res = await settingsApi.getUnits()
+      const res = await unitsApi.listAll()
       setUnits(res)
 
       // Load allowed units for each container type

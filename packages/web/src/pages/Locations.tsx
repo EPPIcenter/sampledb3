@@ -13,12 +13,10 @@ import {
   useLocationsList,
 } from '../hooks/useLocations'
 import { getRootLocations, getLocationChildren, getLocationDescendants, getLocationAncestors, getLocationLabel } from '../lib/location-tree'
-import { PageError, SectionMessage, fromQuery, getQueryErrorMessage } from '../ui'
-import SkeletonCard from '../components/SkeletonCard'
-import LocationDetailsSkeleton from '../components/LocationDetailsSkeleton'
+import { Modal, PageError, SectionMessage, fromQuery, getQueryErrorMessage } from '../ui'
+import { LocationDetailsSkeleton, SkeletonCard } from '../ui'
 import LocationForm from '../components/LocationForm'
 import LocationHierarchyStatsDisplay from '../components/LocationHierarchyStats'
-import ModalPortal from '../components/ModalPortal'
 import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
 import { useUser } from '../contexts/UserContext'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
@@ -1004,18 +1002,13 @@ export default function Locations() {
           : false
 
         return (
-          <ModalPortal>
-            <div className="fixed inset-0 z-[100] overflow-y-auto">
-              <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-                {/* Background overlay */}
-                <div
-                  className="fixed inset-0 bg-black/40 backdrop-blur-md"
-                  onClick={handleDeleteCancel}
-                />
-              
-              {/* Modal panel */}
-              <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full" onClick={(e) => e.stopPropagation()}>
-                <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <Modal
+            isOpen
+            onClose={handleDeleteCancel}
+            showCloseButton={false}
+            size="sm"
+            panelClassName="sm:max-w-md"
+          >
                 <h2 className="text-xl font-semibold text-app-text mb-4">Delete Location</h2>
                 <p className="text-sm text-app-text mb-4">
                   Are you sure you want to delete <strong>{locationToDelete?.name}</strong>?
@@ -1053,11 +1046,7 @@ export default function Locations() {
                     {mutationLoading ? 'Deleting...' : 'Delete'}
                   </button>
                 </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          </ModalPortal>
+          </Modal>
         )
       })()}
       </div>

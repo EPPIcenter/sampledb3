@@ -1,35 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import BarcodeExport from '../BarcodeExport'
-import { exportConfigurationsApi } from '../../lib/api/settings'
+import { settingsApi } from '../../lib/api/settings'
+import { mockSettingsApiGetValue } from '../../__tests__/helpers/settings-mocks'
 
 vi.mock('../../lib/api/export', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('export', {
   exportApi: { exportBarcodes: vi.fn() },
-  exportConfigurationsApi: {
-    getShared: vi.fn().mockResolvedValue({ configurations: [] }),
-    getPersonal: vi.fn().mockResolvedValue({ configurations: [] }),
-  },
-})
+  })
 })
 
 vi.mock('../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('settings', {
-  exportApi: { exportBarcodes: vi.fn() },
-  exportConfigurationsApi: {
-    getShared: vi.fn().mockResolvedValue({ configurations: [] }),
-    getPersonal: vi.fn().mockResolvedValue({ configurations: [] }),
-  }
+    settingsApi: {
+      getValue: vi.fn(),
+    },
   })
 })
 
 describe('BarcodeExport', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(exportConfigurationsApi.getShared).mockResolvedValue({ configurations: [] })
-    vi.mocked(exportConfigurationsApi.getPersonal).mockResolvedValue({ configurations: [] })
+    vi.mocked(settingsApi.getValue).mockImplementation(mockSettingsApiGetValue())
   })
 
   it('shows barcode export content', async () => {
@@ -43,8 +37,8 @@ describe('BarcodeExport', () => {
   it('loads export configurations on mount', async () => {
     await render(<BarcodeExport />)
     await waitFor(() => {
-      expect(exportConfigurationsApi.getShared).toHaveBeenCalled()
-      expect(exportConfigurationsApi.getPersonal).toHaveBeenCalled()
+      expect(settingsApi.getValue).toHaveBeenCalledWith('export_configurations', { scope: 'shared' })
+      expect(settingsApi.getValue).toHaveBeenCalledWith('export_configurations', { scope: 'personal' })
     })
   })
 

@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { controlsApi } from '../../lib/api/controls';
-import { strainsApi } from '../../lib/api/reference-data';
-import type { ControlDefinition } from '../../lib/api/controls';
-import type { Strain } from '../../lib/api/reference-data';
+import { useQueryClient } from '@tanstack/react-query'
+import { controlsApi } from '../../lib/api/controls'
+import type { ControlDefinition } from '../../lib/api/controls'
 import type { BatchInfo } from '../../pages/ControlBatchWizard'
-import ModalPortal from '../ModalPortal'
+import { controlKeys, useControlDefinitionDetail, useControlDefinitionsList } from '../../hooks/useControls'
+import { useStrains } from '../../hooks/useReferenceData'
+import { PageError, SectionMessage, getQueryErrorMessage } from '../../ui'
+import { Modal } from '../../ui'
 import ControlDefinitionForm from '../forms/ControlDefinitionForm'
 
 const STRAIN_BAR_COLORS = [
@@ -33,8 +35,16 @@ export default function BatchInfoStep({
   isAddMode,
   definitionPreSelected = false,
 }: BatchInfoStepProps) {
+  const queryClient = useQueryClient()
+  const definitionsQuery = useControlDefinitionsList(!definitionPreSelected)
+  const strainsQuery = useStrains({ silent: true })
+  const definitionDetailQuery = useControlDefinitionDetail(
+    batchInfo.controlDefinitionId ?? 0,
+    !definitionPreSelected &&
+      !!batchInfo.controlDefinitionId &&
+      !batchInfo.controlDefinition,
+  )
   const [definitions, setDefinitions] = useState<ControlDefinition[]>([])
-  const [loading, setLoading] = useState(false)
   const [validating, setValidating] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [nameSuggestion, setNameSuggestion] = useState<string | null>(null)
@@ -44,7 +54,7 @@ export default function BatchInfoStep({
   const [strainMatchMode, setStrainMatchMode] = useState<'contains' | 'exact'>('contains')
   const [minDensity, setMinDensity] = useState('')
   const [maxDensity, setMaxDensity] = useState('')
-  const [strains, setStrains] = useState<Strain[]>([])
+  const strains = strainsQuery.data ?? []
   const [listFocusedIndex, setListFocusedIndex] = useState(-1)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -58,26 +68,17 @@ export default function BatchInfoStep({
   nameSuggestionRef.current = nameSuggestion
 
   useEffect(() => {
-    if (!definitionPreSelected) {
-      loadDefinitions()
-      loadStrains()
+    if (definitionsQuery.data) {
+      setDefinitions(definitionsQuery.data)
     }
-  }, [definitionPreSelected])
-
-  const loadStrains = async () => {
-    try {
-      const response = await strainsApi.list()
-      setStrains(response.data)  
-    } catch (err) {
-      console.error('Failed to load strains:', err)
-    }
-  }
+  }, [definitionsQuery.data])
 
   useEffect(() => {
-    if (batchInfo.controlDefinitionId && !batchInfo.controlDefinition) {
-      loadDefinition(batchInfo.controlDefinitionId)
+    const def = definitionDetailQuery.data
+    if (def && batchInfo.controlDefinitionId && !batchInfo.controlDefinition) {
+      onChange({ ...batchInfo, controlDefinition: def })
     }
-  }, [batchInfo.controlDefinitionId])
+  }, [definitionDetailQuery.data, batchInfo.controlDefinitionId, batchInfo.controlDefinition, onChange])
 
   // Client-side filter by search, strains, and density
   const filteredDefinitions = useMemo(() => {
@@ -122,30 +123,6 @@ export default function BatchInfoStep({
     setLocalName(batchInfo.name)
   }
 
-  const loadDefinitions = async () => {
-    try {
-      setLoading(true)
-      const response = await controlsApi.list()
-      setDefinitions(response.controls)
-    } catch (err) {
-      console.error('Failed to load control definitions:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadDefinition = async (id: number) => {
-    try {
-      const response = await controlsApi.get(id)
-      onChange({
-        ...batchInfo,
-        controlDefinition: response.control,
-      })
-    } catch (err) {
-      console.error('Failed to load control definition:', err)
-    }
-  }
-
   const applyDefinitionSelection = async (definition: ControlDefinition | null) => {
     const definitionId = definition?.id ?? null
 
@@ -155,8 +132,7 @@ export default function BatchInfoStep({
         const response = await controlsApi.suggestBatchName(definition.id, batchInfo.productionDate || undefined)
         suggestedName = response.name
         setNameSuggestion(suggestedName)
-      } catch (err) {
-        console.error('Failed to generate suggested batch name:', err)
+      } catch {
         const date = batchInfo.productionDate || new Date().toISOString().split('T')[0]
         suggestedName = `${definition.name} ${date}`
         setNameSuggestion(null)
@@ -210,6 +186,9 @@ export default function BatchInfoStep({
       }
       return Array.from(byId.values())
     })
+    void queryClient.invalidateQueries({
+      queryKey: [...controlKeys.all, 'definitions-list'],
+    })
     await applyDefinitionSelection(controls[0])
   }
 
@@ -226,8 +205,8 @@ export default function BatchInfoStep({
           }
           setNameSuggestion(response.name)
         })
-        .catch((err) => {
-          console.error('Failed to generate suggested batch name:', err)
+        .catch(() => {
+          /* keep current name on suggestion failure */
         })
     }
   }, [batchInfo.productionDate, batchInfo.controlDefinitionId, isAddMode, onChange])
@@ -265,8 +244,7 @@ export default function BatchInfoStep({
           setErrors(prev => ({ ...prev, name: '' }))
           setNameSuggestion(null)
         }
-      } catch (err) {
-        console.error('Failed to validate batch name:', err)
+      } catch {
         // Don't block user input on validation error
       } finally {
         setValidating(false)
@@ -297,7 +275,6 @@ export default function BatchInfoStep({
           }
         }
       } catch (err) {
-        console.error('Failed to validate batch name:', err)
         newErrors.name = 'Failed to validate batch name. Please try again.'
       } finally {
         setValidating(false)
@@ -326,8 +303,27 @@ export default function BatchInfoStep({
   const hasDefinition = !!def
   const showNameAndDate = hasDefinition || isAddMode
 
+  if (!definitionPreSelected && definitionsQuery.isError) {
+    return (
+      <PageError
+        title="Could not load control definitions"
+        message={getQueryErrorMessage(
+          definitionsQuery.error,
+          'Failed to load control definitions',
+        )}
+        onRetry={() => void definitionsQuery.refetch()}
+      />
+    )
+  }
+
   return (
     <div className="space-y-8">
+      {strainsQuery.isError && (
+        <SectionMessage
+          variant="error"
+          message={getQueryErrorMessage(strainsQuery.error, 'Strain filters could not be loaded')}
+        />
+      )}
       {/* Context: what batch type we're creating */}
       {def && (
         <div
@@ -485,7 +481,7 @@ export default function BatchInfoStep({
             onKeyDown={handleListKeyDown}
             className={`border rounded-lg overflow-hidden ${errors.controlDefinitionId ? 'border-app-trend-down' : 'border-[rgb(var(--app-border))]'}`}
           >
-            {loading ? (
+            {definitionsQuery.isPending ? (
               <div className="px-4 py-8 text-center text-sm text-app-text-muted">Loading definitions...</div>
             ) : filteredDefinitions.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm" style={{ color: 'rgb(var(--app-text-muted))' }}>
@@ -674,27 +670,23 @@ export default function BatchInfoStep({
         </button>
       </div>
 
-      {showCreateModal && (
-        <ModalPortal>
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm blood-controls-modal-overlay flex items-center justify-center z-50 p-4"
-            onClick={() => setShowCreateModal(false)}
-          >
-            <div
-              className="blood-controls-modal-panel dashboard-card p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Create new control definition"
-            >
-              <ControlDefinitionForm
-                onCancel={() => setShowCreateModal(false)}
-                onSuccess={handleCreateSuccess}
-              />
-            </div>
-          </div>
-        </ModalPortal>
-      )}
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        layout="centered"
+        size="lg"
+        showCloseButton={false}
+        overlayClassName="blood-controls-modal-overlay z-50"
+        backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm"
+        panelClassName="blood-controls-modal-panel dashboard-card max-h-[90vh] overflow-y-auto"
+        contentClassName="p-6"
+        ariaLabel="Create new control definition"
+      >
+        <ControlDefinitionForm
+          onCancel={() => setShowCreateModal(false)}
+          onSuccess={handleCreateSuccess}
+        />
+      </Modal>
     </div>
   )
 }

@@ -6,7 +6,8 @@ import type { SpecimenType } from '../lib/api/types';
 import { tagsApi } from '../lib/api/reference-data';
 import type { Tag } from '../lib/api/reference-data';
 import LocationTreePicker, { type LocationSelection } from './LocationTreePicker'
-import ModalPortal from './ModalPortal'
+import { toggleArrayFilterValue } from '../lib/filter-array-toggle'
+import { Modal } from '../ui'
 
 export interface StatisticsFilters {
   study?: string
@@ -265,28 +266,14 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                 )}
               </div>
 
-              {studyPickerOpen && (
-                <ModalPortal>
-                  <div className="fixed inset-0 z-[100] flex items-center justify-center">
-                    <div
-                      className="fixed inset-0 bg-black/40 backdrop-blur-md"
-                      onClick={() => setStudyPickerOpen(false)}
-                    />
-                  <div className="relative z-10 w-full max-w-3xl mx-4 bg-app-card rounded-lg shadow-xl p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-lg font-semibold text-app-text">Select Study</h2>
-                      <button
-                        type="button"
-                        className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded"
-                        onClick={() => setStudyPickerOpen(false)}
-                        aria-label="Close study selection dialog"
-                      >
-                        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-
+              <Modal
+                isOpen={studyPickerOpen}
+                onClose={() => setStudyPickerOpen(false)}
+                title="Select Study"
+                size="xl"
+                layout="centered"
+                contentClassName="p-6"
+              >
                     <div className="mb-4">
                       <label htmlFor="study-search" className="sr-only">
                         Search studies
@@ -355,10 +342,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                         </ul>
                       )}
                     </div>
-                  </div>
-                </div>
-                </ModalPortal>
-              )}
+              </Modal>
             </div>
 
             {/* Source Type Filter */}
@@ -439,12 +423,11 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                           <input
                             type="checkbox"
                             checked={isChecked}
-                            onChange={(e) => {
-                              const currentTagIds = localFilters.tagIds || []
-                              const newTagIds = e.target.checked
-                                ? [...currentTagIds, tag.id.toString()]
-                                : currentTagIds.filter(id => id !== tag.id.toString())
-                              updateFilter('tagIds', newTagIds)
+                            onChange={() => {
+                              updateFilter(
+                                'tagIds',
+                                toggleArrayFilterValue(localFilters, 'tagIds', tag.id.toString()).tagIds
+                              )
                             }}
                             className="rounded border-app-border text-app-accent focus:ring-app-accent"
                           />

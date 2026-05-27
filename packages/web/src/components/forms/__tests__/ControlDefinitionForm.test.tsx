@@ -23,7 +23,7 @@ vi.mock('../../../lib/api/reference-data', async () => {
     update: vi.fn().mockResolvedValue({}),
     suggestName: vi.fn().mockResolvedValue({ suggestedName: 'Suggested', exists: false }),
   },
-  settingsApi: { getUnits: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
+  unitsApi: { listAll: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
   strainsApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Strain A' }] }) },
 })
 })
@@ -38,7 +38,7 @@ vi.mock('../../../lib/api/controls', async () => {
     update: vi.fn().mockResolvedValue({}),
     suggestName: vi.fn().mockResolvedValue({ suggestedName: 'Suggested', exists: false }),
   },
-  settingsApi: { getUnits: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
+  unitsApi: { listAll: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
   strainsApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Strain A' }] }) },
 })
 })
@@ -53,8 +53,8 @@ vi.mock('../../../lib/api/settings', async () => {
     update: vi.fn().mockResolvedValue({}),
     suggestName: vi.fn().mockResolvedValue({ suggestedName: 'Suggested', exists: false }),
   },
-  settingsApi: { getUnits: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
-  strainsApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Strain A' }] }) }
+  unitsApi: { listAll: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
+  strainsApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Strain A' }] }) },
   })
 })
 

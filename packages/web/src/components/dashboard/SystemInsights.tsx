@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useMemo } from 'react'
 import StatChart from '../StatChart'
 import { StatisticsData } from '../../lib/api/statistics';
-import SkeletonCard from '../SkeletonCard'
+import { SkeletonCard } from '../../ui'
 import { useTheme } from '../../contexts/ThemeContext'
 import { getAppChartColors } from '../../lib/chart-colors'
 

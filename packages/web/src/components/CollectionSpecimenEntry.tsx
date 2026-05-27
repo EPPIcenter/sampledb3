@@ -1,10 +1,8 @@
-import { useState, useEffect } from 'react'
-import { studiesApi } from '../lib/api/studies';
-import type { Study } from '../lib/api/studies';
-import { specimenTypesApi } from '../lib/api/reference-data';
+import { useState, useMemo } from 'react'
 import { specimensApi } from '../lib/api/specimens';
-import type { SpecimenType } from '../lib/api/types';
-import StudyPicker from './StudyPicker'
+import { useStudies } from '../hooks/useStudies'
+import { useSpecimenTypes } from '../hooks/useReferenceData'
+import { PageError, getQueryErrorMessage } from '../ui'
 
 interface SpecimenEntry {
   studyId?: number
@@ -25,39 +23,35 @@ interface CollectionSpecimenEntryProps {
 
 export default function CollectionSpecimenEntry({
   collectionType,
-  collectionId,
+  collectionId: _collectionId,
   positions,
   onSuccess,
   onCancel,
 }: CollectionSpecimenEntryProps) {
-  const [studies, setStudies] = useState<Study[]>([])
-  const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
+  const studiesQuery = useStudies(undefined, { page: 1, limit: 10000 })
+  const specimenTypesQuery = useSpecimenTypes({ silent: true })
+  const studies = studiesQuery.data?.studies ?? []
+  const specimenTypes = specimenTypesQuery.data ?? []
+
   const [entries, setEntries] = useState<Map<string, SpecimenEntry>>(new Map())
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [workflowError, setWorkflowError] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadStudies()
-    loadSpecimenTypes()
-  }, [])
-
-  const loadStudies = async () => {
-    try {
-      const response = await studiesApi.list()
-      setStudies(response.studies)
-    } catch (error) {
-      console.error('Failed to load studies:', error)
+  const readError = useMemo(() => {
+    if (studiesQuery.isError) {
+      return getQueryErrorMessage(studiesQuery.error, 'Failed to load studies')
     }
-  }
-
-  const loadSpecimenTypes = async () => {
-    try {
-      const response = await specimenTypesApi.list()
-      setSpecimenTypes(response.data)
-    } catch (error) {
-      console.error('Failed to load specimen types:', error)
-      setSpecimenTypes([]) // Clear on error
+    if (specimenTypesQuery.isError) {
+      return getQueryErrorMessage(specimenTypesQuery.error, 'Failed to load specimen types')
     }
+    return null
+  }, [studiesQuery.isError, studiesQuery.error, specimenTypesQuery.isError, specimenTypesQuery.error])
+
+  const catalogLoading = studiesQuery.isLoading || specimenTypesQuery.isLoading
+
+  const retryCatalogs = () => {
+    void studiesQuery.refetch()
+    void specimenTypesQuery.refetch()
   }
 
   const updateEntry = (position: string, field: keyof SpecimenEntry, value: string | number | undefined) => {
@@ -71,7 +65,6 @@ export default function CollectionSpecimenEntry({
     newEntries.set(position, {
       ...current,
       [field]: value,
-      // When study changes, update studyId
       ...(field === 'studyShortCode' && {
         studyId: studies.find(s => s.shortCode === value)?.id,
       }),
@@ -82,11 +75,10 @@ export default function CollectionSpecimenEntry({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-    setError(null)
+    setSubmitting(true)
+    setWorkflowError(null)
 
     try {
-      // Collect all valid entries
       const validEntries: Array<SpecimenEntry & { position: string }> = []
       
       for (const [position, entry] of entries.entries()) {
@@ -96,12 +88,11 @@ export default function CollectionSpecimenEntry({
       }
 
       if (validEntries.length === 0) {
-        setError('Please fill in at least one specimen entry')
-        setLoading(false)
+        setWorkflowError('Please fill in at least one specimen entry')
+        setSubmitting(false)
         return
       }
 
-      // Convert to bulk specimen format
       const specimens = validEntries.map(entry => ({
         sourceType: 'subject' as const,
         studyShortCode: entry.studyShortCode,
@@ -114,26 +105,47 @@ export default function CollectionSpecimenEntry({
       const response = await specimensApi.createBulk({ specimens })
       
       if (response.errors && response.errors.length > 0) {
-        setError(`Some specimens failed to create: ${response.errors.map((e: { error: string }) => e.error).join(', ')}`)
+        setWorkflowError(`Some specimens failed to create: ${response.errors.map((e: { error: string }) => e.error).join(', ')}`)
       } else {
-        if (onSuccess) {
-          onSuccess()
-        }
+        onSuccess?.()
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to create specimens')
+    } catch (err: unknown) {
+      const message =
+        err &&
+        typeof err === 'object' &&
+        'response' in err &&
+        (err as { response?: { data?: { error?: string } } }).response?.data?.error
+      setWorkflowError(message || 'Failed to create specimens')
     } finally {
-      setLoading(false)
+      setSubmitting(false)
     }
+  }
+
+  if (readError) {
+    return (
+      <div className="bg-app-card rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold mb-4 text-app-text">Add Specimens to Collection</h2>
+        <PageError title="Could not load form options" message={readError} onRetry={retryCatalogs} />
+      </div>
+    )
+  }
+
+  if (catalogLoading) {
+    return (
+      <div className="bg-app-card rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold mb-4 text-app-text">Add Specimens to Collection</h2>
+        <p className="text-sm text-app-text-muted">Loading studies and specimen types…</p>
+      </div>
+    )
   }
 
   return (
     <div className="bg-app-card rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold mb-4 text-app-text">Add Specimens to Collection</h2>
       
-      {error && (
+      {workflowError && (
         <div className="bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded mb-4">
-          {error}
+          {workflowError}
         </div>
       )}
 
@@ -244,14 +256,13 @@ export default function CollectionSpecimenEntry({
           )}
           <button
             type="submit"
-            disabled={loading}
+            disabled={submitting}
             className="px-4 py-2 bg-app-accent text-white rounded-lg hover:bg-app-accent-hover disabled:opacity-50 font-medium"
           >
-            {loading ? 'Creating...' : 'Create Specimens'}
+            {submitting ? 'Creating...' : 'Create Specimens'}
           </button>
         </div>
       </form>
     </div>
   )
 }
-

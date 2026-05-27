@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { collectionsApi } from '../lib/api/collections';
 import type { ValidatePlateScanResult, InferenceReport } from '../lib/api/collections';
-import { settingsApi } from '../lib/api/settings';
 import type { ScannerConfiguration } from '../lib/api/settings';
+import { usePlateScanBootstrap } from '../hooks/useExportWorkflow'
+import { PageError } from '../ui'
 import { extractPlateStemFromFilename, findPlateCandidatesFromStem } from '../lib/plate-filename-match'
 import { parseScannerPlateCsv } from '../lib/scanner-plate-csv'
 import { inferDestinationPlateForScan } from '../lib/plate-destination-inference'
@@ -173,12 +174,13 @@ function applyPlateInferenceForValidation(
 }
 
 export default function PlateScanValidation() {
+  const bootstrap = usePlateScanBootstrap()
+  const plates = bootstrap.plates
+  const scannerConfigurations = bootstrap.scannerConfigurations
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [csvText, setCsvText] = useState<string>('')
-  const [scannerConfigurations, setScannerConfigurations] = useState<ScannerConfiguration[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
   const [plateMode, setPlateMode] = useState<PlateMode>('select_plate')
-  const [plates, setPlates] = useState<Array<{ id: number; name: string }>>([])
   const [selectedPlateId, setSelectedPlateId] = useState<number | null>(null)
   const [plateSearch, setPlateSearch] = useState('')
   const [candidates, setCandidates] = useState<Array<{ id: number; name: string; matchType: string }>>([])
@@ -187,29 +189,11 @@ export default function PlateScanValidation() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Initial data load. Optional refactor: move to route loader when using a data router to avoid useEffect for fetching.
   useEffect(() => {
-    Promise.all([
-      collectionsApi.listCollectionsByType('micronix_plate'),
-      settingsApi.getValue('scanner_configurations'),
-    ]).then(([collectionsRes, configsValue]) => {
-      const collectionsData = collectionsRes.collections ?? []
-      setPlates(
-        (collectionsData as Array<{ id: number; name: string }>).map((c) => ({
-          id: c.id,
-          name: c.name,
-        }))
-      )
-      const configs = configsValue?.configurations ?? []
-      setScannerConfigurations(configs)
-      const defaultConfig = configs.find((c: ScannerConfiguration) => c.isDefault === true)
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- fallback when no default config
-      setSelectedConfigId(defaultConfig?.id ?? configs[0]?.id ?? null)
-    }).catch((err) => {
-      console.error('Failed to load plates or scanner configs:', err)
-      setError('Failed to load plate list or scanner configurations.')
-    })
-  }, [])
+    if (selectedConfigId != null || scannerConfigurations.length === 0) return
+    const defaultConfig = scannerConfigurations.find((c) => c.isDefault === true)
+    setSelectedConfigId(defaultConfig?.id ?? scannerConfigurations[0]?.id ?? null)
+  }, [scannerConfigurations, selectedConfigId])
 
   useEffect(() => {
     if (!csvText || !csvFile || !selectedConfigId || scannerConfigurations.length === 0) return
@@ -347,6 +331,20 @@ export default function PlateScanValidation() {
             Upload a scanned plate CSV and compare it to a micronix plate. Plate suggestions use the scanner configuration: either the file name (dates/times stripped) or a column that repeats the plate name on each row.
           </p>
         </div>
+
+        {bootstrap.isError && (
+          <PageError
+            title="Could not load plate scan options"
+            message={bootstrap.errorMessage ?? 'Failed to load plate list or scanner configurations'}
+            onRetry={() => bootstrap.refetch()}
+          />
+        )}
+
+        {bootstrap.isLoading && !bootstrap.isError && (
+          <div className="storage-card p-4 mb-6 text-app-text-muted text-sm storage-reveal storage-reveal-2">
+            Loading plates and scanner configurations…
+          </div>
+        )}
 
         {error && (
           <div className="storage-card p-4 mb-6 border-app-trend-down bg-app-trend-down/10 text-app-trend-down storage-reveal storage-reveal-2">

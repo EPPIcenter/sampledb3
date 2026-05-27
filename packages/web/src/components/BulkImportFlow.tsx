@@ -5,7 +5,12 @@ import { specimensApi } from '../lib/api/specimens';
 import { collectionsApi } from '../lib/api/collections';
 import { importsApi } from '../lib/api/imports';
 import type { BulkCombinedAtomicMode } from '../lib/api/imports';
-import { specimenTypesApi } from '../lib/api/reference-data';
+import {
+  fetchBulkImportMissingCollections,
+  useBulkImportTemplateSpecimenTypes,
+  type BulkImportMissingCollection,
+} from '../hooks/useBulkImportWorkflow'
+import { getQueryErrorMessage } from '../ui'
 import { buildBulkImportTemplateContent } from '../lib/bulk-import-csv'
 import {
   getBulkImportCollectionType,
@@ -35,14 +40,7 @@ import '../styles/storage.css'
 export type ImportType = LibImportType
 type Step = 'upload' | 'collections' | 'import'
 
-interface MissingCollection {
-  name: string
-  barcode?: string
-  locationId: number | null
-  collectionBarcode?: string
-  status: 'pending' | 'creating' | 'success' | 'error'
-  error?: string
-}
+type MissingCollection = BulkImportMissingCollection
 
 export interface BulkImportFlowProps {
   /** When set, CSV does not require study_short_code; it is injected from this value. */
@@ -92,7 +90,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       })
     }
   }, [effectiveStep, currentStep, setSearchParams])
-  const [loading, setLoading] = useState(false)
+  const [workflowLoading, setWorkflowLoading] = useState(false)
+  const templateSpecimenTypes = useBulkImportTemplateSpecimenTypes({ importType, containerType })
   const [preview, setPreview] = useState<CSVRow[]>([])
   const [validationErrors, setValidationErrors] = useState<BulkImportValidationError[]>([])
   const [importResult, setImportResult] = useState<{
@@ -172,30 +171,16 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
   const getRowCollectionName = (row: CSVRow) =>
     getBulkImportRowCollectionName(row, containerType)
 
-  const downloadTemplate = async () => {
-    let specimenTypeNames: string[] = []
-    if (importType !== 'subjects' && containerType && containerType !== 'none') {
-      try {
-        const res = await specimenTypesApi.getByContainerType(containerType)
-        specimenTypeNames = res.specimenTypes.map((st) => st.name)
-      } catch (err) {
-        console.error('Failed to fetch specimen types for template', err)
-        // Continue with empty array; builder will use fallback names
-      }
-    } else if (importType !== 'subjects') {
-      try {
-        const res = await specimenTypesApi.list()
-        specimenTypeNames = res.data.map((st) => st.name)
-      } catch (err) {
-        console.error('Failed to fetch specimen types for template', err)
-      }
+  const downloadTemplate = () => {
+    if (templateSpecimenTypes.isError) {
+      return
     }
 
     const { csvContent, filename } = buildBulkImportTemplateContent({
       importType,
       containerType: containerType === '' ? 'none' : containerType,
       fixedStudyShortCode,
-      specimenTypeNames,
+      specimenTypeNames: templateSpecimenTypes.specimenTypeNames,
     })
 
     const blob = new Blob([csvContent], { type: 'text/csv' })
@@ -251,78 +236,10 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     return []
   }
 
-  const checkCollections = async (rows: CSVRow[]): Promise<MissingCollection[]> => {
-    if (containerType === 'none' || importType === 'subjects') {
-      return []
-    }
-
-    const collectionType = getCollectionType()
-    if (!collectionType) return []
-
-    const uniqueCollections = new Set<string>()
-    rows.forEach(row => {
-      const collectionName = getRowCollectionName(row)
-      if (collectionName) {
-        uniqueCollections.add(collectionName)
-      }
-      if (row.collection_barcode) {
-        uniqueCollections.add(row.collection_barcode)
-      }
-    })
-
-    if (uniqueCollections.size === 0) return []
-
-    try {
-      const checkData = Array.from(uniqueCollections).map(identifier => ({
-        identifier,
-        type: collectionType,
-      }))
-
-      const response = await collectionsApi.check({ collections: checkData })
-      const results = response.results
-
-      const missing: MissingCollection[] = []
-      const found = new Set<string>()
-
-      for (const result of results) {
-        if (!result.exists) {
-          const isBarcode = result.identifier.match(/^[A-Z0-9-]+$/) && result.identifier.length > 5
-
-          if (!found.has(result.identifier)) {
-            missing.push({
-              name: isBarcode ? '' : result.identifier,
-              barcode: isBarcode ? result.identifier : undefined,
-              collectionBarcode: isBarcode ? result.identifier : undefined,
-              locationId: null,
-              status: 'pending',
-            })
-            found.add(result.identifier)
-          }
-        } else {
-          found.add(result.identifier)
-        }
-      }
-
-      return missing
-    } catch (error) {
-      console.error('Failed to check collections:', error)
-      return Array.from(uniqueCollections).map(identifier => {
-        const isBarcode = identifier.match(/^[A-Z0-9-]+$/) && identifier.length > 5
-        return {
-          name: isBarcode ? '' : identifier,
-          barcode: isBarcode ? identifier : undefined,
-          collectionBarcode: isBarcode ? identifier : undefined,
-          locationId: null,
-          status: 'pending' as const,
-        }
-      })
-    }
-  }
-
   const handleValidateAndCheck = async () => {
     if (!file) return
 
-    setLoading(true)
+    setWorkflowLoading(true)
     setValidationErrors([])
 
     try {
@@ -338,44 +255,62 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
       if (!validation.valid) {
         setValidationErrors(validation.errors)
-        setLoading(false)
+        setWorkflowLoading(false)
         return
       }
 
       setValidatedData(validation.data)
 
       if (importType !== 'subjects' && containerType !== 'none') {
-        const missing = await checkCollections(rows)
-        setMissingCollections(missing)
+        const collectionType = getCollectionType()
+        if (collectionType) {
+          try {
+            const missing = await fetchBulkImportMissingCollections({
+              rows,
+              collectionType,
+              getRowCollectionName,
+            })
+            setMissingCollections(missing)
 
-        if (missing.length > 0) {
-          setCurrentStep('collections')
-          setLoading(false)
-          return
+            if (missing.length > 0) {
+              setCurrentStep('collections')
+              setWorkflowLoading(false)
+              return
+            }
+          } catch (err: unknown) {
+            setValidationErrors([
+              {
+                row: 0,
+                error: getQueryErrorMessage(err, 'Failed to check collections'),
+              },
+            ])
+            setWorkflowLoading(false)
+            return
+          }
         }
       }
 
       const preErrors = await runPreReviewServerValidation(validation.data, [])
       if (preErrors.length > 0) {
         setValidationErrors(preErrors)
-        setLoading(false)
+        setWorkflowLoading(false)
         return
       }
 
       await handleImport(validation.data)
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Validation failed'
+      const message = getQueryErrorMessage(error, 'Validation failed')
       setValidationErrors([{ row: 0, error: message }])
     } finally {
-      setLoading(false)
+      setWorkflowLoading(false)
     }
   }
 
   const handleCreateCollections = async () => {
-    setLoading(true)
+    setWorkflowLoading(true)
     const collectionType = getCollectionType()
     if (!collectionType) {
-      setLoading(false)
+      setWorkflowLoading(false)
       return
     }
 
@@ -433,18 +368,18 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       const preErrors = await runPreReviewServerValidation(validatedData, updated)
       if (preErrors.length > 0) {
         setValidationErrors(preErrors)
-        setLoading(false)
+        setWorkflowLoading(false)
         return
       }
       await handleImport(validatedData)
     } else {
-      setLoading(false)
+      setWorkflowLoading(false)
     }
   }
 
   const handleImport = async (data: Record<string, unknown>[]) => {
     setCurrentStep('import')
-    setLoading(true)
+    setWorkflowLoading(true)
     setImportResult(null)
     setValidationErrors([])
 
@@ -454,7 +389,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         if (!validateRes.valid && validateRes.errors.length) {
           setValidationErrors(validateRes.errors.map((e) => ({ row: e.index + 1, error: e.message })))
           setCurrentStep('import')
-          setLoading(false)
+          setWorkflowLoading(false)
           return
         }
         const response = await subjectsApi.createBulk({ subjects: data as Array<{ studyShortCode: string; name: string }> })
@@ -471,7 +406,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         if (!validateRes.valid && validateRes.errors.length > 0) {
           setValidationErrors(validateRes.errors.map((e) => ({ row: e.index + 1, error: e.message })))
           setCurrentStep('import')
-          setLoading(false)
+          setWorkflowLoading(false)
           return
         }
         const response = await specimensApi.createBulk({ specimens: specimensWithLocations as SpecimenBulkItem[] })
@@ -506,7 +441,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
             }))
           )
           setCurrentStep('import')
-          setLoading(false)
+          setWorkflowLoading(false)
           return
         }
 
@@ -544,7 +479,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         errors: Array.isArray(data?.errors) ? data.errors : [{ index: 0, error: summaryError }],
       })
     } finally {
-      setLoading(false)
+      setWorkflowLoading(false)
     }
   }
 
@@ -796,6 +731,19 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                       {(importType === 'specimens' || importType === 'combined') && ' Optional columns: collection_date (YYYY-MM-DD)' + (containerType && containerType !== 'none' ? '; comment (per container).' : '.')}
                     </p>
                   )}
+                  {templateSpecimenTypes.isError && (
+                    <p className="text-sm text-app-trend-down mt-2">
+                      {templateSpecimenTypes.errorMessage}
+                      {' '}
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() => void templateSpecimenTypes.refetch()}
+                      >
+                        Retry
+                      </button>
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -849,10 +797,10 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
               <button
                 type="submit"
-                disabled={!file || loading || ((importType === 'specimens' || importType === 'combined') && !containerType)}
+                disabled={!file || workflowLoading || ((importType === 'specimens' || importType === 'combined') && !containerType)}
                 className="storage-btn-primary w-full py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
               >
-                {loading ? 'Validating...' : 'Validate & Continue'}
+                {workflowLoading ? 'Validating...' : 'Validate & Continue'}
               </button>
             </form>
           )}
@@ -957,7 +905,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                   <button
                     type="button"
                     onClick={async () => {
-                      setLoading(true)
+                      setWorkflowLoading(true)
                       setValidationErrors([])
                       try {
                         const preErrors = await runPreReviewServerValidation(
@@ -970,22 +918,22 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                         }
                         await handleImport(validatedData)
                       } finally {
-                        setLoading(false)
+                        setWorkflowLoading(false)
                       }
                     }}
-                    disabled={loading || missingCollections.some((c) => c.locationId == null)}
+                    disabled={workflowLoading || missingCollections.some((c) => c.locationId == null)}
                     className="storage-btn-primary py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   >
-                    {loading ? 'Validating...' : 'Continue to Import'}
+                    {workflowLoading ? 'Validating...' : 'Continue to Import'}
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={handleCreateCollections}
-                    disabled={loading || missingCollections.some((c) => c.locationId == null && c.status !== 'success')}
+                    disabled={workflowLoading || missingCollections.some((c) => c.locationId == null && c.status !== 'success')}
                     className="storage-btn-primary flex-1 py-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   >
-                    {loading ? 'Creating Collections...' : 'Create Collections & Continue'}
+                    {workflowLoading ? 'Creating Collections...' : 'Create Collections & Continue'}
                   </button>
                 )}
               </div>
@@ -1037,7 +985,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                 </div>
               )}
 
-              {!importResult && loading && (
+              {!importResult && workflowLoading && (
                 <div className="text-center py-4">
                   <p className="text-app-text-muted">Import in progress...</p>
                 </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { settingsApi } from '../lib/api/settings';
+import { unitsApi } from '../lib/api/reference-data';
 import type { ContainerDefaults } from '../lib/api/settings';
 import type { Unit } from '../lib/api/types';
 import InfoTooltip from './InfoTooltip'
@@ -60,7 +61,7 @@ export default function ContainerTypeUnitsManager({
     setError(null)
     try {
       // Load all units
-      const unitsResponse = await settingsApi.getUnits()
+      const unitsResponse = await unitsApi.listAll()
       setAllUnits(unitsResponse)
 
       // Load container defaults to get default unit symbols

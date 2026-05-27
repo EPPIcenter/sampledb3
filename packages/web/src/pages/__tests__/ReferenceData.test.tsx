@@ -57,7 +57,6 @@ vi.mock('../../config/reference-data-config', () => {
     getFormFields: vi.fn().mockReturnValue([]),
     requiresPagination: options.requiresPagination || false,
     requiresSearch: options.requiresSearch || false,
-    requiresDependencies: options.requiresDependencies || undefined,
   })
 
   const mockSpecimenTypesConfig = createMockConfig('specimen-types', 'Specimen Types', {

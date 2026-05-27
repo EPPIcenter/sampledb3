@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { setupApi } from '../lib/api/settings';// Types
+import { PageError, getQueryErrorMessage } from '../ui'
+import { useInitializeSetup, useSetupStatus } from '../hooks/useAuthWorkflow'
+
+// Types
 type SpecimenTypeItem = { name: string; containerTypes?: string[] }
 type UnitItem = { name: string; symbol: string; category: string }
 // StateItem removed - status is now derived from remainingQuantity
@@ -35,9 +38,10 @@ const defaultStorageTypes: StorageTypeItem[] = configDefaultStorageTypes
 
 export default function Setup() {
     const navigate = useNavigate()
+    const statusQuery = useSetupStatus()
+    const initializeMutation = useInitializeSetup({ silent: true })
     const [step, setStep] = useState(1)
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+    const [submitError, setSubmitError] = useState<string | null>(null)
 
     // Admin Data
     const [adminData, setAdminData] = useState({
@@ -58,22 +62,14 @@ export default function Setup() {
     // Biology Data
     const [strains, setStrains] = useState<StrainItem[]>([])
 
-    // Check status on mount
     useEffect(() => {
-        setupApi.status()
-            .then(res => {
-                if (res.initialized) navigate('/')
-            })
-            .catch((err) => {
-                console.error('Failed to check setup status:', err)
-                // Show error to user
-                setError(err?.response?.data?.error || err?.message || 'Failed to check system status')
-            })
-    }, [navigate])
+        if (statusQuery.data?.initialized) {
+            navigate('/')
+        }
+    }, [statusQuery.data?.initialized, navigate])
 
     const handleSubmit = async () => {
-        setError(null)
-        setLoading(true)
+        setSubmitError(null)
 
         try {
             const payload = {
@@ -87,12 +83,41 @@ export default function Setup() {
                 strains,
             }
 
-            await setupApi.initialize(payload)
+            await initializeMutation.mutateAsync(payload)
             navigate('/login', { state: { fromSetup: true } })
-        } catch (err: any) {
-            setError(err.response?.data?.error || err.message || 'Setup failed')
-            setLoading(false)
+        } catch (err: unknown) {
+            setSubmitError(getQueryErrorMessage(err, 'Setup failed'))
         }
+    }
+
+    const loading = initializeMutation.isPending
+
+    if (statusQuery.isPending) {
+        return (
+            <div className="min-h-screen bg-app-surface flex items-center justify-center">
+                <div className="text-center">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-app-accent mb-4" />
+                    <p className="text-app-text-muted">Checking setup status...</p>
+                </div>
+            </div>
+        )
+    }
+
+    if (statusQuery.isError) {
+        return (
+            <div className="min-h-screen bg-app-surface flex items-center justify-center px-4">
+                <div className="max-w-md w-full">
+                    <PageError
+                        title="Could not verify setup"
+                        message={getQueryErrorMessage(
+                            statusQuery.error,
+                            'Failed to check whether the system is initialized.',
+                        )}
+                        onRetry={() => void statusQuery.refetch()}
+                    />
+                </div>
+            </div>
+        )
     }
 
     const nextStep = () => setStep(s => s + 1)
@@ -136,9 +161,9 @@ export default function Setup() {
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-4xl">
                 <div className="bg-app-card py-8 px-4 shadow sm:rounded-lg sm:px-10">
 
-                    {error && (
+                    {submitError && (
                         <div className="mb-4 rounded-md bg-app-trend-down/10 p-4">
-                            <h3 className="text-sm font-medium text-app-trend-down">{error}</h3>
+                            <h3 className="text-sm font-medium text-app-trend-down">{submitError}</h3>
                         </div>
                     )}
 

@@ -16,7 +16,6 @@ vi.mock('../../lib/api/settings', async () => {
         scanner_configurations: { configurations: [] },
       },
     }),
-    getUnits: vi.fn().mockResolvedValue([]),
     getContainerTypeUnits: vi.fn().mockResolvedValue({ units: [] }),
   }
   })

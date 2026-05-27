@@ -18,6 +18,7 @@ import ContainerMoveMicronix from '../ContainerMoveMicronix'
 import { collectionsApi } from '../../lib/api/collections'
 import { locationsApi } from '../../lib/api/locations'
 import { settingsApi } from '../../lib/api/settings'
+import { scannerConfigurationsValue } from '../../__tests__/helpers/settings-mocks'
 
 // Mock react-router-dom: stateful so setSearchParams triggers re-renders and get() returns current params.
 let initialSearchParams = new URLSearchParams()
@@ -98,9 +99,9 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         initialSearchParams = new URLSearchParams()
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
         vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
-        vi.mocked(settingsApi.getValue).mockResolvedValue({
-                configurations: [mockScannerConfig]
-            } as any)
+        vi.mocked(settingsApi.getValue).mockResolvedValue(
+            scannerConfigurationsValue([mockScannerConfig]),
+        )
         vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({ plate: { id: 1, name: 'PLATE1' }, wells: {} } as any)
     })
 
@@ -127,9 +128,9 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         initialSearchParams = new URLSearchParams({ step: 'resolve' })
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
         vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
-        vi.mocked(settingsApi.getValue).mockResolvedValue({
-            configurations: [mockScannerConfig],
-        } as any)
+        vi.mocked(settingsApi.getValue).mockResolvedValue(
+            scannerConfigurationsValue([mockScannerConfig]),
+        )
 
         await renderWithProviders(<ContainerMoveMicronix />)
 
@@ -382,9 +383,9 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             skipRows: 0,
             isDefault: false,
         }
-        vi.mocked(settingsApi.getValue).mockResolvedValue({
-                configurations: [configWithTargetPosition, configWithPositionColumn],
-            } as any)
+        vi.mocked(settingsApi.getValue).mockResolvedValue(
+            scannerConfigurationsValue([configWithTargetPosition, configWithPositionColumn]),
+        )
 
         const csvContent = fullPlateCSV({ A01: 'MTX1' })
         const file = new File([csvContent], 'plate.csv', { type: 'text/csv' })
@@ -436,9 +437,9 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             skipRows: 0,
             isDefault: false,
         }
-        vi.mocked(settingsApi.getValue).mockResolvedValue({
-                configurations: [configWithTargetPosition, configWithPositionColumn],
-            } as any)
+        vi.mocked(settingsApi.getValue).mockResolvedValue(
+            scannerConfigurationsValue([configWithTargetPosition, configWithPositionColumn]),
+        )
 
         const csvContent = fullPlateCSV({ A01: 'MTX1' })
         const file = new File([csvContent], 'plate.csv', { type: 'text/csv' })
@@ -487,9 +488,9 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             skipRows: 0,
             isDefault: false,
         }
-        vi.mocked(settingsApi.getValue).mockResolvedValue({
-                configurations: [configWithTargetPosition, configWithPositionColumn],
-            } as any)
+        vi.mocked(settingsApi.getValue).mockResolvedValue(
+            scannerConfigurationsValue([configWithTargetPosition, configWithPositionColumn]),
+        )
 
         const csvContent = fullPlateCSV({ A01: 'MTX1' })
         const file1 = new File([csvContent], 'plate1.csv', { type: 'text/csv' })
@@ -542,9 +543,9 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             skipRows: 0,
             isDefault: false,
         }
-        vi.mocked(settingsApi.getValue).mockResolvedValue({
-                configurations: [configWithTargetPosition, configWithPositionColumn],
-            } as any)
+        vi.mocked(settingsApi.getValue).mockResolvedValue(
+            scannerConfigurationsValue([configWithTargetPosition, configWithPositionColumn]),
+        )
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
                 collections: [
                     { id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 },

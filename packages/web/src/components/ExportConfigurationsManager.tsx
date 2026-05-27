@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { exportConfigurationsApi } from '../lib/api/settings';
+import { exportConfigurationsApi, settingsApi } from '../lib/api/settings';
 import type { ExportConfigurations, ExportConfiguration } from '../lib/api/settings';
 import {
   EXPORT_ENTRY_COLUMNS,
@@ -46,11 +46,13 @@ export default function ExportConfigurationsManager({
       setLoading(true)
       try {
         const [sharedRes, personalRes] = await Promise.all([
-          exportConfigurationsApi.getShared(),
-          exportConfigurationsApi.getPersonal().catch(() => ({ configurations: [] })),
+          settingsApi.getValue('export_configurations', { scope: 'shared' }),
+          settingsApi
+            .getValue('export_configurations', { scope: 'personal' })
+            .catch(() => ({ configurations: [] })),
         ])
-        setSharedConfigurations(sharedRes.configurations)
-        setPersonalConfigurations(personalRes.configurations)
+        setSharedConfigurations(sharedRes?.configurations ?? [])
+        setPersonalConfigurations(personalRes?.configurations ?? [])
       } catch (err: any) {
         setError(err.response?.data?.error || 'Failed to load configurations')
       } finally {

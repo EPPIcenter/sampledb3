@@ -20,7 +20,6 @@ vi.mock('../../lib/api/settings', async () => {
   return createMockedDomainModule('settings', {
   settingsApi: {
     getAll: vi.fn().mockResolvedValue(mockAllSettings()),
-    getUnits: vi.fn().mockResolvedValue([]),
     getContainerTypeUnits: vi.fn().mockResolvedValue({ units: [] }),
   }
   })

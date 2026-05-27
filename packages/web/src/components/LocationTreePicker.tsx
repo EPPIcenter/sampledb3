@@ -9,7 +9,7 @@ import {
   getRootLocations,
   getLocationAncestors,
 } from '../lib/location-tree'
-import ModalPortal from './ModalPortal'
+import { Modal } from '../ui'
 
 export interface LocationSelection {
   locationId: number
@@ -378,28 +378,15 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
         )}
       </button>
 
-      {open && (
-        <ModalPortal>
-          <div className="fixed inset-0 z-[100] flex items-center justify-center">
-            <div
-              className="fixed inset-0 bg-black/40 backdrop-blur-md"
-              onClick={() => setOpen(false)}
-            />
-<div className="relative z-10 w-full max-w-4xl mx-4 bg-app-card rounded-lg shadow-xl p-6 max-h-[90vh] flex flex-col border border-app-border">
-              <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-app-text">Select Locations</h2>
-              <button
-                type="button"
-                className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded"
-                onClick={() => setOpen(false)}
-                aria-label="Close location selection dialog"
-              >
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
+      <Modal
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        title="Select Locations"
+        size="lg"
+        layout="centered"
+        panelClassName="!max-w-4xl max-h-[90vh] flex flex-col border border-app-border"
+        contentClassName="p-6 flex flex-col max-h-[90vh]"
+      >
             <div className="mb-4">
               <label htmlFor="location-search" className="sr-only">
                 Search locations
@@ -492,10 +479,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
                 Done
               </button>
             </div>
-          </div>
-        </div>
-        </ModalPortal>
-      )}
+      </Modal>
     </>
   )
 }

@@ -28,7 +28,13 @@ vi.mock('../../../lib/api/controls', async () => {
   })
 })
 
-vi.mock('../../ModalPortal', () => ({ default: ({ children }: { children: React.ReactNode }) => children }))
+vi.mock('../../../ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../ui')>()
+  return {
+    ...actual,
+    Modal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  }
+})
 vi.mock('../../forms/ControlDefinitionForm', () => ({ default: () => <div>Form</div> }))
 
 const defaultBatchInfo = {

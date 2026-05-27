@@ -1,16 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useParams, useSearchParams, Navigate } from 'react-router-dom'
 import BatchInfoStep from '../components/wizards/BatchInfoStep'
 import SpecimenTypesStep from '../components/wizards/SpecimenTypesStep'
 import CSVUploadStep from '../components/wizards/CSVUploadStep'
 import ContainerConfigurationStep from '../components/wizards/ContainerConfigurationStep'
 import ReviewStep from '../components/wizards/ReviewStep'
-import { controlsApi } from '../lib/api/controls';
-import { specimenTypesApi } from '../lib/api/reference-data';
-import type { ControlDefinition } from '../lib/api/controls';
-import type { SpecimenType } from '../lib/api/types';
+import type { ControlDefinition } from '../lib/api/controls'
+import { useSpecimenTypes } from '../hooks/useReferenceData'
+import {
+  useCompositionDefinitionsByKey,
+  useControlBatchWizardBootstrap,
+  useControlDefinitionWizardSeed,
+} from '../hooks/useControls'
 import { useUser } from '../contexts/UserContext'
-import { getCompositionKey } from '../lib/composition-key'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
 
 /** Strains for composition (used for multi-batch CSV flow). */
@@ -133,107 +136,107 @@ export default function ControlBatchWizard() {
   const [compositionDefinitions, setCompositionDefinitions] = useState<ControlDefinition[] | null>(null)
   const [specimenTypes, setSpecimenTypes] = useState<SpecimenTypeConfig[]>([])
   const [csvFiles, setCsvFiles] = useState<CSVFileData[]>([])
-  const [availableSpecimenTypes, setAvailableSpecimenTypes] = useState<SpecimenType[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+
+  const parsedBatchId = isAddMode && batchId ? parseInt(batchId, 10) : undefined
+  const parsedDefinitionId =
+    isCreateFromDefinition && definitionId ? parseInt(definitionId, 10) : undefined
+
+  const batchBootstrapQuery = useControlBatchWizardBootstrap(parsedBatchId)
+  const definitionSeedQuery = useControlDefinitionWizardSeed(parsedDefinitionId)
+  const compositionQuery = useCompositionDefinitionsByKey(
+    isCompositionCsvFlow ? compositionKey : undefined,
+  )
+
+  const specimenTypesCatalogQuery = useSpecimenTypes({ silent: true })
+  const specimenTypesCatalogStatus = fromQuery(specimenTypesCatalogQuery)
+  const availableSpecimenTypes = specimenTypesCatalogQuery.data ?? []
 
   useEffect(() => {
-    loadSpecimenTypes()
-    if (isAddMode && batchId) {
-      loadExistingBatch(parseInt(batchId))
-    } else if (isCompositionCsvFlow && compositionKey) {
-      loadCompositionStrains(compositionKey)
-    } else if (isCreateFromDefinition && definitionId) {
-      loadDefinitionAndBatchInfo(parseInt(definitionId))
-    }
-  }, [batchId, isAddMode, definitionId, isCreateFromDefinition, isCompositionCsvFlow, compositionKey])
+    const data = batchBootstrapQuery.data
+    if (!data) return
+    setBatchInfo({
+      controlDefinitionId: data.batch.controlDefinitionId,
+      controlDefinition: data.controlDefinition,
+      name: data.batch.name,
+      productionDate: data.batch.productionDate || new Date().toISOString().split('T')[0],
+      properties: data.batch.properties,
+    })
+  }, [batchBootstrapQuery.data])
 
-  const loadSpecimenTypes = async () => {
-    try {
-      const response = await specimenTypesApi.list()
-      setAvailableSpecimenTypes(response.data)
-    } catch (err) {
-      console.error('Failed to load specimen types:', err)
-      setAvailableSpecimenTypes([]) // Clear on error
-    }
-  }
+  useEffect(() => {
+    const seed = definitionSeedQuery.data
+    if (!seed) return
+    const { control, composition } = seed.summaryResponse
+    if (!control) return
+    setBatchInfo({
+      controlDefinitionId: control.id,
+      controlDefinition: { ...control, strains: composition?.strains },
+      name: seed.suggestedName,
+      productionDate: seed.productionDate,
+    })
+  }, [definitionSeedQuery.data])
 
-  const loadExistingBatch = async (id: number) => {
-    try {
-      setLoading(true)
-      const response = await controlsApi.getBatch(id)
-      const batch = response.batch
-      const defResponse = await controlsApi.get(batch.controlDefinitionId)
-      setBatchInfo({
-        controlDefinitionId: batch.controlDefinitionId,
-        controlDefinition: defResponse.control,
-        name: batch.name,
-        productionDate: batch.productionDate || new Date().toISOString().split('T')[0],
-        properties: batch.properties,
-      })
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load batch')
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    const defs = compositionQuery.data
+    if (!defs) return
+    setCompositionDefinitions(defs.length > 0 ? defs : null)
+    if (defs.length > 0 && defs[0].strains?.length) {
+      setCompositionStrains(
+        defs[0].strains.map((s) => ({ id: s.id, percentage: s.percentage })),
+      )
     }
-  }
+  }, [compositionQuery.data])
 
-  const loadCompositionStrains = async (key: string) => {
-    try {
-      setLoading(true)
-      setError(null)
-      const res = await controlsApi.list()
-      const all = (res.controls) as ControlDefinition[]
-      const defs = all.filter((def) => {
-        const defKey = getCompositionKey((def.strains ?? []).map((s) => ({ id: s.id, percentage: s.percentage })))
-        return defKey === key
-      })
-      setCompositionDefinitions(defs.length > 0 ? defs.sort((a, b) => (a.targetDensity ?? 0) - (b.targetDensity ?? 0)) : null)
-      if (defs.length > 0 && defs[0].strains?.length) {
-        setCompositionStrains(
-          defs[0].strains.map((s) => ({ id: s.id, percentage: s.percentage }))
-        )
-      } else {
-        setError('Composition not found or has no strain data')
+  const bootstrapErrorMessage = useMemo(() => {
+    if (isAddMode && batchBootstrapQuery.isError) {
+      return getQueryErrorMessage(batchBootstrapQuery.error, 'Failed to load batch')
+    }
+    if (isCreateFromDefinition && definitionSeedQuery.isError) {
+      return getQueryErrorMessage(definitionSeedQuery.error, 'Failed to load control definition')
+    }
+    if (isCreateFromDefinition && definitionSeedQuery.isSuccess) {
+      if (!definitionSeedQuery.data.summaryResponse.control) {
+        return 'Control definition not found'
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load composition')
-    } finally {
-      setLoading(false)
     }
-  }
+    if (isCompositionCsvFlow && compositionQuery.isError) {
+      return getQueryErrorMessage(compositionQuery.error, 'Failed to load composition')
+    }
+    if (isCompositionCsvFlow && compositionQuery.isSuccess) {
+      const defs = compositionQuery.data
+      if (defs.length === 0 || !defs[0]?.strains?.length) {
+        return 'Composition not found or has no strain data'
+      }
+    }
+    return null
+  }, [
+    isAddMode,
+    isCreateFromDefinition,
+    isCompositionCsvFlow,
+    batchBootstrapQuery.isError,
+    batchBootstrapQuery.error,
+    definitionSeedQuery.isError,
+    definitionSeedQuery.error,
+    definitionSeedQuery.isSuccess,
+    definitionSeedQuery.data,
+    compositionQuery.isError,
+    compositionQuery.error,
+    compositionQuery.isSuccess,
+    compositionQuery.data,
+  ])
 
-  const loadDefinitionAndBatchInfo = async (defId: number) => {
-    try {
-      setLoading(true)
-      setError(null)
-      const today = new Date().toISOString().split('T')[0]
-      const [summaryResponse, nameResponse] = await Promise.all([
-        controlsApi.getDefinitionSummary(defId),
-        controlsApi.suggestBatchName(defId, today),
-      ])
-      const { control, composition } = summaryResponse
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- API may omit control
-      if (!control) {
-        setError('Control definition not found')
-        return
-      }
-      const controlWithComposition = {
-        ...control,
-        strains: composition?.strains,
-      }
-      setBatchInfo({
-        controlDefinitionId: control.id,
-        controlDefinition: controlWithComposition,
-        name: nameResponse.name,
-        productionDate: today,
-      })
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load control definition')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const bootstrapLoading =
+    (isAddMode && batchBootstrapQuery.isPending) ||
+    (isCreateFromDefinition && definitionSeedQuery.isPending) ||
+    (isCompositionCsvFlow && compositionQuery.isPending)
+
+  const bootstrapQueryForRetry = isAddMode
+    ? batchBootstrapQuery
+    : isCompositionCsvFlow
+      ? compositionQuery
+      : isCreateFromDefinition
+        ? definitionSeedQuery
+        : null
 
   const getCancelTarget = () => {
     if (isAddMode && batchId) return `/blood-controls/batches/${batchId}`
@@ -312,7 +315,7 @@ export default function ControlBatchWizard() {
     })
   }, [effectiveStep, currentStep, setSearchParams])
 
-  if (loading) {
+  if (bootstrapLoading) {
     return (
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
@@ -322,7 +325,7 @@ export default function ControlBatchWizard() {
     )
   }
 
-  if (error) {
+  if (bootstrapErrorMessage) {
     const backTarget = isCompositionCsvFlow && compositionKey
       ? `/blood-controls/compositions/${encodeURIComponent(compositionKey)}`
       : isCreateFromDefinition && definitionId
@@ -330,16 +333,55 @@ export default function ControlBatchWizard() {
         : '/blood-controls'
     return (
       <div className="blood-controls-page">
-        <div className="container mx-auto px-4 py-8 relative z-[1]">
-          <div className="text-center space-y-4">
-            <p style={{ color: 'rgb(var(--app-trend-down))' }}>{error}</p>
+        <div className="container mx-auto px-4 py-8 max-w-6xl relative z-[1]">
+          <PageError
+            title="Could not load wizard"
+            message={bootstrapErrorMessage}
+            onRetry={
+              bootstrapQueryForRetry
+                ? () => void bootstrapQueryForRetry.refetch()
+                : undefined
+            }
+          />
+          <div className="mt-4 text-center">
             <button
+              type="button"
               onClick={() => navigate(backTarget)}
               className="blood-controls-btn-secondary"
             >
               Back to {isCreateFromDefinition && definitionId ? 'Control Definition' : 'Blood Controls'}
             </button>
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  const needsSpecimenTypeCatalog =
+    effectiveStep === 'specimen-types' || effectiveStep === 'csv-upload'
+
+  if (specimenTypesCatalogStatus === 'error') {
+    return (
+      <div className="blood-controls-page">
+        <div className="container mx-auto px-4 py-8 max-w-6xl relative z-[1]">
+          <PageError
+            title="Could not load specimen types"
+            message={getQueryErrorMessage(
+              specimenTypesCatalogQuery.error,
+              'Failed to load specimen types',
+            )}
+            onRetry={() => void specimenTypesCatalogQuery.refetch()}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (needsSpecimenTypeCatalog && specimenTypesCatalogStatus === 'loading') {
+    return (
+      <div className="blood-controls-page">
+        <div className="container mx-auto px-4 py-8 relative z-[1]">
+          <div className="text-center" style={{ color: 'rgb(var(--app-text-muted))' }}>Loading specimen types...</div>
         </div>
       </div>
     )

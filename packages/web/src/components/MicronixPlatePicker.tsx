@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import type { Location } from '../lib/api/types';
 import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
 import type { PlateCandidate } from '../lib/plate-filename-match'
-import ModalPortal from './ModalPortal'
+import { Modal } from '../ui'
 
 const MATCH_TYPE_LABELS: Record<PlateCandidate['matchType'], string> = {
   exact: 'Exact match',
@@ -438,31 +438,15 @@ export default function MicronixPlatePicker({
         )}
       </button>
 
-      {open && !disabled && (
-        <ModalPortal>
-          <div className="fixed inset-0 z-[100] flex items-center justify-center">
-            <div
-              className="fixed inset-0 bg-black/40 backdrop-blur-md"
-              onClick={() => setOpen(false)}
-            />
-          <div
-            className="relative z-10 w-full max-w-2xl mx-4 bg-app-card rounded-lg shadow-xl p-6 max-h-[80vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-app-text">Select Micronix Plate</h3>
-              <button
-                type="button"
-                className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded"
-                onClick={() => setOpen(false)}
-                aria-label="Close plate selection"
-              >
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
+      <Modal
+        isOpen={open && !disabled}
+        onClose={() => setOpen(false)}
+        title="Select Micronix Plate"
+        size="md"
+        layout="centered"
+        panelClassName="max-h-[80vh] flex flex-col"
+        contentClassName="p-6 flex flex-col max-h-[80vh]"
+      >
             <div className="mb-4">
               <input
                 type="text"
@@ -589,10 +573,7 @@ export default function MicronixPlatePicker({
                 Done
               </button>
             </div>
-          </div>
-        </div>
-        </ModalPortal>
-      )}
+      </Modal>
     </div>
   )
 }

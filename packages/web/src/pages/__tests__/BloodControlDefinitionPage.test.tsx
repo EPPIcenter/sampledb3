@@ -34,15 +34,7 @@ vi.mock('../../lib/api/reference-data', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('reference-data', {
     strainsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-  })
-})
-
-vi.mock('../../lib/api/settings', async () => {
-  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
-  return createMockedDomainModule('settings', {
-    settingsApi: {
-      getUnits: vi.fn().mockResolvedValue([]),
-    },
+    unitsApi: { listAll: vi.fn().mockResolvedValue([]) },
   })
 })
 

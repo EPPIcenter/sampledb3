@@ -48,4 +48,21 @@ describe('SetupGuard', () => {
       expect(screen.getByText('Protected content')).toBeInTheDocument()
     })
   })
+
+  it('shows PageError with retry when status check fails', async () => {
+    vi.mocked(setupApi.status).mockRejectedValueOnce(new Error('Network error'))
+
+    await render(
+      <SetupGuard>
+        <div>Protected content</div>
+      </SetupGuard>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument()
+      expect(screen.getByText(/network error/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
+  })
 })

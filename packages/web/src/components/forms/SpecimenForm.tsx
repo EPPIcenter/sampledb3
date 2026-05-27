@@ -1,19 +1,16 @@
-import { useState, useEffect, useRef } from 'react'
-import type { Specimen, SpecimenType, StudySubject } from '../../lib/api/types';
-import { specimenTypesApi, cellLinesApi, plasmidsApi, standardsApi } from '../../lib/api/reference-data';
-import type { CellLine, Plasmid, Standard } from '../../lib/api/reference-data';
-import { studiesApi } from '../../lib/api/studies';
-import type { Study } from '../../lib/api/studies';
-import { controlsApi } from '../../lib/api/controls';
-import type { ControlDefinition } from '../../lib/api/controls';
-import { reagentsApi } from '../../lib/api/reagents';
-import type { Reagent } from '../../lib/api/reagents';
+import { useState, useRef, useMemo } from 'react'
+import type { Specimen } from '../../lib/api/types';
 import { useNavigate } from 'react-router-dom'
 import StudyPicker from '../StudyPicker'
 import ContainerRegistration, { type ContainerData } from '../ContainerRegistration'
 import { useModifierHotkey } from '../../hooks/useHotkey'
 import { useCreateSpecimen, type CreateSpecimenInput } from '../../hooks/useSpecimens'
 import { useCreateSubject } from '../../hooks/useSubjects'
+import {
+  useSpecimenFormCatalogs,
+  type SpecimenFormSourceType,
+} from '../../hooks/useSpecimenFormCatalogs'
+import { getQueryErrorMessage } from '../../ui'
 
 function getApiErrorMessage(err: unknown, fallback: string): string {
   if (
@@ -57,14 +54,6 @@ export default function SpecimenForm({
   const loading = createSpecimen.isPending || createSubject.isPending
   const [error, setError] = useState<string | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
-  const [studies, setStudies] = useState<Study[]>([])
-  const [subjects, setSubjects] = useState<StudySubject[]>([])
-  const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
-  const [controls, setControls] = useState<ControlDefinition[]>([])
-  const [reagents, setReagents] = useState<Reagent[]>([])
-  const [cellLines, setCellLines] = useState<CellLine[]>([])
-  const [plasmids, setPlasmids] = useState<Plasmid[]>([])
-  const [standards, setStandards] = useState<Standard[]>([])
   const [formData, setFormData] = useState({
     sourceType: (subjectId ? 'subject' : (controlBatchId ? 'control' : (specimen?.sourceType || 'subject'))) as 'subject' | 'control' | 'reagent' | 'cell_line' | 'plasmid' | 'standard',
     sourceId: subjectId || controlBatchId || specimen?.sourceId || 0,
@@ -79,83 +68,88 @@ export default function SpecimenForm({
   const [containerData, setContainerData] = useState<ContainerData | null>(null)
   const [containerValid, setContainerValid] = useState(true)
 
-  useEffect(() => {
-    loadStudies()
-    loadSpecimenTypes()
-  }, [])
+  const effectiveStudyId = (formData.studyId || studyId) ?? 0
+  const catalogs = useSpecimenFormCatalogs({
+    studyId: effectiveStudyId,
+    sourceType: formData.sourceType as SpecimenFormSourceType,
+  })
+  const {
+    studies,
+    specimenTypes,
+    subjects,
+    controls,
+    reagents,
+    cellLines,
+    plasmids,
+    standards,
+    studiesQuery,
+    specimenTypesQuery,
+    subjectsQuery,
+    controlsQuery,
+    reagentsQuery,
+    cellLinesQuery,
+    plasmidsQuery,
+    standardsQuery,
+  } = catalogs
 
-  // Single effect: load subjects when study (prop or form) or source type changes
-  useEffect(() => {
-    if (formData.sourceType === 'subject') {
-      const effectiveStudyId = (formData.studyId || studyId) ?? 0
-      if (effectiveStudyId > 0) {
-        loadSubjects(effectiveStudyId)
-      }
+  const readError = useMemo(() => {
+    if (studiesQuery.isError) {
+      return getQueryErrorMessage(studiesQuery.error, 'Failed to load studies')
     }
-  }, [studyId, formData.studyId, formData.sourceType])
+    if (specimenTypesQuery.isError) {
+      return getQueryErrorMessage(specimenTypesQuery.error, 'Failed to load specimen types')
+    }
+    if (formData.sourceType === 'subject' && effectiveStudyId > 0 && subjectsQuery.isError) {
+      return getQueryErrorMessage(subjectsQuery.error, 'Failed to load subjects')
+    }
+    if (formData.sourceType === 'control' && controlsQuery.isError) {
+      return getQueryErrorMessage(controlsQuery.error, 'Failed to load controls')
+    }
+    if (formData.sourceType === 'reagent' && reagentsQuery.isError) {
+      return getQueryErrorMessage(reagentsQuery.error, 'Failed to load reagents')
+    }
+    if (formData.sourceType === 'cell_line' && cellLinesQuery.isError) {
+      return getQueryErrorMessage(cellLinesQuery.error, 'Failed to load cell lines')
+    }
+    if (formData.sourceType === 'plasmid' && plasmidsQuery.isError) {
+      return getQueryErrorMessage(plasmidsQuery.error, 'Failed to load plasmids')
+    }
+    if (formData.sourceType === 'standard' && standardsQuery.isError) {
+      return getQueryErrorMessage(standardsQuery.error, 'Failed to load standards')
+    }
+    return null
+  }, [
+    studiesQuery.isError,
+    studiesQuery.error,
+    specimenTypesQuery.isError,
+    specimenTypesQuery.error,
+    subjectsQuery.isError,
+    subjectsQuery.error,
+    controlsQuery.isError,
+    controlsQuery.error,
+    reagentsQuery.isError,
+    reagentsQuery.error,
+    cellLinesQuery.isError,
+    cellLinesQuery.error,
+    plasmidsQuery.isError,
+    plasmidsQuery.error,
+    standardsQuery.isError,
+    standardsQuery.error,
+    formData.sourceType,
+    effectiveStudyId,
+  ])
 
-  useEffect(() => {
-    if (formData.sourceType !== 'subject') {
-      loadSourceEntities(formData.sourceType)
+  const retryCatalogs = () => {
+    void studiesQuery.refetch()
+    void specimenTypesQuery.refetch()
+    if (formData.sourceType === 'subject' && effectiveStudyId > 0) {
+      void subjectsQuery.refetch()
     }
-  }, [formData.sourceType])
-
-  const loadStudies = async () => {
-    try {
-      const response = await studiesApi.list()
-      setStudies(response.studies)
-    } catch (error) {
-      console.error('Failed to load studies:', error)
-    }
-  }
-
-  const loadSpecimenTypes = async () => {
-    try {
-      const response = await specimenTypesApi.list()
-      setSpecimenTypes(response.data)
-    } catch (error) {
-      console.error('Failed to load specimen types:', error)
-      setError('Failed to load specimen types. Please refresh the page.')
-      setSpecimenTypes([]) // Clear on error
-    }
-  }
-
-  const loadSubjects = async (studyId: number) => {
-    try {
-      const response = await studiesApi.getSubjects(studyId)
-      setSubjects(response.subjects)
-    } catch (error) {
-      console.error('Failed to load subjects:', error)
-    }
-  }
-
-  const loadSourceEntities = async (sourceType: 'control' | 'reagent' | 'cell_line' | 'plasmid' | 'standard') => {
-    try {
-      switch (sourceType) {
-        case 'control':
-          const controlsRes = await controlsApi.list()
-          setControls(controlsRes.controls)
-          break
-        case 'reagent':
-          const reagentsRes = await reagentsApi.list()
-          setReagents(reagentsRes.reagents)
-          break
-        case 'cell_line':
-          const cellLinesRes = await cellLinesApi.list()
-          setCellLines(cellLinesRes.cellLines)
-          break
-        case 'plasmid':
-          const plasmidsRes = await plasmidsApi.list()
-          setPlasmids(plasmidsRes.plasmids)
-          break
-        case 'standard':
-          const standardsRes = await standardsApi.list()
-          setStandards(standardsRes.standards)
-          break
-      }
-    } catch (error) {
-      console.error(`Failed to load ${sourceType} entities:`, error)
-    }
+    if (formData.sourceType === 'control') void controlsQuery.refetch()
+    if (formData.sourceType === 'reagent') void reagentsQuery.refetch()
+    if (formData.sourceType === 'cell_line') void cellLinesQuery.refetch()
+    if (formData.sourceType === 'plasmid') void plasmidsQuery.refetch()
+    if (formData.sourceType === 'standard') void standardsQuery.refetch()
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -257,6 +251,19 @@ export default function SpecimenForm({
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+      {readError && (
+        <div className="bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded space-y-2">
+          <p>{readError}</p>
+          <button
+            type="button"
+            onClick={retryCatalogs}
+            className="text-sm underline hover:no-underline"
+          >
+            Retry loading options
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded">
           {error}

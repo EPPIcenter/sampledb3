@@ -3,7 +3,7 @@ import { studiesApi } from '../lib/api/studies';
 import type { Study } from '../lib/api/studies';
 import { specimenTypesApi } from '../lib/api/reference-data';
 import type { SpecimenType } from '../lib/api/types';
-import ModalPortal from './ModalPortal'
+import { Modal } from '../ui'
 
 export interface SpecimenFilters {
   study?: string
@@ -216,31 +216,15 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
                 )}
               </div>
 
-              {studyPickerOpen && (
-                <ModalPortal>
-                  <div className="fixed inset-0 z-[100] overflow-y-auto">
-                    <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-                      {/* Background overlay */}
-                      <div
-                        className="fixed inset-0 bg-black/40 backdrop-blur-md"
-                        onClick={() => setStudyPickerOpen(false)}
-                      />
-                    {/* Modal panel */}
-                    <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full border border-app-border">
-                      <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                        <div className="flex items-center justify-between mb-4">
-                          <h2 className="text-lg font-semibold text-app-text">Select Study</h2>
-                          <button
-                            type="button"
-                            className="text-app-text-muted hover:text-app-text"
-                            onClick={() => setStudyPickerOpen(false)}
-                          >
-                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </div>
-
+              <Modal
+                isOpen={studyPickerOpen}
+                onClose={() => setStudyPickerOpen(false)}
+                title="Select Study"
+                size="xl"
+                layout="centered"
+                panelClassName="border border-app-border"
+                contentClassName="p-6"
+              >
                         <div className="mb-4">
                           <input
                             type="text"
@@ -292,12 +276,7 @@ export default function SpecimenFilter({ filters, onChange, onSubmit, isLoading 
                             </ul>
                           )}
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                </ModalPortal>
-              )}
+              </Modal>
             </div>
 
             {/* Source Type Filter */}

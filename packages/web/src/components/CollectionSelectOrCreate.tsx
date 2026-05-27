@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { useClickOutside } from '../hooks/useClickOutside'
 import LocationPicker from './LocationPicker'
-import ModalPortal from './ModalPortal'
+import { Modal } from '../ui'
 import { collectionsApi } from '../lib/api/collections';const MAX_SUGGESTIONS = 25
 
 export interface CollectionOption {
@@ -316,26 +316,14 @@ export default function CollectionSelectOrCreate({
         </>
       )}
 
-      {modalOpen && (
-        <ModalPortal>
-          <div
-            className="fixed inset-0 z-[100] flex items-center justify-center"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-collection-modal-title"
-          >
-            <div
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm"
-              onClick={() => setModalOpen(false)}
-              aria-hidden="true"
-            />
-            <div className="relative z-10 w-full max-w-lg mx-4 bg-app-card rounded-lg shadow-xl p-6">
-              <h3
-                id="create-collection-modal-title"
-                className="text-lg font-semibold mb-4 text-app-text"
-              >
-                Create new collection
-              </h3>
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Create new collection"
+        size="sm"
+        layout="centered"
+        contentClassName="p-6"
+      >
               <div className="space-y-4">
                 <div>
                   <label
@@ -385,10 +373,7 @@ export default function CollectionSelectOrCreate({
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
-        </ModalPortal>
-      )}
+      </Modal>
     </div>
   )
 }

@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import QpcrExperimentDetail from '../QpcrExperimentDetail'
 import { qpcrExperimentsApi } from '../../lib/api/qpcr'
-import { scannerConfigurationsApi } from '../../lib/api/settings'
+import { settingsApi } from '../../lib/api/settings'
+import { mockSettingsApiGetValue } from '../../__tests__/helpers/settings-mocks'
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
@@ -29,9 +30,8 @@ vi.mock('../../lib/api/qpcr', async () => {
 vi.mock('../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('settings', {
-    scannerConfigurationsApi: {
-      getShared: vi.fn().mockResolvedValue({ configurations: [] }),
-      getPersonal: vi.fn().mockResolvedValue({ configurations: [] }),
+    settingsApi: {
+      getValue: mockSettingsApiGetValue(),
     },
   })
 })
@@ -59,7 +59,7 @@ describe('QpcrExperimentDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(qpcrExperimentsApi.get).mockResolvedValue(mockDetail as never)
-    vi.mocked(scannerConfigurationsApi.getShared).mockResolvedValue({ configurations: [] })
+    vi.mocked(settingsApi.getValue).mockImplementation(mockSettingsApiGetValue())
   })
 
   it('shows experiment name when loaded', async () => {

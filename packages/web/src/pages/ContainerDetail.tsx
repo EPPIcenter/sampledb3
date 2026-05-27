@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { Derivation } from '../lib/api/derivations'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import { getContainerTypeIcon, getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
+import type { ContainerDetail as ContainerDetailData } from '../lib/api/containers'
 import {
   containerKeys,
   useContainer,
@@ -17,24 +18,6 @@ import DerivationChainView from '../components/DerivationChainView'
 import { useUser } from '../contexts/UserContext'
 import { formatDerivationType } from '../lib/derivation-types'
 import '../styles/storage.css'
-
-interface ContainerDetail {
-  id?: number
-  container?: any
-  specimen?: any
-  source?: any
-  location?: any
-  locationPath?: string
-  containerType?: string
-  collection?: {
-    type: string
-    id: number
-    name: string
-    position?: string
-    barcode?: string
-    label?: string
-  }
-}
 
 function statusColor(name: string): string {
   const key = name.toLowerCase()
@@ -54,11 +37,11 @@ export default function ContainerDetail() {
   const containerQuery = useContainer(containerId)
   const derivationsQuery = useContainerDerivationTree(containerId)
   const sourceQuery = useContainerSource(containerId)
-  const data = (containerQuery.data as ContainerDetail | undefined) ?? null
+  const data: ContainerDetailData | null = containerQuery.data ?? null
   const detailStatus = fromQuery(containerQuery)
   const derivations = derivationsQuery.data?.derivations ?? []
   const childContainers =
-    derivationsQuery.data?.childContainers ?? new Map<number, ContainerDetail>()
+    derivationsQuery.data?.childContainers ?? new Map<number, ContainerDetailData>()
   const loadingDerivations = derivationsQuery.isPending
   const sourceDerivation = sourceQuery.data
     ? {
@@ -106,7 +89,7 @@ export default function ContainerDetail() {
     )
   }
 
-  if (!data || (!data.container && !data.id)) {
+  if (!data?.container?.id) {
     return (
       <div className="storage-page">
         <div className="container mx-auto px-4 py-8 relative z-10">
@@ -116,15 +99,11 @@ export default function ContainerDetail() {
     )
   }
 
-  // Handle both flattened and nested formats from API
-  const container = data.container || data
-  const { specimen, source, location, locationPath, containerType, collection } = data
-  
-  // If we're using flattened format, some properties might be on data directly
-  const effectiveLocation = location || container.location
-  const effectiveLocationPath = locationPath || container.locationPath
-  const effectiveContainerType = containerType || container.containerType
-  const effectiveCollection = collection || container.collection
+  const { container, specimen, source } = data
+  const effectiveLocation = container.location
+  const effectiveLocationPath = container.locationPath
+  const effectiveContainerType = container.containerType
+  const effectiveCollection = container.collection
 
   const containerTypeName = getContainerTypeName(effectiveContainerType)
   const containerTypeIcon = getContainerTypeIcon(effectiveContainerType)
@@ -546,12 +525,14 @@ export default function ContainerDetail() {
               ) : (
                 <div className="space-y-2">
                   {derivations.map((derivation) => {
-                    const childContainer = derivation.childContainerId ? childContainers.get(derivation.childContainerId) : null
-                    const container = childContainer?.container || childContainer
-                    const effectiveContainerType = childContainer?.containerType || container?.containerType
-                    const effectiveCollection = childContainer?.collection || container?.collection
-                    const effectiveLocation = childContainer?.location || container?.location
-                    const effectiveLocationPath = childContainer?.locationPath || container?.locationPath
+                    const childDetail = derivation.childContainerId
+                      ? childContainers.get(derivation.childContainerId)
+                      : null
+                    const container = childDetail?.container
+                    const effectiveContainerType = container?.containerType
+                    const effectiveCollection = container?.collection
+                    const effectiveLocation = container?.location
+                    const effectiveLocationPath = container?.locationPath
                     const containerTypeName = effectiveContainerType ? getContainerTypeName(effectiveContainerType) : 'Unknown'
                     const containerTypeIcon = effectiveContainerType ? getContainerTypeIcon(effectiveContainerType) : null
                     const displayLocationPath = effectiveLocationPath || 

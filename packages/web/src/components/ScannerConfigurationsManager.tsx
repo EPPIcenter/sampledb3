@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { scannerConfigurationsApi } from '../lib/api/settings';
+import { scannerConfigurationsApi, settingsApi } from '../lib/api/settings';
 import type { ScannerConfigurations, ScannerConfiguration } from '../lib/api/settings';
 import { plateNameSourceSummary } from '../lib/plate-destination-inference'
 import { useUser } from '../contexts/UserContext'
@@ -48,11 +48,11 @@ export default function ScannerConfigurationsManager({
       setLoading(true)
       try {
         const [sharedRes, personalRes] = await Promise.all([
-          scannerConfigurationsApi.getShared(),
-          scannerConfigurationsApi.getPersonal(),
+          settingsApi.getValue('scanner_configurations', { scope: 'shared' }),
+          settingsApi.getValue('scanner_configurations', { scope: 'personal' }),
         ])
-        setSharedConfigurations(sharedRes.configurations)
-        setPersonalConfigurations(personalRes.configurations)
+        setSharedConfigurations(sharedRes?.configurations ?? [])
+        setPersonalConfigurations(personalRes?.configurations ?? [])
       } catch (err: any) {
         setError(err.response?.data.error || 'Failed to load configurations')
       } finally {

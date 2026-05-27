@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import SkeletonTable from './SkeletonTable'
+import { SkeletonTable } from '../ui'
 import Pagination from './Pagination'
 
 export interface Column<T> {

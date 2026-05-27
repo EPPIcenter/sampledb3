@@ -6,6 +6,7 @@ import CollectionSelectOrCreate, {
 } from './CollectionSelectOrCreate'
 import { collectionsApi } from '../lib/api/collections';
 import { settingsApi } from '../lib/api/settings';
+import { unitsApi } from '../lib/api/reference-data';
 import type { ContainerDefaults } from '../lib/api/settings';
 import type { Unit } from '../lib/api/types';export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
@@ -116,7 +117,7 @@ export default function ContainerRegistration({
             remainingQuantity: typeDefaults.remainingQuantity,
           })
           if (!selectedUnitId && !defaultValue?.unitId) {
-            const resUnits = await settingsApi.getUnits()
+            const resUnits = await unitsApi.listAll()
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- effect cleanup can set cancelled.current between awaits
             if (cancelled.current) return
             const defaultUnit = resUnits.find((u: Unit) => u.symbol === typeDefaults.defaultUnitSymbol)

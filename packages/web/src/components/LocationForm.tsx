@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { locationsApi } from '../lib/api/locations';
 import { storageTypesApi } from '../lib/api/reference-data';
-import ModalPortal from './ModalPortal'
+import { Modal } from '../ui'
 import type { Location } from '../lib/api/types';
 import type { StorageType } from '../lib/api/reference-data';interface LocationFormProps {
   location?: Location | null
@@ -97,39 +97,22 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
     setFormData((prev) => ({ ...prev, [key]: value }))
   }
 
-  // Handle Escape key to cancel
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !loading) {
-        onCancel()
-      }
-    }
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [onCancel, loading])
-
+  const modalTitle = isEdit
+    ? 'Edit Location'
+    : isRoot
+      ? 'Add Root Location'
+      : 'Add Child Location'
 
   return (
-    <ModalPortal>
-      <div className="fixed inset-0 z-[100] overflow-y-auto">
-        <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-          {/* Background overlay */}
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-md"
-            onClick={(e) => {
-              if (!loading) {
-                onCancel()
-              }
-            }}
-          />
-        
-        {/* Modal panel */}
-        <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full sm:max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-          <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto max-h-[90vh]">
-          <h2 className="text-xl font-semibold text-app-text mb-4">
-            {isEdit ? 'Edit Location' : isRoot ? 'Add Root Location' : 'Add Child Location'}
-          </h2>
-
+    <Modal
+      isOpen
+      onClose={onCancel}
+      title={modalTitle}
+      size="sm"
+      panelClassName="sm:max-h-[90vh]"
+      contentClassName="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto max-h-[90vh]"
+      closeDisabled={loading}
+    >
           {error && (
             <div className="mb-4 bg-app-trend-down/10 border border-app-trend-down text-app-trend-down px-4 py-3 rounded">
               {error}
@@ -281,11 +264,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
               </button>
             </div>
           </form>
-          </div>
-        </div>
-      </div>
-    </div>
-    </ModalPortal>
+    </Modal>
   )
 }
 

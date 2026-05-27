@@ -4,8 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { adminApi } from '../lib/api/admin'
 import type { EmptyCollectionItem, EmptyCollectionsDeleteIds } from '../lib/api/admin'
 import { adminKeys, useAdminIntegrityReport } from '../hooks/useAdmin'
-import ModalPortal from '../components/ModalPortal'
-import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
+import { Modal, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
 
 const COLLECTION_TYPES: EmptyCollectionItem['type'][] = ['micronix_plate', 'cryovial_box', 'box', 'bag']
@@ -294,10 +293,15 @@ export default function AdminDataIntegrityEmptyCollections() {
         )}
       </section>
 
-      {showDeleteModal && (
-        <ModalPortal>
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay z-50 flex items-center justify-center p-4">
-            <div className="admin-card max-w-md w-full border border-[rgb(var(--app-border))]">
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={handleCloseDeleteModal}
+        layout="centered"
+        showCloseButton={false}
+        backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
+        panelClassName="admin-card max-w-md w-full border border-[rgb(var(--app-border))]"
+        contentClassName="p-0"
+      >
               <div className="px-6 py-4 border-b border-[rgb(var(--app-border))]">
                 <h2 className="text-xl font-semibold" style={{ color: 'rgb(var(--app-text))' }}>
                   Delete empty collections
@@ -347,10 +351,7 @@ export default function AdminDataIntegrityEmptyCollections() {
                   </button>
                 )}
               </div>
-            </div>
-          </div>
-        </ModalPortal>
-      )}
+      </Modal>
     </>
   )
 }

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Study, StudySummaryBasic } from '../../lib/api/studies';
-import SkeletonList from '../SkeletonList'
+import { SkeletonList } from '../../ui'
 
 interface RecentStudiesProps {
   studies: Array<Study & { summary?: StudySummaryBasic | null }>

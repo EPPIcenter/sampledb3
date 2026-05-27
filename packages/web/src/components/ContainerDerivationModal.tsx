@@ -6,7 +6,7 @@ import { collectionsApi } from '../lib/api/collections';
 import type { SpecimenType } from '../lib/api/types';
 import type { CollectionOption, CollectionSelectValue } from './CollectionSelectOrCreate'
 import CollectionSelectOrCreate from './CollectionSelectOrCreate'
-import ModalPortal from './ModalPortal'
+import { Modal } from '../ui'
 import { DERIVATION_TYPES } from '../lib/derivation-types'
 import '../styles/storage.css'
 
@@ -254,7 +254,7 @@ function ContainerDerivationModalContent({
   const sourceSummary = sourceParts.length > 0 ? sourceParts.join(' · ') : containerTypeLabel
 
   return (
-    <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full sm:max-h-[90vh]">
+    <div className="w-full sm:max-h-[90vh] overflow-y-auto">
       <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-app-text">Create Derivation</h2>
@@ -518,27 +518,16 @@ export default function ContainerDerivationModal({
   onSuccess,
   openKey = 0,
 }: ContainerDerivationModalProps) {
-  if (!isOpen) return null
-
   return (
-    <ModalPortal>
-      <div className="fixed inset-0 z-[100] overflow-y-auto">
-        <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-md"
-            onClick={onClose}
-          />
-          <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-          <ContainerDerivationModalContent
-            key={`${parentContainerId}-${openKey}`}
-            parentContainerId={parentContainerId}
-            parentContainer={parentContainer}
-            onClose={onClose}
-            onSuccess={onSuccess}
-          />
-        </div>
-      </div>
-    </ModalPortal>
+    <Modal isOpen={isOpen} onClose={onClose} showCloseButton={false} size="md" contentClassName="p-0 sm:p-0">
+      <ContainerDerivationModalContent
+        key={`${parentContainerId}-${openKey}`}
+        parentContainerId={parentContainerId}
+        parentContainer={parentContainer}
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />
+    </Modal>
   )
 }
 

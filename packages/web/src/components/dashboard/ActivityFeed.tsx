@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import SkeletonList from '../SkeletonList'
+import { SkeletonList } from '../../ui'
 
 interface ActivityItem {
   id: number

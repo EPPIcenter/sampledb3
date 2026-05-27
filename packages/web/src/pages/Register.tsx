@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { authApi } from '../lib/api/auth';export default function Register() {
+import { getQueryErrorMessage } from '../ui'
+import { useSelfRegister } from '../hooks/useAuthWorkflow'
+
+export default function Register() {
+  const registerMutation = useSelfRegister({ silent: true })
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
@@ -18,20 +21,15 @@ import { authApi } from '../lib/api/auth';export default function Register() {
       return
     }
 
-    setLoading(true)
     try {
-      await authApi.selfRegister({ email, name, password })
+      await registerMutation.mutateAsync({ email, name, password })
       setSuccess(true)
     } catch (err: unknown) {
-      const message =
-        typeof err === 'object' && err !== null && 'response' in err
-          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-          : null
-      setError(message || 'Registration failed. Please try again.')
-    } finally {
-      setLoading(false)
+      setError(getQueryErrorMessage(err, 'Registration failed. Please try again.'))
     }
   }
+
+  const loading = registerMutation.isPending
 
   if (success) {
     return (

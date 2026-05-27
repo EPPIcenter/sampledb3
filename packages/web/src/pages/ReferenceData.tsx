@@ -73,9 +73,7 @@ export default function ReferenceData() {
   const containerTypeRelationships = containerTypesQuery.relationships
   const containerTypeUsageInfo = containerTypesQuery.usageInfo
 
-  // Load dependencies if needed
   const { data: storageTypes } = useStorageTypes()
-  const [dependencies, setDependencies] = useState<Record<string, any[]>>({})
 
   // Debounce search input
   useEffect(() => {
@@ -102,42 +100,6 @@ export default function ReferenceData() {
     prevSearchRef.current = search
     setPage(1)
   }
-
-  // Load dependencies
-  useEffect(() => {
-    const loadDependencies = async () => {
-      if (config.requiresDependencies) {
-        const deps: Record<string, any[]> = {}
-        for (const depType of config.requiresDependencies) {
-          const depConfig = getReferenceDataConfig(depType)
-           
-          if (depConfig) {
-            try {
-              const res = await depConfig.list()
-              // Handle both structures: { data: T[] } and { data: { [key]: T[] } }
-              const data = res.data
-              if (Array.isArray(data)) {
-                // Direct array: { data: T[] }
-                deps[depConfig.getDataKey()] = data
-              } else if (
-                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- API can return object shape at runtime
-                typeof data === 'object' && data !== null
-              ) {
-                // Nested structure: { data: { [key]: T[] } }; key may be missing at runtime
-                deps[depConfig.getDataKey()] = ((data as Record<string, unknown>)[depConfig.getDataKey()] as unknown[] | undefined) ?? []
-              } else {
-                deps[depConfig.getDataKey()] = []
-              }
-            } catch (error) {
-              console.error(`Failed to load dependency ${depType}:`, error)
-            }
-          }
-        }
-        setDependencies(deps)
-      }
-    }
-    loadDependencies()
-  }, [activeTab, config.requiresDependencies])
 
   const refreshTabData = () => {
     void queryClient.invalidateQueries({
@@ -198,15 +160,7 @@ export default function ReferenceData() {
   }
 
   const getColumns = () => {
-    const deps: any = {}
-    if (config.requiresDependencies) {
-      for (const depType of config.requiresDependencies) {
-        const depConfig = getReferenceDataConfig(depType)
-        if (depConfig) {
-          deps[depConfig.getDataKey()] = (dependencies[depConfig.getDataKey()] as unknown[] | undefined) ?? []
-        }
-      }
-    }
+    const deps: Record<string, unknown> = {}
     // Add storageTypes if needed (for locations)
     if (storageTypes) {
       deps.storageTypes = storageTypes

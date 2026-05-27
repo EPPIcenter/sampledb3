@@ -3,12 +3,13 @@ import { useNavigate, useSearchParams, Navigate, Link } from 'react-router-dom'
 import { derivationsApi } from '../lib/api/derivations';
 import type { BulkDerivationSettings, ValidationResult, DerivationCsvImportResultRow } from '../lib/api/derivations';
 import { collectionsApi } from '../lib/api/collections';
-import { specimenTypesApi, unitsApi } from '../lib/api/reference-data';
-import type { SpecimenType, Unit } from '../lib/api/types';
+import { specimenTypesApi } from '../lib/api/reference-data';
 import { getCollectionNameColumn } from '../lib/container-columns'
 import { generateDerivationsTemplate, type TemplateOptions } from '../lib/template-generator'
+import { useDerivationsBulkImportBootstrap } from '../hooks/useDerivationsBulkImportBootstrap'
 import { useUser } from '../contexts/UserContext'
 import LocationPicker from '../components/LocationPicker'
+import { PageError } from '../ui'
 import { DERIVATION_TYPES } from '../lib/derivation-types'
 import '../styles/storage.css'
 
@@ -158,11 +159,8 @@ export default function DerivationsBulkImport() {
     return <Navigate to="/derivations" replace />
   }
 
-  const [loading, setLoading] = useState(false)
+  const [workflowLoading, setWorkflowLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
-  const [units, setUnits] = useState<Unit[]>([])
-  const [allowedContainerTypes, setAllowedContainerTypes] = useState<string[]>([])
   const [defaultsExpanded, setDefaultsExpanded] = useState(false)
 
   const [sourceType, setSourceType] = useState<SourceType>('control_batch')
@@ -180,6 +178,11 @@ export default function DerivationsBulkImport() {
     validateSourceSpecimenType: false,
     validateParentQuantity: false,
   })
+
+  const bootstrap = useDerivationsBulkImportBootstrap(settings.specimenTypeName)
+  const { specimenTypes, units, allowedContainerTypes, bootstrapLoading, bootstrapError, containerTypesError } =
+    bootstrap
+  const formDisabled = workflowLoading || bootstrapLoading
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [csvContent, setCsvContent] = useState<string>('')
@@ -239,16 +242,17 @@ export default function DerivationsBulkImport() {
   )
 
   useEffect(() => {
-    loadReferenceData()
-  }, [])
-
-  useEffect(() => {
-    if (settings.specimenTypeName) {
-      fetchAllowedContainerTypes()
-    } else {
-      setAllowedContainerTypes([])
+    if (
+      settings.containerType &&
+      allowedContainerTypes.length > 0 &&
+      !allowedContainerTypes.includes(settings.containerType)
+    ) {
+      setSettings((prev) => ({
+        ...prev,
+        containerType: allowedContainerTypes[0] as BulkDerivationSettings['containerType'],
+      }))
     }
-  }, [settings.specimenTypeName])
+  }, [settings.containerType, allowedContainerTypes])
 
   // Synchronize viewport with DOM: scroll to results section after import completes.
   // (Effect is appropriate here: we react to state-driven DOM update, not the click itself.)
@@ -257,52 +261,6 @@ export default function DerivationsBulkImport() {
       importResultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [importResults])
-
-  const loadReferenceData = async () => {
-    try {
-      setLoading(true)
-      const [specimenTypesRes, unitsRes] = await Promise.all([
-        specimenTypesApi.list(),
-        unitsApi.list(),
-      ])
-      setSpecimenTypes(specimenTypesRes.data)
-      setUnits(unitsRes.data)
-    } catch (err: unknown) {
-      const errObj = err as { response?: { data?: { error?: string } } }
-      console.error('Failed to load reference data:', err)
-      setError(errObj.response?.data?.error ?? 'Failed to load reference data')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchAllowedContainerTypes = async () => {
-    const selectedSpecimenType = specimenTypes.find((st) => st.name === settings.specimenTypeName)
-    if (!selectedSpecimenType) {
-      setAllowedContainerTypes([])
-      return
-    }
-    try {
-      const response = await specimenTypesApi.getContainerTypes(selectedSpecimenType.id)
-      const containerTypes = response.containerTypes
-      setAllowedContainerTypes(containerTypes)
-      if (
-        settings.containerType &&
-        !containerTypes.includes(settings.containerType)
-      ) {
-        setSettings((prev) => ({
-          ...prev,
-          containerType:
-            containerTypes.length > 0
-              ? (containerTypes[0] as BulkDerivationSettings['containerType'])
-              : 'micronix_tube',
-        }))
-      }
-    } catch (err: unknown) {
-      console.error('Failed to fetch allowed container types:', err)
-      setAllowedContainerTypes([])
-    }
-  }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -336,7 +294,7 @@ export default function DerivationsBulkImport() {
       setError('Please upload a CSV file')
       return null
     }
-    setLoading(true)
+    setWorkflowLoading(true)
     setError(null)
     try {
       const result = await derivationsApi.validateCsv(csvContent, settings)
@@ -344,7 +302,6 @@ export default function DerivationsBulkImport() {
       return result
     } catch (err: unknown) {
       const errObj = err as { response?: { data?: { error?: string; details?: string } } }
-      console.error('Failed to validate CSV:', err)
       setError(
         errObj.response?.data?.error ??
           errObj.response?.data?.details ??
@@ -352,7 +309,7 @@ export default function DerivationsBulkImport() {
       )
       return null
     } finally {
-      setLoading(false)
+      setWorkflowLoading(false)
     }
   }
 
@@ -388,7 +345,7 @@ export default function DerivationsBulkImport() {
       setError('Please upload a CSV file')
       return
     }
-    setLoading(true)
+    setWorkflowLoading(true)
     setError(null)
     try {
       const response = await derivationsApi.importCsv(csvToSend, {
@@ -398,14 +355,13 @@ export default function DerivationsBulkImport() {
       setImportResults(response.rows)
     } catch (err: unknown) {
       const errObj = err as { response?: { data?: { error?: string; details?: string } } }
-      console.error('Failed to import derivations:', err)
       setError(
         errObj.response?.data?.error ??
           errObj.response?.data?.details ??
           'Failed to import derivations'
       )
     } finally {
-      setLoading(false)
+      setWorkflowLoading(false)
     }
   }
 
@@ -552,6 +508,27 @@ export default function DerivationsBulkImport() {
           </div>
         </div>
 
+        {bootstrapError && (
+          <PageError
+            title="Could not load import options"
+            message={bootstrapError}
+            onRetry={() => bootstrap.refetchBootstrap()}
+          />
+        )}
+
+        {containerTypesError && !bootstrapError && (
+          <div className="mb-4 p-3 bg-app-trend-down/10 border border-app-trend-down rounded text-app-trend-down text-sm">
+            {containerTypesError}
+            <button
+              type="button"
+              className="ml-2 underline"
+              onClick={() => bootstrap.refetchBootstrap()}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className="mb-4 p-3 bg-app-trend-down/10 border border-app-trend-down rounded text-app-trend-down text-sm">
             {error}
@@ -574,7 +551,7 @@ export default function DerivationsBulkImport() {
                       setParentContainerType('paper')
                     }}
                     className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
-                    disabled={loading}
+                    disabled={formDisabled}
                   >
                     {SOURCE_TYPES.map((t) => (
                       <option key={t.value} value={t.value}>
@@ -596,7 +573,7 @@ export default function DerivationsBulkImport() {
                       setParentContainerType(e.target.value as ParentContainerType)
                     }
                     className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
-                    disabled={loading}
+                    disabled={formDisabled}
                   >
                     {sourceType === 'control_batch' ? (
                       <>
@@ -646,7 +623,7 @@ export default function DerivationsBulkImport() {
                           setSettings({ ...settings, derivationType: e.target.value })
                         }
                         className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
-                        disabled={loading}
+                        disabled={formDisabled}
                       >
                         <option value="">— In CSV (per row) —</option>
                         {DERIVATION_TYPES.map((t) => (
@@ -666,7 +643,7 @@ export default function DerivationsBulkImport() {
                           setSettings({ ...settings, specimenTypeName: e.target.value })
                         }
                         className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
-                        disabled={loading}
+                        disabled={formDisabled}
                       >
                         <option value="">— In CSV (per row) —</option>
                         {specimenTypes.map((st) => (
@@ -689,7 +666,7 @@ export default function DerivationsBulkImport() {
                           })
                         }
                         className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
-                        disabled={loading}
+                        disabled={formDisabled}
                       >
                         <option value="">— In CSV (per row) —</option>
                         {(allowedContainerTypes.length > 0
@@ -716,7 +693,7 @@ export default function DerivationsBulkImport() {
                         }
                         className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                         placeholder="Protocol name or reference"
-                        disabled={loading}
+                        disabled={formDisabled}
                       />
                     </div>
                     <div>
@@ -730,7 +707,7 @@ export default function DerivationsBulkImport() {
                           setSettings({ ...settings, derivationDate: e.target.value })
                         }
                         className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
-                        disabled={loading}
+                        disabled={formDisabled}
                       />
                       <p className="text-xs text-app-text-muted mt-1">
                         Leave empty to use a <code className="bg-app-surface px-1 rounded">derivation_date</code> column in your CSV (one value per row).
@@ -759,7 +736,7 @@ export default function DerivationsBulkImport() {
                             }}
                             className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                             placeholder="e.g. 1"
-                            disabled={loading}
+                            disabled={formDisabled}
                           />
                           <p className="text-xs text-app-text-muted mt-1">Leave empty to use CSV column per row.</p>
                         </div>
@@ -773,7 +750,7 @@ export default function DerivationsBulkImport() {
                               setSettings({ ...settings, unitSymbol: e.target.value || '' })
                             }
                             className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
-                            disabled={loading}
+                            disabled={formDisabled}
                           >
                             <option value="">— In CSV (per row) —</option>
                             {units.map((u) => (
@@ -803,7 +780,7 @@ export default function DerivationsBulkImport() {
                             }}
                             className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                             placeholder="e.g. 1"
-                            disabled={loading}
+                            disabled={formDisabled}
                           />
                           <p className="text-xs text-app-text-muted mt-1">Leave empty to use CSV column per row. Used when reducing parent quantity (e.g. DBS spot count).</p>
                         </div>
@@ -821,7 +798,7 @@ export default function DerivationsBulkImport() {
                               })
                             }}
                             className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
-                            disabled={loading}
+                            disabled={formDisabled}
                           >
                             <option value="true">Yes (same for all rows)</option>
                             <option value="false">No (same for all rows)</option>
@@ -911,7 +888,7 @@ export default function DerivationsBulkImport() {
                   accept=".csv"
                   onChange={handleFileSelect}
                   className="file-input-accent"
-                  disabled={loading}
+                  disabled={formDisabled}
                 />
                 {csvContent && (
                   <p className="text-sm text-app-trend-up mt-1">
@@ -963,16 +940,16 @@ export default function DerivationsBulkImport() {
                   type="button"
                   onClick={() => navigate('/derivations')}
                   className="storage-btn-secondary"
-                  disabled={loading}
+                  disabled={formDisabled}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={!csvContent.trim() || loading}
+                  disabled={!csvContent.trim() || workflowLoading}
                   className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Validating…' : 'Validate & Continue'}
+                  {workflowLoading ? 'Validating…' : 'Validate & Continue'}
                 </button>
               </div>
             </form>
@@ -1045,7 +1022,7 @@ export default function DerivationsBulkImport() {
                   type="button"
                   onClick={() => setCurrentStep('upload')}
                   className="storage-btn-secondary"
-                  disabled={loading}
+                  disabled={formDisabled}
                 >
                   Back
                 </button>
@@ -1053,14 +1030,14 @@ export default function DerivationsBulkImport() {
                   type="button"
                   onClick={handleCreateCollections}
                   disabled={
-                    loading ||
+                    workflowLoading ||
                     missingCollections.some(
                       (c) => (c.status !== 'success' && !c.locationId)
                     )
                   }
                   className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading
+                  {workflowLoading
                     ? 'Creating & importing…'
                     : 'Create collections & continue'}
                 </button>
@@ -1135,10 +1112,10 @@ export default function DerivationsBulkImport() {
                     await handleImport()
                     setCurrentStep('import')
                   }}
-                  disabled={loading}
+                  disabled={formDisabled}
                   className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Creating…' : 'Create derivations'}
+                  {workflowLoading ? 'Creating…' : 'Create derivations'}
                 </button>
               </div>
             </div>
@@ -1308,14 +1285,14 @@ export default function DerivationsBulkImport() {
                     type="button"
                     onClick={() => setCurrentStep('upload')}
                     className="storage-btn-secondary"
-                    disabled={loading}
+                    disabled={formDisabled}
                   >
                     Back
                   </button>
                   <button
                     type="button"
                     onClick={handleImport}
-                    disabled={loading || (validationResult.summary.invalid) > 0}
+                    disabled={formDisabled || (validationResult.summary.invalid) > 0}
                     className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                     title={
                       (validationResult.summary.invalid) > 0
@@ -1323,7 +1300,7 @@ export default function DerivationsBulkImport() {
                         : undefined
                     }
                   >
-                    {loading ? 'Creating…' : 'Create derivations'}
+                    {workflowLoading ? 'Creating…' : 'Create derivations'}
                   </button>
                 </div>
               ) : (

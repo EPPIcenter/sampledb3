@@ -8,7 +8,7 @@ import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SimpleTimeline from '../components/SimpleTimeline'
 import { getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
 import SpecimenForm from '../components/forms/SpecimenForm'
-import ModalPortal from '../components/ModalPortal'
+import { Modal } from '../ui'
 import { useUser } from '../contexts/UserContext'
 import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
@@ -389,40 +389,26 @@ export default function ControlBatchDetail() {
           </div>
         </div>
 
-        {createSpecimenModalOpen && (
-          <ModalPortal>
-            <div className="fixed inset-0 z-[100] overflow-y-auto blood-controls-modal-overlay">
-              <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setCreateSpecimenModalOpen(false)} />
-              <div className="relative z-10 inline-block align-bottom blood-controls-modal-panel text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full max-h-[90vh] overflow-y-auto">
-                <div className="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold" style={{ color: 'rgb(var(--app-text))' }}>Add Specimen</h2>
-                    <button
-                      type="button"
-                      className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                      style={{ color: 'rgb(var(--app-text-muted))' }}
-                      onClick={() => setCreateSpecimenModalOpen(false)}
-                      aria-label="Close"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <SpecimenForm
-                    controlBatchId={batch.id}
-                    controlBatchName={batch.name}
-                    onSuccess={() => {
-                      setCreateSpecimenModalOpen(false)
-                      refreshSummary()
-                    }}
-                    onCancel={() => setCreateSpecimenModalOpen(false)}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-          </ModalPortal>
-        )}
+        <Modal
+          isOpen={createSpecimenModalOpen}
+          onClose={() => setCreateSpecimenModalOpen(false)}
+          title="Add Specimen"
+          size="xl"
+          overlayClassName="blood-controls-modal-overlay"
+          backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm"
+          panelClassName="blood-controls-modal-panel max-h-[90vh] overflow-y-auto"
+          contentClassName="px-4 pt-5 pb-4 sm:p-6 sm:pb-4"
+        >
+          <SpecimenForm
+            controlBatchId={batch.id}
+            controlBatchName={batch.name}
+            onSuccess={() => {
+              setCreateSpecimenModalOpen(false)
+              refreshSummary()
+            }}
+            onCancel={() => setCreateSpecimenModalOpen(false)}
+          />
+        </Modal>
       </div>
     </div>
   )

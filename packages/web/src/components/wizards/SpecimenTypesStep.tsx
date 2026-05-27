@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
-import { specimenTypesApi } from '../../lib/api/reference-data';
-import type { SpecimenType } from '../../lib/api/types';
+import type { SpecimenType } from '../../lib/api/types'
 import type { SpecimenTypeConfig } from '../../pages/ControlBatchWizard'
+import {
+  useSpecimenTypeContainerTypesForId,
+  useSpecimenTypesByContainerType,
+} from '../../hooks/useReferenceData'
+import { SectionMessage, getQueryErrorMessage } from '../../ui'
 
 interface SpecimenTypesStepProps {
   specimenTypes: SpecimenTypeConfig[]
@@ -30,86 +34,71 @@ export default function SpecimenTypesStep({
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const [allowedContainerTypes, setAllowedContainerTypes] = useState<string[]>([])
   const [allowedSpecimenTypes, setAllowedSpecimenTypes] = useState<SpecimenType[]>([])
-  const [loadingContainerTypes, setLoadingContainerTypes] = useState(false)
-  const [loadingSpecimenTypes, setLoadingSpecimenTypes] = useState(false)
+
+  const specimenTypeId = newSpecimenType.specimenTypeId ?? 0
+  const containerTypesQuery = useSpecimenTypeContainerTypesForId(specimenTypeId)
+  const specimenTypesByContainerQuery = useSpecimenTypesByContainerType(
+    newSpecimenType.containerType,
+  )
 
   // Get already added combinations of specimen type ID and container type
   const addedCombinations = new Set(
     specimenTypes.map(st => `${st.specimenTypeId}-${st.containerType}`)
   )
   
-  // Fetch allowed container types when specimen type is selected
   useEffect(() => {
-    const fetchContainerTypes = async () => {
-      if (newSpecimenType.specimenTypeId && newSpecimenType.specimenTypeId > 0) {  
-        setLoadingContainerTypes(true)
-        try {
-          const response = await specimenTypesApi.getContainerTypes(newSpecimenType.specimenTypeId)
-          const containerTypes = response.containerTypes
-          setAllowedContainerTypes(containerTypes)
-          
-          // If current container type is not allowed, reset to first allowed option or 'paper'
-          if (newSpecimenType.containerType && containerTypes.length > 0) {  
-            if (!containerTypes.includes(newSpecimenType.containerType)) {
-              setNewSpecimenType(prev => ({
-                ...prev,
-                containerType: containerTypes[0] as 'paper' | 'cryovial_tube' | 'micronix_tube',
-              }))
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching container types:', error)
-          // Fall back to showing all options
-          setAllowedContainerTypes([])
-        } finally {
-          setLoadingContainerTypes(false)
-        }
-      } else {
-        // No specimen type selected, clear constraints
-        setAllowedContainerTypes([])
-      }
+    if (specimenTypeId <= 0) {
+      setAllowedContainerTypes([])
+      return
     }
-    
-    fetchContainerTypes()
-  }, [newSpecimenType.specimenTypeId])
-  
-  // Fetch allowed specimen types when container type is selected
+    if (containerTypesQuery.isSuccess && containerTypesQuery.data) {
+      const containerTypes = containerTypesQuery.data.containerTypes
+      setAllowedContainerTypes(containerTypes)
+      if (newSpecimenType.containerType && containerTypes.length > 0) {
+        if (!containerTypes.includes(newSpecimenType.containerType)) {
+          setNewSpecimenType((prev) => ({
+            ...prev,
+            containerType: containerTypes[0] as 'paper' | 'cryovial_tube' | 'micronix_tube',
+          }))
+        }
+      }
+    } else if (containerTypesQuery.isError) {
+      setAllowedContainerTypes([])
+    }
+  }, [specimenTypeId, containerTypesQuery.data, containerTypesQuery.isSuccess, containerTypesQuery.isError, newSpecimenType.containerType])
+
   useEffect(() => {
-    const fetchSpecimenTypes = async () => {
-      if (newSpecimenType.containerType) {
-        setLoadingSpecimenTypes(true)
-        try {
-          const response = await specimenTypesApi.getByContainerType(newSpecimenType.containerType)
-          const specimenTypes = response.specimenTypes
-          setAllowedSpecimenTypes(specimenTypes)
-          
-          // If current specimen type is not allowed, reset to empty
-           
-          if (newSpecimenType.specimenTypeId && specimenTypes.length > 0) {
-            const isAllowed = specimenTypes.some(st => st.id === newSpecimenType.specimenTypeId)
-            if (!isAllowed) {
-              setNewSpecimenType(prev => ({
-                ...prev,
-                specimenTypeId: 0,
-                specimenTypeName: '',
-              }))
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching specimen types:', error)
-          // Fall back to showing all options
-          setAllowedSpecimenTypes([])
-        } finally {
-          setLoadingSpecimenTypes(false)
-        }
-      } else {
-        // No container type selected, clear constraints
-        setAllowedSpecimenTypes([])
-      }
+    if (!newSpecimenType.containerType) {
+      setAllowedSpecimenTypes([])
+      return
     }
-    
-    fetchSpecimenTypes()
-  }, [newSpecimenType.containerType])
+    if (specimenTypesByContainerQuery.isSuccess && specimenTypesByContainerQuery.data) {
+      const types = specimenTypesByContainerQuery.data
+      setAllowedSpecimenTypes(types)
+      if (newSpecimenType.specimenTypeId && types.length > 0) {
+        const isAllowed = types.some((st) => st.id === newSpecimenType.specimenTypeId)
+        if (!isAllowed) {
+          setNewSpecimenType((prev) => ({
+            ...prev,
+            specimenTypeId: 0,
+            specimenTypeName: '',
+          }))
+        }
+      }
+    } else if (specimenTypesByContainerQuery.isError) {
+      setAllowedSpecimenTypes([])
+    }
+  }, [
+    newSpecimenType.containerType,
+    newSpecimenType.specimenTypeId,
+    specimenTypesByContainerQuery.data,
+    specimenTypesByContainerQuery.isSuccess,
+    specimenTypesByContainerQuery.isError,
+  ])
+
+  const loadingContainerTypes = containerTypesQuery.isFetching && specimenTypeId > 0
+  const loadingSpecimenTypes =
+    specimenTypesByContainerQuery.isFetching && !!newSpecimenType.containerType
   
   // Filter available types based on constraints
   const availableTypes = allowedSpecimenTypes.length > 0 
@@ -169,7 +158,7 @@ export default function SpecimenTypesStep({
     onChange(specimenTypes.filter(st => st.id !== id))
   }
 
-  const handleSpecimenTypeSelect = async (specimenTypeId: number) => {
+  const handleSpecimenTypeSelect = (specimenTypeId: number) => {
     const type = availableSpecimenTypes.find(t => t.id === specimenTypeId)
     const containerType = newSpecimenType.containerType
     const combinationKey = containerType ? `${specimenTypeId}-${containerType}` : null
@@ -186,38 +175,20 @@ export default function SpecimenTypesStep({
       setDuplicateError(null)
     }
     
-    // Fetch allowed container types for this specimen type
-    if (specimenTypeId > 0) {
-      try {
-        const response = await specimenTypesApi.getContainerTypes(specimenTypeId)
-        const containerTypes = response.containerTypes
-        setAllowedContainerTypes(containerTypes)
-        
-        // Validate current container type selection - if invalid, clear it
-        if (containerTypes.length > 0 && containerType && !containerTypes.includes(containerType)) {  
-          // Clear container type selection if it's not allowed
-          setNewSpecimenType({
-            ...newSpecimenType,
-            specimenTypeId,
-            specimenTypeName: type?.name || '',
-            containerType: undefined,
-          })
-          return
-        }
-      } catch (error) {
-        console.error('Error fetching container types:', error)
-        // Continue with update even if fetch fails
-      }
-    }
-    
     setNewSpecimenType({
       ...newSpecimenType,
       specimenTypeId,
       specimenTypeName: type?.name || '',
+      containerType:
+        containerType &&
+        allowedContainerTypes.length > 0 &&
+        !allowedContainerTypes.includes(containerType)
+          ? undefined
+          : containerType,
     })
   }
 
-  const handleContainerTypeChange = async (containerTypeValue: string) => {
+  const handleContainerTypeChange = (containerTypeValue: string) => {
     // Handle empty selection
     if (!containerTypeValue || containerTypeValue === '') {
       setNewSpecimenType({
@@ -247,39 +218,25 @@ export default function SpecimenTypesStep({
       setDuplicateError(null)
     }
     
-    // Fetch allowed specimen types for this container type
-    try {
-      const response = await specimenTypesApi.getByContainerType(containerType)
-      const specimenTypes = response.specimenTypes
-      setAllowedSpecimenTypes(specimenTypes)
-      
-      // Validate current specimen type selection
-      if (specimenTypes.length > 0 && specimenTypeId > 0) {
-        const isAllowed = specimenTypes.some(st => st.id === specimenTypeId)
-        if (!isAllowed) {
-          // Reset specimen type selection
-          setNewSpecimenType({
-            ...newSpecimenType,
-            containerType,
-            specimenTypeId: 0,
-            specimenTypeName: '',
-          })
-          return
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching specimen types:', error)
-      // Continue with update even if fetch fails
-    }
-    
     setNewSpecimenType({
       ...newSpecimenType,
       containerType,
     })
   }
 
+  const constraintReadError =
+    containerTypesQuery.isError && specimenTypeId > 0
+      ? getQueryErrorMessage(containerTypesQuery.error, 'Failed to load allowed container types')
+      : specimenTypesByContainerQuery.isError && newSpecimenType.containerType
+        ? getQueryErrorMessage(
+            specimenTypesByContainerQuery.error,
+            'Failed to load specimen types for this container',
+          )
+        : null
+
   return (
     <div className="space-y-6">
+      {constraintReadError && <SectionMessage variant="error" message={constraintReadError} />}
       <div>
         <h2 className="text-xl font-semibold text-app-text mb-4">Add Specimen Types</h2>
         <p className="text-sm text-app-text-muted mb-6">

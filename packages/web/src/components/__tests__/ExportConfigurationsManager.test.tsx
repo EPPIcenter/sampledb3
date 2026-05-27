@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import ExportConfigurationsManager from '../ExportConfigurationsManager'
-import { exportConfigurationsApi } from '../../lib/api/settings'
+import { exportConfigurationsApi, settingsApi } from '../../lib/api/settings'
+import {
+  exportConfigurationsValue,
+  mockSettingsApiGetValue,
+} from '../../__tests__/helpers/settings-mocks'
 
 const sharedConfigs = [
   { name: 'Shared One', columns: ['container_id', 'barcode'], isDefault: true },
@@ -12,12 +16,13 @@ const sharedConfigs = [
 vi.mock('../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('settings', {
-  exportConfigurationsApi: {
-    getShared: vi.fn(),
-    getPersonal: vi.fn(),
-    update: vi.fn(),
-    updatePersonal: vi.fn(),
-  }
+    settingsApi: {
+      getValue: vi.fn(),
+    },
+    exportConfigurationsApi: {
+      update: vi.fn(),
+      updatePersonal: vi.fn(),
+    },
   })
 })
 
@@ -34,12 +39,12 @@ vi.mock('../../contexts/UserContext', async () => {
 describe('ExportConfigurationsManager', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(exportConfigurationsApi.getShared).mockResolvedValue({
-      configurations: sharedConfigs,
-    })
-    vi.mocked(exportConfigurationsApi.getPersonal).mockResolvedValue({
-      configurations: [],
-    })
+    vi.mocked(settingsApi.getValue).mockImplementation(
+      mockSettingsApiGetValue({
+        exportShared: exportConfigurationsValue(sharedConfigs),
+        exportPersonal: exportConfigurationsValue([]),
+      }),
+    )
     vi.mocked(exportConfigurationsApi.update).mockResolvedValue({} as never)
     vi.mocked(exportConfigurationsApi.updatePersonal).mockResolvedValue({} as never)
   })
@@ -47,8 +52,8 @@ describe('ExportConfigurationsManager', () => {
   it('loads shared and personal configurations on mount', async () => {
     await render(<ExportConfigurationsManager data={null} />)
     await waitFor(() => {
-      expect(exportConfigurationsApi.getShared).toHaveBeenCalled()
-      expect(exportConfigurationsApi.getPersonal).toHaveBeenCalled()
+      expect(settingsApi.getValue).toHaveBeenCalledWith('export_configurations', { scope: 'shared' })
+      expect(settingsApi.getValue).toHaveBeenCalledWith('export_configurations', { scope: 'personal' })
     })
   })
 

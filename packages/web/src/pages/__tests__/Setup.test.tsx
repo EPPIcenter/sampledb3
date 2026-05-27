@@ -25,6 +25,12 @@ vi.mock('../../contexts/UserContext', async () => {
   return { ...actual, useUser: () => ({ canWrite: true }) }
 })
 
+async function waitForSetupWizard() {
+  await waitFor(() => {
+    expect(screen.getByRole('heading', { name: /welcome to sampledb/i })).toBeInTheDocument()
+  })
+}
+
 describe('Setup', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -33,6 +39,7 @@ describe('Setup', () => {
 
   it('shows setup-related content', async () => {
     await render(<Setup />)
+    await waitForSetupWizard()
     const welcome = screen.getByRole('heading', { name: /welcome to sampledb/i })
     expect(welcome).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument()
@@ -46,17 +53,20 @@ describe('Setup', () => {
     })
   })
 
-  it('shows error when status check fails', async () => {
+  it('shows PageError with retry when status check fails', async () => {
     vi.mocked(setupApi.status).mockRejectedValue(new Error('Network error'))
     await render(<Setup />)
     await waitFor(() => {
-      expect(screen.getByText(/network error|failed to check/i)).toBeInTheDocument()
+      expect(screen.getByRole('alert')).toBeInTheDocument()
+      expect(screen.getByText(/network error/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 
   it('disables Next on step 1 until admin fields are valid', async () => {
     const user = userEvent.setup()
     await render(<Setup />)
+    await waitForSetupWizard()
     const nextButton = screen.getByRole('button', { name: /next/i })
     expect(nextButton).toBeDisabled()
 
@@ -73,6 +83,7 @@ describe('Setup', () => {
   it('advances to step 2 when Next is clicked with valid step 1', async () => {
     const user = userEvent.setup()
     await render(<Setup />)
+    await waitForSetupWizard()
     await user.type(screen.getByLabelText(/full name/i), 'Admin User')
     await user.type(screen.getByLabelText(/email address/i), 'admin@example.com')
     await user.type(screen.getByLabelText(/^password/i), 'password123')
@@ -89,6 +100,7 @@ describe('Setup', () => {
   it('Back from step 2 returns to step 1', async () => {
     const user = userEvent.setup()
     await render(<Setup />)
+    await waitForSetupWizard()
     await user.type(screen.getByLabelText(/full name/i), 'Admin User')
     await user.type(screen.getByLabelText(/email address/i), 'admin@example.com')
     await user.type(screen.getByLabelText(/^password/i), 'password123')
@@ -106,7 +118,7 @@ describe('Setup', () => {
     const user = userEvent.setup()
     vi.mocked(setupApi.initialize).mockResolvedValue(undefined as never)
     await render(<Setup />)
-    // Go to step 1 and fill
+    await waitForSetupWizard()
     await user.type(screen.getByLabelText(/full name/i), 'Admin User')
     await user.type(screen.getByLabelText(/email address/i), 'admin@example.com')
     await user.type(screen.getByLabelText(/^password/i), 'password123')
@@ -129,6 +141,7 @@ describe('Setup', () => {
     const user = userEvent.setup()
     vi.mocked(setupApi.initialize).mockRejectedValue(new Error('Setup failed'))
     await render(<Setup />)
+    await waitForSetupWizard()
     await user.type(screen.getByLabelText(/full name/i), 'Admin User')
     await user.type(screen.getByLabelText(/email address/i), 'admin@example.com')
     await user.type(screen.getByLabelText(/^password/i), 'password123')

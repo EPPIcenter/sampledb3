@@ -54,7 +54,6 @@ export interface ReferenceDataConfig {
   // Special handling
   requiresPagination?: boolean
   requiresSearch?: boolean
-  requiresDependencies?: ReferenceDataType[]
   readOnly?: boolean // Mark as read-only for legacy data viewing
 }
 

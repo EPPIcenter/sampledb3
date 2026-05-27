@@ -1,7 +1,7 @@
 import type { RefObject } from 'react'
 import { useState } from 'react'
 import { useUser } from '../contexts/UserContext'
-import SkeletonTable from './SkeletonTable'
+import { SkeletonTable } from '../ui'
 import Pagination from './Pagination'
 
 export interface Column<T> {

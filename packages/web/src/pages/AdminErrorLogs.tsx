@@ -5,9 +5,8 @@ import type { ErrorLog, ErrorLogsQueryParams } from '../lib/api/error-logs'
 import { formatErrorLogForLLM } from '../lib/error-log-prompt'
 import { adminKeys, useAdminErrorLogs } from '../hooks/useAdmin'
 import Pagination from '../components/Pagination'
-import ModalPortal from '../components/ModalPortal'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
-import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
+import { Modal, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
 
 export default function AdminErrorLogs() {
@@ -370,10 +369,24 @@ export default function AdminErrorLogs() {
       </div>
 
       {/* Detail Modal */}
-      {showDetailModal && selectedLog && (
-        <ModalPortal>
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay z-50 flex items-center justify-center p-4">
-          <div className="admin-card max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-[rgb(var(--app-border))]">
+      {selectedLog && (
+        <Modal
+          isOpen={showDetailModal}
+          onClose={() => {
+            if (copyFeedbackTimeoutRef.current) {
+              clearTimeout(copyFeedbackTimeoutRef.current)
+              copyFeedbackTimeoutRef.current = null
+            }
+            setCopyFeedback(null)
+            setShowDetailModal(false)
+            setSelectedLog(null)
+          }}
+          layout="centered"
+          showCloseButton={false}
+          backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
+          panelClassName="admin-card max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-[rgb(var(--app-border))]"
+          contentClassName="p-0 flex flex-col flex-1 min-h-0 overflow-hidden"
+        >
             <div className="px-6 py-4 border-b border-[rgb(var(--app-border))] flex items-center justify-between">
               <h2 className="text-xl font-semibold">Error Log Details</h2>
               <button
@@ -519,16 +532,19 @@ export default function AdminErrorLogs() {
                 Close
               </button>
             </div>
-          </div>
-        </div>
-        </ModalPortal>
+        </Modal>
       )}
 
       {/* Cleanup Modal */}
-      {showCleanupModal && (
-        <ModalPortal>
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay z-50 flex items-center justify-center p-4">
-          <div className="admin-card max-w-md w-full border border-[rgb(var(--app-border))]">
+      <Modal
+        isOpen={showCleanupModal}
+        onClose={() => setShowCleanupModal(false)}
+        layout="centered"
+        showCloseButton={false}
+        backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
+        panelClassName="admin-card max-w-md w-full border border-[rgb(var(--app-border))]"
+        contentClassName="p-0"
+      >
             <div className="px-6 py-4 border-b border-[rgb(var(--app-border))]">
               <h2 className="text-xl font-semibold">Cleanup Old Error Logs</h2>
             </div>
@@ -574,10 +590,7 @@ export default function AdminErrorLogs() {
                 {cleanupLoading ? 'Cleaning up...' : 'Cleanup'}
               </button>
             </div>
-          </div>
-        </div>
-        </ModalPortal>
-      )}
+      </Modal>
       </div>
     </div>
   )

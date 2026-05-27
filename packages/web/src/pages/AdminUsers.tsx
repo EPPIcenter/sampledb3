@@ -4,8 +4,7 @@ import { adminApi } from '../lib/api/admin'
 import type { User, UserSession } from '../lib/api/auth'
 import { adminKeys, useAdminUsers } from '../hooks/useAdmin'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
-import ModalPortal from '../components/ModalPortal'
-import { AsyncPresentation, PageError, fromQuery, getQueryErrorMessage } from '../ui'
+import { AsyncPresentation, Modal, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
 
 interface CreateUserData {
@@ -488,10 +487,18 @@ export default function AdminUsers() {
         </div>
 
         {/* Create User Modal */}
-        {showCreateModal && (
-          <ModalPortal>
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
-            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--app-border))]">
+        <Modal
+          isOpen={showCreateModal}
+          onClose={() => {
+            setShowCreateModal(false)
+            setCreateForm({ email: '', name: '', password: '', role: 'member' })
+          }}
+          layout="centered"
+          showCloseButton={false}
+          backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
+          panelClassName="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--app-border))]"
+          contentClassName="p-0"
+        >
               <h2 className="text-xl font-bold mb-4">Create New User</h2>
               <div className="space-y-4">
                 <div>
@@ -579,16 +586,22 @@ export default function AdminUsers() {
                   Cancel
                 </button>
               </div>
-            </div>
-          </div>
-          </ModalPortal>
-        )}
+        </Modal>
 
         {/* Edit User Modal */}
-        {showEditModal && selectedUser && (
-          <ModalPortal>
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
-            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--app-border))]">
+        <Modal
+          isOpen={showEditModal && selectedUser != null}
+          onClose={() => {
+            setShowEditModal(false)
+            setSelectedUser(null)
+            setEditForm({})
+          }}
+          layout="centered"
+          showCloseButton={false}
+          backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
+          panelClassName="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--app-border))]"
+          contentClassName="p-0"
+        >
               <h2 className="text-xl font-bold mb-4">Edit User</h2>
               <div className="space-y-4">
                 <div>
@@ -648,16 +661,21 @@ export default function AdminUsers() {
                   Cancel
                 </button>
               </div>
-            </div>
-          </div>
-          </ModalPortal>
-        )}
+        </Modal>
 
         {/* Delete Confirmation Modal */}
-        {showDeleteModal && selectedUser && (
-          <ModalPortal>
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
-            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--app-border))]">
+        <Modal
+          isOpen={showDeleteModal && selectedUser != null}
+          onClose={() => {
+            setShowDeleteModal(false)
+            setSelectedUser(null)
+          }}
+          layout="centered"
+          showCloseButton={false}
+          backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
+          panelClassName="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--app-border))]"
+          contentClassName="p-0"
+        >
               <h2 className="text-xl font-bold mb-4">Delete User</h2>
               <p className="text-[rgb(var(--app-text-muted))] mb-4">
                 Are you sure you want to soft delete <strong>{selectedUser.name}</strong>? This
@@ -680,16 +698,22 @@ export default function AdminUsers() {
                   Cancel
                 </button>
               </div>
-            </div>
-          </div>
-          </ModalPortal>
-        )}
+        </Modal>
 
         {/* Password Reset Modal */}
-        {showPasswordModal && selectedUser && (
-          <ModalPortal>
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
-            <div className="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--app-border))]">
+        <Modal
+          isOpen={showPasswordModal && selectedUser != null}
+          onClose={() => {
+            setShowPasswordModal(false)
+            setSelectedUser(null)
+            setPasswordForm({ password: '', confirmPassword: '' })
+          }}
+          layout="centered"
+          showCloseButton={false}
+          backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
+          panelClassName="admin-card p-6 max-w-md w-full mx-4 border border-[rgb(var(--app-border))]"
+          contentClassName="p-0"
+        >
               <h2 className="text-xl font-bold mb-4">Reset Password</h2>
               <p className="text-[rgb(var(--app-text-muted))] mb-4">Reset password for {selectedUser.name}</p>
               <div className="space-y-4">
@@ -753,17 +777,23 @@ export default function AdminUsers() {
                   Cancel
                 </button>
               </div>
-            </div>
-          </div>
-          </ModalPortal>
-        )}
+        </Modal>
 
         {/* Sessions Modal */}
-        {showSessionsModal && selectedUser && (
-          <ModalPortal>
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay flex items-center justify-center z-50">
-            <div className="admin-card p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto border border-[rgb(var(--app-border))]">
-              <h2 className="text-xl font-bold mb-4">Active Sessions for {selectedUser.name}</h2>
+        <Modal
+          isOpen={showSessionsModal && selectedUser != null}
+          onClose={() => {
+            setShowSessionsModal(false)
+            setSelectedUser(null)
+            setSessions([])
+          }}
+          layout="centered"
+          showCloseButton={false}
+          backdropClassName="fixed inset-0 bg-black/50 backdrop-blur-sm admin-modal-overlay"
+          panelClassName="admin-card p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto border border-[rgb(var(--app-border))]"
+          contentClassName="p-0"
+        >
+              <h2 className="text-xl font-bold mb-4">Active Sessions for {selectedUser?.name}</h2>
               {sessionsLoading ? (
                 <div className="text-center py-8 dashboard-stat-muted">Loading sessions...</div>
               ) : sessions.length === 0 ? (
@@ -804,10 +834,7 @@ export default function AdminUsers() {
                   Close
                 </button>
               </div>
-            </div>
-          </div>
-          </ModalPortal>
-        )}
+        </Modal>
         </div>
       </div>
     </div>

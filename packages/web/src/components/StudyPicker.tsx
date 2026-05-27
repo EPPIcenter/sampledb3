@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { studiesApi } from '../lib/api/studies';
 import type { Study } from '../lib/api/studies';
-import ModalPortal from './ModalPortal'
+import { Modal } from '../ui'
 
 interface StudyPickerProps {
   value?: number
@@ -76,26 +76,15 @@ export default function StudyPicker({ value, onChange }: StudyPickerProps) {
         )}
       </button>
 
-      {open && (
-        <ModalPortal>
-          <div className="fixed inset-0 z-[100] flex items-center justify-center">
-            <div
-              className="fixed inset-0 bg-black/40 backdrop-blur-md"
-              onClick={() => setOpen(false)}
-            />
-<div className="relative z-10 w-full max-w-3xl mx-4 bg-app-card rounded-lg shadow-xl p-6 border border-app-border">
-              <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-app-text">Select Study</h2>
-              <button
-                type="button"
-                className="text-app-text-muted hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent rounded"
-                onClick={() => setOpen(false)}
-                aria-label="Close study selection dialog"
-              >
-                ✕
-              </button>
-            </div>
-
+      <Modal
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        title="Select Study"
+        size="xl"
+        layout="centered"
+        panelClassName="border border-app-border"
+        contentClassName="p-6"
+      >
             <div className="mb-4">
               <label htmlFor="study-picker-search" className="sr-only">
                 Search studies
@@ -144,10 +133,7 @@ export default function StudyPicker({ value, onChange }: StudyPickerProps) {
                 </ul>
               )}
             </div>
-          </div>
-        </div>
-        </ModalPortal>
-      )}
+      </Modal>
     </>
   )
 }

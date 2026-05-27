@@ -15,7 +15,7 @@ import SessionSettingsForm from '../components/SessionSettingsForm'
 import ExportConfigurationsManager from '../components/ExportConfigurationsManager'
 import TableViewConfigurationsManager from '../components/TableViewConfigurationsManager'
 import ScannerConfigurationsManager from '../components/ScannerConfigurationsManager'
-import SkeletonCard from '../components/SkeletonCard'
+import { SkeletonCard } from '../ui'
 import { SettingsBuildVersions } from '../components/SettingsBuildVersions'
 import '../styles/settings.css'
 

@@ -35,7 +35,7 @@ describe('DerivationsBulkImport', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(specimenTypesApi.list).mockResolvedValue({ data: [] })
-    vi.mocked(unitsApi.list).mockResolvedValue({ data: [] })
+    vi.mocked(unitsApi.listAll).mockResolvedValue([])
   })
 
   it('shows derivation import content', async () => {
@@ -85,6 +85,7 @@ describe('DerivationsBulkImport', () => {
     vi.mocked(derivationsApi.validateCsv).mockRejectedValue(new Error('Invalid CSV'))
     const user = userEvent.setup()
     await render(<DerivationsBulkImport />)
+    await waitFor(() => expect(specimenTypesApi.list).toHaveBeenCalled())
     const file = new File(['col1,col2\na,b'], 'test.csv', { type: 'text/csv' })
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
     expect(fileInput).toBeInTheDocument()
@@ -106,6 +107,7 @@ describe('DerivationsBulkImport', () => {
     })
     const user = userEvent.setup()
     await render(<DerivationsBulkImport />)
+    await waitFor(() => expect(specimenTypesApi.list).toHaveBeenCalled())
     const file = new File(['parent_container_barcode,plate_name,position\nBAR1,PLATE-001,A1'], 'test.csv', {
       type: 'text/csv',
     })

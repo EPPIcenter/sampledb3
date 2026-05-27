@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
-import { studiesApi } from '../../lib/api/studies';
-import { subjectsApi } from '../../lib/api/subjects';
-import type { StudySubject } from '../../lib/api/types';
+import { useState, useRef } from 'react'
+import { subjectsApi } from '../../lib/api/subjects'
+import type { StudySubject } from '../../lib/api/types'
 import { useNavigate } from 'react-router-dom'
 import { useModifierHotkey } from '../../hooks/useHotkey'
+import { useStudy } from '../../hooks/useStudies'
 
 interface SubjectFormProps {
   studyId?: number
@@ -18,32 +18,14 @@ export default function SubjectForm({ studyId, studyShortCode, subject, onSucces
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nameValidationError, setNameValidationError] = useState<string | null>(null)
-  const [studyName, setStudyName] = useState<string | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const [formData, setFormData] = useState({
     name: subject?.name || '',
   })
 
   const effectiveStudyId = subject?.studyId || studyId
-
-  useEffect(() => {
-    // Load study details to display
-    if (effectiveStudyId) {
-      loadStudyById(effectiveStudyId)
-    }
-  }, [effectiveStudyId])
-
-  const loadStudyById = async (id: number) => {
-    try {
-      const response = await studiesApi.list()
-      const study = response.studies.find((s) => s.id === id)
-      if (study) {
-        setStudyName(study.title || null)
-      }
-    } catch (error) {
-      console.error('Failed to load study:', error)
-    }
-  }
+  const studyQuery = useStudy(effectiveStudyId ?? 0)
+  const studyName = studyQuery.data?.title ?? null
 
   const handleNameChange = (name: string) => {
     setFormData({ name })

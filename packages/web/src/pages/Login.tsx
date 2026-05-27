@@ -1,16 +1,16 @@
 import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { authApi } from '../lib/api/auth';
 import { useUser } from '../contexts/UserContext'
 import { addRecentUser } from '../lib/localUserHistory'
+import { getLoginErrorMessage, useLogin } from '../hooks/useAuthWorkflow'
 
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { refreshUser, setUser } = useUser()
+  const { setUser } = useUser()
+  const loginMutation = useLogin({ silent: true })
   const [emailOrUsername, setEmailOrUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Get redirect path from location state, or default to dashboard
@@ -20,29 +20,20 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError(null)
 
     try {
-      const response = await authApi.login(emailOrUsername, password)
+      const response = await loginMutation.mutateAsync({ emailOrUsername, password })
       const userData = response.user
       setUser(userData)
       addRecentUser(userData)
-      setLoading(false)
       navigate(from, { replace: true })
     } catch (err: unknown) {
-      const message =
-        typeof err === 'object' && err !== null && 'response' in err
-          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-          : null
-      if (message === 'Account pending approval') {
-        setError('Your account is pending approval. An administrator will approve it before you can sign in.')
-      } else {
-        setError(message || 'Login failed. Please check your credentials.')
-      }
-      setLoading(false)
+      setError(getLoginErrorMessage(err))
     }
   }
+
+  const loading = loginMutation.isPending
 
   return (
     <div className="min-h-screen bg-app-surface flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">

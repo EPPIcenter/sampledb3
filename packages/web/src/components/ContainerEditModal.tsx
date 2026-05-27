@@ -4,7 +4,7 @@ import type { Tag } from '../lib/api/reference-data';
 import { settingsApi } from '../lib/api/settings';
 import type { Unit } from '../lib/api/types';
 import { useHotkey, useModifierHotkey } from '../hooks/useHotkey'
-import ModalPortal from './ModalPortal'
+import { Modal } from '../ui'
 
 interface ContainerEditModalProps {
   isOpen: boolean
@@ -202,10 +202,7 @@ function ContainerEditModalForm({
   }, { enableOnFormTags: true })
 
   return (
-        <div
-          className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="w-full">
           <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-app-text">Edit Container</h2>
@@ -400,26 +397,14 @@ export default function ContainerEditModal({
   container,
   onSuccess,
 }: ContainerEditModalProps) {
-  if (!isOpen) return null
-
   return (
-    <ModalPortal>
-      <div className="fixed inset-0 z-[100] overflow-y-auto">
-        <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-md"
-            onClick={onClose}
-            aria-hidden
-          />
-          <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-          <ContainerEditModalForm
-            key={container.id}
-            container={container}
-            onClose={onClose}
-            onSuccess={onSuccess}
-          />
-        </div>
-      </div>
-    </ModalPortal>
+    <Modal isOpen={isOpen} onClose={onClose} showCloseButton={false} size="sm" contentClassName="p-0 sm:p-0">
+      <ContainerEditModalForm
+        key={container.id}
+        container={container}
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />
+    </Modal>
   )
 }
