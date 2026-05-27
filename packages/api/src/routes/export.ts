@@ -15,22 +15,20 @@ import { eq, and, inArray } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
 import {
   buildContainerQuery,
-  enrichContainerData,
-  filterContainersByType,
-  formatAsCSV,
-  formatSimpleCSV,
-  formatAsJSON,
-  formatAsExcel,
-  buildExportSummary,
-  validateStudyCodes,
+  buildContainerQueryByMicronixBarcodes,
   buildMultiStudyContainerQuery,
   resolveMicronixBarcodesToContainers,
-  buildContainerQueryByMicronixBarcodes,
-  type ExportFilters,
-  type ExportSummary,
-  type CSVExportOptions,
-  type MultiStudyExportEntry,
-} from '../lib/export-helpers'
+} from '../lib/export/query'
+import { enrichContainerData } from '../lib/export/enrich'
+import { filterContainerIdsByType } from '../lib/export/filter'
+import { formatAsCSV, formatAsExcel, formatAsJSON, formatSimpleCSV } from '../lib/export/format'
+import { buildExportSummary, validateStudyCodes } from '../lib/export/validate'
+import type {
+  CSVExportOptions,
+  ExportFilters,
+  ExportSummary,
+  MultiStudyExportEntry,
+} from '../lib/export/types'
 import { exportSpecimensCsv } from '../lib/export/specimens-csv'
 import { resolveSubjectNamesByStudy } from '../lib/identifier-resolution'
 import { resolveStudyByShortCode } from '../lib/identifier-resolution'
@@ -212,7 +210,7 @@ export_.get('/containers', authMiddleware, async (c) => {
       let filteredContainers = containers
       if (filters.container_types && filters.container_types.length > 0 && filteredContainers.length > 0) {
         const containerIds = filteredContainers.map((c: { id: number }) => c.id)
-        const matchingIds = await filterContainersByType(database, containerIds, filters.container_types)
+        const matchingIds = await filterContainerIdsByType(database, containerIds, filters.container_types)
         filteredContainers = filteredContainers.filter((c: { id: number }) => matchingIds.includes(c.id))
       }
       return c.json({ count: filteredContainers.length })
@@ -374,7 +372,7 @@ export_.post('/containers', authMiddleware, async (c) => {
       let filteredContainers = containers
       if (filters.container_types && filters.container_types.length > 0) {
         const containerIds = containers.map(c => c.id)
-        const matchingIds = await filterContainersByType(database, containerIds, filters.container_types)
+        const matchingIds = await filterContainerIdsByType(database, containerIds, filters.container_types)
         filteredContainers = containers.filter(c => matchingIds.includes(c.id))
       }
       
