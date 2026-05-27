@@ -169,16 +169,13 @@ export async function createTestControlDefinition(db: Database, data?: {
   const [result] = await db.insert(controlDefinition).values({
     name: data?.name || `Control ${Date.now()}`,
     controlType: data?.controlType || 'blood',
-    properties: data?.properties ? JSON.stringify(data.properties) : null,
+    properties: data?.properties ?? null,
     created: now,
     lastUpdated: now,
   }).returning()
   return result
 }
 
-/**
- * Create a test specimen (for testing specimen type "in use")
- */
 /**
  * Create a test study
  */
@@ -254,12 +251,14 @@ export async function createTestControlBatch(
     controlDefinitionId,
     name: data?.name || `Batch ${Date.now()}`,
     productionDate: data?.productionDate,
-    properties: data?.properties ? JSON.stringify(data.properties) : null,
+    properties: data?.properties ?? null,
     created: now,
     lastUpdated: now,
   }).returning()
   return result
-}/**
+}
+
+/**
  * Create a test study with default values
  */
 export function createTestStudyData(overrides?: Partial<{ title: string; shortCode: string; leadPerson: string; isLongitudinal: boolean }>) {

@@ -1,7 +1,7 @@
 import { defineConfig } from 'drizzle-kit'
 
-// Used when regenerating the initial schema: run `bunx drizzle-kit generate`, then copy
-// the generated 0000_*.sql to initial_schema.sql and delete the drizzle/ folder.
+// Regenerate schema snapshot: `bunx drizzle-kit generate`, merge SQL into initial_schema.sql
+// (statement-breakpoint separators), delete drizzle/. Tests and production both use that file.
 export default defineConfig({
   schema: './src/db/schema.ts',
   out: './drizzle',

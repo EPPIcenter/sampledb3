@@ -5,6 +5,7 @@ import { isAbsolute, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import { existsSync, readFileSync } from 'fs'
+import { applyInitialSchema } from './apply-initial-schema'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -203,50 +204,8 @@ export function createDatabase(dbPath?: string): { db: ReturnType<typeof drizzle
   const db = drizzle(sqlite, { schema })
 
   if (needsSchema) {
-    let schemaPath: string | null = null
-    let currentDir = __dirname
-    const pathsTried: string[] = []
-
-    for (let i = 0; i < 5; i++) {
-      const packageJson = join(currentDir, 'package.json')
-      if (existsSync(packageJson)) {
-        try {
-          const pkg = JSON.parse(readFileSync(packageJson, 'utf-8'))
-          if (pkg.name === '@sampledb/api') {
-            const candidate = join(currentDir, 'initial_schema.sql')
-            pathsTried.push(candidate)
-            if (existsSync(candidate)) {
-              schemaPath = candidate
-              break
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-      const parent = dirname(currentDir)
-      if (parent === currentDir) break
-      currentDir = parent
-    }
-
-    if (!schemaPath) {
-      const fallback = join(__dirname, '../../initial_schema.sql')
-      pathsTried.push(fallback)
-      if (existsSync(fallback)) schemaPath = fallback
-    }
-
-    if (!schemaPath) {
-      throw new Error(`initial_schema.sql not found. Tried: ${pathsTried.join(', ')}`)
-    }
-
     try {
-      const sql = readFileSync(schemaPath, 'utf-8')
-      const statements = sql.split('--> statement-breakpoint').map((s) => s.trim()).filter(Boolean)
-      for (const statement of statements) {
-        if (statement.length > 0) {
-          sqlite.exec(statement)
-        }
-      }
+      applyInitialSchema(sqlite)
       if (process.env.NODE_ENV !== 'production') {
         console.log(`✅ Initial schema completed successfully`)
       }

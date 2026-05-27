@@ -8,6 +8,7 @@ import {
   DEFAULT_TABLE_VIEW_CONFIGURATIONS,
 } from '../settings'
 import type { Database } from '../../db/client'
+import { createTestUser } from '../../__tests__/helpers/auth-helpers'
 
 describe('settings lib', () => {
   let testDb: Database
@@ -45,16 +46,26 @@ describe('settings lib', () => {
     })
 
     it('set then get returns value for user-scoped key', async () => {
-      await setSetting(testDb, 'user_key', 'user_value', 1)
-      const value = await getSetting<string>(testDb, 'user_key', 1)
+      const user = await createTestUser(testDb, {
+        email: 'settings-user@test.com',
+        name: 'Settings User',
+        role: 'member',
+      })
+      await setSetting(testDb, 'user_key', 'user_value', user.id as number)
+      const value = await getSetting<string>(testDb, 'user_key', user.id as number)
       expect(value).toBe('user_value')
     })
 
     it('system and user key are independent', async () => {
+      const user = await createTestUser(testDb, {
+        email: 'settings-user2@test.com',
+        name: 'Settings User 2',
+        role: 'member',
+      })
       await setSetting(testDb, 'same_key', 'system', null)
-      await setSetting(testDb, 'same_key', 'user1', 1)
+      await setSetting(testDb, 'same_key', 'user1', user.id as number)
       const systemVal = await getSetting<string>(testDb, 'same_key', null)
-      const userVal = await getSetting<string>(testDb, 'same_key', 1)
+      const userVal = await getSetting<string>(testDb, 'same_key', user.id as number)
       expect(systemVal).toBe('system')
       expect(userVal).toBe('user1')
     })
