@@ -22,6 +22,7 @@ import { NotFoundError } from '../error-handler'
 import {
   buildControlInventoryCountSubqueries,
   controlInventoryCountSelectFields,
+  type BatchGroupedSubqueries,
 } from './control-inventory-counts'
 
 export type BloodControlDefinitionSummaryResult = {
@@ -90,7 +91,7 @@ export async function getBloodControlDefinitionSummary(
   const inventoryCounts = buildControlInventoryCountSubqueries(database, {
     groupBy: 'batch',
     countScope: 'in_stock',
-  })
+  }) as BatchGroupedSubqueries
   const {
     spotCount,
     micronixCount,

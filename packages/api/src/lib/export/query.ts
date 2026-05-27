@@ -11,6 +11,7 @@ import { resolveSubjectsByStudyGrouped } from '../identifier-resolution'
 import { enrichContainerData } from './enrich'
 import { filterContainerIdsByType } from './filter'
 import type {
+  ContainerExportData,
   ExportFilters,
   MultiStudyExportEntry,
   MultiStudyExportResult,

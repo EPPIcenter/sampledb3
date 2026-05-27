@@ -11,19 +11,17 @@ import { NotFoundError } from '../error-handler'
 import {
   buildControlInventoryCountSubqueries,
   controlInventoryCountSelectFields,
+  type BatchGroupedSubqueries,
+  type DefinitionGroupedSubqueries,
 } from './control-inventory-counts'
 
 const BLOOD_CONTROL_TYPE = 'blood' as const
 const LIST_COUNT_SCOPE = 'all' as const
 
-function joinBatchInventoryCounts<T extends { leftJoin: (...args: unknown[]) => T }>(
-  query: T,
-  inventoryCounts: ReturnType<typeof buildControlInventoryCountSubqueries>,
-): T {
-  if (inventoryCounts.groupBy !== 'batch') {
-    throw new Error('Expected batch-grouped inventory counts')
-  }
-
+function joinBatchInventoryCounts(
+  query: { leftJoin: (...args: any[]) => any },
+  inventoryCounts: BatchGroupedSubqueries,
+) {
   return query
     .leftJoin(inventoryCounts.specimenCounts, eq(controlBatch.id, inventoryCounts.specimenCounts.batchId))
     .leftJoin(inventoryCounts.spotCounts, eq(controlBatch.id, inventoryCounts.spotCounts.batchId))
@@ -33,14 +31,10 @@ function joinBatchInventoryCounts<T extends { leftJoin: (...args: unknown[]) => 
     .leftJoin(inventoryCounts.tubeCounts, eq(controlBatch.id, inventoryCounts.tubeCounts.batchId))
 }
 
-function joinDefinitionInventoryCounts<T extends { leftJoin: (...args: unknown[]) => T }>(
-  query: T,
-  inventoryCounts: ReturnType<typeof buildControlInventoryCountSubqueries>,
-): T {
-  if (inventoryCounts.groupBy !== 'definition') {
-    throw new Error('Expected definition-grouped inventory counts')
-  }
-
+function joinDefinitionInventoryCounts(
+  query: { leftJoin: (...args: any[]) => any },
+  inventoryCounts: DefinitionGroupedSubqueries,
+) {
   return query
     .leftJoin(
       inventoryCounts.specimenCounts,
@@ -67,7 +61,7 @@ export async function listBloodControlBatches(database: Database) {
   const inventoryCounts = buildControlInventoryCountSubqueries(database, {
     groupBy: 'batch',
     countScope: LIST_COUNT_SCOPE,
-  })
+  }) as BatchGroupedSubqueries
   const countFields = controlInventoryCountSelectFields(inventoryCounts)
 
   const batchesResults = await joinBatchInventoryCounts(
@@ -91,7 +85,7 @@ export async function listBloodControlBatches(database: Database) {
     .where(eq(controlDefinition.controlType, BLOOD_CONTROL_TYPE))
     .orderBy(desc(controlBatch.created))
 
-  const batches = batchesResults.map((row) => {
+  const batches = batchesResults.map((row: (typeof batchesResults)[number]) => {
     const props = row.properties as Record<string, unknown> | null
     const strains = (props?.strains as unknown[]) || []
     return {
@@ -121,7 +115,7 @@ export async function listBloodControlDefinitions(database: Database) {
   const inventoryCounts = buildControlInventoryCountSubqueries(database, {
     groupBy: 'definition',
     countScope: LIST_COUNT_SCOPE,
-  })
+  }) as DefinitionGroupedSubqueries
   const countFields = controlInventoryCountSelectFields(inventoryCounts)
 
   const allStrains = await database.select().from(strain)
@@ -144,7 +138,7 @@ export async function listBloodControlDefinitions(database: Database) {
     inventoryCounts,
   ).where(eq(controlDefinition.controlType, BLOOD_CONTROL_TYPE))
 
-  const controls = results.map((row) => {
+  const controls = results.map((row: (typeof results)[number]) => {
     const parsed = parseControlProperties(row.properties, strainMap)
     return {
       ...row,

@@ -36,7 +36,7 @@ function tubeCountWhere(countScope: ControlInventoryCountScope): SQL {
   return TUBE_TYPE_EXISTS
 }
 
-type BatchGroupedSubqueries = {
+export type BatchGroupedSubqueries = {
   groupBy: 'batch'
   groupKey: 'batchId'
   spotCounts: ReturnType<typeof buildBatchSpotCountSubquery>
@@ -47,7 +47,7 @@ type BatchGroupedSubqueries = {
   specimenCounts: ReturnType<typeof buildBatchSpecimenCountSubquery>
 }
 
-type DefinitionGroupedSubqueries = {
+export type DefinitionGroupedSubqueries = {
   groupBy: 'definition'
   groupKey: 'definitionId'
   spotCounts: ReturnType<typeof buildDefinitionSpotCountSubquery>
