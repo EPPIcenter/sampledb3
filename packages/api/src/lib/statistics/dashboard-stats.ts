@@ -10,13 +10,14 @@ import {
   storageContainerTag,
 } from '../../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
-import { cache, cacheKeys } from '../cache'
 import { resolveContainerTypes } from '../container-placement'
 import { buildDateFilter, chunkArray } from './helpers'
+import { computeContainerAggregates } from './container-aggregates'
 import {
   resolveContainerIdsAtLocations,
   resolveStatisticsLocationFilter,
 } from './location-filter'
+import { computeSpecimenAggregates } from './specimen-aggregates'
 import { computeStorageStatistics } from './storage-aggregates'
 import type { DashboardStatistics, StatisticsFilters } from './types'
 
@@ -121,117 +122,11 @@ export async function getDashboardStatistics(
 
     const specimenIds = filteredSpecimens.map(s => s.id)
 
-    // Specimen Statistics
-    const specimenTotal = filteredSpecimens.length
-
-    // By source type
-    const bySourceType: Record<string, number> = {}
-    filteredSpecimens.forEach(s => {
-      const type = s.studySubjectId ? 'subject' : s.controlBatchId ? 'control' : 'unknown'
-      bySourceType[type] = (bySourceType[type] || 0) + 1
+    let specimenAggregates = await computeSpecimenAggregates(database, filteredSpecimens, {
+      studyCode,
+      subjectIds,
+      useSpecimenTypeCache: true,
     })
-
-    // By specimen type
-    // Use cache for specimen types (reference data that changes infrequently)
-    const specimenTypeIds = [...new Set(filteredSpecimens.map(s => s.specimenTypeId))]
-    let specimenTypes = specimenTypeIds.length > 0
-      ? cache.get<typeof specimenType.$inferSelect[]>(cacheKeys.specimenTypes)
-      : null
-    
-    if (!specimenTypes && specimenTypeIds.length > 0) {
-      specimenTypes = await database.select().from(specimenType).where(inArray(specimenType.id, specimenTypeIds))
-      // Cache all specimen types (not just filtered ones) for future use
-      const allSpecimenTypes = await database.select().from(specimenType)
-      cache.set(cacheKeys.specimenTypes, allSpecimenTypes, 10 * 60 * 1000) // 10 minutes
-      // Use filtered types for this query
-      specimenTypes = allSpecimenTypes.filter(st => specimenTypeIds.includes(st.id))
-    } else if (specimenTypeIds.length > 0 && specimenTypes) {
-      // Filter cached types to only those we need
-      specimenTypes = specimenTypes.filter(st => specimenTypeIds.includes(st.id))
-    } else {
-      specimenTypes = []
-    }
-    const specimenTypeMap = new Map(specimenTypes.map(st => [st.id, st.name]))
-    
-    const bySpecimenType: Record<string, number> = {}
-    filteredSpecimens.forEach(s => {
-      const typeName = specimenTypeMap.get(s.specimenTypeId) || 'Unknown'
-      bySpecimenType[typeName] = (bySpecimenType[typeName] || 0) + 1
-    })
-
-    // By study
-    const byStudy: Record<string, number> = {}
-    if (subjectIds.length > 0 || !studyCode) {
-      // Get all subjects for specimens
-      const subjectSpecimens = filteredSpecimens.filter(s => s.studySubjectId)
-      const uniqueSubjectIds = [...new Set(subjectSpecimens.map(s => s.studySubjectId!))]
-      
-      if (uniqueSubjectIds.length > 0) {
-        // Batch query to avoid SQLite variable limit
-        const BATCH_SIZE = 500
-        const subjectChunks = chunkArray(uniqueSubjectIds, BATCH_SIZE)
-        const allSubjects: Array<{ id: number; studyId: number }> = []
-        
-        for (const chunk of subjectChunks) {
-          const subjects = await database
-            .select({
-              id: studySubject.id,
-              studyId: studySubject.studyId,
-            })
-            .from(studySubject)
-            .where(inArray(studySubject.id, chunk))
-          allSubjects.push(...subjects)
-        }
-        
-        const studyIds = [...new Set(allSubjects.map(s => s.studyId))]
-        if (studyIds.length > 0) {
-          const studies = await database
-            .select()
-            .from(study)
-            .where(inArray(study.id, studyIds))
-          
-          const studyMap = new Map(studies.map(s => [s.id, s.shortCode]))
-          const subjectStudyMap = new Map(allSubjects.map(s => [s.id, studyMap.get(s.studyId)]))
-          
-          subjectSpecimens.forEach(s => {
-            const studyCode = subjectStudyMap.get(s.studySubjectId!)
-            if (studyCode) {
-              byStudy[studyCode] = (byStudy[studyCode] || 0) + 1
-            }
-          })
-        }
-      }
-    }
-
-    // Collection timeline (monthly)
-    const collectionTimeline: { date: string; count: number }[] = []
-    const collectionMap = new Map<string, number>()
-    filteredSpecimens
-      .filter(s => s.collectionDate)
-      .forEach(s => {
-        const date = new Date(s.collectionDate!)
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-        collectionMap.set(monthKey, (collectionMap.get(monthKey) || 0) + 1)
-      })
-    Array.from(collectionMap.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .forEach(([date, count]) => {
-        collectionTimeline.push({ date, count })
-      })
-
-    // Creation timeline (monthly)
-    const creationTimeline: { date: string; count: number }[] = []
-    const creationMap = new Map<string, number>()
-    filteredSpecimens.forEach(s => {
-      const date = new Date(s.created)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      creationMap.set(monthKey, (creationMap.get(monthKey) || 0) + 1)
-    })
-    Array.from(creationMap.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .forEach(([date, count]) => {
-        creationTimeline.push({ date, count })
-      })
 
     // Location Filtering - Query matching location IDs and their descendants
     const hasLocationFilter = !!locationId
@@ -456,199 +351,38 @@ export async function getDashboardStatistics(
     }
 
     const containerTotal = finalContainers.length
+    const finalContainerIds = finalContainers.map((c) => c.id)
 
-    // Recalculate specimen total based on filtered containers
-    // Only count specimens that have containers matching the filters
-    const filteredSpecimenIds = [...new Set(finalContainers.map(c => c.specimenId))]
-    let adjustedSpecimenTotal = specimenTotal
-    let adjustedSpecimens = filteredSpecimens
-    
-    // If we filtered containers (by type, state, or location), recalculate specimen stats
     if (containerType || tagFilteredContainerIds || hasLocationFilter) {
-      // If we filtered containers, only count specimens that have matching containers
-      adjustedSpecimenTotal = filteredSpecimenIds.length
-      
-      // Filter specimens to only those with matching containers
-      if (filteredSpecimenIds.length > 0) {
-        const specimenIdSet = new Set(filteredSpecimenIds)
-        adjustedSpecimens = filteredSpecimens.filter(s => specimenIdSet.has(s.id))
-      } else {
-        adjustedSpecimens = []
-      }
-      
-      // Recalculate all specimen statistics based on adjusted specimens
-      // By source type
-      const adjustedBySourceType: Record<string, number> = {}
-      adjustedSpecimens.forEach(s => {
-        const type = s.studySubjectId ? 'subject' : s.controlBatchId ? 'control' : 'unknown'
-        adjustedBySourceType[type] = (adjustedBySourceType[type] || 0) + 1
-      })
-      Object.keys(bySourceType).forEach(key => delete bySourceType[key])
-      Object.assign(bySourceType, adjustedBySourceType)
-      
-      // By specimen type
-      const adjustedSpecimenTypeIds = [...new Set(adjustedSpecimens.map(s => s.specimenTypeId))]
-      const adjustedSpecimenTypes = adjustedSpecimenTypeIds.length > 0
-        ? await database.select().from(specimenType).where(inArray(specimenType.id, adjustedSpecimenTypeIds))
-        : []
-      const adjustedSpecimenTypeMap = new Map(adjustedSpecimenTypes.map(st => [st.id, st.name]))
-      
-      const adjustedBySpecimenType: Record<string, number> = {}
-      adjustedSpecimens.forEach(s => {
-        const typeName = adjustedSpecimenTypeMap.get(s.specimenTypeId) || 'Unknown'
-        adjustedBySpecimenType[typeName] = (adjustedBySpecimenType[typeName] || 0) + 1
-      })
-      Object.keys(bySpecimenType).forEach(key => delete bySpecimenType[key])
-      Object.assign(bySpecimenType, adjustedBySpecimenType)
-      
-      // By study
-      const adjustedSubjectSpecimens = adjustedSpecimens.filter(s => s.studySubjectId)
-      const adjustedUniqueSubjectIds = [...new Set(adjustedSubjectSpecimens.map(s => s.studySubjectId!))]
-      
-      if (adjustedUniqueSubjectIds.length > 0) {
-        const BATCH_SIZE = 500
-        const adjustedSubjectChunks = chunkArray(adjustedUniqueSubjectIds, BATCH_SIZE)
-        const adjustedAllSubjects: Array<{ id: number; studyId: number }> = []
-        
-        for (const chunk of adjustedSubjectChunks) {
-          const subjects = await database
-            .select({
-              id: studySubject.id,
-              studyId: studySubject.studyId,
-            })
-            .from(studySubject)
-            .where(inArray(studySubject.id, chunk))
-          adjustedAllSubjects.push(...subjects)
-        }
-        
-        const adjustedStudyIds = [...new Set(adjustedAllSubjects.map(s => s.studyId))]
-        if (adjustedStudyIds.length > 0) {
-          const studies = await database
-            .select()
-            .from(study)
-            .where(inArray(study.id, adjustedStudyIds))
-          
-          const studyMap = new Map(studies.map(s => [s.id, s.shortCode]))
-          const subjectStudyMap = new Map(adjustedAllSubjects.map(s => [s.id, studyMap.get(s.studyId)]))
-          
-          const adjustedByStudy: Record<string, number> = {}
-          adjustedSubjectSpecimens.forEach(s => {
-            const studyCode = subjectStudyMap.get(s.studySubjectId!)
-            if (studyCode) {
-              adjustedByStudy[studyCode] = (adjustedByStudy[studyCode] || 0) + 1
-            }
-          })
-          Object.keys(byStudy).forEach(key => delete byStudy[key])
-          Object.assign(byStudy, adjustedByStudy)
-        }
-      }
-      
-      // Collection timeline
-      const adjustedCollectionTimeline: { date: string; count: number }[] = []
-      const adjustedCollectionMap = new Map<string, number>()
-      adjustedSpecimens
-        .filter(s => s.collectionDate)
-        .forEach(s => {
-          const date = new Date(s.collectionDate!)
-          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-          adjustedCollectionMap.set(monthKey, (adjustedCollectionMap.get(monthKey) || 0) + 1)
-        })
-      Array.from(adjustedCollectionMap.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .forEach(([date, count]) => {
-          adjustedCollectionTimeline.push({ date, count })
-        })
-      collectionTimeline.length = 0
-      collectionTimeline.push(...adjustedCollectionTimeline)
-      
-      // Creation timeline
-      const adjustedCreationTimeline: { date: string; count: number }[] = []
-      const adjustedCreationMap = new Map<string, number>()
-      adjustedSpecimens.forEach(s => {
-        const date = new Date(s.created)
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-        adjustedCreationMap.set(monthKey, (adjustedCreationMap.get(monthKey) || 0) + 1)
-      })
-      Array.from(adjustedCreationMap.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .forEach(([date, count]) => {
-          adjustedCreationTimeline.push({ date, count })
-        })
-      creationTimeline.length = 0
-      creationTimeline.push(...adjustedCreationTimeline)
-    }
-    const averagePerSpecimen = adjustedSpecimenTotal > 0 ? containerTotal / adjustedSpecimenTotal : 0
+      const filteredSpecimenIds = [...new Set(finalContainers.map(c => c.specimenId))]
+      const adjustedSpecimens =
+        filteredSpecimenIds.length > 0
+          ? filteredSpecimens.filter((s) => new Set(filteredSpecimenIds).has(s.id))
+          : []
 
-    // Containers by type (always use finalContainers to respect all filters)
-    const byType: Record<string, number> = {}
-    finalContainers.forEach(container => {
-      const type = containerTypeMap.get(container.id)
-      if (type) {
-        byType[type] = (byType[type] || 0) + 1
-      }
-    })
-
-    // Containers by tags
-    const finalContainerIds = finalContainers.map(c => c.id)
-    let containerTags: Array<{ containerId: number; tagId: number; tagName: string }> = []
-    
-    if (finalContainerIds.length > 0) {
-      // Batch query to avoid SQLite variable limit and stack overflow
-      const containerIdChunks = chunkArray(finalContainerIds, 500)
-
-      // Use Promise.all to parallelize container tag queries
-      const tagChunkResults = await Promise.all(
-        containerIdChunks.map(async (chunk, i) => {
-          const chunkTags = await database
-            .select({
-              containerId: storageContainerTag.storageContainerId,
-              tagId: tag.id,
-              tagName: tag.name,
-            })
-            .from(storageContainerTag)
-            .innerJoin(tag, eq(storageContainerTag.tagId, tag.id))
-            .where(inArray(storageContainerTag.storageContainerId, chunk))
-          return chunkTags
-        })
-      )
-      containerTags = tagChunkResults.flat()
+      specimenAggregates = await computeSpecimenAggregates(database, adjustedSpecimens, {
+        studyCode,
+        subjectIds,
+        useSpecimenTypeCache: false,
+      })
     }
 
-    const byTags: Record<string, number> = {}
-    containerTags.forEach(ct => {
-      byTags[ct.tagName] = (byTags[ct.tagName] || 0) + 1
-    })
+    const averagePerSpecimen =
+      specimenAggregates.total > 0 ? containerTotal / specimenAggregates.total : 0
 
-    // Containers by status (Inferred from remaining quantity)
-    const byStatus: Record<string, number> = {}
-    finalContainers.forEach(c => {
-      let statusName: string
-      if (c.remainingQuantity == null) {
-        statusName = 'Unknown'
-      } else if (c.remainingQuantity > 0) {
-        statusName = 'In Use'
-      } else {
-        statusName = 'Exhausted'
-      }
-      byStatus[statusName] = (byStatus[statusName] || 0) + 1
-    })
+    const containerAggregates = await computeContainerAggregates(
+      database,
+      finalContainers,
+      containerTypeMap,
+    )
 
     const storage = await computeStorageStatistics(database, finalContainerIds, containerTotal)
 
     return {
-      specimens: {
-        total: adjustedSpecimenTotal,
-        bySourceType,
-        bySpecimenType,
-        byStudy,
-        collectionTimeline,
-        creationTimeline,
-      },
+      specimens: specimenAggregates,
       containers: {
         total: containerTotal,
-        byType,
-        byTags,
-        byStatus,
+        ...containerAggregates,
         averagePerSpecimen: Math.round(averagePerSpecimen * 100) / 100,
       },
       storage,
