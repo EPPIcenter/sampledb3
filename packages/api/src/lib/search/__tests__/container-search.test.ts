@@ -32,6 +32,7 @@ describe('container-search', () => {
     const storageType = await createTestStorageType(testDb, { name: 'Search Storage' })
     const loc = await createTestLocation(testDb, {
       name: 'Search Freezer',
+      path: 'Search Freezer',
       storageTypeId: String(storageType.id),
     })
     const plate = await createTestMicronixPlate(testDb, {
@@ -56,6 +57,9 @@ describe('container-search', () => {
       type: 'container',
       id: container.id,
       title: 'Micronix Tube: MX-SEARCH-42',
+      subtitle: 'Plate: Search Plate, Position: C03 • Search Freezer',
+      locationId: loc.id,
+      locationPath: 'Search Freezer',
       url: `/containers/${container.id}`,
     })
   })

@@ -1,11 +1,81 @@
 import type { Database } from '../../db/client'
 import { micronixTube, cryovialTube, micronixPlate, cryovialBox } from '../../db/schema'
 import { eq, like, sql } from 'drizzle-orm'
+import {
+  resolveContainerPlacements,
+  type ContainerPlacement,
+  type KnownContainerPlacement,
+} from '../container-placement'
 import type { SearchResult } from './types'
+
+type ContainerSearchRow = {
+  id: number
+  title: string
+  barcode?: string | null
+  position?: string | null
+  collectionLabel: 'Plate' | 'Box'
+  collectionName?: string | null
+  collectionId: number
+  data: unknown
+  idLookup?: boolean
+}
+
+function isKnownPlacement(
+  placement: ContainerPlacement | undefined,
+): placement is KnownContainerPlacement {
+  return placement !== undefined && placement.containerType !== 'unknown'
+}
+
+function buildContainerSearchSubtitle(
+  row: ContainerSearchRow,
+  placement: ContainerPlacement | undefined,
+): string {
+  const known = isKnownPlacement(placement) ? placement : undefined
+
+  if (row.idLookup) {
+    if (row.barcode) {
+      return known?.locationPath
+        ? `Barcode: ${row.barcode} • ${known.locationPath}`
+        : `Barcode: ${row.barcode}`
+    }
+
+    if (known?.collection) {
+      const base = `${row.collectionLabel}: ${known.collection.name}`
+      return known.locationPath ? `${base} • ${known.locationPath}` : base
+    }
+
+    return `${row.collectionLabel}: ${row.collectionId}`
+  }
+
+  const collectionName = known?.collection.name ?? row.collectionName ?? String(row.collectionId)
+  const position = known?.collection.position ?? row.position ?? 'N/A'
+  let subtitle = `${row.collectionLabel}: ${collectionName}, Position: ${position}`
+
+  if (known?.locationPath) {
+    subtitle = `${subtitle} • ${known.locationPath}`
+  }
+
+  return subtitle
+}
+
+function toSearchResult(row: ContainerSearchRow, placement: ContainerPlacement | undefined): SearchResult {
+  const known = isKnownPlacement(placement) ? placement : undefined
+
+  return {
+    type: 'container',
+    id: row.id,
+    title: row.title,
+    subtitle: buildContainerSearchSubtitle(row, placement),
+    url: `/containers/${row.id}`,
+    locationId: known?.location?.id ?? null,
+    locationPath: known?.locationPath ?? known?.location?.path,
+    data: row.data,
+  }
+}
 
 /** Search containers by barcode or numeric container id. */
 export async function searchContainers(database: Database, query: string): Promise<SearchResult[]> {
-  const results: SearchResult[] = []
+  const rows: ContainerSearchRow[] = []
 
   const micronixTubes = await database
     .select({
@@ -22,12 +92,14 @@ export async function searchContainers(database: Database, query: string): Promi
     .limit(10)
 
   for (const tube of micronixTubes) {
-    results.push({
-      type: 'container',
+    rows.push({
       id: tube.id,
       title: `Micronix Tube: ${tube.barcode}`,
-      subtitle: `Plate: ${tube.plateName || tube.plateId}, Position: ${tube.position || 'N/A'}`,
-      url: `/containers/${tube.id}`,
+      barcode: tube.barcode,
+      position: tube.position,
+      collectionLabel: 'Plate',
+      collectionName: tube.plateName,
+      collectionId: tube.plateId,
       data: tube,
     })
   }
@@ -47,12 +119,14 @@ export async function searchContainers(database: Database, query: string): Promi
     .limit(10)
 
   for (const tube of cryovialTubes) {
-    results.push({
-      type: 'container',
+    rows.push({
       id: tube.id,
       title: `Cryovial Tube: ${tube.barcode || 'No barcode'}`,
-      subtitle: `Box: ${tube.boxName || tube.boxId}, Position: ${tube.position || 'N/A'}`,
-      url: `/containers/${tube.id}`,
+      barcode: tube.barcode,
+      position: tube.position,
+      collectionLabel: 'Box',
+      collectionName: tube.boxName,
+      collectionId: tube.boxId,
       data: tube,
     })
   }
@@ -67,13 +141,14 @@ export async function searchContainers(database: Database, query: string): Promi
 
     if (micronixById.length > 0) {
       const tube = micronixById[0]
-      results.push({
-        type: 'container',
+      rows.push({
         id: tube.id,
         title: `Micronix Tube #${tube.id}`,
-        subtitle: tube.barcode ? `Barcode: ${tube.barcode}` : `Plate: ${tube.collectionId}`,
-        url: `/containers/${tube.id}`,
+        barcode: tube.barcode,
+        collectionLabel: 'Plate',
+        collectionId: tube.collectionId,
         data: tube,
+        idLookup: true,
       })
     } else {
       const cryovialById = await database
@@ -84,17 +159,27 @@ export async function searchContainers(database: Database, query: string): Promi
 
       if (cryovialById.length > 0) {
         const tube = cryovialById[0]
-        results.push({
-          type: 'container',
+        rows.push({
           id: tube.id,
           title: `Cryovial Tube #${tube.id}`,
-          subtitle: tube.barcode ? `Barcode: ${tube.barcode}` : `Box: ${tube.collectionId}`,
-          url: `/containers/${tube.id}`,
+          barcode: tube.barcode,
+          collectionLabel: 'Box',
+          collectionId: tube.collectionId,
           data: tube,
+          idLookup: true,
         })
       }
     }
   }
 
-  return results
+  if (rows.length === 0) {
+    return []
+  }
+
+  const placementMap = await resolveContainerPlacements(
+    database,
+    rows.map((row) => row.id),
+  )
+
+  return rows.map((row) => toSearchResult(row, placementMap.get(row.id)))
 }
