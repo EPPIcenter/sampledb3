@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { exportApi } from '../lib/api/export';
 import {
+  parseExportCsv,
   useExportConfigurations,
+  useExportMultiStudyWorkflow,
   useExportReferenceData,
+  type ExportCsvRow,
+  type ExportMultiStudyFilters,
 } from '../hooks/useExportWorkflow'
 import { PageError } from '../ui'
-import { formatLocalDateTime } from '../lib/date-utils'
 import {
   formatExportConfigId,
   getExportColumnsForConfigId,
@@ -21,72 +23,20 @@ const CONTAINER_TYPES = [
   { value: 'static_well', label: 'Static Well' },
 ]
 
-interface CSVRow {
-  study_short_code: string
-  subject_name: string
-  collection_date?: string
-  date_from?: string
-  date_to?: string
-}
-
 export default function Export() {
-  const [csvFile, setCsvFile] = useState<File | null>(null)
-  const [csvData, setCsvData] = useState<CSVRow[]>([])
+  const [csvData, setCsvData] = useState<ExportCsvRow[]>([])
   const [csvError, setCsvError] = useState<string | null>(null)
   const [dateTolerance, setDateTolerance] = useState<number>(0)
-  const [exporting, setExporting] = useState(false)
   const [exportFormat, setExportFormat] = useState<'csv' | 'xlsx' | 'json'>('csv')
-  const [error, setError] = useState<string | null>(null)
-  
-  // CSV export options
   const [csvDelimiter, setCsvDelimiter] = useState<',' | ';' | '\t'>(',')
   const [csvBOM, setCsvBOM] = useState<boolean>(true)
   const [csvLineEnding, setCsvLineEnding] = useState<'LF' | 'CRLF'>('CRLF')
-  const [count, setCount] = useState<number | null>(null)
-  const [loadingCount, setLoadingCount] = useState(false)
-  
-  // Validation state
-  const [validating, setValidating] = useState(false)
-  const [validationResult, setValidationResult] = useState<{
-    valid: Array<{ code: string; id: number; title?: string; lead_person?: string }>
-    invalid: string[]
-    total_unique: number
-    valid_count: number
-    invalid_count: number
-  } | null>(null)
-  
-  // Export summary
-  const [exportSummary, setExportSummary] = useState<{
-    total_containers: number
-    studies: Array<{
-      study_code: string
-      study_title: string
-      study_lead_person: string
-      containers: number
-      subjects_with_results: Array<{ name: string; count: number }>
-      subjects_no_results: string[]
-      subjects_not_found: string[]
-    }>
-    invalid_study_codes: string[]
-    errors?: string[]
-  } | null>(null)
   const [summaryExpanded, setSummaryExpanded] = useState(false)
-  
-  // Filters
-  const [filters, setFilters] = useState<{
-    specimen_type_ids?: number[]
-    container_types?: string[]
-    date_from?: string
-    date_to?: string
-    created_from?: string
-    created_to?: string
-    tag_ids?: number[]
-  }>({})
-  
+  const [filters, setFilters] = useState<ExportMultiStudyFilters>({})
   const [focusedConfigIndex, setFocusedConfigIndex] = useState<number | null>(null)
+
   const referenceData = useExportReferenceData()
   const { specimenTypes, tags, isLoading: loadingRefData } = referenceData
-  const availableContainerTypes = CONTAINER_TYPES.map((t) => t.value)
   const {
     configurations: exportConfigurations,
     selectedConfigId,
@@ -95,6 +45,20 @@ export default function Export() {
     error: configLoadError,
     loadConfigurations,
   } = useExportConfigurations()
+
+  const {
+    validating,
+    validationResult,
+    validateStudyCodes,
+    resetValidation,
+    count,
+    loadingCount,
+    exporting,
+    exportSummary,
+    exportContainers,
+    resetExportSummary,
+    error,
+  } = useExportMultiStudyWorkflow({ csvData, dateTolerance, filters })
 
   const bootstrapError = useMemo(() => {
     if (referenceData.isError) return referenceData.errorMessage
@@ -107,289 +71,49 @@ export default function Export() {
     void loadConfigurations()
   }
 
-  const parseCSV = useCallback((file: File) => {
-    return new Promise<CSVRow[]>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        try {
-          const text = e.target?.result as string
-          if (!text) {
-            reject(new Error('File is empty'))
-            return
-          }
-
-          const lines = text.split('\n').filter(line => line.trim())
-          if (lines.length === 0) {
-            reject(new Error('CSV file is empty'))
-            return
-          }
-
-          // Parse header
-          const headerLine = lines[0].trim()
-          const headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''))
-          
-          // Find column indices
-          const studyCodeIdx = headers.findIndex(h => h === 'study_short_code' || h === 'study short code')
-          const subjectNameIdx = headers.findIndex(h => h === 'subject_name' || h === 'subject name')
-          
-          if (studyCodeIdx === -1) {
-            reject(new Error('CSV must contain a "study_short_code" column'))
-            return
-          }
-          if (subjectNameIdx === -1) {
-            reject(new Error('CSV must contain a "subject_name" column'))
-            return
-          }
-          
-          const collectionDateIdx = headers.findIndex(h => h === 'collection_date' || h === 'collection date')
-          const dateFromIdx = headers.findIndex(h => h === 'date_from' || h === 'date from')
-          const dateToIdx = headers.findIndex(h => h === 'date_to' || h === 'date to')
-
-          // Parse data rows
-          const data: CSVRow[] = []
-
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim()
-            if (!line) continue
-
-            // Simple CSV parsing (handles quoted values)
-            const values: string[] = []
-            let current = ''
-            let inQuotes = false
-            
-            for (let j = 0; j < line.length; j++) {
-              const char = line[j]
-              if (char === '"') {
-                if (inQuotes && line[j + 1] === '"') {
-                  current += '"'
-                  j++
-                } else {
-                  inQuotes = !inQuotes
-                }
-              } else if (char === ',' && !inQuotes) {
-                values.push(current.trim())
-                current = ''
-              } else {
-                current += char
-              }
-            }
-            values.push(current.trim())
-
-            const studyCode = values[studyCodeIdx]?.replace(/^"|"$/g, '').trim()
-            const subjectName = values[subjectNameIdx]?.replace(/^"|"$/g, '').trim()
-            
-            if (!studyCode || !subjectName) continue
-
-            const row: CSVRow = {
-              study_short_code: studyCode,
-              subject_name: subjectName,
-            }
-
-            if (collectionDateIdx >= 0 && values[collectionDateIdx]) {
-              const date = values[collectionDateIdx].replace(/^"|"$/g, '').trim()
-              if (date) row.collection_date = date
-            }
-            if (dateFromIdx >= 0 && values[dateFromIdx]) {
-              const date = values[dateFromIdx].replace(/^"|"$/g, '').trim()
-              if (date) row.date_from = date
-            }
-            if (dateToIdx >= 0 && values[dateToIdx]) {
-              const date = values[dateToIdx].replace(/^"|"$/g, '').trim()
-              if (date) row.date_to = date
-            }
-
-            data.push(row)
-          }
-
-          if (data.length === 0) {
-            reject(new Error('No valid data rows found in CSV'))
-            return
-          }
-
-          resolve(data)
-        } catch (err: any) {
-          reject(new Error(`Failed to parse CSV: ${err.message}`))
-        }
-      }
-      reader.onerror = () => reject(new Error('Failed to read file'))
-      reader.readAsText(file)
-    })
-  }, [])
-
-  const handleCSVUpload = useCallback(async (file: File) => {
-    try {
-      setCsvError(null)
-      setValidationResult(null)
-      setExportSummary(null)
-      setSummaryExpanded(false)
-      
-      const data = await parseCSV(file)
-      setCsvData(data)
-      setCsvFile(file)
-      
-      // Auto-validate study codes
-      const uniqueStudyCodes = [...new Set(data.map(row => row.study_short_code))]
-      await validateStudyCodes(uniqueStudyCodes)
-    } catch (err: any) {
-      setCsvError(err.message)
-      setCsvData([])
-      setCsvFile(null)
-      setValidationResult(null)
-    }
-  }, [parseCSV])
-
-  const validateStudyCodes = useCallback(async (studyCodes: string[]) => {
-    if (studyCodes.length === 0) return
-    
-    try {
-      setValidating(true)
-      setError(null)
-      const response = await exportApi.validateStudyCodes(studyCodes)
-      setValidationResult(response)
-      
-      if (response.invalid_count > 0) {
-        setError(`Found ${response.invalid_count} invalid study code(s): ${response.invalid.join(', ')}`)
-      }
-    } catch (err: any) {
-      console.error('Failed to validate study codes:', err)
-      setError(err?.response?.data?.error || 'Failed to validate study codes')
-    } finally {
-      setValidating(false)
-    }
-  }, [])
-
-  const updateCount = useCallback(
-    async (getIgnore?: () => boolean) => {
-      if (csvData.length === 0) {
-        setCount(null)
-        return
-      }
-
-      const checkIgnore = getIgnore ?? (() => false)
-
+  const handleCSVUpload = useCallback(
+    async (file: File) => {
       try {
-        setLoadingCount(true)
-        setError(null)
+        setCsvError(null)
+        resetValidation()
+        resetExportSummary()
+        setSummaryExpanded(false)
 
-        const response = await exportApi.containersCountByNamesMultiStudy({
-          entries: csvData,
-          date_tolerance: dateTolerance,
-          specimen_type_ids: filters.specimen_type_ids,
-          container_types: filters.container_types,
-          date_from: filters.date_from,
-          date_to: filters.date_to,
-          created_from: filters.created_from,
-          created_to: filters.created_to,
-        })
+        const data = await parseExportCsv(file)
+        setCsvData(data)
 
-        if (!checkIgnore()) {
-          setCount(response.count)
-        }
-      } catch (error: unknown) {
-        if (!checkIgnore()) {
-          console.error('Failed to get count:', error)
-          const err = error as { response?: { data?: { error?: string } } }
-          setError(err.response?.data?.error || 'Failed to get count')
-          setCount(null)
-        }
-      } finally {
-        if (!checkIgnore()) {
-          setLoadingCount(false)
-        }
+        const uniqueStudyCodes = [...new Set(data.map((row) => row.study_short_code))]
+        validateStudyCodes(uniqueStudyCodes)
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to parse CSV'
+        setCsvError(message)
+        setCsvData([])
+        resetValidation()
       }
     },
-    [csvData, dateTolerance, filters]
+    [validateStudyCodes, resetValidation, resetExportSummary]
   )
 
-  useEffect(() => {
-    if (csvData.length === 0) return
-    let ignore = false
-    const timer = setTimeout(() => {
-      void updateCount(() => ignore)
-    }, 500)
-    return () => {
-      ignore = true
-      clearTimeout(timer)
-    }
-  }, [csvData, dateTolerance, filters, updateCount])
-
-  const handleExport = async () => {
-    try {
-      setExporting(true)
-      setError(null)
-      setExportSummary(null)
-
-      const columns = getExportColumnsForConfigId(exportConfigurations, selectedConfigId)
-
-      const response = await exportApi.containersByNamesMultiStudy({
-        entries: csvData,
-        date_tolerance: dateTolerance,
-        format: exportFormat,
-        columns: columns,
-        specimen_type_ids: filters.specimen_type_ids,
-        container_types: filters.container_types,
-        date_from: filters.date_from,
-        date_to: filters.date_to,
-        created_from: filters.created_from,
-        created_to: filters.created_to,
-        csv_delimiter: exportFormat === 'csv' ? csvDelimiter : undefined,
-        csv_bom: exportFormat === 'csv' ? csvBOM : undefined,
-        csv_line_ending: exportFormat === 'csv' ? csvLineEnding : undefined,
-      })
-      
-      const summary = response.summary
-      setExportSummary(summary)
-
-      // Handle file download
-      let blob: Blob
-      let filename: string
-
-      if (typeof response.data === 'string') {
-        // Base64 encoded
-        const binaryString = atob(response.data)
-        const bytes = new Uint8Array(binaryString.length)
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i)
-        }
-        const mimeType = exportFormat === 'xlsx' 
-          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          : 'text/csv'
-        blob = new Blob([bytes], { type: mimeType })
-      } else {
-        // JSON format
-        blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
-      }
-      
-      filename = response.filename || `multi_study_export_${formatLocalDateTime()}.${exportFormat}`
-      
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = filename
-      
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-
-      // Show inline summary
-      setSummaryExpanded(true)
-    } catch (error: any) {
-      console.error('Export failed:', error)
-      setError(error.response?.data?.error || 'Export failed')
-    } finally {
-      setExporting(false)
-    }
+  const handleExport = () => {
+    const columns = getExportColumnsForConfigId(exportConfigurations, selectedConfigId) ?? []
+    exportContainers({
+      columns,
+      exportFormat,
+      csvDelimiter: exportFormat === 'csv' ? csvDelimiter : undefined,
+      csvBOM: exportFormat === 'csv' ? csvBOM : undefined,
+      csvLineEnding: exportFormat === 'csv' ? csvLineEnding : undefined,
+    })
+    setSummaryExpanded(true)
   }
 
-  const updateFilter = <K extends keyof typeof filters>(
+  const updateFilter = <K extends keyof ExportMultiStudyFilters>(
     key: K,
-    value: typeof filters[K]
+    value: ExportMultiStudyFilters[K]
   ) => {
-    setFilters(prev => ({ ...prev, [key]: value }))
+    setFilters((prev) => ({ ...prev, [key]: value }))
   }
 
-  const toggleArrayFilter = <K extends keyof typeof filters>(
+  const toggleArrayFilter = <K extends keyof ExportMultiStudyFilters>(
     key: K,
     value: number | string
   ) => {
@@ -444,7 +168,7 @@ export default function Export() {
                 onChange={(e) => {
                   const file = e.target.files?.[0]
                   if (file) {
-                    handleCSVUpload(file)
+                    void handleCSVUpload(file)
                   }
                 }}
                 className="file-input-accent"
@@ -723,7 +447,6 @@ export default function Export() {
                     setFocusedConfigIndex(newIndex)
                     const newConfig = exportConfigurations[newIndex]
                     setSelectedConfigId(formatExportConfigId(newConfig.source!, newConfig.name))
-                    // Focus the button
                     const button = e.currentTarget.children[newIndex] as HTMLElement
                     button.focus()
                   } else if (e.key === 'Enter' || e.key === ' ') {
@@ -741,7 +464,7 @@ export default function Export() {
                   const isFocused = focusedConfigIndex === index
                   return (
                     <button
-                      key={configId} // Use unique ID to prevent duplicate keys (fixes Bug 2)
+                      key={configId}
                       type="button"
                       role="radio"
                       aria-checked={isSelected}
@@ -752,14 +475,12 @@ export default function Export() {
                       }}
                       onFocus={() => setFocusedConfigIndex(index)}
                       onBlur={() => {
-                        // Only clear focus if not selected (selected items should keep focus styling)
                         if (configId !== selectedConfigId) {
                           setFocusedConfigIndex(null)
                         }
                       }}
                       onMouseEnter={() => setFocusedConfigIndex(index)}
                       onMouseLeave={() => {
-                        // Only clear focus if not selected (selected items should keep focus styling)
                         if (configId !== selectedConfigId) {
                           setFocusedConfigIndex(null)
                         }
@@ -836,7 +557,6 @@ export default function Export() {
             <div className="mb-6 p-4 bg-app-surface rounded-lg border border-app-border">
               <h3 className="text-sm font-medium text-app-text mb-3">CSV Options</h3>
               
-              {/* Delimiter Selection */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-app-text mb-2">
                   Delimiter
@@ -878,7 +598,6 @@ export default function Export() {
                 </div>
               </div>
 
-              {/* UTF-8 BOM Toggle */}
               <div className="mb-4">
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
@@ -894,7 +613,6 @@ export default function Export() {
                 </p>
               </div>
 
-              {/* Line Ending Selection */}
               <div>
                 <label className="block text-sm font-medium text-app-text mb-2">
                   Line Ending
@@ -969,7 +687,6 @@ export default function Export() {
                 }`}
               >
                 <div className="px-4 py-4 space-y-4 bg-app-card">
-                  {/* Total Containers */}
                   <div className="p-4 rounded-lg" style={{ background: 'rgb(var(--app-accent-muted))' }}>
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium" style={{ color: 'rgb(var(--app-text-muted))' }}>Total Containers Exported:</span>
@@ -979,7 +696,6 @@ export default function Export() {
                     </div>
                   </div>
 
-                  {/* Study Breakdown */}
                   {exportSummary.studies.map((study, idx) => (
                     <div key={idx} className="border border-app-border rounded-lg p-4">
                       <div className="font-medium text-app-text mb-2">
@@ -1032,7 +748,6 @@ export default function Export() {
                     </div>
                   ))}
 
-                  {/* Invalid Study Codes */}
                   {exportSummary.invalid_study_codes.length > 0 && (
                     <div className="border border-app-trend-down rounded-lg p-4 bg-app-trend-down/10">
                       <div className="text-sm font-medium text-app-trend-down mb-2">
@@ -1063,4 +778,3 @@ export default function Export() {
     </div>
   )
 }
-

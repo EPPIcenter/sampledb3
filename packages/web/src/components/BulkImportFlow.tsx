@@ -17,7 +17,7 @@ import {
   getBulkImportRequiredFields,
   getBulkImportOptionalFields,
   parseBulkImportCSV,
-  validateBulkImportCSV,
+  mapBulkImportRowsToPayload,
   getBulkImportRowCollectionName,
   type CSVRow,
   type BulkImportValidationError,
@@ -247,19 +247,18 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       const rows = parseBulkImportCSV(text)
       setCsvRows(rows)
 
-      const validation = validateBulkImportCSV(rows, {
-        importType,
-        containerType,
-        fixedStudyShortCode,
-      })
-
-      if (!validation.valid) {
-        setValidationErrors(validation.errors)
+      if (rows.length === 0) {
+        setValidationErrors([{ row: 0, error: 'CSV file is empty or has no data rows' }])
         setWorkflowLoading(false)
         return
       }
 
-      setValidatedData(validation.data)
+      const data = mapBulkImportRowsToPayload(rows, {
+        importType,
+        containerType,
+        fixedStudyShortCode,
+      })
+      setValidatedData(data)
 
       if (importType !== 'subjects' && containerType !== 'none') {
         const collectionType = getCollectionType()
@@ -290,14 +289,14 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         }
       }
 
-      const preErrors = await runPreReviewServerValidation(validation.data, [])
+      const preErrors = await runPreReviewServerValidation(data, [])
       if (preErrors.length > 0) {
         setValidationErrors(preErrors)
         setWorkflowLoading(false)
         return
       }
 
-      await handleImport(validation.data)
+      await handleImport(data)
     } catch (error: unknown) {
       const message = getQueryErrorMessage(error, 'Validation failed')
       setValidationErrors([{ row: 0, error: message }])

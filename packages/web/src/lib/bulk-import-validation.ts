@@ -1,6 +1,6 @@
 /**
- * CSV parsing and validation for the bulk import flow (subjects, specimens, combined).
- * Shared so BulkImportFlow can stay a thin orchestrator and logic is testable.
+ * CSV parsing and display helpers for the bulk import flow.
+ * Server validate endpoints are the source of truth for row rules.
  */
 import type { ContainerType } from './container-types'
 import { getCollectionNameColumn } from './container-columns'
@@ -12,12 +12,6 @@ export interface CSVRow {
 export interface BulkImportValidationError {
   row: number
   error: string
-}
-
-export interface BulkImportValidationResult {
-  valid: boolean
-  errors: BulkImportValidationError[]
-  data: Record<string, unknown>[]
 }
 
 export type ImportType = 'subjects' | 'specimens' | 'combined'
@@ -122,106 +116,46 @@ function getRowCollectionName(
   return getBulkImportRowCollectionName(row, containerType)
 }
 
-export function validateBulkImportCSV(
+/** Map parsed CSV rows to API payloads (no business-rule validation). */
+export function mapBulkImportRowsToPayload(
   rows: CSVRow[],
   opts: {
     importType: ImportType
     containerType: ContainerType | 'none' | ''
     fixedStudyShortCode?: string
   }
-): BulkImportValidationResult {
-  const errors: BulkImportValidationError[] = []
-  const data: Record<string, unknown>[] = []
+): Record<string, unknown>[] {
   const { importType, containerType, fixedStudyShortCode } = opts
-  const requiredFields = getBulkImportRequiredFields(opts)
+  const data: Record<string, unknown>[] = []
 
-  if (rows.length === 0) {
-    return { valid: false, errors: [{ row: 0, error: 'CSV file is empty' }], data: [] }
-  }
-
-  const headers = Object.keys(rows[0] as object)
-  const missingColumns = requiredFields.filter((col) => !headers.includes(col))
-
-  if (missingColumns.length > 0) {
-    return {
-      valid: false,
-      errors: [{ row: 0, error: `Missing required columns: ${missingColumns.join(', ')}` }],
-      data: [],
-    }
-  }
-
-  if (containerType !== 'none' && containerType !== '' && headers.includes('container_type')) {
-    const containerTypes = new Set(
-      rows.map((row) => row.container_type).filter(Boolean)
-    )
-    if (containerTypes.size > 1) {
-      errors.push({ row: 0, error: 'All rows must have the same container_type' })
-    }
-    if (
-      containerTypes.size === 1 &&
-      !containerTypes.has(containerType as string)
-    ) {
-      errors.push({
-        row: 0,
-        error: `Container type mismatch: CSV has ${Array.from(containerTypes)[0]}, but selected type is ${containerType}`,
+  for (const row of rows) {
+    if (importType === 'subjects') {
+      data.push({
+        studyShortCode: fixedStudyShortCode || row.study_short_code,
+        name: row.subject_name,
       })
-    }
-  }
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]
-    const rowErrors: string[] = []
-
-    for (const field of requiredFields) {
-      if (!trimCell(row[field])) {
-        rowErrors.push(`Missing required field: ${field}`)
-      }
-    }
-
-    if (containerType !== 'none' && containerType !== '') {
-      if (containerType === 'micronix_tube') {
-        if (!trimCell(row.barcode)) rowErrors.push('Barcode is required for micronix tubes')
-        if (!trimCell(row.position)) rowErrors.push('Position is required for micronix tubes')
-      } else if (containerType === 'cryovial_tube') {
-        if (!trimCell(row.position)) rowErrors.push('Position is required for cryovial tubes')
-      } else if (containerType === 'static_well') {
-        if (!trimCell(row.position)) rowErrors.push('Position is required for static wells')
-      } else {
-        if (!trimCell(row.label)) rowErrors.push('Label is required for papers')
-      }
-    }
-
-    if (rowErrors.length > 0) {
-      errors.push({ row: i + 1, error: rowErrors.join('; ') })
     } else {
-      if (importType === 'subjects') {
-        data.push({
-          studyShortCode: fixedStudyShortCode || row.study_short_code,
-          name: row.subject_name,
-        })
-      } else {
-        const spec: Record<string, unknown> = {
-          sourceType: 'subject' as const,
-          studyShortCode: fixedStudyShortCode ?? row.study_short_code,
-          subjectName: row.subject_name,
-          specimenTypeName: row.specimen_type_name,
-          collectionDate: row.collection_date || undefined,
-        }
-        if (containerType !== 'none' && containerType !== '') {
-          spec.container = {
-            containerType,
-            collectionName: getRowCollectionName(row, containerType),
-            collectionBarcode: trimCell(row.collection_barcode) || undefined,
-            barcode: trimCell(row.barcode) || undefined,
-            position: trimCell(row.position) || undefined,
-            label: trimCell(row.label) || undefined,
-            comment: trimCell(row.comment) || undefined,
-          }
-        }
-        data.push(spec)
+      const spec: Record<string, unknown> = {
+        sourceType: 'subject' as const,
+        studyShortCode: fixedStudyShortCode ?? row.study_short_code,
+        subjectName: row.subject_name,
+        specimenTypeName: row.specimen_type_name,
+        collectionDate: row.collection_date || undefined,
       }
+      if (containerType !== 'none' && containerType !== '') {
+        spec.container = {
+          containerType,
+          collectionName: getRowCollectionName(row, containerType),
+          collectionBarcode: trimCell(row.collection_barcode) || undefined,
+          barcode: trimCell(row.barcode) || undefined,
+          position: trimCell(row.position) || undefined,
+          label: trimCell(row.label) || undefined,
+          comment: trimCell(row.comment) || undefined,
+        }
+      }
+      data.push(spec)
     }
   }
 
-  return { valid: errors.length === 0, errors, data }
+  return data
 }

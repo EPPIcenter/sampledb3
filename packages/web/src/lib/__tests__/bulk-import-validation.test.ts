@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseBulkImportCSV,
-  validateBulkImportCSV,
+  mapBulkImportRowsToPayload,
   getBulkImportRequiredFields,
   getBulkImportOptionalFields,
   getBulkImportCollectionType,
@@ -75,54 +75,59 @@ describe('bulk-import-validation', () => {
     })
   })
 
-  describe('validateBulkImportCSV', () => {
-    it('returns invalid when CSV is empty', () => {
-      const result = validateBulkImportCSV([], {
-        importType: 'specimens',
-        containerType: 'none',
-      })
-      expect(result.valid).toBe(false)
-      expect(result.errors[0].error).toContain('empty')
-    })
-    it('returns invalid when required columns are missing', () => {
-      const rows = [{ wrong: 'col' }] as unknown as { [key: string]: string }[]
-      const result = validateBulkImportCSV(rows, {
-        importType: 'specimens',
-        containerType: 'none',
-      })
-      expect(result.valid).toBe(false)
-      expect(result.errors[0].error).toContain('Missing required columns')
-    })
-    it('returns valid and data for subjects with required fields', () => {
+  describe('mapBulkImportRowsToPayload', () => {
+    it('maps subjects rows to API payload', () => {
       const rows = [
         { study_short_code: 'ST1', subject_name: 'Subj1' },
       ] as unknown as { [key: string]: string }[]
-      const result = validateBulkImportCSV(rows, {
+      const data = mapBulkImportRowsToPayload(rows, {
         importType: 'subjects',
         containerType: 'none',
       })
-      expect(result.valid).toBe(true)
-      expect(result.data).toHaveLength(1)
-      expect(result.data[0]).toEqual({ studyShortCode: 'ST1', name: 'Subj1' })
+      expect(data).toHaveLength(1)
+      expect(data[0]).toEqual({ studyShortCode: 'ST1', name: 'Subj1' })
     })
-    it('returns invalid when micronix_tube row missing barcode', () => {
+
+    it('maps specimen rows including optional container fields', () => {
+      const rows = [
+        {
+          study_short_code: 'ST1',
+          subject_name: 'Subj1',
+          specimen_type_name: 'WB',
+          box_name: 'B1',
+          position: 'A01',
+        },
+      ] as { [key: string]: string }[]
+      const data = mapBulkImportRowsToPayload(rows, {
+        importType: 'specimens',
+        containerType: 'cryovial_tube',
+      })
+      expect(data).toHaveLength(1)
+      const container = (data[0] as { container?: Record<string, unknown> }).container
+      expect(container?.collectionName).toBe('B1')
+      expect(container?.barcode).toBeUndefined()
+      expect(container?.comment).toBeUndefined()
+    })
+
+    it('maps micronix rows even when barcode is empty (server validates)', () => {
       const rows = [
         {
           study_short_code: 'ST1',
           subject_name: 'Subj1',
           specimen_type_name: 'DNA',
-          collection_date: '2024-01-01',
           plate_name: 'P1',
           barcode: '',
           position: 'A01',
         },
-      ] as unknown as { [key: string]: string }[]
-      const result = validateBulkImportCSV(rows, {
+      ] as { [key: string]: string }[]
+      const data = mapBulkImportRowsToPayload(rows, {
         importType: 'specimens',
         containerType: 'micronix_tube',
       })
-      expect(result.valid).toBe(false)
-      expect(result.errors.some((e) => e.error.includes('Barcode'))).toBe(true)
+      expect(data).toHaveLength(1)
+      const container = (data[0] as { container?: Record<string, unknown> }).container
+      expect(container?.barcode).toBeUndefined()
+      expect(container?.position).toBe('A01')
     })
   })
 
@@ -145,30 +150,6 @@ describe('bulk-import-validation', () => {
           'micronix_tube'
         )
       ).toBeUndefined()
-    })
-  })
-
-  describe('validateBulkImportCSV optional container columns', () => {
-    it('validates cryovial_tube when barcode and comment headers are omitted', () => {
-      const rows = [
-        {
-          study_short_code: 'ST1',
-          subject_name: 'Subj1',
-          specimen_type_name: 'WB',
-          box_name: 'B1',
-          position: 'A01',
-        },
-      ] as { [key: string]: string }[]
-      const result = validateBulkImportCSV(rows, {
-        importType: 'specimens',
-        containerType: 'cryovial_tube',
-      })
-      expect(result.valid).toBe(true)
-      expect(result.data).toHaveLength(1)
-      const container = (result.data[0] as { container?: Record<string, unknown> }).container
-      expect(container?.collectionName).toBe('B1')
-      expect(container?.barcode).toBeUndefined()
-      expect(container?.comment).toBeUndefined()
     })
   })
 })
