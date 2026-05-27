@@ -8,7 +8,11 @@ import {
 } from '../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
-import { resolveCollectionByName, resolveCollectionByBarcode, type CollectionType } from './collection-resolution'
+import {
+  resolveCollectionByName,
+  resolveCollectionByBarcode,
+  type CollectionType,
+} from './collections/collection-resolve'
 import { utcNow } from './datetime'
 import { formatLocationPath } from './container-enrichment'
 

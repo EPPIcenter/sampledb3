@@ -2,13 +2,6 @@ import { eq, inArray } from 'drizzle-orm'
 import type { Database } from '../db/client'
 import {
   location,
-  micronixPlate,
-  micronixTube,
-  cryovialBox,
-  cryovialTube,
-  paper,
-  sheet,
-  staticWell,
   storageContainerTag,
   tag,
   unit,
@@ -16,40 +9,15 @@ import {
   type StorageContainer,
   type Unit,
 } from '../db/schema'
-import { resolveContainerPlacements, type ContainerPlacement } from './container-placement'
+import {
+  resolveContainerPlacementBundle,
+  type ContainerPlacement,
+  type CryovialSubtypeDetails,
+  type MicronixSubtypeDetails,
+  type PaperSubtypeDetails,
+  type StaticWellSubtypeDetails,
+} from './container-placement'
 import type { CollectionInfo } from '../types/collections'
-
-type MicronixSubtypeRow = {
-  barcode: string | null
-  position: string | null
-  plateId: number | null
-  plateName: string | null
-  locationId: number | null
-}
-
-type CryovialSubtypeRow = {
-  barcode: string | null
-  position: string | null
-  boxId: number | null
-  boxName: string | null
-  locationId: number | null
-}
-
-type PaperSubtypeRow = {
-  barcode: string | null
-  position: string | null
-  sheetId: number | null
-  sheetName: string | null
-  boxId: number | null
-  bagId: number | null
-}
-
-type StaticWellSubtypeRow = {
-  position: string | null
-  plateId: number | null
-  plateName: string | null
-  locationId: number | null
-}
 
 export type EnrichedContainerApi = StorageContainer & {
   containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well' | 'unknown'
@@ -58,18 +26,18 @@ export type EnrichedContainerApi = StorageContainer & {
   location: Location | null
   locationPath: string
   collection: CollectionInfo | null
-  micronixTube?: MicronixSubtypeRow
-  cryovialTube?: CryovialSubtypeRow
-  paper?: PaperSubtypeRow
-  staticWell?: StaticWellSubtypeRow
+  micronixTube?: MicronixSubtypeDetails
+  cryovialTube?: CryovialSubtypeDetails
+  paper?: PaperSubtypeDetails
+  staticWell?: StaticWellSubtypeDetails
 }
 
 function collectionInfoFromPlacement(
   placement: ContainerPlacement,
-  micronixInfo?: MicronixSubtypeRow,
-  cryovialInfo?: CryovialSubtypeRow,
-  paperInfo?: PaperSubtypeRow,
-  staticWellInfo?: StaticWellSubtypeRow,
+  micronixInfo?: MicronixSubtypeDetails,
+  cryovialInfo?: CryovialSubtypeDetails,
+  paperInfo?: PaperSubtypeDetails,
+  staticWellInfo?: StaticWellSubtypeDetails,
 ): CollectionInfo | null {
   if (placement.containerType === 'unknown' || !placement.collection) {
     return null
@@ -117,7 +85,7 @@ function collectionInfoFromPlacement(
   return null
 }
 
-/** Batch-enrich storage containers for API responses (placement + tags + unit + legacy subtype blobs). */
+/** Batch-enrich storage containers for API responses (placement bundle + tags + unit). */
 export async function enrichContainersForApi(
   database: Database,
   containers: StorageContainer[],
@@ -129,67 +97,19 @@ export async function enrichContainersForApi(
   const ids = containers.map((container) => container.id)
   const unitIds = [...new Set(containers.map((container) => container.unitId))]
 
-  const [placementMap, units, tagRows, micronixRows, cryovialRows, paperRows, staticWellRows] = await Promise.all([
-    resolveContainerPlacements(database, ids),
+  const [{ placements, subtypes }, units, tagRows] = await Promise.all([
+    resolveContainerPlacementBundle(database, ids),
     database.select().from(unit).where(inArray(unit.id, unitIds)),
     database
       .select({ containerId: storageContainerTag.storageContainerId, id: tag.id, name: tag.name })
       .from(tag)
       .innerJoin(storageContainerTag, eq(tag.id, storageContainerTag.tagId))
       .where(inArray(storageContainerTag.storageContainerId, ids)),
-    database
-      .select({
-        id: micronixTube.id,
-        barcode: micronixTube.barcode,
-        position: micronixTube.position,
-        plateId: micronixPlate.id,
-        plateName: micronixPlate.name,
-        locationId: micronixPlate.locationId,
-      })
-      .from(micronixTube)
-      .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
-      .where(inArray(micronixTube.id, ids)),
-    database
-      .select({
-        id: cryovialTube.id,
-        barcode: cryovialTube.barcode,
-        position: cryovialTube.position,
-        boxId: cryovialBox.id,
-        boxName: cryovialBox.name,
-        locationId: cryovialBox.locationId,
-      })
-      .from(cryovialTube)
-      .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
-      .where(inArray(cryovialTube.id, ids)),
-    database
-      .select({
-        id: paper.id,
-        barcode: paper.barcode,
-        position: paper.position,
-        sheetId: sheet.id,
-        sheetName: sheet.name,
-        boxId: sheet.boxId,
-        bagId: sheet.bagId,
-      })
-      .from(paper)
-      .leftJoin(sheet, eq(paper.sheetId, sheet.id))
-      .where(inArray(paper.id, ids)),
-    database
-      .select({
-        id: staticWell.id,
-        position: staticWell.position,
-        plateId: micronixPlate.id,
-        plateName: micronixPlate.name,
-        locationId: micronixPlate.locationId,
-      })
-      .from(staticWell)
-      .leftJoin(micronixPlate, eq(staticWell.collectionId, micronixPlate.id))
-      .where(inArray(staticWell.id, ids)),
   ])
 
   const locationIds = [
     ...new Set(
-      [...placementMap.values()]
+      [...placements.values()]
         .map((placement) => placement.location?.id)
         .filter((id): id is number => id != null),
     ),
@@ -209,56 +129,12 @@ export async function enrichContainersForApi(
     tagsByContainerId.set(row.containerId, list)
   }
 
-  const micronixById = new Map<number, MicronixSubtypeRow>()
-  for (const row of micronixRows) {
-    micronixById.set(row.id, {
-      barcode: row.barcode,
-      position: row.position,
-      plateId: row.plateId,
-      plateName: row.plateName,
-      locationId: row.locationId,
-    })
-  }
-
-  const cryovialById = new Map<number, CryovialSubtypeRow>()
-  for (const row of cryovialRows) {
-    cryovialById.set(row.id, {
-      barcode: row.barcode,
-      position: row.position,
-      boxId: row.boxId,
-      boxName: row.boxName,
-      locationId: row.locationId,
-    })
-  }
-
-  const paperById = new Map<number, PaperSubtypeRow>()
-  for (const row of paperRows) {
-    paperById.set(row.id, {
-      barcode: row.barcode,
-      position: row.position,
-      sheetId: row.sheetId,
-      sheetName: row.sheetName,
-      boxId: row.boxId,
-      bagId: row.bagId,
-    })
-  }
-
-  const staticWellById = new Map<number, StaticWellSubtypeRow>()
-  for (const row of staticWellRows) {
-    staticWellById.set(row.id, {
-      position: row.position,
-      plateId: row.plateId,
-      plateName: row.plateName,
-      locationId: row.locationId,
-    })
-  }
-
   return containers.map((container) => {
-    const placement = placementMap.get(container.id)!
-    const micronixInfo = micronixById.get(container.id)
-    const cryovialInfo = cryovialById.get(container.id)
-    const paperInfo = paperById.get(container.id)
-    const staticWellInfo = staticWellById.get(container.id)
+    const placement = placements.get(container.id)!
+    const micronixInfo = subtypes.micronixById.get(container.id)
+    const cryovialInfo = subtypes.cryovialById.get(container.id)
+    const paperInfo = subtypes.paperById.get(container.id)
+    const staticWellInfo = subtypes.staticWellById.get(container.id)
     const locationInfo = placement.location ? locationById.get(placement.location.id) ?? null : null
 
     return {

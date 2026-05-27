@@ -56,6 +56,50 @@ export type UnknownContainerPlacement = {
 
 export type ContainerPlacement = KnownContainerPlacement | UnknownContainerPlacement
 
+export type MicronixSubtypeDetails = {
+  barcode: string | null
+  position: string | null
+  plateId: number | null
+  plateName: string | null
+  locationId: number | null
+}
+
+export type CryovialSubtypeDetails = {
+  barcode: string | null
+  position: string | null
+  boxId: number | null
+  boxName: string | null
+  locationId: number | null
+}
+
+export type PaperSubtypeDetails = {
+  barcode: string | null
+  position: string | null
+  sheetId: number | null
+  sheetName: string | null
+  boxId: number | null
+  bagId: number | null
+}
+
+export type StaticWellSubtypeDetails = {
+  position: string | null
+  plateId: number | null
+  plateName: string | null
+  locationId: number | null
+}
+
+export type ContainerSubtypeMaps = {
+  micronixById: Map<number, MicronixSubtypeDetails>
+  cryovialById: Map<number, CryovialSubtypeDetails>
+  paperById: Map<number, PaperSubtypeDetails>
+  staticWellById: Map<number, StaticWellSubtypeDetails>
+}
+
+export type ResolvedContainerPlacementBundle = {
+  placements: Map<number, ContainerPlacement>
+  subtypes: ContainerSubtypeMaps
+}
+
 type LocationPathInput = {
   path?: string | null
   locationPath?: string | null
@@ -295,6 +339,126 @@ export async function resolveContainerPlacements(
   }
 
   return placementMap
+}
+
+/** Subtype-specific rows (barcodes, parent collection ids) for container detail enrichment. */
+export async function resolveContainerSubtypeDetails(
+  database: Database,
+  containerIds: number[],
+): Promise<ContainerSubtypeMaps> {
+  const micronixById = new Map<number, MicronixSubtypeDetails>()
+  const cryovialById = new Map<number, CryovialSubtypeDetails>()
+  const paperById = new Map<number, PaperSubtypeDetails>()
+  const staticWellById = new Map<number, StaticWellSubtypeDetails>()
+
+  if (containerIds.length === 0) {
+    return { micronixById, cryovialById, paperById, staticWellById }
+  }
+
+  const [micronixRows, cryovialRows, paperRows, staticWellRows] = await Promise.all([
+    database
+      .select({
+        id: micronixTube.id,
+        barcode: micronixTube.barcode,
+        position: micronixTube.position,
+        plateId: micronixPlate.id,
+        plateName: micronixPlate.name,
+        locationId: micronixPlate.locationId,
+      })
+      .from(micronixTube)
+      .leftJoin(micronixPlate, eq(micronixTube.collectionId, micronixPlate.id))
+      .where(inArray(micronixTube.id, containerIds)),
+    database
+      .select({
+        id: cryovialTube.id,
+        barcode: cryovialTube.barcode,
+        position: cryovialTube.position,
+        boxId: cryovialBox.id,
+        boxName: cryovialBox.name,
+        locationId: cryovialBox.locationId,
+      })
+      .from(cryovialTube)
+      .leftJoin(cryovialBox, eq(cryovialTube.collectionId, cryovialBox.id))
+      .where(inArray(cryovialTube.id, containerIds)),
+    database
+      .select({
+        id: paper.id,
+        barcode: paper.barcode,
+        position: paper.position,
+        sheetId: sheet.id,
+        sheetName: sheet.name,
+        boxId: sheet.boxId,
+        bagId: sheet.bagId,
+      })
+      .from(paper)
+      .leftJoin(sheet, eq(paper.sheetId, sheet.id))
+      .where(inArray(paper.id, containerIds)),
+    database
+      .select({
+        id: staticWell.id,
+        position: staticWell.position,
+        plateId: micronixPlate.id,
+        plateName: micronixPlate.name,
+        locationId: micronixPlate.locationId,
+      })
+      .from(staticWell)
+      .leftJoin(micronixPlate, eq(staticWell.collectionId, micronixPlate.id))
+      .where(inArray(staticWell.id, containerIds)),
+  ])
+
+  for (const row of micronixRows) {
+    micronixById.set(row.id, {
+      barcode: row.barcode,
+      position: row.position,
+      plateId: row.plateId,
+      plateName: row.plateName,
+      locationId: row.locationId,
+    })
+  }
+
+  for (const row of cryovialRows) {
+    cryovialById.set(row.id, {
+      barcode: row.barcode,
+      position: row.position,
+      boxId: row.boxId,
+      boxName: row.boxName,
+      locationId: row.locationId,
+    })
+  }
+
+  for (const row of paperRows) {
+    paperById.set(row.id, {
+      barcode: row.barcode,
+      position: row.position,
+      sheetId: row.sheetId,
+      sheetName: row.sheetName,
+      boxId: row.boxId,
+      bagId: row.bagId,
+    })
+  }
+
+  for (const row of staticWellRows) {
+    staticWellById.set(row.id, {
+      position: row.position,
+      plateId: row.plateId,
+      plateName: row.plateName,
+      locationId: row.locationId,
+    })
+  }
+
+  return { micronixById, cryovialById, paperById, staticWellById }
+}
+
+/** Placement + subtype data for container detail reads (single entry point). */
+export async function resolveContainerPlacementBundle(
+  database: Database,
+  containerIds: number[],
+): Promise<ResolvedContainerPlacementBundle> {
+  const [placements, subtypes] = await Promise.all([
+    resolveContainerPlacements(database, containerIds),
+    resolveContainerSubtypeDetails(database, containerIds),
+  ])
+  return { placements, subtypes }
 }
 
 const PLACEMENT_BATCH_SIZE = 500

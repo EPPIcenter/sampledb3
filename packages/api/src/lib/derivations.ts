@@ -18,7 +18,7 @@ import {
   unit,
 } from '../db/schema'
 import { and, eq, sql } from 'drizzle-orm'
-import { resolveCollection, type CollectionType } from '../lib/collection-resolution'
+import { resolveCollection, type CollectionType } from './collections/collection-resolve'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { getDefaultUnit } from './defaults'
 import { utcNow } from './datetime'

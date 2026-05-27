@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
+import { setupTestDatabase, cleanupTestDatabase } from '../../../__tests__/helpers/db-setup'
 import {
   resolveCollection,
   resolveCollectionByName,
   resolveCollectionByBarcode,
-} from '../collection-resolution'
-import type { Database } from '../../db/client'
+} from '../collection-resolve'
+import type { Database } from '../../../db/client'
 
-describe('collection-resolution lib', () => {
+describe('collection-resolve lib', () => {
   let testDb: Database
   let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
 

@@ -16,9 +16,7 @@ import {
 import { eq, and } from 'drizzle-orm'
 import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } from './defaults'
 import { validateUnitForContainerType, validateContainerTypeForSpecimenType } from './validation'
-import {
-  resolveCollection,
-} from './collection-resolution'
+import { resolveCollection } from './collections/collection-resolve'
 import { utcNow } from './datetime'
 
 type DatabaseOrTransaction =

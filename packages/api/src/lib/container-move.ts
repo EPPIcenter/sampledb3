@@ -11,7 +11,7 @@ import {
   sheet,
 } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
-import { resolveCollection, type CollectionType } from './collection-resolution'
+import { resolveCollection, type CollectionType } from './collections/collection-resolve'
 
 /** Staging prefix for position updates so swaps on one plate do not violate UNIQUE(collection_id, position) mid-transaction. */
 const MOVE_STAGING_PREFIX = '__mv_'

@@ -9,7 +9,13 @@ import {
   createTestStorageType,
   createTestUnit,
 } from '../../__tests__/helpers/factories'
-import { formatLocationPath, resolveContainerPlacements, resolveContainerTypes } from '../container-placement'
+import {
+  formatLocationPath,
+  resolveContainerPlacements,
+  resolveContainerPlacementBundle,
+  resolveContainerSubtypeDetails,
+  resolveContainerTypes,
+} from '../container-placement'
 import type { Database } from '../../db/client'
 import {
   bag,
@@ -310,6 +316,39 @@ describe('resolveContainerPlacements', () => {
     expect(map.size).toBe(2)
     expect(map.get(micronixContainer!.id)?.containerType).toBe('micronix_tube')
     expect(map.get(orphanContainer!.id)?.containerType).toBe('unknown')
+  })
+
+  it('resolveContainerSubtypeDetails returns barcode and parent ids', async () => {
+    const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+    const loc = await createTestLocation(testDb, {
+      name: 'Lab',
+      storageTypeId: String(storageType.id),
+      path: 'Lab',
+    })
+    const plate = await createTestMicronixPlate(testDb, { name: 'Subtype Plate', locationId: loc.id })
+    const container = await createContainer()
+    await testDb.insert(micronixTube).values({
+      id: container.id,
+      collectionId: plate.id,
+      barcode: 'MX-SUB',
+      position: 'C01',
+    })
+
+    const { micronixById } = await resolveContainerSubtypeDetails(testDb, [container.id])
+    expect(micronixById.get(container.id)).toMatchObject({
+      barcode: 'MX-SUB',
+      position: 'C01',
+      plateId: plate.id,
+      plateName: 'Subtype Plate',
+      locationId: loc.id,
+    })
+  })
+
+  it('resolveContainerPlacementBundle returns placements and subtypes together', async () => {
+    const container = await createContainer()
+    const bundle = await resolveContainerPlacementBundle(testDb, [container.id])
+    expect(bundle.placements.get(container.id)?.containerType).toBe('unknown')
+    expect(bundle.subtypes.micronixById.size).toBe(0)
   })
 
   it('resolveContainerTypes returns subtype map derived from placements', async () => {
