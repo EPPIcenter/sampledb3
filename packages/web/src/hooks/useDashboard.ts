@@ -1,6 +1,10 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
-import { api } from '../lib/api/client'
+import { listTotal } from '../lib/api/list-total'
 import { studiesApi, type Study, type StudySummaryBasic } from '../lib/api/studies'
+import { specimensApi } from '../lib/api/specimens'
+import { subjectsApi } from '../lib/api/subjects'
+import { containersApi } from '../lib/api/containers'
+import { locationsApi } from '../lib/api/locations'
 import { activityApi } from '../lib/api/search'
 import { statisticsApi, type StatisticsData } from '../lib/api/statistics'
 import { controlsApi } from '../lib/api/controls'
@@ -39,25 +43,6 @@ export const dashboardKeys = {
     [...dashboardKeys.all, 'summaries', [...ids].sort((a, b) => a - b)] as const,
 }
 
-async function fetchCount(
-  path: string,
-  arrayKey: string
-): Promise<number> {
-  const res = await api.get<Record<string, unknown>>(path, { params: { limit: 1 } })
-  const pagination = res.pagination as { total?: number } | undefined
-  if (pagination?.total != null) return pagination.total
-  const arr = res[arrayKey]
-  return Array.isArray(arr) ? arr.length : 0
-}
-
-async function fetchCountSafe(path: string, arrayKey: string): Promise<number> {
-  try {
-    return await fetchCount(path, arrayKey)
-  } catch {
-    return 0
-  }
-}
-
 /** Refetch dashboard widgets after creates/updates elsewhere in the app. */
 export function invalidateDashboardQueries(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: dashboardKeys.all })
@@ -68,11 +53,14 @@ export function useDashboardCritical() {
     queryKey: dashboardKeys.critical(),
     queryFn: async (): Promise<{ stats: DashboardStats; fetchedAt: Date }> => {
       const [studies, specimens, subjects, containers, locations] = await Promise.all([
-        fetchCount('/studies', 'studies'),
-        fetchCount('/specimens', 'specimens'),
-        fetchCountSafe('/subjects', 'subjects'),
-        fetchCountSafe('/containers', 'containers'),
-        fetchCountSafe('/locations', 'locations'),
+        listTotal((p) => studiesApi.list(undefined, p), 'studies'),
+        listTotal((p) => specimensApi.search(p), 'specimens'),
+        listTotal((p) => subjectsApi.list(p), 'subjects'),
+        listTotal((p) => containersApi.list(p), 'containers'),
+        listTotal(async (p) => {
+          const res = await locationsApi.list(1, p.limit)
+          return res
+        }, 'locations'),
       ])
       return {
         stats: { studies, specimens, subjects, containers, locations },
@@ -80,24 +68,6 @@ export function useDashboardCritical() {
       }
     },
   })
-}
-
-async function fetchCountWithCreatedTo(
-  path: string,
-  arrayKey: string,
-  createdTo: string
-): Promise<number> {
-  try {
-    const res = await api.get<Record<string, unknown>>(path, {
-      params: { limit: 1, created_to: createdTo },
-    })
-    const pagination = res.pagination as { total?: number } | undefined
-    if (pagination?.total != null) return pagination.total
-    const arr = res[arrayKey]
-    return Array.isArray(arr) ? arr.length : 0
-  } catch {
-    return 0
-  }
 }
 
 export function useDashboardTrendStats(enabled: boolean) {
@@ -109,9 +79,9 @@ export function useDashboardTrendStats(enabled: boolean) {
       const createdTo = thirtyDaysAgo.toISOString().split('T')[0]
 
       const [studies, specimens, subjects] = await Promise.all([
-        fetchCountWithCreatedTo('/studies', 'studies', createdTo),
-        fetchCountWithCreatedTo('/specimens', 'specimens', createdTo),
-        fetchCountWithCreatedTo('/subjects', 'subjects', createdTo),
+        listTotal((p) => studiesApi.list(undefined, p), 'studies', { created_to: createdTo }),
+        listTotal((p) => specimensApi.search({ ...p, created_to: createdTo }), 'specimens'),
+        listTotal((p) => subjectsApi.list(p), 'subjects'),
       ])
 
       return {
@@ -191,7 +161,7 @@ export type StudyWithSummary = Study & { summary?: StudySummaryBasic | null }
 
 export function mergeStudiesWithSummaries(
   studies: Study[],
-  summaries: StudySummaryBasic[] | undefined
+  summaries: StudySummaryBasic[] | undefined,
 ): StudyWithSummary[] {
   if (!summaries?.length) {
     return studies.map((study) => ({ ...study, summary: null }))

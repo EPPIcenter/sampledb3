@@ -22,7 +22,7 @@ export const strainKeys = createReferenceDataKeys('strains')
 // compositionKeys - REMOVED: Compositions no longer used
 
 // Specimen Types
-export function useSpecimenTypes() {
+export function useSpecimenTypes(options?: { silent?: boolean }) {
   const { error: showError } = useToast()
   
   return useQuery({
@@ -32,10 +32,35 @@ export function useSpecimenTypes() {
         const res = await specimenTypesApi.list()
         return res.data
       } catch (err: any) {
-        showError(err.response?.data?.error || 'Failed to load specimen types')
+        if (!options?.silent) {
+          showError(err.response?.data?.error || 'Failed to load specimen types')
+        }
         throw err
       }
     },
+  })
+}
+
+/** Allowed container types for a specimen type (forms, wizards). */
+export function useSpecimenTypeContainerTypesForId(specimenTypeId: number) {
+  return useQuery({
+    queryKey: [...specimenTypeKeys.detail(specimenTypeId), 'container-types'] as const,
+    queryFn: () => specimenTypesApi.getContainerTypes(specimenTypeId),
+    enabled: specimenTypeId > 0,
+  })
+}
+
+/** Specimen types that support a given container type. */
+export function useSpecimenTypesByContainerType(
+  containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | undefined,
+) {
+  return useQuery({
+    queryKey: [...specimenTypeKeys.lists(), 'by-container', containerType] as const,
+    queryFn: async () => {
+      const res = await specimenTypesApi.getByContainerType(containerType!)
+      return res.specimenTypes
+    },
+    enabled: !!containerType,
   })
 }
 
@@ -304,17 +329,23 @@ export function useDeleteStorageType() {
 }
 
 // Strains
-export function useStrains() {
+export function useStrains(options?: { silent?: boolean }) {
   const { error: showError } = useToast()
-  
+
   return useQuery({
     queryKey: strainKeys.list(),
     queryFn: async () => {
       try {
         const res = await strainsApi.list()
         return res.data
-      } catch (err: any) {
-        showError(err.response?.data?.error || 'Failed to load strains')
+      } catch (err: unknown) {
+        if (!options?.silent) {
+          const message =
+            err && typeof err === 'object' && 'response' in err
+              ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+              : undefined
+          showError(message || 'Failed to load strains')
+        }
         throw err
       }
     },

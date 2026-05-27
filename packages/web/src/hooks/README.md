@@ -30,7 +30,7 @@ invalidateDashboardQueries(queryClient)
 
 **Specimen create** — prefer `useCreateSpecimen`; it calls `invalidateSpecimenQueries` with the API response (including `studyId` when the source is a subject).
 
-**Merged settings** (e.g. scanner configs for move workflows) — use `settingsApi.getValue('scanner_configurations')`, not a raw `api.get` on `/settings/:key`. That route returns `{ key, value }`.
+**Settings by key** — use `settingsApi.getValue` / `settingsApi.putValue` (or `update`, which delegates to `putValue`) for `GET`/`PUT /settings/:key`. Those routes return `{ key, value }` (and optional `userId` on PUT), not the setting value at the top level. For export/scanner admin UIs, pass `{ scope: 'shared' }` or `{ scope: 'personal' }`; workflows use the default merged `effective` scope.
 
 **Direct API writes** — if a page still calls an API module directly, call the matching invalidation helper in the success path. Do not skip dashboard keys when list and dashboard use different query keys.
 

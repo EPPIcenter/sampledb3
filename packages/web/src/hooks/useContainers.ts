@@ -1,15 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../lib/api/client'
+import { containersApi, type ContainerDetail } from '../lib/api/containers'
 import { derivationsApi } from '../lib/api/derivations'
-
-type ContainerDetailResponse = {
-  id?: number
-  container?: Record<string, unknown>
-  containerType?: string
-  collection?: Record<string, unknown>
-  location?: Record<string, unknown>
-  locationPath?: string
-}
 
 export const containerKeys = {
   all: ['containers'] as const,
@@ -21,7 +12,7 @@ export const containerKeys = {
 export function useContainer(id: number) {
   return useQuery({
     queryKey: containerKeys.detail(id),
-    queryFn: () => api.get(`/containers/${id}`),
+    queryFn: () => containersApi.get(id),
     enabled: Number.isFinite(id) && id > 0,
   })
 }
@@ -62,19 +53,17 @@ export function useContainerDerivationTree(containerId: number) {
     queryFn: async () => {
       const response = await derivationsApi.listFromContainer(containerId)
       const derivations = response.derivations
-      const childContainers = new Map<number, ContainerDetailResponse>()
+      const childContainers = new Map<number, ContainerDetail>()
       await Promise.all(
         derivations.map(async (derivation) => {
           if (!derivation.childContainerId) return
           try {
-            const containerResponse = await api.get<ContainerDetailResponse>(
-              `/containers/${derivation.childContainerId}`
-            )
-            childContainers.set(derivation.childContainerId, containerResponse)
+            const detail = await containersApi.get(derivation.childContainerId)
+            childContainers.set(derivation.childContainerId, detail)
           } catch {
             // omit failed child loads
           }
-        })
+        }),
       )
       return { derivations, childContainers }
     },

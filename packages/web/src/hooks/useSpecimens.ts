@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { api } from '../lib/api/client'
 import { specimensApi, type SpecimenListParams } from '../lib/api/specimens'
+import { containersApi } from '../lib/api/containers'
+import { subjectsApi } from '../lib/api/subjects'
+import { studiesApi } from '../lib/api/studies'
+import { controlsApi } from '../lib/api/controls'
 import type { Specimen } from '../lib/api/types'
 import type { ContainerData } from '../components/ContainerRegistration'
 import { useToast } from '../contexts/ToastContext'
@@ -116,14 +119,10 @@ export function useSpecimenSourceInfo(specimen: Specimen | null | undefined) {
     queryFn: async (): Promise<SpecimenSourceInfo | null> => {
       if (!specimen) return null
       if (specimen.studySubjectId) {
-        const subjectRes = await api.get<{ subject: { id: number; name: string; studyId: number } }>(
-          `/subjects/${specimen.studySubjectId}`
-        )
+        const subjectRes = await subjectsApi.get(specimen.studySubjectId)
         const subject = subjectRes.subject
         if (!subject) return null
-        const studyRes = await api.get<{ study: { id: number; title: string; shortCode: string } }>(
-          `/studies/${subject.studyId}`
-        )
+        const studyRes = await studiesApi.get(subject.studyId)
         const study = studyRes.study
         if (!study) return null
         return {
@@ -134,14 +133,10 @@ export function useSpecimenSourceInfo(specimen: Specimen | null | undefined) {
         }
       }
       if (specimen.controlBatchId) {
-        const batchRes = await api.get<{ batch: { id: number; name: string; controlDefinitionId: number } }>(
-          `/blood-controls/batches/${specimen.controlBatchId}`
-        )
+        const batchRes = await controlsApi.getBatch(specimen.controlBatchId)
         const batch = batchRes.batch
         if (!batch) return null
-        const defRes = await api.get<{ control: { id: number; name: string } }>(
-          `/blood-controls/${batch.controlDefinitionId}`
-        )
+        const defRes = await controlsApi.get(batch.controlDefinitionId)
         const control = defRes.control
         return {
           type: 'control',
@@ -160,9 +155,7 @@ export function useContainersForSpecimen(specimenId: string | number | undefined
   return useQuery({
     queryKey: specimenKeys.containers(specimenId!),
     queryFn: async () => {
-      const res = await api.get<{ containers: unknown[] }>('/containers', {
-        params: { specimen_id: specimenId },
-      })
+      const res = await containersApi.list({ specimen_id: specimenId })
       return res.containers ?? []
     },
     enabled: !!specimenId,

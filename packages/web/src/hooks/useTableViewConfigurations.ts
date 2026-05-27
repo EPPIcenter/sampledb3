@@ -39,7 +39,6 @@ export function useTableViewConfigurations(): UseTableViewConfigurationsResult {
           ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
           : null
       setError(message ?? 'Failed to load table view configurations')
-      console.error('Failed to load table view configurations:', err)
     } finally {
       setLoading(false)
     }

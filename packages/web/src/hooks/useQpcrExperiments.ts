@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { qpcrExperimentsApi } from '../lib/api/qpcr'
-import { scannerConfigurationsApi } from '../lib/api/settings'
+import { settingsApi } from '../lib/api/settings'
 import { dashboardKeys } from './useDashboard'
 
 export const qpcrKeys = {
@@ -34,8 +34,8 @@ export function useQpcrScannerConfigurations() {
   return useQuery({
     queryKey: qpcrKeys.scannerConfigs(),
     queryFn: async () => {
-      const res = await scannerConfigurationsApi.getShared()
-      return res.configurations ?? []
+      const res = await settingsApi.getValue('scanner_configurations', { scope: 'shared' })
+      return res?.configurations ?? []
     },
   })
 }
