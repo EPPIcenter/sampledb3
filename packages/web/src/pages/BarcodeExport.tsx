@@ -1,8 +1,13 @@
 import { useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { exportApi } from '../lib/api/export';
-import { useExportConfigurations } from '../hooks/useExportConfigurations'
+import { useExportConfigurations } from '../hooks/useExportWorkflow'
+import { PageError } from '../ui'
 import { formatLocalDateTime } from '../lib/date-utils'
+import {
+  formatExportConfigId,
+  getExportColumnsForConfigId,
+} from '../lib/export-config-selection'
 import '../styles/storage.css'
 
 export default function BarcodeExport() {
@@ -29,6 +34,8 @@ export default function BarcodeExport() {
     selectedConfigId,
     setSelectedConfigId,
     loading: loadingConfigs,
+    error: configLoadError,
+    loadConfigurations,
   } = useExportConfigurations()
 
   const parseCSV = useCallback((file: File) => {
@@ -139,13 +146,7 @@ export default function BarcodeExport() {
       const response = await exportApi.containersByBarcodes({
         barcodes,
         format: exportFormat,
-        columns: (() => {
-          // Split on first colon only to handle config names that contain colons
-          const firstColonIndex = selectedConfigId.indexOf(':')
-          const selectedSource = selectedConfigId.substring(0, firstColonIndex)
-          const selectedName = selectedConfigId.substring(firstColonIndex + 1)
-          return exportConfigurations.find(c => c.source === selectedSource && c.name === selectedName)?.columns
-        })(),
+        columns: getExportColumnsForConfigId(exportConfigurations, selectedConfigId),
         csv_delimiter: exportFormat === 'csv' ? csvDelimiter : undefined,
         csv_bom: exportFormat === 'csv' ? csvBOM : undefined,
         csv_line_ending: exportFormat === 'csv' ? csvLineEnding : undefined,
@@ -205,6 +206,14 @@ export default function BarcodeExport() {
             Upload a CSV file containing micronix tube barcodes to export linked subject and specimen information.
           </p>
         </div>
+
+        {configLoadError && (
+          <PageError
+            title="Could not load export configurations"
+            message={configLoadError}
+            onRetry={() => void loadConfigurations()}
+          />
+        )}
 
         {error && (
           <div className="mb-4 p-3 bg-app-trend-down/10 border border-app-trend-down rounded text-app-trend-down text-sm">
@@ -288,7 +297,7 @@ export default function BarcodeExport() {
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                   e.preventDefault()
-                  const currentIndex = focusedConfigIndex ?? exportConfigurations.findIndex(c => `${c.source}:${c.name}` === selectedConfigId)
+                  const currentIndex = focusedConfigIndex ?? exportConfigurations.findIndex(c => formatExportConfigId(c.source!, c.name) === selectedConfigId)
                   let newIndex: number
                   if (e.key === 'ArrowDown') {
                     newIndex = currentIndex < exportConfigurations.length - 1 ? currentIndex + 1 : 0
@@ -297,20 +306,20 @@ export default function BarcodeExport() {
                   }
                   setFocusedConfigIndex(newIndex)
                   const newConfig = exportConfigurations[newIndex]
-                  setSelectedConfigId(`${newConfig.source}:${newConfig.name}`)
+                  setSelectedConfigId(formatExportConfigId(newConfig.source!, newConfig.name))
                   const button = e.currentTarget.children[newIndex] as HTMLElement
                   button.focus()
                 } else if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
                   if (focusedConfigIndex !== null) {
                     const focusedConfig = exportConfigurations[focusedConfigIndex]
-                    setSelectedConfigId(`${focusedConfig.source}:${focusedConfig.name}`)
+                    setSelectedConfigId(formatExportConfigId(focusedConfig.source!, focusedConfig.name))
                   }
                 }
               }}
             >
               {exportConfigurations.map((config, index) => {
-                const configId = `${config.source}:${config.name}` // Unique ID combining source and name
+                const configId = formatExportConfigId(config.source!, config.name)
                 const isSelected = configId === selectedConfigId
                 const isFocused = focusedConfigIndex === index
                 return (

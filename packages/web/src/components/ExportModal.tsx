@@ -8,8 +8,14 @@ import type { SpecimenType, StudySubject } from '../lib/api/types';
 import { parseExportCsv, type ExportCsvRow } from '../lib/export-modal-csv'
 import { useExportConfigurations } from '../hooks/useExportConfigurations'
 import { formatLocalDateTime } from '../lib/date-utils'
+import {
+  findExportConfiguration,
+  formatExportConfigId,
+  getExportColumnsForConfigId,
+} from '../lib/export-config-selection'
+import { toggleArrayFilterValue } from '../lib/filter-array-toggle'
 import { useModifierHotkey } from '../hooks/useHotkey'
-import ModalPortal from './ModalPortal'
+import { Modal } from '../ui'
 import ExportModalResultSummary from './ExportModalResultSummary'
 
 interface ExportModalProps {
@@ -270,13 +276,7 @@ export default function ExportModal({
           subject_dates: Object.keys(subjectDates).length > 0 ? subjectDates : undefined,
           date_tolerance: dateTolerance,
           format: exportFormat,
-          columns: (() => {
-            // Split on first colon only to handle config names that contain colons
-            const firstColonIndex = selectedConfigId.indexOf(':')
-            const selectedSource = selectedConfigId.substring(0, firstColonIndex)
-            const selectedName = selectedConfigId.substring(firstColonIndex + 1)
-            return exportConfigurations.find(c => c.source === selectedSource && c.name === selectedName)?.columns
-          })(),
+          columns: getExportColumnsForConfigId(exportConfigurations, selectedConfigId),
           specimen_type_ids: filters.specimen_type_ids,
           container_types: filters.container_types,
           date_from: filters.date_from,
@@ -295,11 +295,7 @@ export default function ExportModal({
           includeBOM: csvBOM,
           lineEnding: csvLineEnding,
         } : undefined
-        // Split on first colon only to handle config names that contain colons
-        const firstColonIndex = selectedConfigId.indexOf(':')
-        const selectedSource = selectedConfigId.substring(0, firstColonIndex)
-        const selectedName = selectedConfigId.substring(firstColonIndex + 1)
-        const selectedConfig = exportConfigurations.find(c => c.source === selectedSource && c.name === selectedName)
+        const selectedConfig = findExportConfiguration(exportConfigurations, selectedConfigId)
         response = await exportApi.containers(filters, exportFormat, selectedConfig?.columns, csvOptions)
         summary = null
       }
@@ -375,15 +371,7 @@ export default function ExportModal({
     key: K,
     value: number | string
   ) => {
-    setFilters(prev => {
-      const current = (prev[key] as any[])
-      const index = current.indexOf(value)
-      if (index >= 0) {
-        return { ...prev, [key]: current.filter(v => v !== value) }
-      } else {
-        return { ...prev, [key]: [...current, value] }
-      }
-    })
+    setFilters((prev) => toggleArrayFilterValue(prev, key, value))
     scheduleUpdateCount()
   }
 
@@ -408,21 +396,18 @@ export default function ExportModal({
   if (!isOpen) return null
 
   return (
-    <ModalPortal>
-      <div className="fixed inset-0 z-[100] overflow-y-auto">
-        <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-          {/* Background overlay */}
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-md"
-            onClick={onClose}
-          />
-
-        {/* Modal panel */}
-        <div className="relative z-10 inline-block align-bottom bg-app-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full border border-app-border">
-          <div className="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      showCloseButton={false}
+      size="lg"
+      panelClassName="border border-app-border"
+      contentClassName="bg-app-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4"
+    >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-2xl font-bold text-app-text">Export Study Data</h3>
               <button
+                type="button"
                 onClick={onClose}
                 className="text-app-text-muted hover:text-app-text"
               >
@@ -739,7 +724,7 @@ export default function ExportModal({
                   onKeyDown={(e) => {
                     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                       e.preventDefault()
-                      const currentIndex = focusedConfigIndex ?? exportConfigurations.findIndex(c => `${c.source}:${c.name}` === selectedConfigId)
+                      const currentIndex = focusedConfigIndex ?? exportConfigurations.findIndex(c => formatExportConfigId(c.source!, c.name) === selectedConfigId)
                       let newIndex: number
                     if (e.key === 'ArrowDown') {
                       newIndex = currentIndex < exportConfigurations.length - 1 ? currentIndex + 1 : 0
@@ -748,20 +733,20 @@ export default function ExportModal({
                     }
                     setFocusedConfigIndex(newIndex)
                     const newConfig = exportConfigurations[newIndex]
-                    setSelectedConfigId(`${newConfig.source}:${newConfig.name}`)
+                    setSelectedConfigId(formatExportConfigId(newConfig.source!, newConfig.name))
                     const button = e.currentTarget.children[newIndex] as HTMLElement
                     button.focus()
                   } else if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
                     if (focusedConfigIndex !== null) {
                       const focusedConfig = exportConfigurations[focusedConfigIndex]
-                      setSelectedConfigId(`${focusedConfig.source}:${focusedConfig.name}`)
+                      setSelectedConfigId(formatExportConfigId(focusedConfig.source!, focusedConfig.name))
                     }
                   }
                   }}
                 >
                   {exportConfigurations.map((config, index) => {
-                    const configId = `${config.source}:${config.name}` // Unique ID combining source and name
+                    const configId = formatExportConfigId(config.source!, config.name)
                     const isSelected = configId === selectedConfigId
                     const isFocused = focusedConfigIndex === index
                     return (
@@ -977,11 +962,7 @@ export default function ExportModal({
                 {exporting ? 'Exporting...' : 'Export'}
               </button>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    </ModalPortal>
+    </Modal>
   )
 }
 

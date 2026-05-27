@@ -1,11 +1,17 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { exportApi } from '../lib/api/export';
-import { specimenTypesApi, tagsApi } from '../lib/api/reference-data';
-import type { Tag } from '../lib/api/reference-data';
-import type { SpecimenType } from '../lib/api/types';
-import { useExportConfigurations } from '../hooks/useExportConfigurations'
+import {
+  useExportConfigurations,
+  useExportReferenceData,
+} from '../hooks/useExportWorkflow'
+import { PageError } from '../ui'
 import { formatLocalDateTime } from '../lib/date-utils'
+import {
+  formatExportConfigId,
+  getExportColumnsForConfigId,
+} from '../lib/export-config-selection'
+import { toggleArrayFilterValue } from '../lib/filter-array-toggle'
 import '../styles/storage.css'
 
 const CONTAINER_TYPES = [
@@ -77,60 +83,29 @@ export default function Export() {
     tag_ids?: number[]
   }>({})
   
-  // Reference data
-  const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
-  const [tags, setTags] = useState<Tag[]>([])
-  const [availableContainerTypes, setAvailableContainerTypes] = useState<string[]>([])
-  const [loadingRefData, setLoadingRefData] = useState(false)
   const [focusedConfigIndex, setFocusedConfigIndex] = useState<number | null>(null)
+  const referenceData = useExportReferenceData()
+  const { specimenTypes, tags, isLoading: loadingRefData } = referenceData
+  const availableContainerTypes = CONTAINER_TYPES.map((t) => t.value)
   const {
     configurations: exportConfigurations,
     selectedConfigId,
     setSelectedConfigId,
     loading: loadingConfigs,
-    loadConfigurations: loadExportConfigurations,
+    error: configLoadError,
+    loadConfigurations,
   } = useExportConfigurations()
 
-  const loadReferenceData = useCallback(async () => {
-    try {
-      setLoadingRefData(true)
-      setError(null)
-      
-      // Load all specimen types and tags (not study-specific for multi-study)
-      const [specimenTypesRes, tagsRes] = await Promise.all([
-        specimenTypesApi.list(),
-        tagsApi.list(),
-      ])
-      
-      setSpecimenTypes(
-        specimenTypesRes.data.map((st) => ({
-          id: st.id,
-          name: st.name,
-          created: st.created || '',
-          lastUpdated: st.lastUpdated || '',
-        }))
-      )
-      
-      setTags(tagsRes.data)
-      
-      // For container types, we'll show all types (they'll be filtered server-side)
-      setAvailableContainerTypes(CONTAINER_TYPES.map(t => t.value))
-    } catch (error: any) {
-      console.error('Failed to load reference data:', error)
-      setError(error?.response?.data?.error || error?.message || 'Failed to load export options')
-      setSpecimenTypes([])
-      setTags([])
-      setAvailableContainerTypes([])
-    } finally {
-      setLoadingRefData(false)
-    }
-  }, [])
+  const bootstrapError = useMemo(() => {
+    if (referenceData.isError) return referenceData.errorMessage
+    if (configLoadError) return configLoadError
+    return null
+  }, [referenceData.isError, referenceData.errorMessage, configLoadError])
 
-  // Single mount effect: load reference data once when page is shown (configs loaded by useExportConfigurations)
-  useEffect(() => {
-    loadReferenceData()
-     
-  }, [])
+  const retryBootstrap = () => {
+    referenceData.refetch()
+    void loadConfigurations()
+  }
 
   const parseCSV = useCallback((file: File) => {
     return new Promise<CSVRow[]>((resolve, reject) => {
@@ -344,13 +319,7 @@ export default function Export() {
       setError(null)
       setExportSummary(null)
 
-      // Get columns from selected config
-      // Split on first colon only to handle config names that contain colons
-      const firstColonIndex = selectedConfigId.indexOf(':')
-      const selectedSource = selectedConfigId.substring(0, firstColonIndex)
-      const selectedName = selectedConfigId.substring(firstColonIndex + 1)
-      const selectedConfig = exportConfigurations.find(c => c.source === selectedSource && c.name === selectedName)
-      const columns = selectedConfig?.columns
+      const columns = getExportColumnsForConfigId(exportConfigurations, selectedConfigId)
 
       const response = await exportApi.containersByNamesMultiStudy({
         entries: csvData,
@@ -424,15 +393,7 @@ export default function Export() {
     key: K,
     value: number | string
   ) => {
-    setFilters(prev => {
-      const current = (prev[key] as any[])
-      const index = current.indexOf(value)
-      if (index >= 0) {
-        return { ...prev, [key]: current.filter(v => v !== value) }
-      } else {
-        return { ...prev, [key]: [...current, value] }
-      }
-    })
+    setFilters((prev) => toggleArrayFilterValue(prev, key, value))
   }
 
   const clearFilters = () => {
@@ -456,6 +417,14 @@ export default function Export() {
       <div className="container mx-auto px-4 py-8 relative z-10 max-w-6xl">
         <div className="storage-card p-6 storage-reveal storage-reveal-1">
           <h1 className="text-3xl font-bold mb-6">Export Containers (Multi-Study)</h1>
+
+          {bootstrapError && (
+            <PageError
+              title="Could not load export page"
+              message={bootstrapError}
+              onRetry={retryBootstrap}
+            />
+          )}
 
           {error && (
             <div className="mb-6 p-4 bg-app-trend-down/10 border border-app-trend-down rounded text-app-trend-down text-sm">
@@ -744,7 +713,7 @@ export default function Export() {
                 onKeyDown={(e) => {
                   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                     e.preventDefault()
-                    const currentIndex = focusedConfigIndex ?? exportConfigurations.findIndex(c => `${c.source}:${c.name}` === selectedConfigId)
+                    const currentIndex = focusedConfigIndex ?? exportConfigurations.findIndex(c => formatExportConfigId(c.source!, c.name) === selectedConfigId)
                     let newIndex: number
                     if (e.key === 'ArrowDown') {
                       newIndex = currentIndex < exportConfigurations.length - 1 ? currentIndex + 1 : 0
@@ -753,7 +722,7 @@ export default function Export() {
                     }
                     setFocusedConfigIndex(newIndex)
                     const newConfig = exportConfigurations[newIndex]
-                    setSelectedConfigId(`${newConfig.source}:${newConfig.name}`)
+                    setSelectedConfigId(formatExportConfigId(newConfig.source!, newConfig.name))
                     // Focus the button
                     const button = e.currentTarget.children[newIndex] as HTMLElement
                     button.focus()
@@ -761,13 +730,13 @@ export default function Export() {
                     e.preventDefault()
                     if (focusedConfigIndex !== null) {
                       const focusedConfig = exportConfigurations[focusedConfigIndex]
-                      setSelectedConfigId(`${focusedConfig.source}:${focusedConfig.name}`)
+                      setSelectedConfigId(formatExportConfigId(focusedConfig.source!, focusedConfig.name))
                     }
                   }
                 }}
               >
                 {exportConfigurations.map((config, index) => {
-                  const configId = `${config.source}:${config.name}` // Unique ID combining source and name
+                  const configId = formatExportConfigId(config.source!, config.name)
                   const isSelected = configId === selectedConfigId
                   const isFocused = focusedConfigIndex === index
                   return (

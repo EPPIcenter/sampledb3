@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { fireEvent } from '@testing-library/react'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import Export from '../Export'
-import { exportConfigurationsApi } from '../../lib/api/settings'
+import { settingsApi } from '../../lib/api/settings'
+import { mockSettingsApiGetValue } from '../../__tests__/helpers/settings-mocks'
 import { specimenTypesApi, tagsApi } from '../../lib/api/reference-data'
 
 vi.mock('../../lib/api/export', async () => {
@@ -25,8 +27,7 @@ vi.mock('../../lib/api/reference-data', async () => {
 describe('Export', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(exportConfigurationsApi.getShared).mockResolvedValue({ configurations: [] })
-    vi.mocked(exportConfigurationsApi.getPersonal).mockResolvedValue({ configurations: [] })
+    vi.mocked(settingsApi.getValue).mockImplementation(mockSettingsApiGetValue())
   })
 
   it('shows export-related content', async () => {
@@ -69,5 +70,17 @@ describe('Export', () => {
       const csvMatches = screen.getAllByText(/csv/i)
       expect(csvMatches.length).toBeGreaterThan(0)
     }, { timeout: 3000 })
+  })
+
+  it('toggles container type filter without error when filter array is unset', async () => {
+    await render(<Export />)
+    await waitFor(() => {
+      expect(screen.getByText('Micronix Tube')).toBeInTheDocument()
+    })
+    const checkbox = screen.getByRole('checkbox', { name: /micronix tube/i })
+    fireEvent.click(checkbox)
+    expect(checkbox).toBeChecked()
+    fireEvent.click(checkbox)
+    expect(checkbox).not.toBeChecked()
   })
 })
