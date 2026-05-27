@@ -23,6 +23,10 @@ import { eq, and, sql, inArray } from 'drizzle-orm'
 import { cache, cacheKeys } from '../cache'
 import { resolveContainerTypes } from '../container-placement'
 import { buildDateFilter, chunkArray } from './helpers'
+import {
+  resolveContainerIdsAtLocations,
+  resolveStatisticsLocationFilter,
+} from './location-filter'
 import type { DashboardStatistics, StatisticsFilters } from './types'
 
 /** Filtered dashboard statistics for specimens, containers, and storage. */
@@ -240,48 +244,35 @@ export async function getDashboardStatistics(
 
     // Location Filtering - Query matching location IDs and their descendants
     const hasLocationFilter = !!locationId
+    const locationFilter = await resolveStatisticsLocationFilter(database, sqliteDatabase, locationId)
     let filteredLocationIds: number[] = []
-    
-    if (hasLocationFilter) {
-      const id = parseInt(locationId!)
-      if (!isNaN(id)) {
-        // Get the location and all its descendants
-        const targetLocation = await database
-          .select()
-          .from(location)
-          .where(eq(location.id, id))
-          .get()
-        
-        if (targetLocation) {
-          // Get all descendants of this location
-          const { getLocationDescendants } = await import('../location-helpers')
-          const descendants = await getLocationDescendants(sqliteDatabase, id)
-          filteredLocationIds = [id, ...descendants.map(d => d.id)]
-        } else {
-          // Location not found, return empty results
-          return {
-            specimens: {
-              total: 0,
-              bySourceType: {},
-              bySpecimenType: {},
-              byStudy: {},
-              collectionTimeline: [],
-              creationTimeline: [],
-            },
-            containers: {
-              total: 0,
-              byType: {},
-              byTags: {},
-              byStatus: {},
-              averagePerSpecimen: 0,
-            },
-            storage: {
-              byLocation: [],
-              byRootLocation: {},
-            },
-          }
-        }
+
+    if (locationFilter.kind === 'not_found') {
+      return {
+        specimens: {
+          total: 0,
+          bySourceType: {},
+          bySpecimenType: {},
+          byStudy: {},
+          collectionTimeline: [],
+          creationTimeline: [],
+        },
+        containers: {
+          total: 0,
+          byType: {},
+          byTags: {},
+          byStatus: {},
+          averagePerSpecimen: 0,
+        },
+        storage: {
+          byLocation: [],
+          byRootLocation: {},
+        },
       }
+    }
+
+    if (locationFilter.kind === 'resolved') {
+      filteredLocationIds = locationFilter.filteredLocationIds
     }
 
     // Get container IDs filtered by tags if tag filter is provided
@@ -346,46 +337,11 @@ export async function getDashboardStatistics(
       // Get location-filtered container IDs once (if location filter is active)
       let locationFilteredContainerIds: number[] | null = null
       if (hasLocationFilter && filteredLocationIds.length > 0) {
-        // Query container IDs by matching location IDs (avoiding circular references)
-        // First, get plates/boxes that match the location IDs
-        const [matchingPlates, matchingBoxes] = await Promise.all([
-          database.select({ id: micronixPlate.id })
-            .from(micronixPlate)
-            .where(inArray(micronixPlate.locationId, filteredLocationIds)),
-          database.select({ id: cryovialBox.id })
-            .from(cryovialBox)
-            .where(inArray(cryovialBox.locationId, filteredLocationIds)),
-        ])
-        
-        const plateIds = matchingPlates.map(p => p.id)
-        const boxIds = matchingBoxes.map(b => b.id)
-        
-        // Then get container IDs from those plates/boxes
-        const [micronixContainerIds, cryovialContainerIds] = await Promise.all([
-          plateIds.length > 0
-            ? database.select({ id: micronixTube.id })
-                .from(micronixTube)
-                .where(inArray(micronixTube.collectionId, plateIds))
-            : Promise.resolve([]),
-          boxIds.length > 0
-            ? database.select({ id: cryovialTube.id })
-                .from(cryovialTube)
-                .where(inArray(cryovialTube.collectionId, boxIds))
-            : Promise.resolve([]),
-        ])
-
-        // Combine container IDs
-        locationFilteredContainerIds = [
-          ...new Set([
-            ...micronixContainerIds.map(r => r.id),
-            ...cryovialContainerIds.map(r => r.id),
-          ])
-        ]
-        
-        // Apply tag filter if provided
-        if (tagFilteredContainerIds) {
-          locationFilteredContainerIds = locationFilteredContainerIds.filter(id => tagFilteredContainerIds!.includes(id))
-        }
+        locationFilteredContainerIds = await resolveContainerIdsAtLocations(
+          database,
+          filteredLocationIds,
+          tagFilteredContainerIds,
+        )
       }
       
       // Batch query if too many specimen IDs to avoid SQLite variable limit
@@ -451,42 +407,12 @@ export async function getDashboardStatistics(
     } else {
       // No specimen filter, but we might have state/status/location filters
       if (hasLocationFilter && filteredLocationIds.length > 0) {
-        // Query container IDs by matching location IDs (avoiding circular references)
-        // First, get plates/boxes that match the location IDs
-        const [matchingPlates, matchingBoxes] = await Promise.all([
-          database.select({ id: micronixPlate.id })
-            .from(micronixPlate)
-            .where(inArray(micronixPlate.locationId, filteredLocationIds)),
-          database.select({ id: cryovialBox.id })
-            .from(cryovialBox)
-            .where(inArray(cryovialBox.locationId, filteredLocationIds)),
-        ])
-        
-        const plateIds = matchingPlates.map(p => p.id)
-        const boxIds = matchingBoxes.map(b => b.id)
-        
-        // Then get container IDs from those plates/boxes
-        const [micronixContainerIds, cryovialContainerIds] = await Promise.all([
-          plateIds.length > 0
-            ? database.select({ id: micronixTube.id })
-                .from(micronixTube)
-                .where(inArray(micronixTube.collectionId, plateIds))
-            : Promise.resolve([]),
-          boxIds.length > 0
-            ? database.select({ id: cryovialTube.id })
-                .from(cryovialTube)
-                .where(inArray(cryovialTube.collectionId, boxIds))
-            : Promise.resolve([]),
-        ])
-        
-        // Combine container IDs
-        const locationFilteredContainerIds = [
-          ...new Set([
-            ...micronixContainerIds.map(r => r.id),
-            ...cryovialContainerIds.map(r => r.id),
-          ])
-        ]
-        
+        const locationFilteredContainerIds = await resolveContainerIdsAtLocations(
+          database,
+          filteredLocationIds,
+          tagFilteredContainerIds,
+        )
+
         if (locationFilteredContainerIds.length === 0) {
           filteredContainers = []
         } else {
