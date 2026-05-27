@@ -40,20 +40,32 @@ export async function exportSpecimensCsv(
       .where(eq(study.shortCode, filters.studyCode))
       .get()
 
-    if (studyRecord) {
-      const subjects = await database
-        .select({ id: studySubject.id })
-        .from(studySubject)
-        .where(eq(studySubject.studyId, studyRecord.id))
+    if (!studyRecord) {
+      return formatSimpleCSV(
+        ['id', 'subject_id', 'control_batch_id', 'specimen_type', 'collection_date', 'created'],
+        [],
+        csvOptions,
+      )
+    }
 
-      const subjectIds = subjects.map((s) => s.id)
-      if (subjectIds.length > 0) {
-        if (subjectIds.length === 1) {
-          conditions.push(eq(specimen.studySubjectId, subjectIds[0]))
-        } else {
-          conditions.push(inArray(specimen.studySubjectId, subjectIds))
-        }
-      }
+    const subjects = await database
+      .select({ id: studySubject.id })
+      .from(studySubject)
+      .where(eq(studySubject.studyId, studyRecord.id))
+
+    const subjectIds = subjects.map((s) => s.id)
+    if (subjectIds.length === 0) {
+      return formatSimpleCSV(
+        ['id', 'subject_id', 'control_batch_id', 'specimen_type', 'collection_date', 'created'],
+        [],
+        csvOptions,
+      )
+    }
+
+    if (subjectIds.length === 1) {
+      conditions.push(eq(specimen.studySubjectId, subjectIds[0]))
+    } else {
+      conditions.push(inArray(specimen.studySubjectId, subjectIds))
     }
   }
 
