@@ -281,7 +281,6 @@ export async function getDashboardStatistics(
         containers: {
           total: 0,
           byType: {},
-          byState: {},
           byStatus: {},
           averagePerSpecimen: 0,
         },

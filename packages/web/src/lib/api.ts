@@ -1344,7 +1344,7 @@ export interface StatisticsData {
     total: number
     byType: Record<string, number>
     byTags: Record<string, number>
-    byState: Record<string, number>
+    byStatus: Record<string, number>
     averagePerSpecimen: number
   }
   storage: {

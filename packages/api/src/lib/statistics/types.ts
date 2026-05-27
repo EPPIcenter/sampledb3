@@ -25,7 +25,6 @@ export type DashboardStatistics = {
     byType: Record<string, number>
     byTags: Record<string, number>
     byStatus: Record<string, number>
-    byState?: Record<string, number>
     averagePerSpecimen: number
   }
   storage: {

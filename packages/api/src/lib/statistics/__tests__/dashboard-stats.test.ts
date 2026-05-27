@@ -41,7 +41,6 @@ describe('dashboard-stats', () => {
     expect(data.containers).toMatchObject({
       total: 0,
       byType: {},
-      byState: {},
       byStatus: {},
       averagePerSpecimen: 0,
     })
@@ -82,5 +81,14 @@ describe('dashboard-stats', () => {
 
     expect(data.containers.total).toBe(1)
     expect(data.containers.byType.micronix_tube).toBe(1)
+  })
+
+  it('returns byStatus for containers with remaining quantity', async () => {
+    const container = await createTestStorageContainer(testDb)
+
+    const data = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, {})
+
+    expect(data.containers.byStatus['In Use']).toBe(1)
+    expect(data.containers.total).toBe(1)
   })
 })

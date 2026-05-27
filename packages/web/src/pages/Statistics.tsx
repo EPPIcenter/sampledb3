@@ -121,7 +121,7 @@ export default function Statistics() {
           total: containers.total,
           byType: containers.byType,
           byTags: containers.byTags,
-          byState: containers.byState,
+          byStatus: containers.byStatus,
           averagePerSpecimen: typeof containers.averagePerSpecimen === 'number' ? containers.averagePerSpecimen : 0,
         },
         storage: {

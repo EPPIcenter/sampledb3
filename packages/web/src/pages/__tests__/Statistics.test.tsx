@@ -20,7 +20,7 @@ vi.mock('../../lib/api', () => ({
           total: 0,
           byType: {},
           byTags: {},
-          byState: {},
+          byStatus: {},
           averagePerSpecimen: 0,
         },
         storage: {
@@ -66,7 +66,7 @@ describe('Statistics', () => {
           total: 0,
           byType: {},
           byTags: {},
-          byState: {},
+          byStatus: {},
           averagePerSpecimen: 0,
         },
         storage: {
