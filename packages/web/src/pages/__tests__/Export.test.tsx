@@ -3,15 +3,11 @@ import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import Export from '../Export'
 import * as api from '../../lib/api'
 
-vi.mock('../../lib/api', () => ({
-  exportApi: { validate: vi.fn(), export: vi.fn() },
-  exportConfigurationsApi: {
-    getShared: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
-    getPersonal: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
-  },
-  specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-  tagsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-}))
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { exportPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedApi(exportPageMock())
+})
 
 describe('Export', () => {
   beforeEach(() => {

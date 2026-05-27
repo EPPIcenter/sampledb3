@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { exportApi } from '../lib/api'
+import { exportApi } from '../lib/api/export';
 import { useExportConfigurations } from '../hooks/useExportConfigurations'
 import { formatLocalDateTime } from '../lib/date-utils'
 import '../styles/storage.css'

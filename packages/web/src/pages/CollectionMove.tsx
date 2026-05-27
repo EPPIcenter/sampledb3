@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { collectionsApi, locationsApi, type Location } from '../lib/api'
+import { collectionsApi } from '../lib/api/collections';
+import { locationsApi } from '../lib/api/locations';
+import type { Location } from '../lib/api/types';
 import CollectionMoveTreePicker, { type Collection } from '../components/CollectionMoveTreePicker'
 import LocationTreePicker, { type LocationSelection } from '../components/LocationTreePicker'
 import { useUser } from '../contexts/UserContext'

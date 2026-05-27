@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useHotkey } from '../hooks/useHotkey'
-import { subjectsApi, type SubjectSummaryResponse } from '../lib/api'
+import { subjectsApi } from '../lib/api/subjects';
+import type { SubjectSummaryResponse } from '../lib/api/subjects';
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SimpleTimeline from '../components/SimpleTimeline'
 import { getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
-import { locationsApi, type Location, type LocationHierarchyStats } from '../lib/api'
+import { locationsApi } from '../lib/api/locations';
+import type { LocationHierarchyStats } from '../lib/api/locations';
+import type { Location } from '../lib/api/types';
 import { getLocationAncestors, getLocationDescendants } from '../lib/location-tree'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import LocationHierarchyTree from '../components/LocationHierarchyTree'

@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 import ContainerDerivationModal from '../ContainerDerivationModal'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   derivationsApi: {
     create: vi.fn().mockResolvedValue({ data: { derivation: {}, parentContainer: {}, childContainer: {}, specimen: {}, warnings: [] } }),
   },
@@ -13,7 +15,8 @@ vi.mock('../../lib/api', () => ({
   collectionsApi: {
     listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
   },
-}))
+})
+})
 
 describe('ContainerDerivationModal', () => {
   beforeEach(() => {

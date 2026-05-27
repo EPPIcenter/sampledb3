@@ -5,7 +5,9 @@ import { fireEvent } from '@testing-library/react'
 import LocationForm from '../LocationForm'
 import * as api from '../../lib/api'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   locationsApi: {},
   storageTypesApi: {
     list: vi.fn().mockResolvedValue({
@@ -15,7 +17,8 @@ vi.mock('../../lib/api', () => ({
       ],
     }),
   },
-}))
+})
+})
 
 describe('LocationForm', () => {
   const onSave = vi.fn()

@@ -2,18 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import BloodControls from '../BloodControls'
 
-vi.mock('../../lib/api', () => ({
-  authApi: {
-    getCurrentUser: vi.fn().mockResolvedValue({
-      data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
-    }),
-  },
-  controlsApi: {
-    list: vi.fn().mockResolvedValue({ data: { controls: [] } }),
-    listAllBatches: vi.fn().mockResolvedValue({ data: { batches: [] } }),
-  },
-  strainsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-}))
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { bloodControlsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedApi(bloodControlsPageMock())
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')

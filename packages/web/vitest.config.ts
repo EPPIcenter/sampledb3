@@ -4,6 +4,34 @@ import path from 'path'
 
 const appBuildId = process.env.VITE_APP_BUILD_ID || process.env.APP_BUILD_ID || 'local-dev'
 
+/** Domain modules re-export through lib/api.ts; alias them to the barrel so vi.mock('../lib/api') applies. */
+const apiDomainModules = [
+  'studies',
+  'subjects',
+  'specimens',
+  'reference-data',
+  'controls',
+  'reagents',
+  'locations',
+  'collections',
+  'imports',
+  'export',
+  'derivations',
+  'search',
+  'statistics',
+  'settings',
+  'auth',
+  'admin',
+  'qpcr',
+  'error-logs',
+  'types',
+] as const
+
+const apiDomainAliases = apiDomainModules.map((domain) => ({
+  find: new RegExp(`^(.*)/lib/api/${domain}$`),
+  replacement: '$1/lib/api.ts',
+}))
+
 /**
  * Vitest Configuration
  * 
@@ -41,6 +69,7 @@ export default defineConfig({
         'src/main.tsx',
         'src/**/*.css',
         'src/lib/api.ts',
+        'src/lib/api/**',
         'dist/**',
       ],
       // Baseline; raise in steps (e.g. 50 → 65 → 80 → 90) as coverage improves (see test coverage plan). CSS and api.ts are excluded.
@@ -54,9 +83,10 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, './src') },
+      ...apiDomainAliases,
+    ],
   },
 })
 

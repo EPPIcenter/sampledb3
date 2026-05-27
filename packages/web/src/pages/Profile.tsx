@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { authApi } from '../lib/api'
+import { authApi } from '../lib/api/auth';
 import { useUser } from '../contexts/UserContext'
 import '../styles/profile.css'
 

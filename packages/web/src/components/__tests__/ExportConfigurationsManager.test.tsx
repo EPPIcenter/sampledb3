@@ -9,14 +9,17 @@ const sharedConfigs = [
   { name: 'Shared Two', columns: ['barcode', 'position'], isDefault: false },
 ]
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   exportConfigurationsApi: {
     getShared: vi.fn(),
     getPersonal: vi.fn(),
     update: vi.fn(),
     updatePersonal: vi.fn(),
   },
-}))
+})
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')

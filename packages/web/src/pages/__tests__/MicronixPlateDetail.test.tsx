@@ -30,11 +30,14 @@ const mockWells: Record<string, { type: 'micronix_tube'; id: number; barcode?: s
   },
 }
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   collectionsApi: {
     getMicronixPlate: vi.fn(),
   },
-}))
+})
+})
 
 vi.mock('../../hooks/useTableViewConfigurations', () => ({
   useTableViewConfigurations: () => ({

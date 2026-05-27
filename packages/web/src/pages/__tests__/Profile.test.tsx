@@ -4,13 +4,16 @@ import userEvent from '@testing-library/user-event'
 import Profile from '../Profile'
 
 // Mock the API module
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   authApi: {
     updateProfile: vi.fn(),
     changePassword: vi.fn(),
     getCurrentUser: vi.fn(),
   },
-}))
+})
+})
 
 // Mock the UserContext
 const mockRefreshUser = vi.fn()

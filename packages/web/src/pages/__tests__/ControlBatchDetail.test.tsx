@@ -10,7 +10,9 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   controlsApi: {
     getBatchSummary: vi.fn().mockResolvedValue({
       data: {
@@ -34,7 +36,8 @@ vi.mock('../../lib/api', () => ({
     }),
     deleteBatch: vi.fn().mockResolvedValue(undefined),
   },
-}))
+})
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')

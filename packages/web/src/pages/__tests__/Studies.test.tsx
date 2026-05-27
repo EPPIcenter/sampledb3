@@ -1,14 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 
-vi.mock('../../lib/api', () => ({
-  studiesApi: {
-    list: vi.fn().mockResolvedValue({
-      studies: [],
-      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 },
-    }),
-  },
-}))
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { studiesPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedApi(studiesPageMock())
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')

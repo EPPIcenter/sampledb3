@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import { collectionsApi, locationsApi } from '../../lib/api'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   authApi: {
     getCurrentUser: vi.fn().mockResolvedValue({
       data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
@@ -14,7 +16,8 @@ vi.mock('../../lib/api', () => ({
     listAllCollections: vi.fn().mockResolvedValue({ data: { collections: [] } }),
     moveCollections: vi.fn().mockResolvedValue({ data: { success: true, moved: 0 } }),
   },
-}))
+})
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')

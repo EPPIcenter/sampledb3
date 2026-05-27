@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { controlsApi, type ControlDefinitionSummaryResponse } from '../lib/api'
+import { controlsApi } from '../lib/api/controls';
+import type { ControlDefinitionSummaryResponse } from '../lib/api/controls';
 import { useUser } from '../contexts/UserContext'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import DataTable, { Column } from '../components/DataTable'

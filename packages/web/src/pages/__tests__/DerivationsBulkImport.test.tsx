@@ -4,7 +4,9 @@ import userEvent from '@testing-library/user-event'
 import DerivationsBulkImport from '../DerivationsBulkImport'
 import * as api from '../../lib/api'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   derivationsApi: { validateCsv: vi.fn(), importCsv: vi.fn() },
   collectionsApi: { createMicronixPlate: vi.fn(), createCryovialBox: vi.fn() },
   specimenTypesApi: {
@@ -12,7 +14,8 @@ vi.mock('../../lib/api', () => ({
     getContainerTypes: vi.fn().mockResolvedValue({ data: { containerTypes: ['micronix_tube'] } }),
   },
   unitsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-}))
+})
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')

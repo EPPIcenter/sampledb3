@@ -29,7 +29,9 @@ const mockUnitsByType: Record<string, Array<{ id: number; symbol: string; name: 
   ],
 }
 
-vi.mock('../../../lib/api', () => ({
+vi.mock('../../../lib/api', async () => {
+  const { createMockedApi } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedApi({
   collectionsApi: {
     listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
   },
@@ -38,7 +40,8 @@ vi.mock('../../../lib/api', () => ({
       Promise.resolve({ data: { units: mockUnitsByType[ct] ?? [] } })
     ),
   },
-}))
+})
+})
 
 const specimenTypesWithCollectionConfig: SpecimenTypeConfig[] = [
   {

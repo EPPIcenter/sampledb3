@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 import QpcrExperiments from '../QpcrExperiments'
 
-vi.mock('../../lib/api', () => ({
-  qpcrExperimentsApi: {
-    list: vi.fn().mockResolvedValue({ data: { experiments: [] } }),
-  },
-}))
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { qpcrExperimentsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedApi(qpcrExperimentsPageMock())
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')

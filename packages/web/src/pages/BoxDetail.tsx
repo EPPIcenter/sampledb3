@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { collectionsApi } from '../lib/api'
+import { collectionsApi } from '../lib/api/collections';
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import CollectionTableWithExport from '../components/CollectionTableWithExport'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'

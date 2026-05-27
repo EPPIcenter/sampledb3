@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import DataTable, { Column } from '../components/DataTable'
 import SkeletonTable from '../components/SkeletonTable'
-import { collectionsApi } from '../lib/api'
+import { collectionsApi } from '../lib/api/collections';
 import { filterCollections, type CollectionListItem, type CollectionTypeFilter } from '../lib/collections-browse'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import '../styles/subject-specimen.css'

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
-import { adminApi, type User, type UserSession } from '../lib/api'
+import { adminApi } from '../lib/api/admin';
+import type { User, UserSession } from '../lib/api/auth';
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import ModalPortal from '../components/ModalPortal'
 import '../styles/admin.css'

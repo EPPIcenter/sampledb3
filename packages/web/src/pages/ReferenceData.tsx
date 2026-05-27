@@ -9,7 +9,9 @@ import {
   type ReferenceDataType,
 } from '../config/reference-data-config'
 import { useStorageTypes } from '../hooks/useReferenceData'
-import { locationsApi, specimenTypesApi, type Location, type SpecimenType } from '../lib/api'
+import { locationsApi } from '../lib/api/locations';
+import { specimenTypesApi } from '../lib/api/reference-data';
+import type { Location, SpecimenType } from '../lib/api/types';
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import '../styles/reference-data.css'
 

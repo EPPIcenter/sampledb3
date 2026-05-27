@@ -3,11 +3,14 @@ import { render, screen } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import SearchModal from '../SearchModal'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   default: {
     get: vi.fn().mockResolvedValue({ data: { results: [] } }),
   },
-}))
+})
+})
 
 describe('SearchModal', () => {
   const onClose = vi.fn()

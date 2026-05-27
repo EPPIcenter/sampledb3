@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { adminApi, type IntegrityReport } from '../lib/api'
+import { adminApi } from '../lib/api/admin';
+import type { IntegrityReport } from '../lib/api/admin';
 import '../styles/admin.css'
 
 export default function AdminDataIntegrityOverview() {

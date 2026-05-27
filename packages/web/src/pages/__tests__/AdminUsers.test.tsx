@@ -3,7 +3,9 @@ import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import AdminUsers from '../AdminUsers'
 import * as api from '../../lib/api'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   adminApi: {
     getUsers: vi.fn().mockResolvedValue({ data: { users: [] } }),
     createUser: vi.fn().mockResolvedValue(undefined),
@@ -13,7 +15,8 @@ vi.mock('../../lib/api', () => ({
     resetPassword: vi.fn().mockResolvedValue(undefined),
     getUserSessions: vi.fn().mockResolvedValue({ data: { sessions: [] } }),
   },
-}))
+})
+})
 
 describe('AdminUsers', () => {
   beforeEach(() => {

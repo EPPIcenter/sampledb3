@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { adminApi, type EmptyCollectionItem, type EmptyCollectionsDeleteIds } from '../lib/api'
+import { adminApi } from '../lib/api/admin';
+import type { EmptyCollectionItem, EmptyCollectionsDeleteIds } from '../lib/api/admin';
 import ModalPortal from '../components/ModalPortal'
 import '../styles/admin.css'
 

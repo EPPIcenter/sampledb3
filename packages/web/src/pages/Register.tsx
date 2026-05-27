@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { authApi } from '../lib/api'
-
-export default function Register() {
+import { authApi } from '../lib/api/auth';export default function Register() {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')

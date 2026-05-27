@@ -28,7 +28,9 @@ bun test:coverage # With coverage
 
 - `__tests__/helpers/` - Test utilities
   - `render.tsx`: Custom render function with providers (QueryClient, BrowserRouter, ToastProvider)
-  - `setup.ts`: Global test setup (e.g. IntersectionObserver mock, in-memory localStorage, auth mock). The default `authApi.getCurrentUser` mock resolves synchronously (thenable) so UserProvider state updates run inside React’s act and avoid act() warnings.
+  - `mock-api.ts`: `createMockedApi()` — `importActual` + global `authApi` / `tableViewConfigurationsApi` defaults + per-test overrides
+  - `mock-api-templates.ts`: domain presets (`statisticsPageMock`, `studiesPageMock`, etc.) for common page/hook tests
+  - `setup.ts`: Global test setup (IntersectionObserver, in-memory localStorage, default `createMockedApi()` for `lib/api`)
 - `__tests__/fixtures/` - Test data fixtures
 - `lib/__tests__/` - Lib unit tests (e.g. commands, constants, plate-filename-match, container-types, localUserHistory, hotkeys, error-logger)
 - `components/__tests__/` - Component tests (e.g. BulkImportFlow, ContainerDerivationModal)
@@ -57,28 +59,51 @@ it('renders component', () => {
 
 ### Mocking API Calls
 
-Use `vi.mock` to mock API modules:
+Use `createMockedApi` so tests get `importActual` types/exports, global auth + table-view mocks, and only the domains you override:
 
 ```typescript
 import { vi } from 'vitest'
 import * as api from '../../lib/api'
 
-vi.mock('../../lib/api', () => ({
-  studiesApi: {
-    list: vi.fn(),
-    get: vi.fn(),
-  },
-}))
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
+    studiesApi: {
+      list: vi.fn(),
+      get: vi.fn(),
+    },
+  })
+})
 
-// In tests
+// studiesApi methods return unwrapped data (not AxiosResponse)
 vi.mocked(api.studiesApi.list).mockResolvedValue({
-  data: { studies: [] },
-  status: 200,
-  statusText: 'OK',
-  headers: {},
-  config: {} as any,
+  studies: [],
+  pagination: { total: 0, page: 1, limit: 10, totalPages: 0 },
 })
 ```
+
+Replace whole `*Api` objects in overrides (do not patch single methods on the real object). For pages that use `import api from '../lib/api'`, pass a `default` stub:
+
+```typescript
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
+    default: { get: vi.fn() },
+    derivationsApi: { listFromContainer: vi.fn().mockResolvedValue({ derivations: [] }) },
+  })
+})
+```
+
+Use dynamic `import()` inside the factory (not a top-level `createMockedApi` import) when the test file also imports `helpers/render` — Vitest hoists `vi.mock` and causes a TDZ error otherwise.
+
+All `lib/api` mocks in page, component, and hook tests use this pattern (see any `*.test.tsx` under `src/`). Prefer `mock-api-templates` for repeated page setups:
+
+```typescript
+const { statisticsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+return createMockedApi(statisticsPageMock())
+```
+
+Production code should import from domain modules (`../lib/api/studies`, `../lib/api/client`, etc.). `src/lib/api.ts` remains a deprecated barrel re-export. Vitest aliases domain paths to the barrel so `vi.mock('../../lib/api')` still applies in tests.
 
 ## Writing Tests
 
@@ -118,11 +143,10 @@ import { ReactNode } from 'react'
 import { useStudies } from '../useStudies'
 import * as api from '../../lib/api'
 
-vi.mock('../../lib/api', () => ({
-  studiesApi: {
-    list: vi.fn(),
-  },
-}))
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({ studiesApi: { list: vi.fn() } })
+})
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -142,11 +166,8 @@ function createWrapper() {
 describe('useStudies', () => {
   it('should fetch studies', async () => {
     vi.mocked(api.studiesApi.list).mockResolvedValue({
-      data: { studies: [], pagination: { total: 0, page: 1, limit: 10, totalPages: 0 } },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as any,
+      studies: [],
+      pagination: { total: 0, page: 1, limit: 10, totalPages: 0 },
     })
 
     const { result } = renderHook(() => useStudies(), {

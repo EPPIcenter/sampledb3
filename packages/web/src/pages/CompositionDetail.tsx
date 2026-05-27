@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { controlsApi, type ControlDefinition } from '../lib/api'
+import { controlsApi } from '../lib/api/controls';
+import type { ControlDefinition } from '../lib/api/controls';
 import { getCompositionKey } from '../lib/composition-key'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import { useUser } from '../contexts/UserContext'

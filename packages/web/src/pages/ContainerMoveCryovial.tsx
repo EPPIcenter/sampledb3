@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { useContainerMoveStep, type ContainerMoveAtomicMode } from '../hooks/useContainerMoveStep'
-import { collectionsApi, locationsApi, type Location } from '../lib/api'
+import { collectionsApi } from '../lib/api/collections';
+import { locationsApi } from '../lib/api/locations';
+import type { Location } from '../lib/api/types';
 import { downloadCsv } from '../lib/csv'
 import { generateCryovialMoveTemplate } from '../lib/cryovial-move-template'
 import CryovialBoxPicker, { type CryovialBox } from '../components/CryovialBoxPicker'

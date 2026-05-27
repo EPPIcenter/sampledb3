@@ -1,12 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  collectionsApi,
-  scannerConfigurationsApi,
-  type ScannerConfiguration,
-  type ValidatePlateScanResult,
-  type InferenceReport,
-} from '../lib/api'
+import { collectionsApi } from '../lib/api/collections';
+import type { ValidatePlateScanResult, InferenceReport } from '../lib/api/collections';
+import { scannerConfigurationsApi } from '../lib/api/settings';
+import type { ScannerConfiguration } from '../lib/api/settings';
 import { extractPlateStemFromFilename, findPlateCandidatesFromStem } from '../lib/plate-filename-match'
 import { parseScannerPlateCsv } from '../lib/scanner-plate-csv'
 import { inferDestinationPlateForScan } from '../lib/plate-destination-inference'

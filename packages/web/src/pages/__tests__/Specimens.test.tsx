@@ -2,15 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 import Specimens from '../Specimens'
 
-vi.mock('../../lib/api', () => ({
-  default: {
-    get: vi.fn(),
-  },
-  getModifierKey: () => 'Ctrl',
-  specimenTypesApi: {
-    list: vi.fn().mockResolvedValue({ data: [] }),
-  },
-}))
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { specimensPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedApi(specimensPageMock())
+})
+
+vi.mock('../../lib/api/client', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { specimensPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  const mocked = await createMockedApi(specimensPageMock())
+  return { api: mocked.default }
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')
@@ -24,7 +27,7 @@ vi.mock('../../contexts/UserContext', async () => {
   }
 })
 
-import api from '../../lib/api'
+import { api } from '../../lib/api/client'
 
 describe('Specimens page', () => {
   beforeEach(() => {

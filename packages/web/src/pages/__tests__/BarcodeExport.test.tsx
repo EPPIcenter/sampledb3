@@ -3,13 +3,16 @@ import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import BarcodeExport from '../BarcodeExport'
 import * as api from '../../lib/api'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   exportApi: { exportBarcodes: vi.fn() },
   exportConfigurationsApi: {
     getShared: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
     getPersonal: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
   },
-}))
+})
+})
 
 describe('BarcodeExport', () => {
   beforeEach(() => {

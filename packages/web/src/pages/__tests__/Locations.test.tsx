@@ -2,21 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 import Locations from '../Locations'
 
-vi.mock('../../lib/api', () => ({
-  locationsApi: {
-    list: vi.fn(),
-    get: vi.fn().mockResolvedValue({
-      data: {
-        location: { id: 1, name: 'Root', path: 'Root', parentId: null, storageTypeId: null, canContainCollections: true, created: '', lastUpdated: '' },
-        contents: { plates: [], boxes: [], bags: [], cryovialBoxes: [] },
-        hierarchyStats: undefined,
-      },
-    }),
-  },
-  searchApi: {
-    searchCollections: vi.fn().mockResolvedValue({ data: [] }),
-  },
-}))
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { locationsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedApi(locationsPageMock())
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')

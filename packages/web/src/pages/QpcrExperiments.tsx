@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { qpcrExperimentsApi, type QpcrExperiment } from '../lib/api'
+import { qpcrExperimentsApi } from '../lib/api/qpcr';
+import type { QpcrExperiment } from '../lib/api/qpcr';
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import DataTable from '../components/DataTable'

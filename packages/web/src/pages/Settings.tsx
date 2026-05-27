@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { settingsApi, type AllSettings } from '../lib/api'
+import { settingsApi } from '../lib/api/settings';
+import type { AllSettings } from '../lib/api/settings';
 import { useUser } from '../contexts/UserContext'
 import { useTheme, THEME_IDS, THEME_LABELS } from '../contexts/ThemeContext'
 import InfoTooltip from '../components/InfoTooltip'

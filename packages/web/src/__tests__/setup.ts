@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom'
 import { cleanup } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
+import { createMockedApi } from './helpers/mock-api'
 
 // In-memory localStorage so addRecentUser in UserContext never throws and console stays clean.
 const storage: Record<string, string> = {}
@@ -20,42 +21,16 @@ if (typeof window !== 'undefined') {
   (window as { localStorage?: typeof localStorageMock }).localStorage = localStorageMock
 }
 
-// Default mock for authApi.getCurrentUser so UserProvider (in renderWithProviders) resolves without real API.
-// Returns a thenable that resolves synchronously so the state update runs in the same tick as the effect (inside act).
-// Test files that mock ../../lib/api replace the module and must include authApi in their mock.
-vi.mock('../lib/api', async () => {
-  const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api')
-  const defaultUser = { id: 1, email: 'test@test.com', name: 'Test User', role: 'admin' as const }
-  const syncThenable = (value: { data: { user: typeof defaultUser } }) => ({
-    then: (onFulfilled: (v: typeof value) => void) => {
-      onFulfilled(value)
-      return { catch: () => ({ then: (f: () => void) => f() }) }
-    },
-    catch: () => ({ then: (f: () => void) => f() }),
-  })
+// Default auth + table view mocks so UserProvider and table views resolve without real HTTP.
+// Per-file vi.mock('../../lib/api', async () => createMockedApi({ ... })) replaces this module mock.
+vi.mock('../lib/api', async () => createMockedApi())
+
+// Production code may import domain paths (lib/api/studies); keep axios mock aligned with the barrel default.
+vi.mock('../lib/api/client', async () => {
+  const actual = await vi.importActual<typeof import('../lib/api/client')>('../lib/api/client')
+  const mocked = await createMockedApi()
   return {
-    ...actual,
-    authApi: {
-      ...actual.authApi,
-      getCurrentUser: vi.fn().mockImplementation(() => syncThenable({ data: { user: defaultUser } })),
-    },
-    tableViewConfigurationsApi: {
-      get: vi.fn().mockResolvedValue({
-        data: {
-          key: 'table_view_configurations',
-          value: {
-            configurations: [
-              {
-                name: 'Default',
-                columns: ['position', 'barcode', 'subject_name', 'study_code', 'specimen_type', 'collection_date', 'comment', 'status', 'created', 'last_updated'],
-                isDefault: true,
-              },
-            ],
-          },
-        },
-      }),
-      update: vi.fn().mockResolvedValue({ data: {} }),
-    },
+    api: (mocked as { default?: typeof actual.api }).default ?? actual.api,
   }
 })
 
@@ -80,6 +55,3 @@ if (typeof window !== 'undefined' && typeof window.IntersectionObserver === 'und
 afterEach(() => {
   cleanup()
 })
-
-
-

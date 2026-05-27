@@ -18,12 +18,15 @@ vi.mock('../../contexts/UserContext', async () => {
   }
 })
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   controlsApi: { listDefinitions: vi.fn().mockResolvedValue({ data: { definitions: [] } }) },
   specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
   strainsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
   settingsApi: { getUnits: vi.fn().mockResolvedValue({ data: [] }) },
-}))
+})
+})
 
 describe('BloodControlDefinitionPage', () => {
   beforeEach(() => {

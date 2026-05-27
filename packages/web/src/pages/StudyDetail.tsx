@@ -2,8 +2,11 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useHotkey } from '../hooks/useHotkey'
 import { useClickOutside } from '../hooks/useClickOutside'
-import { studiesApi, subjectsApi, type Study, type StudySubject, type StudySummary, type StudyTimelineData } from '../lib/api'
-import api from '../lib/api'
+import { studiesApi } from '../lib/api/studies';
+import type { Study, StudySummary, StudyTimelineData } from '../lib/api/studies';
+import { subjectsApi } from '../lib/api/subjects';
+import type { StudySubject } from '../lib/api/types';
+import { api } from '../lib/api/client';
 import StudyDetailHeader from '../components/StudyDetailHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ExportModal from '../components/ExportModal'

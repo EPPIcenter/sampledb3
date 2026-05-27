@@ -3,7 +3,9 @@ import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import ExportModal from '../ExportModal'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   exportApi: {
     validate: vi.fn(),
     export: vi.fn(),
@@ -18,7 +20,8 @@ vi.mock('../../lib/api', () => ({
   },
   specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
   tagsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-}))
+})
+})
 
 describe('ExportModal', () => {
   const onClose = vi.fn()

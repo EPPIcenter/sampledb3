@@ -12,7 +12,9 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   default: { get: vi.fn() },
   studiesApi: {
     get: vi.fn(),
@@ -21,7 +23,8 @@ vi.mock('../../lib/api', () => ({
     getSubjects: vi.fn(),
     delete: vi.fn().mockResolvedValue(undefined),
   },
-}))
+})
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { statisticsApi, type StatisticsData, type StatisticsFilters as ApiFilters } from '../lib/api'
+import { statisticsApi } from '../lib/api/statistics';
+import type { StatisticsData, StatisticsFilters as ApiFilters } from '../lib/api/statistics';
 import StatisticsFilter, { type StatisticsFilters } from '../components/StatisticsFilter'
 import StatCard from '../components/StatCard'
 import StatChart from '../components/StatChart'

@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../../__tests__/helpers/render'
 import BatchInfoStep from '../BatchInfoStep'
 
-vi.mock('../../../lib/api', () => ({
+vi.mock('../../../lib/api', async () => {
+  const { createMockedApi } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedApi({
   controlsApi: {
     list: vi.fn().mockResolvedValue({ data: { controls: [] } }),
     getDefinitionSummary: vi.fn(),
@@ -10,7 +12,8 @@ vi.mock('../../../lib/api', () => ({
   strainsApi: {
     list: vi.fn().mockResolvedValue({ data: [] }),
   },
-}))
+})
+})
 
 vi.mock('../../ModalPortal', () => ({ default: ({ children }: { children: React.ReactNode }) => children }))
 vi.mock('../../forms/ControlDefinitionForm', () => ({ default: () => <div>Form</div> }))

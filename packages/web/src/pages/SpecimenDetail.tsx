@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import api from '../lib/api'
-import type { Specimen } from '../lib/api'
+import { api } from '../lib/api/client';
+import type { Specimen } from '../lib/api/types';
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import AddContainerForSpecimenModal from '../components/AddContainerForSpecimenModal'
 import { getSpecimenTypeIcon, getContainerTypeIcon, getContainerTypeName } from '../lib/icons'

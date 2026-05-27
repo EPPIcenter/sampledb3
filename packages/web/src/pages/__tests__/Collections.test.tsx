@@ -44,13 +44,9 @@ const mockCollections: CollectionListItem[] = [
 ]
 
 vi.mock('../../lib/api', async () => {
-  const actual = await vi.importActual<typeof import('../../lib/api')>('../../lib/api')
-  return {
-    ...actual,
-    collectionsApi: {
-      listAllCollections: vi.fn(),
-    },
-  }
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { collectionsPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedApi(collectionsPageMock())
 })
 
 import { collectionsApi } from '../../lib/api'

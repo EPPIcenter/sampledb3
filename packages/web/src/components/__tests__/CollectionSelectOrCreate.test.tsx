@@ -32,14 +32,17 @@ vi.mock('../LocationPicker', () => ({
   ),
 }))
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   collectionsApi: {
     createBox: vi.fn(),
     createBag: vi.fn(),
     createMicronixPlate: vi.fn(),
     createCryovialBox: vi.fn(),
   },
-}))
+})
+})
 
 import { collectionsApi } from '../../lib/api'
 

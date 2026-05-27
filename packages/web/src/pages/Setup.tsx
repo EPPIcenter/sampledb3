@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { setupApi } from '../lib/api'
-
-// Types
+import { setupApi } from '../lib/api/settings';// Types
 type SpecimenTypeItem = { name: string; containerTypes?: string[] }
 type UnitItem = { name: string; symbol: string; category: string }
 // StateItem removed - status is now derived from remainingQuantity

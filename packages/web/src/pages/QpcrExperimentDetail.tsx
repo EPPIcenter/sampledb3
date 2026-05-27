@@ -1,6 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
-import api, { qpcrExperimentsApi, scannerConfigurationsApi, type QpcrExperimentDetailResponse, type QpcrExperimentWell, type ScannerConfiguration } from '../lib/api'
+import { api } from '../lib/api/client';
+import { qpcrExperimentsApi } from '../lib/api/qpcr';
+import type { QpcrExperimentDetailResponse, QpcrExperimentWell } from '../lib/api/qpcr';
+import { scannerConfigurationsApi } from '../lib/api/settings';
+import type { ScannerConfiguration } from '../lib/api/settings';
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import QpcrWellPlate from '../components/qpcr/QpcrWellPlate'

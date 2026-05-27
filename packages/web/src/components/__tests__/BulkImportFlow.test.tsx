@@ -4,7 +4,9 @@ import userEvent from '@testing-library/user-event'
 import BulkImportFlow from '../BulkImportFlow'
 import { importsApi, specimenTypesApi } from '../../lib/api'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   specimenTypesApi: {
     list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Serum' }, { id: 2, name: 'Plasma' }] }),
     getByContainerType: vi.fn().mockResolvedValue({
@@ -36,7 +38,8 @@ vi.mock('../../lib/api', () => ({
     listBoxes: vi.fn().mockResolvedValue({ data: [] }),
     listBags: vi.fn().mockResolvedValue({ data: [] }),
   },
-}))
+})
+})
 
 describe('BulkImportFlow', () => {
   beforeEach(() => {

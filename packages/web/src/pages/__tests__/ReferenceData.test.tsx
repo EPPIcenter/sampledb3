@@ -55,21 +55,10 @@ vi.mock('../../config/reference-data-config', () => {
   }
 })
 
-// Mock the API module
 vi.mock('../../lib/api', async () => {
-  const actual = await vi.importActual('../../lib/api')
-  return {
-    ...actual,
-    locationsApi: {
-      list: vi.fn().mockResolvedValue({
-        data: { locations: [], pagination: { total: 0, page: 1, limit: 50, totalPages: 0 } },
-      }),
-      get: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-    },
-  }
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { referenceDataLocationsMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedApi(referenceDataLocationsMock())
 })
 
 // Mock the hooks

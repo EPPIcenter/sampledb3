@@ -5,13 +5,16 @@ import StudyForm from '../StudyForm'
 
 const mockCreate = vi.fn().mockResolvedValue(undefined)
 const mockUpdate = vi.fn().mockResolvedValue(undefined)
-vi.mock('../../../lib/api', () => ({
+vi.mock('../../../lib/api', async () => {
+  const { createMockedApi } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedApi({
   studiesApi: {
     list: vi.fn().mockResolvedValue({ studies: [] }),
     create: (...args: unknown[]) => mockCreate(...args),
     update: (...args: unknown[]) => mockUpdate(...args),
   },
-}))
+})
+})
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')

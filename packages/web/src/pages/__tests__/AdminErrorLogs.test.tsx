@@ -6,13 +6,16 @@ import AdminErrorLogs from '../AdminErrorLogs'
 import { formatErrorLogForLLM } from '../../lib/error-log-prompt'
 import { errorLogsApi, type ErrorLog, type ErrorLogsResponse } from '../../lib/api'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   errorLogsApi: {
     list: vi.fn().mockResolvedValue({ data: { logs: [] } }),
     get: vi.fn(),
     resolve: vi.fn().mockResolvedValue(undefined),
   },
-}))
+})
+})
 
 const mockErrorLog: ErrorLog = {
   id: 42,

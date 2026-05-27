@@ -10,13 +10,11 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-vi.mock('../../lib/api', () => ({
-  default: { get: vi.fn() },
-  derivationsApi: {
-    listFromContainer: vi.fn().mockResolvedValue({ data: { derivations: [] } }),
-    getSource: vi.fn().mockResolvedValue({ data: null }),
-  },
-}))
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { containerDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedApi(containerDetailPageMock())
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')

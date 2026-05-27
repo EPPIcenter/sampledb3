@@ -2,11 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '../../__tests__/helpers/render'
 import LocationPicker from '../LocationPicker'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   locationsApi: {
     list: vi.fn(),
   },
-}))
+})
+})
 
 import { locationsApi } from '../../lib/api'
 

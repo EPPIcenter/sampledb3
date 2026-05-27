@@ -4,7 +4,9 @@ import { renderWithProviders } from '../../__tests__/helpers/render'
 import PlateScanValidation from '../PlateScanValidation'
 import { collectionsApi, scannerConfigurationsApi } from '../../lib/api'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   collectionsApi: {
     listCollectionsByType: vi.fn(),
     validatePlateScan: vi.fn(),
@@ -12,7 +14,8 @@ vi.mock('../../lib/api', () => ({
   scannerConfigurationsApi: {
     getAll: vi.fn(),
   },
-}))
+})
+})
 
 const mockPlateList = [
   { id: 1, name: 'PLATE1' },

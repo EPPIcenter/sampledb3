@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../../__tests__/helpers/render'
 import SpecimenForm from '../SpecimenForm'
 
-vi.mock('../../../lib/api', () => ({
+vi.mock('../../../lib/api', async () => {
+  const { createMockedApi } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedApi({
   collectionsApi: {
     listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
   },
@@ -23,7 +25,8 @@ vi.mock('../../../lib/api', () => ({
     getContainerTypeUnits: vi.fn().mockResolvedValue({ data: [] }),
     get: vi.fn().mockResolvedValue({ data: {} }),
   },
-}))
+})
+})
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')

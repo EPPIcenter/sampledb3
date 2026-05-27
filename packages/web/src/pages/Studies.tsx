@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
-import { studiesApi, type Study, type StudySummaryBasic } from '../lib/api'
+import { studiesApi } from '../lib/api/studies';
+import type { Study, StudySummaryBasic } from '../lib/api/studies';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import StudyCard from '../components/StudyCard'
 import StudyCardSkeleton from '../components/StudyCardSkeleton'

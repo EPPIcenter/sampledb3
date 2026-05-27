@@ -16,11 +16,11 @@ vi.mock('react-router-dom', async () => {
 })
 
 // Mock the API module
-vi.mock('../../lib/api', () => ({
-  authApi: {
-    login: vi.fn(),
-  },
-}))
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { loginPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedApi(loginPageMock())
+})
 
 // Mock the UserContext
 const mockSetUser = vi.fn()

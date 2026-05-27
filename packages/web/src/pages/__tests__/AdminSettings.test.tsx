@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import AdminSettings from '../AdminSettings'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   settingsApi: {
     getAll: vi.fn().mockResolvedValue({
       data: {
@@ -17,7 +19,8 @@ vi.mock('../../lib/api', () => ({
     getUnits: vi.fn().mockResolvedValue({ data: [] }),
     getContainerTypeUnits: vi.fn().mockResolvedValue({ data: { units: [] } }),
   },
-}))
+})
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')

@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
-import { controlsApi, strainsApi, type ControlDefinition, type ControlBatch, type Strain } from '../lib/api'
+import { controlsApi } from '../lib/api/controls';
+import type { ControlDefinition, ControlBatch } from '../lib/api/controls';
+import { strainsApi } from '../lib/api/reference-data';
+import type { Strain } from '../lib/api/reference-data';
 import DataTable, { Column } from '../components/DataTable'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import StatCard from '../components/StatCard'

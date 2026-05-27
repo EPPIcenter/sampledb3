@@ -12,18 +12,11 @@ import {
 } from '../useStudies'
 import * as api from '../../lib/api'
 
-// Mock the API module
-vi.mock('../../lib/api', () => ({
-  studiesApi: {
-    list: vi.fn(),
-    get: vi.fn(),
-    getSubjects: vi.fn(),
-    getSummary: vi.fn(),
-    getTimeline: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-  },
-}))
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { studiesHooksMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedApi(studiesHooksMock())
+})
 
 function createWrapper() {
   const queryClient = new QueryClient({

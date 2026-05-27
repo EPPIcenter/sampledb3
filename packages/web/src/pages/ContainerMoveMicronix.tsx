@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, Navigate } from 'react-router-dom'
 import { useContainerMoveStep, type ContainerMoveAtomicMode } from '../hooks/useContainerMoveStep'
-import { collectionsApi, locationsApi, scannerConfigurationsApi, type Location, type ScannerConfiguration } from '../lib/api'
+import { collectionsApi } from '../lib/api/collections';
+import { locationsApi } from '../lib/api/locations';
+import { scannerConfigurationsApi } from '../lib/api/settings';
+import type { ScannerConfiguration } from '../lib/api/settings';
+import type { Location } from '../lib/api/types';
 import type { PlateCandidate } from '../lib/plate-filename-match'
 import { inferDestinationPlateForScan } from '../lib/plate-destination-inference'
 import { parseScannerPlateCsv, validateScannerPlateCsv } from '../lib/scanner-plate-csv'

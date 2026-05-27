@@ -2,19 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../__tests__/helpers/render'
 import Dashboard from '../Dashboard'
 
-vi.mock('../../lib/api', () => ({
-  default: { get: vi.fn().mockResolvedValue({ data: {} }) },
-  authApi: {
-    getCurrentUser: vi.fn().mockResolvedValue({
-      data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
-    }),
-  },
-  studiesApi: { list: vi.fn().mockResolvedValue({ studies: [], pagination: { total: 0, totalPages: 0 } }) },
-  activityApi: { recent: vi.fn().mockResolvedValue({ data: { activity: [] } }) },
-  statisticsApi: { get: vi.fn().mockResolvedValue({ data: null }) },
-  controlsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-  qpcrExperimentsApi: { list: vi.fn().mockResolvedValue({ data: { experiments: [] } }) },
-}))
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  const { dashboardPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedApi(dashboardPageMock())
+})
 
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')

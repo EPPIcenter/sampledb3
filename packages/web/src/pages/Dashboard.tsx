@@ -1,17 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import '../styles/dashboard.css'
-import api, {
-  studiesApi,
-  activityApi,
-  statisticsApi,
-  controlsApi,
-  qpcrExperimentsApi,
-  type Study,
-  type StudySummaryBasic,
-  type StatisticsData,
-  type QpcrExperiment,
-} from '../lib/api'
+import { api } from '../lib/api/client';
+import { studiesApi } from '../lib/api/studies';
+import type { Study, StudySummaryBasic } from '../lib/api/studies';
+import { activityApi } from '../lib/api/search';
+import { statisticsApi } from '../lib/api/statistics';
+import type { StatisticsData } from '../lib/api/statistics';
+import { controlsApi } from '../lib/api/controls';
+import { qpcrExperimentsApi } from '../lib/api/qpcr';
+import type { QpcrExperiment } from '../lib/api/qpcr';
 import MetricCard from '../components/dashboard/MetricCard'
 import RecentStudies from '../components/dashboard/RecentStudies'
 import ActivityFeed from '../components/dashboard/ActivityFeed'

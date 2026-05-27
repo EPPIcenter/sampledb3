@@ -3,7 +3,9 @@ import { render, screen } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import StudyPicker from '../StudyPicker'
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   studiesApi: {
     list: vi.fn().mockResolvedValue({
       studies: [
@@ -12,7 +14,8 @@ vi.mock('../../lib/api', () => ({
       ],
     }),
   },
-}))
+})
+})
 
 describe('StudyPicker', () => {
   it('renders trigger with placeholder when no value', async () => {

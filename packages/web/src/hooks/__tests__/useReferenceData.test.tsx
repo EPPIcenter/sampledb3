@@ -16,7 +16,9 @@ import type { SpecimenType, StorageType } from '../../lib/api'
 import type { AxiosResponse } from 'axios'
 
 // Mock the API module
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   specimenTypesApi: {
     list: vi.fn(),
     get: vi.fn(),
@@ -30,7 +32,8 @@ vi.mock('../../lib/api', () => ({
   storageTypesApi: {
     list: vi.fn(),
   },
-}))
+})
+})
 
 function createWrapper() {
   const queryClient = new QueryClient({

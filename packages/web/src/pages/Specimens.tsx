@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import DataTable, { Column } from '../components/DataTable'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
-import api from '../lib/api'
+import { api } from '../lib/api/client';
 import SpecimenFilter, { type SpecimenFilters } from '../components/SpecimenFilter'
 import { getModifierKey } from '../lib/hotkeys'
 import { useUser } from '../contexts/UserContext'

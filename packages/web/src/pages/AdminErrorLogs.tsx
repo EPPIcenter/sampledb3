@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { errorLogsApi, type ErrorLog, type ErrorLogsQueryParams } from '../lib/api'
+import { errorLogsApi } from '../lib/api/error-logs';
+import type { ErrorLog, ErrorLogsQueryParams } from '../lib/api/error-logs';
 import { formatErrorLogForLLM } from '../lib/error-log-prompt'
 import Pagination from '../components/Pagination'
 import ModalPortal from '../components/ModalPortal'

@@ -7,7 +7,9 @@ import type { ControlDefinition } from '../../../lib/api'
 const mockCreateBatchWithSpecimens = vi.fn()
 const mockSuggestBatchName = vi.fn()
 
-vi.mock('../../../lib/api', () => ({
+vi.mock('../../../lib/api', async () => {
+  const { createMockedApi } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedApi({
   controlsApi: {
     createBatchWithSpecimens: (...args: unknown[]) => mockCreateBatchWithSpecimens(...args),
     suggestBatchName: (...args: unknown[]) => mockSuggestBatchName(...args),
@@ -29,7 +31,8 @@ vi.mock('../../../lib/api', () => ({
       return Promise.resolve({ data: { value: null } })
     }),
   },
-}))
+})
+})
 
 function makeBatchInfo(overrides: Partial<BatchInfo> = {}): BatchInfo {
   return {

@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
-import { locationsApi, searchApi, type LocationHierarchyStats, type CollectionSearchResult } from '../lib/api'
+import { locationsApi } from '../lib/api/locations';
+import type { LocationHierarchyStats } from '../lib/api/locations';
+import { searchApi } from '../lib/api/search';
+import type { CollectionSearchResult } from '../lib/api/search';
 import { getRootLocations, getLocationChildren, getLocationDescendants, getLocationAncestors, getLocationLabel } from '../lib/location-tree'
 import SkeletonCard from '../components/SkeletonCard'
 import LocationDetailsSkeleton from '../components/LocationDetailsSkeleton'

@@ -1,16 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, useSearchParams, Navigate, Link } from 'react-router-dom'
-import {
-  derivationsApi,
-  collectionsApi,
-  specimenTypesApi,
-  unitsApi,
-  type BulkDerivationSettings,
-  type ValidationResult,
-  type DerivationCsvImportResultRow,
-  type SpecimenType,
-  type Unit,
-} from '../lib/api'
+import { derivationsApi } from '../lib/api/derivations';
+import type { BulkDerivationSettings, ValidationResult, DerivationCsvImportResultRow } from '../lib/api/derivations';
+import { collectionsApi } from '../lib/api/collections';
+import { specimenTypesApi, unitsApi } from '../lib/api/reference-data';
+import type { SpecimenType, Unit } from '../lib/api/types';
 import { getCollectionNameColumn } from '../lib/container-columns'
 import { generateDerivationsTemplate, type TemplateOptions } from '../lib/template-generator'
 import { useUser } from '../contexts/UserContext'

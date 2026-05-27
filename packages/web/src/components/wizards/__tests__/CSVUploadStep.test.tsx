@@ -17,14 +17,17 @@ vi.mock('../../../lib/control-batch-csv', () => ({
   inferSheetName: vi.fn(() => undefined),
 }))
 
-vi.mock('../../../lib/api', () => ({
+vi.mock('../../../lib/api', async () => {
+  const { createMockedApi } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedApi({
   specimenTypesApi: {
     getByContainerType: vi.fn(),
   },
   settingsApi: {
     get: vi.fn().mockResolvedValue({ data: { value: null } }),
   },
-}))
+})
+})
 
 const defaultSpecimenTypes = [
   { id: 1, name: 'Blood', created: '2020-01-01T00:00:00Z', lastUpdated: '2020-01-01T00:00:00Z' },

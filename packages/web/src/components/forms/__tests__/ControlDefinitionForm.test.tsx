@@ -15,7 +15,9 @@ const mockCreateDefinitionsBulk = vi.hoisted(() =>
   })
 )
 
-vi.mock('../../../lib/api', () => ({
+vi.mock('../../../lib/api', async () => {
+  const { createMockedApi } = await import('../../../__tests__/helpers/mock-api')
+  return createMockedApi({
   controlsApi: {
     getDefinitionSummary: vi.fn(),
     create: mockCreate,
@@ -25,7 +27,8 @@ vi.mock('../../../lib/api', () => ({
   },
   settingsApi: { getUnits: vi.fn().mockResolvedValue({ data: [{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }] }) },
   strainsApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Strain A' }] }) },
-}))
+})
+})
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')

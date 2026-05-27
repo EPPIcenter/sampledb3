@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
-import { qpcrExperimentsApi } from '../lib/api'
+import { qpcrExperimentsApi } from '../lib/api/qpcr';
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import { useUser } from '../contexts/UserContext'
 import '../styles/qpcr.css'

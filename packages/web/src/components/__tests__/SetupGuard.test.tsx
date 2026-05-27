@@ -15,7 +15,9 @@ function createStatusResponse(initialized: boolean): AxiosResponse<{ initialized
   }
 }
 
-vi.mock('../../lib/api', () => ({
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
   setupApi: {
     status: vi.fn().mockResolvedValue({
       data: { initialized: true },
@@ -25,7 +27,8 @@ vi.mock('../../lib/api', () => ({
       config: { headers: {} } as AxiosResponse<{ initialized: boolean }>['config'],
     } as AxiosResponse<{ initialized: boolean }>),
   },
-}))
+})
+})
 
 describe('SetupGuard', () => {
   beforeEach(() => {

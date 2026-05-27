@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import api, { derivationsApi, type Derivation } from '../lib/api'
+import { api } from '../lib/api/client';
+import { derivationsApi } from '../lib/api/derivations';
+import type { Derivation } from '../lib/api/derivations';
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import { getContainerTypeIcon, getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
 import SkeletonDetailPage from '../components/SkeletonDetailPage'

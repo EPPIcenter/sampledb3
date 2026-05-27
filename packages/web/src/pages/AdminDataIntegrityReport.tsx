@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { adminApi, type IntegrityReport, type EmptyCollectionItem } from '../lib/api'
+import { adminApi } from '../lib/api/admin';
+import type { IntegrityReport, EmptyCollectionItem } from '../lib/api/admin';
 import '../styles/admin.css'
 
 function typeLabel(type: EmptyCollectionItem['type']): string {

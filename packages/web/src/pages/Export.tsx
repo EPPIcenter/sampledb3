@@ -1,12 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  exportApi,
-  specimenTypesApi,
-  tagsApi,
-  type SpecimenType,
-  type Tag,
-} from '../lib/api'
+import { exportApi } from '../lib/api/export';
+import { specimenTypesApi, tagsApi } from '../lib/api/reference-data';
+import type { Tag } from '../lib/api/reference-data';
+import type { SpecimenType } from '../lib/api/types';
 import { useExportConfigurations } from '../hooks/useExportConfigurations'
 import { formatLocalDateTime } from '../lib/date-utils'
 import '../styles/storage.css'

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { adminApi, type AdminSystemStats } from '../lib/api'
+import { adminApi } from '../lib/api/admin';
+import type { AdminSystemStats } from '../lib/api/admin';
 import '../styles/admin.css'
 
 export default function AdminStatistics() {

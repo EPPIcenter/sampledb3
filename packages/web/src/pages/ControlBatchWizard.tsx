@@ -5,8 +5,10 @@ import SpecimenTypesStep from '../components/wizards/SpecimenTypesStep'
 import CSVUploadStep from '../components/wizards/CSVUploadStep'
 import ContainerConfigurationStep from '../components/wizards/ContainerConfigurationStep'
 import ReviewStep from '../components/wizards/ReviewStep'
-import { controlsApi, specimenTypesApi } from '../lib/api'
-import type { ControlDefinition, SpecimenType } from '../lib/api'
+import { controlsApi } from '../lib/api/controls';
+import { specimenTypesApi } from '../lib/api/reference-data';
+import type { ControlDefinition } from '../lib/api/controls';
+import type { SpecimenType } from '../lib/api/types';
 import { useUser } from '../contexts/UserContext'
 import { getCompositionKey } from '../lib/composition-key'
 import '../styles/blood-controls.css'

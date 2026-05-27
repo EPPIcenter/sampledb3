@@ -12,13 +12,11 @@ vi.mock('react-router-dom', async () => {
 })
 
 const mockAddContainer = vi.fn()
-vi.mock('../../lib/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../lib/api')>()
-  return {
-    ...actual,
+vi.mock('../../lib/api', async () => {
+  const { createMockedApi } = await import('../../__tests__/helpers/mock-api')
+  return createMockedApi({
     default: { get: vi.fn() },
     specimensApi: {
-      ...actual.specimensApi,
       get: vi.fn().mockResolvedValue({
         specimen: {
           id: 1,
@@ -31,20 +29,19 @@ vi.mock('../../lib/api', async (importOriginal) => {
       addContainer: (...args: unknown[]) => mockAddContainer(...args),
     },
     settingsApi: {
-      ...actual.settingsApi,
       get: vi.fn().mockResolvedValue({ data: { value: null } }),
       getContainerTypeUnits: vi.fn().mockResolvedValue({ data: { units: [] } }),
       getUnits: vi.fn().mockResolvedValue({ data: [] }),
     },
     collectionsApi: {
-      ...actual.collectionsApi,
       listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
     },
     specimenTypesApi: {
-      ...actual.specimenTypesApi,
-      getContainerTypes: vi.fn().mockResolvedValue({ data: { containerTypes: ['micronix_tube', 'cryovial_tube'] } }),
+      getContainerTypes: vi.fn().mockResolvedValue({
+        data: { containerTypes: ['micronix_tube', 'cryovial_tube'] },
+      }),
     },
-  }
+  })
 })
 
 vi.mock('../../contexts/UserContext', async () => {

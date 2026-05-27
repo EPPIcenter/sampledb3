@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useHotkey } from '../hooks/useHotkey'
-import { controlsApi, type ControlBatchSummaryResponse } from '../lib/api'
+import { controlsApi } from '../lib/api/controls';
+import type { ControlBatchSummaryResponse } from '../lib/api/controls';
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SimpleTimeline from '../components/SimpleTimeline'
 import { getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
