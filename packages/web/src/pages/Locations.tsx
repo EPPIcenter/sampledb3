@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 
-import { locationsApi } from '../lib/api/locations';
-import type { LocationHierarchyStats } from '../lib/api/locations';
-import { searchApi } from '../lib/api/search';
-import type { CollectionSearchResult } from '../lib/api/search';
+import { locationsApi } from '../lib/api/locations'
+import type { LocationHierarchyStats } from '../lib/api/locations'
+import { searchApi } from '../lib/api/search'
+import type { CollectionSearchResult } from '../lib/api/search'
+import {
+  applyLocationsTreeState,
+  locationKeys,
+  useLocationDetail,
+  useLocationsList,
+} from '../hooks/useLocations'
 import { getRootLocations, getLocationChildren, getLocationDescendants, getLocationAncestors, getLocationLabel } from '../lib/location-tree'
+import { PageError, SectionMessage, fromQuery, getQueryErrorMessage } from '../ui'
 import SkeletonCard from '../components/SkeletonCard'
 import LocationDetailsSkeleton from '../components/LocationDetailsSkeleton'
 import LocationForm from '../components/LocationForm'
@@ -46,6 +54,7 @@ interface SelectedNode {
 
 export default function Locations() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const { canManageReferenceData } = useUser()
   const canEdit = canManageReferenceData
@@ -55,8 +64,12 @@ export default function Locations() {
   const selectedNodeRef = useRef<HTMLButtonElement>(null)
   useFocusSearchOnSlash(inputRef)
 
+  const locationsQuery = useLocationsList()
+  const listStatus = fromQuery(locationsQuery, {
+    isEmpty: locationsQuery.isSuccess && (locationsQuery.data?.length ?? 0) === 0,
+  })
+  const preserveOnNextSync = useRef(false)
   const [locations, setLocations] = useState<Location[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null)
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
@@ -64,8 +77,6 @@ export default function Locations() {
   const [locationDetailsCache, setLocationDetailsCache] = useState<
     Partial<Record<number, { location: Location; contents: LocationContents; hierarchyStats?: LocationHierarchyStats }>>
   >({})
-  const [loadingSelection, setLoadingSelection] = useState(false)
-  
   // Collection search state
   const [collectionResults, setCollectionResults] = useState<CollectionSearchResult[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -80,77 +91,43 @@ export default function Locations() {
   const [mutationLoading, setMutationLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-  const loadLocations = useCallback(async (preserveState = true) => {
-    try {
-      setLoading(true)
-      // Fetch all locations in a single request (no pagination params)
-      const response = await locationsApi.list()
-      const allLocations = response.data.locations as Location[]
-
-      setLocations(allLocations)
-
-      if (preserveState) {
-        // Preserve expanded state
-        setExpandedIds((prevExpandedIds) => {
-          const preservedExpandedIds = new Set<number>()
-          prevExpandedIds.forEach((id) => {
-            if (allLocations.find((l) => l.id === id)) {
-              preservedExpandedIds.add(id)
-            }
-          })
-          return preservedExpandedIds
-        })
-
-        // Preserve selection if location still exists
-        setSelectedNode((prevSelectedNode) => {
-          if (prevSelectedNode) {
-            const selectedLocation = allLocations.find((l) => l.id === prevSelectedNode.locationId)
-            if (selectedLocation) {
-              // Expand ancestors of the selected location
-              const ancestors = getLocationAncestors(allLocations, prevSelectedNode.locationId)
-              setExpandedIds((prev) => {
-                const next = new Set(prev)
-                ancestors.forEach((a) => next.add(a.id))
-                return next
-              })
-              return prevSelectedNode
-            } else {
-              // Selected location was deleted, select first if available
-              if (allLocations.length > 0) {
-                const first = allLocations[0]
-                const ancestors = getLocationAncestors(allLocations, first.id)
-                setExpandedIds(new Set(ancestors.map((a) => a.id)))
-                return { locationId: first.id }
-              } else {
-                return null
-              }
-            }
-          }
-          return prevSelectedNode
-        })
-      } else {
-        // Initial load - select first location
-        if (allLocations.length > 0) {
-          const first = allLocations[0]
-          const ancestors = getLocationAncestors(allLocations, first.id)
-          setExpandedIds(new Set(ancestors.map((a) => a.id)))
-          setSelectedNode({ locationId: first.id })
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load locations:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const reloadLocations = useCallback(
+    async (preserveState = true) => {
+      preserveOnNextSync.current = preserveState
+      await queryClient.invalidateQueries({ queryKey: locationKeys.list() })
+    },
+    [queryClient]
+  )
 
   useEffect(() => {
-    loadLocations(false) // Initial load, don't preserve state
-  }, [loadLocations])
+    if (!locationsQuery.data) return
+    const preserveState = preserveOnNextSync.current
+    preserveOnNextSync.current = true
+    applyLocationsTreeState(locationsQuery.data as Location[], preserveState, {
+      setLocations,
+      setExpandedIds,
+      setSelectedNode,
+    })
+  }, [locationsQuery.data])
+
+  const selectedLocationId = selectedNode?.locationId ?? null
+  const detailQuery = useLocationDetail(selectedLocationId)
+
+  useEffect(() => {
+    if (!detailQuery.data || selectedLocationId == null) return
+    setLocationDetailsCache((prev) => ({
+      ...prev,
+      [selectedLocationId]: {
+        location: detailQuery.data!.location as Location,
+        contents: detailQuery.data!.contents as LocationContents,
+        hierarchyStats: detailQuery.data!.hierarchyStats as LocationHierarchyStats | undefined,
+      },
+    }))
+  }, [detailQuery.data, selectedLocationId])
 
   // Command palette: /locations?createLocation=true&parentId=…
   useEffect(() => {
-    if (!canEdit || loading) return
+    if (!canEdit || locationsQuery.isPending) return
     if (searchParams.get('createLocation') !== 'true') return
 
     const parentIdStr = searchParams.get('parentId')
@@ -173,42 +150,7 @@ export default function Locations() {
       next.delete('parentId')
       return next
     })
-  }, [canEdit, loading, searchParams, setSearchParams, locations])
-
-  // Define ensureLocationLoaded before useEffects that use it
-  const ensureLocationLoaded = useCallback(async (locationId: number) => {
-    // Skip fetch if we already have this location in cache (Record index can be undefined)
-    if (locationDetailsCache[locationId]) return
-    
-    // Set loading state immediately to trigger skeleton
-    setLoadingSelection(true)
-    try {
-      const response = await locationsApi.get(locationId)
-      setLocationDetailsCache((prev) => ({
-        ...prev,
-          [locationId]: {
-          location: response.data.location as Location,
-          contents: response.data.contents as LocationContents,
-          hierarchyStats: response.data.hierarchyStats as LocationHierarchyStats | undefined,
-        },
-      }))
-    } catch (error) {
-      console.error('Failed to load location details:', error)
-    } finally {
-      setLoadingSelection(false)
-    }
-  }, [locationDetailsCache])
-
-  // Load details when a location is selected
-  useEffect(() => {
-    if (selectedNode) {
-      // Set loading state immediately if not cached to show skeleton right away
-      if (!locationDetailsCache[selectedNode.locationId]) {
-        setLoadingSelection(true)
-      }
-      ensureLocationLoaded(selectedNode.locationId)
-    }
-  }, [selectedNode, ensureLocationLoaded, locationDetailsCache])
+  }, [canEdit, locationsQuery.isPending, searchParams, setSearchParams, locations])
 
   // Scroll selected node into view when it changes
   useEffect(() => {
@@ -217,7 +159,7 @@ export default function Locations() {
     if (nodeRef && tree) {
       // Small delay to ensure DOM is updated
       setTimeout(() => {
-        nodeRef.scrollIntoView({
+        nodeRef?.scrollIntoView?.({
           behavior: 'smooth',
           block: 'center',
           inline: 'nearest',
@@ -246,7 +188,7 @@ export default function Locations() {
       setSearchLoading(true)
       const response = await searchApi.search(searchQuery, 'collection')
       // Filter to only collection types (micronix_plate, cryovial_box, box, bag)
-      const collectionResults = response.data.results.filter(
+      const collectionResults = response.results.filter(
         (r): r is CollectionSearchResult =>
           r.type === 'micronix_plate' || r.type === 'cryovial_box' || r.type === 'box' || r.type === 'bag'
       )
@@ -288,36 +230,30 @@ export default function Locations() {
   const selectedDetails = useMemo(() => {
     if (!selectedNode) return null
 
+    if (detailQuery.isError) {
+      return { mode: 'error' as const }
+    }
+
     const cached = locationDetailsCache[selectedNode.locationId]
     if (cached) {
-      // We have cached data, not loading
       return { mode: 'location' as const, ...cached, isLoading: false }
     }
-    
-    // No cached data - return null to trigger skeleton immediately
-    // This prevents showing the previous location's data when switching
-    return null
-  }, [selectedNode, locationDetailsCache])
 
-  const handleSelectNode = async (node: SelectedNode) => {
-    // If switching to a different location that isn't cached, clear the cache entry
-    // to force skeleton to show immediately
-    if (selectedNode && selectedNode.locationId !== node.locationId) {
-      if (!locationDetailsCache[node.locationId]) {
-        // New location not cached - set loading state immediately
-        setLoadingSelection(true)
-      }
+    if (detailQuery.isPending) {
+      return null
     }
-    
+
+    return null
+  }, [selectedNode, locationDetailsCache, detailQuery.isError, detailQuery.isPending])
+
+  const handleSelectNode = (node: SelectedNode) => {
     setSelectedNode(node)
-    
-    // Expand all ancestors of the selected location so it's visible
+
     const ancestors = getLocationAncestors(locations, node.locationId)
     setExpandedIds((prev) => {
       const next = new Set(prev)
-      ancestors.forEach(a => next.add(a.id))
-      // Also expand the selected location itself if it has children
-      const selectedLocation = locations.find(l => l.id === node.locationId)
+      ancestors.forEach((a) => next.add(a.id))
+      const selectedLocation = locations.find((l) => l.id === node.locationId)
       if (selectedLocation) {
         const children = getLocationChildren(locations, selectedLocation.id)
         if (children.length > 0) {
@@ -326,8 +262,6 @@ export default function Locations() {
       }
       return next
     })
-    
-    await ensureLocationLoaded(node.locationId)
   }
 
   const toggleExpanded = (locationId: number) => {
@@ -373,7 +307,21 @@ export default function Locations() {
   // Handle delete confirmation
   const handleDeleteClick = async (location: Location, e: React.MouseEvent) => {
     e.stopPropagation()
-    await ensureLocationLoaded(location.id)
+    if (!locationDetailsCache[location.id]) {
+      try {
+        const response = await locationsApi.get(location.id)
+        setLocationDetailsCache((prev) => ({
+          ...prev,
+          [location.id]: {
+            location: response.location as Location,
+            contents: response.contents as LocationContents,
+            hierarchyStats: response.hierarchyStats as LocationHierarchyStats | undefined,
+          },
+        }))
+      } catch {
+        // Delete modal still opens; contents warning may be omitted
+      }
+    }
     setDeletingLocationId(location.id)
   }
 
@@ -395,7 +343,7 @@ export default function Locations() {
       setFormParentLocation(null)
       // Clear location details cache to force refresh
       setLocationDetailsCache({})
-      await loadLocations(true) // Preserve state after mutation
+      await reloadLocations(true)
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (error) {
@@ -429,7 +377,7 @@ export default function Locations() {
       if (selectedNode?.locationId === deletingLocationId) {
         setSelectedNode(null)
       }
-      await loadLocations(true) // Preserve state after mutation
+      await reloadLocations(true)
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (error: any) {
@@ -604,6 +552,21 @@ export default function Locations() {
       return (
         <div className="text-center py-16" style={{ color: 'rgb(var(--app-text-muted))' }}>
           Select a location or node in the tree to see details.
+        </div>
+      )
+    }
+
+    if (selectedDetails?.mode === 'error') {
+      return (
+        <div className="py-8 text-center">
+          <SectionMessage message="Failed to load location details" variant="error" />
+          <button
+            type="button"
+            className="storage-btn-secondary text-sm mt-2"
+            onClick={() => void detailQuery.refetch()}
+          >
+            Retry
+          </button>
         </div>
       )
     }
@@ -932,7 +895,13 @@ export default function Locations() {
         </div>
       </div>
 
-      {loading ? (
+      {listStatus === 'error' ? (
+        <PageError
+          title="Could not load locations"
+          message={getQueryErrorMessage(locationsQuery.error, 'Failed to load locations')}
+          onRetry={() => void locationsQuery.refetch()}
+        />
+      ) : locationsQuery.isPending && locations.length === 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 storage-reveal storage-reveal-3">
           <div className="storage-card p-4">
             <div className="h-6 rounded w-32 mb-4 animate-pulse" style={{ backgroundColor: 'rgb(var(--app-border))' }}></div>

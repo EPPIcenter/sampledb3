@@ -89,7 +89,7 @@ export default function ContainerConfigurationStep({
       const results = await Promise.allSettled(
         typesToLoad.map(async (ct) => {
           const res = await settingsApi.getContainerTypeUnits(ct)
-          return { ct, units: res.data.units } as const
+          return { ct, units: res.units } as const
         })
       )
       if (cancelled) return
@@ -123,7 +123,7 @@ export default function ContainerConfigurationStep({
 
         const boxesMap = new Map<string, { id: number; locationId: number }>()
         const boxOptions: CollectionOption[] = []
-        boxesRes.data.collections.forEach((box: { id: number; name?: string; locationId?: number | null; location?: { path: string | null } | null }) => {
+        boxesRes.collections.forEach((box: { id: number; name?: string; locationId?: number | null; location?: { path: string | null } | null }) => {
           if (box.name) {
             if (box.locationId != null) {
               boxesMap.set(box.name, { id: box.id, locationId: box.locationId })
@@ -134,7 +134,7 @@ export default function ContainerConfigurationStep({
 
         const bagsMap = new Map<string, { id: number; locationId: number }>()
         const bagOptions: CollectionOption[] = []
-        bagsRes.data.collections.forEach((bag: { id: number; name?: string; locationId?: number | null; location?: { path: string | null } | null }) => {
+        bagsRes.collections.forEach((bag: { id: number; name?: string; locationId?: number | null; location?: { path: string | null } | null }) => {
           if (bag.name) {
             if (bag.locationId != null) {
               bagsMap.set(bag.name, { id: bag.id, locationId: bag.locationId })
@@ -145,7 +145,7 @@ export default function ContainerConfigurationStep({
 
         const platesMap = new Map<string, { id: number; locationId: number }>()
         const plateOptions: CollectionOption[] = []
-        platesRes.data.collections.forEach((p: { id: number; name?: string; locationId?: number | null; location?: { path: string | null } | null }) => {
+        platesRes.collections.forEach((p: { id: number; name?: string; locationId?: number | null; location?: { path: string | null } | null }) => {
           if (p.name) {
             if (p.locationId != null) {
               platesMap.set(p.name, { id: p.id, locationId: p.locationId })
@@ -155,7 +155,7 @@ export default function ContainerConfigurationStep({
         })
         const cryovialMap = new Map<string, { id: number; locationId: number }>()
         const cryovialOptions: CollectionOption[] = []
-        cryovialRes.data.collections.forEach((c: { id: number; name?: string; locationId?: number | null; location?: { path: string | null } | null }) => {
+        cryovialRes.collections.forEach((c: { id: number; name?: string; locationId?: number | null; location?: { path: string | null } | null }) => {
           if (c.name) {
             if (c.locationId != null) {
               cryovialMap.set(c.name, { id: c.id, locationId: c.locationId })

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { collectionsApi } from '../lib/api/collections';
-import { locationsApi } from '../lib/api/locations';
-import type { Location } from '../lib/api/types';
+import { collectionsApi } from '../lib/api/collections'
 import CollectionTreePicker from '../components/CollectionTreePicker'
 import { useUser } from '../contexts/UserContext'
+import { usePaperMoveBootstrap, usePaperMoveSheets } from '../hooks/useMoveWorkflow'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/storage.css'
 
 interface Paper {
@@ -41,19 +41,26 @@ export default function ContainerMovePapers() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
   const [currentStep, setCurrentStep] = useState<Step>('select-source')
-  const [loading, setLoading] = useState(false)
-  const [locations, setLocations] = useState<Location[]>([])
+  const [mutating, setMutating] = useState(false)
+  const bootstrapQuery = usePaperMoveBootstrap()
+  const bootstrapStatus = fromQuery(bootstrapQuery)
+  const locations = bootstrapQuery.data?.locations ?? []
+  const availableBoxes = bootstrapQuery.data?.boxes ?? []
+  const availableBags = bootstrapQuery.data?.bags ?? []
   const [sourceCollectionType, setSourceCollectionType] = useState<'box' | 'bag' | null>(null)
   const [sourceCollectionId, setSourceCollectionId] = useState<number | null>(null)
   const [sourceCollectionName, setSourceCollectionName] = useState<string>('')
-  const [sheets, setSheets] = useState<Sheet[]>([])
+  const sheetsQuery = usePaperMoveSheets(
+    sourceCollectionType,
+    sourceCollectionId,
+    currentStep === 'select-sheets'
+  )
+  const sheets = (sheetsQuery.data ?? []) as Sheet[]
   const [selectedSheetIds, setSelectedSheetIds] = useState<Set<number>>(new Set())
   const [sheetSearch, setSheetSearch] = useState<string>('')
   const [destinationCollectionType, setDestinationCollectionType] = useState<'box' | 'bag' | null>(null)
   const [destinationCollectionId, setDestinationCollectionId] = useState<number | null>(null)
   const [destinationCollectionName, setDestinationCollectionName] = useState<string>('')
-  const [availableBoxes, setAvailableBoxes] = useState<Collection[]>([])
-  const [availableBags, setAvailableBags] = useState<Collection[]>([])
   const [moveResult, setMoveResult] = useState<{
     success: boolean
     moved: number
@@ -68,115 +75,11 @@ export default function ContainerMovePapers() {
     }
   }, [canWrite, navigate])
 
-  // Load available collections and locations
-  useEffect(() => {
-    const loadCollections = async () => {
-      setLoading(true)
-      try {
-        const [boxesRes, bagsRes, locationsRes] = await Promise.all([
-          collectionsApi.listCollectionsByType('box'),
-          collectionsApi.listCollectionsByType('bag'),
-          locationsApi.list(),
-        ])
-        
-        // Ensure we're accessing the correct response structure
-        const boxes = boxesRes.data.collections
-        const bags = bagsRes.data.collections
-        const locations = locationsRes.data.locations
-        
-        console.log('Loaded boxes:', boxes.length, boxes)
-        console.log('Loaded bags:', bags.length, bags)
-        console.log('Loaded locations:', locations.length)
-        
-        setLocations(locations)
-
-        const mappedBoxes = boxes.map((c: any) => {
-          // Handle case where name might be null, undefined, or actually be the ID
-          const name = (c.name && typeof c.name === 'string' && c.name.trim() !== '')
-            ? c.name
-            : `Box #${c.id}`
-          return {
-            id: c.id,
-            name,
-            type: 'box' as const,
-            itemCount: c.itemCount || 0,
-            locationId: c.locationId,
-            location: c.location,
-          }
-        })
-        
-        const mappedBags = bags.map((c: any) => {
-          // Handle case where name might be null, undefined, or actually be the ID
-          const name = (c.name && typeof c.name === 'string' && c.name.trim() !== '')
-            ? c.name
-            : `Bag #${c.id}`
-          return {
-            id: c.id,
-            name,
-            type: 'bag' as const,
-            itemCount: c.itemCount || 0,
-            locationId: c.locationId,
-            location: c.location,
-          }
-        })
-        
-        console.log('Mapped boxes:', mappedBoxes.length, mappedBoxes)
-        console.log('Mapped bags:', mappedBags.length, mappedBags)
-        
-        setAvailableBoxes(mappedBoxes)
-        setAvailableBags(mappedBags)
-      } catch (error) {
-        console.error('Failed to load collections:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-    
-    loadCollections()
-  }, [])
-
-  // Load sheets when source collection is selected
-  useEffect(() => {
-    if (sourceCollectionId && sourceCollectionType && currentStep === 'select-sheets') {
-      setLoading(true)
-      const fetchSheets = async () => {
-        try {
-          let response
-          if (sourceCollectionType === 'box') {
-            response = await collectionsApi.getBox(sourceCollectionId)
-          } else {
-            response = await collectionsApi.getBag(sourceCollectionId)
-          }
-
-          let sheets: Sheet[] = []
-          if ((response.data.contents as any)?.sheets) {
-            sheets = (response.data.contents as any).sheets.map((s: any) => ({
-              id: s.id,
-              name: s.name,
-              papers: (s.papers || []).map((p: any) => ({
-                id: p.id,
-                label: p.position || `Spot #${p.id}`,
-                container: p.container
-              }))
-            }))
-          }
-          setSheets(sheets)
-        } catch (error: any) {
-          console.error('Failed to load sheets:', error)
-        } finally {
-          setLoading(false)
-        }
-      }
-      fetchSheets()
-    }
-  }, [sourceCollectionId, sourceCollectionType, currentStep])
-
   const handleSourceCollectionSelect = (type: 'box' | 'bag', id: number, name: string) => {
     setSourceCollectionType(type)
     setSourceCollectionId(id)
     setSourceCollectionName(name)
     setSelectedSheetIds(new Set())
-    setSheets([])
     setCurrentStep('select-sheets')
   }
 
@@ -210,7 +113,7 @@ export default function ContainerMovePapers() {
       return
     }
 
-    setLoading(true)
+    setMutating(true)
     setMoveResult(null)
 
     try {
@@ -221,10 +124,10 @@ export default function ContainerMovePapers() {
         targetCollectionType: destType,
       })
 
-      if (response.data.success) {
+      if (response.success) {
         setMoveResult({
           success: true,
-          moved: response.data.moved,
+          moved: response.moved,
           movedSheets,
         })
       } else {
@@ -241,7 +144,7 @@ export default function ContainerMovePapers() {
         error: error.response?.data?.error || error.message || 'Failed to move sheets',
       })
     } finally {
-      setLoading(false)
+      setMutating(false)
     }
   }
 
@@ -250,7 +153,7 @@ export default function ContainerMovePapers() {
       return
     }
 
-    setLoading(true)
+    setMutating(true)
     try {
       const response = await collectionsApi.moveSheets({
         sheetIds: moveResult.movedSheets.map(s => s.id),
@@ -258,7 +161,7 @@ export default function ContainerMovePapers() {
         targetCollectionType: sourceCollectionType,
       })
 
-      if (response.data.success) {
+      if (response.success) {
         // Reset to start over
         handleStartOver()
       } else {
@@ -275,7 +178,7 @@ export default function ContainerMovePapers() {
         error: error.response?.data?.error || error.message || 'Failed to undo move',
       })
     } finally {
-      setLoading(false)
+      setMutating(false)
     }
   }
 
@@ -284,7 +187,6 @@ export default function ContainerMovePapers() {
     setSourceCollectionType(null)
     setSourceCollectionId(null)
     setSourceCollectionName('')
-    setSheets([])
     setSelectedSheetIds(new Set())
     setSheetSearch('')
     setDestinationCollectionType(null)
@@ -297,11 +199,21 @@ export default function ContainerMovePapers() {
     return null
   }
 
+  const bootstrapLoading = bootstrapQuery.isPending
+
   return (
     <div className="storage-page">
       <div className="container mx-auto px-4 py-8 relative z-10">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Move Papers</h1>
+
+        {bootstrapStatus === 'error' && (
+          <PageError
+            title="Could not load collections"
+            message={getQueryErrorMessage(bootstrapQuery.error, 'Failed to load boxes, bags, and locations')}
+            onRetry={() => void bootstrapQuery.refetch()}
+          />
+        )}
 
         {/* Step indicator */}
         <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
@@ -334,7 +246,7 @@ export default function ContainerMovePapers() {
         </div>
 
         {/* Step 1: Choose Source Collection */}
-        {currentStep === 'select-source' && (
+        {bootstrapStatus !== 'error' && currentStep === 'select-source' && (
           <>
             <div className="storage-card p-6 mb-6 relative storage-reveal storage-reveal-2" style={{ isolation: 'isolate' }}>
               <h2 className="text-xl font-semibold mb-4">Choose Source Collection</h2>
@@ -345,12 +257,8 @@ export default function ContainerMovePapers() {
               {(() => {
                 const allCollections = availableBoxes.concat(availableBags)
                 const collectionsWithItems = allCollections.filter((c) => c.itemCount > 0)
-                
-                console.log('Total collections:', allCollections.length)
-                console.log('Collections with items:', collectionsWithItems.length)
-                console.log('Collections:', allCollections)
-                
-                if (allCollections.length === 0 && !loading) {
+
+                if (allCollections.length === 0 && !bootstrapLoading) {
                   return (
                     <div className="p-4 text-center text-app-text-muted">
                       <p>No collections found. Please create a box or bag first.</p>
@@ -372,7 +280,7 @@ export default function ContainerMovePapers() {
                     locations={locations}
                     collections={collectionsWithItems}
                     onSelect={handleSourceCollectionSelect}
-                    loading={loading}
+                    loading={bootstrapLoading}
                     filterEmptyLocations={true}
                   />
                 )
@@ -382,7 +290,7 @@ export default function ContainerMovePapers() {
         )}
 
         {/* Step 2: Select Sheets */}
-        {currentStep === 'select-sheets' && (
+        {bootstrapStatus !== 'error' && currentStep === 'select-sheets' && (
           <>
             <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
               <div className="mb-4">
@@ -392,7 +300,13 @@ export default function ContainerMovePapers() {
                 </p>
               </div>
 
-              {loading ? (
+              {sheetsQuery.isError ? (
+                <PageError
+                  title="Could not load sheets"
+                  message={getQueryErrorMessage(sheetsQuery.error, 'Failed to load sheets')}
+                  onRetry={() => void sheetsQuery.refetch()}
+                />
+              ) : sheetsQuery.isPending ? (
                 <div className="text-center py-8">Loading sheets...</div>
               ) : sheets.length === 0 ? (
                 <p className="text-sm text-app-text-muted">No sheets in this collection.</p>
@@ -518,7 +432,7 @@ export default function ContainerMovePapers() {
         )}
 
         {/* Step 3: Choose Destination Collection */}
-        {currentStep === 'select-destination' && (
+        {bootstrapStatus !== 'error' && currentStep === 'select-destination' && (
           <>
             <div className="storage-card p-6 mb-6 relative storage-reveal storage-reveal-2" style={{ isolation: 'isolate' }}>
               <h2 className="text-xl font-semibold mb-4">Choose Destination Collection</h2>
@@ -532,7 +446,7 @@ export default function ContainerMovePapers() {
                 onSelect={(type, id, name) => handleDestinationSelect(type, id, name)}
                 disabledId={sourceCollectionId!}
                 disabledType={sourceCollectionType!}
-                loading={loading}
+                loading={bootstrapLoading}
                 filterEmptyLocations={true}
               />
             </div>
@@ -549,7 +463,7 @@ export default function ContainerMovePapers() {
         )}
 
         {/* Step 4: Review & Confirm */}
-        {currentStep === 'confirm' && (
+        {bootstrapStatus !== 'error' && currentStep === 'confirm' && (
           <>
             <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
               <h2 className="text-xl font-semibold mb-4">Review & Confirm Move</h2>
@@ -683,9 +597,9 @@ export default function ContainerMovePapers() {
         )}
 
         {/* Step 5: Complete/Results */}
-        {currentStep === 'execute' && (
+        {bootstrapStatus !== 'error' && currentStep === 'execute' && (
           <>
-            {loading ? (
+            {mutating ? (
               <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
                 <div className="text-center py-8">
                   <p className="text-app-text">Moving sheets...</p>

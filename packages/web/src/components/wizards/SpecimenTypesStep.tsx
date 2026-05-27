@@ -45,7 +45,7 @@ export default function SpecimenTypesStep({
         setLoadingContainerTypes(true)
         try {
           const response = await specimenTypesApi.getContainerTypes(newSpecimenType.specimenTypeId)
-          const containerTypes = response.data.containerTypes
+          const containerTypes = response.containerTypes
           setAllowedContainerTypes(containerTypes)
           
           // If current container type is not allowed, reset to first allowed option or 'paper'
@@ -80,7 +80,7 @@ export default function SpecimenTypesStep({
         setLoadingSpecimenTypes(true)
         try {
           const response = await specimenTypesApi.getByContainerType(newSpecimenType.containerType)
-          const specimenTypes = response.data.specimenTypes
+          const specimenTypes = response.specimenTypes
           setAllowedSpecimenTypes(specimenTypes)
           
           // If current specimen type is not allowed, reset to empty
@@ -190,7 +190,7 @@ export default function SpecimenTypesStep({
     if (specimenTypeId > 0) {
       try {
         const response = await specimenTypesApi.getContainerTypes(specimenTypeId)
-        const containerTypes = response.data.containerTypes
+        const containerTypes = response.containerTypes
         setAllowedContainerTypes(containerTypes)
         
         // Validate current container type selection - if invalid, clear it
@@ -250,7 +250,7 @@ export default function SpecimenTypesStep({
     // Fetch allowed specimen types for this container type
     try {
       const response = await specimenTypesApi.getByContainerType(containerType)
-      const specimenTypes = response.data.specimenTypes
+      const specimenTypes = response.specimenTypes
       setAllowedSpecimenTypes(specimenTypes)
       
       // Validate current specimen type selection

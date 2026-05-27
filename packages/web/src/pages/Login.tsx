@@ -25,8 +25,7 @@ export default function Login() {
 
     try {
       const response = await authApi.login(emailOrUsername, password)
-      // The response structure from axios is: { data: { user: {...} } }
-      const userData = response.data.user
+      const userData = response.user
       setUser(userData)
       addRecentUser(userData)
       setLoading(false)

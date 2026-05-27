@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { useUser } from '../contexts/UserContext'
 import ReferenceDataTable from '../components/ReferenceDataTable'
 import ReferenceDataForm from '../components/ReferenceDataForm'
@@ -9,10 +10,16 @@ import {
   type ReferenceDataType,
 } from '../config/reference-data-config'
 import { useStorageTypes } from '../hooks/useReferenceData'
-import { locationsApi } from '../lib/api/locations';
-import { specimenTypesApi } from '../lib/api/reference-data';
-import type { Location, SpecimenType } from '../lib/api/types';
+import {
+  referenceDataPageKeys,
+  useReferenceDataAllLocations,
+  useReferenceDataTab,
+  useSpecimenTypeContainerTypes,
+} from '../hooks/useReferenceDataPage'
+import { specimenTypesApi } from '../lib/api/reference-data'
+import type { Location, SpecimenType } from '../lib/api/types'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/reference-data.css'
 
 export default function ReferenceData() {
@@ -37,9 +44,8 @@ export default function ReferenceData() {
     return <div>Invalid tab</div>
   }
 
+  const queryClient = useQueryClient()
   const [editingItem, setEditingItem] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
-  const [data, setData] = useState<any[]>([])
 
   // Client-side pagination state (for locations)
   const [page, setPage] = useState(1)
@@ -49,13 +55,23 @@ export default function ReferenceData() {
   const [search, setSearch] = useState('')
   const [searchDebounced, setSearchDebounced] = useState('')
 
-  // All locations (without pagination) for parent name lookups
-  const [allLocations, setAllLocations] = useState<Location[]>([])
+  const tabQuery = useReferenceDataTab(activeTab, searchDebounced)
+  const tabStatus = fromQuery(tabQuery)
+  const data = (tabQuery.data ?? []) as unknown[]
 
-  // Container type relationships for specimen types
-  const [containerTypeRelationships, setContainerTypeRelationships] = useState<Record<number, string[]>>({})
-  // Container type usage info (which types are in use and cannot be removed)
-  const [containerTypeUsageInfo, setContainerTypeUsageInfo] = useState<Record<number, Record<string, boolean>>>({})
+  const allLocationsQuery = useReferenceDataAllLocations((activeTab as string) === 'locations')
+  const allLocations = (allLocationsQuery.data ?? []) as Location[]
+
+  const specimenTypeIds =
+    activeTab === 'specimen-types'
+      ? (data as SpecimenType[]).map((st) => st.id)
+      : []
+  const containerTypesQuery = useSpecimenTypeContainerTypes(
+    specimenTypeIds,
+    activeTab === 'specimen-types' && tabQuery.isSuccess && specimenTypeIds.length > 0
+  )
+  const containerTypeRelationships = containerTypesQuery.relationships
+  const containerTypeUsageInfo = containerTypesQuery.usageInfo
 
   // Load dependencies if needed
   const { data: storageTypes } = useStorageTypes()
@@ -123,62 +139,14 @@ export default function ReferenceData() {
     loadDependencies()
   }, [activeTab, config.requiresDependencies])
 
-  // Load all locations (without pagination) for parent name lookups
-  useEffect(() => {
-    if ((activeTab as string) === 'locations') {
-      const loadAllLocations = async () => {
-        try {
-          // Load all locations without pagination
-          const res = await locationsApi.list()
-          setAllLocations(res.data.locations)
-        } catch (error) {
-          console.error('Failed to load all locations:', error)
-        }
-      }
-      loadAllLocations()
-    } else {
-      setAllLocations([])
-    }
-  }, [activeTab])
+  const refreshTabData = () => {
+    void queryClient.invalidateQueries({
+      queryKey: referenceDataPageKeys.tab(activeTab, searchDebounced),
+    })
+  }
 
-  // Load container type relationships for specimen types
-  useEffect(() => {
-    if (activeTab === 'specimen-types') {
-      loadContainerTypeRelationships()
-    } else {
-      setContainerTypeRelationships({})
-      setContainerTypeUsageInfo({})
-    }
-  }, [activeTab, data])
-
-  const loadContainerTypeRelationships = async () => {
-     
-    if (activeTab !== 'specimen-types' || data.length === 0) return
-
-    try {
-      const relationships: Record<number, string[]> = {}
-      const usageInfo: Record<number, Record<string, boolean>> = {}
-      const specimenTypes = data as SpecimenType[]
-      
-      // Load container types for all specimen types in parallel
-      const promises = specimenTypes.map(async (st) => {
-        try {
-          const response = await specimenTypesApi.getContainerTypes(st.id)
-          relationships[st.id] = response.data.containerTypes
-          usageInfo[st.id] = response.data.usageInfo ?? {}
-        } catch (error) {
-          console.error(`Failed to load container types for specimen type ${st.id}:`, error)
-          relationships[st.id] = []
-          usageInfo[st.id] = {}
-        }
-      })
-
-      await Promise.all(promises)
-      setContainerTypeRelationships(relationships)
-      setContainerTypeUsageInfo(usageInfo)
-    } catch (error) {
-      console.error('Failed to load container type relationships:', error)
-    }
+  const refreshContainerTypeRelationships = () => {
+    void containerTypesQuery.refetch()
   }
 
   const handleToggleContainerType = async (specimenTypeId: number, containerType: string, isAdding: boolean) => {
@@ -187,69 +155,19 @@ export default function ReferenceData() {
       return
     }
 
-    try {
-      // Optimistically update state
-      setContainerTypeRelationships((prev) => {
-        const current = prev[specimenTypeId] ?? []
-        const updated = isAdding
-          ? [...current, containerType]
-          : current.filter((ct) => ct !== containerType)
-        return { ...prev, [specimenTypeId]: updated }
-      })
-
-      // Make API call
-      if (isAdding) {
-        await specimenTypesApi.addContainerType(specimenTypeId, containerType)
-      } else {
-        await specimenTypesApi.removeContainerType(specimenTypeId, containerType)
-      }
-
-      // Refresh to ensure consistency
-      await loadContainerTypeRelationships()
-    } catch (error: any) {
-      // Rollback on error
-      await loadContainerTypeRelationships()
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to update container type'
-      console.error('Failed to toggle container type:', errorMessage)
-      throw error
+    if (isAdding) {
+      await specimenTypesApi.addContainerType(specimenTypeId, containerType)
+    } else {
+      await specimenTypesApi.removeContainerType(specimenTypeId, containerType)
     }
+    refreshContainerTypeRelationships()
   }
 
-  // Load data
   useEffect(() => {
-    loadData()
-  }, [activeTab, searchDebounced])
-
-  const loadData = async () => {
-    setLoading(true)
-    try {
-      if (config.requiresPagination || config.requiresSearch) {
-        // Locations - load all (no pagination params = return all)
-        const res = await locationsApi.list(undefined, undefined, searchDebounced)
-        setData((res.data as any)[config.getDataKey()] || [])
-        setPage(1) // Reset to first page when data changes
-      } else {
-        // Simple list
-        // The API returns { data: [...] } or { data: { [key]: [...] } }
-        const res = await config.list()
-        const data = res.data
-        if (Array.isArray(data)) {
-          // Direct array: { data: T[] }
-          setData(data)
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- API can return object shape at runtime
-        } else if (typeof data === 'object' && data !== null) {
-          // Nested structure: { data: { [key]: T[] } }; key may be missing at runtime
-          setData(((data as Record<string, unknown>)[config.getDataKey()] as unknown[] | undefined) ?? [])
-        } else {
-          setData([])
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load data:', error)
-    } finally {
-      setLoading(false)
+    if (tabQuery.isSuccess) {
+      setPage(1)
     }
-  }
+  }, [activeTab, searchDebounced, tabQuery.isSuccess])
 
   const handleSave = async (saveData: any) => {
     try {
@@ -263,10 +181,9 @@ export default function ReferenceData() {
         }
       }
       setEditingItem(null)
-      await loadData()
-      // Refresh container type relationships after save if on specimen types tab
+      refreshTabData()
       if (activeTab === 'specimen-types') {
-        await loadContainerTypeRelationships()
+        refreshContainerTypeRelationships()
       }
     } catch (error: any) {
       throw error
@@ -276,7 +193,7 @@ export default function ReferenceData() {
   const handleDelete = async (id: number) => {
     if (config.delete) {
       await config.delete(id)
-      await loadData()
+      refreshTabData()
     }
   }
 
@@ -359,6 +276,14 @@ export default function ReferenceData() {
           </div>
 
           <div className="p-6">
+            {tabStatus === 'error' && (
+              <PageError
+                title={`Could not load ${config.label}`}
+                message={getQueryErrorMessage(tabQuery.error, 'Failed to load reference data')}
+                onRetry={() => void tabQuery.refetch()}
+              />
+            )}
+
             {!canManageReferenceData && (
               <div className="mb-4 rounded-md ref-data-notice p-3">
                 <div className="flex items-center gap-2">
@@ -393,7 +318,7 @@ export default function ReferenceData() {
             search={config.requiresSearch ? search : undefined}
             onSearchChange={config.requiresSearch ? setSearch : undefined}
             disableClientFilter={config.requiresSearch}
-            loading={loading && config.requiresSearch}
+            loading={tabQuery.isPending && config.requiresSearch}
             readOnly={!canManageReferenceData}
             pagination={config.requiresPagination ? {
               page,

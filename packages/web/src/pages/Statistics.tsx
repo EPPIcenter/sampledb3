@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { statisticsApi } from '../lib/api/statistics';
-import type { StatisticsData, StatisticsFilters as ApiFilters } from '../lib/api/statistics';
+import type { StatisticsData } from '../lib/api/statistics'
 import StatisticsFilter, { type StatisticsFilters } from '../components/StatisticsFilter'
 import StatCard from '../components/StatCard'
 import StatChart from '../components/StatChart'
 import SkeletonCard from '../components/SkeletonCard'
+import { useStatistics } from '../hooks/useStatistics'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/statistics.css'
 
 type BinSize = 'day' | 'week' | 'month' | 'quarter' | 'year'
@@ -53,10 +54,13 @@ function buildFilterChips(f: StatisticsFilters): Array<{ key: keyof StatisticsFi
 }
 
 export default function Statistics() {
-  const [data, setData] = useState<StatisticsData | null>(null)
-  const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState<StatisticsFilters>({})
   const [appliedFilters, setAppliedFilters] = useState<StatisticsFilters>({})
+  const statisticsQuery = useStatistics(appliedFilters)
+  const data = (statisticsQuery.data as StatisticsData | undefined) ?? null
+  const pageStatus = fromQuery(statisticsQuery, {
+    isEmpty: statisticsQuery.isSuccess && data !== null && data.specimens.total === 0,
+  })
   const [searchParams, setSearchParams] = useSearchParams()
   const binParam = searchParams.get('bin')
   const binSize: BinSize =
@@ -81,65 +85,8 @@ export default function Statistics() {
     })
   }
 
-  // Load initial statistics
-  useEffect(() => {
-    loadStatistics(appliedFilters)
-  }, [])
-
-  const loadStatistics = async (filtersToApply: StatisticsFilters) => {
-    try {
-      setLoading(true)
-      // Convert frontend filters to API format
-      const apiFilters: ApiFilters = {}
-      if (filtersToApply.study) apiFilters.study = filtersToApply.study
-      if (filtersToApply.sourceType) apiFilters.source_type = filtersToApply.sourceType
-      if (filtersToApply.specimenTypeId) apiFilters.specimen_type_id = filtersToApply.specimenTypeId
-      if (filtersToApply.containerType) apiFilters.container_type = filtersToApply.containerType
-      if (filtersToApply.tagIds && filtersToApply.tagIds.length > 0) {
-        apiFilters.tag_ids = filtersToApply.tagIds.map(id => parseInt(id)).filter(id => !isNaN(id))
-      }
-      if (filtersToApply.collectionDateFrom) apiFilters.collection_date_from = filtersToApply.collectionDateFrom
-      if (filtersToApply.collectionDateTo) apiFilters.collection_date_to = filtersToApply.collectionDateTo
-      if (filtersToApply.createdFrom) apiFilters.created_from = filtersToApply.createdFrom
-      if (filtersToApply.createdTo) apiFilters.created_to = filtersToApply.createdTo
-      if (filtersToApply.locationId) apiFilters.location_id = filtersToApply.locationId
-
-      const response = await statisticsApi.get(apiFilters)
-      const raw = response.data
-      const specimens = raw.specimens
-      const containers = raw.containers
-      const storage = raw.storage
-      setData({
-        specimens: {
-          total: specimens.total,
-          bySourceType: specimens.bySourceType,
-          bySpecimenType: specimens.bySpecimenType,
-          byStudy: specimens.byStudy,
-          collectionTimeline: Array.isArray(specimens.collectionTimeline) ? specimens.collectionTimeline : [],
-          creationTimeline: Array.isArray(specimens.creationTimeline) ? specimens.creationTimeline : [],
-        },
-        containers: {
-          total: containers.total,
-          byType: containers.byType,
-          byTags: containers.byTags,
-          byStatus: containers.byStatus,
-          averagePerSpecimen: typeof containers.averagePerSpecimen === 'number' ? containers.averagePerSpecimen : 0,
-        },
-        storage: {
-          byLocation: Array.isArray(storage.byLocation) ? storage.byLocation : [],
-          byRootLocation: storage.byRootLocation,
-        },
-      })
-      setAppliedFilters(filtersToApply)
-    } catch (error) {
-      console.error('Failed to load statistics:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleFilterSubmit = (newFilters: StatisticsFilters) => {
-    loadStatistics(newFilters)
+    setAppliedFilters(newFilters)
   }
 
   const handleRemoveFilter = (key: keyof StatisticsFilters) => {
@@ -151,7 +98,7 @@ export default function Statistics() {
       delete next[key]
     }
     setFilters(next)
-    loadStatistics(next)
+    setAppliedFilters(next)
   }
 
   const hasActiveFilters = Object.keys(appliedFilters).length > 0
@@ -348,7 +295,7 @@ export default function Statistics() {
     }))
   }, [data])
 
-  if (loading && !data) {
+  if (pageStatus === 'loading' && !data) {
     return (
       <div className="statistics-page relative z-10 min-h-full">
         <div className="container mx-auto px-4 py-8 relative z-10">
@@ -369,20 +316,28 @@ export default function Statistics() {
     )
   }
 
-  if (!data) {
+  if (pageStatus === 'error') {
     return (
       <div className="statistics-page relative z-10 min-h-full">
         <div className="container mx-auto px-4 py-8 relative z-10">
           <div className="mb-6">
             <h1 className="text-3xl font-bold">Statistics & Analytics</h1>
-            <p className="mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>Comprehensive statistics about specimens, containers, and storage utilization</p>
+            <p className="mt-1" style={{ color: 'rgb(var(--app-text-muted))' }}>
+              Comprehensive statistics about specimens, containers, and storage utilization
+            </p>
           </div>
-          <div className="statistics-card p-6 text-center" style={{ color: 'rgb(var(--app-trend-down))' }}>
-            Failed to load statistics
-          </div>
+          <PageError
+            title="Could not load statistics"
+            message={getQueryErrorMessage(statisticsQuery.error, 'Failed to load statistics')}
+            onRetry={() => void statisticsQuery.refetch()}
+          />
         </div>
       </div>
     )
+  }
+
+  if (!data) {
+    return null
   }
 
   return (
@@ -400,7 +355,7 @@ export default function Statistics() {
           filters={appliedFilters}
           onChange={setFilters}
           onSubmit={handleFilterSubmit}
-          isLoading={loading}
+          isLoading={statisticsQuery.isFetching}
           className="statistics-card mb-6"
         />
 
@@ -430,7 +385,7 @@ export default function Statistics() {
               type="button"
               onClick={() => {
                 setFilters({})
-                loadStatistics({})
+                setAppliedFilters({})
               }}
               className="statistics-link text-sm"
             >
@@ -440,7 +395,7 @@ export default function Statistics() {
         )}
 
         {/* Loading overlay when refreshing with data */}
-        {loading && (
+        {statisticsQuery.isFetching && data && (
           <div className="mb-6 p-4 rounded-lg flex items-center gap-3 border" style={{ backgroundColor: 'rgb(var(--app-accent-muted))', borderColor: 'rgb(var(--app-accent) / 0.3)' }}>
             <svg className="animate-spin h-5 w-5 flex-shrink-0" style={{ color: 'rgb(var(--app-accent-hover))' }} fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -463,7 +418,7 @@ export default function Statistics() {
               type="button"
               onClick={() => {
                 setFilters({})
-                loadStatistics({})
+                setAppliedFilters({})
               }}
               className="statistics-btn-primary px-4 py-2 rounded-lg text-sm"
             >

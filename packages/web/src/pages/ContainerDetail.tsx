@@ -1,11 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { api } from '../lib/api/client';
-import { derivationsApi } from '../lib/api/derivations';
-import type { Derivation } from '../lib/api/derivations';
+import { useQueryClient } from '@tanstack/react-query'
+import type { Derivation } from '../lib/api/derivations'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import { getContainerTypeIcon, getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
-import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import {
+  containerKeys,
+  useContainer,
+  useContainerDerivationTree,
+  useContainerSource,
+} from '../hooks/useContainers'
+import { DetailPageSkeleton, PageError, SectionMessage, fromQuery, getQueryErrorMessage } from '../ui'
 import ContainerDerivationModal from '../components/ContainerDerivationModal'
 import ContainerEditModal from '../components/ContainerEditModal'
 import DerivationChainView from '../components/DerivationChainView'
@@ -43,103 +48,59 @@ function statusColor(name: string): string {
 export default function ContainerDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { canWrite } = useUser()
-  const [data, setData] = useState<ContainerDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [derivations, setDerivations] = useState<Derivation[]>([])
-  const [childContainers, setChildContainers] = useState<Map<number, ContainerDetail>>(new Map())
-  const [sourceDerivation, setSourceDerivation] = useState<{
-    type: 'derivation' | 'original'
-    derivation?: Derivation
-    parentContainer?: any
-    parentSpecimen?: any
-    source?: any
-    container?: any
-    specimen?: any
-  } | null>(null)
-  const [loadingDerivations, setLoadingDerivations] = useState(false)
+  const containerId = id != null ? parseInt(id, 10) : NaN
+  const containerQuery = useContainer(containerId)
+  const derivationsQuery = useContainerDerivationTree(containerId)
+  const sourceQuery = useContainerSource(containerId)
+  const data = (containerQuery.data as ContainerDetail | undefined) ?? null
+  const detailStatus = fromQuery(containerQuery)
+  const derivations = derivationsQuery.data?.derivations ?? []
+  const childContainers =
+    derivationsQuery.data?.childContainers ?? new Map<number, ContainerDetail>()
+  const loadingDerivations = derivationsQuery.isPending
+  const sourceDerivation = sourceQuery.data
+    ? {
+        type: 'derivation' as const,
+        derivation: sourceQuery.data.derivation,
+        parentContainer: sourceQuery.data.parentContainer,
+        parentSpecimen: sourceQuery.data.parentSpecimen,
+      }
+    : null
   const [showDerivationModal, setShowDerivationModal] = useState(false)
   const [derivationModalKey, setDerivationModalKey] = useState(0)
   const [showEditModal, setShowEditModal] = useState(false)
 
-  useEffect(() => {
-    if (id) {
-      loadContainer()
-      loadDerivations()
-      loadSourceDerivation()
-    }
-  }, [id])
-
-  const loadContainer = async () => {
-    try {
-      const response = await api.get(`/containers/${id}`)
-      setData(response.data)
-    } catch (error) {
-      console.error('Failed to load container:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadDerivations = async () => {
-    if (!id) return
-    try {
-      setLoadingDerivations(true)
-      const response = await derivationsApi.listFromContainer(parseInt(id))
-      const derivationsList = response.data.derivations
-      setDerivations(derivationsList)
-      
-      // Load child container details for each derivation
-      const containerMap = new Map<number, ContainerDetail>()
-      await Promise.all(
-        derivationsList.map(async (derivation) => {
-          if (derivation.childContainerId) {
-            try {
-              const containerResponse = await api.get(`/containers/${derivation.childContainerId}`)
-              containerMap.set(derivation.childContainerId, containerResponse.data)
-            } catch (error) {
-              console.error(`Failed to load child container ${derivation.childContainerId}:`, error)
-            }
-          }
-        })
-      )
-      setChildContainers(containerMap)
-    } catch (error) {
-      console.error('Failed to load derivations:', error)
-    } finally {
-      setLoadingDerivations(false)
-    }
-  }
-
-  const loadSourceDerivation = async () => {
-    if (!id) return
-    try {
-      const response = await derivationsApi.getSource(parseInt(id))
-      setSourceDerivation({
-        type: 'derivation',
-        derivation: response.data.derivation,
-        parentContainer: response.data.parentContainer,
-        parentSpecimen: response.data.parentSpecimen,
-      })
-    } catch (error: any) {
-      // 404 is expected if container has no source
-      if (error.response?.status !== 404) {
-        console.error('Failed to load source derivation:', error)
-      }
-      setSourceDerivation(null)
-    }
+  const refreshContainer = () => {
+    void queryClient.invalidateQueries({ queryKey: containerKeys.detail(containerId) })
+    void queryClient.invalidateQueries({ queryKey: containerKeys.derivations(containerId) })
+    void queryClient.invalidateQueries({ queryKey: containerKeys.source(containerId) })
   }
 
   const handleDerivationCreated = () => {
-    loadContainer()
-    loadDerivations()
+    refreshContainer()
   }
 
-  if (loading) {
+  if (detailStatus === 'loading') {
     return (
       <div className="storage-page">
         <div className="container mx-auto px-4 py-8 relative z-10">
-          <SkeletonDetailPage sections={1} />
+          <DetailPageSkeleton sections={1} />
+        </div>
+      </div>
+    )
+  }
+
+  if (detailStatus === 'error') {
+    return (
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <PageError
+            title="Could not load container"
+            message={getQueryErrorMessage(containerQuery.error, 'Failed to load container')}
+            onRetry={() => void containerQuery.refetch()}
+          />
         </div>
       </div>
     )
@@ -754,7 +715,7 @@ export default function ContainerDetail() {
             barcode: effectiveCollection?.barcode,
           }}
           onSuccess={() => {
-            loadContainer()
+            refreshContainer()
             setShowEditModal(false)
           }}
         />

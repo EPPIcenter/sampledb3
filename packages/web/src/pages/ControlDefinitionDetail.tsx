@@ -1,58 +1,52 @@
-import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { controlsApi } from '../lib/api/controls';
-import type { ControlDefinitionSummaryResponse } from '../lib/api/controls';
 import { useUser } from '../contexts/UserContext'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import DataTable, { Column } from '../components/DataTable'
 import StatCard from '../components/StatCard'
-import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import { getContainerTypeIcon } from '../lib/icons'
+import { useControlDefinitionSummary } from '../hooks/useControls'
+import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
 
 export default function ControlDefinitionDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { canWrite } = useUser()
-  const [summaryData, setSummaryData] = useState<ControlDefinitionSummaryResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const definitionId = id != null ? parseInt(id, 10) : NaN
+  const summaryQuery = useControlDefinitionSummary(definitionId)
+  const summaryStatus = fromQuery(summaryQuery)
+  const summaryData = summaryQuery.data ?? null
 
-  useEffect(() => {
-    if (id) {
-      loadSummary()
-    }
-  }, [id])
-
-  const loadSummary = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const response = await controlsApi.getDefinitionSummary(parseInt(id!))
-      setSummaryData(response.data)
-    } catch (err: any) {
-      console.error('Failed to load control definition summary:', err)
-      setError(err.response?.data?.error || 'Failed to load control definition summary')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (loading) {
+  if (summaryStatus === 'loading') {
     return (
       <div className="blood-controls-page">
-        <SkeletonDetailPage sections={2} />
+        <DetailPageSkeleton sections={2} />
       </div>
     )
   }
 
-  if (error || !summaryData) {
+  if (summaryStatus === 'error') {
     return (
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
-          <div className="text-center py-8" style={{ color: 'rgb(var(--app-trend-down))' }}>
-            {error || 'Control definition not found'}
-          </div>
+          <PageError
+            title="Could not load control definition"
+            message={getQueryErrorMessage(
+              summaryQuery.error,
+              'Failed to load control definition summary'
+            )}
+            onRetry={() => void summaryQuery.refetch()}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (!summaryData) {
+    return (
+      <div className="blood-controls-page">
+        <div className="container mx-auto px-4 py-8 relative z-[1]">
+          <div className="text-center py-8 text-app-trend-down">Control definition not found</div>
         </div>
       </div>
     )

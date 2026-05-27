@@ -29,7 +29,7 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
       setLoading(true)
       setError(null)
       const response = await derivationsApi.getChain(containerId)
-      setChain(response.data)
+      setChain(response)
     } catch (err: any) {
       console.error('Failed to load derivation chain:', err)
       setError(err.response?.data?.error || 'Failed to load derivation chain')

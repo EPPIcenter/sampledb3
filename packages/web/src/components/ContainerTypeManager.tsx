@@ -58,7 +58,7 @@ export default function ContainerTypeManager({
     setError(null)
     try {
       const response = await specimenTypesApi.getContainerTypes(specimenTypeId)
-      const containerTypes = response.data.containerTypes
+      const containerTypes = response.containerTypes
       setAllowedContainerTypes(containerTypes)
       setSelectedContainerTypes(new Set(containerTypes))
     } catch (err: any) {

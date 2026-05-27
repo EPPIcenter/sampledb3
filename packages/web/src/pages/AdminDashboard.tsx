@@ -1,36 +1,14 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { adminApi } from '../lib/api/admin';
-import type { AdminSystemStats } from '../lib/api/admin';
+import { useAdminSystemStats } from '../hooks/useAdmin'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<AdminSystemStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const statsQuery = useAdminSystemStats()
+  const statsStatus = fromQuery(statsQuery)
+  const stats = statsQuery.data ?? null
 
-  useEffect(() => {
-    loadStats()
-  }, [])
-
-  const loadStats = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const response = await adminApi.getSystemStats()
-      setStats(response.data)
-    } catch (err: unknown) {
-      const message = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : null
-      setError(message || 'Failed to load admin statistics')
-      console.error('Error loading admin stats:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (loading) {
+  if (statsStatus === 'loading') {
     return (
       <div className="admin-page">
         <div className="relative z-10 p-6">
@@ -50,21 +28,17 @@ export default function AdminDashboard() {
     )
   }
 
-  if (error) {
+  if (statsStatus === 'error') {
     return (
       <div className="admin-page">
         <div className="relative z-10 p-6">
           <div className="max-w-7xl mx-auto">
             <h1 className="text-2xl font-bold mb-6" style={{ color: 'rgb(var(--app-text))' }}>Admin Dashboard</h1>
-            <div className="rounded-lg border border-app-trend-down bg-app-trend-down/10 p-4">
-              <p className="text-app-trend-down">{error}</p>
-              <button
-                onClick={loadStats}
-                className="admin-btn-primary mt-4 px-4 py-2 rounded-lg"
-              >
-                Retry
-              </button>
-            </div>
+            <PageError
+              title="Could not load statistics"
+              message={getQueryErrorMessage(statsQuery.error, 'Failed to load admin statistics')}
+              onRetry={() => void statsQuery.refetch()}
+            />
           </div>
         </div>
       </div>

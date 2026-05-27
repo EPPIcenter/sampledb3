@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { adminApi } from '../lib/api/admin';
-import type { IntegrityReport, EmptyCollectionItem } from '../lib/api/admin';
+import type { EmptyCollectionItem } from '../lib/api/admin'
+import { useAdminIntegrityReport } from '../hooks/useAdmin'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
 
 function typeLabel(type: EmptyCollectionItem['type']): string {
@@ -68,43 +68,21 @@ function IntegritySection({
 }
 
 export default function AdminDataIntegrityReport() {
-  const [report, setReport] = useState<IntegrityReport | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const reportQuery = useAdminIntegrityReport()
+  const reportStatus = fromQuery(reportQuery)
+  const report = reportQuery.data ?? null
 
-  useEffect(() => {
-    let cancelled = false
-    adminApi
-      .getIntegrityReport()
-      .then((res) => {
-        if (!cancelled) setReport(res.data)
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          const message =
-            err && typeof err === 'object' && 'response' in err
-              ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-              : null
-          setError(message || 'Failed to load integrity report')
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  if (loading) {
+  if (reportStatus === 'loading') {
     return <div className="p-8 text-center text-[rgb(var(--app-text-muted))]">Loading…</div>
   }
 
-  if (error) {
+  if (reportStatus === 'error') {
     return (
-      <div className="mb-4 rounded-lg bg-app-trend-down/10 border border-app-trend-down p-3">
-        <p className="text-sm text-app-trend-down">{error}</p>
-      </div>
+      <PageError
+        title="Could not load integrity report"
+        message={getQueryErrorMessage(reportQuery.error, 'Failed to load integrity report')}
+        onRetry={() => void reportQuery.refetch()}
+      />
     )
   }
 

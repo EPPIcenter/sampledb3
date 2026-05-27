@@ -24,7 +24,7 @@ vi.mock('../../../lib/api/reference-data', async () => {
       getByContainerType: vi.fn(),
     },
     settingsApi: {
-      get: vi.fn().mockResolvedValue({ data: { value: null } }),
+      get: vi.fn().mockResolvedValue({ key: 'container_defaults', value: null }),
     },
   })
 })
@@ -33,7 +33,7 @@ vi.mock('../../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   return createMockedDomainModule('settings', {
     settingsApi: {
-      get: vi.fn().mockResolvedValue({ data: { value: null } }),
+      get: vi.fn().mockResolvedValue({ key: 'container_defaults', value: null }),
     },
   })
 })

@@ -42,7 +42,7 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
       setLoading(true)
       // Fetch all locations in a single request (no pagination params)
       const response = await locationsApi.list()
-      const allLocations = response.data.locations
+      const allLocations = response.locations
 
       if (filterCollectionsOnly) {
         // Show collection-capable locations plus all their ancestors so the tree has roots

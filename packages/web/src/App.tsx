@@ -174,7 +174,7 @@ import { exportApi } from './lib/api/export';function AppContent() {
   const handleExportSpecimens = useCallback(async () => {
     try {
       const response = await exportApi.specimens()
-      const blob = response.data as Blob
+      const blob = response as Blob
       const filename = `specimens_export_${formatLocalDateTime()}.csv`
       downloadBlob(blob, filename)
     } catch (error) {
@@ -187,7 +187,7 @@ import { exportApi } from './lib/api/export';function AppContent() {
   const handleExportInventory = useCallback(async () => {
     try {
       const response = await exportApi.inventory()
-      const blob = response.data as Blob
+      const blob = response as Blob
       const filename = `inventory_export_${formatLocalDateTime()}.csv`
       downloadBlob(blob, filename)
     } catch (error) {

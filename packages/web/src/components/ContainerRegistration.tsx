@@ -107,7 +107,7 @@ export default function ContainerRegistration({
         setDefaultUnitError(null)
         const res = await settingsApi.get('container_defaults')
         if (cancelled.current) return
-        const defaults = res.data.value as ContainerDefaults | null
+        const defaults = res.value as ContainerDefaults | null
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime check for container type in defaults
         if (defaults && defaults[containerType]) {
           const typeDefaults = defaults[containerType]
@@ -120,7 +120,7 @@ export default function ContainerRegistration({
             const resUnits = await settingsApi.getUnits()
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- effect cleanup can set cancelled.current between awaits
             if (cancelled.current) return
-            const defaultUnit = resUnits.data.find((u: Unit) => u.symbol === typeDefaults.defaultUnitSymbol)
+            const defaultUnit = resUnits.find((u: Unit) => u.symbol === typeDefaults.defaultUnitSymbol)
             if (defaultUnit) setSelectedUnitId(defaultUnit.id)
           }
         } else {
@@ -150,7 +150,7 @@ export default function ContainerRegistration({
     let cancelled = false
     collectionsApi.listCollectionsByType(type).then((res) => {
       if (cancelled) return
-      const options: CollectionOption[] = res.data.collections.map(
+      const options: CollectionOption[] = res.collections.map(
         (c: { id: number; name: string; location?: { path: string | null } | null }) => ({
           id: c.id,
           name: c.name,
@@ -171,7 +171,7 @@ export default function ContainerRegistration({
       setUnitsError(null)
       // Load units filtered by container type
       const res = await settingsApi.getContainerTypeUnits(containerType)
-      setUnits(res.data.units)
+      setUnits(res.units)
     } catch (err: any) {
       const errorMessage = err?.response?.data?.error ?? err?.message ?? 'Failed to load units for this container type'
       setUnitsError(errorMessage)

@@ -88,7 +88,7 @@ export default function ExportModal({
         tagsApi.list(),
       ])
       
-      const availableTypesData = availableTypesRes.data
+      const availableTypesData = availableTypesRes
       const tagsData = tagsRes.data
 
       setSpecimenTypes(
@@ -150,10 +150,10 @@ export default function ExportModal({
           created_from: filters.created_from,
           created_to: filters.created_to,
         })
-        setCount(response.data.count)
+        setCount(response.count)
       } else {
         const response = await exportApi.containersCount(filters)
-        setCount(response.data.count)
+        setCount(response.count)
       }
     } catch (error: any) {
       console.error('Failed to get count:', error)
@@ -287,7 +287,7 @@ export default function ExportModal({
           csv_bom: exportFormat === 'csv' ? csvBOM : undefined,
           csv_line_ending: exportFormat === 'csv' ? csvLineEnding : undefined,
         })
-        summary = response.data.summary
+        summary = response.summary
         setExportSummary(summary)
       } else {
         const csvOptions = exportFormat === 'csv' ? {
@@ -308,11 +308,11 @@ export default function ExportModal({
       let blob: Blob
       let filename: string
 
-      if (uploadMode === 'csv' && response.data.data) {
+      if (uploadMode === 'csv' && response && typeof response === 'object' && 'data' in response) {
         // Handle base64 encoded data for CSV/XLSX
-        if (typeof response.data.data === 'string') {
+        if (typeof response.data === 'string') {
           // Base64 encoded
-          const binaryString = atob(response.data.data)
+          const binaryString = atob(response.data)
           const bytes = new Uint8Array(binaryString.length)
           for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i)
@@ -323,14 +323,14 @@ export default function ExportModal({
           blob = new Blob([bytes], { type: mimeType })
         } else {
           // JSON format
-          blob = new Blob([JSON.stringify(response.data.data, null, 2)], { type: 'application/json' })
+          blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
         }
-        filename = response.data.filename || `study_${studyCode}_export_${formatLocalDateTime()}.${exportFormat}`
+        filename = response.filename || `study_${studyCode}_export_${formatLocalDateTime()}.${exportFormat}`
       } else {
         // Manual mode - existing behavior
-        blob = response.data instanceof Blob
-          ? response.data
-          : new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
+        blob = response instanceof Blob
+          ? response
+          : new Blob([JSON.stringify(response, null, 2)], { type: 'application/json' })
         const timestamp = formatLocalDateTime()
         const extension = exportFormat === 'json' ? 'json' : exportFormat === 'xlsx' ? 'xlsx' : 'csv'
         filename = `study_${studyCode}_export_${timestamp}.${extension}`

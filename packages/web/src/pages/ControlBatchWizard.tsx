@@ -162,11 +162,11 @@ export default function ControlBatchWizard() {
     try {
       setLoading(true)
       const response = await controlsApi.getBatch(id)
-      const batch = response.data.batch
+      const batch = response.batch
       const defResponse = await controlsApi.get(batch.controlDefinitionId)
       setBatchInfo({
         controlDefinitionId: batch.controlDefinitionId,
-        controlDefinition: defResponse.data.control,
+        controlDefinition: defResponse.control,
         name: batch.name,
         productionDate: batch.productionDate || new Date().toISOString().split('T')[0],
         properties: batch.properties,
@@ -183,7 +183,7 @@ export default function ControlBatchWizard() {
       setLoading(true)
       setError(null)
       const res = await controlsApi.list()
-      const all = (res.data.controls) as ControlDefinition[]
+      const all = (res.controls) as ControlDefinition[]
       const defs = all.filter((def) => {
         const defKey = getCompositionKey((def.strains ?? []).map((s) => ({ id: s.id, percentage: s.percentage })))
         return defKey === key
@@ -212,7 +212,7 @@ export default function ControlBatchWizard() {
         controlsApi.getDefinitionSummary(defId),
         controlsApi.suggestBatchName(defId, today),
       ])
-      const { control, composition } = summaryResponse.data
+      const { control, composition } = summaryResponse
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- API may omit control
       if (!control) {
         setError('Control definition not found')
@@ -225,7 +225,7 @@ export default function ControlBatchWizard() {
       setBatchInfo({
         controlDefinitionId: control.id,
         controlDefinition: controlWithComposition,
-        name: nameResponse.data.name,
+        name: nameResponse.name,
         productionDate: today,
       })
     } catch (err: any) {

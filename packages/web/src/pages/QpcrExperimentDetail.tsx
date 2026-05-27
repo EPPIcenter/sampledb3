@@ -1,12 +1,11 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { api } from '../lib/api/client';
-import { qpcrExperimentsApi } from '../lib/api/qpcr';
-import type { QpcrExperimentDetailResponse, QpcrExperimentWell } from '../lib/api/qpcr';
-import { scannerConfigurationsApi } from '../lib/api/settings';
-import type { ScannerConfiguration } from '../lib/api/settings';
+import { api } from '../lib/api/client'
+import { qpcrExperimentsApi } from '../lib/api/qpcr'
+import type { QpcrExperimentDetailResponse, QpcrExperimentWell } from '../lib/api/qpcr'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
-import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import { useQpcrExperiment, useQpcrScannerConfigurations } from '../hooks/useQpcrExperiments'
+import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import QpcrWellPlate from '../components/qpcr/QpcrWellPlate'
 import { getContainerTypeIcon, getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
 import { useUser } from '../contexts/UserContext'
@@ -151,11 +150,13 @@ export default function QpcrExperimentDetail() {
   const { canWrite } = useUser()
   const { error: showError, success: showSuccess } = useToast()
   const [wellsUpdating, setWellsUpdating] = useState(false)
+  const experimentId = id != null ? parseInt(id, 10) : NaN
+  const experimentQuery = useQpcrExperiment(experimentId)
+  const experimentStatus = fromQuery(experimentQuery)
+  const scannerConfigsQuery = useQpcrScannerConfigurations()
+  const scannerConfigs = scannerConfigsQuery.data ?? []
   const [data, setData] = useState<QpcrExperimentDetailResponse | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [scannerConfigs, setScannerConfigs] = useState<ScannerConfiguration[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
   const [plateUploading, setPlateUploading] = useState(false)
   const [plateError, setPlateError] = useState<string | null>(null)
@@ -173,34 +174,22 @@ export default function QpcrExperimentDetail() {
   const prevExperimentSyncRef = useRef<{ id: number; targetsSig: string; instrumentType: string } | null>(null)
 
   const loadData = () => {
-    if (!id) return
-    const numId = parseInt(id, 10)
-    if (isNaN(numId)) return
-    qpcrExperimentsApi.get(numId).then((res) => setData(res.data)).catch(() => {})
+    void experimentQuery.refetch()
   }
 
   useEffect(() => {
-    if (id) {
-      const numId = parseInt(id, 10)
-      if (isNaN(numId)) {
-        setError('Invalid experiment ID')
-        setLoading(false)
-        return
-      }
-      qpcrExperimentsApi.get(numId)
-        .then((res) => setData(res.data))
-        .catch((err: { response?: { data?: { error?: string } } }) => {
-          setError(err.response?.data?.error ?? 'Failed to load experiment')
-        })
-        .finally(() => setLoading(false))
-      scannerConfigurationsApi.getShared().then((res) => {
-        const configs = (res.data as { configurations?: ScannerConfiguration[] }).configurations ?? []
-        setScannerConfigs(configs)
-        const defaultConfig = configs.find((c) => c.isDefault === true) ?? configs[0]
-        if (defaultConfig) setSelectedConfigId(defaultConfig.id) // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- default or first config
-      }).catch(() => {})
+    if (experimentQuery.data) {
+      setData(experimentQuery.data)
     }
-  }, [id])
+  }, [experimentQuery.data])
+
+  useEffect(() => {
+    if (scannerConfigs.length === 0) return
+    const defaultConfig = scannerConfigs.find((c) => c.isDefault === true) ?? scannerConfigs[0]
+    if (defaultConfig && selectedConfigId === null) {
+      setSelectedConfigId(defaultConfig.id)
+    }
+  }, [scannerConfigs, selectedConfigId])
 
   // Sync form state from data.experiment when it changes (during render to avoid extra pass)
    
@@ -239,7 +228,7 @@ export default function QpcrExperimentDetail() {
       api
         .get<WellDetailContainerResponse>(`/containers/${containerId}`)
         .then((res) => {
-          setWellDetails(res.data)
+          setWellDetails(res)
           setWellDetailsError(null)
         })
         .catch((err: { response?: { data?: { error?: string } } }) => {
@@ -253,19 +242,49 @@ export default function QpcrExperimentDetail() {
     }
   }, [selectedWellPosition, data?.wells])
 
-  if (loading) {
+  if (!id || Number.isNaN(experimentId)) {
     return (
       <div className="qpcr-theme qpcr-page-bg">
-        <SkeletonDetailPage sections={1} />
+        <div className="container mx-auto px-4 py-8 max-w-7xl">
+          <div className="text-center py-12 text-app-trend-down font-medium">Invalid experiment ID</div>
+          <Link to="/qpcr-experiments" className="text-app-accent hover:underline text-sm font-medium">
+            Back to qPCR experiments
+          </Link>
+        </div>
       </div>
     )
   }
 
-  if (error || !data) {
+  if (experimentStatus === 'loading') {
+    return (
+      <div className="qpcr-theme qpcr-page-bg">
+        <DetailPageSkeleton sections={1} />
+      </div>
+    )
+  }
+
+  if (experimentStatus === 'error') {
     return (
       <div className="qpcr-theme qpcr-page-bg">
         <div className="container mx-auto px-4 py-8 max-w-7xl">
-          <div className="text-center py-12 text-app-trend-down font-medium">{error ?? 'Experiment not found'}</div>
+          <PageError
+            title="Could not load experiment"
+            message={getQueryErrorMessage(experimentQuery.error, 'Failed to load experiment')}
+            onRetry={() => void experimentQuery.refetch()}
+          />
+          <Link to="/qpcr-experiments" className="text-app-accent hover:underline text-sm font-medium mt-4 inline-block">
+            Back to qPCR experiments
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <div className="qpcr-theme qpcr-page-bg">
+        <div className="container mx-auto px-4 py-8 max-w-7xl">
+          <div className="text-center py-12 text-app-trend-down font-medium">Experiment not found</div>
           <Link to="/qpcr-experiments" className="text-app-accent hover:underline text-sm font-medium">
             Back to qPCR experiments
           </Link>
@@ -391,7 +410,7 @@ export default function QpcrExperimentDetail() {
       const message = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
         ? (err as { response: { data: { error: string } } }).response.data.error
         : 'Failed to delete experiment'
-      setError(message)
+      showError(message)
     } finally {
       setDeleting(false)
     }
@@ -428,7 +447,7 @@ export default function QpcrExperimentDetail() {
     setWellsUpdating(true)
     try {
       const res = await qpcrExperimentsApi.updateWells(parseInt(id), { wellPosition: selectedWellPosition, contentType })
-      setData((prev) => (prev ? { ...prev, wells: res.data.wells } : null))
+      setData((prev) => (prev ? { ...prev, wells: res.wells } : null))
       showSuccess(contentType === 'negative' ? 'Well set as NTC' : 'Well set as empty')
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
@@ -445,7 +464,7 @@ export default function QpcrExperimentDetail() {
     setWellsUpdating(true)
     try {
       const res = await qpcrExperimentsApi.updateWells(parseInt(id), { positions: emptyWellPositions, contentType: 'negative' })
-      setData((prev) => (prev ? { ...prev, wells: res.data.wells } : null))
+      setData((prev) => (prev ? { ...prev, wells: res.wells } : null))
       showSuccess(`Set ${emptyWellPositions.length} well(s) to NTC`)
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
@@ -462,7 +481,7 @@ export default function QpcrExperimentDetail() {
     setWellsUpdating(true)
     try {
       const res = await qpcrExperimentsApi.updateWells(parseInt(id), { positions: ntcWellPositions, contentType: 'empty' })
-      setData((prev) => (prev ? { ...prev, wells: res.data.wells } : null))
+      setData((prev) => (prev ? { ...prev, wells: res.wells } : null))
       showSuccess(`Set ${ntcWellPositions.length} well(s) to empty`)
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
@@ -580,8 +599,8 @@ export default function QpcrExperimentDetail() {
                       try {
                         const csvText = await file.text()
                         const res = await qpcrExperimentsApi.uploadPlate(parseInt(id), { csvText, scannerConfigurationId: selectedConfigId })
-                        if (res.data.unresolved && res.data.unresolved.length > 0) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- show error when unresolved present
-                          setPlateError(`${res.data.unresolved.length} unresolved barcode(s): ${res.data.unresolved.map((u) => `${u.wellPosition}:${u.barcode}`).join(', ')}`)
+                        if (res.unresolved && res.unresolved.length > 0) { // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- show error when unresolved present
+                          setPlateError(`${res.unresolved.length} unresolved barcode(s): ${res.unresolved.map((u) => `${u.wellPosition}:${u.barcode}`).join(', ')}`)
                         }
                         loadData()
                       } catch (err: unknown) {

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { collectionsApi } from '../lib/api/collections';
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import CollectionGrid from '../components/CollectionGrid'
 import CollectionTableWithExport from '../components/CollectionTableWithExport'
-import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import { useMicronixPlate } from '../hooks/useCollections'
+import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import {
   COLLECTION_GRID_TABLE_COLUMNS,
   COLLECTION_GRID_TABLE_ROW_KEYS,
@@ -30,8 +30,10 @@ export default function MicronixPlateDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [data, setData] = useState<any | null>(null)
-  const [loading, setLoading] = useState(true)
+  const plateId = id != null ? parseInt(id, 10) : NaN
+  const dataQuery = useMicronixPlate(plateId)
+  const data = dataQuery.data ?? null
+  const detailStatus = fromQuery(dataQuery)
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
   const [showDeleteCollection, setShowDeleteCollection] = useState(false)
   const {
@@ -43,25 +45,6 @@ export default function MicronixPlateDetail() {
 
   // Get target position from URL query params
   const targetPosition = searchParams.get('position')
-
-  useEffect(() => {
-    if (!id) return
-    const numericId = parseInt(id)
-    if (Number.isNaN(numericId)) return
-
-    const fetchData = async () => {
-      try {
-        const res = await collectionsApi.getMicronixPlate(numericId)
-        setData(res.data)
-      } catch (err) {
-        console.error('Failed to load micronix plate:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [id])
 
   // Scroll to highlighted container when page loads
   useEffect(() => {
@@ -146,17 +129,30 @@ export default function MicronixPlateDetail() {
     return resolved.length > 0 ? resolved : COLLECTION_GRID_TABLE_COLUMNS
   }, [viewMode, loadingConfigs, viewConfigurations, selectedConfigId])
 
-  if (loading) {
+  if (detailStatus === 'loading') {
     return (
       <div className="storage-page">
         <div className="container mx-auto px-4 py-8 relative z-10">
-          <SkeletonDetailPage sections={1} />
+          <DetailPageSkeleton sections={1} />
         </div>
       </div>
     )
   }
 
-   
+  if (detailStatus === 'error') {
+    return (
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <PageError
+            title="Could not load micronix plate"
+            message={getQueryErrorMessage(dataQuery.error, 'Failed to load micronix plate')}
+            onRetry={() => void dataQuery.refetch()}
+          />
+        </div>
+      </div>
+    )
+  }
+
   if (!data?.plate) {
     return (
       <div className="storage-page">

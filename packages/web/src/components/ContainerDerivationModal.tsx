@@ -99,7 +99,7 @@ function ContainerDerivationModalContent({
       .listCollectionsByType(effectiveCollectionType)
       .then((res) => {
         if (cancelled) return
-        const options: CollectionOption[] = res.data.collections.map(
+        const options: CollectionOption[] = res.collections.map(
           (c: { id: number; name: string; location?: { path: string | null } | null }) => ({
             id: c.id,
             name: c.name,
@@ -136,7 +136,7 @@ function ContainerDerivationModalContent({
       try {
         const response = await specimenTypesApi.getContainerTypes(selectedSpecimenType.id)
         if (ignore) return
-        const containerTypes = response.data.containerTypes
+        const containerTypes = response.containerTypes
         setAllowedContainerTypes(containerTypes)
 
         if (!containerTypes.includes(formData.containerType)) {
@@ -218,8 +218,8 @@ function ContainerDerivationModalContent({
 
       const response = await derivationsApi.createFromContainer(parentContainerId, payload)
       
-      if (response.data.warnings.length > 0) {
-        setWarnings(response.data.warnings)
+      if (response.warnings.length > 0) {
+        setWarnings(response.warnings)
         // Still show success but with warnings
         setTimeout(() => {
           onSuccess()

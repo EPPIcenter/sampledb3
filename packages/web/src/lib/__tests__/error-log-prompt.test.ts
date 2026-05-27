@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { formatErrorLogForLLM } from '../error-log-prompt'
-import type { ErrorLog } from '../api'
+import type { ErrorLog } from '../api/error-logs'
 
 describe('formatErrorLogForLLM', () => {
   it('includes intro asking for help fixing the bug', () => {

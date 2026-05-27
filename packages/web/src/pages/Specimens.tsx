@@ -1,48 +1,42 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useMemo, useState } from 'react'
 import DataTable, { Column } from '../components/DataTable'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
-import { api } from '../lib/api/client';
 import SpecimenFilter, { type SpecimenFilters } from '../components/SpecimenFilter'
-import { getModifierKey } from '../lib/hotkeys'
 import { useUser } from '../contexts/UserContext'
+import { useSpecimens } from '../hooks/useSpecimens'
+import type { SpecimenListParams } from '../lib/api/specimens'
+import type { Specimen } from '../lib/api/types'
+import {
+  AsyncPresentation,
+  EmptyState,
+  PageError,
+  buttonClassName,
+  fromQuery,
+  getQueryErrorMessage,
+} from '../ui'
 import '../styles/subject-specimen.css'
 
-interface Specimen {
-  id: number
-  studySubjectId?: number
-  controlBatchId?: number
-  specimenTypeId: number
-  collectionDate?: string
-  created: string
-  specimenType?: {
-    id: number
-    name: string
-  }
-  studySubject?: {
-    id: number
-    name: string
-  }
-  study?: {
-    id: number
-    shortCode: string
-  }
-  controlBatch?: {
-    id: number
-    name: string
+type SpecimenListRow = Specimen & {
+  study?: { shortCode?: string }
+  studySubject?: { name: string }
+  controlBatch?: { name: string }
+}
+
+function filtersToParams(filters: SpecimenFilters): SpecimenListParams {
+  return {
+    study: filters.study,
+    source_type: filters.sourceType,
+    specimen_type_id: filters.specimenTypeId,
+    collection_date_from: filters.collectionDateFrom,
+    collection_date_to: filters.collectionDateTo,
+    created_from: filters.createdFrom,
+    created_to: filters.createdTo,
+    search: filters.search,
   }
 }
 
-export default function Specimens() {
-  const navigate = useNavigate()
-  const { canWrite } = useUser()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [specimens, setSpecimens] = useState<Specimen[]>([])
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-  const pageSize = 50
-  const searchInputRef = useRef<HTMLInputElement | null>(null)
-
-  const [filters, setFilters] = useState<SpecimenFilters>({
+function filtersFromSearchParams(searchParams: URLSearchParams): SpecimenFilters {
+  return {
     study: searchParams.get('study') || undefined,
     sourceType: searchParams.get('source_type') || undefined,
     specimenTypeId: searchParams.get('specimen_type_id') || undefined,
@@ -51,42 +45,31 @@ export default function Specimens() {
     createdFrom: searchParams.get('created_from') || undefined,
     createdTo: searchParams.get('created_to') || undefined,
     search: searchParams.get('search') || searchParams.get('barcode') || undefined,
+  }
+}
+
+export default function Specimens() {
+  const navigate = useNavigate()
+  const { canWrite } = useUser()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [page, setPage] = useState(1)
+  const pageSize = 50
+
+  const [filters, setFilters] = useState<SpecimenFilters>(() => filtersFromSearchParams(searchParams))
+
+  const listParams = useMemo(() => filtersToParams(filters), [filters])
+  const specimensQuery = useSpecimens(listParams)
+
+  const specimens = (specimensQuery.data ?? []) as SpecimenListRow[]
+  const listStatus = fromQuery(specimensQuery, {
+    isEmpty: specimensQuery.isSuccess && specimens.length === 0,
   })
-
-  const loadSpecimens = useCallback(async () => {
-    try {
-      setLoading(true)
-      // Load all specimens (no pagination params = return all)
-      const params: any = { 
-        study: filters.study,
-        source_type: filters.sourceType,
-        specimen_type_id: filters.specimenTypeId,
-        collection_date_from: filters.collectionDateFrom,
-        collection_date_to: filters.collectionDateTo,
-        created_from: filters.createdFrom,
-        created_to: filters.createdTo,
-        search: filters.search,
-      }
-      
-      const response = await api.get('/specimens', { params })
-      setSpecimens(response.data.specimens || [])
-    } catch (error) {
-      console.error('Failed to load specimens:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [filters])
-
-  useEffect(() => {
-    void loadSpecimens()
-  }, [loadSpecimens])
 
   const handleFilterChange = (newFilters: SpecimenFilters) => {
     setFilters(newFilters)
-    setPage(1) // Reset to first page when filters change
-    
-    // Update URL params (no page param needed for client-side pagination)
-    const params: any = {}
+    setPage(1)
+
+    const params: Record<string, string> = {}
     if (newFilters.study) params.study = newFilters.study
     if (newFilters.sourceType) params.source_type = newFilters.sourceType
     if (newFilters.specimenTypeId) params.specimen_type_id = newFilters.specimenTypeId
@@ -95,12 +78,8 @@ export default function Specimens() {
     if (newFilters.createdFrom) params.created_from = newFilters.createdFrom
     if (newFilters.createdTo) params.created_to = newFilters.createdTo
     if (newFilters.search) params.search = newFilters.search
-    
-    setSearchParams(params)
-  }
 
-  const handleFilterSubmit = (newFilters: SpecimenFilters) => {
-    handleFilterChange(newFilters)
+    setSearchParams(params)
   }
 
   const formatDate = (dateString?: string) => {
@@ -108,8 +87,7 @@ export default function Specimens() {
     return new Date(dateString).toLocaleDateString()
   }
 
-
-  const columns: Column<Specimen>[] = [
+  const columns: Column<SpecimenListRow>[] = [
     {
       key: 'study',
       label: 'Study',
@@ -143,6 +121,16 @@ export default function Specimens() {
     },
   ]
 
+  const listErrorMessage = specimensQuery.error
+    ? getQueryErrorMessage(specimensQuery.error, 'Failed to load specimens')
+    : 'Failed to load specimens'
+
+  const emptyAction = canWrite ? (
+    <Link to="/specimens/new" className={buttonClassName('primary')}>
+      Register a specimen
+    </Link>
+  ) : undefined
+
   return (
     <div className="subject-specimen-page">
       <div className="container mx-auto px-4 py-8 relative z-[1]">
@@ -151,7 +139,7 @@ export default function Specimens() {
           {canWrite && (
             <Link
               to="/specimens/new"
-              className="subject-specimen-btn-primary px-4 py-2 whitespace-nowrap inline-flex items-center no-underline"
+              className={buttonClassName('primary', { className: 'whitespace-nowrap no-underline' })}
             >
               New Specimen
             </Link>
@@ -160,11 +148,22 @@ export default function Specimens() {
         {!canWrite && (
           <div className="subject-specimen-reveal subject-specimen-reveal-2 mb-4 rounded-lg bg-[rgb(var(--app-accent-muted))] border border-[rgb(var(--app-accent)/0.3)] p-3">
             <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[rgb(var(--app-accent))]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                className="w-5 h-5 text-[rgb(var(--app-accent))]"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               <p className="text-sm font-medium text-[rgb(var(--app-text))]">
-                You have view-only access. Contact an administrator or member to create or modify specimens.
+                You have view-only access. Contact an administrator or member to create or modify
+                specimens.
               </p>
             </div>
           </div>
@@ -174,27 +173,51 @@ export default function Specimens() {
           <SpecimenFilter
             filters={filters}
             onChange={setFilters}
-            onSubmit={handleFilterSubmit}
-            isLoading={loading}
+            onSubmit={handleFilterChange}
+            isLoading={specimensQuery.isPending}
           />
         </div>
 
         <div className="subject-specimen-reveal subject-specimen-reveal-4">
-          <DataTable
-            data={specimens}
-            columns={columns}
-            loading={loading}
-            density="compact"
-            onRowClick={(specimen) => window.location.href = `/specimens/${specimen.id}`}
-            emptyMessage="No specimens found"
-            pagination={{
-              page,
-              pageSize,
-              onPageChange: setPage,
-              showPagination: true,
-            }}
-            className="dashboard-card overflow-hidden"
-          />
+          <AsyncPresentation
+            status={listStatus}
+            loadingFallback={
+              <DataTable
+                data={[]}
+                columns={columns}
+                loading
+                density="compact"
+                emptyMessage="No specimens found"
+                className="dashboard-card overflow-hidden"
+              />
+            }
+            errorFallback={
+              <PageError message={listErrorMessage} onRetry={() => void specimensQuery.refetch()} />
+            }
+            emptyFallback={
+              <EmptyState
+                title="No specimens found"
+                description="Try adjusting your filters"
+                action={emptyAction}
+              />
+            }
+          >
+            <DataTable
+              data={specimens}
+              columns={columns}
+              loading={false}
+              density="compact"
+              onRowClick={(specimen) => navigate(`/specimens/${specimen.id}`)}
+              emptyMessage="No specimens found"
+              pagination={{
+                page,
+                pageSize,
+                onPageChange: setPage,
+                showPagination: true,
+              }}
+              className="dashboard-card overflow-hidden"
+            />
+          </AsyncPresentation>
         </div>
       </div>
     </div>

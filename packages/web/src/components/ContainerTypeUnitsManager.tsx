@@ -61,12 +61,12 @@ export default function ContainerTypeUnitsManager({
     try {
       // Load all units
       const unitsResponse = await settingsApi.getUnits()
-      setAllUnits(unitsResponse.data)
+      setAllUnits(unitsResponse)
 
       // Load container defaults to get default unit symbols
       try {
         const defaultsResponse = await settingsApi.get('container_defaults')
-        const defaults = defaultsResponse.data.value as ContainerDefaults | null
+        const defaults = defaultsResponse.value as ContainerDefaults | null
         setContainerDefaults(defaults)
         
         if (defaults) {
@@ -94,7 +94,7 @@ export default function ContainerTypeUnitsManager({
         CONTAINER_TYPES.map(async (ct) => {
           try {
             const response = await settingsApi.getContainerTypeUnits(ct.value)
-            allowed[ct.value] = response.data.units.map((u: Unit) => u.id)
+            allowed[ct.value] = response.units.map((u: Unit) => u.id)
           } catch (err) {
             console.error(`Failed to load units for ${ct.value}:`, err)
           }
@@ -158,7 +158,7 @@ export default function ContainerTypeUnitsManager({
 
       // Load current container defaults
       const defaultsResponse = await settingsApi.get('container_defaults')
-      let defaults = defaultsResponse.data.value as ContainerDefaults | null
+      let defaults = defaultsResponse.value as ContainerDefaults | null
 
       // Initialize defaults if they don't exist
       if (!defaults) {

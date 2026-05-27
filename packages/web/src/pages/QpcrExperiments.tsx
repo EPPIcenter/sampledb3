@@ -1,12 +1,12 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { qpcrExperimentsApi } from '../lib/api/qpcr';
-import type { QpcrExperiment } from '../lib/api/qpcr';
+import type { QpcrExperiment } from '../lib/api/qpcr'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
-import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import DataTable from '../components/DataTable'
 import type { Column } from '../components/DataTable'
 import { useUser } from '../contexts/UserContext'
+import { useQpcrExperimentsList } from '../hooks/useQpcrExperiments'
+import { AsyncPresentation, EmptyState, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/qpcr.css'
 
 const TEMPLATE_LABELS: Record<string, string> = {
@@ -54,26 +54,16 @@ function formatShortDate(iso: string | null | undefined): string {
 export default function QpcrExperiments() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
-  const [experiments, setExperiments] = useState<QpcrExperiment[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('')
-
-  const loadExperiments = useCallback(() => {
-    setLoading(true)
-    setError(null)
-    qpcrExperimentsApi
-      .list(statusFilter ? { status: statusFilter } : undefined)
-      .then((res) => setExperiments(res.data.experiments))
-      .catch((err: { response?: { data?: { error?: string } } }) => {
-        setError(err.response?.data?.error ?? 'Failed to load qPCR experiments')
-      })
-      .finally(() => setLoading(false))
-  }, [statusFilter])
-
-  useEffect(() => {
-    loadExperiments()
-  }, [loadExperiments])
+  const experimentsQuery = useQpcrExperimentsList(statusFilter || undefined)
+  const experiments = experimentsQuery.data ?? []
+  const listStatus = fromQuery(experimentsQuery, {
+    isEmpty: experimentsQuery.isSuccess && experiments.length === 0,
+  })
+  const listErrorMessage = getQueryErrorMessage(
+    experimentsQuery.error,
+    'Failed to load qPCR experiments'
+  )
 
   const handleRowClick = useCallback(
     (row: QpcrExperiment) => {
@@ -198,13 +188,11 @@ export default function QpcrExperiments() {
     },
   ]
 
-  if (loading && experiments.length === 0) {
-    return (
-      <div className="qpcr-theme qpcr-page-bg">
-        <SkeletonDetailPage sections={1} />
-      </div>
-    )
-  }
+  const emptyAction = canWrite ? (
+    <Link to="/qpcr-experiments/new" className="qpcr-btn-primary mt-2">
+      Create experiment
+    </Link>
+  ) : undefined
 
   return (
     <div className="qpcr-theme qpcr-page-bg">
@@ -229,84 +217,64 @@ export default function QpcrExperiments() {
           </div>
         </div>
 
-        {error && (
-          <div
-            className="mb-6 p-4 bg-app-trend-down/10 border border-app-trend-down rounded-xl text-app-trend-down text-sm"
-            role="alert"
-          >
-            {error}
-          </div>
-        )}
-
-        {experiments.length === 0 && !loading ? (
-          <div className="qpcr-card p-12 text-center" style={{ animationDelay: '0ms' }}>
-            <div className="flex flex-col items-center gap-4">
-              <div
-                className="flex h-16 w-16 items-center justify-center rounded-2xl bg-app-surface text-app-text-muted"
-                aria-hidden
-              >
-                <svg
-                  className="h-8 w-8"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-app-text">No qPCR experiments yet</h2>
-                <p className="mt-1 text-sm text-app-text-muted">
-                  Create an experiment to define a plate layout, download an instrument template, and
-                  import results.
-                </p>
-              </div>
-              {canWrite && (
-                <Link to="/qpcr-experiments/new" className="qpcr-btn-primary mt-2">
-                  Create experiment
-                </Link>
-              )}
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-              <label htmlFor="qpcr-status-filter" className="text-sm font-medium text-app-text">
-                Status
-              </label>
-              <select
-                id="qpcr-status-filter"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="qpcr-select w-auto min-w-[10rem] text-sm"
-                aria-label="Filter by status"
-              >
-                <option value="">All</option>
-                <option value="setup">Setup</option>
-                <option value="in_progress">In progress</option>
-                <option value="results_uploaded">Results imported</option>
-              </select>
-            </div>
+        <AsyncPresentation
+          status={listStatus}
+          loadingFallback={
             <div className="qpcr-table-wrapper">
               <DataTable<QpcrExperiment>
-                data={experiments}
+                data={[]}
                 columns={columns}
-                onRowClick={handleRowClick}
-                loading={loading && experiments.length === 0}
-                emptyMessage="No experiments match the current filter."
-                initialSortColumn="lastUpdated"
-                initialSortDirection="desc"
+                loading
                 density="compact"
                 className="qpcr-card overflow-hidden"
               />
             </div>
-          </>
-        )}
+          }
+          errorFallback={
+            <PageError
+              title="Could not load experiments"
+              message={listErrorMessage}
+              onRetry={() => void experimentsQuery.refetch()}
+            />
+          }
+          emptyFallback={
+            <EmptyState
+              title="No qPCR experiments yet"
+              description="Create an experiment to define a plate layout, download an instrument template, and import results."
+              action={emptyAction}
+            />
+          }
+        >
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <label htmlFor="qpcr-status-filter" className="text-sm font-medium text-app-text">
+              Status
+            </label>
+            <select
+              id="qpcr-status-filter"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="qpcr-select w-auto min-w-[10rem] text-sm"
+              aria-label="Filter by status"
+            >
+              <option value="">All</option>
+              <option value="setup">Setup</option>
+              <option value="in_progress">In progress</option>
+              <option value="results_uploaded">Results imported</option>
+            </select>
+          </div>
+          <div className="qpcr-table-wrapper">
+            <DataTable<QpcrExperiment>
+              data={experiments}
+              columns={columns}
+              onRowClick={handleRowClick}
+              emptyMessage="No experiments match the current filter."
+              initialSortColumn="lastUpdated"
+              initialSortDirection="desc"
+              density="compact"
+              className="qpcr-card overflow-hidden"
+            />
+          </div>
+        </AsyncPresentation>
       </div>
     </div>
   )

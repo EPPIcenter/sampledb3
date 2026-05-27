@@ -22,7 +22,7 @@ export default function SetupGuard({ children }: { children: React.ReactNode }) 
         try {
           if (isMountedRef.current) setIsChecking(true)
           const response = await setupApi.status()
-          const initialized = response.data.initialized
+          const initialized = response.initialized
           setupCachedInitialized = initialized
           if (isMountedRef.current) {
             setIsInitialized(initialized)
@@ -71,7 +71,7 @@ export default function SetupGuard({ children }: { children: React.ReactNode }) 
         try {
           if (isMountedRef.current) setIsChecking(true)
           const response = await setupApi.status()
-          setupCachedInitialized = response.data.initialized
+          setupCachedInitialized = response.initialized
           if (isMountedRef.current) {
             setIsInitialized(setupCachedInitialized)
           }

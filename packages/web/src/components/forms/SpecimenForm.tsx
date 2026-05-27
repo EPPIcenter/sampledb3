@@ -119,23 +119,23 @@ export default function SpecimenForm({
       switch (sourceType) {
         case 'control':
           const controlsRes = await controlsApi.list()
-          setControls(controlsRes.data.controls)
+          setControls(controlsRes.controls)
           break
         case 'reagent':
           const reagentsRes = await reagentsApi.list()
-          setReagents(reagentsRes.data.reagents)
+          setReagents(reagentsRes.reagents)
           break
         case 'cell_line':
           const cellLinesRes = await cellLinesApi.list()
-          setCellLines(cellLinesRes.data.cellLines)
+          setCellLines(cellLinesRes.cellLines)
           break
         case 'plasmid':
           const plasmidsRes = await plasmidsApi.list()
-          setPlasmids(plasmidsRes.data.plasmids)
+          setPlasmids(plasmidsRes.plasmids)
           break
         case 'standard':
           const standardsRes = await standardsApi.list()
-          setStandards(standardsRes.data.standards)
+          setStandards(standardsRes.standards)
           break
       }
     } catch (error) {

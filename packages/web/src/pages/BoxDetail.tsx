@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { collectionsApi } from '../lib/api/collections';
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import CollectionTableWithExport from '../components/CollectionTableWithExport'
-import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import { useBox } from '../hooks/useCollections'
+import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import {
   COLLECTION_SHEET_TABLE_COLUMNS,
   COLLECTION_SHEET_TABLE_ROW_KEYS,
@@ -18,8 +18,10 @@ import '../styles/storage.css'
 export default function BoxDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [data, setData] = useState<any | null>(null)
-  const [loading, setLoading] = useState(true)
+  const boxId = id != null ? parseInt(id, 10) : NaN
+  const dataQuery = useBox(boxId)
+  const data = dataQuery.data ?? null
+  const detailStatus = fromQuery(dataQuery)
   const [viewMode, setViewMode] = useState<'sheets' | 'table'>('sheets')
   const [showDeleteCollection, setShowDeleteCollection] = useState(false)
   const [expandedSheets, setExpandedSheets] = useState<Set<number>>(new Set())
@@ -32,29 +34,17 @@ export default function BoxDetail() {
   } = useTableViewConfigurations()
 
   useEffect(() => {
-    if (!id) return
-    const numericId = parseInt(id)
-    if (Number.isNaN(numericId)) return
-
-    const fetchData = async () => {
-      try {
-        const res = await collectionsApi.getBox(numericId)
-        setData(res.data)
-        initializedSheets.current = false // Reset initialization when box changes
-        setExpandedSheets(new Set()) // Reset expanded sheets
-      } catch (err) {
-        console.error('Failed to load box:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [id])
+    initializedSheets.current = false
+    setExpandedSheets(new Set())
+  }, [boxId])
 
   // Initialize expanded sheets (default to collapsed if more than 3 sheets)
   // This hook must be called before any conditional returns to maintain hook order
-  const sheets = data?.contents?.sheets || []
+  const sheets = (data?.contents?.sheets || []) as Array<{
+    id: number
+    name?: string
+    papers?: CollectionTableEntry[]
+  }>
   useEffect(() => {
     if (sheets.length > 0 && !initializedSheets.current) {
       initializedSheets.current = true
@@ -100,11 +90,25 @@ export default function BoxDetail() {
     return resolved.length > 0 ? resolved : COLLECTION_SHEET_TABLE_COLUMNS
   }, [viewMode, loadingConfigs, viewConfigurations, selectedConfigId])
 
-  if (loading) {
+  if (detailStatus === 'loading') {
     return (
       <div className="storage-page">
         <div className="container mx-auto px-4 py-8 relative z-10">
-          <SkeletonDetailPage sections={1} />
+          <DetailPageSkeleton sections={1} />
+        </div>
+      </div>
+    )
+  }
+
+  if (detailStatus === 'error') {
+    return (
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <PageError
+            title="Could not load box"
+            message={getQueryErrorMessage(dataQuery.error, 'Failed to load box')}
+            onRetry={() => void dataQuery.refetch()}
+          />
         </div>
       </div>
     )
@@ -130,7 +134,7 @@ export default function BoxDetail() {
     { label: `Box ${box.name}` },
   ].filter(Boolean) as Array<{ label: string; to?: string }>
 
-  const tubes = contents?.tubes || []
+  const tubes = (contents as { tubes?: unknown[] } | undefined)?.tubes || []
 
   // Calculate statistics
   const totalSpots = sheets.reduce((sum: number, sheet: any) => 

@@ -18,17 +18,16 @@ vi.mock('../../../lib/api/controls', async () => {
     get: vi.fn((key: string) => {
       if (key === 'container_defaults') {
         return Promise.resolve({
-          data: {
-            value: {
-              paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
-              cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
-              micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
-              static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
-            },
+          key: 'container_defaults',
+          value: {
+            paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+            cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
+            micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
+            static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
           },
         })
       }
-      return Promise.resolve({ data: { value: null } })
+      return Promise.resolve({ key: 'container_defaults', value: null })
     }),
   },
 })
@@ -45,17 +44,16 @@ vi.mock('../../../lib/api/settings', async () => {
     get: vi.fn((key: string) => {
       if (key === 'container_defaults') {
         return Promise.resolve({
-          data: {
-            value: {
-              paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
-              cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
-              micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
-              static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
-            },
+          key: 'container_defaults',
+          value: {
+            paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+            cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
+            micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
+            static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
           },
         })
       }
-      return Promise.resolve({ data: { value: null } })
+      return Promise.resolve({ key: 'container_defaults', value: null })
     }),
   }
   })
@@ -87,8 +85,8 @@ describe('ReviewStep multi-batch CSV', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSuggestBatchName.mockResolvedValue({ data: { name: 'Suggested Batch' } })
-    mockCreateBatchWithSpecimens.mockResolvedValue({ data: { batch: { id: 101 } } })
+    mockSuggestBatchName.mockResolvedValue({ name: 'Suggested Batch' })
+    mockCreateBatchWithSpecimens.mockResolvedValue({ batch: { id: 101 }, specimens: [], createdCollections: [] })
   })
 
   it('does not call createBatchWithSpecimens when a density has no matching definition', async () => {
@@ -255,8 +253,8 @@ describe('ReviewStep multi-batch CSV createCollections', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSuggestBatchName.mockResolvedValue({ data: { name: 'Suggested Batch' } })
-    mockCreateBatchWithSpecimens.mockResolvedValue({ data: { batch: { id: 103 } } })
+    mockSuggestBatchName.mockResolvedValue({ name: 'Suggested Batch' })
+    mockCreateBatchWithSpecimens.mockResolvedValue({ batch: { id: 103 }, specimens: [], createdCollections: [] })
   })
 
   it('passes createCollections when CSV file has collectionName but no collectionId', async () => {
@@ -316,7 +314,7 @@ describe('ReviewStep multi-batch CSV createCollections', () => {
 describe('ReviewStep single-batch submitting state', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSuggestBatchName.mockResolvedValue({ data: { name: 'Suggested Batch' } })
+    mockSuggestBatchName.mockResolvedValue({ name: 'Suggested Batch' })
   })
 
   it('re-enables submit button after API error', async () => {
@@ -349,7 +347,7 @@ describe('ReviewStep single-batch submitting state', () => {
   })
 
   it('re-enables submit button when onSuccess callback throws', async () => {
-    mockCreateBatchWithSpecimens.mockResolvedValueOnce({ data: { batch: { id: 200 } } })
+    mockCreateBatchWithSpecimens.mockResolvedValueOnce({ batch: { id: 200 }, specimens: [], createdCollections: [] })
 
     const onSuccess = vi.fn(() => { throw new Error('Navigation failed') })
 
@@ -387,8 +385,8 @@ describe('ReviewStep single-batch submitting state', () => {
 describe('ReviewStep CSV unit fallback', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSuggestBatchName.mockResolvedValue({ data: { name: 'Suggested Batch' } })
-    mockCreateBatchWithSpecimens.mockResolvedValue({ data: { batch: { id: 102 } } })
+    mockSuggestBatchName.mockResolvedValue({ name: 'Suggested Batch' })
+    mockCreateBatchWithSpecimens.mockResolvedValue({ batch: { id: 102 }, specimens: [], createdCollections: [] })
   })
 
   it('uses container default unit when CSV row omits unit_symbol', async () => {

@@ -3,15 +3,13 @@ import { render, screen } from '../../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import ControlDefinitionForm from '../ControlDefinitionForm'
 
-const mockCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ data: { control: { id: 1, name: 'Def 1', targetDensity: 100 } } }))
+const mockCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ control: { id: 1, name: 'Def 1', targetDensity: 100 } }))
 const mockCreateDefinitionsBulk = vi.hoisted(() =>
   vi.fn().mockResolvedValue({
-    data: {
-      controls: [
-        { id: 1, name: 'Def 100', targetDensity: 100 },
-        { id: 2, name: 'Def 500', targetDensity: 500 },
-      ],
-    },
+    controls: [
+      { id: 1, name: 'Def 100', targetDensity: 100 },
+      { id: 2, name: 'Def 500', targetDensity: 500 },
+    ],
   })
 )
 
@@ -22,10 +20,10 @@ vi.mock('../../../lib/api/reference-data', async () => {
     getDefinitionSummary: vi.fn(),
     create: mockCreate,
     createDefinitionsBulk: mockCreateDefinitionsBulk,
-    update: vi.fn().mockResolvedValue({ data: {} }),
-    suggestName: vi.fn().mockResolvedValue({ data: { suggestedName: 'Suggested', exists: false } }),
+    update: vi.fn().mockResolvedValue({}),
+    suggestName: vi.fn().mockResolvedValue({ suggestedName: 'Suggested', exists: false }),
   },
-  settingsApi: { getUnits: vi.fn().mockResolvedValue({ data: [{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }] }) },
+  settingsApi: { getUnits: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
   strainsApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Strain A' }] }) },
 })
 })
@@ -37,10 +35,10 @@ vi.mock('../../../lib/api/controls', async () => {
     getDefinitionSummary: vi.fn(),
     create: mockCreate,
     createDefinitionsBulk: mockCreateDefinitionsBulk,
-    update: vi.fn().mockResolvedValue({ data: {} }),
-    suggestName: vi.fn().mockResolvedValue({ data: { suggestedName: 'Suggested', exists: false } }),
+    update: vi.fn().mockResolvedValue({}),
+    suggestName: vi.fn().mockResolvedValue({ suggestedName: 'Suggested', exists: false }),
   },
-  settingsApi: { getUnits: vi.fn().mockResolvedValue({ data: [{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }] }) },
+  settingsApi: { getUnits: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
   strainsApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Strain A' }] }) },
 })
 })
@@ -52,10 +50,10 @@ vi.mock('../../../lib/api/settings', async () => {
     getDefinitionSummary: vi.fn(),
     create: mockCreate,
     createDefinitionsBulk: mockCreateDefinitionsBulk,
-    update: vi.fn().mockResolvedValue({ data: {} }),
-    suggestName: vi.fn().mockResolvedValue({ data: { suggestedName: 'Suggested', exists: false } }),
+    update: vi.fn().mockResolvedValue({}),
+    suggestName: vi.fn().mockResolvedValue({ suggestedName: 'Suggested', exists: false }),
   },
-  settingsApi: { getUnits: vi.fn().mockResolvedValue({ data: [{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }] }) },
+  settingsApi: { getUnits: vi.fn().mockResolvedValue([{ id: 1, symbol: 'p/ul', name: 'parasites per microliter', category: 'concentration' }]) },
   strainsApi: { list: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Strain A' }] }) }
   })
 })
@@ -70,14 +68,12 @@ describe('ControlDefinitionForm', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    mockCreate.mockResolvedValue({ data: { control: { id: 1, name: 'Def 1', targetDensity: 100 } } })
+    mockCreate.mockResolvedValue({ control: { id: 1, name: 'Def 1', targetDensity: 100 } })
     mockCreateDefinitionsBulk.mockResolvedValue({
-      data: {
-        controls: [
-          { id: 1, name: 'Def 100', targetDensity: 100 },
-          { id: 2, name: 'Def 500', targetDensity: 500 },
-        ],
-      },
+      controls: [
+        { id: 1, name: 'Def 100', targetDensity: 100 },
+        { id: 2, name: 'Def 500', targetDensity: 500 },
+      ],
     })
   })
 
@@ -166,11 +162,11 @@ describe('ControlDefinitionForm', () => {
   })
 
   it('when multiple densities are provided, shows editable name for each definition and passes names to createDefinitionsBulk', async () => {
-    const { controlsApi } = await import('../../../lib/api')
+    const { controlsApi } = await import('../../../lib/api/controls')
     const suggestNameMock = controlsApi.suggestName as ReturnType<typeof vi.fn>
     suggestNameMock
-      .mockResolvedValueOnce({ data: { suggestedName: '100_StrainA', exists: false } })
-      .mockResolvedValueOnce({ data: { suggestedName: '500_StrainA', exists: false } })
+      .mockResolvedValueOnce({ suggestedName: '100_StrainA', exists: false })
+      .mockResolvedValueOnce({ suggestedName: '500_StrainA', exists: false })
     const onSuccess = vi.fn()
     await render(<ControlDefinitionForm onCancel={noopCancel} onSuccess={onSuccess} />)
     const user = userEvent.setup()

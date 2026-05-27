@@ -51,8 +51,8 @@ export default function ScannerConfigurationsManager({
           scannerConfigurationsApi.getShared(),
           scannerConfigurationsApi.getPersonal(),
         ])
-        setSharedConfigurations(sharedRes.data.configurations)
-        setPersonalConfigurations(personalRes.data.configurations)
+        setSharedConfigurations(sharedRes.configurations)
+        setPersonalConfigurations(personalRes.configurations)
       } catch (err: any) {
         setError(err.response?.data.error || 'Failed to load configurations')
       } finally {

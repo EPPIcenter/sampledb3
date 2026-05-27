@@ -33,11 +33,11 @@ vi.mock('../../../lib/api/collections', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   return createMockedDomainModule('collections', {
     collectionsApi: {
-      listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
+      listCollectionsByType: vi.fn().mockResolvedValue({ collections: [] }),
     },
     settingsApi: {
       getContainerTypeUnits: vi.fn((ct: string) =>
-        Promise.resolve({ data: { units: mockUnitsByType[ct] ?? [] } })
+        Promise.resolve({ units: mockUnitsByType[ct] ?? [] })
       ),
     },
   })
@@ -48,7 +48,7 @@ vi.mock('../../../lib/api/settings', async () => {
   return createMockedDomainModule('settings', {
     settingsApi: {
       getContainerTypeUnits: vi.fn((ct: string) =>
-        Promise.resolve({ data: { units: mockUnitsByType[ct] ?? [] } })
+        Promise.resolve({ units: mockUnitsByType[ct] ?? [] })
       ),
     },
   })

@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { collectionsApi } from '../lib/api/collections';
-import { locationsApi } from '../lib/api/locations';
-import type { Location } from '../lib/api/types';
+import { collectionsApi } from '../lib/api/collections'
 import CollectionMoveTreePicker, { type Collection } from '../components/CollectionMoveTreePicker'
 import LocationTreePicker, { type LocationSelection } from '../components/LocationTreePicker'
 import { useUser } from '../contexts/UserContext'
+import { useAllCollections } from '../hooks/useCollections'
+import { useLocationsList } from '../hooks/useLocations'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/storage.css'
 
 export type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
@@ -36,9 +37,28 @@ export default function CollectionMove() {
   if (!canWrite) {
     return null
   }
-  const [loading, setLoading] = useState(false)
-  const [locations, setLocations] = useState<Location[]>([])
-  const [collections, setCollections] = useState<Collection[]>([])
+  const [mutating, setMutating] = useState(false)
+  const locationsQuery = useLocationsList()
+  const collectionsQuery = useAllCollections()
+  const loadStatus = fromQuery(collectionsQuery)
+  const locations = locationsQuery.data ?? []
+  const collections = useMemo(() => {
+    const collectionsData = collectionsQuery.data ?? []
+    return collectionsData.map((c) => ({
+      id: c.id,
+      name: c.name,
+      type: c.type,
+      itemCount: c.itemCount || 0,
+      locationId: c.locationId,
+      location: c.location
+        ? {
+            id: c.location.id,
+            path: c.location.path || '',
+          }
+        : null,
+      barcode: c.barcode || null,
+    })) as Collection[]
+  }, [collectionsQuery.data])
   const [selectedCollectionIds, setSelectedCollectionIds] = useState<Set<string>>(new Set())
   const [targetLocationId, setTargetLocationId] = useState<number | null>(null)
   const [targetLocationPath, setTargetLocationPath] = useState<string>('')
@@ -48,56 +68,6 @@ export default function CollectionMove() {
     moved: number
     errors?: Array<{ row: number; error: string }>
   } | null>(null)
-
-  // Load locations
-  useEffect(() => {
-    const loadLocations = async () => {
-      try {
-        const response = await locationsApi.list()
-        setLocations(response.data.locations)
-      } catch (error) {
-        console.error('Failed to load locations:', error)
-      }
-    }
-    loadLocations()
-  }, [])
-
-  // Load collections on mount
-  useEffect(() => {
-    if (currentStep === 'select-collections') {
-      loadCollections()
-    }
-  }, [currentStep])
-
-  const loadCollections = async () => {
-    setLoading(true)
-    try {
-      // Use optimized endpoint that loads all collections in a single request
-      const response = await collectionsApi.listAllCollections()
-      const collectionsData = response.data.collections
-
-      const allCollections: Collection[] = collectionsData.map((c: any) => ({
-        id: c.id,
-        name: c.name,
-        type: c.type,
-        itemCount: c.itemCount || 0,
-        locationId: c.locationId,
-        location: c.location
-          ? {
-              id: c.location.id,
-              path: c.location.path || '',
-            }
-          : null,
-        barcode: c.barcode || null,
-      }))
-
-      setCollections(allCollections)
-    } catch (error) {
-      console.error('Failed to load collections:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleCollectionToggle = (id: number, type: CollectionType) => {
     const key = toKey({ type, id })
@@ -156,7 +126,7 @@ export default function CollectionMove() {
       return
     }
 
-    setLoading(true)
+    setMutating(true)
     setMoveResult(null)
 
     try {
@@ -195,16 +165,16 @@ export default function CollectionMove() {
             moves,
           })
 
-          if (response.data.success) {
-            totalMoved += response.data.moved
+          if (response.success) {
+            totalMoved += response.moved
           } else {
             allSuccess = false
-            totalMoved += response.data.moved || 0
-            if (response.data.errors) {
+            totalMoved += response.moved || 0
+            if (response.errors) {
               // Adjust row numbers to account for previous moves
               const baseRow = allErrors.length
               allErrors.push(
-                ...response.data.errors.map((err) => ({
+                ...response.errors.map((err) => ({
                   row: err.row + baseRow,
                   error: err.error,
                 }))
@@ -254,7 +224,7 @@ export default function CollectionMove() {
               ],
       })
     } finally {
-      setLoading(false)
+      setMutating(false)
     }
   }
 
@@ -264,8 +234,7 @@ export default function CollectionMove() {
     setTargetLocationId(null)
     setTargetLocationPath('')
     setMoveResult(null)
-    // Reload collections
-    loadCollections()
+    void collectionsQuery.refetch()
   }
 
   const getCollectionTypeLabel = (type: CollectionType) => {
@@ -286,6 +255,14 @@ export default function CollectionMove() {
       <div className="container mx-auto px-4 py-8 relative z-10">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Move Collections</h1>
+
+        {loadStatus === 'error' && (
+          <PageError
+            title="Could not load collections"
+            message={getQueryErrorMessage(collectionsQuery.error, 'Failed to load collections')}
+            onRetry={() => void collectionsQuery.refetch()}
+          />
+        )}
 
         {/* Step indicator */}
         <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
@@ -313,7 +290,7 @@ export default function CollectionMove() {
         </div>
 
         {/* Step 1: Select Collections */}
-        {currentStep === 'select-collections' && (
+        {loadStatus !== 'error' && currentStep === 'select-collections' && (
           <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             <div className="mb-4">
               <h2 className="text-xl font-semibold">Select Collections to Move</h2>
@@ -322,7 +299,7 @@ export default function CollectionMove() {
               </p>
             </div>
 
-            {loading ? (
+            {collectionsQuery.isPending ? (
               <div className="text-center py-8">Loading collections...</div>
             ) : collections.length === 0 ? (
               <p className="text-sm text-app-text-muted">No collections of this type found.</p>
@@ -335,7 +312,7 @@ export default function CollectionMove() {
                 onSelectAll={handleSelectAll}
                 onDeselectAll={handleDeselectAll}
                 onSelectAllAtLocation={handleSelectAllAtLocation}
-                loading={loading}
+                loading={collectionsQuery.isPending}
                 filterEmptyLocations={true}
               />
             )}
@@ -355,7 +332,7 @@ export default function CollectionMove() {
         )}
 
         {/* Step 2: Select Destination Location */}
-        {currentStep === 'select-destination' && (
+        {loadStatus !== 'error' && currentStep === 'select-destination' && (
           <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             <h2 className="text-xl font-semibold mb-4">Choose Destination Location</h2>
             <p className="text-app-text mb-6">
@@ -385,7 +362,7 @@ export default function CollectionMove() {
         )}
 
         {/* Step 3: Confirm */}
-        {currentStep === 'confirm' && (
+        {loadStatus !== 'error' && currentStep === 'confirm' && (
           <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             <h2 className="text-xl font-semibold mb-4">Review & Confirm</h2>
 
@@ -479,17 +456,17 @@ export default function CollectionMove() {
               </button>
               <button
                 onClick={handleExecuteMove}
-                disabled={loading}
+                disabled={mutating}
                 className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Moving...' : 'Confirm & Move'}
+                {mutating ? 'Moving...' : 'Confirm & Move'}
               </button>
             </div>
           </div>
         )}
 
         {/* Step 4: Results */}
-        {currentStep === 'execute' && moveResult && (
+        {loadStatus !== 'error' && currentStep === 'execute' && moveResult && (
           <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
             {moveResult.success ? (
               <>

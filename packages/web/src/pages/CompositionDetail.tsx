@@ -1,20 +1,19 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { controlsApi } from '../lib/api/controls';
-import type { ControlDefinition } from '../lib/api/controls';
 import { getCompositionKey } from '../lib/composition-key'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import { useUser } from '../contexts/UserContext'
 import { getContainerTypeIcon } from '../lib/icons'
+import { useControlDefinitionsList } from '../hooks/useControls'
+import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
 
 export default function CompositionDetail() {
   const { compositionKey: encodedKey } = useParams<{ compositionKey: string }>()
   const navigate = useNavigate()
   const { canWrite } = useUser()
-  const [definitions, setDefinitions] = useState<ControlDefinition[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const definitionsQuery = useControlDefinitionsList()
+  const listStatus = fromQuery(definitionsQuery)
 
   const compositionKey = useMemo(() => {
     if (!encodedKey) return null
@@ -25,58 +24,48 @@ export default function CompositionDetail() {
     }
   }, [encodedKey])
 
-  useEffect(() => {
-    if (!compositionKey) {
-      setError('Invalid composition')
-      setLoading(false)
-      return
-    }
-    loadDefinitions()
-  }, [compositionKey])
-
-  const loadDefinitions = async () => {
-    if (!compositionKey) return
-    try {
-      setLoading(true)
-      setError(null)
-      const res = await controlsApi.list()
-      const all = res.data.controls as ControlDefinition[]
-      const key = compositionKey
-      const matched = all.filter((def) => {
-        const defKey = getCompositionKey((def.strains ?? []).map((s) => ({ id: s.id, percentage: s.percentage })))
-        return defKey === key
+  const definitions = useMemo(() => {
+    if (!compositionKey || !definitionsQuery.data) return []
+    return definitionsQuery.data
+      .filter((def) => {
+        const defKey = getCompositionKey(
+          (def.strains ?? []).map((s) => ({ id: s.id, percentage: s.percentage }))
+        )
+        return defKey === compositionKey
       })
-      setDefinitions(matched.sort((a, b) => (a.targetDensity ?? 0) - (b.targetDensity ?? 0)))
-    } catch (err) {
-      console.error('Failed to load composition:', err)
-      setError('Failed to load composition')
-    } finally {
-      setLoading(false)
-    }
-  }
+      .sort((a, b) => (a.targetDensity ?? 0) - (b.targetDensity ?? 0))
+  }, [compositionKey, definitionsQuery.data])
 
-  if (loading) {
+  if (!compositionKey) {
     return (
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-app-surface rounded w-1/3" />
-            <div className="h-4 bg-app-surface rounded w-2/3" />
-            <div className="h-32 bg-app-surface rounded" />
-          </div>
+          <p className="text-app-trend-down">Invalid composition</p>
+          <Link to="/blood-controls" className="blood-controls-btn-secondary mt-4 inline-block">
+            Back to Blood Controls
+          </Link>
         </div>
       </div>
     )
   }
 
-  if (error || !compositionKey) {
+  if (listStatus === 'loading') {
+    return (
+      <div className="blood-controls-page">
+        <DetailPageSkeleton sections={1} />
+      </div>
+    )
+  }
+
+  if (listStatus === 'error') {
     return (
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
-          <p className="text-app-trend-down">{error || 'Invalid composition'}</p>
-          <Link to="/blood-controls" className="blood-controls-btn-secondary mt-4 inline-block">
-            Back to Blood Controls
-          </Link>
+          <PageError
+            title="Could not load composition"
+            message={getQueryErrorMessage(definitionsQuery.error, 'Failed to load composition')}
+            onRetry={() => void definitionsQuery.refetch()}
+          />
         </div>
       </div>
     )

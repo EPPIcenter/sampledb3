@@ -52,7 +52,7 @@ export default function ReviewStep({
     let cancelled = false
     settingsApi.get('container_defaults').then((res) => {
       if (cancelled) return
-      const defaults = res.data.value
+      const defaults = res.value
       if (defaults) {
         setDefaultUnitByContainerType({
           paper: defaults.paper.defaultUnitSymbol,
@@ -151,7 +151,7 @@ export default function ReviewStep({
           : batchDefinitionSelections[batchRow.rowKey]
         if (definitionId == null) continue // eslint-disable-line @typescript-eslint/no-unnecessary-condition
         const nameRes = await controlsApi.suggestBatchName(definitionId, productionDate)
-        const batchName = (nameRes.data as { name: string }).name
+        const batchName = nameRes.name
         const specimensMap = new Map<string, Array<{
           type: 'paper' | 'cryovial_tube' | 'micronix_tube'
           collectionId?: number
@@ -208,7 +208,7 @@ export default function ReviewStep({
           specimens,
           createCollections,
         })
-        const batchId = (res.data as { batch?: { id?: number } }).batch?.id
+        const batchId = res.batch?.id
         if (batchId != null) lastBatchId = batchId
       }
       if (lastBatchId != null) onSuccess(lastBatchId)
@@ -391,9 +391,9 @@ export default function ReviewStep({
         })
         
         // Extract batch ID from response
-        const batchId = response.data.batch?.id // eslint-disable-line @typescript-eslint/no-unnecessary-condition
+        const batchId = response.batch?.id // eslint-disable-line @typescript-eslint/no-unnecessary-condition
         if (!batchId || isNaN(batchId)) {
-          console.error('Invalid batch ID in response:', response.data)
+          console.error('Invalid batch ID in response:', response)
           throw new Error(`Failed to create batch: invalid batch ID returned (${batchId})`)
         }
         

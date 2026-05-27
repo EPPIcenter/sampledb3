@@ -52,7 +52,7 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
       // Call without pagination params to get all locations
       // The API returns all locations when page/limit are not provided
       const response = await locationsApi.list()
-      let allLocations = response.data.locations
+      let allLocations = response.locations
       
       // Filter to collection-capable locations if requested
       // Include locations that can contain collections AND their ancestors (so we can navigate to them)

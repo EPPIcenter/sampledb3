@@ -1,24 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { useHotkey } from '../hooks/useHotkey'
-import { controlsApi } from '../lib/api/controls';
-import type { ControlBatchSummaryResponse } from '../lib/api/controls';
+import { controlsApi } from '../lib/api/controls'
+import { controlKeys, useControlBatchSummary } from '../hooks/useControls'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SimpleTimeline from '../components/SimpleTimeline'
 import { getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
 import SpecimenForm from '../components/forms/SpecimenForm'
-import SkeletonDetailPage from '../components/SkeletonDetailPage'
 import ModalPortal from '../components/ModalPortal'
 import { useUser } from '../contexts/UserContext'
+import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
 
 export default function ControlBatchDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { canWrite } = useUser()
-  const [summaryData, setSummaryData] = useState<ControlBatchSummaryResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const batchId = id != null ? parseInt(id, 10) : NaN
+  const summaryQuery = useControlBatchSummary(batchId)
+  const summaryStatus = fromQuery(summaryQuery)
+  const summaryData = summaryQuery.data ?? null
   const [createSpecimenModalOpen, setCreateSpecimenModalOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -26,11 +29,9 @@ export default function ControlBatchDetail() {
   const [editProductionDate, setEditProductionDate] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    if (id) {
-      loadSummary()
-    }
-  }, [id])
+  const refreshSummary = () => {
+    void queryClient.invalidateQueries({ queryKey: controlKeys.batchSummary(batchId) })
+  }
 
   // Close modal on Escape
   useHotkey('escape', () => {
@@ -38,20 +39,6 @@ export default function ControlBatchDetail() {
       setCreateSpecimenModalOpen(false)
     }
   }, { enabled: createSpecimenModalOpen, enableOnFormTags: true })
-
-  const loadSummary = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const response = await controlsApi.getBatchSummary(parseInt(id!))
-      setSummaryData(response.data)
-    } catch (err: any) {
-      console.error('Failed to load batch summary:', err)
-      setError(err.response?.data?.error || 'Failed to load batch summary')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleDeleteBatch = async () => {
     if (!summaryData) return
@@ -76,7 +63,7 @@ export default function ControlBatchDetail() {
     if (!window.confirm('Are you sure you want to delete this specimen and all its containers? This action cannot be undone.')) return
     try {
       await controlsApi.deleteSpecimenFromBatch(summaryData.batch.id, specimenId)
-      await loadSummary()
+      refreshSummary()
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to delete specimen')
     }
@@ -106,7 +93,7 @@ export default function ControlBatchDetail() {
       }
       await controlsApi.updateBatch(summaryData.batch.id, updates)
       setEditing(false)
-      await loadSummary()
+      refreshSummary()
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to update batch')
     } finally {
@@ -114,21 +101,33 @@ export default function ControlBatchDetail() {
     }
   }
 
-  if (loading) {
+  if (summaryStatus === 'loading') {
     return (
       <div className="blood-controls-page">
-        <SkeletonDetailPage sections={1} />
+        <DetailPageSkeleton sections={1} />
       </div>
     )
   }
 
-  if (error || !summaryData) {
+  if (summaryStatus === 'error') {
     return (
       <div className="blood-controls-page">
         <div className="container mx-auto px-4 py-8 relative z-[1]">
-          <div className="text-center py-8" style={{ color: 'rgb(var(--app-trend-down))' }}>
-            {error || 'Control batch not found'}
-          </div>
+          <PageError
+            title="Could not load batch"
+            message={getQueryErrorMessage(summaryQuery.error, 'Failed to load batch summary')}
+            onRetry={() => void summaryQuery.refetch()}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (!summaryData) {
+    return (
+      <div className="blood-controls-page">
+        <div className="container mx-auto px-4 py-8 relative z-[1]">
+          <div className="text-center py-8 text-app-trend-down">Control batch not found</div>
         </div>
       </div>
     )
@@ -414,7 +413,7 @@ export default function ControlBatchDetail() {
                     controlBatchName={batch.name}
                     onSuccess={() => {
                       setCreateSpecimenModalOpen(false)
-                      loadSummary()
+                      refreshSummary()
                     }}
                     onCancel={() => setCreateSpecimenModalOpen(false)}
                   />

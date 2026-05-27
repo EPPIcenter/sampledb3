@@ -177,7 +177,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     if (importType !== 'subjects' && containerType && containerType !== 'none') {
       try {
         const res = await specimenTypesApi.getByContainerType(containerType)
-        specimenTypeNames = res.data.specimenTypes.map((st) => st.name)
+        specimenTypeNames = res.specimenTypes.map((st) => st.name)
       } catch (err) {
         console.error('Failed to fetch specimen types for template', err)
         // Continue with empty array; builder will use fallback names
@@ -215,10 +215,10 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       const validateRes = await subjectsApi.validateBulk({
         subjects: data as Array<{ studyShortCode: string; name: string }>,
       })
-      if (validateRes.data.valid || validateRes.data.errors.length === 0) {
+      if (validateRes.valid || validateRes.errors.length === 0) {
         return []
       }
-      return validateRes.data.errors.map((e) => ({ row: e.index + 1, error: e.message }))
+      return validateRes.errors.map((e) => ({ row: e.index + 1, error: e.message }))
     }
     if (importType === 'specimens') {
       const map = buildCollectionLocationMap(missing)
@@ -240,10 +240,10 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         atomicMode,
       })
       const validateRes = await importsApi.bulkCombinedValidate(payload)
-      if (validateRes.data.valid || validateRes.data.errors.length === 0) {
+      if (validateRes.valid || validateRes.errors.length === 0) {
         return []
       }
-      return validateRes.data.errors.map((e) => ({
+      return validateRes.errors.map((e) => ({
         row: e.rowIndex ?? e.subjectIndex + 1,
         error: e.message,
       }))
@@ -279,7 +279,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       }))
 
       const response = await collectionsApi.check({ collections: checkData })
-      const results = response.data.results
+      const results = response.results
 
       const missing: MissingCollection[] = []
       const found = new Set<string>()
@@ -451,8 +451,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     try {
       if (importType === 'subjects') {
         const validateRes = await subjectsApi.validateBulk({ subjects: data as Array<{ studyShortCode: string; name: string }> })
-        if (!validateRes.data.valid && validateRes.data.errors.length) {
-          setValidationErrors(validateRes.data.errors.map((e) => ({ row: e.index + 1, error: e.message })))
+        if (!validateRes.valid && validateRes.errors.length) {
+          setValidationErrors(validateRes.errors.map((e) => ({ row: e.index + 1, error: e.message })))
           setCurrentStep('import')
           setLoading(false)
           return
@@ -460,8 +460,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         const response = await subjectsApi.createBulk({ subjects: data as Array<{ studyShortCode: string; name: string }> })
         setImportResult({
           success: true,
-          created: response.data.created,
-          errors: response.data.errors,
+          created: response.created,
+          errors: response.errors,
         })
       } else if (importType === 'specimens') {
         const collectionLocationMap = buildCollectionLocationMap(missingCollections)
@@ -498,9 +498,9 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           createCollections,
           subjects,
         })
-        if (!validateRes.data.valid && validateRes.data.errors.length > 0) {
+        if (!validateRes.valid && validateRes.errors.length > 0) {
           setValidationErrors(
-            validateRes.data.errors.map((e) => ({
+            validateRes.errors.map((e) => ({
               row: e.rowIndex ?? e.subjectIndex + 1,
               error: e.message,
             }))
@@ -518,9 +518,9 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
             subjects,
           })
           setImportResult({
-            success: !response.data.errors?.length,
-            combinedSummary: response.data.summary,
-            errors: response.data.errors,
+            success: !response.errors?.length,
+            combinedSummary: response.summary,
+            errors: response.errors,
           })
           setCurrentStep('import')
         } catch (err: unknown) {

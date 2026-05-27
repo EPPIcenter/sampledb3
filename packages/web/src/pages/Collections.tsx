@@ -1,10 +1,10 @@
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import DataTable, { Column } from '../components/DataTable'
-import SkeletonTable from '../components/SkeletonTable'
-import { collectionsApi } from '../lib/api/collections';
 import { filterCollections, type CollectionListItem, type CollectionTypeFilter } from '../lib/collections-browse'
+import { useAllCollections } from '../hooks/useCollections'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
+import { AsyncPresentation, EmptyState, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/subject-specimen.css'
 
 const PAGE_SIZE = 50
@@ -65,33 +65,19 @@ export default function Collections() {
     [setSearchParams]
   )
 
-  const [collections, setCollections] = useState<CollectionListItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const collectionsQuery = useAllCollections()
+  const collections = collectionsQuery.data ?? []
+  const listStatus = fromQuery(collectionsQuery, {
+    isEmpty: collectionsQuery.isSuccess && collections.length === 0,
+  })
+  const listErrorMessage = getQueryErrorMessage(
+    collectionsQuery.error,
+    'Failed to load collections'
+  )
+
   const [search, setSearch] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
   useFocusSearchOnSlash(searchInputRef)
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        setLoading(true)
-        setError(null)
-        const res = await collectionsApi.listAllCollections()
-        const list = res.data.collections as CollectionListItem[]
-        if (!cancelled) setCollections(list)
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load collections')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const filteredCollections = useMemo(
     () => filterCollections(collections, search, tabFromUrl),
@@ -148,15 +134,6 @@ export default function Collections() {
           </p>
         </div>
 
-        {error && (
-          <div
-            className="subject-specimen-reveal subject-specimen-reveal-2 mb-4 rounded-lg border border-app-trend-down bg-app-trend-down/10 p-3 text-app-trend-down"
-            role="alert"
-          >
-            {error}
-          </div>
-        )}
-
         <div className="dashboard-card rounded-xl overflow-hidden subject-specimen-reveal subject-specimen-reveal-3">
           <div
             className="border-b flex flex-wrap gap-1 px-4 pt-2"
@@ -206,9 +183,27 @@ export default function Collections() {
               </div>
             </div>
 
-            {loading ? (
-              <SkeletonTable rows={8} columns={5} density="compact" />
-            ) : (
+            <AsyncPresentation
+              status={listStatus}
+              loadingFallback={
+                <DataTable
+                  data={[]}
+                  columns={columns}
+                  loading
+                  density="compact"
+                  emptyMessage={emptyMessage}
+                />
+              }
+              errorFallback={
+                <PageError
+                  message={listErrorMessage}
+                  onRetry={() => void collectionsQuery.refetch()}
+                />
+              }
+              emptyFallback={
+                <EmptyState title="No collections" description={emptyMessage} />
+              }
+            >
               <DataTable
                 key={tabFromUrl}
                 data={filteredCollections}
@@ -224,11 +219,11 @@ export default function Collections() {
                   showPagination: true,
                 }}
               />
-            )}
+            </AsyncPresentation>
           </div>
         </div>
 
-        {!loading && !error && filteredCollections.length > 0 && (
+        {listStatus === 'ready' && filteredCollections.length > 0 && (
           <p className="mt-2 text-sm subject-specimen-reveal subject-specimen-reveal-4" style={{ color: 'rgb(var(--app-text-muted))' }}>
             Showing {Math.min((page - 1) * PAGE_SIZE + 1, filteredCollections.length)}–
             {Math.min(page * PAGE_SIZE, filteredCollections.length)} of {filteredCollections.length} collections

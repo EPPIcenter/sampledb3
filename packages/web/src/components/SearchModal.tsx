@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../lib/api/client';
-import type { SearchResult } from '../lib/api/search';
+import { searchApi, type SearchResult } from '../lib/api/search'
 import { useHotkey } from '../hooks/useHotkey'
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock'
 import ModalPortal from './ModalPortal'
@@ -68,9 +67,9 @@ export default function SearchModal({ isOpen, onClose, initialQuery }: SearchMod
         void (async () => {
           try {
             setLoading(true)
-            const response = await api.get('/search', { params: { q: query, type: 'all' } })
+            const response = await searchApi.search(query, 'all')
             if (!ignore) {
-              setResults(response.data.results || [])
+              setResults(response.results || [])
             }
           } catch (error) {
             if (!ignore) {

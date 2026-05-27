@@ -1,16 +1,15 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
-import { controlsApi } from '../lib/api/controls';
-import type { ControlDefinition, ControlBatch } from '../lib/api/controls';
-import { strainsApi } from '../lib/api/reference-data';
-import type { Strain } from '../lib/api/reference-data';
+import { useRef, useState, useMemo } from 'react'
+import type { ControlDefinition, ControlBatch } from '../lib/api/controls'
 import DataTable, { Column } from '../components/DataTable'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import StatCard from '../components/StatCard'
 import SkeletonCard from '../components/SkeletonCard'
 import { useUser } from '../contexts/UserContext'
+import { useBloodControlsOverview } from '../hooks/useControls'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import { getContainerTypeIcon } from '../lib/icons'
 import { getCompositionKey } from '../lib/composition-key'
+import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/blood-controls.css'
 
 export interface CompositionGroup {
@@ -25,10 +24,11 @@ const PAGE_SIZE = 25
 export default function BloodControls() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
-  const [definitions, setDefinitions] = useState<ControlDefinition[]>([])
-  const [batches, setBatches] = useState<Array<ControlBatch & { definitionName?: string }>>([])
-  const [strains, setStrains] = useState<Strain[]>([])
-  const [loading, setLoading] = useState(true)
+  const overviewQuery = useBloodControlsOverview()
+  const definitions = overviewQuery.data?.definitions ?? []
+  const batches = overviewQuery.data?.batches ?? []
+  const strains = overviewQuery.data?.strains ?? []
+  const overviewStatus = fromQuery(overviewQuery)
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const activeTab: 'definitions' | 'batches' = tabParam === 'batches' ? 'batches' : 'definitions'
@@ -58,10 +58,6 @@ export default function BloodControls() {
     })
   }
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
   // Reset pagination when filters change so we don't land on an empty page (during render)
   const filterKey = [searchTerm, dateFrom, dateTo, strainMatchMode, minDensity, maxDensity, strainFilters.join(',')].join('\0')
   const prevFilterKeyRef = useRef(filterKey)
@@ -69,43 +65,6 @@ export default function BloodControls() {
     prevFilterKeyRef.current = filterKey
     setDefinitionsPage(1)
     setBatchesPage(1)
-  }
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      const [defsRes, batchesRes, strainsRes] = await Promise.all([
-        controlsApi.list(),
-        controlsApi.listAllBatches(),
-        strainsApi.list(),
-      ])
-      setDefinitions((defsRes.data.controls).map(d => ({
-        ...d,
-        specimenCount: Number(d.specimenCount || 0),
-        batchCount: Number(d.batchCount || 0),
-        spotCount: Number(d.spotCount || 0),
-        micronixCount: Number(d.micronixCount || 0),
-        cryovialCount: Number(d.cryovialCount || 0),
-        staticWellCount: Number(d.staticWellCount || 0),
-        tubeCount: Number(d.tubeCount || 0),
-        inventoryTotal: Number(d.inventoryTotal || 0)
-      })))
-      setBatches((batchesRes.data.batches).map(b => ({
-        ...b,
-        specimenCount: Number(b.specimenCount || 0),
-        spotCount: Number(b.spotCount || 0),
-        micronixCount: Number(b.micronixCount || 0),
-        cryovialCount: Number(b.cryovialCount || 0),
-        staticWellCount: Number(b.staticWellCount || 0),
-        tubeCount: Number(b.tubeCount || 0),
-        inventoryTotal: Number(b.inventoryTotal || 0)
-      })))
-      setStrains(strainsRes.data)
-    } catch (error) {
-      console.error('Failed to load controls data:', error)
-    } finally {
-      setLoading(false)
-    }
   }
 
   // Summary stats
@@ -492,6 +451,28 @@ export default function BloodControls() {
     },
   ]
 
+  if (overviewStatus === 'loading') {
+    return (
+      <div className="blood-controls-page">
+        <DetailPageSkeleton sections={2} />
+      </div>
+    )
+  }
+
+  if (overviewStatus === 'error') {
+    return (
+      <div className="blood-controls-page">
+        <div className="container mx-auto px-4 py-8 max-w-7xl relative z-[1]">
+          <PageError
+            title="Could not load blood controls"
+            message={getQueryErrorMessage(overviewQuery.error, 'Failed to load blood controls data')}
+            onRetry={() => void overviewQuery.refetch()}
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="blood-controls-page">
       <div className="container mx-auto px-4 py-8 max-w-7xl relative z-[1]">
@@ -514,20 +495,14 @@ export default function BloodControls() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
-          {loading ? (
-            Array.from({ length: 6 }).map((_, i) => (
-              <SkeletonCard key={i} height="h-24" className={`blood-controls-reveal blood-controls-reveal-${Math.min(i + 2, 6)}`} />
-            ))
-          ) : (
-            <>
+          <>
               <StatCard title="Total Definitions" value={stats.totalDefinitions} subtitle="Unique control types" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-2" />
               <StatCard title="Total Batches" value={stats.totalBatches} subtitle="Cumulative production" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-3" />
               <StatCard title="Total Spots" value={stats.totalSpots} subtitle="DBS / Paper spots available" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-4" />
               <StatCard title="Total Micronix" value={stats.totalMicronix} subtitle="Micronix tubes in stock" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-5" />
               <StatCard title="Total Cryovial" value={stats.totalCryovial} subtitle="Cryovial tubes in stock" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-5" />
               <StatCard title="Total Static Wells" value={stats.totalStaticWells} subtitle="Static wells in stock" className="dashboard-card p-6 blood-controls-reveal blood-controls-reveal-5" />
-            </>
-          )}
+          </>
         </div>
 
         <div className="dashboard-card rounded-xl mb-8 overflow-hidden blood-controls-reveal blood-controls-reveal-6">
@@ -695,7 +670,7 @@ export default function BloodControls() {
               <DataTable
                 data={filteredBatches}
                 columns={batchColumns}
-                loading={loading}
+                loading={overviewQuery.isPending}
                 initialSortColumn="productionDate"
                 initialSortDirection="desc"
                 onRowClick={(batch) => navigate(`/blood-controls/batches/${batch.id}`)}
@@ -712,7 +687,7 @@ export default function BloodControls() {
               <DataTable
                 data={compositionGroups}
                 columns={compositionColumns}
-                loading={loading}
+                loading={overviewQuery.isPending}
                 initialSortColumn="strains"
                 initialSortDirection="asc"
                 onRowClick={(row) => navigate(`/blood-controls/compositions/${encodeURIComponent(row.compositionKey)}`)}

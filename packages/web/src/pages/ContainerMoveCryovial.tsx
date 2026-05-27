@@ -82,7 +82,7 @@ export default function ContainerMoveCryovial() {
       collectionsApi.listCollectionsByType('cryovial_box'),
       locationsApi.list(),
     ]).then(([collectionsResponse, locationsResponse]) => {
-      const collections = collectionsResponse.data.collections as any[]
+      const collections = collectionsResponse.collections as any[]
       setAvailableBoxes(
         collections.map((c: any) => ({
           id: c.id,
@@ -93,7 +93,7 @@ export default function ContainerMoveCryovial() {
           locationPath: c.location?.path || null,
         }))
       )
-      setLocations(locationsResponse.data.locations)
+      setLocations(locationsResponse.locations)
     }).catch((error) => {
       console.error('Failed to load collections or locations:', error)
     })
@@ -323,7 +323,7 @@ export default function ContainerMoveCryovial() {
         }))
       })
 
-      const resolved = resolveResponse.data.containers
+      const resolved = resolveResponse.containers
       
       // Create a set of resolved identifiers for quick lookup
       const resolvedIdentifiers = new Set<string>()
@@ -502,8 +502,8 @@ export default function ContainerMoveCryovial() {
       // Calculate per-file results
       const fileResults = files.map((fileData, fileIndex) => {
         const fileMoves = allMoves.filter(m => m.fileIndex === fileIndex)
-        const moved = response.data.success ? fileMoves.length : 0
-        const errors = response.data.errors?.filter((e: ValidationError) => {
+        const moved = response.success ? fileMoves.length : 0
+        const errors = response.errors?.filter((e: ValidationError) => {
           // Map errors back to file if possible (this is approximate)
           const errorRow = e.row
           return errorRow > 0 && errorRow <= fileData.csvRows.length
@@ -517,18 +517,18 @@ export default function ContainerMoveCryovial() {
         }
       })
 
-      if (response.data.success) {
+      if (response.success) {
         setMoveResult({
           success: true,
-          moved: response.data.moved,
+          moved: response.moved,
           fileResults,
         })
         setCurrentStep('execute')
       } else {
         setMoveResult({
           success: false,
-          moved: response.data.moved || 0,
-          errors: response.data.errors,
+          moved: response.moved || 0,
+          errors: response.errors,
           fileResults,
         })
         setCurrentStep('execute')

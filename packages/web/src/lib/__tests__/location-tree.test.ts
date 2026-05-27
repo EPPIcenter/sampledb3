@@ -10,7 +10,7 @@ import {
   parseLocationPathSegments,
   getLocationSearchHighlightQuery,
 } from '../location-tree'
-import type { Location } from '../api'
+import type { Location } from '../api/types'
 
 const mockLocation = (id: number, name: string, parentId: number | null, path?: string, description?: string): Location =>
   ({

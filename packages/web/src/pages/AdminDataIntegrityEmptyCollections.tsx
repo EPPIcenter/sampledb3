@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { adminApi } from '../lib/api/admin';
-import type { EmptyCollectionItem, EmptyCollectionsDeleteIds } from '../lib/api/admin';
+import { useQueryClient } from '@tanstack/react-query'
+import { adminApi } from '../lib/api/admin'
+import type { EmptyCollectionItem, EmptyCollectionsDeleteIds } from '../lib/api/admin'
+import { adminKeys, useAdminIntegrityReport } from '../hooks/useAdmin'
 import ModalPortal from '../components/ModalPortal'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
 
 const COLLECTION_TYPES: EmptyCollectionItem['type'][] = ['micronix_plate', 'cryovial_box', 'box', 'bag']
@@ -44,36 +47,20 @@ function getCollectionDetailUrl(type: EmptyCollectionItem['type'], id: number): 
 }
 
 export default function AdminDataIntegrityEmptyCollections() {
-  const [collections, setCollections] = useState<EmptyCollectionItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  const reportQuery = useAdminIntegrityReport()
+  const reportStatus = fromQuery(reportQuery)
+  const collections = reportQuery.data?.emptyCollections ?? []
+  const [mutationError, setMutationError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<SelectionKey>>(new Set())
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteResult, setDeleteResult] = useState<{ deleted: number; errors?: string[] } | null>(null)
 
-  const loadReport = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const response = await adminApi.getIntegrityReport()
-      setCollections(response.data.emptyCollections)
-      setSelected(new Set())
-    } catch (err: unknown) {
-      const message =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-          : null
-      setError(message || 'Failed to load empty collections')
-      console.error('Error loading empty collections:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    loadReport()
-  }, [loadReport])
+  const refreshReport = () => {
+    setSelected(new Set())
+    void queryClient.invalidateQueries({ queryKey: adminKeys.integrityReport() })
+  }
 
   const toggleOne = (key: SelectionKey) => {
     setSelected((prev) => {
@@ -150,12 +137,11 @@ export default function AdminDataIntegrityEmptyCollections() {
       setDeleteResult(null)
       const response = await adminApi.deleteEmptyCollections(buildIds())
       setDeleteResult({
-        deleted: response.data.deleted,
-        errors: response.data.errors,
+        deleted: response.deleted,
+        errors: response.errors,
       })
-      await loadReport()
-      setSelected(new Set())
-      if (!response.data.errors?.length) {
+      refreshReport()
+      if (!response.errors?.length) {
         setShowDeleteModal(false)
       }
     } catch (err: unknown) {
@@ -163,7 +149,7 @@ export default function AdminDataIntegrityEmptyCollections() {
         err && typeof err === 'object' && 'response' in err
           ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
           : null
-      setError(message || 'Failed to delete empty collections')
+      setMutationError(message || 'Failed to delete empty collections')
     } finally {
       setDeleteLoading(false)
     }
@@ -172,6 +158,16 @@ export default function AdminDataIntegrityEmptyCollections() {
   const handleCloseDeleteModal = () => {
     setShowDeleteModal(false)
     setDeleteResult(null)
+  }
+
+  if (reportStatus === 'error') {
+    return (
+      <PageError
+        title="Could not load empty collections"
+        message={getQueryErrorMessage(reportQuery.error, 'Failed to load empty collections')}
+        onRetry={() => void reportQuery.refetch()}
+      />
+    )
   }
 
   return (
@@ -184,13 +180,13 @@ export default function AdminDataIntegrityEmptyCollections() {
           Collections (plates, boxes, bags) with no items. You may delete them to keep the database tidy.
         </p>
 
-        {error && (
+        {mutationError && (
           <div className="mb-4 rounded-lg bg-app-trend-down/10 border border-app-trend-down p-3">
-            <p className="text-sm text-app-trend-down">{error}</p>
+            <p className="text-sm text-app-trend-down">{mutationError}</p>
           </div>
         )}
 
-        {loading ? (
+        {reportQuery.isPending ? (
           <div className="p-8 text-center text-[rgb(var(--app-text-muted))]">Loading…</div>
         ) : collections.length === 0 ? (
           <div className="p-8 text-center text-[rgb(var(--app-text-muted))]">No empty collections found.</div>

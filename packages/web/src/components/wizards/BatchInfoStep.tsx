@@ -126,7 +126,7 @@ export default function BatchInfoStep({
     try {
       setLoading(true)
       const response = await controlsApi.list()
-      setDefinitions(response.data.controls)
+      setDefinitions(response.controls)
     } catch (err) {
       console.error('Failed to load control definitions:', err)
     } finally {
@@ -139,7 +139,7 @@ export default function BatchInfoStep({
       const response = await controlsApi.get(id)
       onChange({
         ...batchInfo,
-        controlDefinition: response.data.control,
+        controlDefinition: response.control,
       })
     } catch (err) {
       console.error('Failed to load control definition:', err)
@@ -153,7 +153,7 @@ export default function BatchInfoStep({
     if (definition) {
       try {
         const response = await controlsApi.suggestBatchName(definition.id, batchInfo.productionDate || undefined)
-        suggestedName = response.data.name
+        suggestedName = response.name
         setNameSuggestion(suggestedName)
       } catch (err) {
         console.error('Failed to generate suggested batch name:', err)
@@ -222,9 +222,9 @@ export default function BatchInfoStep({
           const currentNameSuggestion = nameSuggestionRef.current
           // Only update name if it's empty or matches the previous suggestion (avoids overwriting user edits)
           if (!currentBatchInfo.name || currentBatchInfo.name === currentNameSuggestion) {
-            onChange({ ...currentBatchInfo, name: response.data.name })
+            onChange({ ...currentBatchInfo, name: response.name })
           }
-          setNameSuggestion(response.data.name)
+          setNameSuggestion(response.name)
         })
         .catch((err) => {
           console.error('Failed to generate suggested batch name:', err)
@@ -256,10 +256,10 @@ export default function BatchInfoStep({
       setValidating(true)
       try {
         const response = await controlsApi.validateBatchName(localName.trim())
-        if (!response.data.valid) {
-          setErrors(prev => ({ ...prev, name: response.data.error || 'Batch name is invalid' }))
-          if (response.data.suggestion) {
-            setNameSuggestion(response.data.suggestion)
+        if (!response.valid) {
+          setErrors(prev => ({ ...prev, name: response.error || 'Batch name is invalid' }))
+          if (response.suggestion) {
+            setNameSuggestion(response.suggestion)
           }
         } else {
           setErrors(prev => ({ ...prev, name: '' }))
@@ -290,10 +290,10 @@ export default function BatchInfoStep({
       setValidating(true)
       try {
         const response = await controlsApi.validateBatchName(batchInfo.name.trim())
-        if (!response.data.valid) {
-          newErrors.name = response.data.error || 'Batch name is invalid'
-          if (response.data.suggestion) {
-            setNameSuggestion(response.data.suggestion)
+        if (!response.valid) {
+          newErrors.name = response.error || 'Batch name is invalid'
+          if (response.suggestion) {
+            setNameSuggestion(response.suggestion)
           }
         }
       } catch (err) {

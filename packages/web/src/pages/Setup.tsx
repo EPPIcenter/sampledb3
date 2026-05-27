@@ -62,7 +62,7 @@ export default function Setup() {
     useEffect(() => {
         setupApi.status()
             .then(res => {
-                if (res.data.initialized) navigate('/')
+                if (res.initialized) navigate('/')
             })
             .catch((err) => {
                 console.error('Failed to check setup status:', err)

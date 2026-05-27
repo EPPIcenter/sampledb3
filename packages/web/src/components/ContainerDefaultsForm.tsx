@@ -156,7 +156,7 @@ export default function ContainerDefaultsForm({
       setUnitsError(null)
       // Load all units
       const res = await settingsApi.getUnits()
-      setUnits(res.data)
+      setUnits(res)
 
       // Load allowed units for each container type
       const allowed: Record<string, Unit[]> = {}
@@ -166,7 +166,7 @@ export default function ContainerDefaultsForm({
         containerTypes.map(async (containerType) => {
           try {
             const response = await settingsApi.getContainerTypeUnits(containerType)
-            allowed[containerType] = response.data.units
+            allowed[containerType] = response.units
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
             console.error(`Failed to load allowed units for ${containerType}:`, err)

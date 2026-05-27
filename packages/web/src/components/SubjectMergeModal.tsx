@@ -3,7 +3,7 @@ import { subjectsApi } from '../lib/api/subjects';
 import { studiesApi } from '../lib/api/studies';
 import type { StudySubject } from '../lib/api/types';
 import { useClickOutside } from '../hooks/useClickOutside'
-import ModalPortal from './ModalPortal'
+import { Modal } from '../ui'
 
 interface SubjectMergeModalProps {
   isOpen: boolean
@@ -133,7 +133,7 @@ function SubjectMergeModalContent({
       const response = await subjectsApi.merge(targetSubjectId, sourceSubjectId)
       
       // Show success message
-      const { specimensTransferred, specimensMerged, containersMerged, totalContainersTransferred } = response.data
+      const { specimensTransferred, specimensMerged, containersMerged, totalContainersTransferred } = response
       const message = `Merge completed successfully!\n` +
         `- ${specimensTransferred} specimen(s) transferred\n` +
         `- ${specimensMerged} specimen(s) merged (containers transferred to existing specimens)\n` +
@@ -515,25 +515,22 @@ export default function SubjectMergeModal({
   if (!isOpen) return null
 
   return (
-    <ModalPortal>
-      <div className="fixed inset-0 z-[100] overflow-y-auto overflow-x-visible">
-        <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-md"
-            onClick={onClose}
-          />
-          <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-          <div className="inline-block align-bottom bg-app-card rounded-lg text-left shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full sm:max-h-[90vh] relative z-10 overflow-visible">
-            <SubjectMergeModalContent
-              key={`${studyId}-${openKey}`}
-              studyId={studyId}
-              onClose={onClose}
-              onSuccess={onSuccess}
-            />
-          </div>
-        </div>
-      </div>
-    </ModalPortal>
+    <Modal
+      isOpen
+      onClose={onClose}
+      size="xl"
+      showCloseButton={false}
+      overlayClassName="overflow-x-visible"
+      panelClassName="sm:max-h-[90vh] overflow-visible"
+      contentClassName="overflow-visible"
+    >
+      <SubjectMergeModalContent
+        key={`${studyId}-${openKey}`}
+        studyId={studyId}
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />
+    </Modal>
   )
 }
 

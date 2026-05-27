@@ -284,7 +284,7 @@ export default function DerivationsBulkImport() {
     }
     try {
       const response = await specimenTypesApi.getContainerTypes(selectedSpecimenType.id)
-      const containerTypes = response.data.containerTypes
+      const containerTypes = response.containerTypes
       setAllowedContainerTypes(containerTypes)
       if (
         settings.containerType &&
@@ -340,8 +340,8 @@ export default function DerivationsBulkImport() {
     setError(null)
     try {
       const result = await derivationsApi.validateCsv(csvContent, settings)
-      setValidationResult(result.data)
-      return result.data
+      setValidationResult(result)
+      return result
     } catch (err: unknown) {
       const errObj = err as { response?: { data?: { error?: string; details?: string } } }
       console.error('Failed to validate CSV:', err)
@@ -395,7 +395,7 @@ export default function DerivationsBulkImport() {
         dryRun: false,
         settings,
       })
-      setImportResults(response.data.rows)
+      setImportResults(response.rows)
     } catch (err: unknown) {
       const errObj = err as { response?: { data?: { error?: string; details?: string } } }
       console.error('Failed to import derivations:', err)

@@ -47,10 +47,10 @@ export default function ExportConfigurationsManager({
       try {
         const [sharedRes, personalRes] = await Promise.all([
           exportConfigurationsApi.getShared(),
-          exportConfigurationsApi.getPersonal().catch(() => ({ data: { configurations: [] } })),
+          exportConfigurationsApi.getPersonal().catch(() => ({ configurations: [] })),
         ])
-        setSharedConfigurations(sharedRes.data.configurations)
-        setPersonalConfigurations(personalRes.data.configurations)
+        setSharedConfigurations(sharedRes.configurations)
+        setPersonalConfigurations(personalRes.configurations)
       } catch (err: any) {
         setError(err.response?.data?.error || 'Failed to load configurations')
       } finally {

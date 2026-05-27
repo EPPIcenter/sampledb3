@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { inferDestinationPlateForScan, plateNameSourceSummary } from '../plate-destination-inference'
-import type { ScannerConfiguration } from '../api'
+import type { ScannerConfiguration } from '../api/settings'
 
 const baseConfig: ScannerConfiguration = {
   id: '1',

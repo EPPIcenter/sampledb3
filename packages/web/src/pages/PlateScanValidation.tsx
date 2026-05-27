@@ -193,15 +193,14 @@ export default function PlateScanValidation() {
       collectionsApi.listCollectionsByType('micronix_plate'),
       scannerConfigurationsApi.getAll(),
     ]).then(([collectionsRes, configsRes]) => {
-      const collectionsData = (collectionsRes.data as { collections?: unknown[] }).collections ?? []
+      const collectionsData = collectionsRes.collections ?? []
       setPlates(
         (collectionsData as Array<{ id: number; name: string }>).map((c) => ({
           id: c.id,
           name: c.name,
         }))
       )
-      const configsData = (configsRes.data as { configurations?: ScannerConfiguration[] } & { value?: { configurations?: ScannerConfiguration[] } }).value ?? configsRes.data
-      const configs = (configsData as { configurations: ScannerConfiguration[] }).configurations
+      const configs = configsRes.configurations ?? []
       setScannerConfigurations(configs)
       const defaultConfig = configs.find((c: ScannerConfiguration) => c.isDefault === true)
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- fallback when no default config
@@ -292,7 +291,7 @@ export default function PlateScanValidation() {
         ...(inferMode ? {} : { plateId: selectedPlateId! }),
         scannerConfigurationId: selectedConfigId,
       })
-      const data = res.data
+      const data = res
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- discriminator check for union
       if ('inferenceReport' in data && data.inferenceReport) {
         setInferenceReport(data.inferenceReport)

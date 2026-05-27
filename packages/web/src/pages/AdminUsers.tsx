@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
-import { adminApi } from '../lib/api/admin';
-import type { User, UserSession } from '../lib/api/auth';
+import { useRef, useState, useMemo } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { adminApi } from '../lib/api/admin'
+import type { User, UserSession } from '../lib/api/auth'
+import { adminKeys, useAdminUsers } from '../hooks/useAdmin'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
 import ModalPortal from '../components/ModalPortal'
+import { AsyncPresentation, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
 
 interface CreateUserData {
@@ -19,9 +22,8 @@ interface EditUserData {
 }
 
 export default function AdminUsers() {
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  const [mutationError, setMutationError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [showDeleted, setShowDeleted] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -46,9 +48,15 @@ export default function AdminUsers() {
   const [passwordForm, setPasswordForm] = useState({ password: '', confirmPassword: '' })
   const [showPassword, setShowPassword] = useState(false)
 
-  useEffect(() => {
-    loadUsers()
-  }, [showDeleted])
+  const usersQuery = useAdminUsers(showDeleted)
+  const users = usersQuery.data ?? []
+  const listStatus = fromQuery(usersQuery, {
+    isEmpty: usersQuery.isSuccess && users.length === 0,
+  })
+
+  const refreshUsers = () => {
+    void queryClient.invalidateQueries({ queryKey: adminKeys.users(showDeleted) })
+  }
 
   const filteredUsers = useMemo(() => {
     if (!searchQuery.trim()) return users
@@ -61,44 +69,28 @@ export default function AdminUsers() {
     )
   }, [users, searchQuery])
 
-  const loadUsers = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const response = await adminApi.getUsers(showDeleted)
-      setUsers(response.data.users)
-    } catch (err: unknown) {
-      const message = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : null
-      setError(message || 'Failed to load users')
-      console.error('Error loading users:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleCreate = async () => {
     try {
       if (!createForm.email || !createForm.name || !createForm.password) {
-        setError('All fields are required')
+        setMutationError('All fields are required')
         return
       }
 
       if (createForm.password.length < 8) {
-        setError('Password must be at least 8 characters')
+        setMutationError('Password must be at least 8 characters')
         return
       }
 
       await adminApi.createUser(createForm)
       setShowCreateModal(false)
       setCreateForm({ email: '', name: '', password: '', role: 'member' })
-      await loadUsers()
+      setMutationError(null)
+      refreshUsers()
     } catch (err: unknown) {
       const message = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : null
-      setError(message || 'Failed to create user')
+      setMutationError(message || 'Failed to create user')
     }
   }
 
@@ -110,12 +102,12 @@ export default function AdminUsers() {
       setShowEditModal(false)
       setSelectedUser(null)
       setEditForm({})
-      await loadUsers()
+      refreshUsers()
     } catch (err: unknown) {
       const message = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : null
-      setError(message || 'Failed to update user')
+      setMutationError(message || 'Failed to update user')
     }
   }
 
@@ -126,36 +118,36 @@ export default function AdminUsers() {
       await adminApi.deleteUser(selectedUser.id)
       setShowDeleteModal(false)
       setSelectedUser(null)
-      await loadUsers()
+      refreshUsers()
     } catch (err: unknown) {
       const res = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string; details?: string } } }).response?.data
         : null
-      setError(res?.error || res?.details || 'Failed to delete user')
+      setMutationError(res?.error || res?.details || 'Failed to delete user')
     }
   }
 
   const handleApprove = async (user: User) => {
     try {
       await adminApi.approveUser(user.id)
-      await loadUsers()
+      refreshUsers()
     } catch (err: unknown) {
       const message = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : null
-      setError(message || 'Failed to approve user')
+      setMutationError(message || 'Failed to approve user')
     }
   }
 
   const handleRestore = async (user: User) => {
     try {
       await adminApi.restoreUser(user.id)
-      await loadUsers()
+      refreshUsers()
     } catch (err: unknown) {
       const message = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : null
-      setError(message || 'Failed to restore user')
+      setMutationError(message || 'Failed to restore user')
     }
   }
 
@@ -164,12 +156,12 @@ export default function AdminUsers() {
 
     try {
       if (!passwordForm.password || passwordForm.password !== passwordForm.confirmPassword) {
-        setError('Passwords do not match')
+        setMutationError('Passwords do not match')
         return
       }
 
       if (passwordForm.password.length < 8) {
-        setError('Password must be at least 8 characters')
+        setMutationError('Password must be at least 8 characters')
         return
       }
 
@@ -181,7 +173,7 @@ export default function AdminUsers() {
       const message = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : null
-      setError(message || 'Failed to reset password')
+      setMutationError(message || 'Failed to reset password')
     }
   }
 
@@ -189,12 +181,12 @@ export default function AdminUsers() {
     try {
       setSessionsLoading(true)
       const response = await adminApi.getUserSessions(userId)
-      setSessions(response.data.sessions)
+      setSessions(response.sessions)
     } catch (err: unknown) {
       const message = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : null
-      setError(message || 'Failed to load sessions')
+      setMutationError(message || 'Failed to load sessions')
     } finally {
       setSessionsLoading(false)
     }
@@ -210,7 +202,7 @@ export default function AdminUsers() {
       const message = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : null
-      setError(message || 'Failed to revoke session')
+      setMutationError(message || 'Failed to revoke session')
     }
   }
 
@@ -241,7 +233,7 @@ export default function AdminUsers() {
     await loadSessions(user.id)
   }
 
-  if (loading) {
+  if (listStatus === 'loading') {
     return (
       <div className="admin-page">
         <div className="relative z-10 p-6">
@@ -254,6 +246,23 @@ export default function AdminUsers() {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (listStatus === 'error') {
+    return (
+      <div className="admin-page">
+        <div className="relative z-10 p-6">
+          <div className="max-w-7xl mx-auto">
+            <h1 className="text-2xl font-bold mb-6" style={{ color: 'rgb(var(--app-text))' }}>User Management</h1>
+            <PageError
+              title="Could not load users"
+              message={getQueryErrorMessage(usersQuery.error, 'Failed to load users')}
+              onRetry={() => void usersQuery.refetch()}
+            />
           </div>
         </div>
       </div>
@@ -280,11 +289,11 @@ export default function AdminUsers() {
             </button>
           </div>
 
-          {error && (
+          {mutationError && (
             <div className="mb-4 bg-app-trend-down/10 border border-app-trend-down rounded-lg p-4">
               <div className="flex items-center justify-between">
-                <p className="text-app-trend-down">{error}</p>
-                <button onClick={() => setError(null)} className="text-app-trend-down hover:text-app-trend-down">
+                <p className="text-app-trend-down">{mutationError}</p>
+                <button onClick={() => setMutationError(null)} className="text-app-trend-down hover:text-app-trend-down">
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>

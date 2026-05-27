@@ -1,53 +1,14 @@
-import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { adminApi } from '../lib/api/admin';
-import type { IntegrityReport } from '../lib/api/admin';
+import { useAdminIntegrityReport } from '../hooks/useAdmin'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
 
 export default function AdminDataIntegrityOverview() {
-  const [report, setReport] = useState<IntegrityReport | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const reportQuery = useAdminIntegrityReport()
+  const reportStatus = fromQuery(reportQuery)
+  const report = reportQuery.data ?? null
 
-  useEffect(() => {
-    let cancelled = false
-    adminApi
-      .getIntegrityReport()
-      .then((res) => {
-        if (!cancelled) setReport(res.data)
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          const message =
-            err && typeof err === 'object' && 'response' in err
-              ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-              : null
-          setError(message || 'Failed to load integrity report')
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const emptyCount = report?.emptyCollections.length ?? 0
-  const integrityIssueCount = report
-    ? report.collectionsWithMissingLocation.length +
-      report.containersWithMissingSpecimen.length +
-      report.subtypeOrphans.length +
-      report.sheetsWithMissingBoxOrBag.length +
-      report.specimensWithMissingSubjectOrBatch.length +
-      report.studySubjectsWithMissingStudy.length +
-      report.derivationBrokenRefs.length +
-      report.storageContainerTagOrphans.length +
-      report.duplicateBarcodes.length +
-      report.locationPathInconsistencies.length
-    : 0
-
-  if (loading) {
+  if (reportStatus === 'loading') {
     return (
       <div className="p-8 text-center text-[rgb(var(--app-text-muted))]">
         Loading…
@@ -55,13 +16,30 @@ export default function AdminDataIntegrityOverview() {
     )
   }
 
-  if (error) {
+  if (reportStatus === 'error') {
     return (
-      <div className="mb-4 rounded-lg bg-app-trend-down/10 border border-app-trend-down p-3">
-        <p className="text-sm text-app-trend-down">{error}</p>
-      </div>
+      <PageError
+        title="Could not load integrity overview"
+        message={getQueryErrorMessage(reportQuery.error, 'Failed to load integrity report')}
+        onRetry={() => void reportQuery.refetch()}
+      />
     )
   }
+
+  if (!report) return null
+
+  const emptyCount = report.emptyCollections.length
+  const integrityIssueCount =
+    report.collectionsWithMissingLocation.length +
+    report.containersWithMissingSpecimen.length +
+    report.subtypeOrphans.length +
+    report.sheetsWithMissingBoxOrBag.length +
+    report.specimensWithMissingSubjectOrBatch.length +
+    report.studySubjectsWithMissingStudy.length +
+    report.derivationBrokenRefs.length +
+    report.storageContainerTagOrphans.length +
+    report.duplicateBarcodes.length +
+    report.locationPathInconsistencies.length
 
   return (
     <div className="space-y-6">

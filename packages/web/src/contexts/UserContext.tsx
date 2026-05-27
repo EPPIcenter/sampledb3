@@ -28,7 +28,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     userCachedError = null
     try {
       const response = await authApi.getCurrentUser()
-      const userData = response.data.user
+      const userData = response.user
       setUser(userData)
       addRecentUser(userData)
     } catch (err: unknown) {
@@ -61,7 +61,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setError(null)
       const response = await authApi.switchUser(userId, password)
       // The response structure is: { data: { user: {...} } }
-      const userData = response.data.user
+      const userData = response.user
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- server may omit user
       if (!userData) {
         throw new Error('Invalid response from server')

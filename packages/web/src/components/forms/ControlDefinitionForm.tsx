@@ -86,9 +86,9 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
     if (!id) return
     try {
       const res = await controlsApi.getDefinitionSummary(parseInt(id))
-      const control = res.data.control
+      const control = res.control
       setControlDefinition(control)
-      const compositionStrains = res.data.composition?.strains || control.strains || []
+      const compositionStrains = res.composition?.strains || control.strains || []
       if (compositionStrains.length > 0) {
         setStrainInputs(
           compositionStrains.map((s: { id: number; name?: string; percentage?: number }) => ({
@@ -127,7 +127,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
   const loadUnits = async () => {
     try {
       const res = await settingsApi.getUnits()
-      setUnits(res.data)
+      setUnits(res)
     } catch (err) {
       console.error('Failed to load units:', err)
     }
@@ -166,7 +166,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
             targetDensityUnitId: unitId,
             strains: strainsPayload,
           })
-          .then((r) => r.data.suggestedName)
+          .then((r) => r.suggestedName)
       )
     ).then((names) => {
       if (!cancelled) setDefinitionNames(names)
@@ -250,10 +250,10 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
         targetDensityUnitId: fd.targetDensityUnitId ? parseInt(fd.targetDensityUnitId) : undefined,
         strains: inputs.map((s) => ({ strainId: s.strainId, percentage: s.percentage })),
       })
-      setSuggestedName(response.data.suggestedName)
-      setFormData((prev) => ({ ...prev, name: response.data.suggestedName }))
-      if (response.data.exists && response.data.existingDefinition) {
-        setError(`A control definition with this combination already exists: "${response.data.existingDefinition.name}"`)
+      setSuggestedName(response.suggestedName)
+      setFormData((prev) => ({ ...prev, name: response.suggestedName }))
+      if (response.exists && response.existingDefinition) {
+        setError(`A control definition with this combination already exists: "${response.existingDefinition.name}"`)
       } else {
         setError((prev) => prev?.startsWith('A control definition with this combination') ? null : prev)
       }
@@ -277,12 +277,12 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
         targetDensityUnitId: formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined,  
         strains: currentStrainInputs.map((s) => ({ strainId: s.strainId, percentage: s.percentage })),
       })
-      setSuggestedName(response.data.suggestedName)
+      setSuggestedName(response.suggestedName)
       if (autoGenerateName) {
-        setFormData((prev) => ({ ...prev, name: response.data.suggestedName }))
+        setFormData((prev) => ({ ...prev, name: response.suggestedName }))
       }
-      if (response.data.exists && response.data.existingDefinition) {
-        setError(`A control definition with this combination already exists: "${response.data.existingDefinition.name}"`)
+      if (response.exists && response.existingDefinition) {
+        setError(`A control definition with this combination already exists: "${response.existingDefinition.name}"`)
       } else {
         setError((prev) => prev?.startsWith('A control definition with this combination') ? null : prev)
       }
@@ -345,7 +345,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
           ...(formData.name.trim() && { name: formData.name.trim() }),
         }
         const res = await controlsApi.update(controlDefinition.id, updatePayload as Parameters<typeof controlsApi.update>[1])
-        if (onSuccess) onSuccess(res.data.control)
+        if (onSuccess) onSuccess(res.control)
         else navigate('/blood-controls')
       } else {
         const densityStrings = densityValues.filter((s) => s != null && String(s).trim() !== '') // eslint-disable-line @typescript-eslint/no-unnecessary-condition
@@ -382,7 +382,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
             strains: strainsPayload,
           }
           const res = await controlsApi.create(createPayload)
-          if (onSuccess) onSuccess(res.data.control)
+          if (onSuccess) onSuccess(res.control)
           else navigate('/blood-controls')
         } else {
           const res = await controlsApi.createDefinitionsBulk({
@@ -391,7 +391,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
             targetDensityUnitId,
             names: definitionNames,
           })
-          if (onSuccess) onSuccess(res.data.controls)
+          if (onSuccess) onSuccess(res.controls)
           else navigate('/blood-controls')
         }
       }

@@ -1,8 +1,10 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { settingsApi } from '../lib/api/settings';
-import type { AllSettings } from '../lib/api/settings';
+import { useQueryClient } from '@tanstack/react-query'
+import type { AllSettings } from '../lib/api/settings'
 import { useUser } from '../contexts/UserContext'
+import { settingsKeys, useAllSettings } from '../hooks/useSettings'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import { useTheme, THEME_IDS, THEME_LABELS } from '../contexts/ThemeContext'
 import InfoTooltip from '../components/InfoTooltip'
 import ContainerDefaultsForm from '../components/ContainerDefaultsForm'
@@ -236,43 +238,28 @@ export default function Settings() {
       return next
     })
   }
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
+  const settingsQuery = useAllSettings()
+  const settingsStatus = fromQuery(settingsQuery)
+  const settings = settingsQuery.data ?? null
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [mutationError, setMutationError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [settings, setSettings] = useState<AllSettings | null>(null)
 
-  useEffect(() => {
-    loadSettings()
-  }, [])
-
-  const loadSettings = async (showLoading = true) => {
-    if (showLoading) {
-      setLoading(true)
-      setError(null)
-    }
-    try {
-      const res = await settingsApi.getAll()
-      setSettings(res.data)
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load settings')
-    } finally {
-      if (showLoading) {
-        setLoading(false)
-      }
-    }
+  const refreshSettings = () => {
+    void queryClient.invalidateQueries({ queryKey: settingsKeys.allSettings() })
   }
 
   const handleSave = async () => {
     setSaving(true)
-    setError(null)
+    setMutationError(null)
     setSuccess(null)
     try {
       // Each form component handles its own save
       setSuccess('Settings saved successfully')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save settings')
+      setMutationError(err.response?.data?.error || 'Failed to save settings')
     } finally {
       setSaving(false)
     }
@@ -313,11 +300,11 @@ export default function Settings() {
           <ContainerDefaultsForm
             data={settings.container_defaults}
             onSave={handleSave}
-            onError={(err) => setError(err)}
+            onError={(err) => setMutationError(err)}
             onSuccess={() => {
               setSuccess('Container defaults saved successfully')
               setTimeout(() => setSuccess(null), 3000)
-              loadSettings()
+              refreshSettings()
             }}
           />
         )
@@ -325,7 +312,7 @@ export default function Settings() {
         return (
           <ContainerTypeUnitsManager
             onSave={handleSave}
-            onError={(err) => setError(err)}
+            onError={(err) => setMutationError(err)}
             onSuccess={() => {
               setSuccess('Container type units updated successfully')
               setTimeout(() => setSuccess(null), 3000)
@@ -337,11 +324,11 @@ export default function Settings() {
           <PaginationSettingsForm
             data={settings.pagination_settings}
             onSave={handleSave}
-            onError={(err) => setError(err)}
+            onError={(err) => setMutationError(err)}
             onSuccess={() => {
               setSuccess('Pagination settings saved successfully')
               setTimeout(() => setSuccess(null), 3000)
-              loadSettings()
+              refreshSettings()
             }}
           />
         )
@@ -350,11 +337,11 @@ export default function Settings() {
           <PasswordRequirementsForm
             data={settings.password_requirements}
             onSave={handleSave}
-            onError={(err) => setError(err)}
+            onError={(err) => setMutationError(err)}
             onSuccess={() => {
               setSuccess('Password requirements saved successfully')
               setTimeout(() => setSuccess(null), 3000)
-              loadSettings()
+              refreshSettings()
             }}
           />
         )
@@ -363,11 +350,11 @@ export default function Settings() {
           <SessionSettingsForm
             data={settings.session_settings}
             onSave={handleSave}
-            onError={(err) => setError(err)}
+            onError={(err) => setMutationError(err)}
             onSuccess={() => {
               setSuccess('Session settings saved successfully')
               setTimeout(() => setSuccess(null), 3000)
-              loadSettings()
+              refreshSettings()
             }}
           />
         )
@@ -376,11 +363,11 @@ export default function Settings() {
           <ExportConfigurationsManager
             data={settings.export_configurations}
             onSave={handleSave}
-            onError={(err) => setError(err)}
+            onError={(err) => setMutationError(err)}
             onSuccess={() => {
               setSuccess('Export configurations saved successfully')
               setTimeout(() => setSuccess(null), 3000)
-              loadSettings()
+              refreshSettings()
             }}
           />
         )
@@ -389,11 +376,11 @@ export default function Settings() {
           <TableViewConfigurationsManager
             data={settings.table_view_configurations}
             onSave={handleSave}
-            onError={(err) => setError(err)}
+            onError={(err) => setMutationError(err)}
             onSuccess={() => {
               setSuccess('Table view configurations saved successfully')
               setTimeout(() => setSuccess(null), 3000)
-              loadSettings(false)
+              refreshSettings()
             }}
           />
         )
@@ -402,11 +389,11 @@ export default function Settings() {
           <ScannerConfigurationsManager
             data={settings.scanner_configurations}
             onSave={handleSave}
-            onError={(err) => setError(err)}
+            onError={(err) => setMutationError(err)}
             onSuccess={() => {
               setSuccess('Scanner configurations saved successfully')
               setTimeout(() => setSuccess(null), 3000)
-              loadSettings(false)
+              refreshSettings()
             }}
           />
         )
@@ -415,7 +402,7 @@ export default function Settings() {
     }
   }
 
-  if (loading) {
+  if (settingsStatus === 'loading') {
     return (
       <div className="settings-page">
         <div className="container mx-auto px-4 py-4 relative z-10">
@@ -459,6 +446,21 @@ export default function Settings() {
     )
   }
 
+  if (settingsStatus === 'error') {
+    return (
+      <div className="settings-page">
+        <div className="container mx-auto px-4 py-4 relative z-10">
+          <h1 className="text-2xl font-bold mb-4">Application Settings</h1>
+          <PageError
+            title="Could not load settings"
+            message={getQueryErrorMessage(settingsQuery.error, 'Failed to load settings')}
+            onRetry={() => void settingsQuery.refetch()}
+          />
+        </div>
+      </div>
+    )
+  }
+
   const activeCategoryData = filteredSettingsStructure.find(c => c.id === activeCategory)
   const activeSectionData = activeCategoryData?.sections.find(s => s.id === activeSection)
 
@@ -476,9 +478,9 @@ export default function Settings() {
           </p>
         </div>
 
-        {error && (
+        {mutationError && (
           <div className="mb-2 rounded-md p-2 settings-alert-error settings-reveal settings-reveal-2">
-            <p className="text-xs font-medium">{error}</p>
+            <p className="text-xs font-medium">{mutationError}</p>
           </div>
         )}
 

@@ -89,7 +89,7 @@ export default function ContainerMoveMicronix() {
       locationsApi.list(),
       scannerConfigurationsApi.getAll(),
     ]).then(([collectionsResponse, locationsResponse, scannerConfigsResponse]) => {
-      const collections = collectionsResponse.data.collections as any[]
+      const collections = collectionsResponse.collections as any[]
       setAvailablePlates(
         collections.map((c: any) => ({
           id: c.id,
@@ -100,14 +100,13 @@ export default function ContainerMoveMicronix() {
           locationPath: c.location?.path || null,
         }))
       )
-      setLocations(locationsResponse.data.locations)
+      setLocations(locationsResponse.locations)
       
       // Load scanner configurations
       // The API returns { key, value } format, where value is ScannerConfigurations
       // Handle both direct ScannerConfigurations and { key, value } wrapper
-      const configsData = (scannerConfigsResponse.data as any)?.value || scannerConfigsResponse.data
-      if (configsData && configsData.configurations) {
-        const configs = configsData.configurations
+      const configs = scannerConfigsResponse.configurations
+      if (configs) {
         setScannerConfigurations(configs)
         // Auto-select default configuration
         const defaultConfig = configs.find((c: ScannerConfiguration) => c.isDefault === true)
@@ -300,7 +299,7 @@ export default function ContainerMoveMicronix() {
         identifiers: allIdentifiers.map(({ type, barcode }) => ({ type, barcode }))
       })
 
-      const resolved = resolveResponse.data.containers
+      const resolved = resolveResponse.containers
       
       // Create a set of resolved barcodes for quick lookup
       // The API returns { identifier, container } where identifier can be the object or the barcode string
@@ -403,7 +402,7 @@ export default function ContainerMoveMicronix() {
         }
 
         const plateResponse = await collectionsApi.getMicronixPlate(plateId)
-        const wells: Record<string, { type: string; barcode?: string | null }> = plateResponse.data.wells
+        const wells: Record<string, { type: string; barcode?: string | null }> = plateResponse.wells
 
         // All rows (from any file) targeting this plate
         const rowsForPlate: { fileIndex: number; row: CSVRow }[] = []
@@ -556,8 +555,8 @@ export default function ContainerMoveMicronix() {
       // Calculate per-file results
       const fileResults = files.map((fileData, fileIndex) => {
         const fileMoves = allMoves.filter(m => m.fileIndex === fileIndex)
-        const moved = response.data.success ? fileMoves.length : 0
-        const errors = response.data.errors?.filter((e: ValidationError) => {
+        const moved = response.success ? fileMoves.length : 0
+        const errors = response.errors?.filter((e: ValidationError) => {
           // Map errors back to file if possible (this is approximate)
           const errorRow = e.row
           return errorRow > 0 && errorRow <= fileData.csvRows.length
@@ -571,18 +570,18 @@ export default function ContainerMoveMicronix() {
         }
       })
 
-      if (response.data.success) {
+      if (response.success) {
         setMoveResult({
           success: true,
-          moved: response.data.moved,
+          moved: response.moved,
           fileResults,
         })
         setCurrentStep('execute')
       } else {
         setMoveResult({
           success: false,
-          moved: response.data.moved || 0,
-          errors: response.data.errors,
+          moved: response.moved || 0,
+          errors: response.errors,
           fileResults,
         })
         setCurrentStep('execute')

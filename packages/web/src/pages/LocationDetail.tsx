@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
-import { locationsApi } from '../lib/api/locations';
-import type { LocationHierarchyStats } from '../lib/api/locations';
-import type { Location } from '../lib/api/types';
+import type { LocationHierarchyStats } from '../lib/api/locations'
+import type { Location } from '../lib/api/types'
 import { getLocationAncestors, getLocationDescendants } from '../lib/location-tree'
+import { useLocationDetailPage } from '../hooks/useLocations'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import LocationHierarchyTree from '../components/LocationHierarchyTree'
 import LocationHierarchyStatsDisplay from '../components/LocationHierarchyStats'
 import LocationCapabilityBadge from '../components/LocationCapabilityBadge'
 import Pagination from '../components/Pagination'
-import SkeletonDetailPage from '../components/SkeletonDetailPage'
+import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import ContentCard from '../components/ContentCard'
 import '../styles/storage.css'
 
@@ -23,70 +23,32 @@ interface LocationContents {
 export default function LocationDetail() {
   const { id } = useParams<{ id: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [location, setLocation] = useState<Location | null>(null)
-  const [contents, setContents] = useState<LocationContents | null>(null)
-  const [hierarchyStats, setHierarchyStats] = useState<LocationHierarchyStats | null>(null)
-  const [allLocations, setAllLocations] = useState<Location[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadingContext, setLoadingContext] = useState(true)
   const defaultLimit = 25
-  
-  // Derive page values directly from URL params to avoid circular dependencies
+  const locationId = id != null ? parseInt(id, 10) : NaN
+
   const platesPage = parseInt(searchParams.get('plates_page') || '1')
   const cryovialBoxesPage = parseInt(searchParams.get('cryovial_boxes_page') || '1')
   const boxesPage = parseInt(searchParams.get('boxes_page') || '1')
   const bagsPage = parseInt(searchParams.get('bags_page') || '1')
-  
-  const [pagination, setPagination] = useState<{
-    micronixPlates?: { page: number; totalPages: number; total: number; limit: number }
-    cryovialBoxes?: { page: number; totalPages: number; total: number; limit: number }
-    boxes?: { page: number; totalPages: number; total: number; limit: number }
-    bags?: { page: number; totalPages: number; total: number; limit: number }
-  } | null>(null)
 
-  useEffect(() => {
-    if (!id) return
+  const pageParams = {
+    plates_page: platesPage,
+    plates_limit: defaultLimit,
+    cryovial_boxes_page: cryovialBoxesPage,
+    cryovial_boxes_limit: defaultLimit,
+    boxes_page: boxesPage,
+    boxes_limit: defaultLimit,
+    bags_page: bagsPage,
+    bags_limit: defaultLimit,
+  }
 
-    const numericId = parseInt(id)
-    if (Number.isNaN(numericId)) return
-
-    // Derive page values from URL params inside the effect to ensure fresh values
-    const currentPlatesPage = parseInt(searchParams.get('plates_page') || '1')
-    const currentCryovialBoxesPage = parseInt(searchParams.get('cryovial_boxes_page') || '1')
-    const currentBoxesPage = parseInt(searchParams.get('boxes_page') || '1')
-    const currentBagsPage = parseInt(searchParams.get('bags_page') || '1')
-
-    const fetchData = async () => {
-      try {
-        const [detailResponse, listResponse] = await Promise.all([
-          locationsApi.get(numericId, { 
-            plates_page: currentPlatesPage,
-            plates_limit: defaultLimit,
-            cryovial_boxes_page: currentCryovialBoxesPage,
-            cryovial_boxes_limit: defaultLimit,
-            boxes_page: currentBoxesPage,
-            boxes_limit: defaultLimit,
-            bags_page: currentBagsPage,
-            bags_limit: defaultLimit,
-          }),
-          locationsApi.list(),
-        ])
-
-        setLocation(detailResponse.data.location)
-        setContents(detailResponse.data.contents)
-        setHierarchyStats(detailResponse.data.hierarchyStats ?? null)
-        setAllLocations(listResponse.data.locations)
-        setPagination(detailResponse.data.pagination ?? null)
-      } catch (error) {
-        console.error('Failed to load location details:', error)
-      } finally {
-        setLoading(false)
-        setLoadingContext(false)
-      }
-    }
-
-    fetchData()
-  }, [id, searchParams])
+  const detailQuery = useLocationDetailPage(locationId, pageParams)
+  const detailStatus = fromQuery(detailQuery)
+  const location = (detailQuery.data?.location as Location | undefined) ?? null
+  const contents = (detailQuery.data?.contents as LocationContents | undefined) ?? null
+  const hierarchyStats = (detailQuery.data?.hierarchyStats as LocationHierarchyStats | undefined) ?? null
+  const allLocations = (detailQuery.data?.allLocations as Location[] | undefined) ?? []
+  const pagination = detailQuery.data?.pagination ?? null
 
   const pathLabel = useMemo(() => {
     if (!location) return ''
@@ -138,11 +100,25 @@ export default function LocationDetail() {
     return allLocations.filter(loc => allRelated.has(loc.id))
   }, [location, allLocations])
 
-  if (loading) {
+  if (detailStatus === 'loading') {
     return (
       <div className="storage-page">
         <div className="container mx-auto px-4 py-8 relative z-10">
-          <SkeletonDetailPage sections={2} />
+          <DetailPageSkeleton sections={2} />
+        </div>
+      </div>
+    )
+  }
+
+  if (detailStatus === 'error') {
+    return (
+      <div className="storage-page">
+        <div className="container mx-auto px-4 py-8 relative z-10">
+          <PageError
+            title="Could not load location"
+            message={getQueryErrorMessage(detailQuery.error, 'Failed to load location details')}
+            onRetry={() => void detailQuery.refetch()}
+          />
         </div>
       </div>
     )
@@ -239,7 +215,7 @@ export default function LocationDetail() {
 
             <div className="flex-1 flex flex-col min-h-0">
               <h3 className="text-sm font-medium mb-2" style={{ color: 'rgb(var(--app-text-muted))' }}>Tree</h3>
-              {loadingContext ? (
+              {detailQuery.isPending ? (
                 <p className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>Loading hierarchy…</p>
               ) : sameRootLocations.length === 0 ? (
                 <p className="text-xs" style={{ color: 'rgb(var(--app-text-muted))' }}>No hierarchy information available.</p>

@@ -270,10 +270,10 @@ export default function Export() {
       setValidating(true)
       setError(null)
       const response = await exportApi.validateStudyCodes(studyCodes)
-      setValidationResult(response.data)
+      setValidationResult(response)
       
-      if (response.data.invalid_count > 0) {
-        setError(`Found ${response.data.invalid_count} invalid study code(s): ${response.data.invalid.join(', ')}`)
+      if (response.invalid_count > 0) {
+        setError(`Found ${response.invalid_count} invalid study code(s): ${response.invalid.join(', ')}`)
       }
     } catch (err: any) {
       console.error('Failed to validate study codes:', err)
@@ -308,7 +308,7 @@ export default function Export() {
         })
 
         if (!checkIgnore()) {
-          setCount(response.data.count)
+          setCount(response.count)
         }
       } catch (error: unknown) {
         if (!checkIgnore()) {
@@ -368,16 +368,16 @@ export default function Export() {
         csv_line_ending: exportFormat === 'csv' ? csvLineEnding : undefined,
       })
       
-      const summary = response.data.summary
+      const summary = response.summary
       setExportSummary(summary)
 
       // Handle file download
       let blob: Blob
       let filename: string
 
-      if (typeof response.data.data === 'string') {
+      if (typeof response.data === 'string') {
         // Base64 encoded
-        const binaryString = atob(response.data.data)
+        const binaryString = atob(response.data)
         const bytes = new Uint8Array(binaryString.length)
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i)
@@ -388,10 +388,10 @@ export default function Export() {
         blob = new Blob([bytes], { type: mimeType })
       } else {
         // JSON format
-        blob = new Blob([JSON.stringify(response.data.data, null, 2)], { type: 'application/json' })
+        blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
       }
       
-      filename = response.data.filename || `multi_study_export_${formatLocalDateTime()}.${exportFormat}`
+      filename = response.filename || `multi_study_export_${formatLocalDateTime()}.${exportFormat}`
       
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')

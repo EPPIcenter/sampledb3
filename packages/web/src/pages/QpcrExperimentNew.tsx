@@ -25,7 +25,7 @@ export default function QpcrExperimentNew() {
         name: name.trim() || null,
         templateFormat: 'biorad',
       })
-      navigate(`/qpcr-experiments/${res.data.id}`)
+      navigate(`/qpcr-experiments/${res.id}`)
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error

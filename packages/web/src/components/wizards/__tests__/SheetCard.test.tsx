@@ -12,7 +12,7 @@ vi.mock('../../../lib/api/collections', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   return createMockedDomainModule('collections', {
   collectionsApi: {
-    listCollectionsByType: vi.fn().mockResolvedValue({ data: { collections: [] } }),
+    listCollectionsByType: vi.fn().mockResolvedValue({ collections: [] }),
   }
   })
 })

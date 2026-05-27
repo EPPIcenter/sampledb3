@@ -171,12 +171,8 @@ export default function CollectionSelectOrCreate({
         name: modalName.trim(),
         locationId: modalLocationId,
       })
-      const data = res.data as {
-        box?: { id: number; name: string; location?: { path: string | null } | null; locationPath?: string | null }
-        bag?: { id: number; name: string; location?: { path: string | null } | null; locationPath?: string | null }
-        plate?: { id: number; name: string; location?: { path: string | null } | null; locationPath?: string | null }
-      }
-      const created = data.box ?? data.bag ?? data.plate
+      const created =
+        'box' in res ? res.box : 'bag' in res ? res.bag : 'plate' in res ? res.plate : undefined
       if (!created) throw new Error('Create did not return collection')
       const path = created.locationPath ?? created.location?.path ?? null
       onChange({

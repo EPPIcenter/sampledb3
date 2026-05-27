@@ -1,16 +1,18 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { errorLogsApi } from '../lib/api/error-logs';
-import type { ErrorLog, ErrorLogsQueryParams } from '../lib/api/error-logs';
+import { useState, useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { errorLogsApi } from '../lib/api/error-logs'
+import type { ErrorLog, ErrorLogsQueryParams } from '../lib/api/error-logs'
 import { formatErrorLogForLLM } from '../lib/error-log-prompt'
+import { adminKeys, useAdminErrorLogs } from '../hooks/useAdmin'
 import Pagination from '../components/Pagination'
 import ModalPortal from '../components/ModalPortal'
 import { useFocusSearchOnSlash } from '../hooks/useHotkey'
+import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import '../styles/admin.css'
 
 export default function AdminErrorLogs() {
-  const [logs, setLogs] = useState<ErrorLog[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  const [mutationError, setMutationError] = useState<string | null>(null)
   const [selectedLog, setSelectedLog] = useState<ErrorLog | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [showCleanupModal, setShowCleanupModal] = useState(false)
@@ -39,33 +41,24 @@ export default function AdminErrorLogs() {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
-  // Load logs when filters change
-  useEffect(() => {
-    loadLogs()
-  }, [filters, searchDebounced])
+  const listParams: Omit<ErrorLogsQueryParams, 'page' | 'limit'> = {
+    ...filters,
+    search: searchDebounced || undefined,
+  }
+  const logsQuery = useAdminErrorLogs(listParams)
+  const logs = logsQuery.data ?? []
+  const listStatus = fromQuery(logsQuery)
 
-  const loadLogs = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      // Load all logs (no pagination params = return all)
-      const params: Omit<ErrorLogsQueryParams, 'page' | 'limit'> = {
-        ...filters,
-        search: searchDebounced || undefined,
-      }
-      const response = await errorLogsApi.list(params as ErrorLogsQueryParams)
-      setLogs(response.data.logs)
-      setPage(1) // Reset to first page when data changes
-    } catch (err: unknown) {
-      const message = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : null
-      setError(message || 'Failed to load error logs')
-      console.error('Error loading error logs:', err)
-    } finally {
-      setLoading(false)
+  const refreshLogs = () => {
+    void queryClient.invalidateQueries({ queryKey: adminKeys.errorLogs(listParams) })
+    setPage(1)
+  }
+
+  useEffect(() => {
+    if (logsQuery.isSuccess) {
+      setPage(1)
     }
-  }, [filters, searchDebounced])
+  }, [filters, searchDebounced, logsQuery.isSuccess])
 
   const handleFilterChange = (key: keyof Omit<ErrorLogsQueryParams, 'page' | 'limit'>, value: string | boolean | undefined) => {
     setFilters((prev) => ({
@@ -78,7 +71,7 @@ export default function AdminErrorLogs() {
   const handleResolve = async (id: number) => {
     try {
       await errorLogsApi.resolve(id)
-      await loadLogs()
+      refreshLogs()
       if (selectedLog?.id === id) {
         setSelectedLog(null)
         setShowDetailModal(false)
@@ -87,7 +80,7 @@ export default function AdminErrorLogs() {
       const message = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : null
-      setError(message || 'Failed to resolve error log')
+      setMutationError(message || 'Failed to resolve error log')
     }
   }
 
@@ -96,12 +89,12 @@ export default function AdminErrorLogs() {
       setCleanupLoading(true)
       await errorLogsApi.cleanup(retentionDays)
       setShowCleanupModal(false)
-      await loadLogs()
+      refreshLogs()
     } catch (err: unknown) {
       const message = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : null
-      setError(message || 'Failed to cleanup error logs')
+      setMutationError(message || 'Failed to cleanup error logs')
     } finally {
       setCleanupLoading(false)
     }
@@ -110,14 +103,14 @@ export default function AdminErrorLogs() {
   const handleViewDetail = async (id: number) => {
     try {
       const response = await errorLogsApi.get(id)
-      setSelectedLog(response.data)
+      setSelectedLog(response)
       setShowDetailModal(true)
       setCopyFeedback(null)
     } catch (err: unknown) {
       const message = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : null
-      setError(message || 'Failed to load error log details')
+      setMutationError(message || 'Failed to load error log details')
     }
   }
 
@@ -172,6 +165,21 @@ export default function AdminErrorLogs() {
     return new Date(dateString).toLocaleString()
   }
 
+  if (listStatus === 'error') {
+    return (
+      <div className="admin-page">
+        <div className="relative z-10 container mx-auto px-4 py-8">
+          <h1 className="text-3xl font-bold mb-6">Error Logs</h1>
+          <PageError
+            title="Could not load error logs"
+            message={getQueryErrorMessage(logsQuery.error, 'Failed to load error logs')}
+            onRetry={() => void logsQuery.refetch()}
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="admin-page">
       <div className="relative z-10 container mx-auto px-4 py-8">
@@ -187,9 +195,9 @@ export default function AdminErrorLogs() {
           </div>
         </div>
 
-        {error && (
+        {mutationError && (
           <div className="mb-4 rounded-lg bg-app-trend-down/10 border border-app-trend-down p-3">
-            <p className="text-sm text-app-trend-down">{error}</p>
+            <p className="text-sm text-app-trend-down">{mutationError}</p>
           </div>
         )}
 
@@ -263,7 +271,7 @@ export default function AdminErrorLogs() {
 
         {/* Logs Table */}
         <div className="admin-card overflow-hidden">
-          {loading ? (
+          {logsQuery.isPending ? (
             <div className="p-8 text-center text-[rgb(var(--app-text-muted))]">Loading error logs...</div>
           ) : logs.length === 0 ? (
             <div className="p-8 text-center text-[rgb(var(--app-text-muted))]">No error logs found</div>
@@ -555,7 +563,7 @@ export default function AdminErrorLogs() {
                   const input = document.getElementById('retention-days') as HTMLInputElement
                   const days = input.value ? parseInt(input.value, 10) : undefined
                   if (days && (isNaN(days) || days < 1)) {
-                    setError('Retention days must be a positive number')
+                    setMutationError('Retention days must be a positive number')
                     return
                   }
                   handleCleanup(days)
