@@ -354,7 +354,10 @@ specimens.post('/', memberMiddleware, async (c) => {
     }
     
     return c.json({
-      specimen: newSpecimen,
+      specimen: {
+        ...newSpecimen,
+        ...(validation.resolved.studyId != null ? { studyId: validation.resolved.studyId } : {}),
+      },
       container: containerResult ? { containerId: containerResult.containerId } : null,
     }, 201)
   } catch (error) {

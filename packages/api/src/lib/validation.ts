@@ -244,29 +244,37 @@ export async function validateSpecimenData(data: {
   valid: boolean; 
   error?: string; 
   resolved?: { 
-    studySubjectId?: number; 
+    studySubjectId?: number
+    studyId?: number
     controlBatchId?: number; 
     specimenTypeId: number 
   } 
 }> {
   // Validate source
   let studySubjectId: number | undefined
+  let studyId: number | undefined
   let controlBatchId: number | undefined
   
   if (data.sourceType === 'subject') {
     if (data.sourceId) {
       // Verify the subject exists
-      const subject = await database.select({ id: studySubject.id }).from(studySubject).where(eq(studySubject.id, data.sourceId)).get()
+      const subject = await database
+        .select({ id: studySubject.id, studyId: studySubject.studyId })
+        .from(studySubject)
+        .where(eq(studySubject.id, data.sourceId))
+        .get()
       if (!subject) {
         return { valid: false, error: `Subject with ID ${data.sourceId} not found` }
       }
       studySubjectId = data.sourceId
+      studyId = subject.studyId
     } else if (data.studyShortCode && data.subjectName) {
       // Use human-readable identifiers
       const studyValidation = await validateStudyShortCode(database, data.studyShortCode)
       if (!studyValidation.valid || !studyValidation.studyId) {
         return { valid: false, error: studyValidation.error || 'Invalid study' }
       }
+      studyId = studyValidation.studyId
       
       const id = await resolveSubjectByNameAndStudy(database, data.subjectName, studyValidation.studyId)
       if (!id) {
@@ -311,6 +319,7 @@ export async function validateSpecimenData(data: {
     valid: true,
     resolved: {
       studySubjectId,
+      studyId,
       controlBatchId,
       specimenTypeId: specimenTypeId!,
     },

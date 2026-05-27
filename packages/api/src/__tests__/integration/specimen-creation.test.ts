@@ -105,9 +105,10 @@ describe('Specimen Creation Integration Tests', () => {
     })
 
     expect(response.status).toBe(201)
-    const data = await response.json() as { specimen: { studySubjectId: number; specimenTypeId: number } }
+    const data = await response.json() as { specimen: { studySubjectId: number; specimenTypeId: number; studyId: number } }
     expect(data).toHaveProperty('specimen')
     expect(data.specimen.studySubjectId).toBe(subject.id)
+    expect(data.specimen.studyId).toBe(study.id)
     expect(data.specimen.specimenTypeId).toBe(specimenType.id)
   })
 
