@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { subjectsApi } from '../lib/api/subjects'
-import type { StudySubject } from '../lib/api/types'
-import type { SubjectSummaryResponse } from '../lib/api/subjects'
+import { subjectsApi, type SubjectSummaryResponse } from '../lib/api/subjects'
+import { studyKeys } from './useStudies'
+import { specimenKeys } from './useSpecimens'
 
 export const subjectKeys = {
   all: ['subjects'] as const,
@@ -42,6 +42,10 @@ export function useCreateSubject() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: subjectKeys.detail(data.id) })
+      if (data.studyId) {
+        queryClient.invalidateQueries({ queryKey: [...studyKeys.detail(data.studyId), 'subjects'] })
+        queryClient.invalidateQueries({ queryKey: [...studyKeys.detail(data.studyId), 'summary'] })
+      }
     },
   })
 }
@@ -57,9 +61,21 @@ export function useUpdateSubject() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: subjectKeys.detail(data.id) })
       queryClient.invalidateQueries({ queryKey: subjectKeys.summary(data.id) })
+      if (data.studyId) {
+        queryClient.invalidateQueries({ queryKey: [...studyKeys.detail(data.studyId), 'subjects'] })
+        queryClient.invalidateQueries({ queryKey: [...studyKeys.detail(data.studyId), 'summary'] })
+      }
     },
   })
 }
 
-
+export function invalidateSubjectDetail(queryClient: ReturnType<typeof useQueryClient>, subjectId: number, studyId?: number) {
+  void queryClient.invalidateQueries({ queryKey: subjectKeys.summary(subjectId) })
+  void queryClient.invalidateQueries({ queryKey: subjectKeys.detail(subjectId) })
+  void queryClient.invalidateQueries({ queryKey: specimenKeys.lists() })
+  if (studyId) {
+    void queryClient.invalidateQueries({ queryKey: [...studyKeys.detail(studyId), 'subjects'] })
+    void queryClient.invalidateQueries({ queryKey: [...studyKeys.detail(studyId), 'summary'] })
+  }
+}
 

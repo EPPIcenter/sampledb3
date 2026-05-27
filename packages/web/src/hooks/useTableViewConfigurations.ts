@@ -25,7 +25,7 @@ export function useTableViewConfigurations(): UseTableViewConfigurationsResult {
       setLoading(true)
       setError(null)
       const res = await tableViewConfigurationsApi.get()
-      const configs = res.data.value.configurations
+      const configs = res.value.configurations
       setConfigurations(configs)
       if (configs.length > 0) {
         const defaultConfig = configs.find((c) => c.isDefault)

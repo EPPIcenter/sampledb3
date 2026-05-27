@@ -30,11 +30,11 @@ export function useExportConfigurations(): UseExportConfigurationsResult {
       setError(null)
       const [sharedRes, personalRes] = await Promise.all([
         exportConfigurationsApi.getShared(),
-        exportConfigurationsApi.getPersonal().catch(() => ({ data: { configurations: [] } })),
+        exportConfigurationsApi.getPersonal().catch(() => ({ configurations: [] })),
       ])
 
-      const sharedConfigs = sharedRes.data.configurations
-      const personalConfigs = personalRes.data.configurations
+      const sharedConfigs = sharedRes.configurations
+      const personalConfigs = personalRes.configurations
       const hasPersonalDefault = personalConfigs.some((c) => c.isDefault === true)
 
       const merged: ExportConfigurationWithSource[] = [

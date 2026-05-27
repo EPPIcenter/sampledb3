@@ -12,8 +12,8 @@ import {
   useStorageTypes,
 } from '../useReferenceData'
 import { specimenTypesApi, storageTypesApi } from '../../lib/api/reference-data'
-import type { SpecimenType, StorageType } from '../../lib/api/types'
-import type { AxiosResponse } from 'axios'
+import type { SpecimenType } from '../../lib/api/types'
+import type { StorageType } from '../../lib/api/reference-data'
 
 // Mock the API module
 vi.mock('../../lib/api/reference-data', async () => {
@@ -225,13 +225,7 @@ describe('useReferenceData Hooks', () => {
 
   describe('useDeleteSpecimenType', () => {
     it('should delete a specimen type and invalidate queries', async () => {
-      vi.mocked(specimenTypesApi.delete).mockResolvedValue({
-        data: { message: 'Deleted' },
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as AxiosResponse['config'],
-      })
+      vi.mocked(specimenTypesApi.delete).mockResolvedValue({ message: 'Deleted' })
 
       const queryClient = new QueryClient({
         defaultOptions: {
