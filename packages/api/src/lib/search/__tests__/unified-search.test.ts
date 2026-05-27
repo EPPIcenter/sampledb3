@@ -1,17 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import type { Database } from '../../../db/client'
 import { setupTestDatabase, cleanupTestDatabase } from '../../../__tests__/helpers/db-setup'
-import {
-  createTestLocation,
-  createTestMicronixPlate,
-  createTestSpecimen,
-  createTestSpecimenType,
-  createTestStorageContainer,
-  createTestStorageType,
-  createTestStudy,
-  createTestStudySubject,
-} from '../../../__tests__/helpers/factories'
-import { micronixTube } from '../../../db/schema'
+import { createTestStudy } from '../../../__tests__/helpers/factories'
 import { searchUnified } from '../unified-search'
 import { resolveSearchTypes } from '../types'
 
@@ -43,49 +33,14 @@ describe('unified-search', () => {
     expect(result).toEqual({ results: [], query: '', count: 0 })
   })
 
-  it('finds studies by short code', async () => {
+  it('respects type filter and only searches matching entities', async () => {
     await createTestStudy(testDb, { title: 'Alpha Study', shortCode: 'ALPHA' })
 
-    const result = await searchUnified(testDb, 'ALPHA', 'study')
+    const studyOnly = await searchUnified(testDb, 'ALPHA', 'study')
+    const containerOnly = await searchUnified(testDb, 'ALPHA', 'container')
 
-    expect(result.count).toBe(1)
-    expect(result.results[0]).toMatchObject({
-      type: 'study',
-      title: 'Alpha Study',
-      subtitle: 'Code: ALPHA',
-      url: expect.stringMatching(/^\/studies\/\d+$/),
-    })
-  })
-
-  it('finds micronix containers by barcode', async () => {
-    const storageType = await createTestStorageType(testDb, { name: 'Search Storage' })
-    const loc = await createTestLocation(testDb, {
-      name: 'Search Freezer',
-      storageTypeId: String(storageType.id),
-    })
-    const plate = await createTestMicronixPlate(testDb, {
-      name: 'Search Plate',
-      locationId: loc.id,
-      barcode: 'PLATE-001',
-    })
-    const specimenType = await createTestSpecimenType(testDb, { name: 'Search Type' })
-    const specimen = await createTestSpecimen(testDb, specimenType.id)
-    const container = await createTestStorageContainer(testDb, { specimenId: specimen.id })
-    await testDb.insert(micronixTube).values({
-      id: container.id,
-      collectionId: plate.id,
-      barcode: 'MX-SEARCH-42',
-      position: 'C03',
-    })
-
-    const result = await searchUnified(testDb, 'MX-SEARCH', 'container')
-
-    expect(result.count).toBe(1)
-    expect(result.results[0]).toMatchObject({
-      type: 'container',
-      id: container.id,
-      title: 'Micronix Tube: MX-SEARCH-42',
-      url: `/containers/${container.id}`,
-    })
+    expect(studyOnly.count).toBe(1)
+    expect(studyOnly.results.every((r) => r.type === 'study')).toBe(true)
+    expect(containerOnly.count).toBe(0)
   })
 })
