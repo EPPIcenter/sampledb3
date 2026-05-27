@@ -19,6 +19,7 @@ Unwrapping at the client boundary gives one convention: **domain APIs and hooks 
 - Call `api.get/post/...` and return the result directly (or map fields from it).
 - Do not add another `.data` unwrap unless the backend body itself uses an envelope (see below).
 - For `GET /settings/:key`, use `settingsApi.getValue(key)` or `settingsApi.get(key).value` — never `api.get<SettingValue>(`/settings/${key}`)`.
+- For `PUT /settings/:key`, use `settingsApi.putValue(key, value, userId?)` or `settingsApi.update(...)` (alias) — never type the response as the setting value directly. Bulk writes via `exportConfigurationsApi.update` / `scannerConfigurationsApi.update` / `tableViewConfigurationsApi.update` delegate to `putValue`.
 
 ### Pages, components, and hooks
 
@@ -30,9 +31,10 @@ Unwrapping at the client boundary gives one convention: **domain APIs and hooks 
 | Shape | Example endpoints | Client usage |
 |-------|-------------------|--------------|
 | **Direct** | `{ study }`, `{ locations: [] }`, `{ user }` | Use top-level keys on the unwrapped body. |
-| **`ApiResponse` envelope** | `GET /specimen-types` → `{ data: T[], meta? }` | `extractData(body)` in reference-data list helpers; callers of `specimenTypesApi.list()` still receive `{ data, meta }`. |
-| **Settings key envelope** | `GET /settings/:key` → `{ key, value }` | Use `settingsApi.getValue('scanner_configurations')` (or `get()` then `.value`). Do not type the body as the setting value directly. Dedicated `/settings/export-configurations/shared` (etc.) return direct bodies. |
+| **`ApiResponse` envelope** | `GET /units`, `GET /specimen-types`, etc. → `{ data: T[], meta? }` | Reference-data CRUD: `*Api.list()` → `{ data, meta }`. Dropdowns and form bootstrap: `unitsApi.listAll()` → `Unit[]` (unwraps `list()`). Do not use removed `GET /settings/units`. |
+| **Settings key envelope** | `GET /settings/:key` → `{ key, value }`; `PUT /settings/:key` → `{ key, value, userId? }` | Read: `settingsApi.getValue(key, { scope? })`. Write: `settingsApi.putValue` / `settingsApi.update`. Do not type either direction as the setting value directly. For export/scanner: omit `scope` (or `effective`) for merged runtime config; `shared` / `personal` for admin editors. Legacy `/settings/export-configurations/shared` routes remain on the server but the web client uses `getValue` only. |
 | **Named `data` field** | Export POST → `{ summary, data: string \| rows, filename }` | `response.data` is the export payload field, not axios — do not “unwrap” it again. |
+| **Container detail** | `GET /containers/:id` → `{ container, specimen, source }` | Use `containersApi.get(id)` — returns normalized `ContainerDetail`; do not read flattened duplicate keys from legacy responses. List: `containersApi.list()`. |
 
 ### Errors
 
@@ -48,7 +50,18 @@ Unwrapping at the client boundary gives one convention: **domain APIs and hooks 
 - Mock domain APIs with **body shapes**: `mockResolvedValue({ user })`, `mockResolvedValue({ locations: [] })`.
 - Mock `api` in `createMockedDomainModule('client', { default: { get: vi.fn().mockResolvedValue({ studies: [] }) } })` with unwrapped bodies.
 - Keep `{ data: [] }` only when testing code that consumes `ApiResponse` list helpers (`specimenTypesApi.list()` return type).
+- **Settings:** use `packages/web/src/__tests__/helpers/settings-mocks.ts` — `settingsGetEnvelope` / `settingsPutEnvelope` for low-level `api` mocks; `mockSettingsApiGetValue` or `scannerConfigurationsValue` / `exportConfigurationsValue` for `settingsApi.getValue` (unwrapped). Do not pass `{ configurations: [] }` to `api.get` on `/settings/:key`; that shape will not catch envelope bugs.
 - Do not mock `status`, `statusText`, `headers`, or `config` on domain API mocks unless testing `axiosApi` directly.
+- **Runtime validation:** `lib/api/__tests__/parse-response.test.ts` covers envelope schemas; settings/containers tests assert `ApiContractError` on invalid bodies.
+
+## Runtime validation (P7)
+
+Zod parse at **domain module boundaries** (no shared `packages/contract` yet):
+
+- `packages/web/src/lib/api/parse-response.ts` — `parseSettingsEnvelope`, `parseApiResponseData`, `parseContainerDetailWire`, `parseContainersList`; failures throw `ApiContractError`.
+- Wired in `settingsApi.getValue` / `putValue`, `extractData()` (reference-data lists), `containersApi.get` / `list`.
+
+A future shared contract package can export the same schemas for API + web when duplication justifies it.
 
 ## Consequences
 

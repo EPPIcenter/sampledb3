@@ -1,5 +1,6 @@
 import { vi } from 'vitest'
 import type { MockApiOverrides } from './mock-api'
+import { mockSettingsApiGetValue } from './settings-mocks'
 import type { StatisticsData } from '../../lib/api/statistics'
 
 /** Empty statistics payload (fresh app). */
@@ -191,7 +192,7 @@ export function settingsPageMock(): MockApiOverrides {
         scanner_configurations: null,
         table_view_configurations: null,
       }),
-      getValue: vi.fn().mockResolvedValue(null),
+      getValue: mockSettingsApiGetValue(),
     },
   }
 }
@@ -252,9 +253,8 @@ export function exportPageMock(): MockApiOverrides {
       validate: vi.fn(),
       export: vi.fn(),
     },
-    exportConfigurationsApi: {
-      getShared: vi.fn().mockResolvedValue({ configurations: [] }),
-      getPersonal: vi.fn().mockResolvedValue({ configurations: [] }),
+    settingsApi: {
+      getValue: mockSettingsApiGetValue(),
     },
     specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
     tagsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
@@ -278,7 +278,7 @@ export function derivationsBulkImportPageMock(): MockApiOverrides {
       list: vi.fn().mockResolvedValue({ data: [] }),
       getContainerTypes: vi.fn().mockResolvedValue({ containerTypes: ['micronix_tube'] }),
     },
-    unitsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
+    unitsApi: { listAll: vi.fn().mockResolvedValue([]) },
   }
 }
 
@@ -406,7 +406,9 @@ export function specimenDetailPageMock(
     settingsApi: {
       get: vi.fn().mockResolvedValue({ value: null }),
       getContainerTypeUnits: vi.fn().mockResolvedValue({ units: [] }),
-      getUnits: vi.fn().mockResolvedValue([]),
+    },
+    unitsApi: {
+      listAll: vi.fn().mockResolvedValue([]),
     },
     collectionsApi: {
       listCollectionsByType: vi.fn().mockResolvedValue({ collections: [] }),
@@ -437,11 +439,13 @@ export function specimenFormMock(): MockApiOverrides {
     standardsApi: { list: vi.fn().mockResolvedValue({ standards: [] }) },
     subjectsApi: { create: vi.fn().mockResolvedValue({ subject: { id: 1 } }) },
     settingsApi: {
-      getUnits: vi.fn().mockResolvedValue([
-        { id: 1, symbol: 'uL', name: 'microliter', category: 'volume' },
-      ]),
       getContainerTypeUnits: vi.fn().mockResolvedValue({ units: [] }),
       get: vi.fn().mockResolvedValue({ key: 'container_defaults', value: null }),
+    },
+    unitsApi: {
+      listAll: vi.fn().mockResolvedValue([
+        { id: 1, symbol: 'uL', name: 'microliter', category: 'volume' },
+      ]),
     },
   }
 }
@@ -455,7 +459,7 @@ const micronixMoveApis = {
   },
   locationsApi: { list: vi.fn() },
   settingsApi: {
-    getValue: vi.fn(),
+    getValue: mockSettingsApiGetValue(),
   },
 }
 

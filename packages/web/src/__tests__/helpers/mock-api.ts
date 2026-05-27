@@ -42,44 +42,6 @@ function applyAuthDefaults(
   }
 }
 
-function applySettingsDefaults(
-  actual: Record<string, unknown>,
-  overrides: MockApiOverrides
-): Record<string, unknown> {
-  const tableViewConfigurationsApi = actual.tableViewConfigurationsApi as Record<string, unknown>
-  return {
-    ...actual,
-    tableViewConfigurationsApi: overrides.tableViewConfigurationsApi ?? {
-      get: vi.fn().mockResolvedValue({
-        data: {
-          key: 'table_view_configurations',
-          value: {
-            configurations: [
-              {
-                name: 'Default',
-                columns: [
-                  'position',
-                  'barcode',
-                  'subject_name',
-                  'study_code',
-                  'specimen_type',
-                  'collection_date',
-                  'comment',
-                  'status',
-                  'created',
-                  'last_updated',
-                ],
-                isDefault: true,
-              },
-            ],
-          },
-        },
-      }),
-      update: vi.fn().mockResolvedValue({}),
-    },
-  }
-}
-
 /**
  * Vitest factory for `vi.mock('../../lib/api/<domain>', ...)`.
  * Loads only the target module (avoids loading the full API graph per mock).
@@ -105,7 +67,6 @@ export async function createMockedDomainModule(
   }
 
   if (moduleId === 'auth') return applyAuthDefaults(out, overrides)
-  if (moduleId === 'settings') return applySettingsDefaults(out, overrides)
 
   return out
 }

@@ -18,6 +18,8 @@ cd packages/e2e && bunx playwright install chromium
 
 ## Screenshots and report
 
+`tests/presentation-smoke.spec.ts` covers authenticated navigation smoke (dashboard, studies, specimens, settings) after admin login.
+
 Every test run captures a **viewport screenshot** after each test (`screenshot: 'on'`). They are attached to the **HTML report** and stored under `packages/e2e/test-results/` (gitignored).
 
 After a run, open the report:
