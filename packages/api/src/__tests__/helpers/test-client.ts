@@ -1,79 +1,12 @@
 import { expect } from 'vitest'
 import { Hono } from 'hono'
 import { testClient } from 'hono/testing'
-import type { Database } from '../../db/client'
-import { setRequestDatabase } from '../../lib/db-context'
 
 /**
- * Creates a test client for Hono routes
- * This allows testing routes without starting a server
+ * Creates a test client for Hono routes (no server required).
  */
 export function createTestClient(app: Hono) {
   return testClient(app) as any
-}
-
-/**
- * Helper to create a test app with database context
- */
-export function createTestAppWithDb(
-  db: Database,
-  routeFactory: (db: Database) => Hono
-) {
-  const app = new Hono()
-  app.use('*', async (c, next) => {
-    setRequestDatabase(c, db)
-    await next()
-  })
-  const route = routeFactory(db)
-  app.route('/api', route)
-  return createTestClient(app)
-}
-
-/**
- * Assert that a response has the expected status code
- */
-export function expectStatus(response: Response, expectedStatus: number) {
-  if (response.status !== expectedStatus) {
-    throw new Error(
-      `Expected status ${expectedStatus}, got ${response.status}. ` +
-      `Response: ${JSON.stringify(response, null, 2)}`
-    )
-  }
-}
-
-/**
- * Assert that a response has an error message
- */
-interface ErrorResponse {
-  error: string
-  errorCode?: string
-  details?: unknown
-}
-
-export async function expectError(response: Response, expectedMessage?: string): Promise<ErrorResponse> {
-  const data = await response.json() as ErrorResponse
-  expect(data).toHaveProperty('error')
-  if (expectedMessage) {
-    expect(data.error).toContain(expectedMessage)
-  }
-  return data
-}
-
-/**
- * Assert that a response has the expected JSON structure
- */
-export async function expectJsonStructure(
-  response: Response,
-  structure: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  const data = await response.json() as Record<string, unknown>
-  for (const [key, value] of Object.entries(structure)) {
-    expect(data).toHaveProperty(key)
-    if (value !== undefined) {
-      expect(data[key]).toEqual(value)
-    }
-  }
-  return data
 }
 
 /**
@@ -207,22 +140,6 @@ export async function loginAndGetCookie(
   }
   
   return createCookieHeader(sessionId)
-}
-
-/**
- * Create an authenticated test client (for routes requiring auth)
- * This logs in a user and returns a client with the session cookie
- * @deprecated Use loginAndGetCookie() and authenticatedRequest() instead
- */
-export async function createAuthenticatedTestClient(
-  app: Hono,
-  db: Database,
-  emailOrUsername: string,
-  password: string = 'password123'
-) {
-  // Import here to avoid circular dependency
-  const { createAuthenticatedClient } = await import('./auth-helpers')
-  return createAuthenticatedClient(app, db, emailOrUsername, password)
 }
 
 /**

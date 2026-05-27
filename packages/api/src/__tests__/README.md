@@ -18,18 +18,24 @@ Coverage is configured in `packages/api/bunfig.toml` (reporters: text, lcov). Ba
 - `__tests__/helpers/` - Test utilities
   - `db-setup.ts`: In-memory database setup and cleanup
   - `factories.ts`: Test data factories for creating test entities
+  - `authenticated-route-test.ts`: Authenticated route test adapter (DB, login, `createRequestApp`, `request`)
   - `test-client.ts`: Hono test client utilities and assertion helpers
 - `__tests__/fixtures/` - Test data fixtures
 - `routes/__tests__/` - Route handler tests
-- `lib/__tests__/` - Library/utility function tests (e.g. plate-csv, plate-scan-validation, defaults, container-move, derivations, control-batch-creation, error-utils, logger, cache, openapi)
+- `lib/__tests__/` - Library/utility function tests (e.g. plate-csv, plate-scan-validation, defaults, container-move, derivations, error-utils, logger, cache, openapi)
+- `lib/controls/__tests__/` - Control domain libs (batch-with-specimens, batch-csv-validate, definition-summary, batch-delete, strain-composition, control-read)
 - `middleware/__tests__/` - Middleware tests (e.g. auth, rate-limit)
 
 ## Test Database
 
 Tests use an in-memory SQLite database created in `db-setup.ts`. The `setupTestDatabase()` function:
 - Creates a fresh in-memory database for each test suite
-- Sets up the schema using SQL DDL statements
+- Applies `packages/api/initial_schema.sql` (same Drizzle-generated snapshot production uses via `applyInitialSchema`)
 - Returns both the Drizzle database instance and SQLite instance for cleanup
+
+Regenerate the snapshot after schema changes: `bunx drizzle-kit generate` in `packages/api`, then copy the generated SQL to `initial_schema.sql` (see `drizzle.config.ts`).
+
+Integrity tests that seed orphan rows use `withForeignKeysDisabled` from `src/db/apply-initial-schema.ts` so fixtures match production constraints while allowing deliberate corruption.
 
 Example usage:
 
@@ -76,6 +82,49 @@ Available factories:
 - `createTestUnit`
 - `createTestStudy`
 - `createTestStudySubject`
+
+## Authenticated route tests
+
+For route handlers behind session auth, use `setupAuthenticatedRouteTest` instead of duplicating DB setup, settings, user creation, and login:
+
+```typescript
+import { setupAuthenticatedRouteTest, type AuthenticatedRouteTestContext } from '../../__tests__/helpers/authenticated-route-test'
+import { createSearchRoutes } from '../search'
+
+describe('Search API', () => {
+  let ctx: AuthenticatedRouteTestContext
+
+  beforeEach(async () => {
+    ctx = await setupAuthenticatedRouteTest({
+      user: { email: 'user@test.com', role: 'member' },
+      settings: { pagination: true }, // when list routes use validateLimit
+      additionalUsers: [{ key: 'member', email: 'member@test.com', role: 'member' }],
+      seed: async ({ db }) => { /* optional fixtures before login */ },
+      mount: (app, { db, sqlite }) => {
+        app.route('/api/search', createSearchRoutes(db))
+      },
+    })
+  })
+
+  afterEach(() => ctx.cleanup())
+
+  it('returns results', async () => {
+    const res = await ctx.request('/api/search?q=test')
+    expect(res.status).toBe(200)
+  })
+
+  it('returns 401 without auth', async () => {
+    const res = await authenticatedRequest(ctx.createRequestApp(), '/api/search?q=test', { method: 'GET' })
+    expect(res.status).toBe(401)
+  })
+})
+```
+
+Per-test routes (e.g. CRUD factory): omit `mount` and use `ctx.createRequestApp((app) => app.route('/api/tags', routes))`.
+
+### Integration workflows
+
+`__tests__/integration/` uses the same adapter for cross-route HTTP workflows (e.g. derivation create + list, collection move). Lib tests in `lib/__tests__/` still own pure logic; integration tests assert the full HTTP seam.
 
 ## Writing Tests
 
@@ -157,9 +206,9 @@ Coverage reports are generated in:
 ### `test-client.ts` Helpers
 
 - `createTestClient(app)`: Creates a Hono test client
-- `expectStatus(response, expectedStatus)`: Asserts response status
-- `expectError(response, expectedMessage?)`: Asserts error response
-- `expectJsonStructure(response, structure)`: Asserts JSON structure
+- `getResponseData(response)`: Unpacks `{ data }` from standardized API responses
+- `authenticatedRequest(app, path, options)`: HTTP request with session cookie
+- `loginAndGetCookie` / `createAuthenticatedClientWrapper`: Session helpers for route tests
 
 ## Running Tests From Repo Root
 
