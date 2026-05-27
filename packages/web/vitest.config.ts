@@ -29,6 +29,8 @@ export default defineConfig({
     hookTimeout: 5_000,
     teardownTimeout: 3_000,
     pool: 'forks',
+    maxWorkers: 4,
+    minWorkers: 1,
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/__tests__/setup.ts'],

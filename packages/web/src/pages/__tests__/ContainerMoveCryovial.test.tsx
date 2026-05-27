@@ -46,9 +46,7 @@ vi.mock('../../lib/api/locations', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('locations', {
     authApi: {
-        getCurrentUser: vi.fn().mockResolvedValue({
-            data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
-        }),
+        getCurrentUser: vi.fn().mockResolvedValue({ user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } }),
     },
     collectionsApi: {
         resolveContainers: vi.fn(),
@@ -65,9 +63,7 @@ vi.mock('../../lib/api/collections', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('collections', {
     authApi: {
-        getCurrentUser: vi.fn().mockResolvedValue({
-            data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
-        }),
+        getCurrentUser: vi.fn().mockResolvedValue({ user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } }),
     },
     collectionsApi: {
         resolveContainers: vi.fn(),
@@ -84,9 +80,7 @@ vi.mock('../../lib/api/auth', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('auth', {
     authApi: {
-        getCurrentUser: vi.fn().mockResolvedValue({
-            data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
-        }),
+        getCurrentUser: vi.fn().mockResolvedValue({ user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } }),
     },
     collectionsApi: {
         resolveContainers: vi.fn(),
@@ -103,13 +97,13 @@ describe('ContainerMoveCryovial', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         initialSearchParams = new URLSearchParams()
-        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
     })
 
     it('renders upload step initially', async () => {
-        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
         
         await renderWithProviders(<ContainerMoveCryovial />)
         
@@ -124,8 +118,8 @@ describe('ContainerMoveCryovial', () => {
 
     it('resets to upload step and updates URL when step=resolve in URL but no files (reload)', async () => {
         initialSearchParams = new URLSearchParams({ step: 'resolve' })
-        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
 
         await renderWithProviders(<ContainerMoveCryovial />)
 
@@ -139,8 +133,8 @@ describe('ContainerMoveCryovial', () => {
     })
 
     it('validates empty CSV file', async () => {
-        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
         
         const { container } = await renderWithProviders(<ContainerMoveCryovial />)
 
@@ -171,10 +165,8 @@ describe('ContainerMoveCryovial', () => {
     })
 
     it('clears file input value when a file is removed', async () => {
-        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: { collections: [{ id: 1, name: 'BOX1', barcode: null, locationId: null, itemCount: 0 }] }
-        } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [{ id: 1, name: 'BOX1', barcode: null, locationId: null, itemCount: 0 }] } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
 
         const csvContent = 'source_collection_name,source_position,target_position\nBOX1,A1,B1'
         const file = new File([csvContent], 'BOX1.csv', { type: 'text/csv' })
@@ -206,18 +198,13 @@ describe('ContainerMoveCryovial', () => {
 
     it('clears resolution state when destination box is changed', async () => {
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [
                     { id: 1, name: 'BOX1', barcode: null, locationId: 1, itemCount: 0, location: { path: '/Loc1' } },
                     { id: 2, name: 'BOX2', barcode: null, locationId: 1, itemCount: 0, location: { path: '/Loc1' } },
                 ],
-            }
-        } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({
-            data: { locations: [{ id: 1, name: 'Loc1', path: '/Loc1', parentId: null }] }
-        } as any)
+            } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [{ id: 1, name: 'Loc1', path: '/Loc1', parentId: null }] } as any)
         vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: {
                 containers: [
                     {
                         identifier: { sourceCollectionName: 'BOX1', sourcePosition: 'A1' },
@@ -230,8 +217,7 @@ describe('ContainerMoveCryovial', () => {
                         },
                     },
                 ],
-            }
-        } as any)
+            } as any)
 
         const csvContent = 'source_collection_name,source_position,target_position\nBOX1,A1,B1'
         const file = new File([csvContent], 'data.csv', { type: 'text/csv' })
@@ -284,8 +270,8 @@ describe('ContainerMoveCryovial', () => {
     })
 
     it('validates CSV columns specific to cryovials', async () => {
-        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
         
         const { container } = await renderWithProviders(<ContainerMoveCryovial />)
         
@@ -320,7 +306,6 @@ describe('ContainerMoveCryovial', () => {
     it('resolves cryovial containers successfully', async () => {
         // Mock a box that matches the filename so it auto-selects
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ 
-            data: { 
                 collections: [{ 
                     id: 1, 
                     name: 'cryo', 
@@ -329,15 +314,13 @@ describe('ContainerMoveCryovial', () => {
                     itemCount: 0,
                     location: null
                 }] 
-            } 
-        } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+            } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
         
         const csvContent = 'source_collection_name,source_position,target_position\nCRYO1,A1,B1'
         const file = new File([csvContent], 'cryo.csv', { type: 'text/csv' })
 
         vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: {
                 containers: [
                     {
                         identifier: { sourceCollectionName: 'CRYO1', sourcePosition: 'A1' },
@@ -350,8 +333,7 @@ describe('ContainerMoveCryovial', () => {
                         }
                     }
                 ]
-            }
-        } as any)
+            } as any)
 
         const { container } = await renderWithProviders(<ContainerMoveCryovial />)
 
@@ -386,7 +368,6 @@ describe('ContainerMoveCryovial', () => {
     it('errors on incorrect collection types (e.g. generic box)', async () => {
         // Mock a box that matches the filename so it auto-selects
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ 
-            data: { 
                 collections: [{ 
                     id: 1, 
                     name: 'test', 
@@ -395,15 +376,13 @@ describe('ContainerMoveCryovial', () => {
                     itemCount: 0,
                     location: null
                 }] 
-            } 
-        } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+            } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
         
         const csvContent = 'source_collection_name,source_position,target_position\nBOX1,A1,B1'
         const file = new File([csvContent], 'test.csv', { type: 'text/csv' })
 
         vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: {
                 containers: [
                     {
                         identifier: { sourceCollectionName: 'BOX1', sourcePosition: 'A1' },
@@ -416,8 +395,7 @@ describe('ContainerMoveCryovial', () => {
                         }
                     }
                 ]
-            }
-        } as any)
+            } as any)
 
         const { container } = await renderWithProviders(<ContainerMoveCryovial />)
         
@@ -442,17 +420,12 @@ describe('ContainerMoveCryovial', () => {
 
     it('sends selected atomic mode in move payload', async () => {
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [
                     { id: 1, name: 'BOX1', barcode: null, locationId: 1, itemCount: 0, location: { path: '/Loc1' } },
                 ],
-            }
-        } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({
-            data: { locations: [{ id: 1, name: 'Loc1', path: '/Loc1', parentId: null }] }
-        } as any)
+            } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [{ id: 1, name: 'Loc1', path: '/Loc1', parentId: null }] } as any)
         vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: {
                 containers: [
                     {
                         identifier: { sourceCollectionName: 'BOX1', sourcePosition: 'A1' },
@@ -465,11 +438,8 @@ describe('ContainerMoveCryovial', () => {
                         },
                     },
                 ],
-            }
-        } as any)
-        vi.mocked(collectionsApi.moveContainers).mockResolvedValue({
-            data: { success: true, moved: 1 }
-        } as any)
+            } as any)
+        vi.mocked(collectionsApi.moveContainers).mockResolvedValue({ success: true, moved: 1 } as any)
 
         const csvContent = 'source_collection_name,source_position,target_position\nBOX1,A1,B1'
         const file = new File([csvContent], 'BOX1.csv', { type: 'text/csv' })

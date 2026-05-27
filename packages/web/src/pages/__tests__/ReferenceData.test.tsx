@@ -3,6 +3,41 @@ import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import ReferenceData from '../ReferenceData'
 
+const mockUseReferenceDataTab = vi.hoisted(() =>
+  vi.fn(() => ({
+    data: [],
+    isPending: false,
+    isLoading: false,
+    isError: false,
+    isSuccess: true,
+    error: null,
+    refetch: vi.fn(),
+  }))
+)
+
+vi.mock('../../hooks/useReferenceDataPage', async () => {
+  const actual = await vi.importActual<typeof import('../../hooks/useReferenceDataPage')>(
+    '../../hooks/useReferenceDataPage'
+  )
+  return {
+    ...actual,
+    useReferenceDataTab: mockUseReferenceDataTab,
+    useReferenceDataAllLocations: vi.fn(() => ({
+      data: [],
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+    })),
+    useSpecimenTypeContainerTypes: vi.fn(() => ({
+      relationships: {},
+      usageInfo: {},
+      isPending: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    })),
+  }
+})
+
 // Mock the config module
 vi.mock('../../config/reference-data-config', () => {
   const createMockConfig = (id: string, label: string, options: any = {}) => ({
@@ -98,11 +133,20 @@ vi.mock('../../contexts/UserContext', async () => {
 describe('ReferenceData Page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockUseReferenceDataTab.mockReturnValue({
+      data: [],
+      isPending: false,
+      isLoading: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+      refetch: vi.fn(),
+    })
   })
 
   describe('Tab Switching', () => {
     it('should render with default tab (specimen-types)', async () => {
-      await render(<ReferenceData />)
+      await render(<ReferenceData />, { initialEntries: ['/reference-data?tab=specimen-types'] })
 
       await waitFor(() => {
         expect(screen.getByText('Reference Data Management')).toBeInTheDocument()
@@ -128,6 +172,24 @@ describe('ReferenceData Page', () => {
       await render(<ReferenceData />)
       await waitFor(() => {
         expect(screen.getByText('Reference Data Management')).toBeInTheDocument()
+      })
+    })
+
+    it('shows PageError with retry when tab load fails', async () => {
+      mockUseReferenceDataTab.mockReturnValue({
+        data: undefined,
+        isPending: false,
+        isLoading: false,
+        isError: true,
+        isSuccess: false,
+        error: new Error('fail'),
+        refetch: vi.fn(),
+      })
+      await render(<ReferenceData />, { initialEntries: ['/reference-data?tab=specimen-types'] })
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toBeInTheDocument()
+        expect(screen.getByText(/Could not load specimen types/i)).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
       })
     })
   })

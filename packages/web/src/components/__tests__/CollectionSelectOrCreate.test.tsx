@@ -198,19 +198,15 @@ describe('CollectionSelectOrCreate', () => {
     const user = userEvent.setup()
     const createBox = vi.mocked(collectionsApi.createBox)
     createBox.mockResolvedValue({
-      data: {
-        box: {
-          id: 99,
-          name: 'New Box Name',
-          locationId: 10,
-          locationPath: 'Freezer A',
-        },
+      box: {
+        id: 99,
+        name: 'New Box Name',
+        locationId: 10,
+        locationPath: 'Freezer A',
+        created: '2025-01-01T00:00:00Z',
+        lastUpdated: '2025-01-01T00:00:00Z',
       },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').InternalAxiosRequestConfig,
-    } as Awaited<ReturnType<typeof collectionsApi.createBox>>)
+    })
     const onChange = vi.fn()
     render(<CollectionSelectOrCreate {...defaultProps} allowCreate onChange={onChange} />)
     const input = screen.getByRole('combobox')

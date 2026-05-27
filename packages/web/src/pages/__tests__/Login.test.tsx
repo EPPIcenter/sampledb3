@@ -80,7 +80,7 @@ describe('Login Page', () => {
       }
 
       vi.mocked(authApi.login).mockResolvedValueOnce({
-        data: { user: mockUser },
+        user: mockUser,
       } as any)
 
       await render(<Login />)
@@ -118,7 +118,7 @@ describe('Login Page', () => {
       }
 
       vi.mocked(authApi.login).mockResolvedValueOnce({
-        data: { user: mockUser },
+        user: mockUser,
       } as any)
 
       await render(<Login />)
@@ -179,7 +179,7 @@ describe('Login Page', () => {
       }
 
       vi.mocked(authApi.login).mockResolvedValueOnce({
-        data: { user: mockUser },
+        user: mockUser,
       } as any)
 
       await render(<Login />)
@@ -227,13 +227,11 @@ describe('Login Page', () => {
 
       // Resolve the promise
       resolveLogin!({
-        data: {
-          user: {
-            id: 1,
-            email: 'test@example.com',
-            name: 'Test User',
-            role: 'member',
-          },
+        user: {
+          id: 1,
+          email: 'test@example.com',
+          name: 'Test User',
+          role: 'member',
         },
       })
 
@@ -259,7 +257,7 @@ describe('Login Page', () => {
       }
 
       vi.mocked(authApi.login).mockResolvedValueOnce({
-        data: { user: mockUser },
+        user: mockUser,
       } as any)
 
       await render(<Login />)

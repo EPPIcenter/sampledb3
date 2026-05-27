@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import SubjectDetail from '../SubjectDetail'
 
@@ -13,21 +14,8 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('../../lib/api/subjects', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
-  return createMockedDomainModule('subjects', {
-  subjectsApi: {
-    getSummary: vi.fn().mockResolvedValue({
-      subject: { id: 1, name: 'Subject 1', studyId: 1, study: { id: 1, title: 'Study', shortCode: 'ST1' } },
-      specimens: [],
-      summary: {
-        totalSpecimens: 0,
-        totalContainers: 0,
-        specimenTypes: [],
-        collectionDateRange: null,
-        timeline: [],
-      },
-    }),
-  }
-  })
+  const { subjectDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('subjects', subjectDetailPageMock())
 })
 
 vi.mock('../../contexts/UserContext', async () => {
@@ -38,6 +26,8 @@ vi.mock('../../contexts/UserContext', async () => {
   }
 })
 
+import { subjectsApi } from '../../lib/api/subjects'
+
 describe('SubjectDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -46,8 +36,37 @@ describe('SubjectDetail', () => {
   it('shows subject name after load', async () => {
     await render(<SubjectDetail />)
     await waitFor(() => {
-      const matches = screen.getAllByText(/Subject 1/i)
-      expect(matches.length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/Subject 1/i).length).toBeGreaterThan(0)
     }, { timeout: 3000 })
+  })
+
+  it('shows Add Specimen when user can write', async () => {
+    await render(<SubjectDetail />)
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /add specimen/i }).length).toBeGreaterThan(0)
+    }, { timeout: 3000 })
+  })
+
+  it('opens Add Specimen modal when clicked', async () => {
+    const user = userEvent.setup()
+    await render(<SubjectDetail />)
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /add specimen/i }).length).toBeGreaterThan(0)
+    }, { timeout: 3000 })
+    await user.click(screen.getAllByRole('button', { name: /add specimen/i })[0]!)
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /add specimen/i })).toBeInTheDocument()
+    })
+  })
+
+  it('shows page error when summary fails to load', async () => {
+    vi.mocked(subjectsApi.getSummary).mockRejectedValue({
+      response: { data: { error: 'Server unavailable' } },
+    })
+    await render(<SubjectDetail />)
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Server unavailable')
+    })
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
   })
 })

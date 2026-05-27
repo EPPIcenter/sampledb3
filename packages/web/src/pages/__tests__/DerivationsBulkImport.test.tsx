@@ -100,12 +100,10 @@ describe('DerivationsBulkImport', () => {
 
   it('calls validateCsv and advances when validation succeeds with no missing collections', async () => {
     vi.mocked(derivationsApi.validateCsv).mockResolvedValue({
-      data: {
-        rows: [],
-        collections: [],
-        summary: { total: 1, valid: 1, invalid: 0, warnings: 0 },
-      },
-    } as never)
+      rows: [],
+      collections: [],
+      summary: { total: 1, valid: 1, invalid: 0, warnings: 0 },
+    })
     const user = userEvent.setup()
     await render(<DerivationsBulkImport />)
     const file = new File(['parent_container_barcode,plate_name,position\nBAR1,PLATE-001,A1'], 'test.csv', {

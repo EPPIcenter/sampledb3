@@ -59,14 +59,12 @@ describe('PlateScanValidation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-      data: { collections: mockPlateList },
-    } as ReturnType<typeof collectionsApi.listCollectionsByType> extends Promise<infer R> ? R : never)
+      collections: mockPlateList,
+    })
     vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
-      data: { value: { configurations: mockConfigs } },
-    } as any)
-    vi.mocked(collectionsApi.validatePlateScan).mockResolvedValue({
-      data: mockValidateResult,
-    } as any)
+      configurations: mockConfigs,
+    })
+    vi.mocked(collectionsApi.validatePlateScan).mockResolvedValue(mockValidateResult)
   })
 
   it('clears validation result when scanner configuration is changed', async () => {
@@ -152,9 +150,7 @@ describe('PlateScanValidation', () => {
       ...mockValidateResult,
       inferredPlate: true as const,
     }
-    vi.mocked(collectionsApi.validatePlateScan).mockResolvedValue({
-      data: inferredResult,
-    } as unknown as Awaited<ReturnType<typeof collectionsApi.validatePlateScan>>)
+    vi.mocked(collectionsApi.validatePlateScan).mockResolvedValue(inferredResult)
 
     const { container } = await renderWithProviders(<PlateScanValidation />)
 
@@ -213,13 +209,11 @@ describe('PlateScanValidation', () => {
     Object.defineProperty(file, 'text', { value: async () => csvContent })
 
     vi.mocked(collectionsApi.validatePlateScan).mockResolvedValue({
-      data: {
-        inferenceReport: {
-          unknownBarcodes: ['UNKNOWN1'],
-          plateBreakdown: [],
-        },
+      inferenceReport: {
+        unknownBarcodes: ['UNKNOWN1'],
+        plateBreakdown: [],
       },
-    } as unknown as Awaited<ReturnType<typeof collectionsApi.validatePlateScan>>)
+    })
 
     const { container } = await renderWithProviders(<PlateScanValidation />)
 

@@ -14,18 +14,10 @@ vi.mock('../../lib/api/locations', async () => {
 
 import { locationsApi } from '../../lib/api/locations'
 
-const mockAxiosResponse = (data: { locations: Array<Record<string, unknown>> }) => ({
-  data,
-  status: 200,
-  statusText: 'OK',
-  headers: {},
-  config: {} as import('axios').InternalAxiosRequestConfig,
-})
-
 describe('LocationTreePicker', () => {
   const listMock = locationsApi.list as ReturnType<typeof vi.fn>
   beforeEach(() => {
-    listMock.mockResolvedValue(mockAxiosResponse({ locations: [] }))
+    listMock.mockResolvedValue({ locations: [] })
   })
 
   it('renders and opens without crashing', async () => {
@@ -37,35 +29,33 @@ describe('LocationTreePicker', () => {
 
   it('with filterCollectionsOnly shows roots and collection-capable children when only children have canContainCollections', async () => {
     // Production-like: root has canContainCollections=false, only a child has true
-    listMock.mockResolvedValue(
-      mockAxiosResponse({
-        locations: [
-          {
-            id: 1,
-            name: 'Freezer',
-            parentId: null,
-            storageTypeId: '1',
-            storageTypeName: '-80°C',
-            effectiveStorageTypeName: '-80°C',
-            path: 'Freezer',
-            canContainCollections: false,
-            created: '',
-            lastUpdated: '',
-          },
-          {
-            id: 2,
-            name: 'Shelf 1',
-            parentId: 1,
-            storageTypeId: null,
-            effectiveStorageTypeName: '-80°C',
-            path: 'Freezer / Shelf 1',
-            canContainCollections: true,
-            created: '',
-            lastUpdated: '',
-          },
-        ],
-      })
-    )
+    listMock.mockResolvedValue({
+      locations: [
+        {
+          id: 1,
+          name: 'Freezer',
+          parentId: null,
+          storageTypeId: '1',
+          storageTypeName: '-80°C',
+          effectiveStorageTypeName: '-80°C',
+          path: 'Freezer',
+          canContainCollections: false,
+          created: '',
+          lastUpdated: '',
+        },
+        {
+          id: 2,
+          name: 'Shelf 1',
+          parentId: 1,
+          storageTypeId: null,
+          effectiveStorageTypeName: '-80°C',
+          path: 'Freezer / Shelf 1',
+          canContainCollections: true,
+          created: '',
+          lastUpdated: '',
+        },
+      ],
+    })
     const onChange = vi.fn()
     await render(
       <LocationTreePicker selected={[]} onChange={onChange} filterCollectionsOnly={true} />

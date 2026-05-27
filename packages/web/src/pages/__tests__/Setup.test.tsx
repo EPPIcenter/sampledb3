@@ -14,7 +14,7 @@ vi.mock('../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('settings', {
   setupApi: {
-    status: vi.fn().mockResolvedValue({ data: { initialized: false } }),
+    status: vi.fn().mockResolvedValue({ initialized: false }),
     initialize: vi.fn().mockResolvedValue(undefined),
   }
   })
@@ -28,7 +28,7 @@ vi.mock('../../contexts/UserContext', async () => {
 describe('Setup', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(setupApi.status).mockResolvedValue({ data: { initialized: false } } as never)
+    vi.mocked(setupApi.status).mockResolvedValue({ initialized: false })
   })
 
   it('shows setup-related content', async () => {
@@ -39,7 +39,7 @@ describe('Setup', () => {
   })
 
   it('navigates to / when already initialized', async () => {
-    vi.mocked(setupApi.status).mockResolvedValue({ data: { initialized: true } } as never)
+    vi.mocked(setupApi.status).mockResolvedValue({ initialized: true })
     await render(<Setup />)
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/')

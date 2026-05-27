@@ -59,11 +59,8 @@ import { collectionsApi } from '../../lib/api/collections'
 describe('CryovialBoxDetail', () => {
   beforeEach(() => {
     vi.mocked(collectionsApi.getCryovialBox).mockResolvedValue({
-      data: { box: mockBox, positions: mockPositions },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').AxiosResponse['config'],
+      box: mockBox,
+      positions: mockPositions,
     })
   })
 

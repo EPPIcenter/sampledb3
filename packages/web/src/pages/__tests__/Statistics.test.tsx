@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import Statistics from '../Statistics'
+import { statisticsApi } from '../../lib/api/statistics'
+import { emptyStatisticsData } from '../../__tests__/helpers/mock-api-templates'
 
 vi.mock('../../lib/api/statistics', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
@@ -16,6 +18,7 @@ vi.mock('../../contexts/UserContext', async () => {
 describe('Statistics', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(statisticsApi.get).mockResolvedValue(emptyStatisticsData)
   })
 
   it('shows Statistics heading or filter content', async () => {
@@ -27,30 +30,28 @@ describe('Statistics', () => {
 
   it('renders without crashing with completely empty new-app data (minimal valid structure)', async () => {
     // Simulate API response from a freshly set up app with no specimens, containers, or locations
-    const { statisticsApi } = await import('../../lib/api')
+    const { statisticsApi } = await import('../../lib/api/statistics')
     vi.mocked(statisticsApi.get).mockResolvedValue({
-      data: {
-        specimens: {
-          total: 0,
-          bySourceType: {},
-          bySpecimenType: {},
-          byStudy: {},
-          collectionTimeline: [],
-          creationTimeline: [],
-        },
-        containers: {
-          total: 0,
-          byType: {},
-          byTags: {},
-          byStatus: {},
-          averagePerSpecimen: 0,
-        },
-        storage: {
-          byLocation: [],
-          byRootLocation: {},
-        },
+      specimens: {
+        total: 0,
+        bySourceType: {},
+        bySpecimenType: {},
+        byStudy: {},
+        collectionTimeline: [],
+        creationTimeline: [],
       },
-    } as unknown as Awaited<ReturnType<typeof statisticsApi.get>>)
+      containers: {
+        total: 0,
+        byType: {},
+        byTags: {},
+        byStatus: {},
+        averagePerSpecimen: 0,
+      },
+      storage: {
+        byLocation: [],
+        byRootLocation: {},
+      },
+    })
     const { container } = await render(<Statistics />)
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /statistics/i })).toBeInTheDocument()
@@ -58,6 +59,16 @@ describe('Statistics', () => {
     expect(container).toBeInTheDocument()
     // Should show zero values without crashing (multiple stat cards show "0")
     expect(screen.getAllByText('0').length).toBeGreaterThan(0)
+  })
+
+  it('shows PageError with retry when statistics load fails', async () => {
+    vi.mocked(statisticsApi.get).mockRejectedValue(new Error('Server error'))
+    await render(<Statistics />)
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument()
+      expect(screen.getByText(/Could not load statistics/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+    })
   })
 
   // We do not defend against malformed API responses: the server is under our control

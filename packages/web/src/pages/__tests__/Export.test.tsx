@@ -25,8 +25,8 @@ vi.mock('../../lib/api/reference-data', async () => {
 describe('Export', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(exportConfigurationsApi.getShared).mockResolvedValue({ data: { configurations: [] } } as never)
-    vi.mocked(exportConfigurationsApi.getPersonal).mockResolvedValue({ data: { configurations: [] } } as never)
+    vi.mocked(exportConfigurationsApi.getShared).mockResolvedValue({ configurations: [] })
+    vi.mocked(exportConfigurationsApi.getPersonal).mockResolvedValue({ configurations: [] })
   })
 
   it('shows export-related content', async () => {

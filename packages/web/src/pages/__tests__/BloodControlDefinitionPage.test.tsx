@@ -18,33 +18,31 @@ vi.mock('../../contexts/UserContext', async () => {
   }
 })
 
-vi.mock('../../lib/api/reference-data', async () => {
-  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
-  return createMockedDomainModule('reference-data', {
-  controlsApi: { listDefinitions: vi.fn().mockResolvedValue({ data: { definitions: [] } }) },
-  specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-  strainsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-  settingsApi: { getUnits: vi.fn().mockResolvedValue({ data: [] }) },
-})
-})
-
 vi.mock('../../lib/api/controls', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('controls', {
-  controlsApi: { listDefinitions: vi.fn().mockResolvedValue({ data: { definitions: [] } }) },
-  specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-  strainsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-  settingsApi: { getUnits: vi.fn().mockResolvedValue({ data: [] }) },
+    controlsApi: {
+      create: vi.fn(),
+      createDefinitionsBulk: vi.fn(),
+      update: vi.fn().mockResolvedValue({}),
+      suggestName: vi.fn().mockResolvedValue({ suggestedName: 'Suggested', exists: false }),
+    },
+  })
 })
+
+vi.mock('../../lib/api/reference-data', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('reference-data', {
+    strainsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
+  })
 })
 
 vi.mock('../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('settings', {
-  controlsApi: { listDefinitions: vi.fn().mockResolvedValue({ data: { definitions: [] } }) },
-  specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-  strainsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
-  settingsApi: { getUnits: vi.fn().mockResolvedValue({ data: [] }) }
+    settingsApi: {
+      getUnits: vi.fn().mockResolvedValue([]),
+    },
   })
 })
 
@@ -53,9 +51,8 @@ describe('BloodControlDefinitionPage', () => {
     vi.clearAllMocks()
   })
 
-  it('shows New Blood Control Definition heading when id is undefined', async () => {
+  it('renders new definition form', async () => {
     await render(<BloodControlDefinitionPage />)
-    const headings = screen.getAllByRole('heading', { name: /new blood control definition/i })
-    expect(headings.length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('heading', { name: /new blood control definition/i }).length).toBeGreaterThan(0)
   })
 })

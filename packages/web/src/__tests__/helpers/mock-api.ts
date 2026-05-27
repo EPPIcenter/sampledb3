@@ -36,7 +36,7 @@ function applyAuthDefaults(
     authApi: overrides.authApi ?? {
       ...authApi,
       getCurrentUser: vi.fn().mockImplementation(() =>
-        syncThenable({ data: { user: defaultUser } })
+        syncThenable({ user: defaultUser })
       ),
     },
   }
@@ -75,7 +75,7 @@ function applySettingsDefaults(
           },
         },
       }),
-      update: vi.fn().mockResolvedValue({ data: {} }),
+      update: vi.fn().mockResolvedValue({}),
     },
   }
 }

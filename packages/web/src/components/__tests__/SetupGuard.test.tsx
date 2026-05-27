@@ -1,44 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, act } from '../../__tests__/helpers/render'
 import { waitFor } from '@testing-library/react'
-import type { AxiosResponse } from 'axios'
 import SetupGuard from '../SetupGuard'
 import { setupApi } from '../../lib/api/settings'
-
-function createStatusResponse(initialized: boolean): AxiosResponse<{ initialized: boolean }> {
-  return {
-    data: { initialized },
-    status: 200,
-    statusText: 'OK',
-    headers: {},
-    config: { headers: {} } as AxiosResponse['config'],
-  }
-}
 
 vi.mock('../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('settings', {
-  setupApi: {
-    status: vi.fn().mockResolvedValue({
-      data: { initialized: true },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: { headers: {} } as AxiosResponse<{ initialized: boolean }>['config'],
-    } as AxiosResponse<{ initialized: boolean }>),
-  }
+    setupApi: {
+      status: vi.fn().mockResolvedValue({ initialized: true }),
+    },
   })
 })
 
 describe('SetupGuard', () => {
   beforeEach(() => {
-    vi.mocked(setupApi.status).mockResolvedValue(createStatusResponse(true))
+    vi.mocked(setupApi.status).mockResolvedValue({ initialized: true })
   })
 
   it('shows loading state initially', async () => {
-    // Deferred promise so loading state is still visible after render's microtask flush
-    let resolveStatus: (v: AxiosResponse<{ initialized: boolean }>) => void
-    const statusPromise = new Promise<AxiosResponse<{ initialized: boolean }>>((r) => {
+    let resolveStatus: (v: { initialized: boolean }) => void
+    const statusPromise = new Promise<{ initialized: boolean }>((r) => {
       resolveStatus = r
     })
     vi.mocked(setupApi.status).mockReturnValueOnce(statusPromise)
@@ -50,7 +32,7 @@ describe('SetupGuard', () => {
     )
     expect(screen.getByText(/checking setup status/i)).toBeInTheDocument()
     await act(async () => {
-      resolveStatus!(createStatusResponse(true))
+      resolveStatus!({ initialized: true })
       await Promise.resolve()
     })
   })

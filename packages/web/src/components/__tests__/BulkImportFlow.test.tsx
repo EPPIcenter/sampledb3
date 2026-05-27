@@ -104,14 +104,10 @@ describe('BulkImportFlow', () => {
     if (!prevBlobText) {
       blobProto.text = reader
     }
-    vi.mocked(importsApi.bulkCombinedValidate).mockResolvedValue(
-      {
-        data: {
-          valid: false,
-          errors: [{ subjectIndex: 0, message: "Barcode 'B1' is already in use on the server.", rowIndex: 1 }],
-        },
-      } as Awaited<ReturnType<typeof importsApi.bulkCombinedValidate>>
-    )
+    vi.mocked(importsApi.bulkCombinedValidate).mockResolvedValue({
+      valid: false,
+      errors: [{ subjectIndex: 0, message: "Barcode 'B1' is already in use on the server.", rowIndex: 1 }],
+    })
     const user = userEvent.setup()
     const file = new File([text], 'i.csv', { type: 'text/csv' })
     await render(<BulkImportFlow fixedStudyShortCode="ST" />, { initialEntries: ['/import?step=upload'] })

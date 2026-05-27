@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '../../__tests__/helpers/render'
+import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import Locations from '../Locations'
 
 vi.mock('../../lib/api/locations', async () => {
@@ -30,13 +30,7 @@ import { locationsApi } from '../../lib/api/locations'
 
 describe('Locations page', () => {
   beforeEach(() => {
-    vi.mocked(locationsApi.list).mockResolvedValue({
-      data: { locations: [] },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').InternalAxiosRequestConfig,
-    })
+    vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] })
   })
 
   it('renders location list or tree', async () => {
@@ -47,24 +41,18 @@ describe('Locations page', () => {
 
   it('shows locations when API returns list', async () => {
     vi.mocked(locationsApi.list).mockResolvedValue({
-      data: {
-        locations: [
-          {
-            id: 1,
-            name: 'Freezer A',
-            parentId: null,
-            storageTypeId: null,
-            path: 'Freezer A',
-            canContainCollections: true,
-            created: '',
-            lastUpdated: '',
-          },
-        ],
-      },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').InternalAxiosRequestConfig,
+      locations: [
+        {
+          id: 1,
+          name: 'Freezer A',
+          parentId: null,
+          storageTypeId: null,
+          path: 'Freezer A',
+          canContainCollections: true,
+          created: '',
+          lastUpdated: '',
+        },
+      ],
     })
     await render(<Locations />)
     const freezerElements = await screen.findAllByText('Freezer A', {}, { timeout: 3000 })
@@ -73,6 +61,18 @@ describe('Locations page', () => {
 
   it('calls locationsApi.list on mount', async () => {
     await render(<Locations />)
-    expect(locationsApi.list).toHaveBeenCalled()
+    await waitFor(() => {
+      expect(locationsApi.list).toHaveBeenCalled()
+    })
+  })
+
+  it('shows PageError with retry when location list fails', async () => {
+    vi.mocked(locationsApi.list).mockRejectedValue(new Error('fail'))
+    await render(<Locations />)
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument()
+      expect(screen.getByText(/Could not load locations/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+    })
   })
 })

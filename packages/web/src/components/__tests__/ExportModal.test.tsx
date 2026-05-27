@@ -9,14 +9,14 @@ vi.mock('../../lib/api/reference-data', async () => {
   exportApi: {
     validate: vi.fn(),
     export: vi.fn(),
-    availableTypes: vi.fn().mockResolvedValue({ data: { specimen_types: [], container_types: [] } }),
-    getCount: vi.fn().mockResolvedValue({ data: { count: 0 } }),
-    containersCount: vi.fn().mockResolvedValue({ data: { count: 0 } }),
-    containersCountByNames: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+    availableTypes: vi.fn().mockResolvedValue({ specimen_types: [], container_types: [] }),
+    getCount: vi.fn().mockResolvedValue({ count: 0 }),
+    containersCount: vi.fn().mockResolvedValue({ count: 0 }),
+    containersCountByNames: vi.fn().mockResolvedValue({ count: 0 }),
   },
   exportConfigurationsApi: {
-    getShared: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
-    getPersonal: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
+    getShared: vi.fn().mockResolvedValue({ configurations: [] }),
+    getPersonal: vi.fn().mockResolvedValue({ configurations: [] }),
   },
   specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
   tagsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
@@ -29,14 +29,14 @@ vi.mock('../../lib/api/export', async () => {
   exportApi: {
     validate: vi.fn(),
     export: vi.fn(),
-    availableTypes: vi.fn().mockResolvedValue({ data: { specimen_types: [], container_types: [] } }),
-    getCount: vi.fn().mockResolvedValue({ data: { count: 0 } }),
-    containersCount: vi.fn().mockResolvedValue({ data: { count: 0 } }),
-    containersCountByNames: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+    availableTypes: vi.fn().mockResolvedValue({ specimen_types: [], container_types: [] }),
+    getCount: vi.fn().mockResolvedValue({ count: 0 }),
+    containersCount: vi.fn().mockResolvedValue({ count: 0 }),
+    containersCountByNames: vi.fn().mockResolvedValue({ count: 0 }),
   },
   exportConfigurationsApi: {
-    getShared: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
-    getPersonal: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
+    getShared: vi.fn().mockResolvedValue({ configurations: [] }),
+    getPersonal: vi.fn().mockResolvedValue({ configurations: [] }),
   },
   specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
   tagsApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
@@ -49,14 +49,14 @@ vi.mock('../../lib/api/settings', async () => {
   exportApi: {
     validate: vi.fn(),
     export: vi.fn(),
-    availableTypes: vi.fn().mockResolvedValue({ data: { specimen_types: [], container_types: [] } }),
-    getCount: vi.fn().mockResolvedValue({ data: { count: 0 } }),
-    containersCount: vi.fn().mockResolvedValue({ data: { count: 0 } }),
-    containersCountByNames: vi.fn().mockResolvedValue({ data: { count: 0 } }),
+    availableTypes: vi.fn().mockResolvedValue({ specimen_types: [], container_types: [] }),
+    getCount: vi.fn().mockResolvedValue({ count: 0 }),
+    containersCount: vi.fn().mockResolvedValue({ count: 0 }),
+    containersCountByNames: vi.fn().mockResolvedValue({ count: 0 }),
   },
   exportConfigurationsApi: {
-    getShared: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
-    getPersonal: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
+    getShared: vi.fn().mockResolvedValue({ configurations: [] }),
+    getPersonal: vi.fn().mockResolvedValue({ configurations: [] }),
   },
   specimenTypesApi: { list: vi.fn().mockResolvedValue({ data: [] }) },
   tagsApi: { list: vi.fn().mockResolvedValue({ data: [] }) }
@@ -101,11 +101,12 @@ describe('ExportModal', () => {
   })
 
   it('shows 0 matching containers and no error for empty study', async () => {
-    const { exportApi } = await import('../../lib/api')
-    vi.mocked(exportApi.containersCount).mockResolvedValue({ data: { count: 0 } } as never)
+    const { exportApi } = await import('../../lib/api/export')
+    vi.mocked(exportApi.containersCount).mockResolvedValue({ count: 0 })
     vi.mocked(exportApi.availableTypes).mockResolvedValue({
-      data: { specimen_types: [], container_types: [] },
-    } as never)
+      specimen_types: [],
+      container_types: [],
+    })
 
     await render(
       <ExportModal isOpen={true} onClose={onClose} studyCode="TUT01" studyId={1} />

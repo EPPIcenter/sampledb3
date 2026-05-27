@@ -47,13 +47,7 @@ import { studiesApi } from '../../lib/api/studies'
 
 describe('StudyDetail page', () => {
   beforeEach(() => {
-    vi.mocked(api.get).mockResolvedValue({
-      data: { pagination: { total: 0 } },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: { headers: {} } as import('axios').AxiosResponse['config'],
-    })
+    vi.mocked(api.get).mockResolvedValue({ pagination: { total: 0 } })
     vi.mocked(studiesApi.get).mockResolvedValue({
       study: {
         id: 1,

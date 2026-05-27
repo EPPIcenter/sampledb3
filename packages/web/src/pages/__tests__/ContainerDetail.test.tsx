@@ -35,16 +35,10 @@ import { api } from '../../lib/api/client'
 describe('ContainerDetail', () => {
   beforeEach(() => {
     vi.mocked(api.get).mockResolvedValue({
-      data: {
-        container: { id: 1, containerType: 'micronix_tube' },
-        specimen: {},
-        locationPath: '/Loc/Plate',
-        collection: { type: 'micronix_plate', id: 1, name: 'Plate1', position: 'A01', barcode: 'MT001' },
-      },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').AxiosResponse['config'],
+      container: { id: 1, containerType: 'micronix_tube' },
+      specimen: {},
+      locationPath: '/Loc/Plate',
+      collection: { type: 'micronix_plate', id: 1, name: 'Plate1', position: 'A01', barcode: 'MT001' },
     })
   })
 

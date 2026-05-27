@@ -24,13 +24,21 @@ bun test:ui       # UI mode
 bun test:coverage # With coverage
 ```
 
+## HTTP client mocks
+
+See [ADR 0002: HTTP client returns response bodies](../../../docs/adr/0002-http-client-response-unwrap.md).
+
+`lib/api/client` `api` methods resolve to the **response body**, not `AxiosResponse`. Domain mocks return body shapes directly (`{ user }`, `{ studies: [] }`), not `{ data: { … }, status, headers }`.
+
+Reference-data list helpers still return `{ data: T[], meta? }` — keep that envelope in mocks for `specimenTypesApi.list()` and similar.
+
 ## Test Structure
 
 - `__tests__/helpers/` - Test utilities
   - `render.tsx`: Custom render function with providers (QueryClient, BrowserRouter, ToastProvider)
-  - `mock-api.ts`: `createMockedApi()` — `importActual` + global `authApi` / `tableViewConfigurationsApi` defaults + per-test overrides
+  - `mock-api.ts`: `createMockedDomainModule()` — `importActual` per `lib/api/<domain>` + per-test overrides
   - `mock-api-templates.ts`: domain presets (`statisticsPageMock`, `studiesPageMock`, etc.) for common page/hook tests
-  - `setup.ts`: Global test setup (IntersectionObserver, in-memory localStorage, default `createMockedApi()` for `lib/api`)
+  - `setup.ts`: Global test setup (IntersectionObserver, in-memory localStorage; default mocks for `auth` and `settings`)
 - `__tests__/fixtures/` - Test data fixtures
 - `lib/__tests__/` - Lib unit tests (e.g. commands, constants, plate-filename-match, container-types, localUserHistory, hotkeys, error-logger)
 - `components/__tests__/` - Component tests (e.g. BulkImportFlow, ContainerDerivationModal)

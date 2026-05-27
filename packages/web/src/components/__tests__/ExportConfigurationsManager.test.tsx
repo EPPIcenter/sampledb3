@@ -35,11 +35,11 @@ describe('ExportConfigurationsManager', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(exportConfigurationsApi.getShared).mockResolvedValue({
-      data: { configurations: sharedConfigs },
-    } as never)
+      configurations: sharedConfigs,
+    })
     vi.mocked(exportConfigurationsApi.getPersonal).mockResolvedValue({
-      data: { configurations: [] },
-    } as never)
+      configurations: [],
+    })
     vi.mocked(exportConfigurationsApi.update).mockResolvedValue({} as never)
     vi.mocked(exportConfigurationsApi.updatePersonal).mockResolvedValue({} as never)
   })

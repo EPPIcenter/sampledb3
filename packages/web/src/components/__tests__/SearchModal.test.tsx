@@ -7,7 +7,7 @@ vi.mock('../../lib/api/client', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('client', {
   default: {
-    get: vi.fn().mockResolvedValue({ data: { results: [] } }),
+    get: vi.fn().mockResolvedValue({ results: [], query: '', count: 0 }),
   }
   })
 })

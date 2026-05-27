@@ -12,10 +12,10 @@ vi.mock('../../lib/api/locations', async () => {
       data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
     }),
   },
-  locationsApi: { list: vi.fn().mockResolvedValue({ data: { locations: [] } }) },
+  locationsApi: { list: vi.fn().mockResolvedValue({ locations: [] }) },
   collectionsApi: {
-    listAllCollections: vi.fn().mockResolvedValue({ data: { collections: [] } }),
-    moveCollections: vi.fn().mockResolvedValue({ data: { success: true, moved: 0 } }),
+    listAllCollections: vi.fn().mockResolvedValue({ collections: [] }),
+    moveCollections: vi.fn().mockResolvedValue({ success: true, moved: 0 }),
   },
 })
 })
@@ -28,10 +28,10 @@ vi.mock('../../lib/api/collections', async () => {
       data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
     }),
   },
-  locationsApi: { list: vi.fn().mockResolvedValue({ data: { locations: [] } }) },
+  locationsApi: { list: vi.fn().mockResolvedValue({ locations: [] }) },
   collectionsApi: {
-    listAllCollections: vi.fn().mockResolvedValue({ data: { collections: [] } }),
-    moveCollections: vi.fn().mockResolvedValue({ data: { success: true, moved: 0 } }),
+    listAllCollections: vi.fn().mockResolvedValue({ collections: [] }),
+    moveCollections: vi.fn().mockResolvedValue({ success: true, moved: 0 }),
   },
 })
 })
@@ -44,10 +44,10 @@ vi.mock('../../lib/api/auth', async () => {
       data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
     }),
   },
-  locationsApi: { list: vi.fn().mockResolvedValue({ data: { locations: [] } }) },
+  locationsApi: { list: vi.fn().mockResolvedValue({ locations: [] }) },
   collectionsApi: {
-    listAllCollections: vi.fn().mockResolvedValue({ data: { collections: [] } }),
-    moveCollections: vi.fn().mockResolvedValue({ data: { success: true, moved: 0 } }),
+    listAllCollections: vi.fn().mockResolvedValue({ collections: [] }),
+    moveCollections: vi.fn().mockResolvedValue({ success: true, moved: 0 }),
   }
   })
 })
@@ -62,9 +62,15 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => vi.fn() }
 })
 
+function emptyCollectionsPayload() {
+  return { collections: [] }
+}
+
 describe('CollectionMove', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] })
+    vi.mocked(collectionsApi.listAllCollections).mockResolvedValue(emptyCollectionsPayload())
   })
 
   it('shows collection move content', async () => {
@@ -77,6 +83,17 @@ describe('CollectionMove', () => {
     })
   })
 
+  it('shows PageError with retry when collections load fails', async () => {
+    vi.mocked(collectionsApi.listAllCollections).mockRejectedValue(new Error('fail'))
+    const { default: CollectionMove } = await import('../CollectionMove')
+    await render(<CollectionMove />)
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument()
+      expect(screen.getByText(/Could not load collections/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+    })
+  })
+
   it('shows both collections in Review when same id different type are selected', async () => {
     const locations = [
       { id: 1, name: 'F1', path: 'F1', parentId: null, canContainCollections: true, description: undefined, storageTypeId: null, effectiveStorageTypeName: '-80°C', created: '', lastUpdated: '' },
@@ -86,15 +103,9 @@ describe('CollectionMove', () => {
       { id: 1, name: 'Plate A', type: 'micronix_plate' as const, itemCount: 0, locationId: 1, location: { id: 1, path: 'F1' }, barcode: null },
       { id: 1, name: 'Cryovial Box B', type: 'cryovial_box' as const, itemCount: 0, locationId: 1, location: { id: 1, path: 'F1' }, barcode: null },
     ]
-    vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations } } as Awaited<ReturnType<typeof locationsApi.list>>)
-    vi.mocked(collectionsApi.listAllCollections).mockResolvedValue({ data: { collections } } as Awaited<ReturnType<typeof collectionsApi.listAllCollections>>)
-    vi.mocked(collectionsApi.moveCollections).mockResolvedValue({
-      data: { success: true, moved: 1 },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').InternalAxiosRequestConfig,
-    } as Awaited<ReturnType<typeof collectionsApi.moveCollections>>)
+    vi.mocked(locationsApi.list).mockResolvedValue({ locations })
+    vi.mocked(collectionsApi.listAllCollections).mockResolvedValue({ collections })
+    vi.mocked(collectionsApi.moveCollections).mockResolvedValue({ success: true, moved: 1 })
 
     const { default: CollectionMove } = await import('../CollectionMove')
     const user = userEvent.setup()
@@ -146,15 +157,9 @@ describe('CollectionMove', () => {
     const collections = [
       { id: 11, name: 'Plate Default', type: 'micronix_plate' as const, itemCount: 0, locationId: 1, location: { id: 1, path: 'F1' }, barcode: null },
     ]
-    vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations } } as Awaited<ReturnType<typeof locationsApi.list>>)
-    vi.mocked(collectionsApi.listAllCollections).mockResolvedValue({ data: { collections } } as Awaited<ReturnType<typeof collectionsApi.listAllCollections>>)
-    vi.mocked(collectionsApi.moveCollections).mockResolvedValue({
-      data: { success: true, moved: 1 },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').InternalAxiosRequestConfig,
-    } as Awaited<ReturnType<typeof collectionsApi.moveCollections>>)
+    vi.mocked(locationsApi.list).mockResolvedValue({ locations })
+    vi.mocked(collectionsApi.listAllCollections).mockResolvedValue({ collections })
+    vi.mocked(collectionsApi.moveCollections).mockResolvedValue({ success: true, moved: 1 })
 
     const { default: CollectionMove } = await import('../CollectionMove')
     const user = userEvent.setup()
@@ -196,15 +201,9 @@ describe('CollectionMove', () => {
     const collections = [
       { id: 21, name: 'Plate BestEffort', type: 'micronix_plate' as const, itemCount: 0, locationId: 1, location: { id: 1, path: 'F1' }, barcode: null },
     ]
-    vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations } } as Awaited<ReturnType<typeof locationsApi.list>>)
-    vi.mocked(collectionsApi.listAllCollections).mockResolvedValue({ data: { collections } } as Awaited<ReturnType<typeof collectionsApi.listAllCollections>>)
-    vi.mocked(collectionsApi.moveCollections).mockResolvedValue({
-      data: { success: true, moved: 1 },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').InternalAxiosRequestConfig,
-    } as Awaited<ReturnType<typeof collectionsApi.moveCollections>>)
+    vi.mocked(locationsApi.list).mockResolvedValue({ locations })
+    vi.mocked(collectionsApi.listAllCollections).mockResolvedValue({ collections })
+    vi.mocked(collectionsApi.moveCollections).mockResolvedValue({ success: true, moved: 1 })
 
     const { default: CollectionMove } = await import('../CollectionMove')
     const user = userEvent.setup()

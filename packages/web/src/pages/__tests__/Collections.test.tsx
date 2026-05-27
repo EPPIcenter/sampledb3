@@ -54,11 +54,7 @@ import { collectionsApi } from '../../lib/api/collections'
 describe('Collections page', () => {
   beforeEach(() => {
     vi.mocked(collectionsApi.listAllCollections).mockResolvedValue({
-      data: { collections: mockCollections },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').InternalAxiosRequestConfig,
+      collections: mockCollections,
     })
   })
 

@@ -96,16 +96,12 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
     beforeEach(() => {
         vi.clearAllMocks()
         initialSearchParams = new URLSearchParams()
-        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
         vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
-            data: {
                 configurations: [mockScannerConfig]
-            }
-        } as any)
-        vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
-            data: { plate: { id: 1, name: 'PLATE1' }, wells: {} }
-        } as any)
+            } as any)
+        vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({ plate: { id: 1, name: 'PLATE1' }, wells: {} } as any)
     })
 
     it('renders upload step initially', async () => {
@@ -119,10 +115,10 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
 
     it('resets to upload step and updates URL when step=resolve in URL but no files (reload)', async () => {
         initialSearchParams = new URLSearchParams({ step: 'resolve' })
-        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
         vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
-            data: { configurations: [mockScannerConfig] },
+            configurations: [mockScannerConfig],
         } as any)
 
         await renderWithProviders(<ContainerMoveMicronix />)
@@ -137,9 +133,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
     })
 
     it('clears file input value when a file is removed', async () => {
-        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: { collections: [{ id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }] }
-        } as any)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [{ id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }] } as any)
         const csvContent = fullPlateCSV({ A01: 'MTX1' })
         const file = new File([csvContent], 'PLATE1.csv', { type: 'text/csv' })
 
@@ -284,14 +278,11 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
 
     it('accepts CSV with exactly 96 well positions', async () => {
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [
                     { id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }
                 ]
-            }
-        } as any)
+            } as any)
         vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: {
                 containers: [
                     {
                         identifier: { barcode: 'MTX123' },
@@ -305,8 +296,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                         }
                     }
                 ]
-            }
-        } as any)
+            } as any)
         const csvContent = fullPlateCSV({ A01: 'MTX123' })
         const file = new File([csvContent], 'PLATE1.csv', { type: 'text/csv' })
 
@@ -383,10 +373,8 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             isDefault: false,
         }
         vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
-            data: {
                 configurations: [configWithTargetPosition, configWithPositionColumn],
-            },
-        } as any)
+            } as any)
 
         const csvContent = fullPlateCSV({ A01: 'MTX1' })
         const file = new File([csvContent], 'plate.csv', { type: 'text/csv' })
@@ -439,10 +427,8 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             isDefault: false,
         }
         vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
-            data: {
                 configurations: [configWithTargetPosition, configWithPositionColumn],
-            },
-        } as any)
+            } as any)
 
         const csvContent = fullPlateCSV({ A01: 'MTX1' })
         const file = new File([csvContent], 'plate.csv', { type: 'text/csv' })
@@ -492,10 +478,8 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             isDefault: false,
         }
         vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
-            data: {
                 configurations: [configWithTargetPosition, configWithPositionColumn],
-            },
-        } as any)
+            } as any)
 
         const csvContent = fullPlateCSV({ A01: 'MTX1' })
         const file1 = new File([csvContent], 'plate1.csv', { type: 'text/csv' })
@@ -549,23 +533,15 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             isDefault: false,
         }
         vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
-            data: {
                 configurations: [configWithTargetPosition, configWithPositionColumn],
-            },
-        } as any)
+            } as any)
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [
                     { id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 },
                 ],
-            },
-        } as any)
-        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: { containers: [] },
-        } as any)
-        vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
-            data: { plate: { id: 1, name: 'PLATE1' }, wells: {} },
-        } as any)
+            } as any)
+        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({ containers: [] } as any)
+        vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({ plate: { id: 1, name: 'PLATE1' }, wells: {} } as any)
 
         const csvContent = fullPlateCSV({ A01: 'MTX1' })
         const file = new File([csvContent], 'PLATE1.csv', { type: 'text/csv' })
@@ -615,14 +591,11 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         const file = new File([csvContent], 'PLATE1.csv', { type: 'text/csv' })
 
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [
                     { id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }
                 ]
-            }
-        } as any)
+            } as any)
         vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: {
                 containers: [
                     {
                         identifier: { barcode: 'MTX123' },
@@ -636,14 +609,11 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                         }
                     }
                 ]
-            }
-        } as any)
+            } as any)
         vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
-            data: {
                 plate: { id: 1, name: 'PLATE1' },
                 wells: {} // destination plate empty
-            }
-        } as any)
+            } as any)
 
         const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         await waitFor(() => {
@@ -675,28 +645,22 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
     it('clears resolution state and relocation errors when destination plate is changed', async () => {
         // Setup: two plates, file name does not match so picker is shown
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [
                     { id: 1, name: 'PLATE1', barcode: null, locationId: 1, itemCount: 0, location: { path: '/Loc1' } },
                     { id: 2, name: 'PLATE2', barcode: null, locationId: 1, itemCount: 0, location: { path: '/Loc1' } }
                 ]
-            }
-        } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({
-            data: { locations: [{ id: 1, name: 'Loc1', path: '/Loc1', parentId: null }] }
-        } as any)
-        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({ data: { containers: [] } } as any)
+            } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [{ id: 1, name: 'Loc1', path: '/Loc1', parentId: null }] } as any)
+        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({ containers: [] } as any)
         // PLATE1 has tube at A01 not in upload -> relocation error; PLATE2 empty
         vi.mocked(collectionsApi.getMicronixPlate).mockImplementation((plateId: number) =>
             Promise.resolve(
                 plateId === 1
                     ? ({
-                          data: {
-                              plate: { id: 1, name: 'PLATE1' },
-                              wells: { A01: { type: 'micronix_tube', id: 99, barcode: 'TUBE_AT_A01', position: 'A01' } }
-                          }
+                          plate: { id: 1, name: 'PLATE1' },
+                          wells: { A01: { type: 'micronix_tube', id: 99, barcode: 'TUBE_AT_A01', position: 'A01' } },
                       } as any)
-                    : ({ data: { plate: { id: 2, name: 'PLATE2' }, wells: {} } } as any)
+                    : ({ plate: { id: 2, name: 'PLATE2' }, wells: {} } as any)
             )
         )
 
@@ -750,17 +714,12 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         const file = new File([csvContent], 'PLATE1.csv', { type: 'text/csv' })
 
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [
                     { id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }
                 ]
-            }
-        } as any)
-        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: { containers: [] }
-        } as any)
+            } as any)
+        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({ containers: [] } as any)
         vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
-            data: {
                 plate: { id: 1, name: 'PLATE1' },
                 wells: {
                     A01: {
@@ -770,8 +729,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                         position: 'A01'
                     }
                 }
-            }
-        } as any)
+            } as any)
 
         const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         await waitFor(() => {
@@ -805,17 +763,12 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         const file = new File([csvContent], 'PLATE1.csv', { type: 'text/csv' })
 
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [
                     { id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }
                 ]
-            }
-        } as any)
-        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: { containers: [] }
-        } as any)
+            } as any)
+        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({ containers: [] } as any)
         vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
-            data: {
                 plate: { id: 1, name: 'PLATE1' },
                 wells: {
                     A01: {
@@ -825,8 +778,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                         position: 'A01'
                     }
                 }
-            }
-        } as any)
+            } as any)
 
         const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         await waitFor(() => {
@@ -861,14 +813,11 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         const file = new File([csvContent], 'PLATE1.csv', { type: 'text/csv' })
 
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [
                     { id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }
                 ]
-            }
-        } as any)
+            } as any)
         vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: {
                 containers: [
                     {
                         identifier: { barcode: 'TUBE_AT_A01' },
@@ -882,10 +831,8 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                         }
                     }
                 ]
-            }
-        } as any)
+            } as any)
         vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
-            data: {
                 plate: { id: 1, name: 'PLATE1' },
                 wells: {
                     A01: {
@@ -895,8 +842,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                         position: 'A01'
                     }
                 }
-            }
-        } as any)
+            } as any)
 
         const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         await waitFor(() => {
@@ -930,14 +876,11 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         const file2 = new File([fullPlateCSV({ A02: 'TUBE_AT_A01' })], 'PLATE1.csv', { type: 'text/csv' })
 
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [
                     { id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }
                 ]
-            }
-        } as any)
+            } as any)
         vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: {
                 containers: [
                     {
                         identifier: { barcode: 'TUBE_AT_A01' },
@@ -951,10 +894,8 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                         }
                     }
                 ]
-            }
-        } as any)
+            } as any)
         vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
-            data: {
                 plate: { id: 1, name: 'PLATE1' },
                 wells: {
                     A01: {
@@ -964,8 +905,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                         position: 'A01'
                     }
                 }
-            }
-        } as any)
+            } as any)
 
         const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         await waitFor(() => {
@@ -995,21 +935,16 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
 
     it('execute sends only rows with barcode in move payload', async () => {
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [
                     { id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }
                 ]
-            }
-        } as any)
-        vi.mocked(collectionsApi.moveContainers).mockResolvedValue({
-            data: { success: true, moved: 1 }
-        } as any)
+            } as any)
+        vi.mocked(collectionsApi.moveContainers).mockResolvedValue({ success: true, moved: 1 } as any)
 
         const csvContent = fullPlateCSV({ A01: 'MTX123' })
         const file = new File([csvContent], 'PLATE1.csv', { type: 'text/csv' })
 
         vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: {
                 containers: [
                     {
                         identifier: { barcode: 'MTX123' },
@@ -1023,11 +958,8 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                         }
                     }
                 ]
-            }
-        } as any)
-        vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
-            data: { plate: { id: 1, name: 'PLATE1' }, wells: {} }
-        } as any)
+            } as any)
+        vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({ plate: { id: 1, name: 'PLATE1' }, wells: {} } as any)
 
         const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         await waitFor(() => {
@@ -1078,7 +1010,6 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         
         // Mock a plate that matches the filename
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ 
-            data: { 
                 collections: [{ 
                     id: 1, 
                     name: 'PLATE1', 
@@ -1086,11 +1017,9 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                     locationId: null,
                     itemCount: 0 
                 }] 
-            } 
-        } as any)
+            } as any)
 
         vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: {
                 containers: [
                     {
                         identifier: { barcode: 'MTX123' },
@@ -1104,8 +1033,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                         }
                     }
                 ]
-            }
-        } as any)
+            } as any)
 
         const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         
@@ -1151,7 +1079,6 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
     it('infers destination plate from filename with date suffix', async () => {
         const file = new File([fullPlateCSV()], 'PLATE1_2024-01-15.csv', { type: 'text/csv' })
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [{
                     id: 1,
                     name: 'PLATE1',
@@ -1159,8 +1086,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                     locationId: null,
                     itemCount: 0
                 }]
-            }
-        } as any)
+            } as any)
 
         const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         await waitFor(() => {
@@ -1189,7 +1115,6 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
     it('infers destination plate from filename stem with contains match', async () => {
         const file = new File([fullPlateCSV()], 'MyPlate.csv', { type: 'text/csv' })
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
                 collections: [{
                     id: 1,
                     name: 'MyPlate-001',
@@ -1197,8 +1122,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                     locationId: null,
                     itemCount: 0
                 }]
-            }
-        } as any)
+            } as any)
 
         const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         await waitFor(() => {
@@ -1229,7 +1153,6 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         
         // Mock a plate that matches the filename
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ 
-            data: { 
                 collections: [{ 
                     id: 1, 
                     name: 'PLATE1', 
@@ -1237,11 +1160,9 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                     locationId: null,
                     itemCount: 0 
                 }] 
-            } 
-        } as any)
+            } as any)
 
         vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: {
                 containers: [
                     {
                         identifier: { barcode: 'MTX123' },
@@ -1255,8 +1176,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                         }
                     }
                 ]
-            }
-        } as any)
+            } as any)
 
         const { container } = await renderWithProviders(<ContainerMoveMicronix />)
         
@@ -1290,29 +1210,26 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
 
     it('sends selected atomic mode in move payload', async () => {
         vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
-            data: {
-                collections: [{ id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }],
-            },
+            collections: [{ id: 1, name: 'PLATE1', barcode: null, locationId: null, itemCount: 0 }],
         } as any)
         vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
-            data: {
-                containers: [
-                    {
-                        identifier: { barcode: 'MTX1' },
-                        container: {
-                            containerId: 1,
-                            currentCollectionId: 1,
-                            currentCollectionName: 'PLATE1',
-                            currentCollectionType: 'micronix_plate',
-                            currentPosition: 'A01',
-                            barcode: 'MTX1',
-                        },
+            containers: [
+                {
+                    identifier: { barcode: 'MTX1' },
+                    container: {
+                        containerId: 1,
+                        currentCollectionId: 1,
+                        currentCollectionName: 'PLATE1',
+                        currentCollectionType: 'micronix_plate',
+                        currentPosition: 'A01',
+                        barcode: 'MTX1',
                     },
-                ],
-            },
+                },
+            ],
         } as any)
         vi.mocked(collectionsApi.moveContainers).mockResolvedValue({
-            data: { success: true, moved: 1 },
+            success: true,
+            moved: 1,
         } as any)
 
         const csvContent = fullPlateCSV({ A01: 'MTX1' })

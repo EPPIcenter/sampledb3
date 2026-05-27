@@ -10,9 +10,7 @@ vi.mock('../../lib/api/locations', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('locations', {
     authApi: {
-        getCurrentUser: vi.fn().mockResolvedValue({
-            data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
-        }),
+        getCurrentUser: vi.fn().mockResolvedValue({ user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } }),
     },
     collectionsApi: {
         listCollectionsByType: vi.fn(),
@@ -30,9 +28,7 @@ vi.mock('../../lib/api/collections', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('collections', {
     authApi: {
-        getCurrentUser: vi.fn().mockResolvedValue({
-            data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
-        }),
+        getCurrentUser: vi.fn().mockResolvedValue({ user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } }),
     },
     collectionsApi: {
         listCollectionsByType: vi.fn(),
@@ -50,9 +46,7 @@ vi.mock('../../lib/api/auth', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('auth', {
     authApi: {
-        getCurrentUser: vi.fn().mockResolvedValue({
-            data: { user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } },
-        }),
+        getCurrentUser: vi.fn().mockResolvedValue({ user: { id: 1, email: 'admin@test.com', name: 'Admin', role: 'admin' } }),
     },
     collectionsApi: {
         listCollectionsByType: vi.fn(),
@@ -69,18 +63,24 @@ vi.mock('../../lib/api/auth', async () => {
 describe('ContainerMovePapers', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ data: { collections: [] } } as any)
-        vi.mocked(locationsApi.list).mockResolvedValue({ data: { locations: [] } } as any)
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({ locations: [] } as any)
         vi.mocked(collectionsApi.getBox).mockResolvedValue({
-            data: {
                 contents: {
                     sheets: [
                         { id: 100, name: 'Sheet A', papers: [] },
                         { id: 101, name: 'Sheet B', papers: [] }
                     ]
                 }
-            }
-        } as any)
+            } as any)
+        vi.mocked(collectionsApi.getBox).mockResolvedValue({
+                contents: {
+                    sheets: [
+                        { id: 100, name: 'Sheet A', papers: [] },
+                        { id: 101, name: 'Sheet B', papers: [] }
+                    ]
+                }
+            } as any)
     })
 
     it('renders initial step successfully', async () => {
@@ -91,20 +91,28 @@ describe('ContainerMovePapers', () => {
         expect(screen.getByText('Choose Source Collection')).toBeInTheDocument()
     })
 
+    it('shows PageError with retry when bootstrap load fails', async () => {
+        vi.mocked(collectionsApi.listCollectionsByType).mockRejectedValue(new Error('fail'))
+        await renderWithProviders(<ContainerMovePapers />)
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toBeInTheDocument()
+            expect(screen.getByText(/Could not load collections/i)).toBeInTheDocument()
+            expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+        })
+    })
+
     it('expanding location row reveals child locations and collections', async () => {
         vi.mocked(collectionsApi.listCollectionsByType).mockImplementation((type) => {
-            if (type === 'box') return Promise.resolve({ data: { collections: [{ id: 1, name: 'Box A', itemCount: 2, locationId: 10 }] } } as any)
-            if (type === 'bag') return Promise.resolve({ data: { collections: [] } } as any)
-            return Promise.resolve({ data: { collections: [] } } as any)
+            if (type === 'box') return Promise.resolve({ collections: [{ id: 1, name: 'Box A', itemCount: 2, locationId: 10 }] } as any)
+            if (type === 'bag') return Promise.resolve({ collections: [] } as any)
+            return Promise.resolve({ collections: [] } as any)
         })
         vi.mocked(locationsApi.list).mockResolvedValue({
-            data: {
                 locations: [
                     { id: 1, name: 'Building', parentId: null, storageTypeId: '1', canContainCollections: true, path: 'Building' },
                     { id: 10, name: 'Freezer', parentId: 1, storageTypeId: '1', canContainCollections: true, path: 'Building / Freezer' }
                 ]
-            }
-        } as any)
+            } as any)
 
         await renderWithProviders(<ContainerMovePapers />)
 
@@ -117,9 +125,9 @@ describe('ContainerMovePapers', () => {
 
     it('loads available collections on mount', async () => {
         vi.mocked(collectionsApi.listCollectionsByType).mockImplementation((type) => {
-            if (type === 'box') return Promise.resolve({ data: { collections: [{ id: 1, name: 'Box 1', itemCount: 1 }] } } as any)
-            if (type === 'bag') return Promise.resolve({ data: { collections: [{ id: 2, name: 'Bag 1', itemCount: 2 }] } } as any)
-            return Promise.resolve({ data: { collections: [] } } as any)
+            if (type === 'box') return Promise.resolve({ collections: [{ id: 1, name: 'Box 1', itemCount: 1 }] } as any)
+            if (type === 'bag') return Promise.resolve({ collections: [{ id: 2, name: 'Bag 1', itemCount: 2 }] } as any)
+            return Promise.resolve({ collections: [] } as any)
         })
 
         await renderWithProviders(<ContainerMovePapers />)
@@ -142,17 +150,15 @@ describe('ContainerMovePapers', () => {
 
         // 1. Mock data loading
         vi.mocked(collectionsApi.listCollectionsByType).mockImplementation((type) => {
-            if (type === 'box') return Promise.resolve({ data: { collections: [{ id: 1, name: 'Source Box', itemCount: 5, locationId: 10 }] } } as any)
-            return Promise.resolve({ data: { collections: [{ id: 2, name: 'Source Bag', itemCount: 5, locationId: 10 }] } } as any)
+            if (type === 'box') return Promise.resolve({ collections: [{ id: 1, name: 'Source Box', itemCount: 5, locationId: 10 }] } as any)
+            return Promise.resolve({ collections: [{ id: 2, name: 'Source Bag', itemCount: 5, locationId: 10 }] } as any)
         })
         vi.mocked(locationsApi.list).mockResolvedValue({
-            data: {
                 locations: [
                     { id: 1, name: 'Building', parentId: null, storageTypeId: '1', canContainCollections: true, path: 'Building' },
                     { id: 10, name: 'Freezer', parentId: 1, storageTypeId: '1', canContainCollections: true, path: 'Building / Freezer' }
                 ]
-            }
-        } as any)
+            } as any)
 
         await renderWithProviders(<ContainerMovePapers />)
 

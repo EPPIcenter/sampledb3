@@ -15,23 +15,21 @@ vi.mock('../../lib/api/controls', async () => {
   return createMockedDomainModule('controls', {
   controlsApi: {
     getBatchSummary: vi.fn().mockResolvedValue({
-      data: {
-        batch: {
-          id: 1,
-          name: 'Batch 1',
-          controlDefinitionId: 1,
-          productionDate: '2024-01-01',
-          definition: { id: 1, name: 'Control Def', controlType: 'blood' },
-        },
-        specimens: [],
-        summary: {
-          totalSpecimens: 0,
-          totalContainers: 0,
-          totalRemainingQuantity: 0,
-          specimenTypes: [],
-          collectionDateRange: null,
-          timeline: [],
-        },
+      batch: {
+        id: 1,
+        name: 'Batch 1',
+        controlDefinitionId: 1,
+        productionDate: '2024-01-01',
+        definition: { id: 1, name: 'Control Def', controlType: 'blood' },
+      },
+      specimens: [],
+      summary: {
+        totalSpecimens: 0,
+        totalContainers: 0,
+        totalRemainingQuantity: 0,
+        specimenTypes: [],
+        collectionDateRange: null,
+        timeline: [],
       },
     }),
     deleteBatch: vi.fn().mockResolvedValue(undefined),

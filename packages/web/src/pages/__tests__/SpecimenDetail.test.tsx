@@ -53,11 +53,8 @@ import { api } from '../../lib/api/client'
 describe('SpecimenDetail', () => {
   beforeEach(() => {
     vi.mocked(api.get).mockResolvedValue({
-      data: { subject: { id: 1, name: 'S1', studyId: 1 }, study: { title: 'Study', code: 'ST1' } },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').AxiosResponse['config'],
+      subject: { id: 1, name: 'S1', studyId: 1 },
+      study: { title: 'Study', code: 'ST1' },
     })
     mockAddContainer.mockResolvedValue({ containerId: 101 })
   })

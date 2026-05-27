@@ -37,13 +37,7 @@ import { api } from '../../lib/api/client'
 
 describe('Specimens page', () => {
   beforeEach(() => {
-    vi.mocked(api.get).mockResolvedValue({
-      data: { specimens: [] },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').InternalAxiosRequestConfig,
-    })
+    vi.mocked(api.get).mockResolvedValue({ specimens: [] })
   })
 
   it('renders filters and table area', async () => {
@@ -54,22 +48,16 @@ describe('Specimens page', () => {
 
   it('shows specimen rows when API returns list', async () => {
     vi.mocked(api.get).mockResolvedValue({
-      data: {
-        specimens: [
-          {
-            id: 1,
-            specimenTypeId: 1,
-            created: '2024-01-01',
-            specimenType: { id: 1, name: 'Whole Blood' },
-            studySubject: { id: 1, name: 'SUBJ-001' },
-            study: { id: 1, shortCode: 'ST1' },
-          },
-        ],
-      },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').InternalAxiosRequestConfig,
+      specimens: [
+        {
+          id: 1,
+          specimenTypeId: 1,
+          created: '2024-01-01',
+          specimenType: { id: 1, name: 'Whole Blood' },
+          studySubject: { id: 1, name: 'SUBJ-001' },
+          study: { id: 1, shortCode: 'ST1' },
+        },
+      ],
     })
     await render(<Specimens />)
     await screen.findByText(/Whole Blood/i)

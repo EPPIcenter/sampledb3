@@ -17,13 +17,7 @@ const mockList = locationsApi.list as ReturnType<typeof vi.fn>
 
 describe('LocationPicker', () => {
   beforeEach(() => {
-    mockList.mockResolvedValue({
-      data: { locations: [] },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').InternalAxiosRequestConfig,
-    })
+    mockList.mockResolvedValue({ locations: [] })
   })
 
   it('calls locations API on mount', async () => {
@@ -34,24 +28,18 @@ describe('LocationPicker', () => {
 
   it('loads locations when API returns data', async () => {
     mockList.mockResolvedValue({
-      data: {
-        locations: [
-          {
-            id: 1,
-            name: 'Freezer A',
-            parentId: null,
-            storageTypeId: null,
-            path: 'Freezer A',
-            canContainCollections: true,
-            created: '',
-            lastUpdated: '',
-          },
-        ],
-      },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').InternalAxiosRequestConfig,
+      locations: [
+        {
+          id: 1,
+          name: 'Freezer A',
+          parentId: null,
+          storageTypeId: null,
+          path: 'Freezer A',
+          canContainCollections: true,
+          created: '',
+          lastUpdated: '',
+        },
+      ],
     })
     const onChange = vi.fn()
     await render(<LocationPicker value={null} onChange={onChange} />)
@@ -60,34 +48,28 @@ describe('LocationPicker', () => {
 
   it('with filterCollectionsOnly only shows Select button for locations that can contain collections', async () => {
     mockList.mockResolvedValue({
-      data: {
-        locations: [
-          {
-            id: 1,
-            name: 'Root',
-            parentId: null,
-            storageTypeId: null,
-            path: 'Root',
-            canContainCollections: false,
-            created: '',
-            lastUpdated: '',
-          },
-          {
-            id: 2,
-            name: 'Shelf 1',
-            parentId: 1,
-            storageTypeId: null,
-            path: 'Root / Shelf 1',
-            canContainCollections: true,
-            created: '',
-            lastUpdated: '',
-          },
-        ],
-      },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').InternalAxiosRequestConfig,
+      locations: [
+        {
+          id: 1,
+          name: 'Root',
+          parentId: null,
+          storageTypeId: null,
+          path: 'Root',
+          canContainCollections: false,
+          created: '',
+          lastUpdated: '',
+        },
+        {
+          id: 2,
+          name: 'Shelf 1',
+          parentId: 1,
+          storageTypeId: null,
+          path: 'Root / Shelf 1',
+          canContainCollections: true,
+          created: '',
+          lastUpdated: '',
+        },
+      ],
     })
     const onChange = vi.fn()
     await render(

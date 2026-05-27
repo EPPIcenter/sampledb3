@@ -58,11 +58,8 @@ import { collectionsApi } from '../../lib/api/collections'
 describe('MicronixPlateDetail', () => {
   beforeEach(() => {
     vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
-      data: { plate: mockPlate, wells: mockWells },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {} as import('axios').AxiosResponse['config'],
+      plate: mockPlate,
+      wells: mockWells,
     })
   })
 

@@ -8,8 +8,8 @@ vi.mock('../../lib/api/export', async () => {
   return createMockedDomainModule('export', {
   exportApi: { exportBarcodes: vi.fn() },
   exportConfigurationsApi: {
-    getShared: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
-    getPersonal: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
+    getShared: vi.fn().mockResolvedValue({ configurations: [] }),
+    getPersonal: vi.fn().mockResolvedValue({ configurations: [] }),
   },
 })
 })
@@ -19,8 +19,8 @@ vi.mock('../../lib/api/settings', async () => {
   return createMockedDomainModule('settings', {
   exportApi: { exportBarcodes: vi.fn() },
   exportConfigurationsApi: {
-    getShared: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
-    getPersonal: vi.fn().mockResolvedValue({ data: { configurations: [] } }),
+    getShared: vi.fn().mockResolvedValue({ configurations: [] }),
+    getPersonal: vi.fn().mockResolvedValue({ configurations: [] }),
   }
   })
 })
@@ -28,8 +28,8 @@ vi.mock('../../lib/api/settings', async () => {
 describe('BarcodeExport', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(exportConfigurationsApi.getShared).mockResolvedValue({ data: { configurations: [] } } as never)
-    vi.mocked(exportConfigurationsApi.getPersonal).mockResolvedValue({ data: { configurations: [] } } as never)
+    vi.mocked(exportConfigurationsApi.getShared).mockResolvedValue({ configurations: [] })
+    vi.mocked(exportConfigurationsApi.getPersonal).mockResolvedValue({ configurations: [] })
   })
 
   it('shows barcode export content', async () => {
