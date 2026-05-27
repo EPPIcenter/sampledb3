@@ -6,7 +6,7 @@ export type FilterArrayValue = number | string
  * Safe when the field is undefined (treats as empty array).
  */
 export function toggleArrayFilterValue<
-  T extends Record<string, unknown>,
+  T extends object,
   K extends keyof T,
 >(prev: T, key: K, value: FilterArrayValue): T {
   const current = (prev[key] as FilterArrayValue[] | undefined) ?? []
@@ -18,7 +18,7 @@ export function toggleArrayFilterValue<
 }
 
 /** Read an optional array filter field as an array (never undefined). */
-export function getFilterArrayValue<T extends Record<string, unknown>, K extends keyof T>(
+export function getFilterArrayValue<T extends object, K extends keyof T>(
   state: T,
   key: K
 ): FilterArrayValue[] {

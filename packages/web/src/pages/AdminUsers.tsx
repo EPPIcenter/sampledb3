@@ -664,8 +664,9 @@ export default function AdminUsers() {
         </Modal>
 
         {/* Delete Confirmation Modal */}
+        {selectedUser && (
         <Modal
-          isOpen={showDeleteModal && selectedUser != null}
+          isOpen={showDeleteModal}
           onClose={() => {
             setShowDeleteModal(false)
             setSelectedUser(null)
@@ -699,10 +700,12 @@ export default function AdminUsers() {
                 </button>
               </div>
         </Modal>
+        )}
 
         {/* Password Reset Modal */}
+        {selectedUser && (
         <Modal
-          isOpen={showPasswordModal && selectedUser != null}
+          isOpen={showPasswordModal}
           onClose={() => {
             setShowPasswordModal(false)
             setSelectedUser(null)
@@ -778,10 +781,12 @@ export default function AdminUsers() {
                 </button>
               </div>
         </Modal>
+        )}
 
         {/* Sessions Modal */}
+        {selectedUser && (
         <Modal
-          isOpen={showSessionsModal && selectedUser != null}
+          isOpen={showSessionsModal}
           onClose={() => {
             setShowSessionsModal(false)
             setSelectedUser(null)
@@ -793,7 +798,7 @@ export default function AdminUsers() {
           panelClassName="admin-card p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto border border-[rgb(var(--app-border))]"
           contentClassName="p-0"
         >
-              <h2 className="text-xl font-bold mb-4">Active Sessions for {selectedUser?.name}</h2>
+              <h2 className="text-xl font-bold mb-4">Active Sessions for {selectedUser.name}</h2>
               {sessionsLoading ? (
                 <div className="text-center py-8 dashboard-stat-muted">Loading sessions...</div>
               ) : sessions.length === 0 ? (
@@ -835,6 +840,7 @@ export default function AdminUsers() {
                 </button>
               </div>
         </Modal>
+        )}
         </div>
       </div>
     </div>

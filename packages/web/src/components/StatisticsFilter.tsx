@@ -426,7 +426,7 @@ export default function StatisticsFilter({ filters, onChange, onSubmit, isLoadin
                             onChange={() => {
                               updateFilter(
                                 'tagIds',
-                                toggleArrayFilterValue(localFilters, 'tagIds', tag.id.toString()).tagIds
+                                toggleArrayFilterValue(localFilters, 'tagIds', tag.id.toString()).tagIds ?? []
                               )
                             }}
                             className="rounded border-app-border text-app-accent focus:ring-app-accent"

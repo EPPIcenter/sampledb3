@@ -111,11 +111,11 @@ export default function ContainerDetail() {
   // Primary lab identifier for header: barcode (micronix/cryovial/paper when present), else position, else type
   const hasBarcode = effectiveCollection?.barcode && (effectiveContainerType === 'micronix_tube' || effectiveContainerType === 'cryovial_tube' || effectiveContainerType === 'paper')
   const containerIdentifier = hasBarcode
-    ? effectiveCollection.barcode
+    ? (effectiveCollection!.barcode ?? containerTypeName)
     : effectiveCollection?.position || effectiveCollection?.label || containerTypeName
 
   // Build breadcrumbs - use identifier instead of ID
-  const breadcrumbItems = []
+  const breadcrumbItems: Array<{ label: string; to?: string }> = []
   if (source?.type === 'control') {
     breadcrumbItems.push({ label: 'Blood Controls', to: '/blood-controls' })
     if (source.definition) {
@@ -225,9 +225,9 @@ export default function ContainerDetail() {
                 </span>
               )}
               <span
-                className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-white ${container.remainingQuantity > 0 ? 'bg-app-trend-up/100' : 'bg-app-trend-down/100'}`}
+                className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-white ${(container.remainingQuantity ?? 0) > 0 ? 'bg-app-trend-up/100' : 'bg-app-trend-down/100'}`}
               >
-                {container.remainingQuantity > 0 ? 'In Use' : 'Exhausted'}
+                {(container.remainingQuantity ?? 0) > 0 ? 'In Use' : 'Exhausted'}
               </span>
             </div>
           </div>
@@ -372,12 +372,10 @@ export default function ContainerDetail() {
                           <Link to={`/subjects/${source.id}`} className="dashboard-link hover:underline font-medium break-all">
                             {source.name}
                           </Link>
-                        ) : source.type === 'control' ? (
+                        ) : (
                           <Link to={`/blood-controls/batches/${source.id}`} className="dashboard-link hover:underline font-medium break-all">
                             {source.name}
                           </Link>
-                        ) : (
-                          <span>{source.name}</span>
                         )}
                       </dd>
                     </div>
@@ -553,13 +551,13 @@ export default function ContainerDetail() {
                                   {formatDerivationType(derivation.derivationType)}
                                 </span>
                               )}
-                              {container?.remainingQuantity !== undefined && (
+                              {container?.remainingQuantity != null && (
                                 <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                                  container.remainingQuantity > 0 
+                                  (container.remainingQuantity ?? 0) > 0 
                                     ? 'bg-app-trend-up/10 text-app-trend-up' 
                                     : 'bg-app-trend-down/10 text-app-trend-down'
                                 }`}>
-                                  {container.remainingQuantity > 0 ? 'In Use' : 'Exhausted'}
+                                  {(container.remainingQuantity ?? 0) > 0 ? 'In Use' : 'Exhausted'}
                                 </span>
                               )}
                             </div>
@@ -668,13 +666,13 @@ export default function ContainerDetail() {
           onClose={() => setShowDerivationModal(false)}
           parentContainerId={parseInt(id)}
           parentContainer={{
-            remainingQuantity: container.remainingQuantity,
+            remainingQuantity: container.remainingQuantity ?? undefined,
             unit: container.unit,
             containerType: effectiveContainerType,
             barcode: effectiveCollection?.barcode,
             position: effectiveCollection?.position,
             label: effectiveCollection?.label,
-            specimenTypeName: specimen?.specimenType?.name ?? specimen?.specimen_type?.name,
+            specimenTypeName: specimen?.specimenType?.name,
           }}
           onSuccess={handleDerivationCreated}
           openKey={derivationModalKey}
@@ -689,7 +687,7 @@ export default function ContainerDetail() {
           container={{
             id: container.id!,
             comment: container.comment,
-            remainingQuantity: container.remainingQuantity,
+            remainingQuantity: container.remainingQuantity ?? undefined,
             tags: container.tags,
             unit: container.unit,
             containerType: effectiveContainerType,

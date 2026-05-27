@@ -54,6 +54,7 @@ export type EnrichedContainer = {
   location?: { id: number; name: string; path?: string } | null
   locationPath?: string
   collection?: ContainerCollectionInfo | null
+  state?: { id?: number; name: string } | null
   created?: string
   lastUpdated?: string
 }

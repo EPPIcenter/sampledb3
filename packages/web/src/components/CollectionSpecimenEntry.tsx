@@ -110,12 +110,7 @@ export default function CollectionSpecimenEntry({
         onSuccess?.()
       }
     } catch (err: unknown) {
-      const message =
-        err &&
-        typeof err === 'object' &&
-        'response' in err &&
-        (err as { response?: { data?: { error?: string } } }).response?.data?.error
-      setWorkflowError(message || 'Failed to create specimens')
+      setWorkflowError(getQueryErrorMessage(err, 'Failed to create specimens'))
     } finally {
       setSubmitting(false)
     }
