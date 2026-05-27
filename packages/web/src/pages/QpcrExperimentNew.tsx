@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
-import { qpcrExperimentsApi } from '../lib/api/qpcr';
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
+import { useCreateQpcrExperiment } from '../hooks/useQpcrExperiments'
 import { useUser } from '../contexts/UserContext'
 import '../styles/qpcr.css'
 
@@ -9,7 +9,7 @@ export default function QpcrExperimentNew() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
   const [name, setName] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const createExperiment = useCreateQpcrExperiment()
   const [error, setError] = useState<string | null>(null)
 
   if (!canWrite) {
@@ -18,10 +18,9 @@ export default function QpcrExperimentNew() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setSubmitting(true)
     setError(null)
     try {
-      const res = await qpcrExperimentsApi.create({
+      const res = await createExperiment.mutateAsync({
         name: name.trim() || null,
         templateFormat: 'biorad',
       })
@@ -31,8 +30,6 @@ export default function QpcrExperimentNew() {
         ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
         : 'Failed to create experiment'
       setError(msg ?? 'Failed to create experiment')
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -103,10 +100,10 @@ export default function QpcrExperimentNew() {
             <div className="flex flex-wrap gap-3 pt-1">
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={createExperiment.isPending}
                 className="qpcr-btn-primary"
               >
-                {submitting ? 'Creating…' : 'Create and set up plate'}
+                {createExperiment.isPending ? 'Creating…' : 'Create and set up plate'}
               </button>
               <button
                 type="button"

@@ -1,10 +1,15 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api/client'
 import { qpcrExperimentsApi } from '../lib/api/qpcr'
 import type { QpcrExperimentDetailResponse, QpcrExperimentWell } from '../lib/api/qpcr'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
-import { useQpcrExperiment, useQpcrScannerConfigurations } from '../hooks/useQpcrExperiments'
+import {
+  invalidateQpcrExperimentQueries,
+  useQpcrExperiment,
+  useQpcrScannerConfigurations,
+} from '../hooks/useQpcrExperiments'
 import { DetailPageSkeleton, PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import QpcrWellPlate from '../components/qpcr/QpcrWellPlate'
 import { getContainerTypeIcon, getContainerTypeName, getSpecimenTypeIcon } from '../lib/icons'
@@ -146,6 +151,7 @@ function normalizeWellParam(value: string | null): string | null {
 export default function QpcrExperimentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const { canWrite } = useUser()
   const { error: showError, success: showSuccess } = useToast()
@@ -405,6 +411,7 @@ export default function QpcrExperimentDetail() {
     setDeleting(true)
     try {
       await qpcrExperimentsApi.delete(parseInt(id))
+      invalidateQpcrExperimentQueries(queryClient)
       navigate('/qpcr-experiments', { replace: true })
     } catch (err: unknown) {
       const message = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'

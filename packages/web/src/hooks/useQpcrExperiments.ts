@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { qpcrExperimentsApi } from '../lib/api/qpcr'
 import { scannerConfigurationsApi } from '../lib/api/settings'
+import { dashboardKeys } from './useDashboard'
 
 export const qpcrKeys = {
   all: ['qpcr-experiments'] as const,
@@ -35,6 +36,33 @@ export function useQpcrScannerConfigurations() {
     queryFn: async () => {
       const res = await scannerConfigurationsApi.getShared()
       return res.configurations ?? []
+    },
+  })
+}
+
+/** Invalidate list, detail, and dashboard widgets after qPCR experiment changes. */
+export function invalidateQpcrExperimentQueries(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: qpcrKeys.all })
+  void queryClient.invalidateQueries({ queryKey: dashboardKeys.qpcr() })
+}
+
+export function useCreateQpcrExperiment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Parameters<typeof qpcrExperimentsApi.create>[0]) =>
+      qpcrExperimentsApi.create(data),
+    onSuccess: () => {
+      invalidateQpcrExperimentQueries(queryClient)
+    },
+  })
+}
+
+export function useDeleteQpcrExperiment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => qpcrExperimentsApi.delete(id),
+    onSuccess: () => {
+      invalidateQpcrExperimentQueries(queryClient)
     },
   })
 }
