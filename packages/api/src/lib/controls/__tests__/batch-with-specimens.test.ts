@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
+import { setupTestDatabase, cleanupTestDatabase } from '../../../__tests__/helpers/db-setup'
 import {
   createTestControlDefinition,
   createTestSpecimenType,
@@ -7,15 +7,15 @@ import {
   createTestLocation,
   createTestMicronixPlate,
   createTestUnit,
-} from '../../__tests__/helpers/factories'
-import { setContainerDefaults } from '../settings'
-import { createBatchWithSpecimens } from '../controls/batch-with-specimens'
-import { specimenTypeContainerType, containerTypeUnit, storageContainer, box } from '../../db/schema'
+} from '../../../__tests__/helpers/factories'
+import { setContainerDefaults } from '../../settings'
+import { createBatchWithSpecimens } from '../batch-with-specimens'
+import { specimenTypeContainerType, containerTypeUnit, storageContainer, box } from '../../../db/schema'
 import { eq } from 'drizzle-orm'
-import type { Database } from '../../db/client'
-import { utcNow } from '../datetime'
+import type { Database } from '../../../db/client'
+import { utcNow } from '../../datetime'
 
-describe('control-batch-creation', () => {
+describe('batch-with-specimens', () => {
   let testDb: Database
   let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
 

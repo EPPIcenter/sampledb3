@@ -73,6 +73,36 @@ describe('collections lib', () => {
     it('returns null for missing plate', async () => {
       expect(await getMicronixPlateDetail(testDb, 99999)).toBeNull()
     })
+
+    it('returns plate with tube entries and location path', async () => {
+      const storageType = await createTestStorageType(testDb, { name: 'Detail freezer' })
+      const loc = await createTestLocation(testDb, {
+        name: 'Detail freezer',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      const plate = await createTestMicronixPlate(testDb, { name: 'Detail-Plate', locationId: loc.id })
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Type' })
+      const specimen = await createTestSpecimen(testDb, specimenType.id)
+      const container = await createTestStorageContainer(testDb, {
+        specimenId: specimen.id,
+        unitId: unit.id,
+      })
+      await testDb.insert(micronixTube).values({
+        id: container.id,
+        collectionId: plate.id,
+        barcode: 'DT-01',
+        position: 'B02',
+        created: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+      })
+
+      const detail = await getMicronixPlateDetail(testDb, plate.id)
+      expect(detail?.plate.name).toBe('Detail-Plate')
+      expect(detail?.plate.locationPath).toBeDefined()
+      expect(Object.keys(detail?.wells ?? {}).length).toBeGreaterThan(0)
+    })
   })
 
   describe('enrichStorageContainer', () => {
