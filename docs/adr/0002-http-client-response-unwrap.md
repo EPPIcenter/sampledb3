@@ -18,6 +18,7 @@ Unwrapping at the client boundary gives one convention: **domain APIs and hooks 
 
 - Call `api.get/post/...` and return the result directly (or map fields from it).
 - Do not add another `.data` unwrap unless the backend body itself uses an envelope (see below).
+- For `GET /settings/:key`, use `settingsApi.getValue(key)` or `settingsApi.get(key).value` — never `api.get<SettingValue>(`/settings/${key}`)`.
 
 ### Pages, components, and hooks
 
@@ -30,6 +31,7 @@ Unwrapping at the client boundary gives one convention: **domain APIs and hooks 
 |-------|-------------------|--------------|
 | **Direct** | `{ study }`, `{ locations: [] }`, `{ user }` | Use top-level keys on the unwrapped body. |
 | **`ApiResponse` envelope** | `GET /specimen-types` → `{ data: T[], meta? }` | `extractData(body)` in reference-data list helpers; callers of `specimenTypesApi.list()` still receive `{ data, meta }`. |
+| **Settings key envelope** | `GET /settings/:key` → `{ key, value }` | Use `settingsApi.getValue('scanner_configurations')` (or `get()` then `.value`). Do not type the body as the setting value directly. Dedicated `/settings/export-configurations/shared` (etc.) return direct bodies. |
 | **Named `data` field** | Export POST → `{ summary, data: string \| rows, filename }` | `response.data` is the export payload field, not axios — do not “unwrap” it again. |
 
 ### Errors

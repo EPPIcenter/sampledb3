@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { collectionsApi } from '../lib/api/collections';
 import type { ValidatePlateScanResult, InferenceReport } from '../lib/api/collections';
-import { scannerConfigurationsApi } from '../lib/api/settings';
+import { settingsApi } from '../lib/api/settings';
 import type { ScannerConfiguration } from '../lib/api/settings';
 import { extractPlateStemFromFilename, findPlateCandidatesFromStem } from '../lib/plate-filename-match'
 import { parseScannerPlateCsv } from '../lib/scanner-plate-csv'
@@ -191,8 +191,8 @@ export default function PlateScanValidation() {
   useEffect(() => {
     Promise.all([
       collectionsApi.listCollectionsByType('micronix_plate'),
-      scannerConfigurationsApi.getAll(),
-    ]).then(([collectionsRes, configsRes]) => {
+      settingsApi.getValue('scanner_configurations'),
+    ]).then(([collectionsRes, configsValue]) => {
       const collectionsData = collectionsRes.collections ?? []
       setPlates(
         (collectionsData as Array<{ id: number; name: string }>).map((c) => ({
@@ -200,7 +200,7 @@ export default function PlateScanValidation() {
           name: c.name,
         }))
       )
-      const configs = configsRes.configurations ?? []
+      const configs = configsValue?.configurations ?? []
       setScannerConfigurations(configs)
       const defaultConfig = configs.find((c: ScannerConfiguration) => c.isDefault === true)
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- fallback when no default config

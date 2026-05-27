@@ -50,9 +50,8 @@ export default function ReviewStep({
 
   useEffect(() => {
     let cancelled = false
-    settingsApi.get('container_defaults').then((res) => {
+    settingsApi.getValue('container_defaults').then((defaults) => {
       if (cancelled) return
-      const defaults = res.value
       if (defaults) {
         setDefaultUnitByContainerType({
           paper: defaults.paper.defaultUnitSymbol,

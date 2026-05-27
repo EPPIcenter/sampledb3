@@ -65,8 +65,8 @@ export default function ContainerTypeUnitsManager({
 
       // Load container defaults to get default unit symbols
       try {
-        const defaultsResponse = await settingsApi.get('container_defaults')
-        const defaults = defaultsResponse.value as ContainerDefaults | null
+        const defaultsResponse = await settingsApi.getValue('container_defaults')
+        const defaults = defaultsResponse as ContainerDefaults | null
         setContainerDefaults(defaults)
         
         if (defaults) {
@@ -157,8 +157,8 @@ export default function ContainerTypeUnitsManager({
       setSaving(true)
 
       // Load current container defaults
-      const defaultsResponse = await settingsApi.get('container_defaults')
-      let defaults = defaultsResponse.value as ContainerDefaults | null
+      const defaultsResponse = await settingsApi.getValue('container_defaults')
+      let defaults = defaultsResponse as ContainerDefaults | null
 
       // Initialize defaults if they don't exist
       if (!defaults) {

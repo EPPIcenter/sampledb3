@@ -89,10 +89,10 @@ export default function PaginationSettingsForm({
     try {
       await settingsApi.resetUserSetting('pagination_settings')
       // Reload settings to get system default
-      const response = await settingsApi.get('pagination_settings')
-      if (response.value) {
-        setFormData(response.value)
-        setSavedFormData(response.value)
+      const response = await settingsApi.getValue('pagination_settings')
+      if (response) {
+        setFormData(response)
+        setSavedFormData(response)
         setIsUserSpecific(false)
         onSuccess?.()
       }

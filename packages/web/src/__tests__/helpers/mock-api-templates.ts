@@ -191,6 +191,7 @@ export function settingsPageMock(): MockApiOverrides {
         scanner_configurations: null,
         table_view_configurations: null,
       }),
+      getValue: vi.fn().mockResolvedValue(null),
     },
   }
 }
@@ -453,7 +454,9 @@ const micronixMoveApis = {
     getMicronixPlate: vi.fn(),
   },
   locationsApi: { list: vi.fn() },
-  scannerConfigurationsApi: { getAll: vi.fn() },
+  settingsApi: {
+    getValue: vi.fn(),
+  },
 }
 
 export function micronixMovePageMock(): MockApiOverrides {

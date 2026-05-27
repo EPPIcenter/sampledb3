@@ -105,9 +105,8 @@ export default function ContainerRegistration({
     const run = async () => {
       try {
         setDefaultUnitError(null)
-        const res = await settingsApi.get('container_defaults')
+        const defaults = await settingsApi.getValue('container_defaults')
         if (cancelled.current) return
-        const defaults = res.value as ContainerDefaults | null
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime check for container type in defaults
         if (defaults && defaults[containerType]) {
           const typeDefaults = defaults[containerType]

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { tableViewConfigurationsApi, type TableViewConfiguration } from '../lib/api/settings'
+import { settingsApi, type TableViewConfiguration } from '../lib/api/settings'
 
 export interface UseTableViewConfigurationsResult {
   configurations: TableViewConfiguration[]
@@ -24,8 +24,8 @@ export function useTableViewConfigurations(): UseTableViewConfigurationsResult {
     try {
       setLoading(true)
       setError(null)
-      const res = await tableViewConfigurationsApi.get()
-      const configs = res.value.configurations
+      const configsValue = await settingsApi.getValue('table_view_configurations')
+      const configs = configsValue?.configurations ?? []
       setConfigurations(configs)
       if (configs.length > 0) {
         const defaultConfig = configs.find((c) => c.isDefault)

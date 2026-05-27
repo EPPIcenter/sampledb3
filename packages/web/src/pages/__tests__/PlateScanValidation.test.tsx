@@ -3,7 +3,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { renderWithProviders } from '../../__tests__/helpers/render'
 import PlateScanValidation from '../PlateScanValidation'
 import { collectionsApi } from '../../lib/api/collections'
-import { scannerConfigurationsApi } from '../../lib/api/settings'
+import { settingsApi } from '../../lib/api/settings'
 
 vi.mock('../../lib/api/collections', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
@@ -12,8 +12,8 @@ vi.mock('../../lib/api/collections', async () => {
     listCollectionsByType: vi.fn(),
     validatePlateScan: vi.fn(),
   },
-  scannerConfigurationsApi: {
-    getAll: vi.fn(),
+  settingsApi: {
+    getValue: vi.fn(),
   },
 })
 })
@@ -25,8 +25,8 @@ vi.mock('../../lib/api/settings', async () => {
     listCollectionsByType: vi.fn(),
     validatePlateScan: vi.fn(),
   },
-  scannerConfigurationsApi: {
-    getAll: vi.fn(),
+  settingsApi: {
+    getValue: vi.fn(),
   }
   })
 })
@@ -61,7 +61,7 @@ describe('PlateScanValidation', () => {
     vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
       collections: mockPlateList,
     })
-    vi.mocked(scannerConfigurationsApi.getAll).mockResolvedValue({
+    vi.mocked(settingsApi.getValue).mockResolvedValue({
       configurations: mockConfigs,
     })
     vi.mocked(collectionsApi.validatePlateScan).mockResolvedValue(mockValidateResult)

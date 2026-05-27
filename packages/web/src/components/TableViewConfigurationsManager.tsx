@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { tableViewConfigurationsApi } from '../lib/api/settings';
+import { settingsApi, tableViewConfigurationsApi } from '../lib/api/settings';
 import type { TableViewConfigurations, TableViewConfiguration } from '../lib/api/settings';
 import {
   EXPORT_ENTRY_COLUMNS,
@@ -38,8 +38,8 @@ export default function TableViewConfigurationsManager({
     const load = async () => {
       setLoading(true)
       try {
-        const res = await tableViewConfigurationsApi.get()
-        const configs = res.value.configurations ?? [] // eslint-disable-line @typescript-eslint/no-unnecessary-condition
+        const configsValue = await settingsApi.getValue('table_view_configurations')
+        const configs = configsValue?.configurations ?? [] // eslint-disable-line @typescript-eslint/no-unnecessary-condition
         setConfigurations(configs)
       } catch (err: unknown) {
         const msg =

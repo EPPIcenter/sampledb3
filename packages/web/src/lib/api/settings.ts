@@ -94,6 +94,11 @@ export const settingsApi = {
   getAll: () => api.get<AllSettings>('/settings'),
   get: <T extends keyof AllSettings>(key: T) =>
     api.get<{ key: T; value: AllSettings[T] }>(`/settings/${key}`),
+  /** Unwrapped value from GET /settings/:key. Prefer this over assuming a direct body shape. */
+  getValue: async <T extends keyof AllSettings>(key: T): Promise<AllSettings[T]> => {
+    const res = await api.get<{ key: T; value: AllSettings[T] }>(`/settings/${key}`)
+    return res.value
+  },
   update: <T extends keyof AllSettings>(key: T, value: AllSettings[T], userId?: number | null) =>
     api.put<{ key: T; value: AllSettings[T]; userId?: number | null }>(`/settings/${key}`, {
       ...value,
@@ -113,7 +118,6 @@ export const settingsApi = {
 }
 
 export const exportConfigurationsApi = {
-  getAll: () => api.get<ExportConfigurations>('/settings/export_configurations'),
   getShared: () => api.get<ExportConfigurations>('/settings/export-configurations/shared'),
   getPersonal: () => api.get<ExportConfigurations>('/settings/export-configurations/personal'),
   update: (configs: ExportConfigurations, userId?: number | null) => 
@@ -125,13 +129,12 @@ export const exportConfigurationsApi = {
 }
 
 export const tableViewConfigurationsApi = {
-  get: () => api.get<{ key: string; value: TableViewConfigurations }>('/settings/table_view_configurations'),
+  get: () => settingsApi.get('table_view_configurations'),
   update: (configs: TableViewConfigurations) =>
     api.put<TableViewConfigurations>('/settings/table_view_configurations', configs),
 }
 
 export const scannerConfigurationsApi = {
-  getAll: () => api.get<ScannerConfigurations>('/settings/scanner_configurations'),
   getShared: () => api.get<ScannerConfigurations>('/settings/scanner-configurations/shared'),
   getPersonal: () => api.get<ScannerConfigurations>('/settings/scanner-configurations/personal'),
   update: (configs: ScannerConfigurations, userId?: number | null) => 
