@@ -1,7 +1,7 @@
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { specimen, specimenType, study, studySubject } from '../../db/schema'
-import { formatSimpleCSV, type CSVExportOptions } from '../export-helpers'
+import { formatSimpleCSV, type CSVExportOptions } from '../export/format'
 
 export interface SpecimensCsvFilters {
   studyCode?: string
