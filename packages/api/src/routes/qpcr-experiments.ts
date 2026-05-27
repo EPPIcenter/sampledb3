@@ -23,7 +23,7 @@ import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth
 import { validateLimit } from '../lib/constants'
 import { getScannerConfigurationById } from '../lib/settings'
 import type { ScannerConfiguration } from '../lib/settings'
-import { resolveMicronixBarcodesToContainers } from '../lib/export-helpers'
+import { resolveMicronixBarcodesToContainers } from '../lib/export/query'
 import { normalizeWellPosition, parsePlateCSV, validateWellPosition } from '../lib/plate-csv'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
