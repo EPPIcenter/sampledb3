@@ -9,6 +9,7 @@ WORKDIR /app
 # types break the build.
 COPY package.json bun.lock ./
 COPY packages/api/package.json packages/api/
+COPY packages/contract/package.json packages/contract/
 COPY packages/web/package.json packages/web/
 COPY packages/docs/package.json packages/docs/
 COPY packages/e2e/package.json packages/e2e/
@@ -49,6 +50,8 @@ COPY --from=build /app/packages/api/node_modules ./packages/api/node_modules
 COPY --from=build /app/packages/api/dist ./packages/api/dist
 COPY --from=build /app/packages/api/package.json ./packages/api/
 COPY --from=build /app/packages/api/initial_schema.sql ./packages/api/
+
+COPY --from=build /app/packages/contract ./packages/contract
 
 COPY --from=build /app/packages/web/dist ./packages/web/dist
 COPY --from=build /app/packages/docs/dist ./packages/docs/dist
