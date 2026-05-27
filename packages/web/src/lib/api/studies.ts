@@ -54,53 +54,20 @@ type SubjectsListResponse = {
 type SummariesResponse = { summaries: StudySummaryBasic[] }
 
 export const studiesApi = {
-  list: async (
-    search?: string,
-    params?: { page?: number; limit?: number }
-  ): Promise<StudiesListResponse> => {
-    const response = await api.get<StudiesListResponse>('/studies', {
-      params: { search, ...params }
-    })
-    return response.data
-  },
-  get: async (id: number): Promise<StudyResponse> => {
-    const response = await api.get<StudyResponse>(`/studies/${id}`)
-    return response.data
-  },
-  getSubjects: async (
-    id: number,
-    params?: { page?: number; limit?: number }
-  ): Promise<SubjectsListResponse> => {
-    const response = await api.get<SubjectsListResponse>(`/studies/${id}/subjects`, { params })
-    return response.data
-  },
-  getSummary: async (id: number): Promise<StudySummary> => {
-    const response = await api.get<StudySummary>(`/studies/${id}/summary`)
-    return response.data
-  },
-  getSummaries: async (ids: number[]): Promise<SummariesResponse> => {
-    const response = await api.get<SummariesResponse>('/studies/summaries', {
-      params: { ids: ids.join(',') }
-    })
-    return response.data
-  },
-  getTimeline: async (id: number): Promise<StudyTimelineData> => {
-    const response = await api.get<StudyTimelineData>(`/studies/${id}/timeline`)
-    return response.data
-  },
-  create: async (data: Omit<Study, 'id' | 'created' | 'lastUpdated'>): Promise<StudyResponse> => {
-    const response = await api.post<StudyResponse>('/studies', data)
-    return response.data
-  },
-  update: async (
+  list: (search?: string, params?: { page?: number; limit?: number }) =>
+    api.get<StudiesListResponse>('/studies', { params: { search, ...params } }),
+  get: (id: number) => api.get<StudyResponse>(`/studies/${id}`),
+  getSubjects: (id: number, params?: { page?: number; limit?: number }) =>
+    api.get<SubjectsListResponse>(`/studies/${id}/subjects`, { params }),
+  getSummary: (id: number) => api.get<StudySummary>(`/studies/${id}/summary`),
+  getSummaries: (ids: number[]) =>
+    api.get<SummariesResponse>('/studies/summaries', { params: { ids: ids.join(',') } }),
+  getTimeline: (id: number) => api.get<StudyTimelineData>(`/studies/${id}/timeline`),
+  create: (data: Omit<Study, 'id' | 'created' | 'lastUpdated'>) =>
+    api.post<StudyResponse>('/studies', data),
+  update: (
     id: number,
     data: Partial<Pick<Study, 'title' | 'leadPerson' | 'shortCode' | 'description' | 'isLongitudinal'>>
-  ): Promise<StudyResponse> => {
-    const response = await api.put<StudyResponse>(`/studies/${id}`, data)
-    return response.data
-  },
-  delete: async (id: number): Promise<{ message: string }> => {
-    const response = await api.delete<{ message: string }>(`/studies/${id}`)
-    return response.data
-  },
+  ) => api.put<StudyResponse>(`/studies/${id}`, data),
+  delete: (id: number) => api.delete<{ message: string }>(`/studies/${id}`),
 }

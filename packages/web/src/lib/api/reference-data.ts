@@ -22,7 +22,7 @@ export interface Strain {
 export const specimenTypesApi = {
   list: async (): Promise<{ data: SpecimenType[]; meta?: ApiResponse<SpecimenType[]>['meta'] }> => {
     const response = await api.get<ApiResponse<SpecimenType[]>>('/specimen-types')
-    return { data: extractData(response), meta: response.data.meta }
+    return { data: extractData(response), meta: response.meta }
   },
   get: async (id: number) => {
     const response = await api.get<ApiResponse<SpecimenType>>(`/specimen-types/${id}`)
@@ -50,7 +50,7 @@ export const specimenTypesApi = {
 export const tagsApi = {
   list: async (): Promise<{ data: Tag[]; meta?: ApiResponse<Tag[]>['meta'] }> => {
     const response = await api.get<ApiResponse<Tag[]>>('/tags')
-    return { data: extractData(response), meta: response.data.meta }
+    return { data: extractData(response), meta: response.meta }
   },
   get: async (id: number) => {
     const response = await api.get<ApiResponse<Tag>>(`/tags/${id}`)
@@ -70,7 +70,7 @@ export const tagsApi = {
 export const storageTypesApi = {
   list: async (): Promise<{ data: StorageType[]; meta?: ApiResponse<StorageType[]>['meta'] }> => {
     const response = await api.get<ApiResponse<StorageType[]>>('/storage-types')
-    return { data: extractData(response), meta: response.data.meta }
+    return { data: extractData(response), meta: response.meta }
   },
   get: async (id: number) => {
     const response = await api.get<ApiResponse<StorageType>>(`/storage-types/${id}`)
@@ -90,7 +90,7 @@ export const storageTypesApi = {
 export const strainsApi = {
   list: async (): Promise<{ data: Strain[]; meta?: ApiResponse<Strain[]>['meta'] }> => {
     const response = await api.get<ApiResponse<Strain[]>>('/strains')
-    return { data: extractData(response), meta: response.data.meta }
+    return { data: extractData(response), meta: response.meta }
   },
   get: async (id: number) => {
     const response = await api.get<ApiResponse<Strain>>(`/strains/${id}`)
@@ -110,7 +110,7 @@ export const strainsApi = {
 export const unitsApi = {
   list: async (): Promise<{ data: Unit[]; meta?: ApiResponse<Unit[]>['meta'] }> => {
     const response = await api.get<ApiResponse<Unit[]>>('/units')
-    return { data: extractData(response), meta: response.data.meta }
+    return { data: extractData(response), meta: response.meta }
   },
   get: async (id: number) => {
     const response = await api.get<ApiResponse<Unit>>(`/units/${id}`)

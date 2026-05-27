@@ -1,7 +1,7 @@
 import { api } from './client'
 import type { Specimen } from './types'
 
-type SpecimensListResponse = { specimens: Specimen[] }
+type SpecimensListResponse = { specimens: Specimen[]; pagination?: { total: number } }
 type SpecimenResponse = { specimen: Specimen }
 type SpecimensBulkResponse = {
   specimens: Specimen[]
@@ -56,36 +56,31 @@ export type AddContainerData = {
   comment?: string
 }
 
+export type SpecimenListParams = {
+  study?: string
+  source_type?: string
+  specimen_type_id?: string
+  collection_date_from?: string
+  collection_date_to?: string
+  created_from?: string
+  created_to?: string
+  search?: string
+  barcode?: string
+  subject_id?: string
+  page?: number
+  limit?: number
+}
+
 export const specimensApi = {
-  search: async (params?: { source_type?: string; study?: string; barcode?: string; subject_id?: string }): Promise<SpecimensListResponse> => {
-    const response = await api.get<SpecimensListResponse>('/specimens', { params })
-    return response.data
-  },
-  get: async (id: number): Promise<SpecimenResponse> => {
-    const response = await api.get<SpecimenResponse>(`/specimens/${id}`)
-    return response.data
-  },
-  create: async (data: CreateSpecimenData): Promise<SpecimenResponse> => {
-    const response = await api.post<SpecimenResponse>('/specimens', data)
-    return response.data
-  },
-  createBulk: async (data: CreateSpecimensBulkData): Promise<SpecimensBulkResponse> => {
-    const response = await api.post<SpecimensBulkResponse>('/specimens/bulk', data)
-    return response.data
-  },
-  validateBulk: async (data: CreateSpecimensBulkData): Promise<{ valid: boolean; errors: Array<{ index: number; message: string }> }> => {
-    const response = await api.post<{ valid: boolean; errors: Array<{ index: number; message: string }> }>('/specimens/bulk/validate', data)
-    return response.data
-  },
-  /** Add a container to an existing specimen. */
-  addContainer: async (
-    specimenId: number,
-    data: AddContainerData
-  ): Promise<{ containerId: number }> => {
-    const response = await api.post<{ containerId: number }>(
-      `/specimens/${specimenId}/containers`,
+  search: (params?: SpecimenListParams) => api.get<SpecimensListResponse>('/specimens', { params }),
+  get: (id: number) => api.get<SpecimenResponse>(`/specimens/${id}`),
+  create: (data: CreateSpecimenData) => api.post<SpecimenResponse>('/specimens', data),
+  createBulk: (data: CreateSpecimensBulkData) => api.post<SpecimensBulkResponse>('/specimens/bulk', data),
+  validateBulk: (data: CreateSpecimensBulkData) =>
+    api.post<{ valid: boolean; errors: Array<{ index: number; message: string }> }>(
+      '/specimens/bulk/validate',
       data
-    )
-    return response.data
-  },
+    ),
+  addContainer: (specimenId: number, data: AddContainerData) =>
+    api.post<{ containerId: number }>(`/specimens/${specimenId}/containers`, data),
 }

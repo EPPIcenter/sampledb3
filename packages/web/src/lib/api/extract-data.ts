@@ -1,6 +1,6 @@
 import type { ApiResponse } from '../../types/api'
 
-/** Unpack standardized API response `data` field. */
-export function extractData<T>(response: { data: ApiResponse<T> }): T {
-  return response.data.data
+/** Unpack standardized API envelope `{ data, meta? }` from an unwrapped response body. */
+export function extractData<T>(body: ApiResponse<T>): T {
+  return body.data
 }

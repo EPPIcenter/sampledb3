@@ -1,5 +1,6 @@
 import { api } from './client'
 import type { Study, StudySubject, Specimen } from './types'
+
 export interface SubjectSummarySpecimen {
   id: number
   specimenTypeId: number
@@ -59,26 +60,21 @@ export interface SubjectSummaryResponse {
 type SubjectResponse = { subject: StudySubject }
 
 export const subjectsApi = {
-  get: async (id: number): Promise<SubjectResponse> => {
-    const response = await api.get<SubjectResponse>(`/subjects/${id}`)
-    return response.data
-  },
-  getSummary: async (id: number): Promise<SubjectSummaryResponse> => {
-    const response = await api.get<SubjectSummaryResponse>(`/subjects/${id}/summary`)
-    return response.data
-  },
-  create: async (data: { studyId?: number; studyShortCode?: string; name: string }): Promise<SubjectResponse> => {
-    const response = await api.post<SubjectResponse>('/subjects', data)
-    return response.data
-  },
-  update: async (id: number, data: { name: string }): Promise<SubjectResponse> => {
-    const response = await api.put<SubjectResponse>(`/subjects/${id}`, data)
-    return response.data
-  },
+  get: (id: number) => api.get<SubjectResponse>(`/subjects/${id}`),
+  getSummary: (id: number) => api.get<SubjectSummaryResponse>(`/subjects/${id}/summary`),
+  create: (data: { studyId?: number; studyShortCode?: string; name: string }) =>
+    api.post<SubjectResponse>('/subjects', data),
+  update: (id: number, data: { name: string }) => api.put<SubjectResponse>(`/subjects/${id}`, data),
   createBulk: (data: { subjects: Array<{ studyShortCode: string; name: string }> }) =>
-    api.post<{ subjects: StudySubject[]; created: number; errors?: Array<{ index: number; error: string }> }>('/subjects/bulk', data),
+    api.post<{ subjects: StudySubject[]; created: number; errors?: Array<{ index: number; error: string }> }>(
+      '/subjects/bulk',
+      data
+    ),
   validateBulk: (data: { subjects: Array<{ studyShortCode: string; name: string }> }) =>
-    api.post<{ valid: boolean; errors: Array<{ index: number; message: string }> }>('/subjects/bulk/validate', data),
+    api.post<{ valid: boolean; errors: Array<{ index: number; message: string }> }>(
+      '/subjects/bulk/validate',
+      data
+    ),
   createWithSpecimens: (data: {
     studyShortCode: string
     subjectName: string

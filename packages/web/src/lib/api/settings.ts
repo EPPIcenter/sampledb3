@@ -92,11 +92,14 @@ export type SettingValueByKey<T extends string> =
 
 export const settingsApi = {
   getAll: () => api.get<AllSettings>('/settings'),
-  get: <T extends keyof AllSettings>(key: T): Promise<{ data: { key: T; value: AllSettings[T] } }> => 
+  get: <T extends keyof AllSettings>(key: T) =>
     api.get<{ key: T; value: AllSettings[T] }>(`/settings/${key}`),
-  update: <T extends keyof AllSettings>(key: T, value: AllSettings[T], userId?: number | null): Promise<{ data: { key: T; value: AllSettings[T]; userId?: number | null } }> =>
-    api.put<{ key: T; value: AllSettings[T]; userId?: number | null }>(`/settings/${key}`, { ...value, userId }),
-  resetUserSetting: (key: string): Promise<{ data: { success: boolean; message: string } }> =>
+  update: <T extends keyof AllSettings>(key: T, value: AllSettings[T], userId?: number | null) =>
+    api.put<{ key: T; value: AllSettings[T]; userId?: number | null }>(`/settings/${key}`, {
+      ...value,
+      userId,
+    }),
+  resetUserSetting: (key: string) =>
     api.delete<{ success: boolean; message: string }>(`/settings/${key}/user`),
   getUnits: () => api.get<Unit[]>('/settings/units'),
   getContainerTypeUnits: (containerType: string) =>
