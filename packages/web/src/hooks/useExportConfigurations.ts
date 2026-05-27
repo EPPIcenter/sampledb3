@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { exportConfigurationsApi, type ExportConfiguration } from '../lib/api'
+import { exportConfigurationsApi, type ExportConfiguration } from '../lib/api/settings'
 
 export type ExportConfigurationWithSource = ExportConfiguration & {
   source?: 'shared' | 'personal'

@@ -54,3 +54,10 @@ export interface Location {
   lastUpdated: string
 }
 
+
+export interface Unit {
+  id: number
+  symbol: string
+  name: string
+  category: string
+}

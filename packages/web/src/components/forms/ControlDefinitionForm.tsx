@@ -1,5 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { controlsApi, settingsApi, strainsApi, type ControlDefinition, type Strain, type Unit } from '../../lib/api'
+import { controlsApi } from '../../lib/api/controls';
+import type { ControlDefinition } from '../../lib/api/controls';
+import { settingsApi } from '../../lib/api/settings';
+import { strainsApi } from '../../lib/api/reference-data';
+import type { Strain } from '../../lib/api/reference-data';
+import type { Unit } from '../../lib/api/types';
 import { useNavigate, useParams } from 'react-router-dom'
 import { useModifierHotkey } from '../../hooks/useHotkey'
 

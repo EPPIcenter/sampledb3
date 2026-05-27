@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { locationsApi, type Location } from '../lib/api'
+import { locationsApi } from '../lib/api/locations';
+import type { Location } from '../lib/api/types';
 import {
   buildLocationTree,
   filterLocationTree,

@@ -1,8 +1,7 @@
 import { useState, useCallback } from 'react'
 import axios from 'axios'
-import { collectionsApi, type CollectionDeleteWithContentsBlocker } from '../lib/api'
-
-type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+import { collectionsApi } from '../lib/api/collections';
+import type { CollectionDeleteWithContentsBlocker } from '../lib/api/collections';type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
 
 type Props = {
   isOpen: boolean

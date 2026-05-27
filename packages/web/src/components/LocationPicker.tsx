@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { locationsApi, type Location } from '../lib/api'
+import { locationsApi } from '../lib/api/locations';
+import type { Location } from '../lib/api/types';
 import { buildLocationTree, filterLocationTree, getLocationLabel, getRootLocations, getLocationChildren, getLocationAncestors } from '../lib/location-tree'
 import ModalPortal from './ModalPortal'
 

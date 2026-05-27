@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
-import { settingsApi, type PasswordRequirements } from '../lib/api'
+import { settingsApi } from '../lib/api/settings';
+import type { PasswordRequirements } from '../lib/api/settings';
 import InfoTooltip from './InfoTooltip'
 
 interface PasswordRequirementsFormProps {

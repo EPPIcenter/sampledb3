@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '../lib/api'
-import { specimensApi, type Specimen } from '../lib/api'
+import { api } from '../lib/api/client'
+import { specimensApi } from '../lib/api/specimens'
+import type { Specimen } from '../lib/api/types'
 import { useToast } from '../contexts/ToastContext'
 
 export const specimenKeys = {

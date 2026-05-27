@@ -2,9 +2,7 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import { useClickOutside } from '../hooks/useClickOutside'
 import LocationPicker from './LocationPicker'
 import ModalPortal from './ModalPortal'
-import { collectionsApi } from '../lib/api'
-
-const MAX_SUGGESTIONS = 25
+import { collectionsApi } from '../lib/api/collections';const MAX_SUGGESTIONS = 25
 
 export interface CollectionOption {
   id: number

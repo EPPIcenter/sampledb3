@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { studiesApi, subjectsApi, type StudySubject } from '../../lib/api'
+import { studiesApi } from '../../lib/api/studies';
+import { subjectsApi } from '../../lib/api/subjects';
+import type { StudySubject } from '../../lib/api/types';
 import { useNavigate } from 'react-router-dom'
 import { useModifierHotkey } from '../../hooks/useHotkey'
 

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { studiesApi, type Study } from '../lib/api'
+import { studiesApi, type Study } from '../lib/api/studies'
 import { useToast } from '../contexts/ToastContext'
 
 export const studyKeys = {

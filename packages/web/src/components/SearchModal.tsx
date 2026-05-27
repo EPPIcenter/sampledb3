@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import api, { type SearchResult } from '../lib/api'
+import { api } from '../lib/api/client';
+import type { SearchResult } from '../lib/api/search';
 import { useHotkey } from '../hooks/useHotkey'
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock'
 import ModalPortal from './ModalPortal'

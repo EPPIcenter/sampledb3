@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
 import { getRecentUsers, type LocalUser } from '../lib/localUserHistory'
-import { authApi } from '../lib/api'
+import { authApi } from '../lib/api/auth';
 import { useClickOutside } from '../hooks/useClickOutside'
 
 export default function UserSwitcher() {

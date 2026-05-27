@@ -1,7 +1,5 @@
 import React from 'react'
-import type { QpcrExperimentWell } from '../../lib/api'
-
-const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+import type { QpcrExperimentWell } from '../../lib/api/qpcr';const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 const COLS = 12
 
 function wellPositionToKey(row: string, col: number): string {

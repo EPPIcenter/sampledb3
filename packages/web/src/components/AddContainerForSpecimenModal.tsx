@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import ModalPortal from './ModalPortal'
 import ContainerRegistration, { type ContainerData } from './ContainerRegistration'
-import { specimensApi, specimenTypesApi } from '../lib/api'
+import { specimensApi } from '../lib/api/specimens';
+import { specimenTypesApi } from '../lib/api/reference-data';
 import '../styles/subject-specimen.css'
 
 interface AddContainerForSpecimenModalProps {

@@ -1,27 +1,18 @@
 import { useState, useEffect, useRef } from 'react'
-import {
-  specimensApi,
-  type Specimen,
-  specimenTypesApi,
-  type SpecimenType,
-  studiesApi,
-  type Study,
-  type StudySubject,
-  controlsApi,
-  type ControlDefinition,
-  reagentsApi,
-  type Reagent,
-  cellLinesApi,
-  type CellLine,
-  plasmidsApi,
-  type Plasmid,
-  standardsApi,
-  type Standard,
-} from '../../lib/api'
+import { specimensApi } from '../../lib/api/specimens';
+import type { Specimen, SpecimenType, StudySubject } from '../../lib/api/types';
+import { specimenTypesApi, cellLinesApi, plasmidsApi, standardsApi } from '../../lib/api/reference-data';
+import type { CellLine, Plasmid, Standard } from '../../lib/api/reference-data';
+import { studiesApi } from '../../lib/api/studies';
+import type { Study } from '../../lib/api/studies';
+import { controlsApi } from '../../lib/api/controls';
+import type { ControlDefinition } from '../../lib/api/controls';
+import { reagentsApi } from '../../lib/api/reagents';
+import type { Reagent } from '../../lib/api/reagents';
 import { useNavigate } from 'react-router-dom'
 import StudyPicker from '../StudyPicker'
 import ContainerRegistration, { type ContainerData } from '../ContainerRegistration'
-import { subjectsApi } from '../../lib/api'
+import { subjectsApi } from '../../lib/api/subjects';
 import { useModifierHotkey } from '../../hooks/useHotkey'
 
 interface SpecimenFormProps {

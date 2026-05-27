@@ -1,6 +1,6 @@
  
 import { useState, useMemo, useCallback, memo } from 'react'
-import { type Location } from '../lib/api'
+import type { Location } from '../lib/api/types';
 import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
 import type { CollectionType } from '../pages/CollectionMove'
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { studiesApi, type Study } from '../lib/api'
+import { studiesApi } from '../lib/api/studies';
+import type { Study } from '../lib/api/studies';
 import ModalPortal from './ModalPortal'
 
 interface StudyPickerProps {

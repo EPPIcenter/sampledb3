@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
-import { settingsApi, type PaginationSettings } from '../lib/api'
+import { settingsApi } from '../lib/api/settings';
+import type { PaginationSettings } from '../lib/api/settings';
 import { useUser } from '../contexts/UserContext'
 import InfoTooltip from './InfoTooltip'
 

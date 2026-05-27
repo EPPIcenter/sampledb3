@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
-import { settingsApi, type SessionSettings } from '../lib/api'
+import { settingsApi } from '../lib/api/settings';
+import type { SessionSettings } from '../lib/api/settings';
 import InfoTooltip from './InfoTooltip'
 
 interface SessionSettingsFormProps {

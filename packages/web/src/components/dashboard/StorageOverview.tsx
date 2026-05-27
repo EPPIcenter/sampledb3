@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Location } from '../../lib/api'
+import { Location } from '../../lib/api/types';
 import SkeletonCard from '../SkeletonCard'
 
 interface StorageOverviewProps {

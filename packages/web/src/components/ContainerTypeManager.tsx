@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { specimenTypesApi } from '../lib/api'
+import { specimenTypesApi } from '../lib/api/reference-data';
 import { getContainerTypeName } from '../lib/icons'
 import { useHotkey } from '../hooks/useHotkey'
 import ModalPortal from './ModalPortal'

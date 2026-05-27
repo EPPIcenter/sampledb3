@@ -1,9 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import {
-  tableViewConfigurationsApi,
-  type TableViewConfigurations,
-  type TableViewConfiguration,
-} from '../lib/api'
+import { tableViewConfigurationsApi } from '../lib/api/settings';
+import type { TableViewConfigurations, TableViewConfiguration } from '../lib/api/settings';
 import {
   EXPORT_ENTRY_COLUMNS,
   DEFAULT_TABLE_VIEW_COLUMN_KEYS,

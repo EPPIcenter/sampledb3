@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { scannerConfigurationsApi, type ScannerConfigurations, type ScannerConfiguration } from '../lib/api'
+import { scannerConfigurationsApi } from '../lib/api/settings';
+import type { ScannerConfigurations, ScannerConfiguration } from '../lib/api/settings';
 import { plateNameSourceSummary } from '../lib/plate-destination-inference'
 import { useUser } from '../contexts/UserContext'
 import InfoTooltip from './InfoTooltip'

@@ -8,7 +8,7 @@ import { select } from 'd3-selection'
 // @ts-ignore
 import { timeFormat } from 'd3-time-format'
 import { useNavigate } from 'react-router-dom'
-import type { StudyTimelineData } from '../lib/api'
+import type { StudyTimelineData } from '../lib/api/studies';
 import { useDateFilter } from '../contexts/DateFilterContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { getAppAxisColors } from '../lib/chart-colors'

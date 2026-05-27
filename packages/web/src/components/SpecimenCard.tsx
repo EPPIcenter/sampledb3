@@ -1,8 +1,6 @@
 import { Link } from 'react-router-dom'
 import { getSpecimenTypeIcon, getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
-import type { SubjectSummarySpecimen } from '../lib/api'
-
-interface SpecimenCardProps {
+import type { SubjectSummarySpecimen } from '../lib/api/subjects';interface SpecimenCardProps {
   specimen: SubjectSummarySpecimen
 }
 

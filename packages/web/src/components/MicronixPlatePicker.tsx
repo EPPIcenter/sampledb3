@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { type Location } from '../lib/api'
+import type { Location } from '../lib/api/types';
 import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
 import type { PlateCandidate } from '../lib/plate-filename-match'
 import ModalPortal from './ModalPortal'

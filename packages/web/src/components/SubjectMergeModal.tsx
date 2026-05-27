@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { subjectsApi, studiesApi, type StudySubject } from '../lib/api'
+import { subjectsApi } from '../lib/api/subjects';
+import { studiesApi } from '../lib/api/studies';
+import type { StudySubject } from '../lib/api/types';
 import { useClickOutside } from '../hooks/useClickOutside'
 import ModalPortal from './ModalPortal'
 

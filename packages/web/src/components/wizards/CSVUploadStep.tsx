@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { parseContainerCSV, validateCSVRows, generateCSVTemplate, inferSheetName } from '../../lib/control-batch-csv'
-import { specimenTypesApi } from '../../lib/api'
-import type { SpecimenType } from '../../lib/api'
+import { specimenTypesApi } from '../../lib/api/reference-data';
+import type { SpecimenType } from '../../lib/api/types';
 import type { CSVFileData } from '../../pages/ControlBatchWizard'
 
 /** Minimal batch info for production date in composition CSV flow. */

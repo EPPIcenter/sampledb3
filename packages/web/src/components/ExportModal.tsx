@@ -1,14 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  exportApi,
-  type ExportFilters,
-  specimenTypesApi,
-  tagsApi,
-  type SpecimenType,
-  type Tag,
-  type StudySubject,
-} from '../lib/api'
+import { exportApi } from '../lib/api/export';
+import type { ExportFilters } from '../lib/api/export';
+import { specimenTypesApi, tagsApi } from '../lib/api/reference-data';
+import type { Tag } from '../lib/api/reference-data';
+import type { SpecimenType, StudySubject } from '../lib/api/types';
 import { parseExportCsv, type ExportCsvRow } from '../lib/export-modal-csv'
 import { useExportConfigurations } from '../hooks/useExportConfigurations'
 import { formatLocalDateTime } from '../lib/date-utils'

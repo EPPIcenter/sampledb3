@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getSpecimenTypeIcon, getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
-import type { SubjectSummarySpecimen } from '../lib/api'
-
-interface SimpleTimelineProps {
+import type { SubjectSummarySpecimen } from '../lib/api/subjects';interface SimpleTimelineProps {
   specimens: SubjectSummarySpecimen[]
 }
 

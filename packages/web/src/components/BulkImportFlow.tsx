@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { subjectsApi, specimensApi, collectionsApi, importsApi, specimenTypesApi, type BulkCombinedAtomicMode } from '../lib/api'
+import { subjectsApi } from '../lib/api/subjects';
+import { specimensApi } from '../lib/api/specimens';
+import { collectionsApi } from '../lib/api/collections';
+import { importsApi } from '../lib/api/imports';
+import type { BulkCombinedAtomicMode } from '../lib/api/imports';
+import { specimenTypesApi } from '../lib/api/reference-data';
 import { buildBulkImportTemplateContent } from '../lib/bulk-import-csv'
 import {
   getBulkImportCollectionType,

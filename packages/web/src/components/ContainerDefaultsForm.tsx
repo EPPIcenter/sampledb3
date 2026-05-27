@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { settingsApi, type ContainerDefaults, type Unit } from '../lib/api'
+import { settingsApi } from '../lib/api/settings';
+import type { ContainerDefaults } from '../lib/api/settings';
+import type { Unit } from '../lib/api/types';
 import InfoTooltip from './InfoTooltip'
 
 interface ContainerDefaultsFormProps {

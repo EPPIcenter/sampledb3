@@ -75,8 +75,7 @@ import { useBrowserShortcutBlocker } from './hooks/useBrowserShortcutBlocker'
 import { useCommands } from './lib/command-registry/registry'
 import { formatHotkey, getModifierKey, isMac } from './lib/hotkeys'
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { exportApi } from './lib/api'
-function AppContent() {
+import { exportApi } from './lib/api/export';function AppContent() {
   const navigate = useNavigate()
   const location = useLocation()
   const { canWrite, isAdmin, canManageReferenceData, refreshUser } = useUser()

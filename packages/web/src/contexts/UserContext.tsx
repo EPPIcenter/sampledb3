@@ -1,5 +1,5 @@
 import { useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
-import { authApi, type User } from '../lib/api'
+import { authApi, type User } from '../lib/api/auth'
 import { addRecentUser } from '../lib/localUserHistory'
 import { UserContext } from './user-context-instance'
 

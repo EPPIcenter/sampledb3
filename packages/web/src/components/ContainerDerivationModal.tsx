@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react'
-import { derivationsApi, specimenTypesApi, collectionsApi, type SpecimenType, type CreateDerivationPayload } from '../lib/api'
+import { derivationsApi } from '../lib/api/derivations';
+import type { CreateDerivationPayload } from '../lib/api/derivations';
+import { specimenTypesApi } from '../lib/api/reference-data';
+import { collectionsApi } from '../lib/api/collections';
+import type { SpecimenType } from '../lib/api/types';
 import type { CollectionOption, CollectionSelectValue } from './CollectionSelectOrCreate'
 import CollectionSelectOrCreate from './CollectionSelectOrCreate'
 import ModalPortal from './ModalPortal'

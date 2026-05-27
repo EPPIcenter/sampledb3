@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import type { Study, StudySummaryBasic } from '../lib/api'
-
-interface StudySummaryData extends StudySummaryBasic {
+import type { Study, StudySummaryBasic } from '../lib/api/studies';interface StudySummaryData extends StudySummaryBasic {
   averageSpecimensPerSubject?: number
   studyDurationDays?: number | null
   topSpecimenTypes?: Array<{ name: string; count: number }>

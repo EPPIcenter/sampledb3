@@ -3,7 +3,9 @@ import SheetCard from './SheetCard'
 import CollectionAssignment from './CollectionAssignment'
 import type { CollectionAssignmentChange } from './CollectionAssignment'
 import type { CollectionOption } from '../CollectionSelectOrCreate'
-import { collectionsApi, settingsApi, type Unit } from '../../lib/api'
+import { collectionsApi } from '../../lib/api/collections';
+import { settingsApi } from '../../lib/api/settings';
+import type { Unit } from '../../lib/api/types';
 import { uniqueSheetNamesFromRows } from '../../lib/control-batch-csv'
 import type { SpecimenTypeConfig, CSVFileData, ContainerConfig } from '../../pages/ControlBatchWizard'
 

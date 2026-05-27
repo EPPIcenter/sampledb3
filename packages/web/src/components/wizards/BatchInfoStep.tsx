@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { controlsApi, strainsApi } from '../../lib/api'
-import type { ControlDefinition, Strain } from '../../lib/api'
+import { controlsApi } from '../../lib/api/controls';
+import { strainsApi } from '../../lib/api/reference-data';
+import type { ControlDefinition } from '../../lib/api/controls';
+import type { Strain } from '../../lib/api/reference-data';
 import type { BatchInfo } from '../../pages/ControlBatchWizard'
 import ModalPortal from '../ModalPortal'
 import ControlDefinitionForm from '../forms/ControlDefinitionForm'

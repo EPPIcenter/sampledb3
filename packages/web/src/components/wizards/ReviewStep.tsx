@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
-import { controlsApi, settingsApi } from '../../lib/api'
-import type { ControlDefinition } from '../../lib/api'
+import { controlsApi } from '../../lib/api/controls';
+import { settingsApi } from '../../lib/api/settings';
+import type { ControlDefinition } from '../../lib/api/controls';
 import { normalizePosition, groupRowsByDensity } from '../../lib/control-batch-csv'
 import type { BatchInfo, SpecimenTypeConfig, CSVFileData, CompositionStrains } from '../../pages/ControlBatchWizard'
 

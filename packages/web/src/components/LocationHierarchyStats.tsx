@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { type LocationHierarchyStats } from '../lib/api'
+import type { LocationHierarchyStats } from '../lib/api/locations';
 import LocationCapabilityBadge from './LocationCapabilityBadge'
 
 interface LocationHierarchyStatsProps {

@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { subjectsApi, type StudySubject, type SubjectSummaryResponse } from '../lib/api'
+import { subjectsApi } from '../lib/api/subjects'
+import type { StudySubject } from '../lib/api/types'
+import type { SubjectSummaryResponse } from '../lib/api/subjects'
 
 export const subjectKeys = {
   all: ['subjects'] as const,

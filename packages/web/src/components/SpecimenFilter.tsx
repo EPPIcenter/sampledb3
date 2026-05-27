@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { studiesApi, type Study } from '../lib/api'
-import { specimenTypesApi, type SpecimenType } from '../lib/api'
+import { studiesApi } from '../lib/api/studies';
+import type { Study } from '../lib/api/studies';
+import { specimenTypesApi } from '../lib/api/reference-data';
+import type { SpecimenType } from '../lib/api/types';
 import ModalPortal from './ModalPortal'
 
 export interface SpecimenFilters {

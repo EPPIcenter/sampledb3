@@ -1,4 +1,4 @@
-import type { Study, StudySummary } from '../lib/api'
+import type { Study, StudySummary } from '../lib/api/studies';
 import EntityBreadcrumbs from './EntityBreadcrumbs'
 
 export interface StudyDetailHeaderProps {

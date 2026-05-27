@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { derivationsApi, type Derivation } from '../lib/api'
+import { derivationsApi } from '../lib/api/derivations';
+import type { Derivation } from '../lib/api/derivations';
 import { formatDerivationType } from '../lib/derivation-types'
 import { getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
 

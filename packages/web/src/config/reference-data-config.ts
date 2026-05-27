@@ -1,20 +1,9 @@
  
 import React from 'react'
 import type { Column } from '../components/ReferenceDataTable'
-import type {
-  SpecimenType,
-  Tag,
-  StorageType,
-  Strain,
-  Unit,
-} from '../lib/api'
-import {
-  specimenTypesApi,
-  tagsApi,
-  storageTypesApi,
-  strainsApi,
-  unitsApi,
-} from '../lib/api'
+import type { SpecimenType, Unit } from '../lib/api/types';
+import type { Tag, StorageType, Strain } from '../lib/api/reference-data';
+import { specimenTypesApi, tagsApi, storageTypesApi, strainsApi, unitsApi } from '../lib/api/reference-data';
 import ContainerTypesCell from '../components/ContainerTypesCell'
 import ContainerTypeToggle from '../components/ContainerTypeToggle'
 

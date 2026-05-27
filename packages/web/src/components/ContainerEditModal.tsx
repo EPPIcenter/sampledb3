@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { tagsApi, settingsApi, type Tag, type Unit } from '../lib/api'
+import { tagsApi } from '../lib/api/reference-data';
+import type { Tag } from '../lib/api/reference-data';
+import { settingsApi } from '../lib/api/settings';
+import type { Unit } from '../lib/api/types';
 import { useHotkey, useModifierHotkey } from '../hooks/useHotkey'
 import ModalPortal from './ModalPortal'
 

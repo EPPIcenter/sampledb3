@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { exportConfigurationsApi, type ExportConfigurations, type ExportConfiguration } from '../lib/api'
+import { exportConfigurationsApi } from '../lib/api/settings';
+import type { ExportConfigurations, ExportConfiguration } from '../lib/api/settings';
 import {
   EXPORT_ENTRY_COLUMNS,
   DEFAULT_EXPORT_COLUMN_KEYS,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { tableViewConfigurationsApi, type TableViewConfiguration } from '../lib/api'
+import { tableViewConfigurationsApi, type TableViewConfiguration } from '../lib/api/settings'
 
 export interface UseTableViewConfigurationsResult {
   configurations: TableViewConfiguration[]

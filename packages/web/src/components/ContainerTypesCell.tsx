@@ -1,4 +1,4 @@
-import type { SpecimenType } from '../lib/api'
+import type { SpecimenType } from '../lib/api/types';
 import ContainerTypeToggle from './ContainerTypeToggle'
 
 interface ContainerTypesCellProps {

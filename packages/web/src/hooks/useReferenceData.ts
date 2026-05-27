@@ -1,14 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  specimenTypesApi,
-  tagsApi,
-  storageTypesApi,
-  strainsApi,
-  type SpecimenType,
-  type Tag,
-  type StorageType,
-  type Strain,
-} from '../lib/api'
+import { specimenTypesApi, tagsApi, storageTypesApi, strainsApi } from '../lib/api/reference-data'
+import type { SpecimenType } from '../lib/api/types'
+import type { Tag, StorageType, Strain } from '../lib/api/reference-data'
 import { useToast } from '../contexts/ToastContext'
 
 // Generic reference data keys factory

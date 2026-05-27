@@ -1,4 +1,4 @@
-import { type Location } from '../lib/api'
+import type { Location } from '../lib/api/types';
 import { buildLocationTree, getLocationLabel, getRootLocations, getLocationChildren } from '../lib/location-tree'
 
 interface LocationHierarchyTreeProps {

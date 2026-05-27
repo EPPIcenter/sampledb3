@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react'
-import { studiesApi, specimenTypesApi, specimensApi, type Study, type SpecimenType } from '../lib/api'
+import { studiesApi } from '../lib/api/studies';
+import type { Study } from '../lib/api/studies';
+import { specimenTypesApi } from '../lib/api/reference-data';
+import { specimensApi } from '../lib/api/specimens';
+import type { SpecimenType } from '../lib/api/types';
 import StudyPicker from './StudyPicker'
 
 interface SpecimenEntry {

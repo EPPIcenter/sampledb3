@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { locationsApi, storageTypesApi } from '../lib/api'
+import { locationsApi } from '../lib/api/locations';
+import { storageTypesApi } from '../lib/api/reference-data';
 import ModalPortal from './ModalPortal'
-import type { Location, StorageType } from '../lib/api'
-
-interface LocationFormProps {
+import type { Location } from '../lib/api/types';
+import type { StorageType } from '../lib/api/reference-data';interface LocationFormProps {
   location?: Location | null
   parentId?: number | null
   parentLocation?: Location | null

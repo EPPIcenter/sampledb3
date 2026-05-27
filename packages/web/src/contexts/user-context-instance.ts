@@ -1,5 +1,5 @@
 import { createContext } from 'react'
-import type { User } from '../lib/api'
+import type { User } from '../lib/api/auth'
 
 /** Stable module: `createContext` must not re-run on HMR of provider logic (see UserContext.tsx). */
 export interface UserContextType {

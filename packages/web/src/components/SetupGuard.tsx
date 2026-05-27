@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { setupApi } from '../lib/api'
-
-// Run once per app load so Strict Mode double-mount doesn't run the check twice
+import { setupApi } from '../lib/api/settings';// Run once per app load so Strict Mode double-mount doesn't run the check twice
 let setupDidInit = false
 let setupCachedInitialized: boolean | null = null
 /** Shared promise so remounts before first completion can wait instead of defaulting. */

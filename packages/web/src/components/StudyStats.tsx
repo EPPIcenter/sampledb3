@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { StudySummary, StudyTimelineData } from '../lib/api'
+import type { StudySummary, StudyTimelineData } from '../lib/api/studies';
 import StatCard from './StatCard'
 import StatChart from './StatChart'
 import { useDateFilter, defaultMinDate } from '../contexts/DateFilterContext'
