@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { Hono } from 'hono'
-import { createTestClient, loginAndGetCookie, createAuthenticatedClientWrapper, authenticatedRequest } from '../../__tests__/helpers/test-client'
-import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
-import { createAuthRoutes } from '../auth'
-import { setupPasswordRequirements, setupSessionSettings, createTestUser } from '../../__tests__/helpers/auth-helpers'
+import { createTestClient, createAuthenticatedClientWrapper, authenticatedRequest } from '../../__tests__/helpers/test-client'
+import {
+  setupAuthenticatedRouteTest,
+  type AuthenticatedRouteTestContext,
+} from '../../__tests__/helpers/authenticated-route-test'
 import {
   createTestStudy,
   createTestStudySubject,
@@ -30,7 +30,6 @@ import {
   settings,
 } from '../../db/schema'
 import { createSubjectsRoutes } from '../subjects'
-import { handleRouteError } from '../../lib/error-handler'
 import { utcNow } from '../../lib/datetime'
 
 interface SubjectWithSpecimensResponse {
@@ -61,154 +60,127 @@ interface ErrorResponse {
 }
 
 describe('Subjects with Specimens API', () => {
-  let app: Hono
+  let ctx: AuthenticatedRouteTestContext
   let testDb: Database
-  let sqlite: any
   let testStudy: any
   let testSpecimenType: any
   let testLocation: any
   let testUnit: any
   let testStorageType: any
-  let cookieHeader: string
 
   beforeEach(async () => {
-    const setup = await setupTestDatabase()
-    testDb = setup.db
-    sqlite = setup.sqlite
+    ctx = await setupAuthenticatedRouteTest({
+      user: {
+        email: 'test@example.com',
+        name: 'Test User',
+        password: 'password123',
+        role: 'member',
+      },
+      seed: async ({ db }) => {
+        testDb = db
 
-    // Create required test data
-    testStudy = await createTestStudy(testDb, {
-      title: 'Test Study',
-      shortCode: 'TEST01',
-    })
+        testStudy = await createTestStudy(db, {
+          title: 'Test Study',
+          shortCode: 'TEST01',
+        })
 
-    testSpecimenType = await createTestSpecimenType(testDb, {
-      name: 'Whole Blood',
-    })
+        testSpecimenType = await createTestSpecimenType(testDb, {
+          name: 'Whole Blood',
+        })
 
-    // Create storage type for location (required for root locations)
-    testStorageType = await createTestStorageType(testDb, {
-      name: 'Freezer',
-      description: 'Test storage type',
-    })
+        testStorageType = await createTestStorageType(testDb, {
+          name: 'Freezer',
+          description: 'Test storage type',
+        })
 
-    testLocation = await createTestLocation(testDb, {
-      name: 'Test Location',
-      parentId: null,
-      storageTypeId: String(testStorageType.id),
-      canContainCollections: true,
-    })
+        testLocation = await createTestLocation(testDb, {
+          name: 'Test Location',
+          parentId: null,
+          storageTypeId: String(testStorageType.id),
+          canContainCollections: true,
+        })
 
-    testUnit = await createTestUnit(testDb, {
-      symbol: 'uL',
-      name: 'microliter',
-      category: 'volume',
-    })
+        testUnit = await createTestUnit(testDb, {
+          symbol: 'uL',
+          name: 'microliter',
+          category: 'volume',
+        })
 
-    // Set up container type associations (required for validation)
-    await testDb.insert(specimenTypeContainerType).values({
-      specimenTypeId: testSpecimenType.id,
-      containerType: 'cryovial_tube',
-    })
-    await testDb.insert(specimenTypeContainerType).values({
-      specimenTypeId: testSpecimenType.id,
-      containerType: 'micronix_tube',
-    })
-    await testDb.insert(specimenTypeContainerType).values({
-      specimenTypeId: testSpecimenType.id,
-      containerType: 'paper',
-    })
-    await testDb.insert(specimenTypeContainerType).values({
-      specimenTypeId: testSpecimenType.id,
-      containerType: 'static_well',
-    })
+        await testDb.insert(specimenTypeContainerType).values({
+          specimenTypeId: testSpecimenType.id,
+          containerType: 'cryovial_tube',
+        })
+        await testDb.insert(specimenTypeContainerType).values({
+          specimenTypeId: testSpecimenType.id,
+          containerType: 'micronix_tube',
+        })
+        await testDb.insert(specimenTypeContainerType).values({
+          specimenTypeId: testSpecimenType.id,
+          containerType: 'paper',
+        })
+        await testDb.insert(specimenTypeContainerType).values({
+          specimenTypeId: testSpecimenType.id,
+          containerType: 'static_well',
+        })
 
-    // Set up default units for container types (required for container creation)
-    // This is typically done in setup, but for tests we need to ensure units exist
-    const containerTypeUnit = await import('../../db/schema').then(m => m.containerTypeUnit)
-    await testDb.insert(containerTypeUnit).values({
-      containerType: 'cryovial_tube',
-      unitId: testUnit.id,
-    })
-    await testDb.insert(containerTypeUnit).values({
-      containerType: 'micronix_tube',
-      unitId: testUnit.id,
-    })
-    await testDb.insert(containerTypeUnit).values({
-      containerType: 'paper',
-      unitId: testUnit.id,
-    })
-    await testDb.insert(containerTypeUnit).values({
-      containerType: 'static_well',
-      unitId: testUnit.id,
-    })
+        const containerTypeUnit = await import('../../db/schema').then(m => m.containerTypeUnit)
+        await testDb.insert(containerTypeUnit).values({
+          containerType: 'cryovial_tube',
+          unitId: testUnit.id,
+        })
+        await testDb.insert(containerTypeUnit).values({
+          containerType: 'micronix_tube',
+          unitId: testUnit.id,
+        })
+        await testDb.insert(containerTypeUnit).values({
+          containerType: 'paper',
+          unitId: testUnit.id,
+        })
+        await testDb.insert(containerTypeUnit).values({
+          containerType: 'static_well',
+          unitId: testUnit.id,
+        })
 
-    // Set up container defaults (required for getDefaultUnit, etc.)
-    // Insert directly into test database
-    await testDb.insert(settings).values({
-      key: 'container_defaults',
-      value: {
-        micronix_tube: {
-          totalQuantity: 1.0,
-          remainingQuantity: 1.0,
-          defaultUnitSymbol: 'uL',
-        },
-        cryovial_tube: {
-          totalQuantity: 1.0,
-          remainingQuantity: 1.0,
-          defaultUnitSymbol: 'uL',
-        },
-        paper: {
-          totalQuantity: 1.0,
-          remainingQuantity: 1.0,
-          defaultUnitSymbol: 'uL',
-        },
-        static_well: {
-          totalQuantity: 1.0,
-          remainingQuantity: 1.0,
-          defaultUnitSymbol: 'uL',
-        },
-      } as any,
+        await testDb.insert(settings).values({
+          key: 'container_defaults',
+          value: {
+            micronix_tube: {
+              totalQuantity: 1.0,
+              remainingQuantity: 1.0,
+              defaultUnitSymbol: 'uL',
+            },
+            cryovial_tube: {
+              totalQuantity: 1.0,
+              remainingQuantity: 1.0,
+              defaultUnitSymbol: 'uL',
+            },
+            paper: {
+              totalQuantity: 1.0,
+              remainingQuantity: 1.0,
+              defaultUnitSymbol: 'uL',
+            },
+            static_well: {
+              totalQuantity: 1.0,
+              remainingQuantity: 1.0,
+              defaultUnitSymbol: 'uL',
+            },
+          } as any,
+        })
+      },
+      mount: (app, { db }) => {
+        app.route('/api/subjects', createSubjectsRoutes(db))
+      },
     })
-
-    // Setup required settings for auth to work
-    await setupPasswordRequirements(testDb, 8)
-    await setupSessionSettings(testDb, 604800)
-
-    // Create a test user for authentication
-    await createTestUser(testDb, {
-      email: 'test@example.com',
-      name: 'Test User',
-      password: 'password123',
-      role: 'member',
-    })
-
-    // Create subjects routes with test database
-    const subjectsRoutes = createSubjectsRoutes(testDb)
-    const authRoutes = createAuthRoutes(testDb, testDb)
-    app = new Hono()
-    app.use('*', (c, next) => {
-      c.set('db', testDb)
-      return next()
-    })
-    app.onError((err, c) => handleRouteError(err, c))
-    app.route('/api/subjects', subjectsRoutes)
-    app.route('/api/auth', authRoutes)
-    
-    // Login to get session cookie
-    cookieHeader = await loginAndGetCookie(app, 'test@example.com', 'password123')
   })
 
   afterEach(() => {
-    if (sqlite) {
-      cleanupTestDatabase(sqlite)
-    }
+    ctx.cleanup()
   })
 
   // Helper to create authenticated client - available to all tests
   function createAuthClient() {
-    const baseClient = createTestClient(app)
-    return createAuthenticatedClientWrapper(baseClient, cookieHeader)
+    const baseClient = createTestClient(ctx.createRequestApp())
+    return createAuthenticatedClientWrapper(baseClient, ctx.cookie)
   }
 
   describe('Creating New Subjects with Specimens and Containers', () => {
@@ -226,9 +198,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-001',
@@ -280,9 +252,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-002',
@@ -339,9 +311,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-003',
@@ -385,9 +357,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-004',
@@ -441,9 +413,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-005',
@@ -506,9 +478,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'EXISTING-SUBJ',
@@ -556,9 +528,9 @@ describe('Subjects with Specimens API', () => {
       })
 
       // Same subject + type + no date: all three rows reuse the existing specimen, only containers are created
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-WITH-SPECS',
@@ -607,9 +579,9 @@ describe('Subjects with Specimens API', () => {
 
   describe('Transaction Rollback Tests', () => {
     it('should rollback on invalid specimen type', async () => {
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERROR',
@@ -632,9 +604,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('rejects micronix tube without position', async () => {
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NO-POS',
@@ -659,9 +631,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should rollback on container creation failure', async () => {
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERROR-2',
@@ -737,9 +709,9 @@ describe('Subjects with Specimens API', () => {
       })
 
       // Try to create another with same barcode
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NEW',
@@ -778,9 +750,9 @@ describe('Subjects with Specimens API', () => {
         created: now,
         lastUpdated: now,
       })
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-DUP-BARCODE',
@@ -858,9 +830,9 @@ describe('Subjects with Specimens API', () => {
         position: 'B01',
       })
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NEW-POS',
@@ -892,9 +864,9 @@ describe('Subjects with Specimens API', () => {
         created: now,
         lastUpdated: now,
       })
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-DUP-POS',
@@ -935,9 +907,9 @@ describe('Subjects with Specimens API', () => {
         created: now,
         lastUpdated: now,
       })
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-CRYO-DUP-BARCODE',
@@ -1015,9 +987,9 @@ describe('Subjects with Specimens API', () => {
         position: 'A01',
       })
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NEW-CRYO',
@@ -1048,9 +1020,9 @@ describe('Subjects with Specimens API', () => {
         created: now,
         lastUpdated: now,
       })
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-CRYO-DUP-POS',
@@ -1126,9 +1098,9 @@ describe('Subjects with Specimens API', () => {
         position: 'D05',
       })
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NEW-CRYO-POS',
@@ -1160,9 +1132,9 @@ describe('Subjects with Specimens API', () => {
         created: now,
         lastUpdated: now,
       })
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-STATIC-DUP-POS',
@@ -1237,9 +1209,9 @@ describe('Subjects with Specimens API', () => {
         position: 'E03',
       })
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NEW-STATIC',
@@ -1308,9 +1280,9 @@ describe('Subjects with Specimens API', () => {
         position: 'F01',
       })
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NEW-MIXED',
@@ -1348,9 +1320,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-EXISTING-COLL',
@@ -1380,9 +1352,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should create collection if location provided', async () => {
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NEW-COLL',
@@ -1412,9 +1384,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should fail gracefully on missing collection without location', async () => {
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-MISSING-COLL',
@@ -1441,9 +1413,9 @@ describe('Subjects with Specimens API', () => {
   describe('Response Format Tests', () => {
     it('should include subjectCreated flag', async () => {
       // Test new subject
-      const res1 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res1 = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'NEW-SUBJ-FLAG',
@@ -1465,9 +1437,9 @@ describe('Subjects with Specimens API', () => {
         name: 'EXISTING-SUBJ-FLAG',
       })
 
-      const res2 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res2 = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'EXISTING-SUBJ-FLAG',
@@ -1496,9 +1468,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-RESPONSE',
@@ -1539,9 +1511,9 @@ describe('Subjects with Specimens API', () => {
         })
         .returning()
 
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-SUMMARY',
@@ -1585,9 +1557,9 @@ describe('Subjects with Specimens API', () => {
       })
 
       // First call: create subject + specimen with container
-      const res1 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res1 = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'DEDUP-SUBJ',
@@ -1611,9 +1583,9 @@ describe('Subjects with Specimens API', () => {
       const subjectId = data1.subject.id
 
       // Second call: same study, subject, type, collection date — reuse specimen, add container only
-      const res2 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res2 = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'DEDUP-SUBJ',
@@ -1646,9 +1618,9 @@ describe('Subjects with Specimens API', () => {
 
   describe('Validation Error Tests', () => {
     it('should return 400 for invalid study short code', async () => {
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'INVALID',
           subjectName: 'SUBJ',
@@ -1664,9 +1636,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should return 400 for invalid specimen type name', async () => {
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ',
@@ -1686,9 +1658,9 @@ describe('Subjects with Specimens API', () => {
 
     it('should return 400 for missing required container fields', async () => {
       // Test cryovial without collection
-      const res1 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res1 = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERR-1',
@@ -1706,9 +1678,9 @@ describe('Subjects with Specimens API', () => {
       expect(res1.status).toBe(400)
 
       // Test micronix without barcode
-      const res2 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res2 = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERR-2',
@@ -1727,9 +1699,9 @@ describe('Subjects with Specimens API', () => {
       expect(res2.status).toBe(400)
 
       // Test paper without label
-      const res3 = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res3 = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-ERR-3',
@@ -1751,9 +1723,9 @@ describe('Subjects with Specimens API', () => {
 
   describe('Edge Cases', () => {
     it('should handle empty specimens array', async () => {
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-EMPTY',
@@ -1769,9 +1741,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should handle specimens without containers', async () => {
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: 'SUBJ-NO-CONTAINERS',
@@ -1795,9 +1767,9 @@ describe('Subjects with Specimens API', () => {
     })
 
     it('should handle subject name with whitespace', async () => {
-      const res = await authenticatedRequest(app, '/api/subjects/with-specimens', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           studyShortCode: 'TEST01',
           subjectName: '  SUBJ-WHITESPACE  ',

@@ -1,55 +1,162 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { createTestClient } from '../helpers/test-client'
-import { setupTestDatabase, cleanupTestDatabase } from '../helpers/db-setup'
-import { 
-  createTestStudy,
-  createTestStudySubject,
+import {
+  setupAuthenticatedRouteTest,
+  type AuthenticatedRouteTestContext,
+} from '../helpers/authenticated-route-test'
+import {
   createTestSpecimenType,
   createTestSpecimen,
+  createTestUnit,
+  createTestStorageType,
+  createTestLocation,
+  createTestMicronixPlate,
 } from '../helpers/factories'
-import type { Database } from '../../db/client'
 import { createDerivationsRoutes } from '../../routes/derivations'
+import { setContainerDefaults } from '../../lib/settings'
+import { specimenTypeContainerType, storageContainer, micronixTube } from '../../db/schema'
+import type { Database } from '../../db/client'
+import { utcNow } from '../../lib/datetime'
+
+const BASE = '/api/derivations'
+
+async function createParentContainerFixture(db: Database) {
+  const unit = await createTestUnit(db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+  await setContainerDefaults(db, {
+    micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+    cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+    paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+    static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+  })
+
+  const specimenType = await createTestSpecimenType(db, { name: 'DNA' })
+  const now = utcNow()
+  await db.insert(specimenTypeContainerType).values({
+    specimenTypeId: specimenType.id,
+    containerType: 'micronix_tube',
+    created: now,
+  })
+
+  const specimen = await createTestSpecimen(db, specimenType.id)
+  const storageType = await createTestStorageType(db, { name: 'Freezer' })
+  const location = await createTestLocation(db, {
+    name: 'Loc',
+    storageTypeId: String(storageType.id),
+  })
+  const sourcePlate = await createTestMicronixPlate(db, {
+    name: 'SourcePlate',
+    locationId: location.id,
+  })
+  const targetPlate = await createTestMicronixPlate(db, {
+    name: 'TargetPlate',
+    locationId: location.id,
+  })
+
+  const [parentContainer] = await db
+    .insert(storageContainer)
+    .values({
+      specimenId: specimen.id,
+      unitId: unit.id,
+      totalQuantity: 1.0,
+      remainingQuantity: 1.0,
+      created: now,
+      lastUpdated: now,
+    })
+    .returning()
+
+  await db.insert(micronixTube).values({
+    id: parentContainer!.id,
+    collectionId: sourcePlate.id,
+    barcode: 'MT-PARENT',
+    position: 'A01',
+  })
+
+  return {
+    parentContainerId: parentContainer!.id,
+    targetPlateId: targetPlate.id,
+  }
+}
 
 describe('Derivation Workflow Integration Tests', () => {
-  let testDb: Database
-  let sqlite: any
-  let client: ReturnType<typeof createTestClient>
+  let ctx: AuthenticatedRouteTestContext
 
   beforeEach(async () => {
-    const setup = await setupTestDatabase()
-    testDb = setup.db
-    sqlite = setup.sqlite
-
-    const app = new (await import('hono')).Hono()
-    app.route('/api/derivations', createDerivationsRoutes(testDb))
-    client = createTestClient(app)
+    ctx = await setupAuthenticatedRouteTest({
+      user: {
+        email: 'test@example.com',
+        name: 'Test User',
+        role: 'member',
+      },
+      mount: (app, { db }) => {
+        app.route('/api/derivations', createDerivationsRoutes(db))
+      },
+    })
   })
 
   afterEach(() => {
-    if (sqlite) {
-      cleanupTestDatabase(sqlite)
-    }
+    ctx.cleanup()
   })
 
-  it('should create a derivation from parent container', async () => {
-    // Setup: Create study, subject, specimen type, and specimen with container
-    const study = await createTestStudy(testDb, {
-      title: 'Test Study',
-      shortCode: 'TEST001',
-    })
-    const subject = await createTestStudySubject(testDb, {
-      studyId: study.id,
-      name: 'Subject 1',
-    })
-    const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
-    const specimen = await createTestSpecimen(testDb, specimenType.id, {
-      studySubjectId: subject.id,
+  it('creates a derivation from parent container through the HTTP seam', async () => {
+    const { parentContainerId, targetPlateId } = await createParentContainerFixture(ctx.db)
+
+    const res = await ctx.request(`${BASE}/containers/${parentContainerId}/derive`, {
+      method: 'POST',
+      json: {
+        derivationType: 'aliquot',
+        specimenTypeName: 'DNA',
+        containerType: 'micronix_tube',
+        collectionId: targetPlateId,
+        containerBarcode: 'MT-CHILD',
+        position: 'A01',
+      },
     })
 
-    // Note: This test requires a container to be created first
-    // The actual derivation creation would need container setup
-    // This is a basic structure - expand based on actual derivation route structure
-    expect(specimen).toBeDefined()
-    expect(specimen.id).toBeGreaterThan(0)
+    expect(res.status).toBe(200)
+    const data = (await res.json()) as {
+      derivation: { parentContainerId: number; childContainerId: number }
+      childContainer: { id: number }
+      specimen: { id: number }
+    }
+    expect(data.derivation.parentContainerId).toBe(parentContainerId)
+    expect(data.childContainer.id).toBe(data.derivation.childContainerId)
+    expect(data.specimen).toBeDefined()
+
+    const listRes = await ctx.request(`${BASE}/containers/${parentContainerId}/derivations`, {
+      method: 'GET',
+    })
+    expect(listRes.status).toBe(200)
+    const list = (await listRes.json()) as { derivations: unknown[]; count: number }
+    expect(list.count).toBe(1)
+    expect(list.derivations).toHaveLength(1)
+  })
+
+  it('returns derivation source for the child container', async () => {
+    const { parentContainerId, targetPlateId } = await createParentContainerFixture(ctx.db)
+
+    const deriveRes = await ctx.request(`${BASE}/containers/${parentContainerId}/derive`, {
+      method: 'POST',
+      json: {
+        derivationType: 'aliquot',
+        specimenTypeName: 'DNA',
+        containerType: 'micronix_tube',
+        collectionId: targetPlateId,
+        containerBarcode: 'MT-CHILD-2',
+        position: 'A02',
+      },
+    })
+    expect(deriveRes.status).toBe(200)
+    const derived = (await deriveRes.json()) as { childContainer: { id: number } }
+
+    const sourceRes = await ctx.request(`${BASE}/containers/${derived.childContainer.id}/source`, {
+      method: 'GET',
+    })
+    expect(sourceRes.status).toBe(200)
+    const source = (await sourceRes.json()) as {
+      type: string
+      derivation: { derivationType: string; childContainerId: number }
+    }
+    expect(source.type).toBe('derivation')
+    expect(source.derivation.derivationType).toBe('aliquot')
+    expect(source.derivation.childContainerId).toBe(derived.childContainer.id)
   })
 })

@@ -1,12 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { Hono } from 'hono'
-import { loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
-import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
-import { createAuthRoutes } from '../auth'
+import { authenticatedRequest } from '../../__tests__/helpers/test-client'
+import {
+  setupAuthenticatedRouteTest,
+  type AuthenticatedRouteTestContext,
+} from '../../__tests__/helpers/authenticated-route-test'
 import { createImportsRoutes } from '../imports'
-import { handleRouteError } from '../../lib/error-handler'
-import type { Database } from '../../db/client'
-import { setupPasswordRequirements, setupSessionSettings, createTestUser } from '../../__tests__/helpers/auth-helpers'
 import {
   createTestStudy,
   createTestSpecimenType,
@@ -19,67 +17,37 @@ import { setContainerDefaults } from '../../lib/settings'
 import { eq } from 'drizzle-orm'
 
 describe('Imports API', () => {
-  let testDb: Database
-  let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
-  let cookieHeader: string
+  let ctx: AuthenticatedRouteTestContext
 
   beforeEach(async () => {
-    const setup = await setupTestDatabase()
-    testDb = setup.db
-    sqlite = setup.sqlite
-
-    await setupPasswordRequirements(testDb, 8)
-    await setupSessionSettings(testDb, 604800)
-
-    await createTestUser(testDb, {
-      email: 'admin@test.com',
-      name: 'Admin',
-      password: 'password123',
-      role: 'admin',
+    ctx = await setupAuthenticatedRouteTest({
+      user: {
+        email: 'admin@test.com',
+        name: 'Admin',
+        password: 'password123',
+        role: 'admin',
+      },
+      mount: (app, { db }) => {
+        app.route('/api/imports', createImportsRoutes(db))
+      },
     })
-
-    const app = new Hono()
-    app.use('*', (c, next) => {
-      c.set('db', testDb)
-      return next()
-    })
-    app.route('/api/auth', createAuthRoutes(testDb, testDb))
-    app.route('/api/imports', createImportsRoutes(testDb))
-
-    cookieHeader = await loginAndGetCookie(app, 'admin@test.com', 'password123')
   })
 
   afterEach(() => {
-    if (sqlite) {
-      cleanupTestDatabase(sqlite)
-    }
+    ctx.cleanup()
   })
-
-  function createApp(): Hono {
-    const app = new Hono()
-    app.use('*', (c, next) => {
-      c.set('db', testDb)
-      return next()
-    })
-    app.onError((err, c) => handleRouteError(err, c))
-    app.route('/api/imports', createImportsRoutes(testDb))
-    return app
-  }
 
   describe('POST /api/imports/derivations-csv', () => {
     it('returns 400 with invalid body (empty csv)', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/derivations-csv', {
+      const res = await ctx.request('/api/imports/derivations-csv', {
         method: 'POST',
-        cookie: cookieHeader,
         json: { csv: '' },
       })
       expect(res.status).toBe(400)
     })
 
     it('returns 401 when not authenticated', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/derivations-csv', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/imports/derivations-csv', {
         method: 'POST',
         json: { csv: 'parent_container_id,container_type\n1,micronix_tube' },
       })
@@ -89,18 +57,15 @@ describe('Imports API', () => {
 
   describe('POST /api/imports/derivations-csv/validate', () => {
     it('returns 400 with invalid body (empty csv)', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/derivations-csv/validate', {
+      const res = await ctx.request('/api/imports/derivations-csv/validate', {
         method: 'POST',
-        cookie: cookieHeader,
         json: { csv: '' },
       })
       expect(res.status).toBe(400)
     })
 
     it('returns 401 when not authenticated', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/derivations-csv/validate', {
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/imports/derivations-csv/validate', {
         method: 'POST',
         json: { csv: 'header' },
       })
@@ -110,15 +75,13 @@ describe('Imports API', () => {
 
   describe('POST /api/imports/bulk-combined', () => {
     it('full_file mode rolls back all data when any subject is invalid', async () => {
-      await createTestStudy(testDb, { title: 'Import Study', shortCode: 'IMPBULK' })
-      await createTestSpecimenType(testDb, { name: 'Whole Blood' })
-      const beforeSubjects = await testDb.select().from(studySubject)
-      const beforeSpecimens = await testDb.select().from(specimen)
+      await createTestStudy(ctx.db, { title: 'Import Study', shortCode: 'IMPBULK' })
+      await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const beforeSubjects = await ctx.db.select().from(studySubject)
+      const beforeSpecimens = await ctx.db.select().from(specimen)
 
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/bulk-combined', {
+      const res = await ctx.request('/api/imports/bulk-combined', {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           studyShortCode: 'IMPBULK',
           atomicMode: 'full_file',
@@ -136,20 +99,18 @@ describe('Imports API', () => {
       })
 
       expect(res.status).toBe(400)
-      const afterSubjects = await testDb.select().from(studySubject)
-      const afterSpecimens = await testDb.select().from(specimen)
+      const afterSubjects = await ctx.db.select().from(studySubject)
+      const afterSpecimens = await ctx.db.select().from(specimen)
       expect(afterSubjects.length).toBe(beforeSubjects.length)
       expect(afterSpecimens.length).toBe(beforeSpecimens.length)
     })
 
     it('per_subject mode allows partial success and returns indexed errors', async () => {
-      await createTestStudy(testDb, { title: 'Import Study2', shortCode: 'IMPBULK2' })
-      await createTestSpecimenType(testDb, { name: 'Plasma' })
-      const app = createApp()
+      await createTestStudy(ctx.db, { title: 'Import Study2', shortCode: 'IMPBULK2' })
+      await createTestSpecimenType(ctx.db, { name: 'Plasma' })
 
-      const res = await authenticatedRequest(app, '/api/imports/bulk-combined', {
+      const res = await ctx.request('/api/imports/bulk-combined', {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           studyShortCode: 'IMPBULK2',
           atomicMode: 'per_subject',
@@ -173,7 +134,7 @@ describe('Imports API', () => {
       expect(data.errors).toBeDefined()
       expect(data.errors?.[0]?.index).toBe(1)
 
-      const persisted = await testDb
+      const persisted = await ctx.db
         .select()
         .from(studySubject)
       expect(persisted.find((s) => s.name === 'PARTIAL-OK')).toBeDefined()
@@ -181,20 +142,18 @@ describe('Imports API', () => {
     })
 
     it('returns 400 when createCollections specifies a location that cannot contain collections', async () => {
-      await createTestStudy(testDb, { title: 'Location Check Study', shortCode: 'LOCCHECK' })
-      await createTestSpecimenType(testDb, { name: 'Whole Blood' })
-      const storageType = await createTestStorageType(testDb, { name: 'Freezer', description: 'Test' })
-      const noCollLoc = await createTestLocation(testDb, {
+      await createTestStudy(ctx.db, { title: 'Location Check Study', shortCode: 'LOCCHECK' })
+      await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer', description: 'Test' })
+      const noCollLoc = await createTestLocation(ctx.db, {
         name: 'No Collections Here',
         parentId: null,
         storageTypeId: String(storageType.id),
         canContainCollections: false,
       })
 
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/bulk-combined', {
+      const res = await ctx.request('/api/imports/bulk-combined', {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           studyShortCode: 'LOCCHECK',
           atomicMode: 'full_file',
@@ -214,27 +173,27 @@ describe('Imports API', () => {
       const body = (await res.json()) as { error?: string }
       expect(body.error).toContain('cannot contain collections')
 
-      const plates = await testDb.select().from(micronixPlate).where(eq(micronixPlate.name, 'Plate1'))
+      const plates = await ctx.db.select().from(micronixPlate).where(eq(micronixPlate.name, 'Plate1'))
       expect(plates.length).toBe(0)
     })
 
     it('returns 400 when specimen container collectionLocationId points to a location that cannot contain collections', async () => {
-      await createTestStudy(testDb, { title: 'Inline Loc Check Study', shortCode: 'INLINELOC' })
-      const testSpecimenType = await createTestSpecimenType(testDb, { name: 'Whole Blood' })
-      const storageType = await createTestStorageType(testDb, { name: 'Freezer', description: 'Test' })
-      const noCollLoc = await createTestLocation(testDb, {
+      await createTestStudy(ctx.db, { title: 'Inline Loc Check Study', shortCode: 'INLINELOC' })
+      const testSpecimenType = await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer', description: 'Test' })
+      const noCollLoc = await createTestLocation(ctx.db, {
         name: 'No Collections',
         parentId: null,
         storageTypeId: String(storageType.id),
         canContainCollections: false,
       })
-      const testUnit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      await testDb.insert(specimenTypeContainerType).values({
+      const testUnit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await ctx.db.insert(specimenTypeContainerType).values({
         specimenTypeId: testSpecimenType.id,
         containerType: 'cryovial_tube',
       })
-      await testDb.insert(containerTypeUnit).values({ containerType: 'cryovial_tube', unitId: testUnit.id })
-      await testDb.insert(settings).values({
+      await ctx.db.insert(containerTypeUnit).values({ containerType: 'cryovial_tube', unitId: testUnit.id })
+      await ctx.db.insert(settings).values({
         key: 'container_defaults',
         userId: null,
         value: {
@@ -242,10 +201,8 @@ describe('Imports API', () => {
         },
       })
 
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/bulk-combined', {
+      const res = await ctx.request('/api/imports/bulk-combined', {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           studyShortCode: 'INLINELOC',
           atomicMode: 'full_file',
@@ -274,34 +231,32 @@ describe('Imports API', () => {
       const body = (await res.json()) as { error?: string }
       expect(body.error).toContain('cannot contain collections')
 
-      const boxes = await testDb.select().from(cryovialBox).where(eq(cryovialBox.name, 'NewBox'))
+      const boxes = await ctx.db.select().from(cryovialBox).where(eq(cryovialBox.name, 'NewBox'))
       expect(boxes.length).toBe(0)
     })
 
     it('uses default unit for container when unitId is omitted in payload', async () => {
-      await createTestStudy(testDb, { title: 'Unit Default Study', shortCode: 'UNITDEF' })
-      const specimenType = await createTestSpecimenType(testDb, { name: 'Whole Blood' })
-      const testUnit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      await setContainerDefaults(testDb, {
+      await createTestStudy(ctx.db, { title: 'Unit Default Study', shortCode: 'UNITDEF' })
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const testUnit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(ctx.db, {
         micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
       })
-      await testDb.insert(specimenTypeContainerType).values({
+      await ctx.db.insert(specimenTypeContainerType).values({
         specimenTypeId: specimenType.id,
         containerType: 'micronix_tube',
       })
-      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: testUnit.id })
-      const storageType = await createTestStorageType(testDb, { name: 'Freezer', description: 'Test' })
-      const loc = await createTestLocation(testDb, {
+      await ctx.db.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: testUnit.id })
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer', description: 'Test' })
+      const loc = await createTestLocation(ctx.db, {
         name: 'LocUnit',
         parentId: null,
         storageTypeId: String(storageType.id),
         canContainCollections: true,
       })
 
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/bulk-combined', {
+      const res = await ctx.request('/api/imports/bulk-combined', {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           studyShortCode: 'UNITDEF',
           atomicMode: 'full_file',
@@ -332,7 +287,7 @@ describe('Imports API', () => {
       const data = (await res.json()) as { results: Array<{ specimens: Array<{ containerId?: number }> }> }
       const containerId = data.results[0].specimens[0].containerId
       expect(containerId).toBeDefined()
-      const created = await testDb.select().from(storageContainer).where(eq(storageContainer.id, containerId!)).get()
+      const created = await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, containerId!)).get()
       expect(created).toBeDefined()
       expect(created!.unitId).toBe(testUnit.id)
     })
@@ -340,12 +295,10 @@ describe('Imports API', () => {
 
   describe('POST /api/imports/bulk-combined/validate', () => {
     it('returns valid: true for a valid payload (no containers)', async () => {
-      await createTestStudy(testDb, { title: 'Validate Study', shortCode: 'VAL' })
-      await createTestSpecimenType(testDb, { name: 'Whole Blood' })
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/bulk-combined/validate', {
+      await createTestStudy(ctx.db, { title: 'Validate Study', shortCode: 'VAL' })
+      await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const res = await ctx.request('/api/imports/bulk-combined/validate', {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           studyShortCode: 'VAL',
           atomicMode: 'full_file',
@@ -362,10 +315,8 @@ describe('Imports API', () => {
     })
 
     it('returns valid: false and errors when study does not exist', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/bulk-combined/validate', {
+      const res = await ctx.request('/api/imports/bulk-combined/validate', {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           studyShortCode: 'NOSTUDY',
           atomicMode: 'full_file',
@@ -380,11 +331,9 @@ describe('Imports API', () => {
     })
 
     it('returns valid: false when specimen type is not found', async () => {
-      await createTestStudy(testDb, { title: 'Val Study', shortCode: 'VAL2' })
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/bulk-combined/validate', {
+      await createTestStudy(ctx.db, { title: 'Val Study', shortCode: 'VAL2' })
+      const res = await ctx.request('/api/imports/bulk-combined/validate', {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           studyShortCode: 'VAL2',
           atomicMode: 'full_file',
@@ -400,19 +349,17 @@ describe('Imports API', () => {
     })
 
     it('returns valid: false when createCollections location cannot contain collections', async () => {
-      await createTestStudy(testDb, { title: 'Val Loc', shortCode: 'VALLOC' })
-      await createTestSpecimenType(testDb, { name: 'Blood' })
-      const storageType = await createTestStorageType(testDb, { name: 'Freezer', description: 'Test' })
-      const noCollLoc = await createTestLocation(testDb, {
+      await createTestStudy(ctx.db, { title: 'Val Loc', shortCode: 'VALLOC' })
+      await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer', description: 'Test' })
+      const noCollLoc = await createTestLocation(ctx.db, {
         name: 'No Coll',
         parentId: null,
         storageTypeId: String(storageType.id),
         canContainCollections: false,
       })
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/bulk-combined/validate', {
+      const res = await ctx.request('/api/imports/bulk-combined/validate', {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           studyShortCode: 'VALLOC',
           atomicMode: 'full_file',
@@ -429,12 +376,10 @@ describe('Imports API', () => {
     })
 
     it('returns valid: false when collection date is invalid (future)', async () => {
-      await createTestStudy(testDb, { title: 'Date Study', shortCode: 'DATED' })
-      await createTestSpecimenType(testDb, { name: 'Blood' })
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/imports/bulk-combined/validate', {
+      await createTestStudy(ctx.db, { title: 'Date Study', shortCode: 'DATED' })
+      await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const res = await ctx.request('/api/imports/bulk-combined/validate', {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           studyShortCode: 'DATED',
           atomicMode: 'full_file',

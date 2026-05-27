@@ -1,68 +1,36 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { Hono } from 'hono'
-import { loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
-import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
-import { createAuthRoutes } from '../auth'
+import { authenticatedRequest } from '../../__tests__/helpers/test-client'
+import {
+  setupAuthenticatedRouteTest,
+  type AuthenticatedRouteTestContext,
+} from '../../__tests__/helpers/authenticated-route-test'
 import { createStatisticsRoutes } from '../statistics'
-import { handleRouteError } from '../../lib/error-handler'
-import type { Database } from '../../db/client'
-import type { Database as SQLiteDatabase } from 'bun:sqlite'
-import { setupPasswordRequirements, setupSessionSettings, createTestUser } from '../../__tests__/helpers/auth-helpers'
 
 describe('Statistics API', () => {
-  let testDb: Database
-  let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
-  let cookieHeader: string
+  let ctx: AuthenticatedRouteTestContext
 
   beforeEach(async () => {
-    const setup = await setupTestDatabase()
-    testDb = setup.db
-    sqlite = setup.sqlite
-
-    await setupPasswordRequirements(testDb, 8)
-    await setupSessionSettings(testDb, 604800)
-
-    await createTestUser(testDb, {
-      email: 'admin@test.com',
-      name: 'Admin',
-      password: 'password123',
-      role: 'admin',
+    ctx = await setupAuthenticatedRouteTest({
+      user: {
+        email: 'admin@test.com',
+        name: 'Admin',
+        password: 'password123',
+        role: 'admin',
+      },
+      mount: (app, { db, sqlite }) => {
+        app.route('/api/statistics', createStatisticsRoutes(db, sqlite))
+      },
     })
-
-    const app = new Hono()
-    app.use('*', (c, next) => {
-      c.set('db', testDb)
-      return next()
-    })
-    app.route('/api/auth', createAuthRoutes(testDb, testDb))
-    app.route('/api/statistics', createStatisticsRoutes(testDb, sqlite as SQLiteDatabase))
-
-    cookieHeader = await loginAndGetCookie(app, 'admin@test.com', 'password123')
   })
 
   afterEach(() => {
-    if (sqlite) {
-      cleanupTestDatabase(sqlite)
-    }
+    ctx.cleanup()
   })
-
-  function createApp(): Hono {
-    const app = new Hono()
-    app.use('*', (c, next) => {
-      c.set('db', testDb)
-      return next()
-    })
-    app.onError((err, c) => handleRouteError(err, c))
-    app.route('/api/statistics', createStatisticsRoutes(testDb, sqlite as SQLiteDatabase))
-    return app
-  }
 
   describe('GET /api/statistics', () => {
     it('returns 200 and expected shape with auth', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/statistics', {
+      const res = await ctx.request('/api/statistics', {
         method: 'GET',
-        cookie: cookieHeader,
       })
       expect(res.status).toBe(200)
       const data = (await res.json()) as Record<string, unknown>
@@ -71,10 +39,8 @@ describe('Statistics API', () => {
     })
 
     it('returns 200 with query filters (study, container_type)', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/statistics?study=NONEXISTENT&container_type=micronix_tube', {
+      const res = await ctx.request('/api/statistics?study=NONEXISTENT&container_type=micronix_tube', {
         method: 'GET',
-        cookie: cookieHeader,
       })
       expect(res.status).toBe(200)
       const data = (await res.json()) as Record<string, unknown>
@@ -82,18 +48,15 @@ describe('Statistics API', () => {
     })
 
     it('returns 401 without auth', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/statistics', { method: 'GET' })
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/statistics', { method: 'GET' })
       expect(res.status).toBe(401)
     })
   })
 
   describe('GET /api/statistics/admin', () => {
     it('returns 200 with admin auth', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/statistics/admin', {
+      const res = await ctx.request('/api/statistics/admin', {
         method: 'GET',
-        cookie: cookieHeader,
       })
       expect(res.status).toBe(200)
       const data = (await res.json()) as Record<string, unknown>
@@ -101,8 +64,7 @@ describe('Statistics API', () => {
     })
 
     it('returns 401 without auth', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, '/api/statistics/admin', { method: 'GET' })
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/statistics/admin', { method: 'GET' })
       expect(res.status).toBe(401)
     })
   })

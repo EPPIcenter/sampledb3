@@ -1,16 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { Hono } from 'hono'
-import { loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
-import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
-import { createAuthRoutes } from '../auth'
-import { createControlsRoutes } from '../controls'
-import { handleRouteError } from '../../lib/error-handler'
-import type { Database } from '../../db/client'
+import { authenticatedRequest } from '../../__tests__/helpers/test-client'
 import {
-  setupPasswordRequirements,
-  setupSessionSettings,
-  createTestUser,
-} from '../../__tests__/helpers/auth-helpers'
+  setupAuthenticatedRouteTest,
+  type AuthenticatedRouteTestContext,
+} from '../../__tests__/helpers/authenticated-route-test'
+import { createControlsRoutes } from '../controls'
 import {
   createTestControlDefinition,
   createTestStrain,
@@ -20,59 +14,30 @@ import {
 const BASE = '/api/blood-controls'
 
 describe('Controls API', () => {
-  let testDb: Database
-  let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
-  let cookieHeader: string
+  let ctx: AuthenticatedRouteTestContext
 
   beforeEach(async () => {
-    const setup = await setupTestDatabase()
-    testDb = setup.db
-    sqlite = setup.sqlite
-
-    await setupPasswordRequirements(testDb, 8)
-    await setupSessionSettings(testDb, 604800)
-
-    await createTestUser(testDb, {
-      email: 'admin@test.com',
-      name: 'Admin',
-      password: 'password123',
-      role: 'admin',
+    ctx = await setupAuthenticatedRouteTest({
+      user: {
+        email: 'admin@test.com',
+        name: 'Admin',
+        password: 'password123',
+        role: 'admin',
+      },
+      mount: (app, { db }) => {
+        app.route('/api/blood-controls', createControlsRoutes(db))
+      },
     })
-
-    const app = new Hono()
-    app.use('*', (c, next) => {
-      c.set('db', testDb)
-      return next()
-    })
-    app.route('/api/auth', createAuthRoutes(testDb, testDb))
-    app.route('/api/blood-controls', createControlsRoutes(testDb))
-
-    cookieHeader = await loginAndGetCookie(app, 'admin@test.com', 'password123')
   })
 
   afterEach(() => {
-    if (sqlite) {
-      cleanupTestDatabase(sqlite)
-    }
+    ctx.cleanup()
   })
-
-  function createApp(): Hono {
-    const app = new Hono()
-    app.use('*', (c, next) => {
-      c.set('db', testDb)
-      return next()
-    })
-    app.onError((err, c) => handleRouteError(err, c))
-    app.route('/api/blood-controls', createControlsRoutes(testDb))
-    return app
-  }
 
   describe(`GET ${BASE}`, () => {
     it('returns 200 and controls list when authenticated', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, BASE, {
+      const res = await ctx.request(BASE, {
         method: 'GET',
-        cookie: cookieHeader,
       })
       expect(res.status).toBe(200)
       const data = (await res.json()) as { controls: unknown[] }
@@ -81,18 +46,15 @@ describe('Controls API', () => {
     })
 
     it('returns 401 when not authenticated', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, BASE, { method: 'GET' })
+      const res = await authenticatedRequest(ctx.createRequestApp(), BASE, { method: 'GET' })
       expect(res.status).toBe(401)
     })
   })
 
   describe(`GET ${BASE}/:id`, () => {
     it('returns 404 for non-existent definition', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/99999`, {
+      const res = await ctx.request(`${BASE}/99999`, {
         method: 'GET',
-        cookie: cookieHeader,
       })
       expect(res.status).toBe(404)
       const data = (await res.json()) as { error: string }
@@ -100,29 +62,24 @@ describe('Controls API', () => {
     })
 
     it('returns 400 for invalid ID', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/notanid`, {
+      const res = await ctx.request(`${BASE}/notanid`, {
         method: 'GET',
-        cookie: cookieHeader,
       })
       expect(res.status).toBe(400)
     })
 
     it('returns 401 when not authenticated', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/1`, { method: 'GET' })
+      const res = await authenticatedRequest(ctx.createRequestApp(), `${BASE}/1`, { method: 'GET' })
       expect(res.status).toBe(401)
     })
 
     it('returns 200 and definition when it exists', async () => {
-      const def = await createTestControlDefinition(testDb, {
+      const def = await createTestControlDefinition(ctx.db, {
         name: 'Test Control Def',
         controlType: 'blood',
       })
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/${def.id}`, {
+      const res = await ctx.request(`${BASE}/${def.id}`, {
         method: 'GET',
-        cookie: cookieHeader,
       })
       expect(res.status).toBe(200)
       const data = (await res.json()) as { control: { id: number; name: string } }
@@ -134,10 +91,8 @@ describe('Controls API', () => {
 
   describe(`GET ${BASE}/batches`, () => {
     it('returns 200 and batches list when authenticated', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/batches`, {
+      const res = await ctx.request(`${BASE}/batches`, {
         method: 'GET',
-        cookie: cookieHeader,
       })
       expect(res.status).toBe(200)
       const data = (await res.json()) as { batches: unknown[] }
@@ -146,22 +101,19 @@ describe('Controls API', () => {
     })
 
     it('returns 401 when not authenticated', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/batches`, { method: 'GET' })
+      const res = await authenticatedRequest(ctx.createRequestApp(), `${BASE}/batches`, { method: 'GET' })
       expect(res.status).toBe(401)
     })
   })
 
   describe(`POST ${BASE}/:id/batches`, () => {
     it('returns 201 when creating a batch', async () => {
-      const definition = await createTestControlDefinition(testDb, {
+      const definition = await createTestControlDefinition(ctx.db, {
         name: 'Batch Test Def',
         controlType: 'blood',
       })
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+      const res = await ctx.request(`${BASE}/${definition.id}/batches`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: { productionDate: '2024-01-01' },
       })
       expect(res.status).toBe(201)
@@ -171,22 +123,19 @@ describe('Controls API', () => {
     })
 
     it('returns 404 when definition does not exist', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/99999/batches`, {
+      const res = await ctx.request(`${BASE}/99999/batches`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: { productionDate: '2024-01-01' },
       })
       expect(res.status).toBe(404)
     })
 
     it('returns 401 when not authenticated', async () => {
-      const definition = await createTestControlDefinition(testDb, {
+      const definition = await createTestControlDefinition(ctx.db, {
         name: 'Def For Auth Test',
         controlType: 'blood',
       })
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+      const res = await authenticatedRequest(ctx.createRequestApp(), `${BASE}/${definition.id}/batches`, {
         method: 'POST',
         json: { productionDate: '2024-01-01' },
       })
@@ -196,13 +145,13 @@ describe('Controls API', () => {
 
   describe(`POST ${BASE}/definitions/find`, () => {
     it('returns 200 and definition when composition and density match', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Find Strain' })
-      const unit = await createTestUnit(testDb, {
+      const strain = await createTestStrain(ctx.db, { name: 'Find Strain' })
+      const unit = await createTestUnit(ctx.db, {
         symbol: 'p/ul',
         name: 'parasites per microliter',
         category: 'concentration',
       })
-      const existing = await createTestControlDefinition(testDb, {
+      const existing = await createTestControlDefinition(ctx.db, {
         name: 'Existing Find Def',
         controlType: 'blood',
         properties: {
@@ -211,10 +160,8 @@ describe('Controls API', () => {
           targetDensityUnitId: unit.id,
         },
       })
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/definitions/find`, {
+      const res = await ctx.request(`${BASE}/definitions/find`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           strains: [{ strainId: strain.id, percentage: 100 }],
           targetDensity: 500,
@@ -229,19 +176,16 @@ describe('Controls API', () => {
     })
 
     it('returns 404 when no definition matches and does not create', async () => {
-      const strain = await createTestStrain(testDb, { name: 'No Match Strain' })
-      const app = createApp()
-      const listRes = await authenticatedRequest(app, BASE, {
+      const strain = await createTestStrain(ctx.db, { name: 'No Match Strain' })
+      const listRes = await ctx.request(BASE, {
         method: 'GET',
-        cookie: cookieHeader,
       })
       expect(listRes.status).toBe(200)
       const listData = (await listRes.json()) as { controls?: unknown[] }
       const countBefore = Array.isArray(listData.controls) ? listData.controls.length : 0
 
-      const findRes = await authenticatedRequest(app, `${BASE}/definitions/find`, {
+      const findRes = await ctx.request(`${BASE}/definitions/find`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           strains: [{ strainId: strain.id, percentage: 100 }],
           targetDensity: 99999,
@@ -251,9 +195,8 @@ describe('Controls API', () => {
       const findData = (await findRes.json()) as { error: string }
       expect(findData.error).toContain('No control definition found')
 
-      const listRes2 = await authenticatedRequest(app, BASE, {
+      const listRes2 = await ctx.request(BASE, {
         method: 'GET',
-        cookie: cookieHeader,
       })
       const listData2 = (await listRes2.json()) as { controls?: unknown[] }
       const countAfter = Array.isArray(listData2.controls) ? listData2.controls.length : 0
@@ -263,16 +206,14 @@ describe('Controls API', () => {
 
   describe(`POST ${BASE}/definitions/bulk`, () => {
     it('creates multiple definitions for same composition with different densities', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Bulk Strain' })
-      const unit = await createTestUnit(testDb, {
+      const strain = await createTestStrain(ctx.db, { name: 'Bulk Strain' })
+      const unit = await createTestUnit(ctx.db, {
         symbol: 'p/ul',
         name: 'parasites per microliter',
         category: 'concentration',
       })
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+      const res = await ctx.request(`${BASE}/definitions/bulk`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           strains: [{ strainId: strain.id, percentage: 100 }],
           targetDensities: [100, 500, 1000],
@@ -291,13 +232,13 @@ describe('Controls API', () => {
     })
 
     it('returns existing definition when composition and density already exist (get-or-create)', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Bulk Existing Strain' })
-      const unit = await createTestUnit(testDb, {
+      const strain = await createTestStrain(ctx.db, { name: 'Bulk Existing Strain' })
+      const unit = await createTestUnit(ctx.db, {
         symbol: 'p/ul',
         name: 'parasites per microliter',
         category: 'concentration',
       })
-      const existing = await createTestControlDefinition(testDb, {
+      const existing = await createTestControlDefinition(ctx.db, {
         name: 'Existing Bulk Def',
         controlType: 'blood',
         properties: {
@@ -306,10 +247,8 @@ describe('Controls API', () => {
           targetDensityUnitId: unit.id,
         },
       })
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+      const res = await ctx.request(`${BASE}/definitions/bulk`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           strains: [{ strainId: strain.id, percentage: 100 }],
           targetDensities: [500, 1000],
@@ -330,11 +269,9 @@ describe('Controls API', () => {
     })
 
     it('returns 400 when targetDensities is empty', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Strain Empty' })
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+      const strain = await createTestStrain(ctx.db, { name: 'Strain Empty' })
+      const res = await ctx.request(`${BASE}/definitions/bulk`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           strains: [{ strainId: strain.id, percentage: 100 }],
           targetDensities: [],
@@ -345,10 +282,8 @@ describe('Controls API', () => {
     })
 
     it('returns 400 when strains are missing', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+      const res = await ctx.request(`${BASE}/definitions/bulk`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           strains: [],
           targetDensities: [100, 200],
@@ -361,8 +296,7 @@ describe('Controls API', () => {
     })
 
     it('returns 401 when not authenticated', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+      const res = await authenticatedRequest(ctx.createRequestApp(), `${BASE}/definitions/bulk`, {
         method: 'POST',
         json: {
           strains: [{ strainId: 1, percentage: 100 }],
@@ -374,16 +308,14 @@ describe('Controls API', () => {
     })
 
     it('uses provided names when names array is supplied and length matches targetDensities', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Name Strain' })
-      const unit = await createTestUnit(testDb, {
+      const strain = await createTestStrain(ctx.db, { name: 'Name Strain' })
+      const unit = await createTestUnit(ctx.db, {
         symbol: 'p/ul',
         name: 'parasites per microliter',
         category: 'concentration',
       })
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+      const res = await ctx.request(`${BASE}/definitions/bulk`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           strains: [{ strainId: strain.id, percentage: 100 }],
           targetDensities: [100, 500, 1000],
@@ -399,11 +331,9 @@ describe('Controls API', () => {
     })
 
     it('returns 400 when names is missing', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Strain N' })
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+      const strain = await createTestStrain(ctx.db, { name: 'Strain N' })
+      const res = await ctx.request(`${BASE}/definitions/bulk`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           strains: [{ strainId: strain.id, percentage: 100 }],
           targetDensities: [100, 500],
@@ -413,11 +343,9 @@ describe('Controls API', () => {
     })
 
     it('returns 400 when names length does not match targetDensities length', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Strain N' })
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+      const strain = await createTestStrain(ctx.db, { name: 'Strain N' })
+      const res = await ctx.request(`${BASE}/definitions/bulk`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           strains: [{ strainId: strain.id, percentage: 100 }],
           targetDensities: [100, 500],
@@ -428,13 +356,13 @@ describe('Controls API', () => {
     })
 
     it('returns 400 when provided name is already used by another definition', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Strain Dup' })
-      const unit = await createTestUnit(testDb, {
+      const strain = await createTestStrain(ctx.db, { name: 'Strain Dup' })
+      const unit = await createTestUnit(ctx.db, {
         symbol: 'p/ul',
         name: 'parasites per microliter',
         category: 'concentration',
       })
-      await createTestControlDefinition(testDb, {
+      await createTestControlDefinition(ctx.db, {
         name: 'Taken Name',
         controlType: 'blood',
         properties: {
@@ -443,10 +371,8 @@ describe('Controls API', () => {
           targetDensityUnitId: unit.id,
         },
       })
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/definitions/bulk`, {
+      const res = await ctx.request(`${BASE}/definitions/bulk`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           strains: [{ strainId: strain.id, percentage: 100 }],
           targetDensities: [200, 300],
@@ -463,26 +389,23 @@ describe('Controls API', () => {
 
   describe(`PATCH ${BASE}/batches/:id`, () => {
     it('returns 200 and updates batch name', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Strain Patch' })
-      const definition = await createTestControlDefinition(testDb, {
+      const strain = await createTestStrain(ctx.db, { name: 'Strain Patch' })
+      const definition = await createTestControlDefinition(ctx.db, {
         name: 'DefPatch',
         properties: {
           strains: [{ id: strain.id, name: 'Strain Patch', percentage: 100 }],
           targetDensity: 500,
         },
       })
-      const app = createApp()
-      const createRes = await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+      const createRes = await ctx.request(`${BASE}/${definition.id}/batches`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: { name: 'Original Name', productionDate: '2026-04-01' },
       })
       expect(createRes.status).toBe(201)
       const { batch } = (await createRes.json()) as { batch: { id: number } }
 
-      const patchRes = await authenticatedRequest(app, `${BASE}/batches/${batch.id}`, {
+      const patchRes = await ctx.request(`${BASE}/batches/${batch.id}`, {
         method: 'PATCH',
-        cookie: cookieHeader,
         json: { name: 'Updated Name' },
       })
       expect(patchRes.status).toBe(200)
@@ -491,26 +414,23 @@ describe('Controls API', () => {
     })
 
     it('returns 200 and updates production date', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Strain Date' })
-      const definition = await createTestControlDefinition(testDb, {
+      const strain = await createTestStrain(ctx.db, { name: 'Strain Date' })
+      const definition = await createTestControlDefinition(ctx.db, {
         name: 'DefDate',
         properties: {
           strains: [{ id: strain.id, name: 'Strain Date', percentage: 100 }],
           targetDensity: 600,
         },
       })
-      const app = createApp()
-      const createRes = await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+      const createRes = await ctx.request(`${BASE}/${definition.id}/batches`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: { name: 'BatchDate', productionDate: '2026-01-01' },
       })
       expect(createRes.status).toBe(201)
       const { batch } = (await createRes.json()) as { batch: { id: number } }
 
-      const patchRes = await authenticatedRequest(app, `${BASE}/batches/${batch.id}`, {
+      const patchRes = await ctx.request(`${BASE}/batches/${batch.id}`, {
         method: 'PATCH',
-        cookie: cookieHeader,
         json: { productionDate: '2026-06-15' },
       })
       expect(patchRes.status).toBe(200)
@@ -519,41 +439,35 @@ describe('Controls API', () => {
     })
 
     it('returns 400 when name already exists', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Strain Dup' })
-      const definition = await createTestControlDefinition(testDb, {
+      const strain = await createTestStrain(ctx.db, { name: 'Strain Dup' })
+      const definition = await createTestControlDefinition(ctx.db, {
         name: 'DefDup',
         properties: {
           strains: [{ id: strain.id, name: 'Strain Dup', percentage: 100 }],
           targetDensity: 700,
         },
       })
-      const app = createApp()
-      await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+      await ctx.request(`${BASE}/${definition.id}/batches`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: { name: 'Existing Batch', productionDate: '2026-04-01' },
       })
-      const createRes = await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+      const createRes = await ctx.request(`${BASE}/${definition.id}/batches`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: { name: 'Second Batch', productionDate: '2026-04-02' },
       })
       expect(createRes.status).toBe(201)
       const { batch } = (await createRes.json()) as { batch: { id: number } }
 
-      const patchRes = await authenticatedRequest(app, `${BASE}/batches/${batch.id}`, {
+      const patchRes = await ctx.request(`${BASE}/batches/${batch.id}`, {
         method: 'PATCH',
-        cookie: cookieHeader,
         json: { name: 'Existing Batch' },
       })
       expect(patchRes.status).toBe(400)
     })
 
     it('returns 404 for non-existent batch', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, `${BASE}/batches/99999`, {
+      const res = await ctx.request(`${BASE}/batches/99999`, {
         method: 'PATCH',
-        cookie: cookieHeader,
         json: { name: 'Ghost Batch' },
       })
       expect(res.status).toBe(404)
@@ -562,64 +476,58 @@ describe('Controls API', () => {
 
   describe(`DELETE ${BASE}/batches/:batchId/specimens/:specimenId`, () => {
     it('returns 200 and deletes the specimen from the batch', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Strain Del' })
-      const definition = await createTestControlDefinition(testDb, {
+      const strain = await createTestStrain(ctx.db, { name: 'Strain Del' })
+      const definition = await createTestControlDefinition(ctx.db, {
         name: 'DefDel',
         properties: {
           strains: [{ id: strain.id, name: 'Strain Del', percentage: 100 }],
           targetDensity: 800,
         },
       })
-      const app = createApp()
-      const createRes = await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+      const createRes = await ctx.request(`${BASE}/${definition.id}/batches`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: { name: 'BatchDel', productionDate: '2026-04-01' },
       })
       expect(createRes.status).toBe(201)
       const { batch } = (await createRes.json()) as { batch: { id: number } }
 
-      const { specimen, controlBatch: controlBatchTable } = await import('../../db/schema')
+      const { specimen } = await import('../../db/schema')
       const { eq } = await import('drizzle-orm')
       const { createTestSpecimenType } = await import('../../__tests__/helpers/factories')
-      const specType = await createTestSpecimenType(testDb, { name: 'Blood Del' })
-      const [spec] = await testDb.insert(specimen).values({
+      const specType = await createTestSpecimenType(ctx.db, { name: 'Blood Del' })
+      const [spec] = await ctx.db.insert(specimen).values({
         controlBatchId: batch.id,
         specimenTypeId: specType.id,
         collectionDate: '2026-04-01',
       }).returning()
 
-      const delRes = await authenticatedRequest(app, `${BASE}/batches/${batch.id}/specimens/${spec.id}`, {
+      const delRes = await ctx.request(`${BASE}/batches/${batch.id}/specimens/${spec.id}`, {
         method: 'DELETE',
-        cookie: cookieHeader,
       })
       expect(delRes.status).toBe(200)
 
-      const remaining = await testDb.select().from(specimen).where(eq(specimen.id, spec.id)).get()
+      const remaining = await ctx.db.select().from(specimen).where(eq(specimen.id, spec.id)).get()
       expect(remaining).toBeUndefined()
     })
 
     it('returns 404 when specimen does not belong to the batch', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Strain NotBelong' })
-      const definition = await createTestControlDefinition(testDb, {
+      const strain = await createTestStrain(ctx.db, { name: 'Strain NotBelong' })
+      const definition = await createTestControlDefinition(ctx.db, {
         name: 'DefNotBelong',
         properties: {
           strains: [{ id: strain.id, name: 'Strain NotBelong', percentage: 100 }],
           targetDensity: 900,
         },
       })
-      const app = createApp()
-      const createRes = await authenticatedRequest(app, `${BASE}/${definition.id}/batches`, {
+      const createRes = await ctx.request(`${BASE}/${definition.id}/batches`, {
         method: 'POST',
-        cookie: cookieHeader,
         json: { name: 'BatchNotBelong', productionDate: '2026-04-01' },
       })
       expect(createRes.status).toBe(201)
       const { batch } = (await createRes.json()) as { batch: { id: number } }
 
-      const delRes = await authenticatedRequest(app, `${BASE}/batches/${batch.id}/specimens/99999`, {
+      const delRes = await ctx.request(`${BASE}/batches/${batch.id}/specimens/99999`, {
         method: 'DELETE',
-        cookie: cookieHeader,
       })
       expect(delRes.status).toBe(404)
     })
@@ -627,16 +535,14 @@ describe('Controls API', () => {
 
   describe(`POST ${BASE}`, () => {
     it('returns 201 when creating a control definition with valid payload', async () => {
-      const strain = await createTestStrain(testDb, { name: 'Strain A' })
-      const unit = await createTestUnit(testDb, {
+      const strain = await createTestStrain(ctx.db, { name: 'Strain A' })
+      const unit = await createTestUnit(ctx.db, {
         symbol: 'p/ul',
         name: 'parasites per microliter',
         category: 'concentration',
       })
-      const app = createApp()
-      const res = await authenticatedRequest(app, BASE, {
+      const res = await ctx.request(BASE, {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           targetDensity: 1000,
           targetDensityUnitId: unit.id,
@@ -650,10 +556,8 @@ describe('Controls API', () => {
     })
 
     it('returns 400 when strains are missing', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, BASE, {
+      const res = await ctx.request(BASE, {
         method: 'POST',
-        cookie: cookieHeader,
         json: {
           targetDensity: 1000,
           strains: [],
@@ -665,8 +569,7 @@ describe('Controls API', () => {
     })
 
     it('returns 401 when not authenticated', async () => {
-      const app = createApp()
-      const res = await authenticatedRequest(app, BASE, {
+      const res = await authenticatedRequest(ctx.createRequestApp(), BASE, {
         method: 'POST',
         json: { targetDensity: 1000, strains: [] },
       })

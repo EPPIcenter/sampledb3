@@ -1,59 +1,38 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { Hono } from 'hono'
-import { loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
-import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
-import { createAuthRoutes } from '../auth'
+import { authenticatedRequest } from '../../__tests__/helpers/test-client'
+import {
+  setupAuthenticatedRouteTest,
+  type AuthenticatedRouteTestContext,
+} from '../../__tests__/helpers/authenticated-route-test'
 import { createLocationsRoutes } from '../locations'
-import { handleRouteError } from '../../lib/error-handler'
-import { setupPasswordRequirements, setupSessionSettings, setupPaginationSettings, createTestUser } from '../../__tests__/helpers/auth-helpers'
 import { createTestStorageType, createTestLocation } from '../../__tests__/helpers/factories'
-import type { Database } from '../../db/client'
 
 describe('Locations API', () => {
-  let app: Hono
-  let testDb: Database
-  let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
-  let cookie: string
+  let ctx: AuthenticatedRouteTestContext
 
   beforeEach(async () => {
-    const setup = await setupTestDatabase()
-    testDb = setup.db
-    sqlite = setup.sqlite
-
-    await setupPasswordRequirements(testDb, 8)
-    await setupSessionSettings(testDb, 604800)
-    await setupPaginationSettings(testDb)
-
-    await createTestUser(testDb, {
-      email: 'user@test.com',
-      name: 'User',
-      password: 'password123',
-      role: 'member',
+    ctx = await setupAuthenticatedRouteTest({
+      user: {
+        email: 'user@test.com',
+        name: 'User',
+        password: 'password123',
+        role: 'member',
+      },
+      settings: { pagination: true },
+      mount: (app, { db, sqlite }) => {
+        app.route('/api/locations', createLocationsRoutes(db, sqlite))
+      },
     })
-
-    app = new Hono()
-    app.use('*', (c, next) => {
-      c.set('db', testDb)
-      return next()
-    })
-    app.onError((err, c) => handleRouteError(err, c))
-    app.route('/api/auth', createAuthRoutes(testDb, testDb))
-    app.route('/api/locations', createLocationsRoutes(testDb, sqlite))
-
-    cookie = await loginAndGetCookie(app, 'user@test.com', 'password123')
   })
 
   afterEach(() => {
-    if (sqlite) {
-      cleanupTestDatabase(sqlite)
-    }
+    ctx.cleanup()
   })
 
   describe('GET /api/locations', () => {
     it('returns 200 and locations array with pagination', async () => {
-      const res = await authenticatedRequest(app, '/api/locations', {
+      const res = await ctx.request('/api/locations', {
         method: 'GET',
-        cookie,
       })
       expect(res.status).toBe(200)
       const data = (await res.json()) as { locations: unknown[]; pagination: unknown }
@@ -63,24 +42,23 @@ describe('Locations API', () => {
     })
 
     it('returns 401 when not authenticated', async () => {
-      const res = await authenticatedRequest(app, '/api/locations', { method: 'GET' })
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/locations', { method: 'GET' })
       expect(res.status).toBe(401)
     })
   })
 
   describe('GET /api/locations/:id', () => {
     it('returns 200 and location when found', async () => {
-      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
-      const loc = await createTestLocation(testDb, {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, {
         name: 'Root',
         parentId: null,
         storageTypeId: String(storageType.id),
         canContainCollections: false,
         path: 'Root',
       })
-      const res = await authenticatedRequest(app, `/api/locations/${loc.id}`, {
+      const res = await ctx.request(`/api/locations/${loc.id}`, {
         method: 'GET',
-        cookie,
       })
       expect(res.status).toBe(200)
       const data = (await res.json()) as { location: { id: number; name: string } }
@@ -90,15 +68,14 @@ describe('Locations API', () => {
     })
 
     it('returns 404 when location does not exist', async () => {
-      const res = await authenticatedRequest(app, '/api/locations/99999', {
+      const res = await ctx.request('/api/locations/99999', {
         method: 'GET',
-        cookie,
       })
       expect(res.status).toBe(404)
     })
 
     it('returns 401 when not authenticated', async () => {
-      const res = await authenticatedRequest(app, '/api/locations/1', { method: 'GET' })
+      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/locations/1', { method: 'GET' })
       expect(res.status).toBe(401)
     })
   })

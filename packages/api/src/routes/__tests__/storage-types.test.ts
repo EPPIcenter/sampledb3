@@ -1,130 +1,111 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest, createAuthenticatedClientWrapper } from '../../__tests__/helpers/test-client'
-import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
+import {
+  createTestClient,
+  getResponseData,
+  authenticatedRequest,
+  createAuthenticatedClientWrapper,
+} from '../../__tests__/helpers/test-client'
+import {
+  setupAuthenticatedRouteTest,
+  type AuthenticatedRouteTestContext,
+} from '../../__tests__/helpers/authenticated-route-test'
 import { createTestStorageType, createTestLocation } from '../../__tests__/helpers/factories'
-import type { Database } from '../../db/client'
 import { createCrudRoutes } from '../../lib/crud-routes'
 import { storageType, location } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
-import { handleRouteError } from '../../lib/error-handler'
 
 describe('Storage Types API', () => {
-  let testDb: Database
-  let sqlite: any
-  let storageTypesRoutes: any
-  let cookieHeader: string
+  let ctx: AuthenticatedRouteTestContext
 
   beforeEach(async () => {
-    const setup = await setupTestDatabase()
-    testDb = setup.db
-    sqlite = setup.sqlite
-
-    // Setup required settings for auth to work
-    await setupPasswordRequirements(testDb, 8)
-    await setupSessionSettings(testDb, 604800)
-
-    // Create an admin user for authenticated requests
-    await createTestUser(testDb, {
-      email: 'admin@test.com',
-      name: 'Admin User',
-      password: 'password123',
-      role: 'admin',
-    })
-
-    // Login to get session cookie
-    const app = new Hono()
-    const { createAuthRoutes } = await import('../../routes/auth')
-    app.route('/api/auth', createAuthRoutes(testDb, testDb))
-    cookieHeader = await loginAndGetCookie(app, 'admin@test.com', 'password123')
-
-    // Create routes with test database
     const createSchema = z.object({
       name: z.string().min(1, 'Name is required'),
       description: z.string().optional(),
     })
 
-    async function checkStorageTypeInUse(id: number, database: any): Promise<string | null> {
-      const typeRecord = await database
-        .select()
-        .from(storageType)
-        .where(eq(storageType.id, id))
-        .get()
+    ctx = await setupAuthenticatedRouteTest({
+      user: {
+        email: 'admin@test.com',
+        name: 'Admin User',
+        password: 'password123',
+        role: 'admin',
+      },
+      mount: (app, { db }) => {
+        async function checkStorageTypeInUse(id: number, database: typeof db): Promise<string | null> {
+          const typeRecord = await database
+            .select()
+            .from(storageType)
+            .where(eq(storageType.id, id))
+            .get()
 
-      if (!typeRecord) {
-        return 'Storage type not found'
-      }
+          if (!typeRecord) {
+            return 'Storage type not found'
+          }
 
-      const inUse = await database
-        .select()
-        .from(location)
-        .where(eq(location.storageTypeId, String(typeRecord.id)))
-        .limit(1)
-        .get()
+          const inUse = await database
+            .select()
+            .from(location)
+            .where(eq(location.storageTypeId, String(typeRecord.id)))
+            .limit(1)
+            .get()
 
-      if (inUse) {
-        return 'Cannot delete storage type: it is in use by locations'
-      }
-      return null
-    }
+          if (inUse) {
+            return 'Cannot delete storage type: it is in use by locations'
+          }
+          return null
+        }
 
-    storageTypesRoutes = createCrudRoutes({
-      table: storageType,
-      database: testDb,
-      entityName: 'Storage type',
-      pluralName: 'storageTypes',
-      singularName: 'storageType',
-      createSchema,
-      checkInUse: checkStorageTypeInUse,
+        const storageTypesRoutes = createCrudRoutes({
+          table: storageType,
+          database: db,
+          entityName: 'Storage type',
+          pluralName: 'storageTypes',
+          singularName: 'storageType',
+          createSchema,
+          checkInUse: checkStorageTypeInUse,
+        })
+        app.route('/api/storage-types', storageTypesRoutes)
+      },
     })
   })
 
   afterEach(() => {
-    if (sqlite) {
-      cleanupTestDatabase(sqlite)
-    }
+    ctx.cleanup()
   })
 
   function createApp(): Hono {
-    const app = new Hono()
-    app.use('*', (c, next) => {
-      c.set('db', testDb)
-      return next()
-    })
-    app.onError((err, c) => handleRouteError(err, c))
-    app.route('/api/storage-types', storageTypesRoutes)
-    return app
+    return ctx.createRequestApp()
   }
 
   describe('GET /storage-types', () => {
     it('should return empty array when no storage types exist', async () => {
       const app = createApp()
       const baseClient = createTestClient(app) as any
-      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
+      const client = createAuthenticatedClientWrapper(baseClient, ctx.cookie)
 
       const res = await authenticatedRequest(app, '/api/storage-types', {
         method: 'GET',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
       expect(res.status).toBe(200)
-      const data = await getResponseData(res) as any
+      const data = (await getResponseData(res)) as any
       expect(data).toEqual([])
     })
 
     it('should return all storage types', async () => {
-      await createTestStorageType(testDb, { name: 'Freezer', description: 'Cold storage' })
-      await createTestStorageType(testDb, { name: 'Refrigerator', description: 'Cool storage' })
+      await createTestStorageType(ctx.db, { name: 'Freezer', description: 'Cold storage' })
+      await createTestStorageType(ctx.db, { name: 'Refrigerator', description: 'Cool storage' })
 
       const app = createApp()
 
       const res = await authenticatedRequest(app, '/api/storage-types', {
         method: 'GET',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
       expect(res.status).toBe(200)
-      const data = await getResponseData(res) as any
+      const data = (await getResponseData(res)) as any
       expect(data).toHaveLength(2)
     })
   })
@@ -133,11 +114,11 @@ describe('Storage Types API', () => {
     it('should create a new storage type', async () => {
       const app = createApp()
       const baseClient = createTestClient(app) as any
-      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
+      const client = createAuthenticatedClientWrapper(baseClient, ctx.cookie)
 
       const res = await authenticatedRequest(app, '/api/storage-types', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           name: 'New Storage Type',
           description: 'Test description',
@@ -145,7 +126,7 @@ describe('Storage Types API', () => {
       })
 
       expect(res.status).toBe(201)
-      const data = await getResponseData(res) as any
+      const data = (await getResponseData(res)) as any
       expect(data.name).toBe('New Storage Type')
       expect(data.description).toBe('Test description')
     })
@@ -153,55 +134,55 @@ describe('Storage Types API', () => {
     it('should create storage type without description', async () => {
       const app = createApp()
       const baseClient = createTestClient(app) as any
-      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
+      const client = createAuthenticatedClientWrapper(baseClient, ctx.cookie)
 
       const res = await authenticatedRequest(app, '/api/storage-types', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           name: 'Simple Type',
         },
       })
 
       expect(res.status).toBe(201)
-      const data = await getResponseData(res) as any
+      const data = (await getResponseData(res)) as any
       expect(data.name).toBe('Simple Type')
     })
 
     it('should reject duplicate names', async () => {
-      await createTestStorageType(testDb, { name: 'Existing Type' })
+      await createTestStorageType(ctx.db, { name: 'Existing Type' })
 
       const app = createApp()
       const baseClient = createTestClient(app) as any
-      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
+      const client = createAuthenticatedClientWrapper(baseClient, ctx.cookie)
 
       const res = await authenticatedRequest(app, '/api/storage-types', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           name: 'Existing Type',
         },
       })
 
       expect(res.status).toBe(409)
-      const data = await res.json() as any
+      const data = (await res.json()) as any
       expect(data.error).toContain('already exists')
     })
   })
 
   describe('GET /storage-types/:id', () => {
     it('should return storage type by ID', async () => {
-      const testType = await createTestStorageType(testDb, { name: 'Test Type' })
+      const testType = await createTestStorageType(ctx.db, { name: 'Test Type' })
 
       const app = createApp()
 
       const res = await authenticatedRequest(app, `/api/storage-types/${testType.id}`, {
         method: 'GET',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res) as any
+      const data = (await getResponseData(res)) as any
       expect(data.id).toBe(testType.id)
       expect(data.name).toBe('Test Type')
     })
@@ -211,7 +192,7 @@ describe('Storage Types API', () => {
 
       const res = await authenticatedRequest(app, '/api/storage-types/99999', {
         method: 'GET',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
 
       expect(res.status).toBe(404)
@@ -220,15 +201,15 @@ describe('Storage Types API', () => {
 
   describe('PUT /storage-types/:id', () => {
     it('should update storage type', async () => {
-      const testType = await createTestStorageType(testDb, { name: 'Original' })
+      const testType = await createTestStorageType(ctx.db, { name: 'Original' })
 
       const app = createApp()
       const baseClient = createTestClient(app) as any
-      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
+      const client = createAuthenticatedClientWrapper(baseClient, ctx.cookie)
 
       const res = await authenticatedRequest(app, `/api/storage-types/${testType.id}`, {
         method: 'PUT',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: {
           name: 'Updated',
           description: 'New description',
@@ -236,7 +217,7 @@ describe('Storage Types API', () => {
       })
 
       expect(res.status).toBe(200)
-      const data = await getResponseData(res) as any
+      const data = (await getResponseData(res)) as any
       expect(data.name).toBe('Updated')
       expect(data.description).toBe('New description')
     })
@@ -244,23 +225,23 @@ describe('Storage Types API', () => {
 
   describe('DELETE /storage-types/:id', () => {
     it('should delete storage type when not in use', async () => {
-      const testType = await createTestStorageType(testDb, { name: 'Safe to Delete' })
+      const testType = await createTestStorageType(ctx.db, { name: 'Safe to Delete' })
 
       const app = createApp()
       const baseClient = createTestClient(app) as any
-      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
+      const client = createAuthenticatedClientWrapper(baseClient, ctx.cookie)
 
       const res = await authenticatedRequest(app, `/api/storage-types/${testType.id}`, {
         method: 'DELETE',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
 
       expect(res.status).toBe(200)
     })
 
     it('should reject deletion when in use by locations (by ID)', async () => {
-      const testType = await createTestStorageType(testDb, { name: 'In Use Type' })
-      await createTestLocation(testDb, {
+      const testType = await createTestStorageType(ctx.db, { name: 'In Use Type' })
+      await createTestLocation(ctx.db, {
         name: 'Root',
         parentId: null,
         storageTypeId: String(testType.id),
@@ -270,19 +251,16 @@ describe('Storage Types API', () => {
 
       const app = createApp()
       const baseClient = createTestClient(app) as any
-      const client = createAuthenticatedClientWrapper(baseClient, cookieHeader)
+      const client = createAuthenticatedClientWrapper(baseClient, ctx.cookie)
 
       const res = await authenticatedRequest(app, `/api/storage-types/${testType.id}`, {
         method: 'DELETE',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
 
       expect(res.status).toBe(400)
-      const data = await res.json() as any
+      const data = (await res.json()) as any
       expect(data.error).toContain('in use')
     })
-
   })
 })
-
-

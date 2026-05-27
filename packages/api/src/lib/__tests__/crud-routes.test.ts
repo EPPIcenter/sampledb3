@@ -1,69 +1,40 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { createTestClient, getResponseData, loginAndGetCookie, authenticatedRequest, createAuthenticatedClientWrapper } from '../../__tests__/helpers/test-client'
+import { createTestClient, getResponseData, authenticatedRequest, createAuthenticatedClientWrapper } from '../../__tests__/helpers/test-client'
+import {
+  setupAuthenticatedRouteTest,
+  type AuthenticatedRouteTestContext,
+} from '../../__tests__/helpers/authenticated-route-test'
 import { createCrudRoutes } from '../crud-routes'
-import { handleRouteError } from '../error-handler'
-import { setupTestDatabase, cleanupTestDatabase, resetTestDatabase } from '../../__tests__/helpers/db-setup'
 import { tag, storageContainer, storageContainerTag } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
-import type { Database } from '../../db/client'
 import { utcNow } from '../datetime'
 import { createTestTag, createTestStorageContainer, createTestSpecimenType, createTestSpecimen, createTestUnit } from '../../__tests__/helpers/factories'
-import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
 import type { ErrorResponse, SuccessResponse, ValidationErrorResponse } from '../../__tests__/helpers/test-types'
 
 describe('createCrudRoutes Factory', () => {
-  let testDb: Database
-  let sqlite: any
-  let cookieHeader: string
+  let ctx: AuthenticatedRouteTestContext
 
-  // Helper to create an authenticated test client
   function createAuthClient(app: Hono) {
     const baseClient = createTestClient(app)
-    return createAuthenticatedClientWrapper(baseClient, cookieHeader)
+    return createAuthenticatedClientWrapper(baseClient, ctx.cookie)
   }
 
-  // Helper to create app with db context and error handler so error_logs table is used
   function createTagsApp(routes: Hono): Hono {
-    const app = new Hono()
-    app.use('*', (c, next) => {
-      c.set('db', testDb)
-      return next()
+    return ctx.createRequestApp((app) => {
+      app.route('/api/tags', routes)
     })
-    app.onError((err, c) => handleRouteError(err, c))
-    app.route('/api/tags', routes)
-    return app
   }
 
   beforeEach(async () => {
-    const setup = await setupTestDatabase()
-    testDb = setup.db
-    sqlite = setup.sqlite
-
-    // Setup required settings for auth to work
-    await setupPasswordRequirements(testDb, 8)
-    await setupSessionSettings(testDb, 604800)
-
-    // Create an admin user for authenticated requests
-    await createTestUser(testDb, {
-      email: 'admin@test.com',
-      name: 'Admin User',
-      password: 'password123',
-      role: 'admin',
+    ctx = await setupAuthenticatedRouteTest({
+      user: { email: 'admin@test.com', name: 'Admin User', role: 'admin' },
     })
-
-    // Login to get session cookie
-    const app = new Hono()
-    const { createAuthRoutes } = await import('../../routes/auth')
-    app.route('/api/auth', createAuthRoutes(testDb, testDb))
-    cookieHeader = await loginAndGetCookie(app, 'admin@test.com', 'password123')
   })
 
   afterEach(() => {
-    if (sqlite) {
-      cleanupTestDatabase(sqlite)
-    }
+    ctx.cleanup()
   })
 
   describe('Basic CRUD Operations', () => {
@@ -74,7 +45,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -85,7 +56,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'GET',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
       expect(res.status).toBe(200)
       const data = await getResponseData<Array<{ id: number; name: string }>>(res)
@@ -99,7 +70,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -107,13 +78,13 @@ describe('createCrudRoutes Factory', () => {
       })
 
       // Create a test tag
-      const testTag = await createTestTag(testDb, { name: 'Test Tag' })
+      const testTag = await createTestTag(ctx.db, { name: 'Test Tag' })
 
       const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'GET',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
 
       expect(res.status).toBe(200)
@@ -130,7 +101,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -141,7 +112,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, '/api/tags/99999', {
         method: 'GET',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
 
       expect(res.status).toBe(404)
@@ -156,7 +127,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -167,7 +138,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, '/api/tags/invalid', {
         method: 'GET',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
 
       expect(res.status).toBe(400)
@@ -182,7 +153,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -194,7 +165,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: { name: 'New Tag' },
       })
 
@@ -212,7 +183,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -220,14 +191,14 @@ describe('createCrudRoutes Factory', () => {
       })
 
       // Create a test state
-      const testTag = await createTestTag(testDb, { name: 'Original Name' })
+      const testTag = await createTestTag(ctx.db, { name: 'Original Name' })
 
       const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'PUT',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: { name: 'Updated Name' },
       })
 
@@ -243,7 +214,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -251,13 +222,13 @@ describe('createCrudRoutes Factory', () => {
       })
 
       // Create a test state
-      const testTag = await createTestTag(testDb, { name: 'To Delete' })
+      const testTag = await createTestTag(ctx.db, { name: 'To Delete' })
 
       const app = createTagsApp(routes)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'DELETE',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
 
       expect(res.status).toBe(200)
@@ -268,7 +239,7 @@ describe('createCrudRoutes Factory', () => {
       const app2 = createTagsApp(routes)
       const getRes = await authenticatedRequest(app2, `/api/tags/${testTag.id}`, {
         method: 'GET',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
       expect(getRes.status).toBe(404)
     })
@@ -282,7 +253,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -293,7 +264,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: { name: '' }, // Empty name should fail
       })
 
@@ -310,21 +281,21 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
         createSchema,
       })
 
-      const testTag = await createTestTag(testDb, { name: 'Test' })
+      const testTag = await createTestTag(ctx.db, { name: 'Test' })
 
       const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'PUT',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: { name: '' }, // Empty name should fail
       })
 
@@ -338,21 +309,21 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
         createSchema,
       })
 
-      await createTestTag(testDb, { name: 'Duplicate' })
+      await createTestTag(ctx.db, { name: 'Duplicate' })
 
       const app = createTagsApp(routes)
       const client = createAuthClient(app)
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: { name: 'Duplicate' },
       })
 
@@ -368,15 +339,15 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
         createSchema,
       })
 
-      const tag1 = await createTestTag(testDb, { name: 'Tag 1' })
-      await createTestTag(testDb, { name: 'Tag 2' })
+      const tag1 = await createTestTag(ctx.db, { name: 'Tag 1' })
+      await createTestTag(ctx.db, { name: 'Tag 2' })
 
       const app = createTagsApp(routes)
       const client = createAuthClient(app)
@@ -384,7 +355,7 @@ describe('createCrudRoutes Factory', () => {
       // Try to update state1 to have the same name as state2
       const res = await authenticatedRequest(app, `/api/tags/${tag1.id}`, {
         method: 'PUT',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: { name: 'Tag 2' },
       })
 
@@ -400,14 +371,14 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
         createSchema,
       })
 
-      const testTag = await createTestTag(testDb, { name: 'Original' })
+      const testTag = await createTestTag(ctx.db, { name: 'Original' })
 
       const app = createTagsApp(routes)
       const client = createAuthClient(app)
@@ -415,7 +386,7 @@ describe('createCrudRoutes Factory', () => {
       // Update with the same name should work
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'PUT',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: { name: 'Original' },
       })
 
@@ -440,7 +411,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -453,7 +424,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: { name: 'Invalid' },
       })
 
@@ -468,7 +439,7 @@ describe('createCrudRoutes Factory', () => {
         name: z.string().min(1),
       })
 
-      const testTag = await createTestTag(testDb, { name: 'Test' })
+      const testTag = await createTestTag(ctx.db, { name: 'Test' })
 
       let validateUpdateCalled = false
       const validateUpdate = async (id: number, data: any, database: Database) => {
@@ -481,7 +452,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -494,7 +465,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'PUT',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: { name: 'Invalid' },
       })
 
@@ -511,24 +482,24 @@ describe('createCrudRoutes Factory', () => {
         name: z.string().min(1),
       })
 
-      const testTag = await createTestTag(testDb, { name: 'In Use Tag' })
+      const testTag = await createTestTag(ctx.db, { name: 'In Use Tag' })
 
       // Create dependencies for storage container
-      const testUnit = await createTestUnit(testDb, {
+      const testUnit = await createTestUnit(ctx.db, {
         symbol: 'uL',
         name: 'microliter',
         category: 'volume',
       })
-      const testSpecimenType = await createTestSpecimenType(testDb, { name: 'Test Type' })
-      const testSpecimen = await createTestSpecimen(testDb, testSpecimenType.id)
+      const testSpecimenType = await createTestSpecimenType(ctx.db, { name: 'Test Type' })
+      const testSpecimen = await createTestSpecimen(ctx.db, testSpecimenType.id)
 
-      const testContainer = await createTestStorageContainer(testDb, {
+      const testContainer = await createTestStorageContainer(ctx.db, {
         specimenId: testSpecimen.id,
         unitId: testUnit.id as number,
       })
 
       // Add tag to container to test "in use" scenario
-      await testDb.insert(storageContainerTag).values({
+      await ctx.db.insert(storageContainerTag).values({
         storageContainerId: testContainer.id,
         tagId: testTag.id,
       })
@@ -549,7 +520,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -562,7 +533,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'DELETE',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
 
       expect(res.status).toBe(400)
@@ -575,7 +546,7 @@ describe('createCrudRoutes Factory', () => {
         name: z.string().min(1),
       })
 
-      const testTag = await createTestTag(testDb, { name: 'Safe to Delete' })
+      const testTag = await createTestTag(ctx.db, { name: 'Safe to Delete' })
 
       const checkInUse = async (id: number, database: Database) => {
         const inUse = await database
@@ -593,7 +564,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -605,7 +576,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'DELETE',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
 
       expect(res.status).toBe(200)
@@ -618,8 +589,8 @@ describe('createCrudRoutes Factory', () => {
         name: z.string().min(1),
       })
 
-      await createTestTag(testDb, { name: 'Tag 1' })
-      await createTestTag(testDb, { name: 'Tag 2' })
+      await createTestTag(ctx.db, { name: 'Tag 1' })
+      await createTestTag(ctx.db, { name: 'Tag 2' })
 
       const transformList = (item: any) => ({
         id: item.id,
@@ -628,7 +599,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -640,7 +611,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'GET',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
       expect(res.status).toBe(200)
       const data = await getResponseData(res) as Array<{ name: string }>
@@ -653,7 +624,7 @@ describe('createCrudRoutes Factory', () => {
         name: z.string().min(1),
       })
 
-      const testTag = await createTestTag(testDb, { name: 'Test Tag' })
+      const testTag = await createTestTag(ctx.db, { name: 'Test Tag' })
 
       const transformDetail = (item: any) => ({
         id: item.id,
@@ -663,7 +634,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -675,7 +646,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'GET',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
 
       expect(res.status).toBe(200)
@@ -697,7 +668,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -710,7 +681,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'POST',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: { name: 'Test' },
       })
 
@@ -724,7 +695,7 @@ describe('createCrudRoutes Factory', () => {
         name: z.string().min(1),
       })
 
-      const testTag = await createTestTag(testDb, { name: 'Test' })
+      const testTag = await createTestTag(ctx.db, { name: 'Test' })
 
       const onUpdateDefaults = () => ({
         updatedAt: utcNow(),
@@ -732,7 +703,7 @@ describe('createCrudRoutes Factory', () => {
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -745,7 +716,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, `/api/tags/${testTag.id}`, {
         method: 'PUT',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
         json: { name: 'Updated' },
       })
 
@@ -759,13 +730,13 @@ describe('createCrudRoutes Factory', () => {
         name: z.string().min(1),
       })
 
-      await createTestTag(testDb, { name: 'Zebra' })
-      await createTestTag(testDb, { name: 'Alpha' })
-      await createTestTag(testDb, { name: 'Beta' })
+      await createTestTag(ctx.db, { name: 'Zebra' })
+      await createTestTag(ctx.db, { name: 'Alpha' })
+      await createTestTag(ctx.db, { name: 'Beta' })
 
       const routes = createCrudRoutes({
         table: tag,
-        database: testDb,
+        database: ctx.db,
         entityName: 'Tag',
         pluralName: 'tags',
         singularName: 'tag',
@@ -776,7 +747,7 @@ describe('createCrudRoutes Factory', () => {
 
       const res = await authenticatedRequest(app, '/api/tags', {
         method: 'GET',
-        cookie: cookieHeader,
+        cookie: ctx.cookie,
       })
       expect(res.status).toBe(200)
       const data = await getResponseData(res) as Array<{ name: string }>

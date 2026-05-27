@@ -1,58 +1,34 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { loginAndGetCookie, authenticatedRequest } from '../../__tests__/helpers/test-client'
-import { Hono } from 'hono'
-import { createAuthRoutes } from '../auth'
+import { setupAuthenticatedRouteTest, type AuthenticatedRouteTestContext } from '../../__tests__/helpers/authenticated-route-test'
 import { createQpcrExperimentsRoutes } from '../qpcr-experiments'
-import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
-import type { Database } from '../../db/client'
-import type { Database as SQLiteDatabase } from 'bun:sqlite'
-import { createTestUser, setupPasswordRequirements, setupSessionSettings } from '../../__tests__/helpers/auth-helpers'
-import { handleRouteError } from '../../lib/error-handler'
 import { utcNow } from '../../lib/datetime'
 import { qpcrExperiment, qpcrExperimentTarget, qpcrExperimentWell } from '../../db/schema'
 
 describe('qPCR Experiments Template', () => {
-  let app: Hono
-  let testDb: Database
-  let sqlite: SQLiteDatabase
+  let ctx: AuthenticatedRouteTestContext
 
   beforeEach(async () => {
-    const setup = await setupTestDatabase()
-    testDb = setup.db
-    sqlite = setup.sqlite
-
-    await setupPasswordRequirements(testDb, 8)
-    await setupSessionSettings(testDb, 604800)
-    await createTestUser(testDb, {
-      email: 'admin@test.com',
-      name: 'Admin User',
-      password: 'password123',
-      role: 'admin',
+    ctx = await setupAuthenticatedRouteTest({
+      user: {
+        email: 'admin@test.com',
+        name: 'Admin User',
+        password: 'password123',
+        role: 'admin',
+      },
+      mount: (app, { db }) => {
+        app.route('/api/qpcr-experiments', createQpcrExperimentsRoutes(db))
+      },
     })
-
-    app = new Hono()
-    app.use('*', (c, next) => {
-      c.set('db', testDb)
-      return next()
-    })
-    app.onError((err, c) => handleRouteError(err, c))
-    app.route('/api/auth', createAuthRoutes(testDb, testDb))
-    app.route('/api/qpcr-experiments', createQpcrExperimentsRoutes(testDb))
   })
 
   afterEach(() => {
-    if (sqlite) {
-      cleanupTestDatabase(sqlite)
-    }
+    ctx.cleanup()
   })
 
   describe('POST /', () => {
     it('creates an experiment with one default target', async () => {
-      const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
-
-      const createRes = await authenticatedRequest(app, '/api/qpcr-experiments', {
+      const createRes = await ctx.request('/api/qpcr-experiments', {
         method: 'POST',
-        cookie,
         json: { name: 'Default target test', templateFormat: 'biorad' },
       })
       expect(createRes.status).toBe(201)
@@ -61,7 +37,7 @@ describe('qPCR Experiments Template', () => {
       expect(created.name).toBe('Default target test')
       expect(created.templateFormat).toBe('biorad')
 
-      const getRes = await authenticatedRequest(app, `/api/qpcr-experiments/${created.id}`, { cookie })
+      const getRes = await ctx.request(`/api/qpcr-experiments/${created.id}`)
       expect(getRes.status).toBe(200)
       const detail = (await getRes.json()) as { experiment: { targets: Array<{ targetName: string; fluorophore: string | null; reporter: string | null }> } }
       expect(detail.experiment.targets).toHaveLength(1)
@@ -73,9 +49,7 @@ describe('qPCR Experiments Template', () => {
 
   describe('GET /:id/template', () => {
     it('includes only rows for wells that have a tube; skips positions with no tube', async () => {
-      const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
-
-      const [exp] = await testDb
+      const [exp] = await ctx.db
         .insert(qpcrExperiment)
         .values({
           name: 'Template test',
@@ -87,7 +61,7 @@ describe('qPCR Experiments Template', () => {
         .returning()
       if (!exp) throw new Error('Insert failed')
 
-      await testDb.insert(qpcrExperimentTarget).values({
+      await ctx.db.insert(qpcrExperimentTarget).values({
         qpcrExperimentId: exp.id,
         targetName: 'varATS',
         fluorophore: 'FAM',
@@ -95,7 +69,7 @@ describe('qPCR Experiments Template', () => {
         sortOrder: 0,
       })
 
-      await testDb.insert(qpcrExperimentWell).values([
+      await ctx.db.insert(qpcrExperimentWell).values([
         {
           qpcrExperimentId: exp.id,
           wellPosition: 'A01',
@@ -110,9 +84,7 @@ describe('qPCR Experiments Template', () => {
         },
       ])
 
-      const bioradRes = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/template?format=biorad`, {
-        cookie,
-      })
+      const bioradRes = await ctx.request(`/api/qpcr-experiments/${exp.id}/template?format=biorad`)
       expect(bioradRes.status).toBe(200)
       const bioradText = await bioradRes.text()
       const bioradLines = bioradText.split('\n').filter(Boolean)
@@ -121,9 +93,7 @@ describe('qPCR Experiments Template', () => {
       expect(bioradLines[1]).toContain('A1')
       expect(bioradLines[2]).toContain('A2')
 
-      const quantRes = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/template?format=quant_studio`, {
-        cookie,
-      })
+      const quantRes = await ctx.request(`/api/qpcr-experiments/${exp.id}/template?format=quant_studio`)
       expect(quantRes.status).toBe(200)
       const quantText = await quantRes.text()
       const quantLines = quantText.split('\n').filter(Boolean)
@@ -136,9 +106,7 @@ describe('qPCR Experiments Template', () => {
     })
 
     it('uses well barcode as Sample Name in template when barcode is set', async () => {
-      const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
-
-      const [exp] = await testDb
+      const [exp] = await ctx.db
         .insert(qpcrExperiment)
         .values({
           name: 'Barcode template test',
@@ -150,7 +118,7 @@ describe('qPCR Experiments Template', () => {
         .returning()
       if (!exp) throw new Error('Insert failed')
 
-      await testDb.insert(qpcrExperimentTarget).values({
+      await ctx.db.insert(qpcrExperimentTarget).values({
         qpcrExperimentId: exp.id,
         targetName: 'varATS',
         fluorophore: 'FAM',
@@ -158,7 +126,7 @@ describe('qPCR Experiments Template', () => {
         sortOrder: 0,
       })
 
-      await testDb.insert(qpcrExperimentWell).values({
+      await ctx.db.insert(qpcrExperimentWell).values({
         qpcrExperimentId: exp.id,
         wellPosition: 'A01',
         barcode: 'MT-001',
@@ -166,9 +134,7 @@ describe('qPCR Experiments Template', () => {
         standardDensity: null,
       })
 
-      const bioradRes = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/template?format=biorad`, {
-        cookie,
-      })
+      const bioradRes = await ctx.request(`/api/qpcr-experiments/${exp.id}/template?format=biorad`)
       expect(bioradRes.status).toBe(200)
       const bioradText = await bioradRes.text()
       const bioradLines = bioradText.split('\n').filter(Boolean)
@@ -176,9 +142,7 @@ describe('qPCR Experiments Template', () => {
       expect(bioradLines[1]).toContain('MT-001')
       expect(bioradLines[1]).toBe('A1,FAM,varATS,Unk,MT-001,')
 
-      const quantRes = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/template?format=quant_studio`, {
-        cookie,
-      })
+      const quantRes = await ctx.request(`/api/qpcr-experiments/${exp.id}/template?format=quant_studio`)
       expect(quantRes.status).toBe(200)
       const quantText = await quantRes.text()
       const quantLines = quantText.split('\n').filter(Boolean)
@@ -192,9 +156,7 @@ describe('qPCR Experiments Template', () => {
     })
 
     it('returns 400 when experiment has no targets', async () => {
-      const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
-
-      const [exp] = await testDb
+      const [exp] = await ctx.db
         .insert(qpcrExperiment)
         .values({
           name: 'No targets',
@@ -206,16 +168,14 @@ describe('qPCR Experiments Template', () => {
         .returning()
       if (!exp) throw new Error('Insert failed')
 
-      await testDb.insert(qpcrExperimentWell).values({
+      await ctx.db.insert(qpcrExperimentWell).values({
         qpcrExperimentId: exp.id,
         wellPosition: 'A01',
         contentType: 'unknown',
         standardDensity: null,
       })
 
-      const res = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/template?format=biorad`, {
-        cookie,
-      })
+      const res = await ctx.request(`/api/qpcr-experiments/${exp.id}/template?format=biorad`)
       expect(res.status).toBe(400)
       const body = await res.json() as { error?: string; errorCode?: string }
       expect(body.error).toContain('Add at least one target')
@@ -225,8 +185,7 @@ describe('qPCR Experiments Template', () => {
 
   describe('PATCH /:id/wells', () => {
     it('sets a single empty position to NTC and returns updated wells', async () => {
-      const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
-      const [exp] = await testDb
+      const [exp] = await ctx.db
         .insert(qpcrExperiment)
         .values({
           name: 'Wells patch test',
@@ -237,7 +196,7 @@ describe('qPCR Experiments Template', () => {
         })
         .returning()
       if (!exp) throw new Error('Insert failed')
-      await testDb.insert(qpcrExperimentWell).values({
+      await ctx.db.insert(qpcrExperimentWell).values({
         qpcrExperimentId: exp.id,
         wellPosition: 'A01',
         barcode: 'TUBE01',
@@ -245,9 +204,8 @@ describe('qPCR Experiments Template', () => {
         standardDensity: null,
       })
 
-      const res = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/wells`, {
+      const res = await ctx.request(`/api/qpcr-experiments/${exp.id}/wells`, {
         method: 'PATCH',
-        cookie,
         json: { wellPosition: 'A03', contentType: 'negative' },
       })
       expect(res.status).toBe(200)
@@ -260,8 +218,7 @@ describe('qPCR Experiments Template', () => {
     })
 
     it('sets a single NTC well to empty (removes row)', async () => {
-      const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
-      const [exp] = await testDb
+      const [exp] = await ctx.db
         .insert(qpcrExperiment)
         .values({
           name: 'Wells patch empty',
@@ -272,14 +229,13 @@ describe('qPCR Experiments Template', () => {
         })
         .returning()
       if (!exp) throw new Error('Insert failed')
-      await testDb.insert(qpcrExperimentWell).values([
+      await ctx.db.insert(qpcrExperimentWell).values([
         { qpcrExperimentId: exp.id, wellPosition: 'A01', barcode: 'TUBE01', contentType: 'unknown', standardDensity: null },
         { qpcrExperimentId: exp.id, wellPosition: 'A02', barcode: null, contentType: 'negative', standardDensity: null },
       ])
 
-      const res = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/wells`, {
+      const res = await ctx.request(`/api/qpcr-experiments/${exp.id}/wells`, {
         method: 'PATCH',
-        cookie,
         json: { wellPosition: 'A02', contentType: 'empty' },
       })
       expect(res.status).toBe(200)
@@ -290,8 +246,7 @@ describe('qPCR Experiments Template', () => {
     })
 
     it('sets all empty wells to NTC (bulk)', async () => {
-      const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
-      const [exp] = await testDb
+      const [exp] = await ctx.db
         .insert(qpcrExperiment)
         .values({
           name: 'Wells bulk NTC',
@@ -302,7 +257,7 @@ describe('qPCR Experiments Template', () => {
         })
         .returning()
       if (!exp) throw new Error('Insert failed')
-      await testDb.insert(qpcrExperimentWell).values({
+      await ctx.db.insert(qpcrExperimentWell).values({
         qpcrExperimentId: exp.id,
         wellPosition: 'A01',
         barcode: 'TUBE01',
@@ -310,9 +265,8 @@ describe('qPCR Experiments Template', () => {
         standardDensity: null,
       })
 
-      const res = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/wells`, {
+      const res = await ctx.request(`/api/qpcr-experiments/${exp.id}/wells`, {
         method: 'PATCH',
-        cookie,
         json: { positions: ['A03', 'A04'], contentType: 'negative' },
       })
       expect(res.status).toBe(200)
@@ -323,8 +277,7 @@ describe('qPCR Experiments Template', () => {
     })
 
     it('rejects setting a well with barcode to NTC', async () => {
-      const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
-      const [exp] = await testDb
+      const [exp] = await ctx.db
         .insert(qpcrExperiment)
         .values({
           name: 'Wells reject filled',
@@ -335,7 +288,7 @@ describe('qPCR Experiments Template', () => {
         })
         .returning()
       if (!exp) throw new Error('Insert failed')
-      await testDb.insert(qpcrExperimentWell).values({
+      await ctx.db.insert(qpcrExperimentWell).values({
         qpcrExperimentId: exp.id,
         wellPosition: 'A01',
         barcode: 'TUBE01',
@@ -343,9 +296,8 @@ describe('qPCR Experiments Template', () => {
         standardDensity: null,
       })
 
-      const res = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/wells`, {
+      const res = await ctx.request(`/api/qpcr-experiments/${exp.id}/wells`, {
         method: 'PATCH',
-        cookie,
         json: { wellPosition: 'A01', contentType: 'negative' },
       })
       expect(res.status).toBe(400)
@@ -355,8 +307,7 @@ describe('qPCR Experiments Template', () => {
     })
 
     it('rejects PATCH wells when experiment status is results_uploaded', async () => {
-      const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
-      const [exp] = await testDb
+      const [exp] = await ctx.db
         .insert(qpcrExperiment)
         .values({
           name: 'Wells locked',
@@ -368,9 +319,8 @@ describe('qPCR Experiments Template', () => {
         .returning()
       if (!exp) throw new Error('Insert failed')
 
-      const res = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/wells`, {
+      const res = await ctx.request(`/api/qpcr-experiments/${exp.id}/wells`, {
         method: 'PATCH',
-        cookie,
         json: { wellPosition: 'A03', contentType: 'negative' },
       })
       expect(res.status).toBe(409)
@@ -380,8 +330,7 @@ describe('qPCR Experiments Template', () => {
     })
 
     it('rejects invalid well position', async () => {
-      const cookie = await loginAndGetCookie(app, 'admin@test.com', 'password123')
-      const [exp] = await testDb
+      const [exp] = await ctx.db
         .insert(qpcrExperiment)
         .values({
           name: 'Wells invalid pos',
@@ -393,9 +342,8 @@ describe('qPCR Experiments Template', () => {
         .returning()
       if (!exp) throw new Error('Insert failed')
 
-      const res = await authenticatedRequest(app, `/api/qpcr-experiments/${exp.id}/wells`, {
+      const res = await ctx.request(`/api/qpcr-experiments/${exp.id}/wells`, {
         method: 'PATCH',
-        cookie,
         json: { wellPosition: 'Z99', contentType: 'negative' },
       })
       expect(res.status).toBe(400)
