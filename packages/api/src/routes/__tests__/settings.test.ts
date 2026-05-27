@@ -48,19 +48,4 @@ describe('Settings API', () => {
     })
   })
 
-  describe('GET /api/settings/units', () => {
-    it('returns 200 and units array', async () => {
-      const res = await ctx.request('/api/settings/units', {
-        method: 'GET',
-      })
-      expect(res.status).toBe(200)
-      const data = (await res.json()) as unknown[]
-      expect(Array.isArray(data)).toBe(true)
-    })
-
-    it('returns 401 when not authenticated', async () => {
-      const res = await authenticatedRequest(ctx.createRequestApp(), '/api/settings/units', { method: 'GET' })
-      expect(res.status).toBe(401)
-    })
-  })
 })

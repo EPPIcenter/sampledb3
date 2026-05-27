@@ -201,7 +201,6 @@ containers.get('/:id', authMiddleware, async (c) => {
       container: enriched,
       specimen: spec,
       source: sourceInfo,
-      ...enriched,
     })
   } catch (error: unknown) {
     console.error('Error fetching container:', error)

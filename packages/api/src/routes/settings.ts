@@ -73,53 +73,84 @@ export function createSettingsRoutes(database: Database) {
   }
 })
 
-  // GET /api/settings/units - Get all available units
-  settings.get('/units', authMiddleware, async (c) => {
-    try {
-      const units = await database
-        .select({
-          id: unit.id,
-          symbol: unit.symbol,
-          name: unit.name,
-          category: unit.category,
-        })
-        .from(unit)
-        .orderBy(unit.symbol)
-      
-      return c.json(units)
-    } catch (error: unknown) {
-      return c.json({ error: 'Internal server error' }, 500)
-    }
-  })
-
   // GET /api/settings/:key - Get specific setting (user-aware)
+  // Optional ?scope=effective|shared|personal for export/scanner (default: effective = merged for user)
   settings.get('/:key', authMiddleware, async (c) => {
     try {
       const key = requireParam(c, 'key')
       const user = c.get('user')
       const userId = user?.id
+      const scopeParam = c.req.query('scope')
+      const scope =
+        scopeParam === undefined || scopeParam === '' || scopeParam === 'effective'
+          ? 'effective'
+          : scopeParam === 'shared' || scopeParam === 'personal'
+            ? scopeParam
+            : null
+      if (scope === null) {
+        return c.json({ error: 'Invalid scope; use effective, shared, or personal' }, 400)
+      }
 
       let value: unknown = null
       switch (key) {
         case 'container_defaults':
+          if (scope !== 'effective') {
+            return c.json({ error: 'scope is only supported for export_configurations and scanner_configurations' }, 400)
+          }
           value = await getContainerDefaults(database)
           break
         case 'pagination_settings':
+          if (scope !== 'effective') {
+            return c.json({ error: 'scope is only supported for export_configurations and scanner_configurations' }, 400)
+          }
           value = await getPaginationSettings(database, userId)
           break
         case 'password_requirements':
+          if (scope !== 'effective') {
+            return c.json({ error: 'scope is only supported for export_configurations and scanner_configurations' }, 400)
+          }
           value = await getPasswordRequirements(database)
           break
         case 'session_settings':
+          if (scope !== 'effective') {
+            return c.json({ error: 'scope is only supported for export_configurations and scanner_configurations' }, 400)
+          }
           value = await getSessionSettings(database)
           break
         case 'export_configurations':
-          value = await getExportConfigurations(database, userId)
+          if (scope === 'shared') {
+            value = await getSharedExportConfigurations(database)
+          } else if (scope === 'personal') {
+            if (!userId) {
+              throw new UnauthorizedError('User not authenticated')
+            }
+            value = await getPersonalExportConfigurations(database, userId)
+          } else {
+            value = await getExportConfigurations(database, userId)
+          }
+          if (value === null && scope !== 'effective') {
+            value = { configurations: [] }
+          }
           break
         case 'scanner_configurations':
-          value = await getScannerConfigurations(database, userId)
+          if (scope === 'shared') {
+            value = await getSharedScannerConfigurations(database)
+          } else if (scope === 'personal') {
+            if (!userId) {
+              throw new UnauthorizedError('User not authenticated')
+            }
+            value = await getPersonalScannerConfigurations(database, userId)
+          } else {
+            value = await getScannerConfigurations(database, userId)
+          }
+          if (value === null && scope !== 'effective') {
+            value = { configurations: [] }
+          }
           break
         case 'table_view_configurations':
+          if (scope !== 'effective') {
+            return c.json({ error: 'scope is only supported for export_configurations and scanner_configurations' }, 400)
+          }
           value = await getTableViewConfigurations(database)
           break
         default:
