@@ -20,7 +20,6 @@ import {
   staticWell,
 } from '../db/schema'
 import { eq, and, sql } from 'drizzle-orm'
-import { resolveCollection } from './collection-resolution'
 import { findExistingStudySpecimen } from './specimen-helpers'
 import {
   validateStudyShortCode,
@@ -33,9 +32,13 @@ import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } 
 import { utcNow } from './datetime'
 import { resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
 import { ValidationError } from './error-handler'
-import { validateContainerData, type ContainerData } from './container-creation'
 import { validateContainerPlacementInPayload } from './container-placement-validation'
 import { normalizePosition } from './normalize-position'
+import {
+  bulkCombinedCollectionMessages,
+  resolveContainerCollection,
+  validateSpecimenContainerRegistration,
+} from './registration-orchestrator'
 
 export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
@@ -154,21 +157,31 @@ async function revalidatePreparedSubjectInTx(
       }
 
       if (container.containerType === 'cryovial_tube' || container.containerType === 'micronix_tube' || container.containerType === 'static_well') {
-        const collectionType = container.containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
-        const identifier = container.collectionName || container.collectionBarcode
-        if (identifier && !container.collectionLocationId) {
-          const collectionId = await resolveCollection(identifier, collectionType, dbTx)
-          if (!collectionId) {
-            throw new ValidationError(`${specimenLabel}: collection '${identifier}' no longer exists; provide collectionLocationId to create it`)
-          }
-          prepared.collectionMap.set(`${collectionType}-${identifier}`, collectionId)
+        const collectionResolution = await resolveContainerCollection(
+          dbTx,
+          container.containerType,
+          container,
+          { messages: bulkCombinedCollectionMessages }
+        )
+        if (collectionResolution.error) {
+          throw new ValidationError(`${specimenLabel}: ${collectionResolution.error}`)
+        }
+        if (collectionResolution.collectionId !== null) {
+          prepared.collectionMap.set(collectionResolution.collectionKey, collectionResolution.collectionId)
         }
       } else if (container.collectionName && !container.collectionLocationId) {
-        const boxId = await resolveCollection(container.collectionName, 'box', dbTx)
-        if (!boxId) {
-          throw new ValidationError(`${specimenLabel}: box '${container.collectionName}' no longer exists; provide collectionLocationId to create it`)
+        const collectionResolution = await resolveContainerCollection(
+          dbTx,
+          container.containerType,
+          container,
+          { messages: bulkCombinedCollectionMessages }
+        )
+        if (collectionResolution.error) {
+          throw new ValidationError(`${specimenLabel}: ${collectionResolution.error}`)
         }
-        prepared.collectionMap.set(`box-${container.collectionName}`, boxId)
+        if (collectionResolution.collectionId !== null) {
+          prepared.collectionMap.set(collectionResolution.collectionKey, collectionResolution.collectionId)
+        }
       }
     }
   }
@@ -204,24 +217,14 @@ export async function prepareSubjectWithSpecimens(
       throw new ValidationError(dateValidation.error ?? 'Invalid collection date', { specimenIndex: i })
     }
     if (spec.container?.containerType) {
-      const containerTypeValidation = await validateContainerTypeForSpecimenType(
+      const containerRegistration = await validateSpecimenContainerRegistration(
         database,
         specimenTypeId,
-        spec.container.containerType
+        spec.container as ExtendedContainerData,
+        { messages: bulkCombinedCollectionMessages }
       )
-      if (!containerTypeValidation.valid) {
-        throw new ValidationError(
-          containerTypeValidation.error ?? 'Invalid container type for specimen type',
-          { specimenIndex: i }
-        )
-      }
-      const containerValidation = await validateContainerData(
-        database,
-        spec.container.containerType,
-        spec.container as ContainerData
-      )
-      if (!containerValidation.valid) {
-        throw new ValidationError(containerValidation.error ?? 'Invalid container', { specimenIndex: i })
+      if (!containerRegistration.valid) {
+        throw new ValidationError(containerRegistration.error ?? 'Invalid container', { specimenIndex: i })
       }
     }
     resolvedSpecimens.push({
@@ -235,23 +238,17 @@ export async function prepareSubjectWithSpecimens(
   for (const spec of resolvedSpecimens) {
     if (spec.container?.containerType) {
       const container = spec.container
-      const containerType = container.containerType
-      if (containerType === 'cryovial_tube' || containerType === 'micronix_tube' || containerType === 'static_well') {
-        const collectionType = containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
-        const identifier = container.collectionName || container.collectionBarcode
-        if (identifier) {
-          const existingId = await resolveCollection(identifier, collectionType, database)
-          if (existingId) collectionMap.set(`${collectionType}-${identifier}`, existingId)
-          else if (!container.collectionLocationId) {
-            throw new ValidationError(`Collection '${identifier}' not found. Please provide collectionLocationId to create it.`)
-          }
-        }
-      } else if (container.collectionName) {
-        const existingBoxId = await resolveCollection(container.collectionName, 'box', database)
-        if (existingBoxId) collectionMap.set(`box-${container.collectionName}`, existingBoxId)
-        else if (!container.collectionLocationId) {
-          throw new ValidationError(`Box '${container.collectionName}' not found. Please provide collectionLocationId to create it.`)
-        }
+      const collectionResolution = await resolveContainerCollection(
+        database,
+        container.containerType,
+        container,
+        { messages: bulkCombinedCollectionMessages }
+      )
+      if (collectionResolution.error) {
+        throw new ValidationError(collectionResolution.error)
+      }
+      if (collectionResolution.collectionId !== null) {
+        collectionMap.set(collectionResolution.collectionKey, collectionResolution.collectionId)
       }
     }
   }

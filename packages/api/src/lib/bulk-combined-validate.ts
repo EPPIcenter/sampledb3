@@ -9,25 +9,33 @@ import {
   validateStudyShortCode,
   validateSubjectName,
   validateCollectionDate,
-  validateContainerTypeForSpecimenType,
   validateUnitForContainerType,
 } from './validation'
 import { getDefaultUnit } from './defaults'
 import { resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
 import {
-  normalizePosition,
   type ExtendedContainerData,
   type BulkCombinedPayload,
 } from './bulk-combined-import'
-import { resolveContainerCollection, bulkCombinedCollectionMessages } from './registration-orchestrator'
 import {
-  buildContainerPlacementCheckRow,
+  bulkCombinedCollectionMessages,
+  validateSpecimenContainerRegistration,
+} from './registration-orchestrator'
+import {
   collectContainerPlacementErrors,
   type ContainerPlacementCheckRow,
 } from './container-placement-validation'
 
 const LOCATION_CANNOT_CONTAIN_COLLECTIONS =
   'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.'
+
+/** Map orchestrator field messages to combined-import UX copy. */
+function combinedContainerErrorMessage(message: string): string {
+  if (message.includes('Position (well) is required')) {
+    return 'Position is required for this container type (e.g. A01)'
+  }
+  return message
+}
 
 export interface BulkCombinedValidateError {
   subjectIndex: number
@@ -137,31 +145,22 @@ export async function validateBulkCombinedPayload(
       const container = spec.container
       const containerType = container.containerType
 
-      if (specimenTypeId) {
-        const containerTypeValidation = await validateContainerTypeForSpecimenType(
-          database,
-          specimenTypeId,
-          containerType
-        )
-        if (!containerTypeValidation.valid) {
-          add(
-            subjectIndex,
-            specimenIndex,
-            containerTypeValidation.error ?? 'Invalid container type for specimen type',
-            rowIndex
-          )
-        }
-      }
-
-      const collectionResolution = await resolveContainerCollection(database, containerType, container, {
-        messages: bulkCombinedCollectionMessages,
-      })
-      if (collectionResolution.error) {
-        add(subjectIndex, specimenIndex, collectionResolution.error, rowIndex)
+      if (!specimenTypeId) {
         continue
       }
 
-      const { collectionKey, collectionId } = collectionResolution
+      const containerRegistration = await validateSpecimenContainerRegistration(
+        database,
+        specimenTypeId,
+        container,
+        { messages: bulkCombinedCollectionMessages }
+      )
+      if (!containerRegistration.valid) {
+        add(subjectIndex, specimenIndex, combinedContainerErrorMessage(containerRegistration.error), rowIndex)
+        continue
+      }
+
+      const { collectionKey, collectionId, placementRow } = containerRegistration
       if (container.collectionLocationId) {
         toBeCreatedKeys.add(collectionKey)
       } else if (collectionId !== null) {
@@ -180,24 +179,7 @@ export async function validateBulkCombinedPayload(
         }
       }
 
-      const normalizedPosition = normalizePosition(container.position)
-      if (
-        (containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'static_well') &&
-        !normalizedPosition
-      ) {
-        add(subjectIndex, specimenIndex, 'Position is required for this container type (e.g. A01)', rowIndex)
-      }
-      if (containerType === 'paper' && !container.label?.trim()) {
-        add(subjectIndex, specimenIndex, 'Label (sheet name) is required for paper', rowIndex)
-      }
-      if (containerType === 'micronix_tube' && (!container.barcode || !container.barcode.trim())) {
-        add(subjectIndex, specimenIndex, 'Barcode is required for micronix tubes', rowIndex)
-      }
-
-      const resolvedId = collectionId ?? collectionKeyToId.get(collectionKey) ?? null
-      placementRows.push(
-        buildContainerPlacementCheckRow(container, resolvedId, collectionKey)
-      )
+      placementRows.push(placementRow)
       placementContexts.push({ subjectIndex, specimenIndex, rowIndex })
     }
   }

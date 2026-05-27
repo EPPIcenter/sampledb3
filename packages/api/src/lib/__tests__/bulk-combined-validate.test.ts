@@ -153,6 +153,7 @@ describe('bulk-combined-validate', () => {
         result.errors.some(
           (e) =>
             e.message.includes('Plate/box name or barcode is required') ||
+            e.message.includes('Collection name or barcode is required') ||
             e.message.includes('not found')
         )
       ).toBe(true)

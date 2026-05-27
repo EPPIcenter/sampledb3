@@ -1,21 +1,17 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
-import { specimen, storageContainer, studySubject, study, specimenType, controlBatch } from '../db/schema'
-import { eq, and, like, or, sql } from 'drizzle-orm'
+import { specimen, storageContainer, specimenType } from '../db/schema'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { validatePage, validateLimit } from '../lib/constants'
-import { resolveContainerByBarcode } from '../lib/identifier-resolution'
-import { validateSpecimenData, checkDuplicateSpecimens } from '../lib/validation'
-import { createContainerForSpecimen, validateContainerData, type ContainerData } from '../lib/container-creation'
-import { findExistingStudySpecimen, findExistingControlSpecimen } from '../lib/specimen-helpers'
-import { validateContainerTypeForSpecimenType } from '../lib/validation'
-import { resolveCollection } from '../lib/collection-resolution'
+import { listSpecimens } from '../lib/specimens/specimen-read'
+import { validateSpecimenData } from '../lib/validation'
+import { createContainerForSpecimen, type ContainerData } from '../lib/container-creation'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { containerSchema, containerSchemaRequired, containerSchemaWithLocation } from '../lib/schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
-import { validateBulkSpecimenRows } from '../lib/registration-orchestrator'
+import { validateBulkSpecimenRows, createBulkSpecimenRows } from '../lib/registration-orchestrator'
 
 /**
  * Create specimens routes with database injection
@@ -30,177 +26,21 @@ export function createSpecimensRoutes(database: Database): Hono {
 // Search specimens
 specimens.get('/', authMiddleware, async (c) => {
   try {
-    const sourceType = c.req.query('source_type')
-    const studyCode = c.req.query('study')
-    const subjectId = c.req.query('subject_id')
-    const controlBatchId = c.req.query('control_batch_id')
-    const specimenTypeId = c.req.query('specimen_type_id')
-    const collectionDateFrom = c.req.query('collection_date_from')
-    const collectionDateTo = c.req.query('collection_date_to')
-    const createdFrom = c.req.query('created_from')
-    const createdTo = c.req.query('created_to')
-    const barcode = c.req.query('barcode')
-    const search = c.req.query('search')
-    
-    let query = dbInstance
-      .select({
-        id: specimen.id,
-        studySubjectId: specimen.studySubjectId,
-        controlBatchId: specimen.controlBatchId,
-        specimenTypeId: specimen.specimenTypeId,
-        collectionDate: specimen.collectionDate,
-        created: specimen.created,
-        specimenType: {
-          id: specimenType.id,
-          name: specimenType.name,
-        },
-        studySubject: {
-          id: studySubject.id,
-          name: studySubject.name,
-        },
-        study: {
-          id: study.id,
-          shortCode: study.shortCode,
-        },
-        controlBatch: {
-          id: controlBatch.id,
-          name: controlBatch.name,
-        }
-      })
-      .from(specimen)
-      .leftJoin(specimenType, eq(specimen.specimenTypeId, specimenType.id))
-      .leftJoin(studySubject, eq(specimen.studySubjectId, studySubject.id))
-      .leftJoin(study, eq(studySubject.studyId, study.id))
-      .leftJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
-      
-    const conditions = []
-    
-    if (sourceType === 'subject') {
-      conditions.push(sql`${specimen.studySubjectId} IS NOT NULL`)
-    } else if (sourceType === 'control') {
-      conditions.push(sql`${specimen.controlBatchId} IS NOT NULL`)
-    }
-    
-    if (studyCode) {
-      conditions.push(eq(study.shortCode, studyCode))
-    }
-    
-    if (subjectId) {
-      const id = parseInt(subjectId)
-      if (!isNaN(id)) {
-        conditions.push(eq(specimen.studySubjectId, id))
-      }
-    }
-
-    if (controlBatchId) {
-      const id = parseInt(controlBatchId)
-      if (!isNaN(id)) {
-        conditions.push(eq(specimen.controlBatchId, id))
-      }
-    }
-
-    if (specimenTypeId) {
-      const id = parseInt(specimenTypeId)
-      if (!isNaN(id)) {
-        conditions.push(eq(specimen.specimenTypeId, id))
-      }
-    }
-
-    if (collectionDateFrom) {
-      conditions.push(sql`${specimen.collectionDate} >= ${collectionDateFrom}`)
-    }
-    if (collectionDateTo) {
-      conditions.push(sql`${specimen.collectionDate} <= ${collectionDateTo}`)
-    }
-    if (createdFrom) {
-      conditions.push(sql`${specimen.created} >= ${createdFrom}`)
-    }
-    if (createdTo) {
-      conditions.push(sql`${specimen.created} <= ${createdTo}`)
-    }
-
-    if (barcode) {
-      // Find specimens that have a container with this barcode
-      // This requires joins to all the container tables
-      const containerId = await resolveContainerByBarcode(dbInstance, barcode)
-      if (containerId) {
-        const container = await dbInstance
-          .select({ specimenId: storageContainer.specimenId })
-          .from(storageContainer)
-          .where(eq(storageContainer.id, containerId))
-          .get()
-        if (container) {
-          conditions.push(eq(specimen.id, container.specimenId))
-        } else {
-          return c.json({ specimens: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } })
-        }
-      } else {
-        return c.json({ specimens: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } })
-      }
-    }
-
-    if (search) {
-      conditions.push(or(
-        like(studySubject.name, `%${search}%`),
-        like(controlBatch.name, `%${search}%`),
-        like(specimenType.name, `%${search}%`)
-      ))
-    }
-    
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions) as any) as any
-    }
-    
-    const pageParam = c.req.query('page')
-    const limitParam = c.req.query('limit')
-    
-    // If no pagination params provided, return all specimens (for client-side pagination)
-    const returnAll = !pageParam && !limitParam
-    
-    const page = pageParam ? validatePage(pageParam) : 1
-    let limit: number | undefined
-    if (returnAll) {
-      limit = undefined
-    } else if (limitParam) {
-      limit = await validateLimit(database, limitParam)
-    } else {
-      limit = 50 // Default limit when page is provided but limit is not
-    }
-    const offset = returnAll ? undefined : (page - 1) * limit!
-    
-    const countQuery = dbInstance
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(specimen)
-      .leftJoin(specimenType, eq(specimen.specimenTypeId, specimenType.id))
-      .leftJoin(studySubject, eq(specimen.studySubjectId, studySubject.id))
-      .leftJoin(study, eq(studySubject.studyId, study.id))
-      .leftJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
-    
-    if (conditions.length > 0) {
-      countQuery.where(and(...conditions) as any) as any
-    }
-    
-    let queryWithOrder = query.orderBy(sql`${specimen.created} DESC`)
-    if (!returnAll) {
-      queryWithOrder = queryWithOrder.limit(limit!).offset(offset!) as any
-    }
-    
-    const [specimensList, countResult] = await Promise.all([
-      queryWithOrder,
-      countQuery,
-    ])
-    
-    const total = countResult[0]?.count || 0
-    
-    return c.json({
-      specimens: specimensList,
-      pagination: returnAll ? undefined : {
-        page,
-        limit: limit!,
-        total,
-        totalPages: Math.ceil(total / limit!),
-      },
-    })
+    return c.json(await listSpecimens(dbInstance, {
+      sourceType: c.req.query('source_type'),
+      study: c.req.query('study'),
+      subjectId: c.req.query('subject_id'),
+      controlBatchId: c.req.query('control_batch_id'),
+      specimenTypeId: c.req.query('specimen_type_id'),
+      collectionDateFrom: c.req.query('collection_date_from'),
+      collectionDateTo: c.req.query('collection_date_to'),
+      createdFrom: c.req.query('created_from'),
+      createdTo: c.req.query('created_to'),
+      barcode: c.req.query('barcode'),
+      search: c.req.query('search'),
+      page: c.req.query('page'),
+      limit: c.req.query('limit'),
+    }))
   } catch (error) {
     return handleRouteError(error, c)
   }
@@ -383,188 +223,26 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
     })
     
     const data = schema.parse(body)
-    
+
     if (data.specimens.length === 0) {
       return c.json({ error: 'No specimens provided' }, 400)
     }
-    
-    const errors: Array<{ index: number; error: string }> = []
-    const now = utcNow()
-    const user = c.get('user')
-    
-    // Phase 1: validate all rows (async)
-    type ValidRow = { index: number; spec: (typeof data.specimens)[number]; validation: Awaited<ReturnType<typeof validateSpecimenData>> & { valid: true; resolved: NonNullable<Awaited<ReturnType<typeof validateSpecimenData>>['resolved']> } }
-    const validRows: ValidRow[] = []
-    for (let i = 0; i < data.specimens.length; i++) {
-      const spec = data.specimens[i]
-      try {
-        const validation = await validateSpecimenData({
-          sourceType: spec.sourceType,
-          sourceId: spec.sourceId,
-          studyShortCode: spec.studyShortCode,
-          subjectName: spec.subjectName,
-          specimenTypeName: spec.specimenTypeName,
-          collectionDate: spec.collectionDate,
-        }, dbInstance)
-        if (!validation.valid || !validation.resolved) {
-          errors.push({ index: i, error: validation.error || 'Invalid specimen data' })
-          continue
-        }
-        if (spec.container?.containerType) {
-          const containerType = spec.container.containerType
-          const containerTypeValidation = await validateContainerTypeForSpecimenType(dbInstance, validation.resolved.specimenTypeId, containerType)
-          if (!containerTypeValidation.valid) {
-            errors.push({ index: i, error: containerTypeValidation.error || 'Invalid container type for specimen type' })
-            continue
-          }
-          const containerDataForValidation: ContainerData = {
-            containerType,
-            collectionName: spec.container.collectionName,
-            collectionBarcode: spec.container.collectionBarcode,
-            barcode: spec.container.barcode,
-            position: spec.container.position,
-            label: spec.container.label,
-          }
-          const containerValidation = await validateContainerData(dbInstance, containerType, containerDataForValidation)
-          if (!containerValidation.valid) {
-            errors.push({ index: i, error: containerValidation.error || 'Invalid container data' })
-            continue
-          }
-          const collectionType = containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
-          const identifier = spec.container.collectionName || spec.container.collectionBarcode
-          if (containerType !== 'paper' && identifier) {
-            const existingId = await resolveCollection(identifier, collectionType, dbInstance)
-            if (!existingId && !spec.container.collectionLocationId) {
-              errors.push({ index: i, error: `Collection '${identifier}' not found. Create it first or use Combined import with a location.` })
-              continue
-            }
-          }
-          if (containerType === 'paper' && spec.container.collectionName) {
-            const existingBox = await resolveCollection(spec.container.collectionName, 'box', dbInstance)
-            if (!existingBox && !spec.container.collectionLocationId) {
-              errors.push({ index: i, error: `Box '${spec.container.collectionName}' not found. Create it first or use Combined import with a location.` })
-              continue
-            }
-          }
-        }
-        validRows.push({ index: i, spec, validation: validation as ValidRow['validation'] })
-      } catch (error: unknown) {
-        errors.push({ index: i, error: error instanceof Error ? error.message : 'Validation failed' })
-      }
-    }
 
-    // All-or-nothing: do not insert if any row failed validation
-    if (errors.length > 0) {
+    const user = c.get('user')
+    const createResult = await createBulkSpecimenRows(dbInstance, data.specimens, user?.id)
+
+    if (!createResult.success) {
       return c.json({
         error: 'Validation failed',
-        errors,
+        errors: createResult.errors.map(({ index, message }) => ({ index, error: message })),
         created: 0,
       }, 400)
     }
 
-    // One specimen per unique (subject/control + type + date). Use payload key so dedupe is stable regardless of resolved ID quirks.
-    const payloadKey = (r: (typeof validRows)[number], idx: number): string =>
-      r.spec.sourceType === 'subject'
-        ? `s:${String(r.spec.studyShortCode ?? '')}:${String(r.spec.subjectName ?? '')}:${String(r.spec.specimenTypeName)}:${String(r.spec.collectionDate ?? '')}`
-        : `c:${String(r.validation.resolved.controlBatchId ?? '')}:${String(r.validation.resolved.specimenTypeId)}:${String(r.spec.collectionDate ?? '')}`
-    const orderedPayloadKeys = validRows.map((r, idx) => payloadKey(r, idx))
-    const payloadKeyToFirstIndex = new Map<string, number>()
-    for (let idx = 0; idx < orderedPayloadKeys.length; idx++) {
-      const k = orderedPayloadKeys[idx]
-      if (!payloadKeyToFirstIndex.has(k)) payloadKeyToFirstIndex.set(k, idx)
-    }
-    const uniqueSpecimenOrder: number[] = []
-    const indexToUniqueIndex: number[] = []
-    for (let idx = 0; idx < orderedPayloadKeys.length; idx++) {
-      const first = payloadKeyToFirstIndex.get(orderedPayloadKeys[idx]) ?? idx
-      if (first === idx) uniqueSpecimenOrder.push(idx)
-      indexToUniqueIndex.push(uniqueSpecimenOrder.indexOf(first))
-    }
-
-    // Phase 1: sync transaction to create/get specimens (one per unique key). No await so tx sees own inserts.
-    const specimenRecordsByUniqueIndex: (typeof specimen.$inferSelect)[] = []
-    const syncResult = dbInstance.transaction((tx) => {
-      const dbTx = tx as unknown as Database
-      let newCount = 0
-      for (const uniqueIdx of uniqueSpecimenOrder) {
-        const { spec, validation } = validRows[uniqueIdx]
-        const studySubjectId = validation.resolved.studySubjectId
-        const existing =
-          spec.sourceType === 'subject' && studySubjectId != null
-            ? findExistingStudySpecimen(dbTx, studySubjectId, validation.resolved.specimenTypeId, spec.collectionDate)
-            : spec.sourceType === 'control' && validation.resolved.controlBatchId != null
-              ? findExistingControlSpecimen(dbTx, validation.resolved.controlBatchId, validation.resolved.specimenTypeId, spec.collectionDate)
-              : null
-        if (existing) {
-          specimenRecordsByUniqueIndex.push(existing)
-        } else {
-          const insertResult = tx
-            .insert(specimen)
-            .values({
-              studySubjectId: validation.resolved.studySubjectId,
-              controlBatchId: validation.resolved.controlBatchId,
-              specimenTypeId: validation.resolved.specimenTypeId,
-              collectionDate: spec.collectionDate ?? null,
-              created: now,
-              lastUpdated: now,
-              createdBy: user?.id,
-              updatedBy: user?.id,
-            })
-            .returning()
-            .get()
-          const inserted = Array.isArray(insertResult) ? insertResult[0] : insertResult
-          if (!inserted) throw new Error('Insert did not return specimen row')
-          specimenRecordsByUniqueIndex.push(inserted as typeof specimen.$inferSelect)
-          newCount += 1
-        }
-      }
-      return { newCount }
-    })
-
-    // Phase 2: create containers (async) in a second transaction so all-or-nothing
-    const specimensOut: typeof specimen.$inferSelect[] = indexToUniqueIndex.map((ui) => specimenRecordsByUniqueIndex[ui])
-    let containersCount = 0
-    await dbInstance.transaction(async (tx) => {
-      const dbTx = tx as unknown as Database
-      for (let i = 0; i < validRows.length; i++) {
-        const { spec } = validRows[i]
-        const specimenRecord = specimensOut[i]
-        if (!spec.container?.containerType) continue
-        const containerData: ContainerData = {
-          containerType: spec.container.containerType,
-          collectionName: spec.container.collectionName,
-          collectionBarcode: spec.container.collectionBarcode,
-          barcode: spec.container.barcode,
-          position: spec.container.position,
-          label: spec.container.label,
-          unitId: spec.container.unitId,
-          totalQuantity: spec.container.totalQuantity,
-          remainingQuantity: spec.container.remainingQuantity,
-          comment: spec.container.comment,
-        }
-        const containerResult = await createContainerForSpecimen(
-          specimenRecord.id,
-          containerData,
-          dbTx,
-          user?.id
-        )
-        if (!containerResult.success || !containerResult.containerId) {
-          throw new Error(containerResult.error ?? `Row ${i}: failed to create container`)
-        }
-        containersCount += 1
-      }
-    })
-
-    const result = {
-      specimens: specimensOut,
-      created: syncResult.newCount,
-      containersCreated: containersCount,
-    }
-
     return c.json({
-      specimens: result.specimens,
-      created: result.created,
-      containersCreated: result.containersCreated,
+      specimens: createResult.result.specimens,
+      created: createResult.result.created,
+      containersCreated: createResult.result.containersCreated,
     }, 201)
   } catch (error) {
     return handleRouteError(error, c)

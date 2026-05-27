@@ -3,18 +3,22 @@
  * Consolidates provenance (Study → Subject → Specimen / Control batch) and container placement checks.
  */
 import type { Database } from '../db/client'
+import { specimen } from '../db/schema'
 import { validateSpecimenData, validateContainerTypeForSpecimenType } from './validation'
 import {
   validateContainerFieldRequirements,
+  createContainerForSpecimen,
   type ContainerData,
   type ContainerType,
 } from './container-creation'
-import { resolveCollection } from './collection-resolution'
+import { resolveCollection } from './collections/collection-resolve'
 import {
   buildContainerPlacementCheckRow,
   collectContainerPlacementErrors,
   type ContainerPlacementCheckRow,
 } from './container-placement-validation'
+import { findExistingStudySpecimen, findExistingControlSpecimen } from './specimen-helpers'
+import { utcNow } from './datetime'
 import type { ExtendedContainerData } from './bulk-combined-import'
 
 export type BulkSpecimenContainerInput = Omit<ExtendedContainerData, 'containerType'> & {
@@ -42,6 +46,12 @@ export type BulkSpecimenValidateResult = {
   errors: BulkSpecimenValidateError[]
 }
 
+export type BulkSpecimenCreateResult = {
+  specimens: Array<typeof specimen.$inferSelect>
+  created: number
+  containersCreated: number
+}
+
 type CollectionResolutionMessages = {
   collectionNotFound: (identifier: string) => string
   boxNotFound: (name: string) => string
@@ -61,6 +71,14 @@ const bulkCombinedCollectionMessages: CollectionResolutionMessages = {
 }
 
 export { bulkCombinedCollectionMessages }
+
+type ResolvedSpecimen = NonNullable<Awaited<ReturnType<typeof validateSpecimenData>>['resolved']>
+
+type PreparedBulkSpecimenRow = {
+  index: number
+  row: BulkSpecimenValidateRow
+  resolved: ResolvedSpecimen
+}
 
 export async function resolveContainerCollection(
   database: Database,
@@ -103,15 +121,84 @@ export async function resolveContainerCollection(
   return { collectionId: existingId, collectionKey }
 }
 
+export type SpecimenContainerRegistrationResult =
+  | {
+      valid: true
+      collectionId: number | null
+      collectionKey: string
+      placementRow: ContainerPlacementCheckRow
+    }
+  | { valid: false; error: string }
+
 /**
- * Validate bulk specimen rows without creating records.
- * Used by POST /specimens/bulk/validate.
+ * Shared container type, field, collection resolution, and placement-row build.
+ * Used by bulk specimen validate/create and combined import validate/import paths.
  */
-export async function validateBulkSpecimenRows(
+export async function validateSpecimenContainerRegistration(
+  database: Database,
+  specimenTypeId: number,
+  container: ExtendedContainerData,
+  options?: { messages?: CollectionResolutionMessages }
+): Promise<SpecimenContainerRegistrationResult> {
+  const containerType = container.containerType
+  const containerTypeValidation = await validateContainerTypeForSpecimenType(
+    database,
+    specimenTypeId,
+    containerType
+  )
+  if (!containerTypeValidation.valid) {
+    return {
+      valid: false,
+      error: containerTypeValidation.error || 'Invalid container type for specimen type',
+    }
+  }
+
+  const containerDataForValidation: ContainerData = {
+    containerType,
+    collectionName: container.collectionName,
+    collectionBarcode: container.collectionBarcode,
+    barcode: container.barcode,
+    position: container.position,
+    label: container.label,
+  }
+  const containerValidation = validateContainerFieldRequirements(containerType, containerDataForValidation)
+  if (!containerValidation.valid) {
+    return { valid: false, error: containerValidation.error || 'Invalid container data' }
+  }
+
+  const collectionResolution = await resolveContainerCollection(database, containerType, container, options)
+  if (collectionResolution.error) {
+    return { valid: false, error: collectionResolution.error }
+  }
+
+  return {
+    valid: true,
+    collectionId: collectionResolution.collectionId,
+    collectionKey: collectionResolution.collectionKey,
+    placementRow: buildContainerPlacementCheckRow(
+      container,
+      collectionResolution.collectionId,
+      collectionResolution.collectionKey
+    ),
+  }
+}
+
+/** Stable dedupe key for bulk specimen rows (subject/control + type + date). */
+export function bulkSpecimenPayloadKey(row: BulkSpecimenValidateRow, resolved: ResolvedSpecimen): string {
+  return row.sourceType === 'subject'
+    ? `s:${String(row.studyShortCode ?? '')}:${String(row.subjectName ?? '')}:${String(row.specimenTypeName)}:${String(row.collectionDate ?? '')}`
+    : `c:${String(resolved.controlBatchId ?? '')}:${String(resolved.specimenTypeId)}:${String(row.collectionDate ?? '')}`
+}
+
+async function prepareBulkSpecimenRows(
   database: Database,
   rows: BulkSpecimenValidateRow[]
-): Promise<BulkSpecimenValidateResult> {
+): Promise<
+  | { valid: true; prepared: PreparedBulkSpecimenRow[] }
+  | { valid: false; errors: BulkSpecimenValidateError[] }
+> {
   const errors: BulkSpecimenValidateError[] = []
+  const prepared: PreparedBulkSpecimenRow[] = []
   const placementRows: ContainerPlacementCheckRow[] = []
   const placementIndexToRowIndex: number[] = []
 
@@ -134,52 +221,23 @@ export async function validateBulkSpecimenRows(
         continue
       }
 
+      prepared.push({ index, row, resolved: validation.resolved })
+
       if (!row.container?.containerType) {
         continue
       }
 
-      const container = row.container as ExtendedContainerData
-      const containerType = container.containerType
-      const containerTypeValidation = await validateContainerTypeForSpecimenType(
+      const containerRegistration = await validateSpecimenContainerRegistration(
         database,
         validation.resolved.specimenTypeId,
-        containerType
+        row.container as ExtendedContainerData
       )
-      if (!containerTypeValidation.valid) {
-        errors.push({
-          index,
-          message: containerTypeValidation.error || 'Invalid container type for specimen type',
-        })
+      if (!containerRegistration.valid) {
+        errors.push({ index, message: containerRegistration.error })
         continue
       }
 
-      const containerDataForValidation: ContainerData = {
-        containerType,
-        collectionName: container.collectionName,
-        collectionBarcode: container.collectionBarcode,
-        barcode: container.barcode,
-        position: container.position,
-        label: container.label,
-      }
-      const containerValidation = validateContainerFieldRequirements(containerType, containerDataForValidation)
-      if (!containerValidation.valid) {
-        errors.push({ index, message: containerValidation.error || 'Invalid container data' })
-        continue
-      }
-
-      const collectionResolution = await resolveContainerCollection(database, containerType, container)
-      if (collectionResolution.error) {
-        errors.push({ index, message: collectionResolution.error })
-        continue
-      }
-
-      placementRows.push(
-        buildContainerPlacementCheckRow(
-          container,
-          collectionResolution.collectionId,
-          collectionResolution.collectionKey
-        )
-      )
+      placementRows.push(containerRegistration.placementRow)
       placementIndexToRowIndex.push(index)
     } catch (error: unknown) {
       errors.push({
@@ -197,8 +255,141 @@ export async function validateBulkSpecimenRows(
     }
   }
 
+  if (errors.length > 0) {
+    return { valid: false, errors }
+  }
+
+  return { valid: true, prepared }
+}
+
+/**
+ * Validate bulk specimen rows without creating records.
+ * Used by POST /specimens/bulk/validate.
+ */
+export async function validateBulkSpecimenRows(
+  database: Database,
+  rows: BulkSpecimenValidateRow[]
+): Promise<BulkSpecimenValidateResult> {
+  const result = await prepareBulkSpecimenRows(database, rows)
   return {
-    valid: errors.length === 0,
-    errors,
+    valid: result.valid,
+    errors: result.valid ? [] : result.errors,
+  }
+}
+
+/**
+ * Create bulk specimen rows after the same validation as validateBulkSpecimenRows.
+ * Used by POST /specimens/bulk.
+ */
+export async function createBulkSpecimenRows(
+  database: Database,
+  rows: BulkSpecimenValidateRow[],
+  userId?: number
+): Promise<
+  | { success: true; result: BulkSpecimenCreateResult }
+  | { success: false; errors: BulkSpecimenValidateError[] }
+> {
+  const prep = await prepareBulkSpecimenRows(database, rows)
+  if (!prep.valid) {
+    return { success: false, errors: prep.errors }
+  }
+
+  const { prepared } = prep
+  const now = utcNow()
+
+  const orderedPayloadKeys = prepared.map(({ row, resolved }) => bulkSpecimenPayloadKey(row, resolved))
+  const payloadKeyToFirstIndex = new Map<string, number>()
+  for (let idx = 0; idx < orderedPayloadKeys.length; idx++) {
+    const key = orderedPayloadKeys[idx]
+    if (!payloadKeyToFirstIndex.has(key)) payloadKeyToFirstIndex.set(key, idx)
+  }
+  const uniqueSpecimenOrder: number[] = []
+  const indexToUniqueIndex: number[] = []
+  for (let idx = 0; idx < orderedPayloadKeys.length; idx++) {
+    const first = payloadKeyToFirstIndex.get(orderedPayloadKeys[idx]) ?? idx
+    if (first === idx) uniqueSpecimenOrder.push(idx)
+    indexToUniqueIndex.push(uniqueSpecimenOrder.indexOf(first))
+  }
+
+  const specimenRecordsByUniqueIndex: Array<typeof specimen.$inferSelect> = []
+  const syncResult = database.transaction((tx) => {
+    const dbTx = tx as unknown as Database
+    let newCount = 0
+    for (const uniqueIdx of uniqueSpecimenOrder) {
+      const { row, resolved } = prepared[uniqueIdx]
+      const studySubjectId = resolved.studySubjectId
+      const existing =
+        row.sourceType === 'subject' && studySubjectId != null
+          ? findExistingStudySpecimen(dbTx, studySubjectId, resolved.specimenTypeId, row.collectionDate)
+          : row.sourceType === 'control' && resolved.controlBatchId != null
+            ? findExistingControlSpecimen(dbTx, resolved.controlBatchId, resolved.specimenTypeId, row.collectionDate)
+            : null
+      if (existing) {
+        specimenRecordsByUniqueIndex.push(existing)
+      } else {
+        const insertResult = tx
+          .insert(specimen)
+          .values({
+            studySubjectId: resolved.studySubjectId,
+            controlBatchId: resolved.controlBatchId,
+            specimenTypeId: resolved.specimenTypeId,
+            collectionDate: row.collectionDate ?? null,
+            created: now,
+            lastUpdated: now,
+            createdBy: userId,
+            updatedBy: userId,
+          })
+          .returning()
+          .get()
+        const inserted = Array.isArray(insertResult) ? insertResult[0] : insertResult
+        if (!inserted) throw new Error('Insert did not return specimen row')
+        specimenRecordsByUniqueIndex.push(inserted as typeof specimen.$inferSelect)
+        newCount += 1
+      }
+    }
+    return { newCount }
+  })
+
+  const specimensOut = indexToUniqueIndex.map((ui) => specimenRecordsByUniqueIndex[ui])
+  let containersCount = 0
+  await database.transaction(async (tx) => {
+    const dbTx = tx as unknown as Database
+    for (let i = 0; i < prepared.length; i++) {
+      const { row, index } = prepared[i]
+      const specimenRecord = specimensOut[i]
+      if (!row.container?.containerType) continue
+      const container = row.container as ExtendedContainerData
+      const containerData: ContainerData = {
+        containerType: container.containerType,
+        collectionName: container.collectionName,
+        collectionBarcode: container.collectionBarcode,
+        barcode: container.barcode,
+        position: container.position,
+        label: container.label,
+        unitId: container.unitId,
+        totalQuantity: container.totalQuantity,
+        remainingQuantity: container.remainingQuantity,
+        comment: container.comment,
+      }
+      const containerResult = await createContainerForSpecimen(
+        specimenRecord.id,
+        containerData,
+        dbTx,
+        userId
+      )
+      if (!containerResult.success || !containerResult.containerId) {
+        throw new Error(containerResult.error ?? `Row ${index}: failed to create container`)
+      }
+      containersCount += 1
+    }
+  })
+
+  return {
+    success: true,
+    result: {
+      specimens: specimensOut,
+      created: syncResult.newCount,
+      containersCreated: containersCount,
+    },
   }
 }
