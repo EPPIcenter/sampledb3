@@ -15,7 +15,7 @@
     "start": "bun --env-file=.env --env-file=.env.local --filter @sampledb/api start",
     "lint": "bun --filter '*' lint",
     "typecheck": "bun --filter '*' typecheck",
-    "test": "bun --env-file=.env --env-file=.env.local run --filter @sampledb/api test && bun --env-file=.env --env-file=.env.local run --filter @sampledb/web test",
+    "test": "bun --env-file=.env --env-file=.env.local run --filter @sampledb/contract test && bun --env-file=.env --env-file=.env.local run --filter @sampledb/api test && bun --env-file=.env --env-file=.env.local run --filter @sampledb/web test",
     "test:coverage": "bun --env-file=.env --env-file=.env.local run --filter @sampledb/api test:coverage && bun --env-file=.env --env-file=.env.local run --filter @sampledb/web test:coverage",
     "test:e2e": "bun --filter @sampledb/e2e test",
     "demo:seed": "bun --env-file=.env --env-file=.env.local --filter @sampledb/api demo:seed"
@@ -34,6 +34,7 @@
   },
   "workspaces": [
     "packages/api",
+    "packages/contract",
     "packages/web",
     "packages/docs",
     "packages/e2e"

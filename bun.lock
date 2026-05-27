@@ -17,6 +17,7 @@
         "@hono/swagger-ui": "^0.5.3",
         "@hono/zod-openapi": "^1.2.0",
         "@hono/zod-validator": "^0.7.6",
+        "@sampledb/contract": "workspace:*",
         "bcryptjs": "^3.0.3",
         "drizzle-kit": "^0.31.8",
         "drizzle-orm": "^0.45.1",
@@ -35,6 +36,16 @@
         "tsc-alias": "^1.8.16",
         "typescript": "^5.9.3",
         "vitest": "^4.0.16",
+      },
+    },
+    "packages/contract": {
+      "name": "@sampledb/contract",
+      "version": "1.1.0",
+      "dependencies": {
+        "zod": "^4.3.5",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
       },
     },
     "packages/docs": {
@@ -444,6 +455,8 @@
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.55.1", "", { "os": "win32", "cpu": "x64" }, "sha512-SPEpaL6DX4rmcXtnhdrQYgzQ5W2uW3SCJch88lB2zImhJRhIIK44fkUrgIV/Q8yUNfw5oyZ5vkeQsZLhCb06lw=="],
 
     "@sampledb/api": ["@sampledb/api@workspace:packages/api"],
+
+    "@sampledb/contract": ["@sampledb/contract@workspace:packages/contract"],
 
     "@sampledb/docs": ["@sampledb/docs@workspace:packages/docs"],
 

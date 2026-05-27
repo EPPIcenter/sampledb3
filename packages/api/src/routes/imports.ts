@@ -9,7 +9,7 @@ import { handleRouteError } from '../lib/error-handler'
 import {
   bulkCombinedRequestSchema,
   bulkCombinedValidateRequestSchema,
-} from '../lib/schemas'
+} from '@sampledb/contract'
 
 /**
  * Create imports routes with database injection

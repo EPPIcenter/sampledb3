@@ -1,4 +1,14 @@
 import { z } from 'zod'
+import {
+  bulkCombinedContainerSchema,
+  bulkCombinedRequestSchema,
+  bulkCombinedValidateRequestSchema,
+} from '@sampledb/contract'
+
+export {
+  bulkCombinedRequestSchema,
+  bulkCombinedValidateRequestSchema,
+} from '@sampledb/contract'
 
 const baseContainerObject = z.object({
   containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', 'static_well']).optional(),
@@ -31,52 +41,7 @@ export const containerSchemaRequired = baseContainerObject.extend({
  * Extended container schema for bulk endpoints (POST /bulk, imports) that support
  * collection creation. Includes collectionLocationId for creating collections when missing.
  */
-export const containerSchemaWithLocation = baseContainerObject
-  .extend({
-    collectionLocationId: z.number().int().optional(),
-  })
-  .optional()
-
-const bulkCombinedSubjectSpecimenSchema = z.object({
-  specimenTypeName: z.string().min(1),
-  collectionDate: z.string().optional(),
-  container: containerSchemaWithLocation,
-})
-
-const bulkCombinedSubjectSchema = z.object({
-  subjectName: z.string().min(1),
-  specimens: z.array(bulkCombinedSubjectSpecimenSchema),
-})
-
-/** POST /imports/bulk-combined and POST /imports/bulk-combined/validate */
-export const bulkCombinedRequestSchema = z.object({
-  studyShortCode: z.string().min(1),
-  atomicMode: z.enum(['full_file', 'per_subject']),
-  createCollections: z
-    .array(
-      z.object({
-        type: z.enum(['box', 'bag', 'micronix_plate', 'cryovial_box']),
-        name: z.string().min(1),
-        locationId: z.number().int(),
-        barcode: z.string().optional(),
-      })
-    )
-    .optional(),
-  subjects: z.array(bulkCombinedSubjectSchema),
-})
-
-/** Validate endpoint allows optional rowIndex per specimen for CSV alignment */
-export const bulkCombinedValidateRequestSchema = bulkCombinedRequestSchema.extend({
-  subjects: z.array(
-    bulkCombinedSubjectSchema.extend({
-      specimens: z.array(
-        bulkCombinedSubjectSpecimenSchema.extend({
-          rowIndex: z.number().int().optional(),
-        })
-      ),
-    })
-  ),
-})
+export const containerSchemaWithLocation = bulkCombinedContainerSchema
 
 /** POST /subjects/with-specimens */
 export const withSpecimensRequestSchema = z.object({

@@ -16,6 +16,7 @@
     "demo:seed": "bun src/lib/demo-seed.ts"
   },
   "dependencies": {
+    "@sampledb/contract": "workspace:*",
     "@hono/swagger-ui": "^0.5.3",
     "@hono/zod-openapi": "^1.2.0",
     "@hono/zod-validator": "^0.7.6",
