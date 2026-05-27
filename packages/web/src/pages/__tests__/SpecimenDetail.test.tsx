@@ -43,6 +43,12 @@ vi.mock('../../lib/api/collections', async () => {
   return createMockedDomainModule('collections', specimenDetailPageMock((...args: unknown[]) => mockAddContainer(...args)))
 })
 
+vi.mock('../../lib/api/containers', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { specimenDetailPageMock } = await import('../../__tests__/helpers/mock-api-templates')
+  return createMockedDomainModule('containers', specimenDetailPageMock((...args: unknown[]) => mockAddContainer(...args)))
+})
+
 vi.mock('../../contexts/UserContext', async () => {
   const actual = await vi.importActual<typeof import('../../contexts/UserContext')>('../../contexts/UserContext')
   return { ...actual, useUser: () => ({ canWrite: true }) }
@@ -70,7 +76,7 @@ describe('SpecimenDetail', () => {
   it('shows Add container button when user can write', async () => {
     await render(<SpecimenDetail />)
     await waitFor(() => {
-      expect(screen.getByText(/No containers found/i)).toBeInTheDocument()
+      expect(screen.getByText(/No containers found for this specimen/i)).toBeInTheDocument()
     }, { timeout: 3000 })
     expect(screen.getByRole('button', { name: /add container/i })).toBeInTheDocument()
   })

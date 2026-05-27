@@ -32,7 +32,7 @@ describe('toggleArrayFilterValue', () => {
 
 describe('getFilterArrayValue', () => {
   it('returns empty array when field is unset', () => {
-    expect(getFilterArrayValue({}, 'tag_ids')).toEqual([])
+    expect(getFilterArrayValue<{ tag_ids?: string[] }, 'tag_ids'>({}, 'tag_ids')).toEqual([])
   })
 
   it('returns the stored array when set', () => {

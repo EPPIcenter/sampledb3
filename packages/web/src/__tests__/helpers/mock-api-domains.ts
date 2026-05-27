@@ -10,6 +10,7 @@ export type ApiModuleId =
   | 'reagents'
   | 'locations'
   | 'collections'
+  | 'containers'
   | 'imports'
   | 'export'
   | 'derivations'
@@ -31,6 +32,7 @@ export const API_MODULE_IDS: ApiModuleId[] = [
   'reagents',
   'locations',
   'collections',
+  'containers',
   'imports',
   'export',
   'derivations',
@@ -60,6 +62,7 @@ export const API_KEY_TO_MODULE: Record<string, ApiModuleId> = {
   reagentsApi: 'reagents',
   locationsApi: 'locations',
   collectionsApi: 'collections',
+  containersApi: 'containers',
   importsApi: 'imports',
   exportApi: 'export',
   derivationsApi: 'derivations',
@@ -96,6 +99,7 @@ const MODULE_API_KEYS: Record<ApiModuleId, string[]> = {
   reagents: ['reagentsApi'],
   locations: ['locationsApi'],
   collections: ['collectionsApi'],
+  containers: ['containersApi'],
   imports: ['importsApi'],
   export: ['exportApi'],
   derivations: ['derivationsApi'],

@@ -10,52 +10,31 @@ const mockSuggestBatchName = vi.fn()
 vi.mock('../../../lib/api/controls', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   return createMockedDomainModule('controls', {
-  controlsApi: {
-    createBatchWithSpecimens: (...args: unknown[]) => mockCreateBatchWithSpecimens(...args),
-    suggestBatchName: (...args: unknown[]) => mockSuggestBatchName(...args),
-  },
-  settingsApi: {
-    get: vi.fn((key: string) => {
-      if (key === 'container_defaults') {
-        return Promise.resolve({
-          key: 'container_defaults',
-          value: {
-            paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
-            cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
-            micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
-            static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
-          },
-        })
-      }
-      return Promise.resolve({ key: 'container_defaults', value: null })
-    }),
-  },
+    controlsApi: {
+      createBatchWithSpecimens: (...args: unknown[]) => mockCreateBatchWithSpecimens(...args),
+      suggestBatchName: (...args: unknown[]) => mockSuggestBatchName(...args),
+    },
+  })
 })
-})
+
+const containerDefaults = {
+  paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+  cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
+  micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
+  static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
+}
 
 vi.mock('../../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../../__tests__/helpers/mock-api')
   return createMockedDomainModule('settings', {
-  controlsApi: {
-    createBatchWithSpecimens: (...args: unknown[]) => mockCreateBatchWithSpecimens(...args),
-    suggestBatchName: (...args: unknown[]) => mockSuggestBatchName(...args),
-  },
-  settingsApi: {
-    get: vi.fn((key: string) => {
-      if (key === 'container_defaults') {
-        return Promise.resolve({
-          key: 'container_defaults',
-          value: {
-            paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
-            cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
-            micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'µL' },
-            static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'spots' },
-          },
-        })
-      }
-      return Promise.resolve({ key: 'container_defaults', value: null })
-    }),
-  }
+    settingsApi: {
+      getValue: vi.fn(async (key: string) => {
+        if (key === 'container_defaults') {
+          return containerDefaults
+        }
+        return null
+      }),
+    },
   })
 })
 

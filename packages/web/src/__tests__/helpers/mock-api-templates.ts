@@ -403,8 +403,11 @@ export function specimenDetailPageMock(
       }),
       addContainer,
     },
+    containersApi: {
+      list: vi.fn().mockResolvedValue({ containers: [] }),
+    },
     settingsApi: {
-      get: vi.fn().mockResolvedValue({ value: null }),
+      getValue: vi.fn().mockResolvedValue(null),
       getContainerTypeUnits: vi.fn().mockResolvedValue({ units: [] }),
     },
     unitsApi: {

@@ -3,7 +3,6 @@ import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import QpcrExperimentDetail from '../QpcrExperimentDetail'
 import { qpcrExperimentsApi } from '../../lib/api/qpcr'
 import { settingsApi } from '../../lib/api/settings'
-import { mockSettingsApiGetValue } from '../../__tests__/helpers/settings-mocks'
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
@@ -29,6 +28,7 @@ vi.mock('../../lib/api/qpcr', async () => {
 
 vi.mock('../../lib/api/settings', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  const { mockSettingsApiGetValue } = await import('../../__tests__/helpers/settings-mocks')
   return createMockedDomainModule('settings', {
     settingsApi: {
       getValue: mockSettingsApiGetValue(),
@@ -56,8 +56,9 @@ const mockDetail = {
 }
 
 describe('QpcrExperimentDetail', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
+    const { mockSettingsApiGetValue } = await import('../../__tests__/helpers/settings-mocks')
     vi.mocked(qpcrExperimentsApi.get).mockResolvedValue(mockDetail as never)
     vi.mocked(settingsApi.getValue).mockImplementation(mockSettingsApiGetValue())
   })
