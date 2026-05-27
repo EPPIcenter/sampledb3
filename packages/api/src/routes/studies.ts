@@ -18,6 +18,7 @@ import { eq, and, like, sql, or, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
 import { handleRouteError, NotFoundError, ConflictError, ValidationError } from '../lib/error-handler'
+import { getStudySummaries, listStudies } from '../lib/studies/study-read'
 import { createAuthMiddleware, createMemberMiddleware, createAdminMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
@@ -42,34 +43,8 @@ studies.get('/', authMiddleware, async (c) => {
     const search = c.req.query('search')
     const page = validatePage(c.req.query('page'))
     const limit = await validateLimit(database, c.req.query('limit'))
-    const offset = (page - 1) * limit
-    
-    let query = database.select().from(study)
-    let countQuery = database.select({ count: sql<number>`COUNT(*)`.as('count') }).from(study)
-    
-    if (search) {
-      const searchPattern = `%${search}%`
-      const whereClause = sql`${study.title} LIKE ${searchPattern} OR ${study.shortCode} LIKE ${searchPattern}`
-      query = query.where(whereClause) as any
-      countQuery = countQuery.where(whereClause) as any
-    }
-    
-    const [studiesList, countResult] = await Promise.all([
-      query.limit(limit).offset(offset),
-      countQuery,
-    ])
-    
-    const total = countResult[0]?.count || 0
-    
-    return c.json({
-      studies: studiesList,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    })
+
+    return c.json(await listStudies(database, { search, page, limit }))
   } catch (error) {
     return handleRouteError(error, c)
   }
@@ -89,153 +64,7 @@ studies.get('/summaries', authMiddleware, async (c) => {
       return c.json({ summaries: [] })
     }
 
-    // Get all subjects for these studies
-    const subjects = await database
-      .select()
-      .from(studySubject)
-      .where(inArray(studySubject.studyId, ids))
-
-    const studySubjectMap = new Map<number, number[]>()
-    subjects.forEach(s => {
-      if (!studySubjectMap.has(s.studyId)) {
-        studySubjectMap.set(s.studyId, [])
-      }
-      studySubjectMap.get(s.studyId)!.push(s.id)
-    })
-
-    const allSubjectIds = subjects.map(s => s.id)
-    const summaries: Array<{
-      studyId: number
-      totalSubjects: number
-      totalSpecimens: number
-      totalContainers: number
-      collectionDateRange: { earliest: string; latest: string } | null
-    }> = []
-
-    if (allSubjectIds.length === 0) {
-      // No subjects for any study
-      for (const id of ids) {
-        summaries.push({
-          studyId: id,
-          totalSubjects: 0,
-          totalSpecimens: 0,
-          totalContainers: 0,
-          collectionDateRange: null,
-        })
-      }
-      return c.json({ summaries })
-    }
-
-    // Get all specimens for these subjects - batch to avoid SQLite variable limit
-    const SQLITE_MAX_VARS = 500 // Conservative limit to avoid issues
-    const specimens: Array<{
-      id: number
-      studySubjectId: number
-      collectionDate: string | null
-    }> = []
-
-    for (let i = 0; i < allSubjectIds.length; i += SQLITE_MAX_VARS) {
-      const batch = allSubjectIds.slice(i, i + SQLITE_MAX_VARS)
-      const placeholders = batch.map(() => '?').join(',')
-      const specimensQuery = `
-        SELECT 
-          s.id,
-          s.study_subject_id as studySubjectId,
-          s.collection_date as collectionDate
-        FROM specimen s
-        WHERE s.study_subject_id IN (${placeholders})
-      `
-      const stmt = sqliteDatabase.prepare(specimensQuery)
-      const batchResults = stmt.all(...batch) as Array<{
-        id: number
-        studySubjectId: number
-        collectionDate: string | null
-      }>
-      specimens.push(...batchResults)
-    }
-
-    // Map specimens to studies via subjects
-    const subjectToStudyMap = new Map<number, number>()
-    subjects.forEach(s => {
-      subjectToStudyMap.set(s.id, s.studyId)
-    })
-
-    const studySpecimenMap = new Map<number, Array<{ id: number; collectionDate: string | null }>>()
-    specimens.forEach(spec => {
-      const studyId = subjectToStudyMap.get(spec.studySubjectId)
-      if (studyId) {
-        if (!studySpecimenMap.has(studyId)) {
-          studySpecimenMap.set(studyId, [])
-        }
-        studySpecimenMap.get(studyId)!.push({ id: spec.id, collectionDate: spec.collectionDate })
-      }
-    })
-
-    // Get container counts - batch to avoid SQLite variable limit
-    const specimenIds = specimens.map(s => s.id)
-    const containerCounts: Record<number, number> = {}
-    if (specimenIds.length > 0) {
-      // Map containers back to studies
-      const specimenToStudyMap = new Map<number, number>()
-      specimens.forEach(spec => {
-        const studyId = subjectToStudyMap.get(spec.studySubjectId)
-        if (studyId) {
-          specimenToStudyMap.set(spec.id, studyId)
-        }
-      })
-
-      // Batch container queries
-      for (let i = 0; i < specimenIds.length; i += SQLITE_MAX_VARS) {
-        const batch = specimenIds.slice(i, i + SQLITE_MAX_VARS)
-        const containerPlaceholders = batch.map(() => '?').join(',')
-        const containersQuery = `
-          SELECT specimen_id, COUNT(*) as count
-          FROM storage_container
-          WHERE specimen_id IN (${containerPlaceholders})
-          GROUP BY specimen_id
-        `
-        const containerStmt = sqliteDatabase.prepare(containersQuery)
-        const containerRows = containerStmt.all(...batch) as Array<{ specimen_id: number; count: number }>
-
-        containerRows.forEach(row => {
-          const studyId = specimenToStudyMap.get(row.specimen_id)
-          if (studyId) {
-            containerCounts[studyId] = (containerCounts[studyId] || 0) + row.count
-          }
-        })
-      }
-    }
-
-    // Build summaries for each study
-    for (const id of ids) {
-      const subjectIds = studySubjectMap.get(id) || []
-      const studySpecimens = studySpecimenMap.get(id) || []
-      const totalSpecimens = studySpecimens.length
-      const totalContainers = containerCounts[id] || 0
-
-      // Calculate collection date range
-      const collectionDates = (studySpecimens
-        .map(s => s.collectionDate)
-        .filter(Boolean) as string[])
-        .sort()
-
-      const collectionDateRange = collectionDates.length > 0
-        ? {
-            earliest: collectionDates[0],
-            latest: collectionDates[collectionDates.length - 1],
-          }
-        : null
-
-      summaries.push({
-        studyId: id,
-        totalSubjects: subjectIds.length,
-        totalSpecimens,
-        totalContainers,
-        collectionDateRange,
-      })
-    }
-
-    return c.json({ summaries })
+    return c.json(await getStudySummaries(database, sqliteDatabase, ids))
   } catch (error) {
     return handleRouteError(error, c)
   }
