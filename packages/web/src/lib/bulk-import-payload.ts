@@ -1,11 +1,10 @@
 /**
  * Build API payloads for bulk import in one place so validate and import stay aligned.
  */
+import type { BulkCombinedRequest, BulkCombinedValidateRequest } from '@sampledb/contract'
 import { getBulkImportCollectionType } from './bulk-import-validation'
-import { importsApi, type BulkCombinedAtomicMode } from './api/imports'
+import type { BulkCombinedAtomicMode } from './api/imports'
 import type { ContainerType } from './container-types'
-
-type BulkCombinedImportRequest = Parameters<typeof importsApi.bulkCombined>[0]
 
 export interface MissingCollectionForPayload {
   name: string
@@ -55,14 +54,7 @@ export function buildCreateCollectionsForBulkCombined(params: {
   missingCollections: MissingCollectionForPayload[]
   /** From getBulkImportCollectionType(containerType) */
   collectionApiType: ReturnType<typeof getBulkImportCollectionType>
-}):
-  | Array<{
-      type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-      name: string
-      locationId: number
-      barcode?: string
-    }>
-  | undefined {
+}): BulkCombinedRequest['createCollections'] {
   const { atomicMode, missingCollections, collectionApiType } = params
   if (atomicMode !== 'full_file' || !collectionApiType) {
     return undefined
@@ -84,7 +76,26 @@ export function buildCreateCollectionsForBulkCombined(params: {
     })
 }
 
-/** Combined import subject tree + top-level study short code (for importsApi.bulkCombined*). */
+/** Strip validate-only rowIndex before POST /imports/bulk-combined. */
+export function toBulkCombinedImportRequest(
+  payload: BulkCombinedValidateRequest
+): BulkCombinedRequest {
+  return {
+    studyShortCode: payload.studyShortCode,
+    atomicMode: payload.atomicMode,
+    createCollections: payload.createCollections,
+    subjects: payload.subjects.map(({ subjectName, specimens }) => ({
+      subjectName,
+      specimens: specimens.map(({ specimenTypeName, collectionDate, container }) => ({
+        specimenTypeName,
+        collectionDate,
+        container,
+      })),
+    })),
+  }
+}
+
+/** Combined import validate payload (includes rowIndex for CSV alignment). */
 export function buildBulkCombinedRequestPayload(
   data: Record<string, unknown>[],
   opts: {
@@ -94,12 +105,12 @@ export function buildBulkCombinedRequestPayload(
     missingCollections: MissingCollectionForPayload[]
     atomicMode: BulkCombinedAtomicMode
   }
-) {
+): BulkCombinedValidateRequest {
   const { fixedStudyShortCode, missingCollections, atomicMode, containerType } = opts
   const collectionLocationMap = buildCollectionLocationMap(missingCollections)
   const collectionApiType = getBulkImportCollectionType(containerType)
 
-  const subjectMap = new Map<string, Record<string, unknown>[]>()
+  const subjectMap = new Map<string, BulkCombinedValidateRequest['subjects'][number]['specimens']>()
 
   for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
     const spec = data[rowIndex]
@@ -110,9 +121,9 @@ export function buildBulkCombinedRequestPayload(
       subjectMap.set(key, [])
     }
 
-    let containerData = spec.container as Record<string, unknown> | undefined
+    let containerData = spec.container as BulkCombinedValidateRequest['subjects'][number]['specimens'][number]['container']
     if (containerData && containerData.collectionName) {
-      const locationId = collectionLocationMap.get(containerData.collectionName as string)
+      const locationId = collectionLocationMap.get(containerData.collectionName)
       if (locationId != null) {
         containerData = {
           ...containerData,
@@ -120,7 +131,7 @@ export function buildBulkCombinedRequestPayload(
         }
       }
     } else if (containerData && containerData.collectionBarcode) {
-      const locationId = collectionLocationMap.get(containerData.collectionBarcode as string)
+      const locationId = collectionLocationMap.get(containerData.collectionBarcode)
       if (locationId != null) {
         containerData = {
           ...containerData,
@@ -130,8 +141,8 @@ export function buildBulkCombinedRequestPayload(
     }
 
     subjectMap.get(key)!.push({
-      specimenTypeName: spec.specimenTypeName,
-      collectionDate: spec.collectionDate,
+      specimenTypeName: spec.specimenTypeName as string,
+      collectionDate: spec.collectionDate as string | undefined,
       container: containerData,
       rowIndex: rowIndex + 1,
     })
@@ -143,12 +154,7 @@ export function buildBulkCombinedRequestPayload(
     const [, subjectName] = key.split(':') as [string, string]
     return {
       subjectName,
-      specimens: specimens.map((s) => ({
-        specimenTypeName: s.specimenTypeName as string,
-        collectionDate: s.collectionDate as string | undefined,
-        container: s.container,
-        rowIndex: (s as { rowIndex?: number }).rowIndex,
-      })),
+      specimens,
     }
   })
 
@@ -163,5 +169,5 @@ export function buildBulkCombinedRequestPayload(
     atomicMode,
     createCollections,
     subjects,
-  } as BulkCombinedImportRequest
+  }
 }

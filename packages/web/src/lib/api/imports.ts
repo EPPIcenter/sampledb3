@@ -1,39 +1,11 @@
+import type { BulkCombinedRequest, BulkCombinedValidateRequest } from '@sampledb/contract'
 import { api } from './client'
 import type { StudySubject, Specimen } from './types'
 
-export type BulkCombinedAtomicMode = 'full_file' | 'per_subject'
+export type BulkCombinedAtomicMode = BulkCombinedRequest['atomicMode']
 
 export const importsApi = {
-  bulkCombined: (data: {
-    studyShortCode: string
-    atomicMode: BulkCombinedAtomicMode
-    createCollections?: Array<{
-      type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-      name: string
-      locationId: number
-      barcode?: string
-    }>
-    subjects: Array<{
-      subjectName: string
-      specimens: Array<{
-        specimenTypeName: string
-        collectionDate?: string
-        container?: {
-          containerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
-          collectionName?: string
-          collectionBarcode?: string
-          barcode?: string
-          position?: string
-          label?: string
-          unitId?: number
-          totalQuantity?: number
-          remainingQuantity?: number
-          comment?: string
-          collectionLocationId?: number
-        }
-      }>
-    }>
-  }) =>
+  bulkCombined: (data: BulkCombinedRequest) =>
     api.post<{
       summary: { subjectsCreated: number; subjectsUpdated: number; specimensCreated: number; containersCreated: number }
       results: Array<{
@@ -43,40 +15,9 @@ export const importsApi = {
       }>
       errors?: Array<{ index: number; error: string }>
     }>('/imports/bulk-combined', data),
-  bulkCombinedValidate: (data: {
-    studyShortCode: string
-    atomicMode: BulkCombinedAtomicMode
-    createCollections?: Array<{
-      type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-      name: string
-      locationId: number
-      barcode?: string
-    }>
-    subjects: Array<{
-      subjectName: string
-      specimens: Array<{
-        specimenTypeName: string
-        collectionDate?: string
-        container?: {
-          containerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
-          collectionName?: string
-          collectionBarcode?: string
-          barcode?: string
-          position?: string
-          label?: string
-          unitId?: number
-          totalQuantity?: number
-          remainingQuantity?: number
-          comment?: string
-          collectionLocationId?: number
-        }
-        rowIndex?: number
-      }>
-    }>
-  }) =>
+  bulkCombinedValidate: (data: BulkCombinedValidateRequest) =>
     api.post<{
       valid: boolean
       errors: Array<{ subjectIndex: number; specimenIndex?: number; rowIndex?: number; message: string }>
     }>('/imports/bulk-combined/validate', data),
 }
-

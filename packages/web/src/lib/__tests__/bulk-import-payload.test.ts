@@ -4,6 +4,7 @@ import {
   buildCreateCollectionsForBulkCombined,
   buildSpecimensWithLocationIds,
   buildBulkCombinedRequestPayload,
+  toBulkCombinedImportRequest,
 } from '../bulk-import-payload'
 
 describe('bulk-import-payload', () => {
@@ -104,7 +105,23 @@ describe('bulk-import-payload', () => {
     expect(p.studyShortCode).toBe('S')
     expect(p.subjects).toHaveLength(1)
     expect(p.subjects[0]!.specimens).toHaveLength(2)
-    expect((p.subjects[0]!.specimens[0] as unknown as { rowIndex: number }).rowIndex).toBe(1)
-    expect((p.subjects[0]!.specimens[1] as unknown as { rowIndex: number }).rowIndex).toBe(2)
+    expect(p.subjects[0]!.specimens[0]!.rowIndex).toBe(1)
+    expect(p.subjects[0]!.specimens[1]!.rowIndex).toBe(2)
+  })
+
+  it('toBulkCombinedImportRequest strips rowIndex for import POST', () => {
+    const validatePayload = buildBulkCombinedRequestPayload(
+      [
+        {
+          studyShortCode: 'S',
+          subjectName: 'Sub1',
+          specimenTypeName: 'T',
+        },
+      ],
+      { containerType: 'none', fixedStudyShortCode: undefined, missingCollections: [], atomicMode: 'per_subject' }
+    )
+    const importPayload = toBulkCombinedImportRequest(validatePayload)
+    expect(importPayload.subjects[0]!.specimens[0]).not.toHaveProperty('rowIndex')
+    expect(validatePayload.subjects[0]!.specimens[0]!.rowIndex).toBe(1)
   })
 })

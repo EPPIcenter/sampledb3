@@ -29,6 +29,7 @@ import {
   buildBulkCombinedRequestPayload,
   buildCollectionLocationMap,
   buildSpecimensWithLocationIds,
+  toBulkCombinedImportRequest,
 } from '../lib/bulk-import-payload'
 import {
   formatBulkImportSuccessMessage,
@@ -416,7 +417,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           errors: response.errors,
         })
       } else {
-        const { studyShortCode, atomicMode: am, createCollections, subjects } = buildBulkCombinedRequestPayload(
+        const validatePayload = buildBulkCombinedRequestPayload(
           data,
           {
             containerType,
@@ -426,12 +427,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
           }
         )
 
-        const validateRes = await importsApi.bulkCombinedValidate({
-          studyShortCode,
-          atomicMode: am,
-          createCollections,
-          subjects,
-        })
+        const validateRes = await importsApi.bulkCombinedValidate(validatePayload)
         if (!validateRes.valid && validateRes.errors.length > 0) {
           setValidationErrors(
             validateRes.errors.map((e) => ({
@@ -445,12 +441,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         }
 
         try {
-          const response = await importsApi.bulkCombined({
-            studyShortCode,
-            atomicMode: am,
-            createCollections,
-            subjects,
-          })
+          const response = await importsApi.bulkCombined(toBulkCombinedImportRequest(validatePayload))
           setImportResult({
             success: !response.errors?.length,
             combinedSummary: response.summary,
