@@ -18,7 +18,7 @@ export const EXPORT_ENTRY_COLUMNS: ExportEntryColumn[] = [
   { key: 'label', label: 'Container Name' },
   { key: 'collection_name', label: 'Collection Name' },
   { key: 'status', label: 'Status' },
-  { key: 'state', label: 'State' },
+  { key: 'tags', label: 'Tags' },
   { key: 'comment', label: 'Comment' },
   { key: 'specimen_id', label: 'Specimen ID' },
   { key: 'specimen_type', label: 'Specimen Type' },

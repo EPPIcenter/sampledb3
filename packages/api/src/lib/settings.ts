@@ -1,6 +1,7 @@
 import type { Database } from '../db/client'
 import { settings } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
+import { migrateExportConfigurationColumnKeys } from './export-config-migration'
 
 // Type definitions for settings
 export interface ContainerDefaults {
@@ -272,15 +273,31 @@ export async function setSessionSettings(db: Database, config: SessionSettings):
 }
 
 /**
+ * Load export configurations for a scope, migrating retired column keys on read.
+ */
+async function loadExportConfigurationsScope(
+  db: Database,
+  userId: number | null,
+): Promise<ExportConfigurations | null> {
+  const raw = await getSetting<ExportConfigurations>(db, 'export_configurations', userId)
+  if (!raw) return null
+  const { configs, changed } = migrateExportConfigurationColumnKeys(raw)
+  if (changed) {
+    await setExportConfigurations(db, configs, userId)
+  }
+  return configs
+}
+
+/**
  * Get export configurations (merged: system shared + user personal)
  * @param db - Database instance
  * @param userId - Optional user ID. If provided, returns merged configs (shared + personal)
  */
 export async function getExportConfigurations(db: Database, userId?: number | null): Promise<ExportConfigurations | null> {
-  const systemConfigs = await getSetting<ExportConfigurations>(db, 'export_configurations', null)
+  const systemConfigs = await loadExportConfigurationsScope(db, null)
   
   if (userId !== undefined && userId !== null) {
-    const userConfigs = await getSetting<ExportConfigurations>(db, 'export_configurations', userId)
+    const userConfigs = await loadExportConfigurationsScope(db, userId)
     
     // Merge: system configs + user personal configs
     if (systemConfigs && userConfigs) {
@@ -313,7 +330,7 @@ export async function getExportConfigurations(db: Database, userId?: number | nu
  * @param db - Database instance
  */
 export async function getSharedExportConfigurations(db: Database): Promise<ExportConfigurations | null> {
-  return getSetting<ExportConfigurations>(db, 'export_configurations', null)
+  return loadExportConfigurationsScope(db, null)
 }
 
 /**
@@ -321,7 +338,7 @@ export async function getSharedExportConfigurations(db: Database): Promise<Expor
  * @param db - Database instance
  */
 export async function getPersonalExportConfigurations(db: Database, userId: number): Promise<ExportConfigurations | null> {
-  return getSetting<ExportConfigurations>(db, 'export_configurations', userId)
+  return loadExportConfigurationsScope(db, userId)
 }
 
 /**

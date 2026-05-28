@@ -13,9 +13,10 @@ import {
   createTestStrain,
   createTestControlDefinition,
   createTestControlBatch,
+  createTestTag,
 } from '../../../__tests__/helpers/factories'
 import type { Database } from '../../../db/client'
-import { micronixTube, cryovialTube, cryovialBox } from '../../../db/schema'
+import { micronixTube, cryovialTube, cryovialBox, storageContainerTag } from '../../../db/schema'
 import { utcNow } from '../../datetime'
 import { enrichContainerData } from '../enrich'
 import { buildContainerQuery } from '../query'
@@ -323,5 +324,44 @@ describe('enrichContainerData', () => {
         barcode: 'PIPE-01',
       })
     })
+  })
+
+  it('includes sorted comma-separated tag names on export rows', async () => {
+    const study = await createTestStudy(testDb, {
+      title: 'Tag Study',
+      shortCode: 'TAGS',
+      leadPerson: 'Lead',
+    })
+    const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'TaggedSubj' })
+    const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
+    const spec = await createTestSpecimen(testDb, specimenType.id, { studySubjectId: subject.id })
+    const container = await createTestStorageContainer(testDb, { specimenId: spec.id })
+
+    const holdTag = await createTestTag(testDb, { name: 'Hold' })
+    const qcTag = await createTestTag(testDb, { name: 'QC' })
+    await testDb.insert(storageContainerTag).values([
+      { storageContainerId: container.id, tagId: holdTag.id },
+      { storageContainerId: container.id, tagId: qcTag.id },
+    ])
+
+    const enriched = await enrichContainerData(
+      testDb,
+      [container],
+      [
+        {
+          id: spec.id,
+          studySubjectId: subject.id,
+          controlBatchId: null,
+          specimenTypeId: specimenType.id,
+          collectionDate: null,
+          created: spec.created,
+        },
+      ],
+      study,
+    )
+
+    expect(enriched).toHaveLength(1)
+    expect(enriched[0].tags).toBe('Hold, QC')
+    expect('state' in enriched[0]).toBe(false)
   })
 })

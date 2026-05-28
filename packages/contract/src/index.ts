@@ -7,6 +7,10 @@
  * remain web-local in parse-response until migrated incrementally.
  */
 export {
+  type ContainerExportData,
+  type ExportFilters,
+} from './export'
+export {
   bulkCombinedContainerSchema,
   bulkCombinedSubjectSpecimenSchema,
   bulkCombinedSubjectSchema,

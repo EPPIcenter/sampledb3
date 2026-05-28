@@ -8,6 +8,8 @@ import {
   controlDefinition,
   unit,
   strain,
+  storageContainerTag,
+  tag,
 } from '../../db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { resolveContainerPlacementBundle } from '../container-placement'
@@ -165,6 +167,30 @@ export async function enrichContainerData(
 
   const { placements: placementMap, subtypes } = await resolveContainerPlacementBundle(database, containerIds)
 
+  const tagRows =
+    containerIds.length > 0
+      ? await database
+          .select({
+            containerId: storageContainerTag.storageContainerId,
+            name: tag.name,
+          })
+          .from(storageContainerTag)
+          .innerJoin(tag, eq(storageContainerTag.tagId, tag.id))
+          .where(inArray(storageContainerTag.storageContainerId, containerIds))
+      : []
+
+  const tagsByContainerId = new Map<number, string[]>()
+  for (const row of tagRows) {
+    const list = tagsByContainerId.get(row.containerId) ?? []
+    list.push(row.name)
+    tagsByContainerId.set(row.containerId, list)
+  }
+
+  function formatTagsForContainer(containerId: number): string {
+    const names = tagsByContainerId.get(containerId) ?? []
+    return [...names].sort((a, b) => a.localeCompare(b)).join(', ')
+  }
+
   function barcodeForContainer(containerId: number): string | undefined {
     return (
       subtypes.micronixById.get(containerId)?.barcode ??
@@ -238,7 +264,7 @@ export async function enrichContainerData(
       barcode,
       position,
       collection_name: collectionName,
-      state: '',
+      tags: formatTagsForContainer(container.id),
       status:
         container.remainingQuantity == null
           ? 'Unknown'

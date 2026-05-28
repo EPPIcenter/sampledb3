@@ -1,58 +1,9 @@
 import type { InferSelectModel } from 'drizzle-orm'
 import { study } from '../../db/schema'
 
+export type { ContainerExportData, ExportFilters } from '@sampledb/contract'
+
 export type StudyRecord = InferSelectModel<typeof study>
-
-export interface ExportFilters {
-  study: string
-  specimen_type_ids?: number[]
-  container_types?: string[]
-  date_from?: string
-  date_to?: string
-  created_from?: string
-  created_to?: string
-  subject_ids?: number[]
-  date_tolerance?: number  // Global tolerance for all exact dates (defaults to 0)
-  subject_dates?: {  // Per-subject date filtering
-    [subjectId: number]: 
-      | { exact: string }  // Exact date match (tolerance applied from date_tolerance)
-      | { from?: string, to?: string }  // Date range
-  }
-}
-
-export interface ContainerExportData {
-  container_id: number
-  container_type: string
-  barcode?: string
-  position?: string
-  label?: string
-  collection_name?: string
-  state: string
-  status: string
-  comment?: string
-  specimen_id: number
-  specimen_type: string
-  collection_date?: string
-  subject_id?: number
-  subject_name?: string
-  control_batch_id?: number
-  control_batch_name?: string
-  control_definition_name?: string
-  control_type?: string
-  target_density?: number
-  target_density_unit?: string
-  strain_composition?: string
-  /** Omitted for control-batch specimens (provenance via control columns). */
-  study_id?: number
-  study_title?: string
-  study_code?: string
-  study_lead_person?: string
-  location_path?: string
-  location_id?: number
-  location_name?: string
-  created: string
-  last_updated: string
-}
 
 export interface CSVExportOptions {
   delimiter?: string  // Default: ','
@@ -78,7 +29,7 @@ export interface MultiStudyExportEntry {
 }
 
 export interface MultiStudyExportResult {
-  containers: ContainerExportData[]
+  containers: import('@sampledb/contract').ContainerExportData[]
   studies: Map<number, StudyRecord>
   summary: MultiStudyExportSummary
 }

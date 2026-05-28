@@ -45,6 +45,20 @@ function parseCSVOptions(params: any): CSVExportOptions {
   }
 }
 
+function parseTagIds(values: string[] | undefined): number[] | undefined {
+  if (!values || values.length === 0) return undefined
+  const ids = values.map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id))
+  return ids.length > 0 ? ids : undefined
+}
+
+function parseTagIdsFromBody(body: unknown): number[] | undefined {
+  if (!body || typeof body !== 'object' || !('tag_ids' in body)) return undefined
+  const raw = (body as { tag_ids?: unknown }).tag_ids
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  const ids = raw.map((id) => parseInt(String(id), 10)).filter((id) => !Number.isNaN(id))
+  return ids.length > 0 ? ids : undefined
+}
+
 /**
  * Format a date as a filesystem-safe local datetime string
  * Format: YYYY-MM-DD_HH-MM-SS (e.g., "2026-01-27_14-30-45")
@@ -173,6 +187,11 @@ export_.get('/containers', authMiddleware, async (c) => {
       filters.subject_ids = subjectIds
         .map(id => parseInt(id))
         .filter(id => !isNaN(id))
+    }
+
+    const tagIds = parseTagIds(c.req.queries('tag_ids'))
+    if (tagIds) {
+      filters.tag_ids = tagIds
     }
 
     // Date filters
@@ -338,6 +357,11 @@ export_.post('/containers', authMiddleware, async (c) => {
 
     if (body.container_types && Array.isArray(body.container_types)) {
       filters.container_types = body.container_types
+    }
+
+    const tagIds = parseTagIdsFromBody(body)
+    if (tagIds) {
+      filters.tag_ids = tagIds
     }
 
     if (body.date_from) {
@@ -609,6 +633,11 @@ export_.post('/containers/multi-study', authMiddleware, async (c) => {
     
     if (body.container_types && Array.isArray(body.container_types)) {
       filters.container_types = body.container_types
+    }
+
+    const tagIds = parseTagIdsFromBody(body)
+    if (tagIds) {
+      filters.tag_ids = tagIds
     }
     
     if (body.date_from) {

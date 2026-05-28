@@ -295,6 +295,7 @@ const initSchema = z.object({
               'position',
               'label',
               'collection_name',
+              'tags',
               'status',
               'comment',
               'specimen_id',

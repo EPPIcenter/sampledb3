@@ -1,47 +1,7 @@
+import type { ContainerExportData, ExportFilters } from '@sampledb/contract'
 import { api } from './client'
-export interface ExportFilters {
-  study: string
-  specimen_type_ids?: number[]
-  container_types?: string[]
-  date_from?: string
-  date_to?: string
-  created_from?: string
-  created_to?: string
-  tag_ids?: number[] // Replaces state_ids
-  subject_ids?: number[]
-}
 
-export interface ContainerExportData {
-  container_id: number
-  container_type: string
-  barcode?: string
-  position?: string
-  label?: string
-  collection_name?: string
-  tags: string // Comma-separated tag names
-  status: string
-  comment?: string
-  specimen_id: number
-  specimen_type: string
-  collection_date?: string
-  subject_id?: number
-  subject_name?: string
-  control_batch_id?: number
-  control_batch_name?: string
-  control_definition_name?: string
-  control_type?: string
-  target_density?: number
-  target_density_unit?: string
-  strain_composition?: string
-  /** Omitted for control-batch specimens (provenance via control columns). */
-  study_id?: number
-  study_title?: string
-  study_code?: string
-  study_lead_person?: string
-  location_path?: string
-  created: string
-  last_updated: string
-}
+export type { ContainerExportData, ExportFilters }
 
 export interface CSVExportOptions {
   delimiter?: ',' | ';' | '\t'
@@ -145,6 +105,7 @@ export const exportApi = {
     columns?: string[]
     specimen_type_ids?: number[]
     container_types?: string[]
+    tag_ids?: number[]
     date_from?: string
     date_to?: string
     created_from?: string
@@ -173,6 +134,7 @@ export const exportApi = {
     date_tolerance?: number
     specimen_type_ids?: number[]
     container_types?: string[]
+    tag_ids?: number[]
     date_from?: string
     date_to?: string
     created_from?: string
@@ -212,6 +174,7 @@ export const exportApi = {
     columns?: string[]
     specimen_type_ids?: number[]
     container_types?: string[]
+    tag_ids?: number[]
     date_from?: string
     date_to?: string
     created_from?: string
@@ -251,6 +214,7 @@ export const exportApi = {
     date_tolerance?: number
     specimen_type_ids?: number[]
     container_types?: string[]
+    tag_ids?: number[]
     date_from?: string
     date_to?: string
     created_from?: string
@@ -298,4 +262,3 @@ export const exportApi = {
 interface DerivationProperties {
   [key: string]: unknown
 }
-

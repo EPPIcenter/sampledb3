@@ -6,8 +6,11 @@ import {
   createTestSpecimenType,
   createTestSpecimen,
   createTestStorageContainer,
+  createTestTag,
+  createTestUnit,
 } from '../../../__tests__/helpers/factories'
 import type { Database } from '../../../db/client'
+import { storageContainerTag } from '../../../db/schema'
 import { buildContainerQuery, resolveMicronixBarcodesToContainers, buildContainerQueryByMicronixBarcodes } from '../query'
 
 describe('buildContainerQuery', () => {
@@ -75,6 +78,42 @@ describe('buildContainerQuery', () => {
     const result = await buildContainerQuery(testDb, { study: 'EMPTY_NEW' })
     expect(result.containers).toHaveLength(0)
     expect(result.study.shortCode).toBe('EMPTY_NEW')
+  })
+
+  it('returns only containers that have all selected tags (AND)', async () => {
+    const study = await createTestStudy(testDb, {
+      title: 'Tag Filter Study',
+      shortCode: 'TF1',
+      leadPerson: 'Lead',
+    })
+    const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'Subj1' })
+    const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
+    const spec = await createTestSpecimen(testDb, specimenType.id, { studySubjectId: subject.id })
+
+    const unit = await createTestUnit(testDb, {
+      symbol: `uL-tag-${Date.now()}`,
+      name: 'microliter',
+      category: 'volume',
+    })
+    const bothTagsContainer = await createTestStorageContainer(testDb, { specimenId: spec.id, unitId: unit.id })
+    const oneTagContainer = await createTestStorageContainer(testDb, { specimenId: spec.id, unitId: unit.id })
+
+    const qcTag = await createTestTag(testDb, { name: 'QC' })
+    const holdTag = await createTestTag(testDb, { name: 'Hold' })
+
+    await testDb.insert(storageContainerTag).values([
+      { storageContainerId: bothTagsContainer.id, tagId: qcTag.id },
+      { storageContainerId: bothTagsContainer.id, tagId: holdTag.id },
+      { storageContainerId: oneTagContainer.id, tagId: qcTag.id },
+    ])
+
+    const result = await buildContainerQuery(testDb, {
+      study: 'TF1',
+      tag_ids: [qcTag.id, holdTag.id],
+    })
+
+    expect(result.containers).toHaveLength(1)
+    expect(result.containers[0].id).toBe(bothTagsContainer.id)
   })
 })
 

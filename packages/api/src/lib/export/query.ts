@@ -8,6 +8,7 @@ import {
 } from '../../db/schema'
 import { eq, and, or, inArray, gte, lte, sql } from 'drizzle-orm'
 import { resolveSubjectsByStudyGrouped } from '../identifier-resolution'
+import { resolveContainerIdsWithAllTags } from '../container-tag-filter'
 import { enrichContainerData } from './enrich'
 import { filterContainerIdsByType } from './filter'
 import type {
@@ -161,10 +162,18 @@ export async function buildContainerQuery(database: Database, filters: ExportFil
   }
 
   // Get matching containers
-  const containers = await database
+  let containers = await database
     .select()
     .from(storageContainer)
     .where(and(...containerConditions) as any)
+
+  if (filters.tag_ids && filters.tag_ids.length > 0) {
+    const matchingIds = new Set(await resolveContainerIdsWithAllTags(database, filters.tag_ids))
+    if (matchingIds.size === 0) {
+      return { containers: [], study: studyRecord, specimens: [] }
+    }
+    containers = containers.filter((container) => matchingIds.has(container.id))
+  }
 
   return { containers, study: studyRecord, specimens }
 }

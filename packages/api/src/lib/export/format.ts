@@ -185,7 +185,7 @@ export async function formatAsCSV(
     'control_definition_name',
     'specimen_type',
     'container_type',
-    'state',
+    'tags',
     'status',
     'comment',
     'collection_name',
