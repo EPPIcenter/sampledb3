@@ -56,12 +56,28 @@ Unwrapping at the client boundary gives one convention: **domain APIs and hooks 
 
 ## Runtime validation (P7)
 
-Zod parse at **domain module boundaries** (no shared `packages/contract` yet):
+Zod parse at **domain module boundaries**. Shared request schemas live in `@sampledb/contract`; web-local response parsing remains in `parse-response.ts`.
 
-- `packages/web/src/lib/api/parse-response.ts` — `parseSettingsEnvelope`, `parseApiResponseData`, `parseContainerDetailWire`, `parseContainersList`; failures throw `ApiContractError`.
-- Wired in `settingsApi.getValue` / `putValue`, `extractData()` (reference-data lists), `containersApi.get` / `list`.
+### Shared contract (`@sampledb/contract`)
 
-A future shared contract package can export the same schemas for API + web when duplication justifies it.
+- **Bulk combined import requests** — `bulkCombinedRequestSchema` and `bulkCombinedValidateRequestSchema` for `POST /imports/bulk-combined` and `POST /imports/bulk-combined/validate`. The API parses inbound JSON with these schemas; the web imports API and bulk import payload builder use the inferred TypeScript types (`BulkCombinedRequest`, `BulkCombinedValidateRequest`). Types-only on the web — no runtime Zod parse in the browser for bulk import requests; server validation remains the source of truth for business rules.
+- Cross-package conformance tests assert web-built validate payloads satisfy the contract schema.
+
+### Web-local parse-response
+
+These response wire shapes remain in `packages/web/src/lib/api/parse-response.ts` until a second consumer justifies moving them into contract:
+
+- `parseSettingsEnvelope` — settings key envelope (`GET`/`PUT /settings/:key`)
+- `parseApiResponseData` — reference-data CRUD list envelope (`{ data, meta? }`)
+- `parseContainerDetailWire`, `parseContainersList` — container detail and list wire formats
+
+Failures throw `ApiContractError`. Wired in `settingsApi.getValue` / `putValue`, `extractData()` (reference-data lists), `containersApi.get` / `list`.
+
+### Out of scope (for now)
+
+- Bulk combined import **response** schemas (validate errors, import summary)
+- Runtime Zod parse of outgoing bulk import bodies in the browser
+- Migrating parse-response schemas into contract (incremental follow-up when duplication warrants it)
 
 ## Consequences
 

@@ -1,9 +1,10 @@
 /**
  * Shared API request/response schemas for SampleDB clients and server.
  *
- * Bulk combined import types are consumed by POST /imports/bulk-combined and
- * POST /imports/bulk-combined/validate. A follow-up web slice can import
- * {@link BulkCombinedRequest} and related schemas from this package.
+ * Bulk combined import request types and schemas are consumed by the API
+ * (inbound Zod parse) and the web client (TypeScript types for the imports
+ * API and bulk import payload builder). Response schemas for other endpoints
+ * remain web-local in parse-response until migrated incrementally.
  */
 export {
   bulkCombinedContainerSchema,
