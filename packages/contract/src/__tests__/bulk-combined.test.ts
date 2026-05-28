@@ -2,6 +2,8 @@ import { describe, it, expect } from 'bun:test'
 import {
   bulkCombinedRequestSchema,
   bulkCombinedValidateRequestSchema,
+  bulkCombinedValidateResponseSchema,
+  bulkCombinedImportResponseSchema,
 } from '../bulk-combined'
 
 const validPayload = {
@@ -137,5 +139,29 @@ describe('bulkCombinedValidateRequestSchema', () => {
       ],
     })
     expect(result.success).toBe(false)
+  })
+})
+
+describe('bulkCombinedValidateResponseSchema', () => {
+  it('accepts valid validate response', () => {
+    const result = bulkCombinedValidateResponseSchema.safeParse({
+      valid: true,
+      errors: [],
+    })
+    expect(result.success).toBe(true)
+  })
+})
+
+describe('bulkCombinedImportResponseSchema', () => {
+  it('accepts import summary without errors', () => {
+    const result = bulkCombinedImportResponseSchema.safeParse({
+      summary: {
+        subjectsCreated: 1,
+        subjectsUpdated: 0,
+        specimensCreated: 1,
+        containersCreated: 1,
+      },
+    })
+    expect(result.success).toBe(true)
   })
 })

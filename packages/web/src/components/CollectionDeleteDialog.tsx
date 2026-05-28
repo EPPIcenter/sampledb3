@@ -1,7 +1,10 @@
 import { useState, useCallback } from 'react'
 import axios from 'axios'
-import { collectionsApi } from '../lib/api/collections';
-import type { CollectionDeleteWithContentsBlocker } from '../lib/api/collections';type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+import type { CollectionDeletePreflight } from '@sampledb/contract'
+import { collectionsApi } from '../lib/api/collections'
+
+type CollectionType = 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+type CollectionDeleteBlocker = CollectionDeletePreflight['blockers'][number]
 
 type Props = {
   isOpen: boolean
@@ -28,7 +31,7 @@ export default function CollectionDeleteDialog({
   const [removeEmptySubjects, setRemoveEmptySubjects] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [errorSummary, setErrorSummary] = useState<string | null>(null)
-  const [blockers, setBlockers] = useState<CollectionDeleteWithContentsBlocker[]>([])
+  const [blockers, setBlockers] = useState<CollectionDeleteBlocker[]>([])
 
   const reset = useCallback(() => {
     setConfirmText('')
@@ -65,7 +68,7 @@ export default function CollectionDeleteDialog({
       onDeleted()
     } catch (e: unknown) {
       if (axios.isAxiosError(e) && e.response?.status === 409) {
-        const d = e.response.data as { error?: string; blockers?: CollectionDeleteWithContentsBlocker[] }
+        const d = e.response.data as { error?: string; blockers?: CollectionDeleteBlocker[] }
         setErrorSummary(d.error ?? 'This collection could not be deleted.')
         setBlockers(Array.isArray(d.blockers) ? d.blockers : [])
         setDeleting(false)

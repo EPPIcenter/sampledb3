@@ -7,6 +7,7 @@ import { specimenTypesApi } from '../lib/api/reference-data';
 import { getCollectionNameColumn } from '../lib/container-columns'
 import { generateDerivationsTemplate, type TemplateOptions } from '../lib/template-generator'
 import { useDerivationsBulkImportBootstrap } from '../hooks/useDerivationsBulkImportBootstrap'
+import { useDerivationsBulkCsvWorkflow } from '../hooks/useDerivationsBulkCsvWorkflow'
 import { useUser } from '../contexts/UserContext'
 import LocationPicker from '../components/LocationPicker'
 import { PageError } from '../ui'
@@ -179,6 +180,8 @@ export default function DerivationsBulkImport() {
     validateParentQuantity: false,
   })
 
+  const derivationsCsvWorkflow = useDerivationsBulkCsvWorkflow(settings)
+
   const bootstrap = useDerivationsBulkImportBootstrap(settings.specimenTypeName)
   const { specimenTypes, units, allowedContainerTypes, bootstrapLoading, bootstrapError, containerTypesError } =
     bootstrap
@@ -297,16 +300,11 @@ export default function DerivationsBulkImport() {
     setWorkflowLoading(true)
     setError(null)
     try {
-      const result = await derivationsApi.validateCsv(csvContent, settings)
+      const result = await derivationsCsvWorkflow.validateCsv(csvContent)
       setValidationResult(result)
       return result
     } catch (err: unknown) {
-      const errObj = err as { response?: { data?: { error?: string; details?: string } } }
-      setError(
-        errObj.response?.data?.error ??
-          errObj.response?.data?.details ??
-          'Failed to validate CSV'
-      )
+      setError(err instanceof Error ? err.message : 'Failed to validate CSV')
       return null
     } finally {
       setWorkflowLoading(false)
@@ -348,18 +346,10 @@ export default function DerivationsBulkImport() {
     setWorkflowLoading(true)
     setError(null)
     try {
-      const response = await derivationsApi.importCsv(csvToSend, {
-        dryRun: false,
-        settings,
-      })
+      const response = await derivationsCsvWorkflow.importCsv(csvToSend)
       setImportResults(response.rows)
     } catch (err: unknown) {
-      const errObj = err as { response?: { data?: { error?: string; details?: string } } }
-      setError(
-        errObj.response?.data?.error ??
-          errObj.response?.data?.details ??
-          'Failed to import derivations'
-      )
+      setError(err instanceof Error ? err.message : 'Failed to import derivations')
     } finally {
       setWorkflowLoading(false)
     }

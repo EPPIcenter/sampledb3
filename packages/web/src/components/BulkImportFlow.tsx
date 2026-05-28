@@ -1,15 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { subjectsApi } from '../lib/api/subjects';
-import { specimensApi } from '../lib/api/specimens';
 import { collectionsApi } from '../lib/api/collections';
-import { importsApi } from '../lib/api/imports';
 import type { BulkCombinedAtomicMode } from '../lib/api/imports';
 import {
   fetchBulkImportMissingCollections,
   useBulkImportTemplateSpecimenTypes,
   type BulkImportMissingCollection,
 } from '../hooks/useBulkImportWorkflow'
+import { useBulkCsvWorkflow } from '../hooks/useBulkCsvWorkflow'
 import { getQueryErrorMessage } from '../ui'
 import { buildBulkImportTemplateContent } from '../lib/bulk-import-csv'
 import {
@@ -25,12 +23,6 @@ import {
 } from '../lib/bulk-import-validation'
 import { getCollectionNameColumn } from '../lib/container-columns'
 import { type ContainerType } from './ContainerRegistration'
-import {
-  buildBulkCombinedRequestPayload,
-  buildCollectionLocationMap,
-  buildSpecimensWithLocationIds,
-  toBulkCombinedImportRequest,
-} from '../lib/bulk-import-payload'
 import {
   formatBulkImportSuccessMessage,
   type BulkImportCombinedSummary,
@@ -107,6 +99,14 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
   const [missingCollections, setMissingCollections] = useState<MissingCollection[]>([])
   const [validatedData, setValidatedData] = useState<Record<string, unknown>[]>([])
   const [atomicMode, setAtomicMode] = useState<BulkCombinedAtomicMode>('full_file')
+
+  const bulkCsvWorkflow = useBulkCsvWorkflow({
+    importType,
+    containerType,
+    fixedStudyShortCode,
+    missingCollections,
+    atomicMode,
+  })
 
   const getCollectionType = () =>
     getBulkImportCollectionType(containerType)
@@ -197,44 +197,48 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
     data: Record<string, unknown>[],
     missing: MissingCollection[]
   ): Promise<BulkImportValidationError[]> => {
-    if (importType === 'subjects') {
-      const validateRes = await subjectsApi.validateBulk({
-        subjects: data as Array<{ studyShortCode: string; name: string }>,
+    return bulkCsvWorkflow.runServerValidation(data)
+  }
+
+  const handleImport = async (
+    data: Record<string, unknown>[],
+    options?: { alreadyValidated?: boolean }
+  ) => {
+    setCurrentStep('import')
+    setWorkflowLoading(true)
+    setImportResult(null)
+    setValidationErrors([])
+
+    try {
+      const result = await bulkCsvWorkflow.runImport(data, {
+        skipServerValidate: options?.alreadyValidated,
       })
-      if (validateRes.valid || validateRes.errors.length === 0) {
-        return []
+
+      if (!result.success && result.errors?.length && result.created == null && !result.combinedSummary) {
+        setValidationErrors(result.errors.map((e) => ({ row: e.index + 1, error: e.error })))
+        return
       }
-      return validateRes.errors.map((e) => ({ row: e.index + 1, error: e.message }))
-    }
-    if (importType === 'specimens') {
-      const map = buildCollectionLocationMap(missing)
-      const specimensWithLocations = buildSpecimensWithLocationIds(data, map)
-      type SpecimenBulkItem = Parameters<typeof specimensApi.createBulk>[0]['specimens'][number]
-      const validateRes = await specimensApi.validateBulk({
-        specimens: specimensWithLocations as SpecimenBulkItem[],
+
+      setImportResult({
+        success: result.success,
+        created: result.created,
+        containersCreated: result.containersCreated,
+        combinedSummary: result.combinedSummary,
+        errors: result.errors,
       })
-      if (validateRes.valid) {
-        return []
-      }
-      return validateRes.errors.map((e) => ({ row: e.index + 1, error: e.message }))
-    }
-    if (importType === 'combined') {
-      const payload = buildBulkCombinedRequestPayload(data, {
-        containerType,
-        fixedStudyShortCode,
-        missingCollections: missing,
-        atomicMode,
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string; errors?: Array<{ index: number; error: string }> }; message?: string } }
+      const errData = err.response?.data
+      const summaryError = errData?.error || (err as Error).message || 'Import failed'
+      setValidationErrors([{ row: 0, error: summaryError }])
+      setImportResult({
+        success: false,
+        created: 0,
+        errors: Array.isArray(errData?.errors) ? errData.errors : [{ index: 0, error: summaryError }],
       })
-      const validateRes = await importsApi.bulkCombinedValidate(payload)
-      if (validateRes.valid || validateRes.errors.length === 0) {
-        return []
-      }
-      return validateRes.errors.map((e) => ({
-        row: e.rowIndex ?? e.subjectIndex + 1,
-        error: e.message,
-      }))
+    } finally {
+      setWorkflowLoading(false)
     }
-    return []
   }
 
   const handleValidateAndCheck = async () => {
@@ -297,7 +301,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         return
       }
 
-      await handleImport(data)
+      await handleImport(data, { alreadyValidated: true })
     } catch (error: unknown) {
       const message = getQueryErrorMessage(error, 'Validation failed')
       setValidationErrors([{ row: 0, error: message }])
@@ -371,104 +375,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
         setWorkflowLoading(false)
         return
       }
-      await handleImport(validatedData)
+      await handleImport(validatedData, { alreadyValidated: true })
     } else {
-      setWorkflowLoading(false)
-    }
-  }
-
-  const handleImport = async (data: Record<string, unknown>[]) => {
-    setCurrentStep('import')
-    setWorkflowLoading(true)
-    setImportResult(null)
-    setValidationErrors([])
-
-    try {
-      if (importType === 'subjects') {
-        const validateRes = await subjectsApi.validateBulk({ subjects: data as Array<{ studyShortCode: string; name: string }> })
-        if (!validateRes.valid && validateRes.errors.length) {
-          setValidationErrors(validateRes.errors.map((e) => ({ row: e.index + 1, error: e.message })))
-          setCurrentStep('import')
-          setWorkflowLoading(false)
-          return
-        }
-        const response = await subjectsApi.createBulk({ subjects: data as Array<{ studyShortCode: string; name: string }> })
-        setImportResult({
-          success: true,
-          created: response.created,
-          errors: response.errors,
-        })
-      } else if (importType === 'specimens') {
-        const collectionLocationMap = buildCollectionLocationMap(missingCollections)
-        const specimensWithLocations = buildSpecimensWithLocationIds(data, collectionLocationMap)
-        type SpecimenBulkItem = Parameters<typeof specimensApi.createBulk>[0]['specimens'][number]
-        const validateRes = await specimensApi.validateBulk({ specimens: specimensWithLocations as SpecimenBulkItem[] })
-        if (!validateRes.valid && validateRes.errors.length > 0) {
-          setValidationErrors(validateRes.errors.map((e) => ({ row: e.index + 1, error: e.message })))
-          setCurrentStep('import')
-          setWorkflowLoading(false)
-          return
-        }
-        const response = await specimensApi.createBulk({ specimens: specimensWithLocations as SpecimenBulkItem[] })
-        setImportResult({
-          success: true,
-          created: response.created,
-          containersCreated: response.containersCreated,
-          errors: response.errors,
-        })
-      } else {
-        const validatePayload = buildBulkCombinedRequestPayload(
-          data,
-          {
-            containerType,
-            fixedStudyShortCode,
-            missingCollections,
-            atomicMode,
-          }
-        )
-
-        const validateRes = await importsApi.bulkCombinedValidate(validatePayload)
-        if (!validateRes.valid && validateRes.errors.length > 0) {
-          setValidationErrors(
-            validateRes.errors.map((e) => ({
-              row: e.rowIndex ?? e.subjectIndex + 1,
-              error: e.message,
-            }))
-          )
-          setCurrentStep('import')
-          setWorkflowLoading(false)
-          return
-        }
-
-        try {
-          const response = await importsApi.bulkCombined(toBulkCombinedImportRequest(validatePayload))
-          setImportResult({
-            success: !response.errors?.length,
-            combinedSummary: response.summary,
-            errors: response.errors,
-          })
-          setCurrentStep('import')
-        } catch (err: unknown) {
-          const error = err as { response?: { data?: { error?: string } } }
-          setImportResult({
-            success: false,
-            created: 0,
-            errors: [{ index: 0, error: error.response?.data?.error ?? 'Import failed' }],
-          })
-          setCurrentStep('import')
-        }
-      }
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { error?: string; errors?: Array<{ index: number; error: string }> }; message?: string } }
-      const data = err.response?.data
-      const summaryError = data?.error || (err as Error).message || 'Import failed'
-      setValidationErrors([{ row: 0, error: summaryError }])
-      setImportResult({
-        success: false,
-        created: 0,
-        errors: Array.isArray(data?.errors) ? data.errors : [{ index: 0, error: summaryError }],
-      })
-    } finally {
       setWorkflowLoading(false)
     }
   }
@@ -906,7 +814,7 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
                           setValidationErrors(preErrors)
                           return
                         }
-                        await handleImport(validatedData)
+                        await handleImport(validatedData, { alreadyValidated: true })
                       } finally {
                         setWorkflowLoading(false)
                       }

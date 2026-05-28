@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { bulkCombinedValidateRequestSchema } from '@sampledb/contract'
+import {
+  bulkCombinedValidateRequestSchema,
+  bulkCombinedValidateResponseSchema,
+  bulkCombinedImportResponseSchema,
+} from '@sampledb/contract'
 import { buildBulkCombinedRequestPayload } from '../bulk-import-payload'
 
 describe('bulk import contract conformance', () => {
@@ -56,5 +60,26 @@ describe('bulk import contract conformance', () => {
     const malformed = { ...payload, atomicMode: 'invalid_mode' as typeof payload.atomicMode }
     const result = bulkCombinedValidateRequestSchema.safeParse(malformed)
     expect(result.success).toBe(false)
+  })
+
+  it('accepts representative validate response fixture', () => {
+    const result = bulkCombinedValidateResponseSchema.safeParse({
+      valid: false,
+      errors: [{ subjectIndex: 0, rowIndex: 2, message: 'Duplicate barcode' }],
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts representative import response fixture', () => {
+    const result = bulkCombinedImportResponseSchema.safeParse({
+      summary: {
+        subjectsCreated: 1,
+        subjectsUpdated: 0,
+        specimensCreated: 2,
+        containersCreated: 2,
+      },
+      errors: [{ index: 1, error: 'Subject failed' }],
+    })
+    expect(result.success).toBe(true)
   })
 })

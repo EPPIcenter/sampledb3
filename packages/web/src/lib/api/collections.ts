@@ -1,4 +1,5 @@
 import { api } from './client'
+import type { CollectionDeletePreflight } from '@sampledb/contract'
 import type { Location } from './types'
 
 // Collection response types
@@ -212,6 +213,10 @@ export const collectionsApi = {
       data
     ),
   /** Remove a collection, all of its child containers, orphan specimens, and optionally empty study subjects. */
+  deletePreflight: (data: {
+    collectionType: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+    id: number
+  }) => api.post<CollectionDeletePreflight>('/collections/delete-with-contents/preflight', data),
   deleteWithContents: (data: {
     collectionType: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
     id: number
@@ -226,10 +231,7 @@ export const collectionsApi = {
     }>('/collections/delete-with-contents', data),
 }
 
-export type CollectionDeleteWithContentsBlocker = {
-  code: string
-  message: string
-} & {
+export type CollectionDeleteWithContentsBlocker = CollectionDeletePreflight['blockers'][number] & {
   qpcrExperimentId?: number
   qpcrWellId?: number
   wellPosition?: string
