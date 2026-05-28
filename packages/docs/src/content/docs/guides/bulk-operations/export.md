@@ -57,7 +57,7 @@ Once your subject list is uploaded and validated, you can apply various filters 
 
 **Created Date Range** filtering works similarly but filters by when containers were created in the system, not when specimens were collected. This can be useful for tracking when data was entered or for exporting only recently added containers.
 
-**Tags** filtering lets you include only containers that have been tagged with specific labels. If you use tags to categorize containers (like "QC", "Priority", or "Reanalysis"), you can filter exports to include only tagged containers.
+**Tags** filtering lets you include only containers that have been tagged with specific labels. If you use tags to categorize containers (like "QC", "Priority", or "Reanalysis"), you can filter exports to include only containers that have **all** selected tags (the same AND rule as Statistics).
 
 All these filters are optional—you can use none, some, or all of them depending on your needs. The system shows you a count of how many containers match your current filter settings, which updates automatically as you change filters. This helps you verify that your filters are working as expected before you export.
 

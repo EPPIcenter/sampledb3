@@ -91,6 +91,14 @@ _Avoid_: Master data (unless that is your org's term), metadata (too vague)
 Day-to-day records created through lab work — studies, subjects, specimens, containers, controls, derivations, and imports.
 _Avoid_: Transactional data (acceptable in developer docs, but "operational" matches lab vocabulary)
 
+**Tag**:
+A reference-data label assigned to a **Container**. A container may have zero or more tags; tags are not mutually exclusive. Labs use tags for workflow and organization (for example QC, hold, priority) and for filtering exports and statistics.
+_Avoid_: State (retired domain term); using **Tag** for quantity-derived in-use/exhausted indicators (see **Container quantity status**)
+
+**Container quantity status**:
+Whether material in a **Container** is treated as still available or depleted, derived from remaining quantity (in use vs exhausted). Not a **Tag** and not stored as reference data.
+_Avoid_: State, status tag, availability tag (when you mean quantity only)
+
 ### Physical storage hierarchy
 
 **Specimen → Container → Collection → Location** describes where material is physically stored. A specimen may exist without a container. When stored, one specimen may have many containers — each container is an aliquot.
@@ -108,7 +116,7 @@ A place in the storage hierarchy where collections are kept (e.g. freezer, shelf
 _Avoid_: Site (unless referring to an external facility), storage (too vague)
 
 **Container placement**:
-Where a **Container** sits in the physical storage hierarchy — its position within a **Collection**, the collection it belongs to, and the **Location** path where that collection is stored. Distinct from specimen provenance (**Source**, study/control context) and from container identity metadata (barcodes, tags).
+Where a **Container** sits in the physical storage hierarchy — its position within a **Collection**, the collection it belongs to, and the **Location** path where that collection is stored. Distinct from specimen provenance (**Source**, study/control context) and from container identity metadata (barcodes, **Tags**).
 _Avoid_: Enrichment (implementation term); conflating placement with specimen or source lookups
 
 ### System
