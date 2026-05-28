@@ -15,13 +15,13 @@ When running tests, you may see a `RangeError: Maximum call stack size exceeded`
 
 ## Setup
 
-Tests use Vitest + React Testing Library. Run tests with:
+Tests use Vitest + React Testing Library. **Do not use `bun test`** for this package — that invokes Bun's native runner, which lacks Vitest's `vi.importActual` / jsdom setup and can hang indefinitely on component tests. Use the npm scripts (Vitest) instead:
 
 ```bash
-bun test          # Run once
-bun test:watch    # Watch mode
-bun test:ui       # UI mode
-bun test:coverage # With coverage
+bun run test          # Run once (vitest run)
+bun run test:watch    # Watch mode
+bun run test:ui       # UI mode
+bun run test:coverage # With coverage
 ```
 
 ## HTTP client mocks
