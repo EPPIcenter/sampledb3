@@ -160,8 +160,8 @@ describe('enrichContainerData', () => {
       subject_name: 'Batch-June',
       target_density: 10000,
       target_density_unit: 'p/uL',
-      study_code: 'CONTROL',
-      study_title: 'Control Batch',
+      study_code: undefined,
+      study_title: undefined,
     })
     expect(enriched[0].strain_composition).toContain('W2')
     expect(enriched[0].strain_composition).toContain('100%')

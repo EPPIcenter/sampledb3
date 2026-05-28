@@ -39,6 +39,3 @@ export async function filterContainerIdsByType(
     return containerType !== undefined && allowedTypes.has(containerType)
   })
 }
-
-/** @deprecated Use filterContainerIdsByType */
-export const filterContainersByType = filterContainerIdsByType

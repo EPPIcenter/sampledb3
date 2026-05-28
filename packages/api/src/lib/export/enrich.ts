@@ -223,18 +223,14 @@ export async function enrichContainerData(
         containerStudy = subjectStudy
       }
     } else if (controlBatchId) {
-      // For control batches, use a placeholder study object
-      containerStudy = { 
-        id: 0, 
-        shortCode: 'CONTROL', 
-        title: 'Control Batch', 
-        description: null,
-        leadPerson: '', 
-        isLongitudinal: false, 
-        created: '', 
-        lastUpdated: '' 
-      } as StudyRecord
+      containerStudy = study
     }
+
+    // Study columns: blank for control-batch specimens (provenance is via control columns)
+    const studyId = controlBatchId ? undefined : containerStudy.id
+    const studyTitle = controlBatchId ? undefined : containerStudy.title
+    const studyCode = controlBatchId ? undefined : containerStudy.shortCode
+    const studyLeadPerson = controlBatchId ? undefined : containerStudy.leadPerson
 
     enriched.push({
       container_id: container.id,
@@ -262,10 +258,10 @@ export async function enrichContainerData(
       target_density: targetDensity,
       target_density_unit: targetDensityUnit,
       strain_composition: strainComposition,
-      study_id: containerStudy.id,
-      study_title: containerStudy.title,
-      study_code: containerStudy.shortCode,
-      study_lead_person: containerStudy.leadPerson,
+      study_id: studyId,
+      study_title: studyTitle,
+      study_code: studyCode,
+      study_lead_person: studyLeadPerson,
       location_path: locationPath,
       location_id: placement.location?.id,
       location_name: placement.location?.name,

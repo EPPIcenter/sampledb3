@@ -12,7 +12,6 @@ import {
   specimen,
   box,
   bag,
-  location,
   micronixPlate,
   cryovialBox,
 } from '../db/schema'
@@ -20,6 +19,11 @@ import { eq, and } from 'drizzle-orm'
 import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } from './defaults'
 import { validateUnitForContainerType, validateContainerTypeForSpecimenType } from './validation'
 import { resolveCollection } from './collections/collection-resolve'
+import {
+  assertLocationCanContainCollections,
+  CollectionLocationNotAllowedError,
+  CollectionLocationNotFoundError,
+} from './collections/collection-lifecycle'
 import { utcNow } from './datetime'
 import { normalizePosition } from './normalize-position'
 import { ValidationError } from './error-handler'
@@ -53,19 +57,17 @@ export type CreateContainerForSpecimenOptions = {
   skipValidation?: boolean
 }
 
-const LOCATION_CANNOT_CONTAIN_COLLECTIONS =
-  'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.'
-
-function assertLocationCanContainCollections(
+function guardCollectionLocation(
   database: DatabaseOrTransaction,
   locationId: number
 ): void {
-  const loc = database.select().from(location).where(eq(location.id, locationId)).get()
-  if (!loc) {
-    throw new ValidationError('Location not found')
-  }
-  if (!loc.canContainCollections) {
-    throw new ValidationError(LOCATION_CANNOT_CONTAIN_COLLECTIONS)
+  try {
+    assertLocationCanContainCollections(database, locationId)
+  } catch (error) {
+    if (error instanceof CollectionLocationNotFoundError || error instanceof CollectionLocationNotAllowedError) {
+      throw new ValidationError(error.message)
+    }
+    throw error
   }
 }
 
@@ -86,7 +88,7 @@ async function resolveMicronixPlateId(
     return existing
   }
   if (data.collectionLocationId) {
-    assertLocationCanContainCollections(database, data.collectionLocationId)
+    guardCollectionLocation(database, data.collectionLocationId)
     const now = utcNow()
     const inserted = await database
       .insert(micronixPlate)
@@ -123,7 +125,7 @@ async function resolveCryovialBoxId(
     return existing
   }
   if (data.collectionLocationId) {
-    assertLocationCanContainCollections(database, data.collectionLocationId)
+    guardCollectionLocation(database, data.collectionLocationId)
     const now = utcNow()
     const inserted = await database
       .insert(cryovialBox)
@@ -163,7 +165,7 @@ async function resolvePaperCollection(
     return { boxId: null, bagId: bagRecord.id }
   }
   if (data.collectionLocationId) {
-    assertLocationCanContainCollections(database, data.collectionLocationId)
+    guardCollectionLocation(database, data.collectionLocationId)
     const now = utcNow()
     const inserted = await database
       .insert(box)

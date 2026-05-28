@@ -1,25 +1,19 @@
 import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
-import { location, micronixPlate, cryovialBox, box, bag } from '../../db/schema'
+import { micronixPlate, cryovialBox, box, bag } from '../../db/schema'
 import { utcNow } from '../datetime'
 import { formatLocationPath } from '../container-enrichment'
+import {
+  assertLocationCanContainCollections,
+  CollectionLocationNotAllowedError,
+  CollectionLocationNotFoundError,
+} from './collection-lifecycle'
 import type { CreateCollectionInput } from './types'
 
-export class CollectionLocationNotFoundError extends Error {
-  constructor() {
-    super('Location not found')
-    this.name = 'CollectionLocationNotFoundError'
-  }
-}
-
-export class CollectionLocationNotAllowedError extends Error {
-  constructor() {
-    super(
-      'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.',
-    )
-    this.name = 'CollectionLocationNotAllowedError'
-  }
-}
+export {
+  CollectionLocationNotFoundError,
+  CollectionLocationNotAllowedError,
+} from './collection-lifecycle'
 
 export class CollectionNameExistsError extends Error {
   constructor(message: string) {
@@ -28,15 +22,8 @@ export class CollectionNameExistsError extends Error {
   }
 }
 
-async function loadCollectionLocation(database: Database, locationId: number) {
-  const loc = await database.select().from(location).where(eq(location.id, locationId)).get()
-  if (!loc) throw new CollectionLocationNotFoundError()
-  if (!loc.canContainCollections) throw new CollectionLocationNotAllowedError()
-  return loc
-}
-
 export async function createMicronixPlate(database: Database, input: CreateCollectionInput) {
-  const loc = await loadCollectionLocation(database, input.locationId)
+  const loc = assertLocationCanContainCollections(database, input.locationId)
   const existing = await database.select().from(micronixPlate).where(eq(micronixPlate.name, input.name)).get()
   if (existing) throw new CollectionNameExistsError('Plate with this name already exists')
 
@@ -59,7 +46,7 @@ export async function createMicronixPlate(database: Database, input: CreateColle
 }
 
 export async function createCryovialBox(database: Database, input: CreateCollectionInput) {
-  const loc = await loadCollectionLocation(database, input.locationId)
+  const loc = assertLocationCanContainCollections(database, input.locationId)
   const existing = await database.select().from(cryovialBox).where(eq(cryovialBox.name, input.name)).get()
   if (existing) throw new CollectionNameExistsError('Cryovial box with this name already exists')
 
@@ -82,7 +69,7 @@ export async function createCryovialBox(database: Database, input: CreateCollect
 }
 
 export async function createGenericBox(database: Database, input: CreateCollectionInput) {
-  const loc = await loadCollectionLocation(database, input.locationId)
+  const loc = assertLocationCanContainCollections(database, input.locationId)
   const existing = await database.select().from(box).where(eq(box.name, input.name)).get()
   if (existing) throw new CollectionNameExistsError('Box with this name already exists')
 
@@ -104,7 +91,7 @@ export async function createGenericBox(database: Database, input: CreateCollecti
 }
 
 export async function createBag(database: Database, input: CreateCollectionInput) {
-  const loc = await loadCollectionLocation(database, input.locationId)
+  const loc = assertLocationCanContainCollections(database, input.locationId)
   const existing = await database.select().from(bag).where(eq(bag.name, input.name)).get()
   if (existing) throw new CollectionNameExistsError('Bag with this name already exists')
 

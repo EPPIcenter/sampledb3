@@ -5,7 +5,7 @@ import { executeMoves, type BatchMoveRequest, type ContainerInfo } from '../lib/
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
-import { deleteCollectionWithContents } from '../lib/collection-delete-cascade'
+import { deleteCollectionWithContents, preflightCollectionDelete } from '../lib/collection-delete-cascade'
 import { validatePlateScan, inferPlateOrGetReport } from '../lib/plate-scan-validation'
 import { requireParam } from '../lib/common-validators'
 import {
@@ -41,6 +41,7 @@ import {
   moveCollectionsBodySchema,
   deleteWithContentsBodySchema,
 } from '../lib/collections/collection-resolve'
+import { collectionDeletePreflightSchema } from '@sampledb/contract'
 import { moveSheetsToCollection, SheetMoveTargetNotFoundError } from '../lib/collections/sheet-move'
 import type { CollectionType } from '../lib/collections/types'
 
@@ -373,6 +374,21 @@ export function createCollectionsRoutes(database: Database): Hono {
         errors: moveResult.errors,
       })
     } catch (error: unknown) {
+      return handleRouteError(error, c)
+    }
+  })
+
+  collections.post('/delete-with-contents/preflight', memberMiddleware, async (c) => {
+    try {
+      const parsed = deleteWithContentsBodySchema
+        .pick({ collectionType: true, id: true })
+        .parse(await c.req.json())
+      const result = await preflightCollectionDelete(database, {
+        type: parsed.collectionType,
+        id: parsed.id,
+      })
+      return c.json(collectionDeletePreflightSchema.parse(result))
+    } catch (error) {
       return handleRouteError(error, c)
     }
   })

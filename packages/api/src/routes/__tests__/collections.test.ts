@@ -293,6 +293,32 @@ describe('Collections API', () => {
     })
   })
 
+  describe('POST /api/collections/delete-with-contents/preflight', () => {
+    it('returns preflight summary matching contract schema for an empty plate', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'StPre' })
+      const loc = await createTestLocation(ctx.db, {
+        name: 'LocPre',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'PlatePre1', locationId: loc.id })
+
+      const res = await ctx.request('/api/collections/delete-with-contents/preflight', {
+        method: 'POST',
+        json: { collectionType: 'micronix_plate', id: plate.id },
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        canDelete: boolean
+        blockers: Array<{ code: string; message: string }>
+        summary: { containerCount: number; specimenCount: number }
+      }
+      expect(data.canDelete).toBe(true)
+      expect(data.blockers).toEqual([])
+      expect(data.summary).toEqual({ containerCount: 0, specimenCount: 0 })
+    })
+  })
+
   describe('POST /api/collections/delete-with-contents', () => {
     it('returns 404 when collection does not exist', async () => {
       const res = await ctx.request('/api/collections/delete-with-contents', {

@@ -7,11 +7,6 @@ import {
   studySubject,
   specimen,
   specimenType,
-  location,
-  micronixPlate,
-  cryovialBox,
-  box,
-  bag,
 } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { findExistingStudySpecimen } from './specimen-helpers'
@@ -26,12 +21,19 @@ import { getDefaultUnit, getDefaultTotalQuantity, getDefaultRemainingQuantity } 
 import { utcNow } from './datetime'
 import { resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
 import { ValidationError } from './error-handler'
-import { validateContainerPlacementInPayload } from './container-placement-validation'
+import { collectContainerPlacementErrors } from './container-placement-validation'
 import {
   bulkCombinedCollectionMessages,
+  prepareCombinedSubjectContainerBatch,
   resolveContainerCollection,
-  validateSpecimenContainerRegistration,
-} from './registration-orchestrator'
+} from './registration-prepare'
+import {
+  assertLocationCanContainCollections,
+  CollectionLocationNotAllowedError,
+  CollectionLocationNotFoundError,
+  createOrResolveCollection,
+  LOCATION_CANNOT_CONTAIN_COLLECTIONS,
+} from './collections/collection-lifecycle'
 import {
   createContainerForSpecimen,
   type ContainerData,
@@ -54,9 +56,6 @@ export interface ExtendedContainerData {
 }
 
 export { normalizePosition } from './normalize-position'
-
-const LOCATION_CANNOT_CONTAIN_COLLECTIONS =
-  'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.'
 
 export interface WithSpecimensPayload {
   studyShortCode: string
@@ -140,32 +139,17 @@ async function revalidatePreparedSubjectInTx(
         throw new ValidationError(`${specimenLabel}: ${unitValidation.error ?? 'invalid unit for container type'}`)
       }
 
-      if (container.containerType === 'cryovial_tube' || container.containerType === 'micronix_tube' || container.containerType === 'static_well') {
-        const collectionResolution = await resolveContainerCollection(
-          dbTx,
-          container.containerType,
-          container,
-          { messages: bulkCombinedCollectionMessages }
-        )
-        if (collectionResolution.error) {
-          throw new ValidationError(`${specimenLabel}: ${collectionResolution.error}`)
-        }
-        if (collectionResolution.collectionId !== null) {
-          prepared.collectionMap.set(collectionResolution.collectionKey, collectionResolution.collectionId)
-        }
-      } else if (container.collectionName && !container.collectionLocationId) {
-        const collectionResolution = await resolveContainerCollection(
-          dbTx,
-          container.containerType,
-          container,
-          { messages: bulkCombinedCollectionMessages }
-        )
-        if (collectionResolution.error) {
-          throw new ValidationError(`${specimenLabel}: ${collectionResolution.error}`)
-        }
-        if (collectionResolution.collectionId !== null) {
-          prepared.collectionMap.set(collectionResolution.collectionKey, collectionResolution.collectionId)
-        }
+      const collectionResolution = await resolveContainerCollection(
+        dbTx,
+        container.containerType,
+        container,
+        { messages: bulkCombinedCollectionMessages }
+      )
+      if (collectionResolution.error) {
+        throw new ValidationError(`${specimenLabel}: ${collectionResolution.error}`)
+      }
+      if (collectionResolution.collectionId !== null) {
+        prepared.collectionMap.set(collectionResolution.collectionKey, collectionResolution.collectionId)
       }
     }
   }
@@ -200,17 +184,6 @@ export async function prepareSubjectWithSpecimens(
     if (!dateValidation.valid) {
       throw new ValidationError(dateValidation.error ?? 'Invalid collection date', { specimenIndex: i })
     }
-    if (spec.container?.containerType) {
-      const containerRegistration = await validateSpecimenContainerRegistration(
-        database,
-        specimenTypeId,
-        spec.container as ExtendedContainerData,
-        { messages: bulkCombinedCollectionMessages }
-      )
-      if (!containerRegistration.valid) {
-        throw new ValidationError(containerRegistration.error ?? 'Invalid container', { specimenIndex: i })
-      }
-    }
     resolvedSpecimens.push({
       specimenTypeId,
       collectionDate: spec.collectionDate,
@@ -218,26 +191,18 @@ export async function prepareSubjectWithSpecimens(
     })
   }
 
-  const collectionMap = new Map<string, number>()
-  for (const spec of resolvedSpecimens) {
-    if (spec.container?.containerType) {
-      const container = spec.container
-      const collectionResolution = await resolveContainerCollection(
-        database,
-        container.containerType,
-        container,
-        { messages: bulkCombinedCollectionMessages }
-      )
-      if (collectionResolution.error) {
-        throw new ValidationError(collectionResolution.error)
-      }
-      if (collectionResolution.collectionId !== null) {
-        collectionMap.set(collectionResolution.collectionKey, collectionResolution.collectionId)
-      }
-    }
+  const containerPrep = await prepareCombinedSubjectContainerBatch(database, resolvedSpecimens, {
+    messages: bulkCombinedCollectionMessages,
+  })
+  if (!containerPrep.valid) {
+    throw new ValidationError(containerPrep.message, { specimenIndex: containerPrep.specimenIndex })
   }
 
-  await validateContainerPlacementInPayload(database, resolvedSpecimens, collectionMap)
+  const { placementRows, collectionMap } = containerPrep.result
+  const placementErrors = await collectContainerPlacementErrors(database, placementRows)
+  if (placementErrors.length > 0) {
+    throw new ValidationError(placementErrors[0].message, { specimenIndex: placementErrors[0].rowIndex })
+  }
 
   const preparedContainers: PreparedSubject['preparedContainers'] = []
   for (const spec of resolvedSpecimens) {
@@ -474,12 +439,16 @@ export async function runBulkCombinedImport(
 
   // full_file: one transaction with optional collection creation
   for (const coll of createCollections) {
-    const loc = await database.select().from(location).where(eq(location.id, coll.locationId)).get()
-    if (!loc) {
-      throw new ValidationError('Location not found')
-    }
-    if (!loc.canContainCollections) {
-      throw new ValidationError(LOCATION_CANNOT_CONTAIN_COLLECTIONS)
+    try {
+      assertLocationCanContainCollections(database, coll.locationId)
+    } catch (error) {
+      if (error instanceof CollectionLocationNotFoundError) {
+        throw new ValidationError('Location not found')
+      }
+      if (error instanceof CollectionLocationNotAllowedError) {
+        throw new ValidationError(LOCATION_CANNOT_CONTAIN_COLLECTIONS)
+      }
+      throw error
     }
   }
 
@@ -505,41 +474,18 @@ export async function runBulkCombinedImport(
     for (const coll of createCollections) {
       const key = `${coll.type}-${coll.name}`
       if (mergedCollectionMap.has(key)) continue
-      if (coll.type === 'box') {
-        const r = tx.insert(box).values({
-          name: coll.name,
-          locationId: coll.locationId,
-          created: now,
-          lastUpdated: now,
-        }).returning().get()
-        mergedCollectionMap.set(key, (Array.isArray(r) ? r[0] : r).id)
-      } else if (coll.type === 'bag') {
-        const r = tx.insert(bag).values({
-          name: coll.name,
-          locationId: coll.locationId,
-          created: now,
-          lastUpdated: now,
-        }).returning().get()
-        mergedCollectionMap.set(key, (Array.isArray(r) ? r[0] : r).id)
-      } else if (coll.type === 'micronix_plate') {
-        const r = tx.insert(micronixPlate).values({
+      await createOrResolveCollection(
+        tx,
+        {
+          type: coll.type,
           name: coll.name,
           locationId: coll.locationId,
           barcode: coll.barcode ?? null,
-          created: now,
-          lastUpdated: now,
-        }).returning().get()
-        mergedCollectionMap.set(key, (Array.isArray(r) ? r[0] : r).id)
-      } else {
-        const r = tx.insert(cryovialBox).values({
-          name: coll.name,
-          locationId: coll.locationId,
-          barcode: coll.barcode ?? null,
-          created: now,
-          lastUpdated: now,
-        }).returning().get()
-        mergedCollectionMap.set(key, (Array.isArray(r) ? r[0] : r).id)
-      }
+          userId,
+          now,
+        },
+        mergedCollectionMap
+      )
     }
     const out: OneSubjectResult[] = []
     for (let i = 0; i < allPrepared.length; i++) {

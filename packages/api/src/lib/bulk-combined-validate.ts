@@ -3,8 +3,6 @@
  * without performing any inserts; returns all errors for display.
  */
 import type { Database } from '../db/client'
-import { location } from '../db/schema'
-import { eq } from 'drizzle-orm'
 import {
   validateStudyShortCode,
   validateSubjectName,
@@ -19,15 +17,18 @@ import {
 } from './bulk-combined-import'
 import {
   bulkCombinedCollectionMessages,
-  validateSpecimenContainerRegistration,
-} from './registration-orchestrator'
+  prepareCombinedSubjectContainerBatch,
+} from './registration-prepare'
+import {
+  assertLocationCanContainCollections,
+  CollectionLocationNotAllowedError,
+  CollectionLocationNotFoundError,
+  LOCATION_CANNOT_CONTAIN_COLLECTIONS,
+} from './collections/collection-lifecycle'
 import {
   collectContainerPlacementErrors,
   type ContainerPlacementCheckRow,
 } from './container-placement-validation'
-
-const LOCATION_CANNOT_CONTAIN_COLLECTIONS =
-  'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.'
 
 /** Map orchestrator field messages to combined-import UX copy. */
 function combinedContainerErrorMessage(message: string): string {
@@ -79,20 +80,21 @@ export async function validateBulkCombinedPayload(
     errors.push({ subjectIndex, specimenIndex, message, ...(rowIndex !== undefined && { rowIndex }) })
   }
 
-  // 1. Validate createCollections locations
   for (let c = 0; c < createCollections.length; c++) {
     const coll = createCollections[c]
-    const loc = await database.select().from(location).where(eq(location.id, coll.locationId)).get()
-    if (!loc) {
-      add(0, 0, `Location not found for collection '${coll.name}' (${coll.type})`)
-      continue
-    }
-    if (!loc.canContainCollections) {
-      add(0, 0, `${LOCATION_CANNOT_CONTAIN_COLLECTIONS} Collection '${coll.name}' uses location ID ${coll.locationId}.`)
+    try {
+      assertLocationCanContainCollections(database, coll.locationId)
+    } catch (error) {
+      if (error instanceof CollectionLocationNotFoundError) {
+        add(0, 0, `Location not found for collection '${coll.name}' (${coll.type})`)
+      } else if (error instanceof CollectionLocationNotAllowedError) {
+        add(0, 0, `${LOCATION_CANNOT_CONTAIN_COLLECTIONS} Collection '${coll.name}' uses location ID ${coll.locationId}.`)
+      } else {
+        throw error
+      }
     }
   }
 
-  // 2. Validate study
   const studyValidation = await validateStudyShortCode(database, studyShortCode)
   let studyId: number | null = null
   if (!studyValidation.valid || !studyValidation.studyId) {
@@ -103,13 +105,11 @@ export async function validateBulkCombinedPayload(
 
   const placementRows: ContainerPlacementCheckRow[] = []
   const placementContexts: ContainerRowContext[] = []
-  const collectionKeyToId = new Map<string, number>()
   const toBeCreatedKeys = new Set<string>()
   for (const coll of createCollections) {
     toBeCreatedKeys.add(`${coll.type}-${coll.name}`)
   }
 
-  // 3. Per-subject and per-specimen validation (first pass)
   for (let subjectIndex = 0; subjectIndex < subjects.length; subjectIndex++) {
     const subj = subjects[subjectIndex]
     const trimmedName = subj.subjectName.trim()
@@ -124,6 +124,14 @@ export async function validateBulkCombinedPayload(
       }
     }
 
+    const resolvedForPrepare: Array<{
+      specimenTypeId: number
+      collectionDate?: string
+      container?: ExtendedContainerData
+      specimenIndex: number
+      rowIndex?: number
+    }> = []
+
     for (let specimenIndex = 0; specimenIndex < subj.specimens.length; specimenIndex++) {
       const spec = subj.specimens[specimenIndex]
       const rowIndex = 'rowIndex' in spec ? spec.rowIndex : undefined
@@ -131,45 +139,19 @@ export async function validateBulkCombinedPayload(
       const specimenTypeId = await resolveSpecimenTypeByName(database, spec.specimenTypeName)
       if (!specimenTypeId) {
         add(subjectIndex, specimenIndex, `Specimen type '${spec.specimenTypeName}' not found`, rowIndex)
+        continue
       }
 
       const dateValidation = validateCollectionDate(spec.collectionDate)
       if (!dateValidation.valid) {
         add(subjectIndex, specimenIndex, dateValidation.error ?? 'Invalid collection date', rowIndex)
-      }
-
-      if (!spec.container?.containerType) {
         continue
       }
 
-      const container = spec.container
-      const containerType = container.containerType
-
-      if (!specimenTypeId) {
-        continue
-      }
-
-      const containerRegistration = await validateSpecimenContainerRegistration(
-        database,
-        specimenTypeId,
-        container,
-        { messages: bulkCombinedCollectionMessages }
-      )
-      if (!containerRegistration.valid) {
-        add(subjectIndex, specimenIndex, combinedContainerErrorMessage(containerRegistration.error), rowIndex)
-        continue
-      }
-
-      const { collectionKey, collectionId, placementRow } = containerRegistration
-      if (container.collectionLocationId) {
-        toBeCreatedKeys.add(collectionKey)
-      } else if (collectionId !== null) {
-        collectionKeyToId.set(collectionKey, collectionId)
-      }
-
-      if (containerType !== 'paper') {
+      if (spec.container?.containerType) {
+        const containerType = spec.container.containerType
         try {
-          const unitId = container.unitId ?? (await getDefaultUnit(database, containerType))
+          const unitId = spec.container.unitId ?? (await getDefaultUnit(database, containerType))
           const unitValidation = await validateUnitForContainerType(database, containerType, unitId)
           if (!unitValidation.valid) {
             add(subjectIndex, specimenIndex, unitValidation.error ?? 'Invalid unit for container type', rowIndex)
@@ -179,8 +161,56 @@ export async function validateBulkCombinedPayload(
         }
       }
 
-      placementRows.push(placementRow)
-      placementContexts.push({ subjectIndex, specimenIndex, rowIndex })
+      resolvedForPrepare.push({
+        specimenTypeId,
+        collectionDate: spec.collectionDate,
+        container: spec.container,
+        specimenIndex,
+        rowIndex,
+      })
+    }
+
+    if (resolvedForPrepare.length === 0) {
+      continue
+    }
+
+    const containerPrep = await prepareCombinedSubjectContainerBatch(
+      database,
+      resolvedForPrepare.map(({ specimenTypeId, collectionDate, container }) => ({
+        specimenTypeId,
+        collectionDate,
+        container,
+      })),
+      { messages: bulkCombinedCollectionMessages }
+    )
+    if (!containerPrep.valid) {
+      const failed = resolvedForPrepare[containerPrep.specimenIndex]
+      add(
+        subjectIndex,
+        failed?.specimenIndex ?? containerPrep.specimenIndex,
+        combinedContainerErrorMessage(containerPrep.message),
+        failed?.rowIndex
+      )
+      continue
+    }
+
+    let placementRowIndex = 0
+    for (const resolvedRow of resolvedForPrepare) {
+      if (!resolvedRow.container?.containerType) continue
+      const prepRow = containerPrep.result.placementRows[placementRowIndex]
+      if (!prepRow) break
+
+      if (resolvedRow.container.collectionLocationId) {
+        toBeCreatedKeys.add(prepRow.collectionKey)
+      }
+
+      placementRows.push(prepRow)
+      placementContexts.push({
+        subjectIndex,
+        specimenIndex: resolvedRow.specimenIndex,
+        rowIndex: resolvedRow.rowIndex,
+      })
+      placementRowIndex++
     }
   }
 

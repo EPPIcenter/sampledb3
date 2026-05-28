@@ -1,4 +1,5 @@
 import type { Database } from '../db/client'
+import type { CollectionDeletePreflight } from '@sampledb/contract'
 import {
   micronixPlate,
   micronixTube,
@@ -286,6 +287,27 @@ async function runPreflight(
   }
 
   return blockers
+}
+
+export async function preflightCollectionDelete(
+  database: Database,
+  request: Pick<DeleteCollectionWithContentsRequest, 'type' | 'id'>
+): Promise<CollectionDeletePreflight> {
+  await ensureCollectionRowExists(database, request.type, request.id)
+
+  const containerIdList = await collectContainerIdsInCollection(database, request.type, request.id)
+  const containerIdSet = new Set(containerIdList)
+  const fullyRemovedSpecimenIds = await computeSpecimensFullyRemovedByContainerBatch(database, containerIdSet)
+  const blockers = await runPreflight(database, containerIdSet, fullyRemovedSpecimenIds)
+
+  return {
+    canDelete: blockers.length === 0,
+    blockers: blockers.map(({ code, message }) => ({ code, message })),
+    summary: {
+      containerCount: containerIdList.length,
+      specimenCount: fullyRemovedSpecimenIds.length,
+    },
+  }
 }
 
 /**
