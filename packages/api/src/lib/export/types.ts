@@ -42,9 +42,10 @@ export interface ContainerExportData {
   target_density?: number
   target_density_unit?: string
   strain_composition?: string
-  study_id: number
-  study_title: string
-  study_code: string
+  /** Omitted for control-batch specimens (provenance via control columns). */
+  study_id?: number
+  study_title?: string
+  study_code?: string
   study_lead_person?: string
   location_path?: string
   location_id?: number

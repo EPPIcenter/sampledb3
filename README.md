@@ -45,6 +45,8 @@ bun run build
 bun run start
 ```
 
+Before pushing, run `bun run ci:verify` (typecheck + build) to match the Docker CI step. Install git pre-commit hooks with `bun run setup:hooks` to catch TypeScript errors on commit.
+
 ## Project Structure
 
 ```

@@ -12,6 +12,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "packages/api/**"
+      - "packages/contract/**"
       - "packages/web/**"
       - "packages/docs/**"
       - ".github/workflows/pr-container.yml"

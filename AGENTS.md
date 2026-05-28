@@ -27,3 +27,19 @@ Example (completes in ~1s):
 ```bash
 cd packages/web && bun run test -- src/components/__tests__/BulkImportFlow.test.tsx
 ```
+
+### Pre-commit hooks
+
+CI builds the Docker image with `bun run build`, which runs `tsc` on API and web. Type errors that tests miss will fail the nightly build.
+
+Install repo hooks once per clone:
+
+```bash
+bun run setup:hooks
+```
+
+The pre-commit hook runs `typecheck` on `@sampledb/contract`, `@sampledb/api`, and/or `@sampledb/web` when staged files touch those packages (or Docker/build config). To mirror CI fully before pushing:
+
+```bash
+bun run ci:verify   # typecheck + build all packages
+```
