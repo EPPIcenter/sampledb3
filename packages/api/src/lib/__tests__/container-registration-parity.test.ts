@@ -70,14 +70,15 @@ describe('container registration write parity', () => {
   let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
 
   beforeEach(async () => {
+    clearSettingsCache()
+    clearDefaultsCache()
     const setup = await setupTestDatabase()
     testDb = setup.db
     sqlite = setup.sqlite
-    clearSettingsCache()
-    clearDefaultsCache(testDb)
   })
 
   afterEach(() => {
+    clearDefaultsCache()
     if (sqlite) cleanupTestDatabase(sqlite)
   })
 
