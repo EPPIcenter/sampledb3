@@ -38,7 +38,7 @@ describe('collection-table-columns', () => {
       barcode: 'MTX-001',
       container: {
         remainingQuantity: 1,
-        state: { name: 'Active' },
+        tags: [{ id: 1, name: 'QC' }],
         source: { type: 'subject', name: 'Subject-1', study: { code: 'STUDY1' } },
         specimen: { collectionDate: '2024-01-15' },
       },
@@ -50,7 +50,7 @@ describe('collection-table-columns', () => {
     expect(row).toHaveProperty('status', 'In Use')
     expect(row).toHaveProperty('subject_name', 'Subject-1')
     expect(row).toHaveProperty('study_code', 'STUDY1')
-    expect(row).toHaveProperty('state', 'Active')
+    expect(row).toHaveProperty('tags', 'QC')
     expect(row).toHaveProperty('collection_date', '2024-01-15')
   })
 
@@ -89,9 +89,9 @@ describe('collection-table-columns', () => {
     })
 
     it('preserves config order for matching keys', () => {
-      const configKeys = ['state', 'collection_date', 'position']
+      const configKeys = ['tags', 'collection_date', 'position']
       const result = getTableColumnsFromExportConfig(configKeys, COLLECTION_GRID_TABLE_ROW_KEYS)
-      expect(result.map((c) => c.key)).toEqual(['state', 'collection_date', 'position'])
+      expect(result.map((c) => c.key)).toEqual(['tags', 'collection_date', 'position'])
     })
 
     it('includes export config columns like comment and collection_name when in config', () => {

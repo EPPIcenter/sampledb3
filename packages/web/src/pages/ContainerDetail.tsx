@@ -217,13 +217,14 @@ export default function ContainerDetail() {
                   Edit
                 </button>
               )}
-              {container.state?.name && (
+              {container.tags?.map((tag) => (
                 <span
-                  className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-white ${statusColor(container.state.name)}`}
+                  key={tag.id}
+                  className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-white ${statusColor(tag.name)}`}
                 >
-                  {container.state.name}
+                  {tag.name}
                 </span>
-              )}
+              ))}
               <span
                 className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-white ${(container.remainingQuantity ?? 0) > 0 ? 'bg-app-trend-up/100' : 'bg-app-trend-down/100'}`}
               >

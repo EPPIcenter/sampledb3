@@ -27,7 +27,7 @@ interface ContainerSource {
 export interface CollectionEntryContainer {
   remainingQuantity?: number
   comment?: string | null
-  state?: { name?: string } | null
+  tags?: Array<{ id: number; name: string }>
   source?: ContainerSource | null
   specimen?: { collectionDate?: string | null } | null
   specimenTypeName?: string | null
@@ -62,7 +62,7 @@ export const COLLECTION_GRID_TABLE_COLUMNS: CollectionTableColumn[] = [
   { key: 'control_definition_name', label: 'Control Definition Name' },
   { key: 'control_type', label: 'Control Type' },
   { key: 'collection_date', label: 'Collection Date' },
-  { key: 'state', label: 'State' },
+  { key: 'tags', label: 'Tags' },
 ]
 
 /** Columns for sheet/paper tables (box, bag, sheet). Same as grid plus Sheet. No internal IDs. */
@@ -76,7 +76,7 @@ export const COLLECTION_SHEET_TABLE_COLUMNS: CollectionTableColumn[] = [
   { key: 'control_definition_name', label: 'Control Definition Name' },
   { key: 'control_type', label: 'Control Type' },
   { key: 'collection_date', label: 'Collection Date' },
-  { key: 'state', label: 'State' },
+  { key: 'tags', label: 'Tags' },
 ]
 
 export type CollectionTableRow = Record<string, string | number | null>
@@ -92,7 +92,7 @@ export const COLLECTION_GRID_TABLE_ROW_KEYS = new Set([
   'label',
   'collection_name',
   'status',
-  'state',
+  'tags',
   'comment',
   'specimen_type',
   'collection_date',
@@ -148,7 +148,10 @@ export function buildCollectionTableRow(entry: CollectionTableEntry): Collection
   const strainComposition = source?.type === 'control' ? (source.strainComposition ?? '') : ''
    
   const collectionDate = container?.specimen?.collectionDate ?? ''
-  const state = container?.state?.name ?? ''
+  const tags =
+    container?.tags && container.tags.length > 0
+      ? [...container.tags].map((t) => t.name).sort((a, b) => a.localeCompare(b)).join(', ')
+      : ''
   const comment = container?.comment ?? ''
    
   const specimenTypeName = container?.specimenTypeName ?? ''
@@ -162,7 +165,7 @@ export function buildCollectionTableRow(entry: CollectionTableEntry): Collection
     label: '',
     collection_name: context?.collectionName ?? '',
     status,
-    state,
+    tags,
     comment,
     specimen_type: specimenTypeName,
     collection_date: collectionDate,

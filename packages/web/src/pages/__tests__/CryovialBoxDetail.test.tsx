@@ -25,7 +25,7 @@ const mockPositions: Record<string, Array<{ kind: 'cryovial_tube'; id: number; b
       container: {
         specimenId: 10,
         remainingQuantity: 1,
-        state: { name: 'Active' },
+        tags: [{ id: 1, name: 'QC' }],
         source: { type: 'subject', name: 'Sub-1' },
       },
     },

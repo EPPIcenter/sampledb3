@@ -14,7 +14,7 @@ import {
 } from '../../db/schema'
 import { formatLocationPath } from '../container-enrichment'
 import { normalizePosition } from '../normalize-position'
-import { enrichPaperContainers, enrichStorageContainer } from './container-detail'
+import { enrichPaperContainers, enrichStorageContainer, attachTagsToEnrichedContainers } from './container-detail'
 
 export async function getMicronixPlateDetail(database: Database, id: number) {
   const plate = await database.select().from(micronixPlate).where(eq(micronixPlate.id, id)).get()
@@ -36,6 +36,14 @@ export async function getMicronixPlateDetail(database: Database, id: number) {
     })),
   )
 
+  const tubeContainersWithTags = await attachTagsToEnrichedContainers(
+    database,
+    tubeEntries.map((entry) => entry.container),
+  )
+  tubeEntries.forEach((entry, index) => {
+    entry.container = tubeContainersWithTags[index]
+  })
+
   const wellEntries = await Promise.all(
     wells.map(async (w) => ({
       type: 'static_well' as const,
@@ -44,6 +52,14 @@ export async function getMicronixPlateDetail(database: Database, id: number) {
       container: await enrichStorageContainer(database, w.id),
     })),
   )
+
+  const wellContainersWithTags = await attachTagsToEnrichedContainers(
+    database,
+    wellEntries.map((entry) => entry.container),
+  )
+  wellEntries.forEach((entry, index) => {
+    entry.container = wellContainersWithTags[index]
+  })
 
   const wellsByPosition: Record<string, (typeof tubeEntries)[number] | (typeof wellEntries)[number]> = {}
   for (const entry of [...tubeEntries, ...wellEntries]) {
@@ -76,6 +92,14 @@ export async function getCryovialBoxDetail(database: Database, id: number) {
       container: await enrichStorageContainer(database, t.id),
     })),
   )
+
+  const tubeContainersWithTags = await attachTagsToEnrichedContainers(
+    database,
+    tubeEntries.map((entry) => entry.container),
+  )
+  tubeEntries.forEach((entry, index) => {
+    entry.container = tubeContainersWithTags[index]
+  })
 
   const positions: Record<string, typeof tubeEntries> = {}
   for (const entry of tubeEntries) {

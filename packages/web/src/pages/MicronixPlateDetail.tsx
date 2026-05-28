@@ -67,17 +67,25 @@ export default function MicronixPlateDetail() {
   }, [])
 
   const legend = useMemo(() => {
-    if (!data?.wells) return []
+    if (!data?.wells) return { tags: [] as string[], statuses: [] as string[] }
     const values = Object.values<any>(data.wells)
-    const labels = new Set<string>()
+    const tagLabels = new Set<string>()
+    const statusLabels = new Set<string>()
     values.forEach((entry) => {
       const container = entry?.container
-      if (container?.state?.name) labels.add(container.state.name)
+      if (container?.tags?.length) {
+        for (const tag of container.tags) {
+          tagLabels.add(tag.name)
+        }
+      }
       if (container) {
-        labels.add(container.remainingQuantity > 0 ? 'In Use' : 'Exhausted')
+        statusLabels.add(container.remainingQuantity > 0 ? 'In Use' : 'Exhausted')
       }
     })
-    return Array.from(labels).sort()
+    return {
+      tags: Array.from(tagLabels).sort(),
+      statuses: Array.from(statusLabels).sort(),
+    }
   }, [data])
 
   const tableRows = useMemo(() => {
@@ -254,15 +262,21 @@ export default function MicronixPlateDetail() {
                 </div>
               )}
             </div>
-            {legend.length > 0 && viewMode === 'grid' && (
+            {((legend.tags.length > 0) || legend.statuses.length > 0) && viewMode === 'grid' && (
               <div className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: 'rgb(var(--app-text-muted))' }}>
                 <span className="font-semibold" style={{ color: 'rgb(var(--app-text))' }}>Legend:</span>
-                {legend.map((name) => (
-                  <span key={name} className="inline-flex items-center gap-1">
+                {legend.tags.map((name) => (
+                  <span key={`tag-${name}`} className="inline-flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />
+                    <span>{name}</span>
+                  </span>
+                ))}
+                {legend.statuses.map((name) => (
+                  <span key={`status-${name}`} className="inline-flex items-center gap-1">
                     <span
-                      className={`inline-block w-2 h-2 rounded-full ${statusColor(
-                        name
-                      )}`}
+                      className={`inline-block w-2 h-2 rounded-full ${
+                        name === 'In Use' ? 'bg-app-trend-up/100' : 'bg-app-trend-down/100'
+                      }`}
                     />
                     <span>{name}</span>
                   </span>
@@ -290,7 +304,8 @@ export default function MicronixPlateDetail() {
               }
               const entry: any = value
               const hasContainer = !!entry.container
-              const stateName = entry.container?.state?.name
+              const tagNames =
+                entry.container?.tags?.map((tag: { name: string }) => tag.name).sort() ?? []
               const statusName = hasContainer ? (entry.container.remainingQuantity > 0 ? 'In Use' : 'Exhausted') : null
               const specimenId = entry.container?.specimenId
               const source = entry.container?.source
@@ -324,7 +339,7 @@ export default function MicronixPlateDetail() {
               if (entry.barcode) tooltipParts.push(`Barcode: ${entry.barcode}`)
               if (subjectName) tooltipParts.push(`${source?.type === 'subject' ? 'Subject' : 'Control'}: ${subjectName}`)
               if (entry.container?.specimenTypeName) tooltipParts.push(`Specimen type: ${entry.container.specimenTypeName}`)
-              if (stateName) tooltipParts.push(`State: ${stateName}`)
+              if (tagNames.length > 0) tooltipParts.push(`Tags: ${tagNames.join(', ')}`)
               if (statusName) tooltipParts.push(`Status: ${statusName}`)
               const title = tooltipParts.join(' • ')
 
@@ -340,22 +355,12 @@ export default function MicronixPlateDetail() {
                     ${isClickable ? 'hover:shadow-sm hover:border-app-accent/50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-app-accent' : ''}`}
                   title={title}
                 >
-                  {hasContainer && (
+                  {hasContainer && statusName && (
                     <div className="w-full flex items-center justify-center gap-1">
-                      {stateName && (
-                        <span
-                          className={`inline-block w-2 h-2 rounded-full ${statusColor(
-                            stateName
-                          )}`}
-                          title={stateName}
-                        />
-                      )}
-                      {statusName && (
-                        <span
-                          className={`inline-block w-2 h-2 rounded-full ${statusName === 'In Use' ? 'bg-app-trend-up/100' : 'bg-app-trend-down/100'}`}
-                          title={statusName}
-                        />
-                      )}
+                      <span
+                        className={`inline-block w-2 h-2 rounded-full ${statusName === 'In Use' ? 'bg-app-trend-up/100' : 'bg-app-trend-down/100'}`}
+                        title={statusName}
+                      />
                     </div>
                   )}
                   <div className="font-mono truncate w-full text-center text-[8px]">

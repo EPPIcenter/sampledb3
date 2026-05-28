@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import {
   storageContainer,
@@ -10,6 +10,8 @@ import {
   controlDefinition,
   unit,
   strain,
+  storageContainerTag,
+  tag,
 } from '../../db/schema'
 import { parseControlProperties } from '../control-properties'
 import type { ContainerSource, EnrichedStorageContainer } from './types'
@@ -157,4 +159,43 @@ export async function enrichPaperContainers<T extends { id: number; barcode: str
       container: await enrichStorageContainer(database, p.id),
     })),
   )
+}
+
+export type EnrichedStorageContainerWithTags = EnrichedStorageContainer & {
+  tags: Array<{ id: number; name: string }>
+}
+
+/** Batch-load tags and attach to enriched collection containers. */
+export async function attachTagsToEnrichedContainers(
+  database: Database,
+  containers: Array<EnrichedStorageContainer | null>,
+): Promise<Array<EnrichedStorageContainerWithTags | null>> {
+  const ids = containers.filter((container): container is EnrichedStorageContainer => container != null).map((c) => c.id)
+  const tagsByContainerId = new Map<number, Array<{ id: number; name: string }>>()
+
+  if (ids.length > 0) {
+    const tagRows = await database
+      .select({
+        containerId: storageContainerTag.storageContainerId,
+        id: tag.id,
+        name: tag.name,
+      })
+      .from(tag)
+      .innerJoin(storageContainerTag, eq(tag.id, storageContainerTag.tagId))
+      .where(inArray(storageContainerTag.storageContainerId, ids))
+
+    for (const row of tagRows) {
+      const list = tagsByContainerId.get(row.containerId) ?? []
+      list.push({ id: row.id, name: row.name })
+      tagsByContainerId.set(row.containerId, list)
+    }
+  }
+
+  return containers.map((container) => {
+    if (!container) return null
+    return {
+      ...container,
+      tags: tagsByContainerId.get(container.id) ?? [],
+    }
+  })
 }

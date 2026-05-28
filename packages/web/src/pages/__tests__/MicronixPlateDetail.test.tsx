@@ -24,7 +24,7 @@ const mockWells: Record<string, { type: 'micronix_tube'; id: number; barcode?: s
     container: {
       specimenId: 42,
       remainingQuantity: 1,
-      state: { name: 'Active' },
+      tags: [{ id: 1, name: 'QC' }, { id: 2, name: 'Hold' }],
       source: { type: 'subject', name: 'Subject-1' },
     },
   },
@@ -70,6 +70,16 @@ describe('MicronixPlateDetail', () => {
     })
     expect(screen.getByRole('button', { name: /Grid/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Table/i })).toBeInTheDocument()
+  })
+
+  it('shows tag names in grid legend when wells have tags', async () => {
+    await render(<MicronixPlateDetail />)
+    await waitFor(() => {
+      expect(screen.getByText('Legend:')).toBeInTheDocument()
+    })
+    expect(screen.getByText('QC')).toBeInTheDocument()
+    expect(screen.getByText('Hold')).toBeInTheDocument()
+    expect(screen.getByText('In Use')).toBeInTheDocument()
   })
 
   it('table view shows expected columns and row count', async () => {
