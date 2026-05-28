@@ -370,6 +370,7 @@ export async function createBulkSpecimenRows(
         totalQuantity: container.totalQuantity,
         remainingQuantity: container.remainingQuantity,
         comment: container.comment,
+        collectionLocationId: container.collectionLocationId,
       }
       const containerResult = await createContainerForSpecimen(
         specimenRecord.id,

@@ -7,19 +7,13 @@ import {
   studySubject,
   specimen,
   specimenType,
-  storageContainer,
   location,
   micronixPlate,
-  micronixTube,
   cryovialBox,
-  cryovialTube,
   box,
   bag,
-  sheet,
-  paper,
-  staticWell,
 } from '../db/schema'
-import { eq, and, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { findExistingStudySpecimen } from './specimen-helpers'
 import {
   validateStudyShortCode,
@@ -33,12 +27,15 @@ import { utcNow } from './datetime'
 import { resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
 import { ValidationError } from './error-handler'
 import { validateContainerPlacementInPayload } from './container-placement-validation'
-import { normalizePosition } from './normalize-position'
 import {
   bulkCombinedCollectionMessages,
   resolveContainerCollection,
   validateSpecimenContainerRegistration,
 } from './registration-orchestrator'
+import {
+  createContainerForSpecimen,
+  type ContainerData,
+} from './container-creation'
 
 export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
@@ -60,19 +57,6 @@ export { normalizePosition } from './normalize-position'
 
 const LOCATION_CANNOT_CONTAIN_COLLECTIONS =
   'Location cannot contain collections. Only locations with canContainCollections=true can hold collections.'
-
-function assertLocationCanContainCollections(
-  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
-  locationId: number
-): void {
-  const loc = tx.select().from(location).where(eq(location.id, locationId)).get()
-  if (!loc) {
-    throw new ValidationError('Location not found')
-  }
-  if (!loc.canContainCollections) {
-    throw new ValidationError(LOCATION_CANNOT_CONTAIN_COLLECTIONS)
-  }
-}
 
 export interface WithSpecimensPayload {
   studyShortCode: string
@@ -284,12 +268,12 @@ export async function prepareSubjectWithSpecimens(
   }
 }
 
-export function createSubjectWithSpecimensInTx(
+export async function createSubjectWithSpecimensInTx(
   tx: Parameters<Parameters<Database['transaction']>[0]>[0],
   prepared: PreparedSubject,
   userId: number | undefined,
   now: string
-): OneSubjectResult {
+): Promise<OneSubjectResult> {
   const dbTx = tx as unknown as Database
   const { studyId, existingSubjectId, trimmedName, resolvedSpecimens, preparedContainers, collectionMap } = prepared
 
@@ -354,165 +338,32 @@ export function createSubjectWithSpecimensInTx(
 
     if (spec.container?.containerType) {
       const container = spec.container
-      const containerType = container.containerType
-      const storageContainerResult = tx
-        .insert(storageContainer)
-        .values({
-          specimenId,
-          unitId: preparedContainer.unitId,
-          totalQuantity: preparedContainer.totalQuantity,
-          remainingQuantity: preparedContainer.remainingQuantity,
-          comment: container.comment ?? null,
-          created: now,
-          lastUpdated: now,
-        })
-        .returning()
-        .get()
-      const storageContainerRecord = Array.isArray(storageContainerResult) ? storageContainerResult[0] : storageContainerResult
-      containerId = storageContainerRecord.id
-      containerCreated = true
-
-      if (containerType === 'micronix_tube') {
-        const identifier = container.collectionName || container.collectionBarcode!
-        const key = `micronix_plate-${identifier}`
-        let collectionId: number
-        if (collectionMap.has(key)) {
-          collectionId = collectionMap.get(key)!
-        } else if (container.collectionLocationId) {
-          assertLocationCanContainCollections(tx, container.collectionLocationId)
-          const newPlateResult = tx
-            .insert(micronixPlate)
-            .values({
-              name: container.collectionName ?? identifier,
-              locationId: container.collectionLocationId,
-              barcode: container.collectionBarcode ?? null,
-              created: now,
-              lastUpdated: now,
-            })
-            .returning()
-            .get()
-          collectionId = (Array.isArray(newPlateResult) ? newPlateResult[0] : newPlateResult).id
-          collectionMap.set(key, collectionId)
-        } else throw new ValidationError('Collection not found and no location provided')
-        if (container.barcode) {
-          const existing = tx.select({ id: micronixTube.id }).from(micronixTube).where(eq(micronixTube.barcode, container.barcode)).get()
-          if (existing) {
-            throw new ValidationError(`Barcode '${container.barcode}' already exists`, { specimenIndex: i })
-          }
-        }
-        tx.insert(micronixTube).values({
-          id: containerId,
-          collectionId,
-          barcode: container.barcode!,
-          position: normalizePosition(container.position),
-        }).run()
-      } else if (containerType === 'cryovial_tube') {
-        const identifier = container.collectionName || container.collectionBarcode!
-        const key = `cryovial_box-${identifier}`
-        let collectionId: number
-        if (collectionMap.has(key)) {
-          collectionId = collectionMap.get(key)!
-        } else if (container.collectionLocationId) {
-          assertLocationCanContainCollections(tx, container.collectionLocationId)
-          const newBoxResult = tx
-            .insert(cryovialBox)
-            .values({
-              name: container.collectionName ?? identifier,
-              locationId: container.collectionLocationId,
-              barcode: container.collectionBarcode ?? null,
-              created: now,
-              lastUpdated: now,
-            })
-            .returning()
-            .get()
-          collectionId = (Array.isArray(newBoxResult) ? newBoxResult[0] : newBoxResult).id
-          collectionMap.set(key, collectionId)
-        } else throw new ValidationError('Collection not found and no location provided')
-        if (container.barcode) {
-          const existing = tx.select({ id: cryovialTube.id }).from(cryovialTube).where(eq(cryovialTube.barcode, container.barcode)).get()
-          if (existing) {
-            throw new ValidationError(`Barcode '${container.barcode}' already exists`, { specimenIndex: i })
-          }
-        }
-        tx.insert(cryovialTube).values({
-          id: containerId,
-          collectionId,
-          barcode: container.barcode ?? null,
-          position: normalizePosition(container.position),
-        }).run()
-      } else if (containerType === 'paper') {
-        const boxName = container.collectionName!
-        const key = `box-${boxName}`
-        let boxId: number
-        if (collectionMap.has(key)) {
-          boxId = collectionMap.get(key)!
-        } else if (container.collectionLocationId) {
-          assertLocationCanContainCollections(tx, container.collectionLocationId)
-          const newBoxResult = tx
-            .insert(box)
-            .values({
-              name: boxName,
-              locationId: container.collectionLocationId,
-              created: now,
-              lastUpdated: now,
-            })
-            .returning()
-            .get()
-          const newBox = Array.isArray(newBoxResult) ? newBoxResult[0] : newBoxResult
-          boxId = newBox.id
-          collectionMap.set(key, boxId)
-        } else throw new ValidationError('Box not found and no location provided')
-        const sheetName = container.label ?? 'Sheet-1'
-        const existingSheet = tx
-          .select()
-          .from(sheet)
-          .where(and(eq(sheet.name, sheetName), eq(sheet.boxId, boxId)))
-          .get()
-        let sheetId: number
-        if (existingSheet) {
-          sheetId = existingSheet.id
-        } else {
-          const newSheetResult = tx
-            .insert(sheet)
-            .values({ name: sheetName, boxId, bagId: null, created: sql`current_timestamp`, lastUpdated: sql`current_timestamp` })
-            .returning()
-            .get()
-          sheetId = (Array.isArray(newSheetResult) ? newSheetResult[0] : newSheetResult).id
-        }
-        tx.insert(paper).values({
-          id: containerId,
-          sheetId,
-          barcode: container.barcode ?? null,
-          position: normalizePosition(container.position),
-        }).run()
-      } else {
-        const identifier = container.collectionName || container.collectionBarcode!
-        const key = `micronix_plate-${identifier}`
-        let collectionId: number
-        if (collectionMap.has(key)) {
-          collectionId = collectionMap.get(key)!
-        } else if (container.collectionLocationId) {
-          assertLocationCanContainCollections(tx, container.collectionLocationId)
-          const newPlateResult = tx
-            .insert(micronixPlate)
-            .values({
-              name: container.collectionName ?? identifier,
-              locationId: container.collectionLocationId,
-              barcode: container.collectionBarcode ?? null,
-              created: now,
-              lastUpdated: now,
-            })
-            .returning()
-            .get()
-          collectionId = (Array.isArray(newPlateResult) ? newPlateResult[0] : newPlateResult).id
-          collectionMap.set(key, collectionId)
-        } else throw new ValidationError('Collection not found and no location provided')
-        tx.insert(staticWell).values({
-          id: containerId,
-          collectionId,
-          position: normalizePosition(container.position),
-        }).run()
+      const containerData: ContainerData = {
+        containerType: container.containerType,
+        collectionName: container.collectionName,
+        collectionBarcode: container.collectionBarcode,
+        barcode: container.barcode,
+        position: container.position,
+        label: container.label,
+        unitId: preparedContainer.unitId,
+        totalQuantity: preparedContainer.totalQuantity,
+        remainingQuantity: preparedContainer.remainingQuantity,
+        comment: container.comment,
+        collectionLocationId: container.collectionLocationId,
       }
+      const containerResult = await createContainerForSpecimen(specimenId, containerData, tx, {
+        userId,
+        collectionMap,
+        skipValidation: true,
+      })
+      if (!containerResult.success || !containerResult.containerId) {
+        throw new ValidationError(
+          containerResult.error ?? 'Failed to create container',
+          { specimenIndex: i }
+        )
+      }
+      containerId = containerResult.containerId
+      containerCreated = true
     }
 
     insertedSpecimens.push({
@@ -549,7 +400,7 @@ export async function runOneSubjectWithSpecimens(
     payload.specimens
   )
   const now = utcNow()
-  return database.transaction((tx) => {
+  return database.transaction(async (tx) => {
     return createSubjectWithSpecimensInTx(tx, prepared, userId, now)
   })
 }
@@ -695,7 +546,7 @@ export async function runBulkCombinedImport(
       const prepared = allPrepared[i]
       const prepWithMergedMap = { ...prepared, collectionMap: mergedCollectionMap }
       try {
-        out.push(createSubjectWithSpecimensInTx(tx, prepWithMergedMap, userId, now))
+        out.push(await createSubjectWithSpecimensInTx(tx, prepWithMergedMap, userId, now))
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Failed to create subject with specimens'
         throw new ValidationError(`Subject '${prepared.trimmedName}' (index ${i + 1}) failed: ${message}`)
