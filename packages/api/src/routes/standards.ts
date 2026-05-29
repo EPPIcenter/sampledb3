@@ -4,6 +4,7 @@ import { standard } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { createAuthMiddleware } from '../middleware/auth'
 import { requireParam } from '../lib/common-validators'
+import { handleRouteError } from '../lib/error-handler'
 
 /**
  * Create standards routes with database injection
@@ -18,9 +19,8 @@ export function createStandardsRoutes(database: Database): Hono {
     try {
       const standardsList = await database.select().from(standard).orderBy(standard.name)
       return c.json({ standards: standardsList })
-    } catch (error: any) {
-      console.error('Error fetching standards:', error)
-      return c.json({ error: 'Failed to fetch standards', details: error.message }, 500)
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 
@@ -44,9 +44,8 @@ export function createStandardsRoutes(database: Database): Hono {
       }
 
       return c.json({ standard: standardRecord })
-    } catch (error: any) {
-      console.error('Error fetching standard:', error)
-      return c.json({ error: 'Failed to fetch standard', details: error.message }, 500)
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 

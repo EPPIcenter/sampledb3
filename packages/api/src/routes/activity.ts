@@ -15,6 +15,7 @@ import {
 } from '../db/schema'
 import { sql, eq } from 'drizzle-orm'
 import { createAuthMiddleware } from '../middleware/auth'
+import { handleRouteError } from '../lib/error-handler'
 
 /**
  * Create activity routes with database injection
@@ -303,9 +304,8 @@ export function createActivityRoutes(database: Database): Hono {
       .slice(0, limit)
     
     return c.json({ activity: allActivity })
-  } catch (error: any) {
-    console.error('Error fetching recent activity:', error)
-    return c.json({ error: 'Failed to fetch recent activity', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 

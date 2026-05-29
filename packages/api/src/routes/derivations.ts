@@ -20,6 +20,7 @@ import { createDerivation } from '../lib/derivations'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
+import { handleRouteError } from '../lib/error-handler'
 
 /**
  * Create derivations routes with database injection
@@ -196,12 +197,8 @@ derivations.post('/containers/:id/derive', memberMiddleware, async (c) => {
     })
 
     return c.json(result)
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error creating derivation:', error)
-    return c.json({ error: 'Failed to create derivation', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -231,9 +228,8 @@ derivations.get('/containers/:id/derivations', authMiddleware, async (c) => {
       derivations: records,
       count: records.length,
     })
-  } catch (error: any) {
-    console.error('Error listing derivations:', error)
-    return c.json({ error: 'Failed to list derivations', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -364,9 +360,8 @@ derivations.get('/containers/:id/source', authMiddleware, async (c) => {
       container,
       specimen: spec,
     })
-  } catch (error: any) {
-    console.error('Error fetching container source:', error)
-    return c.json({ error: 'Failed to fetch container source', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -429,9 +424,8 @@ derivations.get('/containers/:id/derivation-chain', authMiddleware, async (c) =>
       descendants,
       current,
     })
-  } catch (error: any) {
-    console.error('Error fetching derivation chain:', error)
-    return c.json({ error: 'Failed to fetch derivation chain', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -468,12 +462,8 @@ derivations.patch('/derivations/:id', memberMiddleware, async (c) => {
       return c.json({ error: 'Derivation not found' }, 404)
     }
     return c.json({ derivation: updated })
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error updating derivation:', error)
-    return c.json({ error: 'Failed to update derivation', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -504,9 +494,8 @@ derivations.delete('/derivations/:id', memberMiddleware, async (c) => {
       return c.json({ error: 'Derivation not found' }, 404)
     }
     return c.json({ message: 'Derivation deleted' })
-  } catch (error: any) {
-    console.error('Error deleting derivation:', error)
-    return c.json({ error: 'Failed to delete derivation', details: error.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 

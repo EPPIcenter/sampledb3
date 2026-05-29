@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
-import { z } from 'zod'
 import { executeMoves, type BatchMoveRequest, type ContainerInfo } from '../lib/container-move'
 import { executeCollectionMoves, type CollectionMoveRequest } from '../lib/collection-move'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
@@ -98,7 +97,6 @@ export function createCollectionsRoutes(database: Database): Hono {
       })
       return c.json({ ...result, ...(inferredPlate && { inferredPlate: true }) })
     } catch (error) {
-      if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
       if (error instanceof Error) {
         if (error.message === 'Scanner configuration not found') return c.json({ error: error.message }, 400)
         if (error.message === 'Plate not found') return c.json({ error: error.message }, 404)
@@ -106,7 +104,7 @@ export function createCollectionsRoutes(database: Database): Hono {
           return c.json({ error: error.message }, 400)
         }
       }
-      throw error
+      return handleRouteError(error, c)
     }
   })
 
@@ -152,8 +150,7 @@ export function createCollectionsRoutes(database: Database): Hono {
       const results = await checkCollectionsExist(database, data.collections)
       return c.json({ results })
     } catch (error) {
-      if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
-      return c.json({ error: 'Internal server error' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -163,8 +160,7 @@ export function createCollectionsRoutes(database: Database): Hono {
       const result = await resolveNamedCollection(database, data.name, data.type)
       return c.json(result)
     } catch (error) {
-      if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
-      return c.json({ error: 'Internal server error' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -175,10 +171,9 @@ export function createCollectionsRoutes(database: Database): Hono {
       const result = await createMicronixPlate(database, { ...data, userId: user?.id })
       return c.json(result, 201)
     } catch (error) {
-      if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
       const mapped = mapCreateCollectionError(error, c)
       if (mapped) return mapped
-      return c.json({ error: 'Internal server error' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -189,10 +184,9 @@ export function createCollectionsRoutes(database: Database): Hono {
       const result = await createCryovialBox(database, { ...data, userId: user?.id })
       return c.json(result, 201)
     } catch (error) {
-      if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
       const mapped = mapCreateCollectionError(error, c)
       if (mapped) return mapped
-      return c.json({ error: 'Internal server error' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -203,10 +197,9 @@ export function createCollectionsRoutes(database: Database): Hono {
       const result = await createGenericBox(database, { ...data, userId: user?.id })
       return c.json(result, 201)
     } catch (error) {
-      if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
       const mapped = mapCreateCollectionError(error, c)
       if (mapped) return mapped
-      return c.json({ error: 'Internal server error' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -217,10 +210,9 @@ export function createCollectionsRoutes(database: Database): Hono {
       const result = await createBag(database, { ...data, userId: user?.id })
       return c.json(result, 201)
     } catch (error) {
-      if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
       const mapped = mapCreateCollectionError(error, c)
       if (mapped) return mapped
-      return c.json({ error: 'Internal server error' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -242,27 +234,8 @@ export function createCollectionsRoutes(database: Database): Hono {
       }
 
       return c.json({ containers: result })
-    } catch (error: unknown) {
-      if (error instanceof z.ZodError) {
-        return c.json({ error: 'Invalid input', details: error.issues }, 400)
-      }
-      console.error('Error resolving containers:', error)
-      const isDevelopment = process.env.NODE_ENV !== 'production'
-      const errorMessage = error instanceof Error ? error.message : 'Failed to resolve containers'
-      const errorStack = error instanceof Error ? error.stack : undefined
-      return c.json(
-        {
-          error: errorMessage,
-          ...(isDevelopment && {
-            details: errorMessage,
-            stack: errorStack,
-          }),
-          ...(!isDevelopment && {
-            errorCode: 'RESOLVE_CONTAINERS_ERROR',
-          }),
-        },
-        500,
-      )
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 
@@ -271,8 +244,7 @@ export function createCollectionsRoutes(database: Database): Hono {
       const items = await listAllCollections(database)
       return c.json({ collections: items })
     } catch (error) {
-      console.error('Error loading all collections:', error)
-      return c.json({ error: 'Internal server error' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -282,7 +254,7 @@ export function createCollectionsRoutes(database: Database): Hono {
       const result = await listCollectionsByType(database, type)
       return c.json({ collections: result })
     } catch (error) {
-      return c.json({ error: 'Internal server error' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -296,29 +268,8 @@ export function createCollectionsRoutes(database: Database): Hono {
       }
 
       return c.json({ success: true, moved: result.moved })
-    } catch (error: unknown) {
-      if (error instanceof z.ZodError) {
-        return c.json({ error: 'Invalid input', details: error.issues }, 400)
-      }
-      console.error('Error moving containers:', error)
-      const isDevelopment = process.env.NODE_ENV !== 'production'
-      const errorMessage = error instanceof Error ? error.message : 'Failed to move containers'
-      const errorStack = error instanceof Error ? error.stack : undefined
-      return c.json(
-        {
-          error: errorMessage,
-          moved: 0,
-          errors: [{ row: 0, error: errorMessage }],
-          ...(isDevelopment && {
-            details: errorMessage,
-            stack: errorStack,
-          }),
-          ...(!isDevelopment && {
-            errorCode: 'MOVE_CONTAINERS_ERROR',
-          }),
-        },
-        500,
-      )
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 
@@ -332,23 +283,11 @@ export function createCollectionsRoutes(database: Database): Hono {
         data.targetCollectionType,
       )
       return c.json({ success: true, moved: result.moved })
-    } catch (error: unknown) {
-      if (error instanceof z.ZodError) {
-        return c.json({ error: 'Invalid input', details: error.issues }, 400)
-      }
+    } catch (error) {
       if (error instanceof SheetMoveTargetNotFoundError) {
         return c.json({ error: error.message }, 404)
       }
-      console.error('Error moving sheets:', error)
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      const errorName = error instanceof Error ? error.name : 'Internal server error'
-      return c.json(
-        {
-          error: errorName,
-          message: errorMessage,
-        },
-        500,
-      )
+      return handleRouteError(error, c)
     }
   })
 

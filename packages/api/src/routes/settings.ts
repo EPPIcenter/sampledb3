@@ -69,7 +69,7 @@ export function createSettingsRoutes(database: Database) {
       table_view_configurations: tableViewConfigurations,
     })
   } catch (error: unknown) {
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -163,7 +163,7 @@ export function createSettingsRoutes(database: Database) {
 
     return c.json({ key, value })
   } catch (error: unknown) {
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -344,17 +344,7 @@ const tableViewConfigurationsSchema = z.object({
         return c.json({ error: 'Invalid setting key' }, 400)
     }
   } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      return c.json({ 
-        error: 'Validation error', 
-        details: error.issues.map(issue => ({
-          path: issue.path.join('.'),
-          message: issue.message
-        }))
-      }, 400)
-    }
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    return c.json({ error: 'Internal server error', details: errorMessage }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -380,9 +370,6 @@ const tableViewConfigurationsSchema = z.object({
     
     return c.json({ success: true, message: 'Setting reset to system default' })
   } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Validation error', details: error.issues }, 400)
-    }
     return handleRouteError(error, c)
   }
 })
@@ -395,7 +382,7 @@ const tableViewConfigurationsSchema = z.object({
       const configs = await getSharedExportConfigurations(database)
       return c.json(configs)
     } catch (error: unknown) {
-      return c.json({ error: 'Internal server error' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -410,9 +397,6 @@ const tableViewConfigurationsSchema = z.object({
       const configs = await getPersonalExportConfigurations(database, userId)
       return c.json(configs || { configurations: [] })
     } catch (error: unknown) {
-      if (error instanceof z.ZodError) {
-        return c.json({ error: 'Validation error', details: error.issues }, 400)
-      }
       return handleRouteError(error, c)
     }
   })
@@ -440,12 +424,6 @@ const tableViewConfigurationsSchema = z.object({
 
     return c.json({ success: true, config: newConfig })
   } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      return c.json({ 
-        error: 'Validation error', 
-        details: error.issues 
-      }, 400)
-    }
     return handleRouteError(error, c)
   }
 })
@@ -465,12 +443,6 @@ const tableViewConfigurationsSchema = z.object({
 
     return c.json({ success: true, configurations: validated.configurations })
   } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      return c.json({ 
-        error: 'Validation error', 
-        details: error.issues 
-      }, 400)
-    }
     return handleRouteError(error, c)
   }
 })
@@ -481,7 +453,7 @@ const tableViewConfigurationsSchema = z.object({
       const configs = await getSharedScannerConfigurations(database)
       return c.json(configs)
     } catch (error: unknown) {
-      return c.json({ error: 'Internal server error' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -496,9 +468,6 @@ const tableViewConfigurationsSchema = z.object({
       const configs = await getPersonalScannerConfigurations(database, userId)
       return c.json(configs || { configurations: [] })
     } catch (error: unknown) {
-      if (error instanceof z.ZodError) {
-        return c.json({ error: 'Validation error', details: error.issues }, 400)
-      }
       return handleRouteError(error, c)
     }
   })
@@ -526,12 +495,6 @@ const tableViewConfigurationsSchema = z.object({
 
     return c.json({ success: true, config: newConfig })
   } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      return c.json({ 
-        error: 'Validation error', 
-        details: error.issues 
-      }, 400)
-    }
     return handleRouteError(error, c)
   }
 })
@@ -551,12 +514,6 @@ const tableViewConfigurationsSchema = z.object({
 
     return c.json({ success: true, configurations: validated.configurations })
   } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      return c.json({ 
-        error: 'Validation error', 
-        details: error.issues 
-      }, 400)
-    }
     return handleRouteError(error, c)
   }
 })
@@ -587,8 +544,7 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
 
       return c.json({ units: relationships })
     } catch (error) {
-      console.error('Error fetching units:', error)
-      return c.json({ error: 'Failed to fetch units' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -617,11 +573,7 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
 
       return c.json({ success: true, unitId })
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return c.json({ error: 'Invalid input', details: error.issues }, 400)
-      }
-      console.error('Error adding unit:', error)
-      return c.json({ error: 'Failed to add unit' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -654,8 +606,7 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
       }
       return c.json({ success: true })
     } catch (error) {
-      console.error('Error removing unit:', error)
-      return c.json({ error: 'Failed to remove unit' }, 500)
+      return handleRouteError(error, c)
     }
   })
 
@@ -681,8 +632,7 @@ const containerTypeSchema = z.enum(['paper', 'cryovial_tube', 'micronix_tube', '
 
       return c.json({ units: relationships })
     } catch (error) {
-      console.error('Error fetching units:', error)
-      return c.json({ error: 'Failed to fetch units' }, 500)
+      return handleRouteError(error, c)
     }
   })
 

@@ -129,9 +129,6 @@ controls.patch('/batches/:id', memberMiddleware, async (c) => {
 
     return c.json({ batch: updated })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
     return handleRouteError(error, c)
   }
 })
@@ -225,10 +222,7 @@ controls.post('/check-unique', memberMiddleware, async (c) => {
     }
     return c.json({ exists: false })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -278,11 +272,7 @@ controls.post('/suggest-name', memberMiddleware, async (c) => {
       existingDefinition: existingMatch?.definition,
     })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error suggesting name:', error)
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -333,9 +323,7 @@ controls.post('/definitions/find', memberMiddleware, async (c) => {
       404,
     )
   } catch (error) {
-    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    console.error('Error finding control definition:', error)
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -445,9 +433,7 @@ controls.post('/definitions/bulk', memberMiddleware, async (c) => {
 
     return c.json({ controls: results }, 201)
   } catch (error) {
-    if (error instanceof z.ZodError) return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    console.error('Error bulk creating control definitions:', error)
-    return c.json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -537,14 +523,7 @@ controls.post('/', memberMiddleware, async (c) => {
     }
     return c.json({ control: newControl }, 201)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error creating control definition:', error)
-    if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
-      return c.json({ error: 'A control definition with this name already exists' }, 409)
-    }
-    return c.json({ error: 'Internal server error', details: error instanceof Error ? error.message : String(error) }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -655,12 +634,8 @@ controls.post('/batches/validate-name', memberMiddleware, async (c) => {
     const validation = await validateControlBatchName(database, data.name, data.excludeId)
     
     return c.json(validation)
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return c.json({ valid: false, error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error validating batch name:', error)
-    return c.json({ valid: false, error: 'Failed to validate batch name', details: error?.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 
@@ -689,12 +664,8 @@ controls.post('/batches/suggest-name', memberMiddleware, async (c) => {
     const suggestedName = await generateUniqueBatchName(dbInstance, definition.name, data.productionDate)
     
     return c.json({ name: suggestedName })
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    console.error('Error generating suggested batch name:', error)
-    return c.json({ error: 'Failed to generate suggested name', details: error?.message }, 500)
+  } catch (error) {
+    return handleRouteError(error, c)
   }
 })
 

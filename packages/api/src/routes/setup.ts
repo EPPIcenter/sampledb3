@@ -16,6 +16,7 @@ import {
 } from '../lib/settings'
 import type { Database } from '../db/client'
 import { utcNow } from '../lib/datetime'
+import { handleRouteError } from '../lib/error-handler'
 // Note: Defaults are only used in the frontend Setup.tsx
 // Backend requires all data to be provided via the API
 
@@ -396,11 +397,7 @@ const initSchema = z.object({
 
       return c.json({ success: true, message: 'System initialized successfully' })
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return c.json({ error: 'Invalid input', details: error.issues }, 400)
-      }
-      console.error('Setup error:', error)
-      return c.json({ error: 'Setup failed', details: String(error) }, 500)
+      return handleRouteError(error, c)
     }
   })
 

@@ -4,6 +4,7 @@ import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { getAdminStatistics } from '../lib/statistics/admin-stats'
 import { getDashboardStatistics } from '../lib/statistics/dashboard-stats'
 import { parseStatisticsFilters } from '../lib/statistics/parse-filters'
+import { handleRouteError } from '../lib/error-handler'
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 
 /**
@@ -22,21 +23,7 @@ export function createStatisticsRoutes(database: Database, sqliteDatabase: SQLit
       const data = await getDashboardStatistics(database, sqliteDatabase, filters)
       return c.json(data)
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      const isDevelopment = process.env.NODE_ENV !== 'production'
-      return c.json(
-        {
-          error: 'Failed to fetch statistics',
-          ...(isDevelopment && {
-            details: errorMessage,
-            stack: error instanceof Error ? error.stack : undefined,
-          }),
-          ...(!isDevelopment && {
-            errorCode: 'STATISTICS_ERROR',
-          }),
-        },
-        500,
-      )
+      return handleRouteError(error, c)
     }
   })
 
@@ -45,15 +32,7 @@ export function createStatisticsRoutes(database: Database, sqliteDatabase: SQLit
       const data = await getAdminStatistics(database)
       return c.json(data)
     } catch (error: unknown) {
-      console.error('[ADMIN STATS] Error fetching admin statistics:', error)
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      return c.json(
-        {
-          error: 'Failed to fetch admin statistics',
-          details: errorMessage,
-        },
-        500,
-      )
+      return handleRouteError(error, c)
     }
   })
 

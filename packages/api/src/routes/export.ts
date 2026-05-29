@@ -1,5 +1,11 @@
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { Database } from '../db/client'
+import {
+  handleRouteError,
+  ExpectedNotFoundError,
+  RouteError,
+} from '../lib/error-handler'
 import {
   specimen,
   studySubject,
@@ -73,6 +79,19 @@ function formatLocalDateTime(date: Date = new Date()): string {
   return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`
 }
 
+function handleExportFailure(c: Context, message: string, error: unknown): Response {
+  if (error instanceof ExpectedNotFoundError || error instanceof RouteError) {
+    return handleRouteError(error, c)
+  }
+  const details = error instanceof Error ? error.message : String(error)
+  return handleRouteError(new RouteError(500, { error: message, details }), c)
+}
+
+function rethrowExpectedNotFound(error: unknown): never {
+  const message = error instanceof Error ? error.message : 'Not found'
+  throw new ExpectedNotFoundError(message)
+}
+
 /**
  * Create export routes with database injection
  * @param database - Database instance (required)
@@ -100,9 +119,8 @@ export_.get('/specimens.csv', authMiddleware, async (c) => {
     c.header('Content-Type', 'text/csv')
     c.header('Content-Disposition', `attachment; filename="specimens_${formatLocalDateTime()}.csv"`)
     return c.text(csv)
-  } catch (error: any) {
-    console.error('Error exporting specimens:', error)
-    return c.json({ error: 'Failed to export specimens', details: error.message }, 500)
+  } catch (error) {
+    return handleExportFailure(c, 'Failed to export specimens', error)
   }
 })
 
@@ -148,9 +166,8 @@ export_.get('/inventory.csv', authMiddleware, async (c) => {
     c.header('Content-Type', 'text/csv')
     c.header('Content-Disposition', `attachment; filename="inventory_${formatLocalDateTime()}.csv"`)
     return c.text(csv)
-  } catch (error: any) {
-    console.error('Error exporting inventory:', error)
-    return c.json({ error: 'Failed to export inventory', details: error.message }, 500)
+  } catch (error) {
+    return handleExportFailure(c, 'Failed to export inventory', error)
   }
 })
 
@@ -221,8 +238,8 @@ export_.get('/containers', authMiddleware, async (c) => {
       containers = result.containers
       study = result.study
       specimens = result.specimens
-    } catch (error: any) {
-      return c.json({ error: error.message }, 404)
+    } catch (error: unknown) {
+      rethrowExpectedNotFound(error)
     }
 
     if (countOnly) {
@@ -236,7 +253,7 @@ export_.get('/containers', authMiddleware, async (c) => {
     }
 
     if (containers.length === 0) {
-      return c.json({ error: 'No containers found for this study' }, 404)
+      throw new ExpectedNotFoundError('No containers found for this study')
     }
 
     // Enrich container data (this also applies container type filtering)
@@ -276,9 +293,8 @@ export_.get('/containers', authMiddleware, async (c) => {
     return c.body(new Uint8Array(excelBuffer), 200, {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
-  } catch (error: any) {
-    console.error('Error exporting containers:', error)
-    return c.json({ error: 'Failed to export containers', details: error.message }, 500)
+  } catch (error) {
+    return handleExportFailure(c, 'Failed to export containers', error)
   }
 })
 
@@ -296,7 +312,7 @@ export_.post('/containers', authMiddleware, async (c) => {
     // Resolve study
     const studyId = await resolveStudyByShortCode(database, studyCode)
     if (!studyId) {
-      return c.json({ error: 'Study not found' }, 404)
+      throw new ExpectedNotFoundError('Study not found')
     }
 
     // Get subject names from request
@@ -387,8 +403,8 @@ export_.post('/containers', authMiddleware, async (c) => {
       containers = result.containers
       study = result.study
       specimens = result.specimens
-    } catch (error: any) {
-      return c.json({ error: error.message }, 404)
+    } catch (error: unknown) {
+      rethrowExpectedNotFound(error)
     }
 
     if (countOnly) {
@@ -463,9 +479,8 @@ export_.post('/containers', authMiddleware, async (c) => {
       format: 'xlsx',
       filename: `${filename}.xlsx`,
     })
-  } catch (error: any) {
-    console.error('Error exporting containers by names:', error)
-    return c.json({ error: 'Failed to export containers', details: error.message }, 500)
+  } catch (error) {
+    return handleExportFailure(c, 'Failed to export containers', error)
   }
 })
 
@@ -485,7 +500,7 @@ export_.get('/available-types', authMiddleware, async (c) => {
       .get()
 
     if (!studyRecord) {
-      return c.json({ error: 'Study not found' }, 404)
+      throw new ExpectedNotFoundError('Study not found')
     }
 
     // Get subject IDs for this study
@@ -569,9 +584,8 @@ export_.get('/available-types', authMiddleware, async (c) => {
       specimen_types: specimenTypes.map(st => ({ id: st.id, name: st.name })),
       container_types: containerTypes,
     })
-  } catch (error: any) {
-    console.error('Error fetching available types:', error)
-    return c.json({ error: 'Failed to fetch available types', details: error.message }, 500)
+  } catch (error) {
+    return handleExportFailure(c, 'Failed to fetch available types', error)
   }
 })
 
@@ -599,9 +613,8 @@ export_.post('/containers/validate-studies', authMiddleware, async (c) => {
       valid_count: validation.valid.size,
       invalid_count: validation.invalid.length,
     })
-  } catch (error: any) {
-    console.error('Error validating study codes:', error)
-    return c.json({ error: 'Failed to validate study codes', details: error.message }, 500)
+  } catch (error) {
+    return handleExportFailure(c, 'Failed to validate study codes', error)
   }
 })
 
@@ -710,9 +723,8 @@ export_.post('/containers/multi-study', authMiddleware, async (c) => {
       format: 'xlsx',
       filename: `${filename}.xlsx`,
     })
-  } catch (error: any) {
-    console.error('Error exporting containers from multiple studies:', error)
-    return c.json({ error: 'Failed to export containers', details: error.message }, 500)
+  } catch (error) {
+    return handleExportFailure(c, 'Failed to export containers', error)
   }
 })
 
@@ -759,8 +771,8 @@ export_.post('/containers/by-barcodes', authMiddleware, async (c) => {
       specimens = result.specimens
       studies = result.studies
       subjectToStudyMap = result.subjectToStudyMap
-    } catch (error: any) {
-      return c.json({ error: error.message }, 404)
+    } catch (error: unknown) {
+      rethrowExpectedNotFound(error)
     }
 
     if (containers.length === 0) {
@@ -831,9 +843,8 @@ export_.post('/containers/by-barcodes', authMiddleware, async (c) => {
       format: 'xlsx',
       filename: `${filename}.xlsx`,
     })
-  } catch (error: any) {
-    console.error('Error exporting containers by barcodes:', error)
-    return c.json({ error: 'Failed to export containers', details: error.message }, 500)
+  } catch (error) {
+    return handleExportFailure(c, 'Failed to export containers', error)
   }
 })
 

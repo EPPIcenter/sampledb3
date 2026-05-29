@@ -7,6 +7,7 @@ import { sql } from 'drizzle-orm'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
+import { handleRouteError } from '../lib/error-handler'
 
 /**
  * Create reagents routes with database injection
@@ -106,10 +107,7 @@ reagents.post('/', memberMiddleware, async (c) => {
     }
     return c.json({ reagent: newReagent }, 201)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
 })
 
@@ -153,10 +151,7 @@ reagents.patch('/:id', memberMiddleware, async (c) => {
     }
     return c.json({ reagent: updated })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({ error: 'Invalid input', details: error.issues }, 400)
-    }
-    return c.json({ error: 'Internal server error' }, 500)
+    return handleRouteError(error, c)
   }
   })
 

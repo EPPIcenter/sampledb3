@@ -4,6 +4,7 @@ import { plasmid } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { createAuthMiddleware } from '../middleware/auth'
 import { requireParam } from '../lib/common-validators'
+import { handleRouteError } from '../lib/error-handler'
 
 /**
  * Create plasmids routes with database injection
@@ -18,9 +19,8 @@ export function createPlasmidsRoutes(database: Database): Hono {
     try {
       const plasmidsList = await database.select().from(plasmid).orderBy(plasmid.name)
       return c.json({ plasmids: plasmidsList })
-    } catch (error: any) {
-      console.error('Error fetching plasmids:', error)
-      return c.json({ error: 'Failed to fetch plasmids', details: error.message }, 500)
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 
@@ -44,9 +44,8 @@ export function createPlasmidsRoutes(database: Database): Hono {
       }
 
       return c.json({ plasmid: plasmidRecord })
-    } catch (error: any) {
-      console.error('Error fetching plasmid:', error)
-      return c.json({ error: 'Failed to fetch plasmid', details: error.message }, 500)
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 

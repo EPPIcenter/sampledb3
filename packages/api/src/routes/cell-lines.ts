@@ -4,6 +4,7 @@ import { cellLine } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { createAuthMiddleware } from '../middleware/auth'
 import { requireParam } from '../lib/common-validators'
+import { handleRouteError } from '../lib/error-handler'
 
 /**
  * Create cell lines routes with database injection
@@ -18,9 +19,8 @@ export function createCellLinesRoutes(database: Database): Hono {
     try {
       const lines = await database.select().from(cellLine).orderBy(cellLine.name)
       return c.json({ cellLines: lines })
-    } catch (error: any) {
-      console.error('Error fetching cell lines:', error)
-      return c.json({ error: 'Failed to fetch cell lines', details: error.message }, 500)
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 
@@ -44,9 +44,8 @@ export function createCellLinesRoutes(database: Database): Hono {
       }
 
       return c.json({ cellLine: line })
-    } catch (error: any) {
-      console.error('Error fetching cell line:', error)
-      return c.json({ error: 'Failed to fetch cell line', details: error.message }, 500)
+    } catch (error) {
+      return handleRouteError(error, c)
     }
   })
 

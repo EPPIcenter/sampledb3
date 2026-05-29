@@ -154,7 +154,6 @@ async function checkContainerTypeInUse(
       }
     }
   } catch (error) {
-    console.error('Error checking container type usage:', error)
     return {
       inUse: false, // Fail open to avoid blocking if query fails
     }
