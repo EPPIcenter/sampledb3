@@ -30,7 +30,6 @@ export type Paper = InferSelectModel<typeof paper>
 export type StaticWell = InferSelectModel<typeof staticWell>
 export type Strain = InferSelectModel<typeof strain>
 export type StorageType = InferSelectModel<typeof storageType>
-export type Version = InferSelectModel<typeof version>
 export type Settings = InferSelectModel<typeof settings>
 export type SpecimenTypeContainerType = InferSelectModel<typeof specimenTypeContainerType>
 export type ContainerTypeUnit = InferSelectModel<typeof containerTypeUnit>
@@ -377,8 +376,8 @@ export const storageType = sqliteTable('storage_type', {
   description: text('description'),
 })
 
-export const version = sqliteTable('version', {
-  name: text('name').notNull(),
+export const schemaVersion = sqliteTable('schema_version', {
+  version: integer('version').notNull(),
 })
 
 // Application settings (user-configurable defaults)

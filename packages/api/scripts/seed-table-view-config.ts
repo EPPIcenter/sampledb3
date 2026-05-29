@@ -10,7 +10,7 @@
  * Or from packages/api:
  *   DATABASE_PATH=/path/to/sampledb.sqlite bun run scripts/seed-table-view-config.ts
  */
-import { createDatabase } from '../src/db/client'
+import { openOperationalDatabase } from '../src/db/client'
 import {
   getSetting,
   setTableViewConfigurations,
@@ -25,7 +25,7 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  const { db } = createDatabase(dbPath.trim())
+  const { db } = openOperationalDatabase(dbPath.trim())
   const existing = await getSetting<TableViewConfigurations>(db, 'table_view_configurations', null)
 
   if (existing?.configurations?.length) {

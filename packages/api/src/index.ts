@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import { readFile } from 'fs/promises'
 import { rateLimit } from './middleware/rate-limit'
-import { createDatabase } from './db/client'
+import { openOperationalDatabase } from './db/client'
 import { setRequestDatabase } from './lib/db-context'
 import { study } from './db/schema'
 import { createAuthRoutes } from './routes/auth'
@@ -48,7 +48,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 // Create database instance
-const { db, sqlite } = createDatabase()
+const { db, sqlite } = openOperationalDatabase()
 
 /** long-lived hashed bundles vs HTML vs other static (favicon, etc.) */
 function setStaticCachePolicy(filePath: string, c: Context): void {

@@ -1,5 +1,10 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { setupTestDatabase, cleanupTestDatabase } from './db-setup'
+import {
+  setupTestDatabase,
+  cleanupTestDatabase,
+  CURRENT_SCHEMA_VERSION,
+  getRecordedSchemaVersion,
+} from './db-setup'
 
 describe('setupTestDatabase', () => {
   let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
@@ -25,5 +30,7 @@ describe('setupTestDatabase', () => {
     expect(names).toContain('settings')
     expect(names).toContain('users')
     expect(names).toContain('qpcr_experiment')
+    expect(names).toContain('schema_version')
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
   })
 })

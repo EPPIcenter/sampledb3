@@ -7,7 +7,7 @@
  * Requires DATABASE_PATH env var, or defaults to ./sampledb_demo.sqlite when run from root.
  */
 import type { Database } from '../db/client'
-import { createDatabase } from '../db/client'
+import { openOperationalDatabase } from '../db/client'
 import {
   users,
   specimenType,
@@ -462,7 +462,7 @@ export async function runDemoSeed(
 
 if (import.meta.main) {
   const dbPath = process.env.DATABASE_PATH || './sampledb_demo.sqlite'
-  const { db } = createDatabase(dbPath)
+  const { db } = openOperationalDatabase(dbPath)
   runDemoSeed(db)
     .then((result) => {
       console.log('Demo seed complete:', result)

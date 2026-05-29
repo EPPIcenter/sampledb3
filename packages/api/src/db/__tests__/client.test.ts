@@ -3,7 +3,7 @@ import { Database } from 'bun:sqlite'
 import { existsSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { createDatabase } from '../client'
+import { openOperationalDatabase } from '../client'
 
 describe('Database Client', () => {
   let testDbPath: string
@@ -34,7 +34,7 @@ describe('Database Client', () => {
     expect(before).toBeNull()
     db.close()
 
-    const { sqlite } = createDatabase(testDbPath)
+    const { sqlite } = openOperationalDatabase(testDbPath)
     const after = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='error_logs'").get()
     expect(after).toBeDefined()
     expect((after as { name: string }).name).toBe('error_logs')

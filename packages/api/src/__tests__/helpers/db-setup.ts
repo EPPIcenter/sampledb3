@@ -1,30 +1,26 @@
-import { Database } from 'bun:sqlite'
-import { drizzle } from 'drizzle-orm/bun-sqlite'
-import * as schema from '../../db/schema'
 import type { Database as DrizzleDatabase } from '../../db/client'
-import { applyInitialSchema, dropAllUserTables } from '../../db/apply-initial-schema'
+import { openOperationalDatabase } from '../../db/client'
+import { CURRENT_SCHEMA_VERSION, getRecordedSchemaVersion } from '../../db/schema-evolution'
+import { dropAllUserTables } from '../../db/apply-initial-schema'
+import { evolveOperationalSchema } from '../../db/schema-evolution'
+import type { Database } from 'bun:sqlite'
 
 /**
- * Creates an in-memory SQLite database for testing.
+ * Opens an in-memory operational database the same way production does.
  * Assigns a unique _id so defaults/settings cache keys are distinct across test DBs.
  */
 export function createTestDatabase(): { db: DrizzleDatabase; sqlite: Database } {
-  const sqlite = new Database(':memory:')
-  sqlite.exec('PRAGMA journal_mode = WAL')
-
-  const db = drizzle(sqlite, { schema }) as DrizzleDatabase & { _id?: string }
-  db._id = `test-db-${crypto.randomUUID()}`
-
-  return { db, sqlite }
+  const { db, sqlite } = openOperationalDatabase(':memory:')
+  const typedDb = db as DrizzleDatabase & { _id?: string }
+  typedDb._id = `test-db-${crypto.randomUUID()}`
+  return { db: typedDb, sqlite }
 }
 
 /**
- * Sets up a test database using the same initial_schema.sql snapshot as production.
+ * Sets up a test database using the production open + schema evolution path.
  */
 export async function setupTestDatabase(): Promise<{ db: DrizzleDatabase; sqlite: Database }> {
-  const { db, sqlite } = createTestDatabase()
-  applyInitialSchema(sqlite)
-  return { db, sqlite }
+  return createTestDatabase()
 }
 
 /**
@@ -35,9 +31,11 @@ export function cleanupTestDatabase(sqlite: Database) {
 }
 
 /**
- * Reset the test database by dropping all tables and reapplying initial_schema.sql
+ * Reset the test database by dropping all tables and re-running schema evolution.
  */
 export async function resetTestDatabase(sqlite: Database, _db: DrizzleDatabase) {
   dropAllUserTables(sqlite)
-  applyInitialSchema(sqlite)
+  evolveOperationalSchema(sqlite)
 }
+
+export { CURRENT_SCHEMA_VERSION, getRecordedSchemaVersion }
