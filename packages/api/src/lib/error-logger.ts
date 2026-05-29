@@ -2,6 +2,22 @@ import type { Database } from '../db/client'
 import { errorLogs } from '../db/schema'
 import { lt, sql } from 'drizzle-orm'
 import { utcNow } from './datetime'
+import { logError as logObservabilityError } from './observability'
+
+function logPersistFailure(
+  reason: string,
+  persistError: unknown,
+  original: { source: ErrorLogSource; level: ErrorLogLevel; message: string; context?: ErrorLogContext },
+): void {
+  const err = persistError instanceof Error ? persistError : new Error(String(persistError))
+  logObservabilityError(reason, err, {
+    component: 'error-logger',
+    source: original.source,
+    level: original.level,
+    message: original.message,
+    ...original.context,
+  })
+}
 
 export interface ErrorLogContext {
   userId?: number
@@ -109,25 +125,19 @@ export async function logError(
         userAgent: context?.userAgent,
         resolved: false,
       })
-    } catch (logError) {
-      // Log to console as fallback if database logging fails
-      console.error('[ERROR_LOGGER] Failed to log error to database:', logError)
-      console.error('[ERROR_LOGGER] Original error:', {
+    } catch (insertError) {
+      logPersistFailure('Failed to log error to database', insertError, {
         source,
         level,
         message: message || errorDetails.message,
-        errorCode: errorDetails.errorCode,
         context,
       })
     }
   } catch (err) {
-    // Fallback to console if anything goes wrong
-    console.error('[ERROR_LOGGER] Critical error in error logger:', err)
-    console.error('[ERROR_LOGGER] Original error:', {
+    logPersistFailure('Critical error in error logger', err, {
       source,
       level,
       message,
-      error,
       context,
     })
   }
@@ -228,7 +238,11 @@ export async function cleanupOldErrorLogs(
       retentionDays: days,
     }
   } catch (error) {
-    console.error('[ERROR_LOGGER] Failed to cleanup old error logs:', error)
+    logObservabilityError(
+      'Failed to cleanup old error logs',
+      error instanceof Error ? error : new Error(String(error)),
+      { component: 'error-logger' },
+    )
     throw error
   }
 }

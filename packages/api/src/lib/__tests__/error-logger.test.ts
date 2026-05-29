@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import { logError, logFrontendError, logBackendError, cleanupOldErrorLogs } from '../error-logger'
 import { errorLogs } from '../../db/schema'
@@ -191,6 +191,8 @@ describe('error-logger lib', () => {
 
   describe('graceful degradation when error_logs table missing', () => {
     it('does not throw when error_logs table does not exist', async () => {
+      process.env.LOG_FORMAT = 'json'
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
       const setup = await setupTestDatabase()
       const { db, sqlite } = setup
       sqlite.exec('DROP TABLE IF EXISTS error_logs')
@@ -203,6 +205,12 @@ describe('error-logger lib', () => {
         logError(db, 'backend', 'error', 'No table', new Error('test'), {})
       ).resolves.toBeUndefined()
 
+      expect(consoleError).toHaveBeenCalled()
+      const payload = JSON.parse(String(consoleError.mock.calls[0][0]))
+      expect(payload.message).toBe('Failed to log error to database')
+      expect(payload.context?.component).toBe('error-logger')
+
+      consoleError.mockRestore()
       cleanupTestDatabase(sqlite)
     })
   })

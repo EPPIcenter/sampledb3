@@ -19,6 +19,7 @@ import { parseBioradCsv, parseQuantStudioXls } from '../lib/qpcr-result-parse'
 import { z } from 'zod'
 import { handleRouteError } from '../lib/error-handler'
 import { logError, type ErrorLogContext } from '../lib/error-logger'
+import { logError as logObservabilityError } from '../lib/observability'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { validateLimit } from '../lib/constants'
 import { getScannerConfigurationById } from '../lib/settings'
@@ -835,7 +836,13 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         errorMessage,
         new Error(errorMessage),
         templateLogContext(errorMessage, errorCode)
-      ).catch((err) => console.error('[qpcr template] Failed to log error:', err))
+      ).catch((err) =>
+        logObservabilityError(
+          'Failed to log qPCR template error to database',
+          err instanceof Error ? err : new Error(String(err)),
+          { component: 'qpcr-experiments' },
+        ),
+      )
     }
     try {
       const id = parseInt(requireParam(c, 'id'))
