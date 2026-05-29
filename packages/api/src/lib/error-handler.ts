@@ -3,6 +3,13 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { z } from 'zod'
 import { logBackendError, logError, type ErrorLogContext } from './error-logger'
 import { getRequestDatabase } from './db-context'
+import { logError as logObservabilityError } from './observability'
+import { getRequestId } from '../middleware/request-context'
+
+function logPersistFailure(logErr: unknown): void {
+  const err = logErr instanceof Error ? logErr : new Error(String(logErr))
+  logObservabilityError('Failed to log error to database', err, { component: 'error-handler' })
+}
 
 export interface ErrorResponse {
   error: string
@@ -34,6 +41,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
     userId: user?.id,
     url,
     userAgent,
+    requestId: getRequestId(c),
     additionalContext: {
       method: c.req.method,
       path: new URL(url).pathname,
@@ -42,9 +50,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
   
   // Preserve route-specific JSON bodies (search, containers read paths, etc.)
   if (error instanceof RouteError) {
-    logBackendError(database, error, errorContext).catch((logErr) => {
-      console.error('[ERROR_HANDLER] Failed to log error:', logErr)
-    })
+    logBackendError(database, error, errorContext).catch(logPersistFailure)
     return c.json(error.body, error.status as ContentfulStatusCode)
   }
 
@@ -57,9 +63,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
         ...errorContext.additionalContext,
         validationIssues: error.issues,
       },
-    }).catch((logErr) => {
-      console.error('[ERROR_HANDLER] Failed to log error:', logErr)
-    })
+    }).catch(logPersistFailure)
     return c.json({
       error: 'Validation error',
       details: error.issues,
@@ -74,20 +78,22 @@ export function handleRouteError(error: unknown, c: Context): Response {
     // Handle custom error classes
     if (error instanceof UnauthorizedError) {
       // Log 401 errors as warnings (they can be expected in some cases)
-      logError(database, 'backend', 'warning', error.message, error, errorContext).catch((logErr) => {
-        console.error('[ERROR_HANDLER] Failed to log error:', logErr)
-      })
+      logError(database, 'backend', 'warning', error.message, error, errorContext).catch(logPersistFailure)
       return c.json({
         error: error.message,
         errorCode: 'UNAUTHORIZED'
       }, 401)
     }
     
+    if (error instanceof ExpectedNotFoundError) {
+      return c.json({
+        error: error.message,
+        errorCode: 'NOT_FOUND',
+      }, 404)
+    }
+
     if (error instanceof NotFoundError) {
-      // Log error asynchronously (non-blocking)
-      logBackendError(database, error, errorContext).catch((logErr) => {
-        console.error('[ERROR_HANDLER] Failed to log error:', logErr)
-      })
+      logError(database, 'backend', 'warning', error.message, error, errorContext).catch(logPersistFailure)
       return c.json({
         error: error.message,
         errorCode: 'NOT_FOUND'
@@ -96,9 +102,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
     
     if (error instanceof ConflictError) {
       // Log error asynchronously (non-blocking)
-      logBackendError(database, error, errorContext).catch((logErr) => {
-        console.error('[ERROR_HANDLER] Failed to log error:', logErr)
-      })
+      logBackendError(database, error, errorContext).catch(logPersistFailure)
       return c.json({
         error: error.message,
         errorCode: 'CONFLICT'
@@ -106,9 +110,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
     }
 
     if (error instanceof CollectionDeleteBlockedError) {
-      logError(database, 'backend', 'warning', error.message, error, errorContext).catch((logErr) => {
-        console.error('[ERROR_HANDLER] Failed to log error:', logErr)
-      })
+      logError(database, 'backend', 'warning', error.message, error, errorContext).catch(logPersistFailure)
       return c.json(
         {
           error: error.summary,
@@ -121,9 +123,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
     
     if (error instanceof ValidationError) {
       // Log error asynchronously (non-blocking)
-      logBackendError(database, error, errorContext).catch((logErr) => {
-        console.error('[ERROR_HANDLER] Failed to log error:', logErr)
-      })
+      logBackendError(database, error, errorContext).catch(logPersistFailure)
       return c.json({
         error: error.message,
         details: error.details,
@@ -132,9 +132,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
     }
     
     // Log error asynchronously (non-blocking)
-    logBackendError(database, error, errorContext).catch((logErr) => {
-      console.error('[ERROR_HANDLER] Failed to log error:', logErr)
-    })
+    logBackendError(database, error, errorContext).catch(logPersistFailure)
     return c.json({
       error: error.message,
       errorCode: error.name || 'APPLICATION_ERROR',
@@ -147,9 +145,7 @@ export function handleRouteError(error: unknown, c: Context): Response {
 
   // Handle unknown errors
   // Log error asynchronously (non-blocking)
-  logBackendError(database, error, errorContext).catch((logErr) => {
-    console.error('[ERROR_HANDLER] Failed to log error:', logErr)
-  })
+  logBackendError(database, error, errorContext).catch(logPersistFailure)
   const isDevelopment = process.env.NODE_ENV !== 'production'
   return c.json({
     error: 'Internal server error',
@@ -161,6 +157,13 @@ export function handleRouteError(error: unknown, c: Context): Response {
 }
 
 // Custom error classes for better error handling
+export class ExpectedNotFoundError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ExpectedNotFoundError'
+  }
+}
+
 export class NotFoundError extends Error {
   constructor(resource: string, id?: string | number) {
     super(`${resource}${id ? ` with id ${id}` : ''} not found`)

@@ -76,6 +76,43 @@ describe('error-logger lib', () => {
     })
   })
 
+  describe('ERROR_LOG_LEVEL', () => {
+    const originalLevel = process.env.ERROR_LOG_LEVEL
+
+    afterEach(() => {
+      if (originalLevel !== undefined) {
+        process.env.ERROR_LOG_LEVEL = originalLevel
+      } else {
+        delete process.env.ERROR_LOG_LEVEL
+      }
+    })
+
+    it('suppresses warning when minimum level is error', async () => {
+      process.env.ERROR_LOG_LEVEL = 'error'
+      const setup = await setupTestDatabase()
+      const { db, sqlite } = setup
+
+      await logError(db, 'backend', 'warning', 'Routine warning', new Error('warn'), {})
+
+      const rows = await db.select().from(errorLogs).where(eq(errorLogs.message, 'Routine warning'))
+      expect(rows.length).toBe(0)
+      cleanupTestDatabase(sqlite)
+    })
+
+    it('persists warning when minimum level is warning', async () => {
+      process.env.ERROR_LOG_LEVEL = 'warning'
+      const setup = await setupTestDatabase()
+      const { db, sqlite } = setup
+
+      await logError(db, 'backend', 'warning', 'Tracked warning', new Error('warn'), {})
+
+      const rows = await db.select().from(errorLogs).where(eq(errorLogs.message, 'Tracked warning'))
+      expect(rows.length).toBeGreaterThanOrEqual(1)
+      expect(rows[rows.length - 1].level).toBe('warning')
+      cleanupTestDatabase(sqlite)
+    })
+  })
+
   let testDb: Database
   let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
 

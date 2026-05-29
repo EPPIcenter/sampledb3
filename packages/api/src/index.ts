@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { logger } from 'hono/logger'
 import { secureHeaders } from 'hono/secure-headers'
 import { serveStatic } from 'hono/bun'
 import { join } from 'path'
@@ -40,6 +39,7 @@ import { createErrorLogsRoutes } from './routes/error-logs'
 import { createDataAuditRoutes } from './routes/data-audit'
 import { createQpcrExperimentsRoutes } from './routes/qpcr-experiments'
 import { handleRouteError } from './lib/error-handler'
+import { requestContextMiddleware } from './middleware/request-context'
 import { getAppBuildId } from './lib/app-build-id'
 import { shouldServeSpaFallback } from './lib/spa-fallback-path'
 import type { Context } from 'hono'
@@ -69,7 +69,7 @@ app.use('*', async (c, next) => {
   setRequestDatabase(c, db)
   await next()
 })
-app.use('*', logger())
+app.use('*', requestContextMiddleware())
 app.use('*', secureHeaders())
 app.use('*', cors({
   origin: process.env.NODE_ENV === 'production' 

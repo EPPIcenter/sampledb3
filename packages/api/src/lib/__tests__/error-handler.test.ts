@@ -4,6 +4,7 @@ import { z } from 'zod'
 import {
   handleRouteError,
   UnauthorizedError,
+  ExpectedNotFoundError,
   NotFoundError,
   ConflictError,
   ValidationError,
@@ -12,6 +13,8 @@ import {
   containersFetchFailedBody,
 } from '../error-handler'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
+import { errorLogs } from '../../db/schema'
+import { eq } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 
 describe('error-handler', () => {
@@ -82,6 +85,46 @@ describe('error-handler', () => {
       const data = await getJson(res)
       expect((data.error as string)).toContain('not found')
       expect(data.errorCode).toBe('NOT_FOUND')
+    })
+
+    it('returns 404 for ExpectedNotFoundError without persisting to error_logs', async () => {
+      const app = createAppWithError(new ExpectedNotFoundError('Study not found'))
+      const res = await app.request('http://localhost/test')
+      expect(res.status).toBe(404)
+      const data = await getJson(res)
+      expect(data.error).toBe('Study not found')
+      expect(data.errorCode).toBe('NOT_FOUND')
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const rows = await testDb
+        .select()
+        .from(errorLogs)
+        .where(eq(errorLogs.message, 'Study not found'))
+      expect(rows.length).toBe(0)
+    })
+
+    it('persists NotFoundError at warning level when threshold allows', async () => {
+      const previous = process.env.ERROR_LOG_LEVEL
+      process.env.ERROR_LOG_LEVEL = 'warning'
+
+      try {
+        const app = createAppWithError(new NotFoundError('Specimen', 99))
+        await app.request('http://localhost/test')
+
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const rows = await testDb
+          .select()
+          .from(errorLogs)
+          .where(eq(errorLogs.message, 'Specimen with id 99 not found'))
+        expect(rows.length).toBeGreaterThanOrEqual(1)
+        expect(rows[rows.length - 1].level).toBe('warning')
+      } finally {
+        if (previous !== undefined) {
+          process.env.ERROR_LOG_LEVEL = previous
+        } else {
+          delete process.env.ERROR_LOG_LEVEL
+        }
+      }
     })
 
     it('returns 409 and CONFLICT for ConflictError', async () => {
