@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { axiosApi, getLastResponseRequestId } from './api/client'
 
 export interface FrontendError {
   message: string
@@ -15,29 +15,22 @@ let isProcessingQueue = false
 let queueTimeout: ReturnType<typeof setTimeout> | null = null
 
 /**
- * Get the API base URL
- */
-function getApiBaseUrl(): string {
-  // In production, use relative URL
-  // In development, use the API server URL
-  if (import.meta.env.PROD) {
-    return '/api'
-  }
-  return import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
-}
-
-/**
  * Send a single error to the backend
  */
 async function sendError(error: FrontendError): Promise<void> {
+  const requestId =
+    (typeof error.context?.requestId === 'string' ? error.context.requestId : undefined) ??
+    getLastResponseRequestId()
+
   try {
-    await axios.post(`${getApiBaseUrl()}/error-logs`, {
+    await axiosApi.post('/error-logs', {
       message: error.message,
       stack: error.stack,
       errorCode: error.errorCode,
       level: error.level,
       context: {
         ...error.context,
+        ...(requestId ? { requestId } : {}),
         userAgent: navigator.userAgent,
         url: window.location.href,
         timestamp: new Date().toISOString(),
@@ -123,7 +116,7 @@ export async function logError(error: FrontendError): Promise<void> {
 export function logErrorFromException(
   error: Error,
   level: 'error' | 'warning' | 'info' = 'error',
-  context?: Record<string, unknown>
+  context?: Record<string, unknown>,
 ): void {
   logError({
     message: error.message,
@@ -140,7 +133,7 @@ export function logErrorFromException(
 export function logErrorFromMessage(
   message: string,
   level: 'error' | 'warning' | 'info' = 'error',
-  context?: Record<string, unknown>
+  context?: Record<string, unknown>,
 ): void {
   logError({
     message,
