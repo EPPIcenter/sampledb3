@@ -1,10 +1,13 @@
 import { Database } from 'bun:sqlite'
 import { applyInitialSchema } from './apply-initial-schema'
+import { applyLegacyBaselineMigration } from './legacy-baseline'
+import { listNumberedMigrations, runSqlMigration } from './migration-runner'
 
 /** Canonical schema level; bump when adding numbered deltas under migrations/. */
-export const CURRENT_SCHEMA_VERSION = 1
+export const CURRENT_SCHEMA_VERSION = 2
 
 const SCHEMA_VERSION_TABLE = 'schema_version'
+const LEGACY_BASELINE_VERSION = 1
 
 export function hasSchemaVersionTable(sqlite: Database): boolean {
   const row = sqlite
@@ -40,17 +43,27 @@ function applyPendingMigrations(sqlite: Database, fromVersion: number): void {
   if (fromVersion >= CURRENT_SCHEMA_VERSION) {
     return
   }
-  // Numbered deltas (002+) run here once slice 5+ land; none at version 1 baseline.
-  const afterMigrations = CURRENT_SCHEMA_VERSION
-  if (fromVersion < afterMigrations) {
-    sqlite.prepare(`UPDATE ${SCHEMA_VERSION_TABLE} SET version = ?`).run(afterMigrations)
+
+  for (const migration of listNumberedMigrations()) {
+    if (migration.version <= fromVersion) {
+      continue
+    }
+    if (migration.version > CURRENT_SCHEMA_VERSION) {
+      continue
+    }
+    // 001 runs only via applyLegacyBaselineMigration for unversioned databases.
+    if (migration.version === LEGACY_BASELINE_VERSION) {
+      continue
+    }
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`📝 Applying schema migration ${migration.version} (${migration.basename})...`)
+    }
+    runSqlMigration(sqlite, migration.version, migration.path)
   }
 }
 
 /**
  * Bring an operational SQLite file to CURRENT_SCHEMA_VERSION.
- * Empty files get the SQL snapshot (includes schema_version = 1).
- * Unversioned non-empty files are unchanged here; legacy patches run from open until 001 lands.
  */
 export function evolveOperationalSchema(sqlite: Database): void {
   const recorded = getRecordedSchemaVersion(sqlite)
@@ -71,9 +84,13 @@ export function evolveOperationalSchema(sqlite: Database): void {
     }
     applyInitialSchema(sqlite)
     const version = getRecordedSchemaVersion(sqlite)
-    if (version !== CURRENT_SCHEMA_VERSION) {
+    if (version == null || version < CURRENT_SCHEMA_VERSION) {
+      applyPendingMigrations(sqlite, version ?? 0)
+    }
+    const after = getRecordedSchemaVersion(sqlite)
+    if (after !== CURRENT_SCHEMA_VERSION) {
       throw new Error(
-        `Initial schema must leave schema_version at ${CURRENT_SCHEMA_VERSION}, got ${version ?? 'missing'}`,
+        `Initial schema must reach schema version ${CURRENT_SCHEMA_VERSION}, got ${after ?? 'missing'}`,
       )
     }
     if (process.env.NODE_ENV !== 'production') {
@@ -81,4 +98,11 @@ export function evolveOperationalSchema(sqlite: Database): void {
     }
     return
   }
+
+  applyLegacyBaselineMigration(sqlite)
+  const afterLegacy = getRecordedSchemaVersion(sqlite)
+  if (afterLegacy == null) {
+    throw new Error('Legacy baseline migration did not set schema_version')
+  }
+  applyPendingMigrations(sqlite, afterLegacy)
 }

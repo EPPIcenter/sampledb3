@@ -10,6 +10,7 @@ import {
   isEmptyOperationalDatabase,
 } from '../schema-evolution'
 import { openOperationalDatabase } from '../open'
+import { SchemaMigrationError, runSqlMigrationStatements } from '../migration-runner'
 
 describe('schema evolution', () => {
   let testDbPath: string
@@ -46,9 +47,64 @@ describe('schema evolution', () => {
     sqlite.close()
   })
 
-  it('openOperationalDatabase on empty file reaches version 1 without import side effects', () => {
+  it('openOperationalDatabase on empty file reaches current version', () => {
     const { sqlite } = openOperationalDatabase(testDbPath)
     expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    sqlite.close()
+  })
+
+  it('legacy unversioned database gains error_logs and schema_version 1 then upgrades to current', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE study (id INTEGER PRIMARY KEY)')
+    sqlite.exec(
+      'CREATE TABLE settings (key TEXT, user_id INTEGER, value TEXT, PRIMARY KEY (key, user_id))',
+    )
+    sqlite.close()
+
+    const { sqlite: opened } = openOperationalDatabase(testDbPath)
+    expect(getRecordedSchemaVersion(opened)).toBe(CURRENT_SCHEMA_VERSION)
+    const errorLogs = opened
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='error_logs'")
+      .get()
+    expect(errorLogs).toBeDefined()
+    opened.close()
+  })
+
+  it('applies migration 002 when database is at version 1', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (1)')
+    sqlite.exec('CREATE TABLE study (id INTEGER PRIMARY KEY)')
+    evolveOperationalSchema(sqlite)
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    sqlite.close()
+  })
+
+  it('fail-hard: invalid migration leaves schema_version unchanged', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (1)')
+
+    expect(() =>
+      runSqlMigrationStatements(sqlite, 99, 'NOT VALID SQL SYNTAX HERE;'),
+    ).toThrow(SchemaMigrationError)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(1)
+    sqlite.close()
+  })
+
+  it('SchemaMigrationError includes migration version', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (1)')
+
+    try {
+      runSqlMigrationStatements(sqlite, 42, 'BOGUS;')
+    } catch (error) {
+      expect(error).toBeInstanceOf(SchemaMigrationError)
+      expect((error as SchemaMigrationError).migrationVersion).toBe(42)
+      expect((error as Error).message).toContain('42')
+    }
     sqlite.close()
   })
 })

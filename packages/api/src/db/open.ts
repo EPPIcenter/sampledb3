@@ -4,7 +4,6 @@ import { existsSync, readFileSync } from 'fs'
 import { dirname, isAbsolute, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import * as schema from './schema'
-import { applyLegacyConnectionPatches } from './legacy-connection-patches'
 import { evolveOperationalSchema } from './schema-evolution'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -113,7 +112,6 @@ export function openOperationalDatabase(dbPath?: string): {
 
   try {
     evolveOperationalSchema(sqlite)
-    applyLegacyConnectionPatches(sqlite)
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     console.error(`❌ Error preparing database: ${message}`)
