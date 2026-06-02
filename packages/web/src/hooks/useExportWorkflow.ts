@@ -5,7 +5,6 @@ import { collectionsApi } from '../lib/api/collections'
 import { exportApi } from '../lib/api/export'
 import { settingsApi, type ExportConfiguration, type ScannerConfiguration } from '../lib/api/settings'
 import { formatLocalDateTime } from '../lib/date-utils'
-import { downloadPostExportEnvelope } from '../lib/export-download'
 import { formatExportConfigId } from '../lib/export-config-selection'
 import { parseExportCsv, type MultiStudyExportCsvRow as ExportCsvRow } from '../lib/export-filter-csv'
 import { getQueryErrorMessage } from '../ui'
@@ -59,10 +58,7 @@ function downloadMultiStudyExportFile(
   response: Awaited<ReturnType<typeof exportApi.containersByNamesMultiStudy>>,
   exportFormat: 'csv' | 'xlsx' | 'json'
 ) {
-  downloadPostExportEnvelope({
-    data: response.data,
-    format: exportFormat,
-    filename: response.filename,
+  exportApi.downloadEnvelope(response, {
     defaultFilename: `multi_study_export_${formatLocalDateTime()}.${exportFormat}`,
   })
 }

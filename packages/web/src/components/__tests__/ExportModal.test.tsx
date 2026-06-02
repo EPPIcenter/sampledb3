@@ -37,6 +37,8 @@ vi.mock('../../lib/api/export', async () => {
         format: 'csv',
         filename: 'study_ST1_export.csv',
       }),
+      downloadEnvelope: vi.fn(),
+      downloadGetResponse: vi.fn(),
     },
   })
 })

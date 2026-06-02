@@ -11,7 +11,7 @@ import {
 import type { Database } from '../../../db/client'
 import { exportSpecimensCsv } from '../specimens-csv'
 
-const csvOptions = { delimiter: ',', includeBOM: false, lineEnding: 'LF' as const }
+const csvOptions = { delimiter: ',', bom: false, lineEnding: 'lf' as const }
 
 describe('exportSpecimensCsv', () => {
   let testDb: Database

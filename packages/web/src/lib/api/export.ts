@@ -1,12 +1,26 @@
-import type { ContainerExportData, ExportFilters } from '@sampledb/contract'
+import type { ContainerExportData, CSVExportOptions, ExportFilters } from '@sampledb/contract'
 import { api } from './client'
+import {
+  downloadExportFile,
+  downloadGetExportResponse,
+  downloadPostExportEnvelope,
+  type ExportDownloadFormat,
+} from '../export-download'
 
-export type { ContainerExportData, ExportFilters }
+export type { ContainerExportData, ExportFilters, CSVExportOptions }
 
-export interface CSVExportOptions {
-  delimiter?: ',' | ';' | '\t'
-  includeBOM?: boolean
-  lineEnding?: 'LF' | 'CRLF'
+function csvOptionsToQueryParams(csvOptions?: CSVExportOptions): Record<string, string | boolean> {
+  const params: Record<string, string | boolean> = {}
+  if (csvOptions?.delimiter) params.csv_delimiter = csvOptions.delimiter
+  if (csvOptions?.bom !== undefined) params.csv_bom = csvOptions.bom
+  if (csvOptions?.lineEnding) params.csv_line_ending = csvOptions.lineEnding === 'lf' ? 'LF' : 'CRLF'
+  return params
+}
+
+export type PostExportEnvelopeResponse = {
+  data: string | unknown
+  format: ExportDownloadFormat
+  filename?: string
 }
 
 export const exportApi = {
@@ -18,11 +32,7 @@ export const exportApi = {
     return api.get('/export/specimens.csv', { params: queryParams, responseType: 'blob' })
   },
   inventory: (csvOptions?: CSVExportOptions) => {
-    const params: any = {}
-    if (csvOptions?.delimiter) params.csv_delimiter = csvOptions.delimiter
-    if (csvOptions?.includeBOM !== undefined) params.csv_bom = csvOptions.includeBOM
-    if (csvOptions?.lineEnding) params.csv_line_ending = csvOptions.lineEnding
-    return api.get('/export/inventory.csv', { params, responseType: 'blob' })
+    return api.get('/export/inventory.csv', { params: csvOptionsToQueryParams(csvOptions), responseType: 'blob' })
   },
   containers: (params: ExportFilters, format: 'csv' | 'xlsx' | 'json' = 'csv', columns?: string[], csvOptions?: CSVExportOptions) => {
     const queryParams: Record<string, string | number | number[] | string[] | undefined> = { format }
@@ -50,9 +60,7 @@ export const exportApi = {
     }
     // Add CSV options if provided
     if (csvOptions) {
-      if (csvOptions.delimiter) queryParams.csv_delimiter = csvOptions.delimiter
-      if (csvOptions.includeBOM !== undefined) queryParams.csv_bom = csvOptions.includeBOM ? 'true' : 'false'
-      if (csvOptions.lineEnding) queryParams.csv_line_ending = csvOptions.lineEnding
+      Object.assign(queryParams, csvOptionsToQueryParams(csvOptions))
     }
     return api.get('/export/containers', {
       params: queryParams,
@@ -256,6 +264,33 @@ export const exportApi = {
       format: 'csv' | 'xlsx' | 'json'
       filename?: string
     }>('/export/containers/by-barcodes', params)
+  },
+
+  /** ADR-0002 POST export envelope → browser download. */
+  downloadEnvelope(
+    response: PostExportEnvelopeResponse,
+    params: { defaultFilename: string }
+  ): void {
+    downloadPostExportEnvelope({
+      data: response.data,
+      format: response.format,
+      filename: response.filename,
+      defaultFilename: params.defaultFilename,
+    })
+  },
+
+  /** GET export response (blob or JSON) → browser download. */
+  downloadGetResponse(params: {
+    response: Blob | unknown
+    format: ExportDownloadFormat
+    filename: string
+  }): void {
+    downloadGetExportResponse(params)
+  },
+
+  /** Direct blob download (e.g. command-palette specimen/inventory exports). */
+  downloadBlob(blob: Blob, filename: string): void {
+    downloadExportFile({ kind: 'blob', blob, filename })
   },
 }
 

@@ -76,7 +76,6 @@ import { useCommands } from './lib/command-registry/registry'
 import { formatHotkey, getModifierKey, isMac } from './lib/hotkeys'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { exportApi } from './lib/api/export'
-import { downloadExportFile } from './lib/export-download'
 
 function AppContent() {
   const navigate = useNavigate()
@@ -164,11 +163,7 @@ function AppContent() {
   const handleExportSpecimens = useCallback(async () => {
     try {
       const response = await exportApi.specimens()
-      downloadExportFile({
-        kind: 'blob',
-        blob: response as Blob,
-        filename: `specimens_export_${formatLocalDateTime()}.csv`,
-      })
+      exportApi.downloadBlob(response as Blob, `specimens_export_${formatLocalDateTime()}.csv`)
     } catch (error) {
       console.error('Failed to export specimens:', error)
       alert('Failed to export specimens. Please try again.')
@@ -179,11 +174,7 @@ function AppContent() {
   const handleExportInventory = useCallback(async () => {
     try {
       const response = await exportApi.inventory()
-      downloadExportFile({
-        kind: 'blob',
-        blob: response as Blob,
-        filename: `inventory_export_${formatLocalDateTime()}.csv`,
-      })
+      exportApi.downloadBlob(response as Blob, `inventory_export_${formatLocalDateTime()}.csv`)
     } catch (error) {
       console.error('Failed to export inventory:', error)
       alert('Failed to export inventory. Please try again.')

@@ -1,16 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { exportApi } from '../../lib/api/export'
-import { downloadGetExportResponse, downloadPostExportEnvelope } from '../../lib/export-download'
 import { useSingleStudyExportWorkflow } from '../useSingleStudyExportWorkflow'
 
 vi.mock('../../lib/export-filter-csv', () => ({
   parseExportModalCsv: vi.fn(),
-}))
-
-vi.mock('../../lib/export-download', () => ({
-  downloadGetExportResponse: vi.fn(),
-  downloadPostExportEnvelope: vi.fn(),
 }))
 
 vi.mock('../../lib/api/export', () => ({
@@ -19,6 +13,8 @@ vi.mock('../../lib/api/export', () => ({
     containersCountByNames: vi.fn(),
     containers: vi.fn(),
     containersByNames: vi.fn(),
+    downloadEnvelope: vi.fn(),
+    downloadGetResponse: vi.fn(),
   },
 }))
 
@@ -114,7 +110,7 @@ describe('useSingleStudyExportWorkflow', () => {
 
     expect(outcome).toBe('close')
     expect(exportApi.containers).toHaveBeenCalled()
-    expect(downloadGetExportResponse).toHaveBeenCalled()
+    expect(exportApi.downloadGetResponse).toHaveBeenCalled()
   })
 
   it('submits csv-upload export via POST envelope and stores summary', async () => {
@@ -149,6 +145,6 @@ describe('useSingleStudyExportWorkflow', () => {
     expect(outcome).toBe('summary')
     expect(exportApi.containersByNames).toHaveBeenCalled()
     expect(result.current.exportSummary?.total_containers).toBe(1)
-    expect(downloadPostExportEnvelope).toHaveBeenCalled()
+    expect(exportApi.downloadEnvelope).toHaveBeenCalled()
   })
 })

@@ -37,6 +37,7 @@ vi.mock('../../lib/api/export', () => ({
     validateStudyCodes: vi.fn(),
     containersCountByNamesMultiStudy: vi.fn(),
     containersByNamesMultiStudy: vi.fn(),
+    downloadEnvelope: vi.fn(),
   },
 }))
 

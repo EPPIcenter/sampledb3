@@ -1,3 +1,4 @@
+import { parseCsv } from '@sampledb/contract'
 import { buildCsv } from './csv'
 
 export interface CSVContainerRow {
@@ -85,78 +86,10 @@ export interface ValidationError {
 }
 
 /**
- * Parse CSV text into rows
- */
-export function parseCSV(csvText: string): string[][] {
-  const lines: string[] = []
-  let currentLine = ''
-  let inQuotes = false
-
-  for (let i = 0; i < csvText.length; i++) {
-    const char = csvText[i]
-    const nextChar = csvText[i + 1]
-
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        // Escaped quote
-        currentLine += '"'
-        i++
-      } else {
-        // Toggle quote state
-        inQuotes = !inQuotes
-      }
-    } else if (char === '\n' && !inQuotes) {
-      // End of line
-      lines.push(currentLine)
-      currentLine = ''
-    } else if (char === '\r' && !inQuotes) {
-      // Ignore carriage return
-      continue
-    } else {
-      currentLine += char
-    }
-  }
-
-  // Add last line
-  if (currentLine || lines.length === 0) {
-    lines.push(currentLine)
-  }
-
-  // Parse each line into columns
-  return lines.map(line => {
-    const columns: string[] = []
-    let currentColumn = ''
-    let inQuotes = false
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i]
-      const nextChar = line[i + 1]
-
-      if (char === '"') {
-        if (inQuotes && nextChar === '"') {
-          currentColumn += '"'
-          i++
-        } else {
-          inQuotes = !inQuotes
-        }
-      } else if (char === ',' && !inQuotes) {
-        columns.push(currentColumn.trim())
-        currentColumn = ''
-      } else {
-        currentColumn += char
-      }
-    }
-    columns.push(currentColumn.trim())
-
-    return columns
-  })
-}
-
-/**
  * Parse CSV file into container rows
  */
 export function parseContainerCSV(csvText: string, filename: string): ParsedCSVFile {
-  const rows = parseCSV(csvText)
+  const rows = parseCsv(csvText)
   if (rows.length === 0) {
     return {
       filename,

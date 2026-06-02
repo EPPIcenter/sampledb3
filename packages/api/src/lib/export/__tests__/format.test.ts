@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { parseCsv } from '@sampledb/contract'
 import { formatSimpleCSV } from '../format'
 
-const lfNoBom = { delimiter: ',', includeBOM: false, lineEnding: 'LF' as const }
+const lfNoBom = { delimiter: ',', bom: false, lineEnding: 'lf' as const }
 
 describe('formatSimpleCSV', () => {
   describe('RFC 4180 cell escaping via contract serializeCsv', () => {
@@ -134,7 +134,7 @@ describe('formatSimpleCSV', () => {
 
   describe('delimiter, line ending, and BOM options', () => {
     it('uses comma delimiter by default', () => {
-      const result = formatSimpleCSV(['col1', 'col2'], [['val1', 'val2']], { includeBOM: false, lineEnding: 'LF' })
+      const result = formatSimpleCSV(['col1', 'col2'], [['val1', 'val2']], { bom: false, lineEnding: 'lf' })
       expect(result).toBe('col1,col2\nval1,val2')
     })
 
@@ -142,7 +142,7 @@ describe('formatSimpleCSV', () => {
       const result = formatSimpleCSV(
         ['col1', 'col2'],
         [['val1', 'val2']],
-        { delimiter: ';', includeBOM: false, lineEnding: 'LF' }
+        { delimiter: ';', bom: false, lineEnding: 'lf' }
       )
       expect(result).toBe('col1;col2\nval1;val2')
     })
@@ -151,13 +151,13 @@ describe('formatSimpleCSV', () => {
       const result = formatSimpleCSV(
         ['col1', 'col2'],
         [['val1', 'val2']],
-        { delimiter: '\t', includeBOM: false, lineEnding: 'LF' }
+        { delimiter: '\t', bom: false, lineEnding: 'lf' }
       )
       expect(result).toBe('col1\tcol2\nval1\tval2')
     })
 
     it('uses CRLF by default', () => {
-      const result = formatSimpleCSV(['col1'], [['val1']], { includeBOM: false })
+      const result = formatSimpleCSV(['col1'], [['val1']], { bom: false })
       expect(result).toBe('col1\r\nval1')
     })
 
@@ -167,7 +167,7 @@ describe('formatSimpleCSV', () => {
     })
 
     it('includes BOM by default', () => {
-      const result = formatSimpleCSV(['col1'], [['val1']], { lineEnding: 'LF' })
+      const result = formatSimpleCSV(['col1'], [['val1']], { lineEnding: 'lf' })
       expect(result.startsWith('\uFEFF')).toBe(true)
     })
 

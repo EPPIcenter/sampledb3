@@ -3,19 +3,10 @@ import {
   getExportColumnKind,
   serializeCsv,
   type CsvCellValue,
-  type CSVExportOptions as ContractCSVOptions,
 } from '@sampledb/contract'
 import type { Database } from '../../db/client'
 import { filterContainerExportColumns, resolveExportColumnKeys } from './columns'
 import type { ContainerExportData, CSVExportOptions, ExportFilters, StudyRecord } from './types'
-
-function toContractCsvOptions(options?: CSVExportOptions): ContractCSVOptions {
-  return {
-    delimiter: options?.delimiter ?? ',',
-    bom: options?.includeBOM ?? true,
-    lineEnding: options?.lineEnding === 'LF' ? 'lf' : 'crlf',
-  }
-}
 
 function formatExportRow(headers: string[], row: unknown[]): CsvCellValue[] {
   return headers.map((header, index) => formatExportCellValue(header, row[index]))
@@ -31,7 +22,7 @@ export function formatSimpleCSV(
   }
 
   const formattedRows = rows.map((row) => formatExportRow(headers, row))
-  return serializeCsv(headers, formattedRows, toContractCsvOptions(options))
+  return serializeCsv(headers, formattedRows, options)
 }
 
 export async function formatAsCSV(
@@ -50,7 +41,7 @@ export async function formatAsCSV(
     columnKeys.map((header) => formatExportCellValue(header, (row as any)[header]))
   )
 
-  return serializeCsv(columnKeys, rows, toContractCsvOptions(options))
+  return serializeCsv(columnKeys, rows, options)
 }
 
 export async function formatAsJSON(

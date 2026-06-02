@@ -5,7 +5,7 @@ import type { ContainerExportData } from '@sampledb/contract'
 import type { Database } from '../../../db/client'
 import { formatAsCSV, formatAsExcel } from '../format'
 
-const lfNoBom = { delimiter: ',', includeBOM: false, lineEnding: 'LF' as const }
+const lfNoBom = { delimiter: ',', bom: false, lineEnding: 'lf' as const }
 const unusedDb = {} as Database
 
 const sampleContainer: ContainerExportData = {

@@ -4,7 +4,6 @@ import { exportApi } from '../lib/api/export';
 import { useExportConfigurations } from '../hooks/useExportWorkflow'
 import { PageError } from '../ui'
 import { formatLocalDateTime } from '../lib/date-utils'
-import { downloadPostExportEnvelope } from '../lib/export-download'
 import {
   formatExportConfigId,
   getExportColumnsForConfigId,
@@ -79,10 +78,7 @@ export default function BarcodeExport() {
       const summary = response.summary
       setExportSummary(summary)
 
-      downloadPostExportEnvelope({
-        data: response.data,
-        format: exportFormat,
-        filename: response.filename,
+      exportApi.downloadEnvelope(response, {
         defaultFilename: `barcode_export_${formatLocalDateTime()}.${exportFormat}`,
       })
 

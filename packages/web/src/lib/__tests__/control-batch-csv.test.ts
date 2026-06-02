@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   normalizePosition,
-  parseCSV,
   parseContainerCSV,
   validateCSVRows,
   generateCSVTemplate,
@@ -32,42 +31,6 @@ describe('control-batch-csv', () => {
     it('returns empty or whitespace as-is', () => {
       expect(normalizePosition('')).toBe('')
       expect(normalizePosition('   ')).toBe('   ')
-    })
-  })
-
-  describe('parseCSV', () => {
-    it('parses simple lines', () => {
-      const rows = parseCSV('a,b,c\n1,2,3')
-      expect(rows).toHaveLength(2)
-      expect(rows[0]).toEqual(['a', 'b', 'c'])
-      expect(rows[1]).toEqual(['1', '2', '3'])
-    })
-
-    it('parses row with multiple columns', () => {
-      const rows = parseCSV('a,b\n1,2')
-      expect(rows.length).toBe(2)
-      expect(rows[0]).toEqual(['a', 'b'])
-      expect(rows[1]).toEqual(['1', '2'])
-    })
-
-    it('handles empty file', () => {
-      const rows = parseCSV('')
-      expect(rows).toHaveLength(1)
-      expect(rows[0]).toEqual([''])
-    })
-
-    it('handles quoted fields', () => {
-      const rows = parseCSV('"a","b"\n1,2')
-      expect(rows).toHaveLength(2)
-      expect(rows[0]).toEqual(['a', 'b'])
-      expect(rows[1]).toEqual(['1', '2'])
-    })
-
-    it('handles CRLF line endings', () => {
-      const rows = parseCSV('a,b\r\n1,2')
-      expect(rows).toHaveLength(2)
-      expect(rows[0]).toEqual(['a', 'b'])
-      expect(rows[1]).toEqual(['1', '2'])
     })
   })
 

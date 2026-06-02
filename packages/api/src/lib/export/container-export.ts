@@ -25,8 +25,8 @@ export function parseCSVExportOptions(params: {
 }): CSVExportOptions {
   return {
     delimiter: params.csv_delimiter ?? ',',
-    includeBOM: params.csv_bom !== false && params.csv_bom !== 'false',
-    lineEnding: params.csv_line_ending ?? 'CRLF',
+    bom: params.csv_bom !== false && params.csv_bom !== 'false',
+    lineEnding: params.csv_line_ending === 'LF' ? 'lf' : 'crlf',
   }
 }
 

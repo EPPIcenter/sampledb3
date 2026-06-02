@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { exportApi, type ExportFilters } from '../lib/api/export'
 import { parseExportModalCsv, type SingleStudyExportCsvRow } from '../lib/export-filter-csv'
 import { formatLocalDateTime } from '../lib/date-utils'
-import { downloadGetExportResponse, downloadPostExportEnvelope } from '../lib/export-download'
 import { toggleArrayFilterValue } from '../lib/filter-array-toggle'
 
 export type SingleStudyExportSummary = {
@@ -229,10 +228,7 @@ export function useSingleStudyExportWorkflow(options: {
           })
 
           setExportSummary(response.summary)
-          downloadPostExportEnvelope({
-            data: response.data,
-            format: exportFormat,
-            filename: response.filename,
+          exportApi.downloadEnvelope(response, {
             defaultFilename: `study_${studyCode}_export_${formatLocalDateTime()}.${exportFormat}`,
           })
           setSummaryExpanded(true)
@@ -243,8 +239,8 @@ export function useSingleStudyExportWorkflow(options: {
           exportFormat === 'csv'
             ? {
                 delimiter: csvDelimiter,
-                includeBOM: csvBOM,
-                lineEnding: csvLineEnding,
+                bom: csvBOM,
+                lineEnding: csvLineEnding === 'LF' ? ('lf' as const) : ('crlf' as const),
               }
             : undefined
 
@@ -257,7 +253,7 @@ export function useSingleStudyExportWorkflow(options: {
 
         const timestamp = formatLocalDateTime()
         const extension = exportFormat === 'json' ? 'json' : exportFormat === 'xlsx' ? 'xlsx' : 'csv'
-        downloadGetExportResponse({
+        exportApi.downloadGetResponse({
           response,
           format: exportFormat,
           filename: `study_${studyCode}_export_${timestamp}.${extension}`,

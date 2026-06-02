@@ -1,15 +1,9 @@
 import type { InferSelectModel } from 'drizzle-orm'
 import { study } from '../../db/schema'
 
-export type { ContainerExportData, ExportFilters } from '@sampledb/contract'
+export type { ContainerExportData, ExportFilters, CSVExportOptions } from '@sampledb/contract'
 
 export type StudyRecord = InferSelectModel<typeof study>
-
-export interface CSVExportOptions {
-  delimiter?: string  // Default: ','
-  includeBOM?: boolean  // Default: true
-  lineEnding?: 'LF' | 'CRLF'  // Default: 'CRLF'
-}
 
 export interface ExportSummary {
   total_containers: number
