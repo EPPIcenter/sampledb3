@@ -27,9 +27,15 @@ The system shows you a list of found containers, displaying key information like
 
 ## Configuring Your Export
 
-Before exporting, you can configure what data to include and how it should be formatted. Export format options include CSV (comma-separated values), which works with spreadsheets and most analysis tools; XLSX (Excel format), which is convenient if you're primarily working in Excel; and JSON (structured data format), which is useful for programmatic access or importing into other systems.
+Before exporting, choose how the downloaded file should be formatted.
 
-Export configuration determines which columns appear in your exported file. You can use the default configuration, which includes all available columns, or select a custom configuration that includes only the columns you need. Custom configurations are managed in Settings and let you create predefined column sets for specific purposes—perhaps a "Minimal Export" with just identifiers and basic information, or an "Analysis-Ready" configuration with all columns needed for statistical analysis.
+**CSV download** works with spreadsheets, R, Python, and most analysis tools. Container export CSV uses plain quoted strings (RFC 4180) — not Excel formula wrappers. For script-based workflows, CSV is usually the right default.
+
+**XLSX download** is best when lab staff will work in Excel and need identifier columns (barcodes, IDs) preserved as text cells with leading zeros intact. Prefer XLSX over CSV when Excel text formatting is the main requirement.
+
+**JSON download** suits programmatic access or importing into another system.
+
+Export configuration determines which **export columns** appear in the file. You can use the default configuration (all available columns) or select a custom configuration with only the columns you need. Custom configurations are managed in Settings.
 
 ## Common Use Cases
 
@@ -43,7 +49,7 @@ During inventory audits, scanning containers and exporting their data helps gene
 
 Effective barcode export starts with accurate barcode entry. Verify that scanned barcodes are correct—if a scanner misreads a barcode, you'll get incorrect results. Review the found containers list to ensure the system identified the right containers. If something looks wrong, check the barcode and try again.
 
-Choose the export format that matches your needs. CSV is the most universal and works with most tools, but XLSX might be better if you're primarily working in Excel. JSON is useful for programmatic access but less convenient for manual review.
+Choose the export format that matches your workflow. CSV is universal for scripts and pipelines; XLSX preserves identifier columns as text in Excel; JSON is for programmatic handoff. See [Bulk Export](/docs/guides/bulk-operations/export/) for the same CSV vs XLSX guidance on multi-study export, and [Release Notes](/docs/guides/troubleshooting/release-notes/) if you are upgrading from exports that used Excel formula cell wrappers in CSV.
 
 Use appropriate export configurations to get the columns you need without overwhelming your export with unnecessary data. If you regularly export for the same purposes, create custom configurations to save time and ensure consistency.
 

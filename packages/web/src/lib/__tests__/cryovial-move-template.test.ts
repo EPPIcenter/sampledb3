@@ -1,27 +1,26 @@
 import { describe, it, expect } from 'vitest'
+import { parseCsv } from '@sampledb/contract'
 import { generateCryovialMoveTemplate } from '../cryovial-move-template'
 
 describe('generateCryovialMoveTemplate', () => {
   it('returns CSV with header and three example rows', () => {
     const csv = generateCryovialMoveTemplate()
-    const lines = csv.trim().split('\n')
-    expect(lines).toHaveLength(4)
-    expect(lines[0]).toBe('source_collection_name,source_position,target_position')
-    expect(lines[1]).toContain('BOX-001')
-    expect(lines[1]).toContain('B05')
-    expect(lines[1]).toContain('C03')
-    expect(lines[2]).toContain('BOX-001')
-    expect(lines[2]).toContain('C02')
-    expect(lines[2]).toContain('D01')
-    expect(lines[3]).toContain('BOX-002')
-    expect(lines[3]).toContain('A01')
-    expect(lines[3]).toContain('B02')
+    const rows = parseCsv(csv)
+    expect(rows).toHaveLength(4)
+    expect(rows[0]).toEqual(['source_collection_name', 'source_position', 'target_position'])
+    expect(rows[1]).toEqual(['BOX-001', 'B05', 'C03'])
+    expect(rows[2]).toEqual(['BOX-001', 'C02', 'D01'])
+    expect(rows[3]).toEqual(['BOX-002', 'A01', 'B02'])
   })
 
-  it('matches exact current template output for parser compatibility', () => {
+  it('uses canonical CSV wire format with unchanged cell values', () => {
     const csv = generateCryovialMoveTemplate()
-    const expected =
-      'source_collection_name,source_position,target_position\nBOX-001,B05,C03\nBOX-001,C02,D01\nBOX-002,A01,B02'
-    expect(csv).toBe(expected)
+    expect(csv.charCodeAt(0)).toBe(0xfeff)
+    expect(parseCsv(csv)).toEqual([
+      ['source_collection_name', 'source_position', 'target_position'],
+      ['BOX-001', 'B05', 'C03'],
+      ['BOX-001', 'C02', 'D01'],
+      ['BOX-002', 'A01', 'B02'],
+    ])
   })
 })

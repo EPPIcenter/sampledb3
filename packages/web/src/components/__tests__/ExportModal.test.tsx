@@ -3,6 +3,10 @@ import { render, screen, waitFor } from '../../__tests__/helpers/render'
 import userEvent from '@testing-library/user-event'
 import ExportModal from '../ExportModal'
 
+vi.mock('../../lib/export-filter-csv', () => ({
+  parseExportModalCsv: vi.fn(),
+}))
+
 vi.mock('../../lib/api/reference-data', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
   return createMockedDomainModule('reference-data', {
@@ -21,6 +25,18 @@ vi.mock('../../lib/api/export', async () => {
       getCount: vi.fn().mockResolvedValue({ count: 0 }),
       containersCount: vi.fn().mockResolvedValue({ count: 0 }),
       containersCountByNames: vi.fn().mockResolvedValue({ count: 0 }),
+      containers: vi.fn().mockResolvedValue(new Blob(['csv'], { type: 'text/csv' })),
+      containersByNames: vi.fn().mockResolvedValue({
+        summary: {
+          total_containers: 1,
+          subjects_with_results: [{ name: 'SUBJ-1', count: 1 }],
+          subjects_no_results: [],
+          subjects_not_found: [],
+        },
+        data: btoa('csv'),
+        format: 'csv',
+        filename: 'study_ST1_export.csv',
+      }),
     },
   })
 })
@@ -110,5 +126,54 @@ describe('ExportModal', () => {
     const checkbox = screen.getByRole('checkbox', { name: /micronix tube/i })
     await userEvent.setup().click(checkbox)
     expect(checkbox).toBeChecked()
+  })
+
+  it('uploads a subject CSV and exports with summary', async () => {
+    const user = userEvent.setup()
+
+    const { parseExportModalCsv } = await import('../../lib/export-filter-csv')
+    vi.mocked(parseExportModalCsv).mockResolvedValue([{ subject_name: 'SUBJ-1' }])
+
+    const { exportApi } = await import('../../lib/api/export')
+    vi.mocked(exportApi.containersCountByNames).mockResolvedValue({
+      count: 1,
+      summary: {
+        total_containers: 1,
+        subjects_with_results: [],
+        subjects_no_results: [],
+        subjects_not_found: [],
+      },
+    })
+
+    await render(
+      <ExportModal isOpen={true} onClose={onClose} studyCode="ST1" studyId={1} />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Export Study Data/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /CSV Upload/i }))
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(fileInput, new File(['subject_name\nSUBJ-1'], 'subjects.csv', { type: 'text/csv' }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Successfully parsed 1 subject/i)).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(exportApi.containersCountByNames).toHaveBeenCalled()
+    }, { timeout: 2000 })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Export$/i })).not.toBeDisabled()
+    }, { timeout: 2000 })
+
+    await user.click(screen.getByRole('button', { name: /^Export$/i }))
+
+    await waitFor(() => {
+      expect(exportApi.containersByNames).toHaveBeenCalled()
+      expect(screen.getByText(/Export Summary/i)).toBeInTheDocument()
+    })
   })
 })

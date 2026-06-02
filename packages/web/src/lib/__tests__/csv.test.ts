@@ -31,26 +31,31 @@ describe('csv', () => {
   })
 
   describe('buildCsv', () => {
-    it('builds header row and data rows', () => {
+    const lfNoBom = { bom: false, lineEnding: 'lf' as const }
+
+    it('builds header row and data rows with canonical defaults (BOM + CRLF)', () => {
       const csv = buildCsv(
         ['Position', 'Barcode'],
         [['A01', 'MTX-001'], ['A02', '']]
       )
-      expect(csv).toBe('Position,Barcode\nA01,MTX-001\nA02,')
+      expect(csv.charCodeAt(0)).toBe(0xfeff)
+      expect(csv.slice(1)).toBe('Position,Barcode\r\nA01,MTX-001\r\nA02,')
     })
 
     it('escapes cells that contain comma', () => {
-      const csv = buildCsv(
-        ['Col'],
-        [['a,b']]
-      )
+      const csv = buildCsv(['Col'], [['a,b']], lfNoBom)
       expect(csv).toBe('Col\n"a,b"')
     })
 
-    it('includes BOM when requested for Excel', () => {
+    it('includes BOM when requested explicitly (default is already on)', () => {
       const csv = buildCsv(['A'], [['x']], { bom: true })
       expect(csv.charCodeAt(0)).toBe(0xfeff)
-      expect(csv.slice(1)).toBe('A\nx')
+      expect(csv.slice(1)).toBe('A\r\nx')
+    })
+
+    it('can disable BOM and use LF for legacy-style output', () => {
+      const csv = buildCsv(['A'], [['x']], lfNoBom)
+      expect(csv).toBe('A\nx')
     })
   })
 

@@ -5,17 +5,14 @@ import { collectionsApi } from '../lib/api/collections'
 import { exportApi } from '../lib/api/export'
 import { settingsApi, type ExportConfiguration, type ScannerConfiguration } from '../lib/api/settings'
 import { formatLocalDateTime } from '../lib/date-utils'
+import { downloadPostExportEnvelope } from '../lib/export-download'
 import { formatExportConfigId } from '../lib/export-config-selection'
+import { parseExportCsv, type MultiStudyExportCsvRow as ExportCsvRow } from '../lib/export-filter-csv'
 import { getQueryErrorMessage } from '../ui'
 import { useSpecimenTypes } from './useReferenceData'
 
-export type ExportCsvRow = {
-  study_short_code: string
-  subject_name: string
-  collection_date?: string
-  date_from?: string
-  date_to?: string
-}
+export type { ExportCsvRow }
+export { parseExportCsv }
 
 export type ExportMultiStudyFilters = {
   specimen_type_ids?: number[]
@@ -58,143 +55,16 @@ export type ExportMultiStudySubmitParams = {
   csvLineEnding?: 'LF' | 'CRLF'
 }
 
-/** Parse multi-study export CSV (UX-only; server validates study codes). */
-export function parseExportCsv(file: File): Promise<ExportCsvRow[]> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const text = e.target?.result as string
-        if (!text) {
-          reject(new Error('File is empty'))
-          return
-        }
-
-        const lines = text.split('\n').filter((line) => line.trim())
-        if (lines.length === 0) {
-          reject(new Error('CSV file is empty'))
-          return
-        }
-
-        const headerLine = lines[0].trim()
-        const headers = headerLine.split(',').map((h) => h.trim().toLowerCase().replace(/^"|"$/g, ''))
-
-        const studyCodeIdx = headers.findIndex((h) => h === 'study_short_code' || h === 'study short code')
-        const subjectNameIdx = headers.findIndex((h) => h === 'subject_name' || h === 'subject name')
-
-        if (studyCodeIdx === -1) {
-          reject(new Error('CSV must contain a "study_short_code" column'))
-          return
-        }
-        if (subjectNameIdx === -1) {
-          reject(new Error('CSV must contain a "subject_name" column'))
-          return
-        }
-
-        const collectionDateIdx = headers.findIndex((h) => h === 'collection_date' || h === 'collection date')
-        const dateFromIdx = headers.findIndex((h) => h === 'date_from' || h === 'date from')
-        const dateToIdx = headers.findIndex((h) => h === 'date_to' || h === 'date to')
-
-        const data: ExportCsvRow[] = []
-
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim()
-          if (!line) continue
-
-          const values: string[] = []
-          let current = ''
-          let inQuotes = false
-
-          for (let j = 0; j < line.length; j++) {
-            const char = line[j]
-            if (char === '"') {
-              if (inQuotes && line[j + 1] === '"') {
-                current += '"'
-                j++
-              } else {
-                inQuotes = !inQuotes
-              }
-            } else if (char === ',' && !inQuotes) {
-              values.push(current.trim())
-              current = ''
-            } else {
-              current += char
-            }
-          }
-          values.push(current.trim())
-
-          const studyCode = values[studyCodeIdx]?.replace(/^"|"$/g, '').trim()
-          const subjectName = values[subjectNameIdx]?.replace(/^"|"$/g, '').trim()
-
-          if (!studyCode || !subjectName) continue
-
-          const row: ExportCsvRow = {
-            study_short_code: studyCode,
-            subject_name: subjectName,
-          }
-
-          if (collectionDateIdx >= 0 && values[collectionDateIdx]) {
-            const date = values[collectionDateIdx].replace(/^"|"$/g, '').trim()
-            if (date) row.collection_date = date
-          }
-          if (dateFromIdx >= 0 && values[dateFromIdx]) {
-            const date = values[dateFromIdx].replace(/^"|"$/g, '').trim()
-            if (date) row.date_from = date
-          }
-          if (dateToIdx >= 0 && values[dateToIdx]) {
-            const date = values[dateToIdx].replace(/^"|"$/g, '').trim()
-            if (date) row.date_to = date
-          }
-
-          data.push(row)
-        }
-
-        if (data.length === 0) {
-          reject(new Error('No valid data rows found in CSV'))
-          return
-        }
-
-        resolve(data)
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Unknown error'
-        reject(new Error(`Failed to parse CSV: ${message}`))
-      }
-    }
-    reader.onerror = () => reject(new Error('Failed to read file'))
-    reader.readAsText(file)
-  })
-}
-
 function downloadMultiStudyExportFile(
   response: Awaited<ReturnType<typeof exportApi.containersByNamesMultiStudy>>,
   exportFormat: 'csv' | 'xlsx' | 'json'
 ) {
-  let blob: Blob
-  const filename = response.filename || `multi_study_export_${formatLocalDateTime()}.${exportFormat}`
-
-  if (typeof response.data === 'string') {
-    const binaryString = atob(response.data)
-    const bytes = new Uint8Array(binaryString.length)
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i)
-    }
-    const mimeType =
-      exportFormat === 'xlsx'
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv'
-    blob = new Blob([bytes], { type: mimeType })
-  } else {
-    blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
-  }
-
-  const url = window.URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  window.URL.revokeObjectURL(url)
+  downloadPostExportEnvelope({
+    data: response.data,
+    format: exportFormat,
+    filename: response.filename,
+    defaultFilename: `multi_study_export_${formatLocalDateTime()}.${exportFormat}`,
+  })
 }
 
 export type ExportConfigurationWithSource = ExportConfiguration & {

@@ -119,6 +119,64 @@ _Avoid_: Site (unless referring to an external facility), storage (too vague)
 Where a **Container** sits in the physical storage hierarchy — its position within a **Collection**, the collection it belongs to, and the **Location** path where that collection is stored. Distinct from specimen provenance (**Source**, study/control context) and from container identity metadata (barcodes, **Tags**).
 _Avoid_: Enrichment (implementation term); conflating placement with specimen or source lookups
 
+### Export
+
+**Container export**:
+Server-side export of operational **Container** records with specimen, source, and placement context, formatted using an **Export configuration**. Entry points include **Bulk export**, single-study export (Study export modal), and **Barcode export**.
+_Avoid_: Bulk export (when you mean the full server-side category); collection table snapshot export; using "sample" in export column headers
+
+**Bulk export**:
+The multi-study **Container export** workflow on the Export page — lab staff upload a subject-list CSV spanning one or more studies and download matching containers.
+_Avoid_: Using "bulk export" as the umbrella for all container exports, barcode export, or collection table CSV
+
+**Barcode export**:
+A **Container export** entry point driven by an uploaded barcode list rather than a subject list.
+_Avoid_: Bulk export (different filter input); collection table snapshot export
+
+**Collection table snapshot export**:
+Client-side CSV of the current collection table view on a plate, box, bag, or sheet detail page — what is visible in the grid, using **Table view configuration** columns. No server-side container query. Uses the same **CSV download** conventions and download behaviour as other export paths.
+_Avoid_: Container export; bulk export; export configuration (those apply to server-side container exports only)
+
+**Export configuration**:
+Reference-data preset defining which columns appear in **Container export** downloads (Export page, Study export modal, barcode export).
+_Avoid_: Table view configuration; conflating with collection table snapshot export
+
+**Table view configuration**:
+Reference-data preset defining which columns appear in collection table views and **Collection table snapshot export**.
+_Avoid_: Export configuration
+
+**Specimen export**:
+Server-side flat export of **Specimen** records (command palette or specimens.csv). No **Export configuration**, no subject-list or barcode filter — a lightweight audit snapshot.
+_Avoid_: Container export (enriched container rows with placement and source context); bulk export
+
+**Inventory export**:
+Server-side flat export of inventory summary data (command palette or inventory.csv). No **Export configuration** — a lightweight audit snapshot.
+_Avoid_: Container export; bulk export; collection table snapshot export
+
+**CSV download**:
+A comma-separated values file generated or downloaded from SampleDB — container/specimen/inventory exports, collection table snapshots, import templates, and other CSV outputs. All share the same wire conventions (UTF-8 with BOM, CRLF line endings, plain cell values per RFC 4180) so files behave consistently in Excel and in R/Python. **Container export** workflows additionally let lab staff override delimiter, BOM, and line ending before download.
+_Avoid_: Excel formula cell wrappers (`="..."`); using CSV as the Excel text-preservation format (use **XLSX download** for that); different wire conventions for templates vs exports
+
+**XLSX download**:
+Excel workbook export from **Container export** workflows. Preserves identifier and code columns as text cells (leading zeros, long barcodes) without CSV workarounds.
+_Avoid_: Expecting the same text-preservation behaviour from **CSV download**
+
+**Export column**:
+A named field available in **Container export** and **Collection table snapshot export** (e.g. barcode, subject name, collection date). Each export column has a defined kind — identifier, numeric, date, timestamp, or text — that governs how values appear in CSV and XLSX without lab staff configuring formatting per download.
+_Avoid_: Treating all digit-shaped values as identifiers by heuristic; expecting per-column format toggles in **Export configuration** (configurations choose which columns appear, not how they are typed)
+
+**Identifier column**:
+An **Export column** whose values are opaque codes or labels (barcodes, IDs, names, paths) that must not be treated as arithmetic numbers. Plain strings in **CSV download**; text cells in **XLSX download**.
+_Avoid_: Numeric column (quantities, densities); Excel formula wrappers in CSV
+
+**Export filter file**:
+A CSV uploaded to specify which containers to include in a **Container export**. Does not create or modify operational data. Column requirements depend on the entry point — multi-study subject list (`study_short_code`, `subject_name`), single-study subject list (`subject_name` only), or barcode list (`barcode`). Required columns use **canonical snake_case headers** in documentation and error messages; parsers accept a small fixed alias set per column (e.g. space-separated variants) and case-insensitive matching so Excel-edited files still work.
+_Avoid_: Bulk import; import file; treating upload as data entry; open-ended header guessing; requiring exact header casing
+
+**Export summary**:
+Feedback returned after a **Container export** submit — match counts, subjects or barcodes not found, subjects with no matching containers, and related warnings. Shown in the UI alongside the downloaded file; returned in the POST response envelope with the export payload.
+_Avoid_: Export report (too vague); **Export filter file** (that is the upload input); **CSV download** (that is the output file); statistics page reporting
+
 ### System
 
 **SampleDB**:

@@ -21,7 +21,7 @@ export default function CollectionTableWithExport({
   const handleExportCsv = () => {
     const header = columns.map((c) => c.label)
     const rowArrays = rows.map((row) => columns.map((col) => row[col.key] ?? ''))
-    const csv = buildCsv(header, rowArrays, { bom: true })
+    const csv = buildCsv(header, rowArrays)
     downloadCsv(csv, exportFilename)
   }
 

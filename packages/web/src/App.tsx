@@ -75,7 +75,10 @@ import { useBrowserShortcutBlocker } from './hooks/useBrowserShortcutBlocker'
 import { useCommands } from './lib/command-registry/registry'
 import { formatHotkey, getModifierKey, isMac } from './lib/hotkeys'
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { exportApi } from './lib/api/export';function AppContent() {
+import { exportApi } from './lib/api/export'
+import { downloadExportFile } from './lib/export-download'
+
+function AppContent() {
   const navigate = useNavigate()
   const location = useLocation()
   const { canWrite, isAdmin, canManageReferenceData, refreshUser } = useUser()
@@ -158,25 +161,14 @@ import { exportApi } from './lib/api/export';function AppContent() {
   // cannot be blocked by JavaScript for security reasons - browsers prevent this)
   useBrowserShortcutBlocker(true)
 
-  // Helper function to download a blob as a file
-  const downloadBlob = (blob: Blob, filename: string) => {
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-  }
-
-  // Helper function to export specimens
   const handleExportSpecimens = useCallback(async () => {
     try {
       const response = await exportApi.specimens()
-      const blob = response as Blob
-      const filename = `specimens_export_${formatLocalDateTime()}.csv`
-      downloadBlob(blob, filename)
+      downloadExportFile({
+        kind: 'blob',
+        blob: response as Blob,
+        filename: `specimens_export_${formatLocalDateTime()}.csv`,
+      })
     } catch (error) {
       console.error('Failed to export specimens:', error)
       alert('Failed to export specimens. Please try again.')
@@ -187,9 +179,11 @@ import { exportApi } from './lib/api/export';function AppContent() {
   const handleExportInventory = useCallback(async () => {
     try {
       const response = await exportApi.inventory()
-      const blob = response as Blob
-      const filename = `inventory_export_${formatLocalDateTime()}.csv`
-      downloadBlob(blob, filename)
+      downloadExportFile({
+        kind: 'blob',
+        blob: response as Blob,
+        filename: `inventory_export_${formatLocalDateTime()}.csv`,
+      })
     } catch (error) {
       console.error('Failed to export inventory:', error)
       alert('Failed to export inventory. Please try again.')

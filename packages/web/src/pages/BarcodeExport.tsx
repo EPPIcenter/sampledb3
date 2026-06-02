@@ -4,10 +4,12 @@ import { exportApi } from '../lib/api/export';
 import { useExportConfigurations } from '../hooks/useExportWorkflow'
 import { PageError } from '../ui'
 import { formatLocalDateTime } from '../lib/date-utils'
+import { downloadPostExportEnvelope } from '../lib/export-download'
 import {
   formatExportConfigId,
   getExportColumnsForConfigId,
 } from '../lib/export-config-selection'
+import { parseBarcodeExportFilterFile } from '../lib/export-filter-csv'
 import '../styles/storage.css'
 
 export default function BarcodeExport() {
@@ -38,99 +40,21 @@ export default function BarcodeExport() {
     loadConfigurations,
   } = useExportConfigurations()
 
-  const parseCSV = useCallback((file: File) => {
-    return new Promise<string[]>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        try {
-          const text = e.target?.result as string
-          if (!text) {
-            reject(new Error('File is empty'))
-            return
-          }
-
-          const lines = text.split('\n').filter(line => line.trim())
-          if (lines.length === 0) {
-            reject(new Error('CSV file is empty'))
-            return
-          }
-
-          // Parse header
-          const headerLine = lines[0].trim()
-          const headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''))
-          
-          // Find barcode column index
-          const barcodeIdx = headers.findIndex(h => h === 'barcode')
-          if (barcodeIdx === -1) {
-            reject(new Error('CSV must contain a "barcode" column'))
-            return
-          }
-
-          // Parse data rows
-          const barcodeList: string[] = []
-
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim()
-            if (!line) continue
-
-            // Simple CSV parsing (handles quoted values)
-            const values: string[] = []
-            let current = ''
-            let inQuotes = false
-            
-            for (let j = 0; j < line.length; j++) {
-              const char = line[j]
-              if (char === '"') {
-                if (inQuotes && line[j + 1] === '"') {
-                  current += '"'
-                  j++
-                } else {
-                  inQuotes = !inQuotes
-                }
-              } else if (char === ',' && !inQuotes) {
-                values.push(current.trim())
-                current = ''
-              } else {
-                current += char
-              }
-            }
-            values.push(current.trim())
-
-            const barcode = values[barcodeIdx]?.replace(/^"|"$/g, '').trim()
-            if (barcode) {
-              barcodeList.push(barcode)
-            }
-          }
-
-          if (barcodeList.length === 0) {
-            reject(new Error('No valid barcodes found in CSV'))
-            return
-          }
-
-          resolve(barcodeList)
-        } catch (err: any) {
-          reject(new Error(`Failed to parse CSV: ${err.message}`))
-        }
-      }
-      reader.onerror = () => reject(new Error('Failed to read file'))
-      reader.readAsText(file)
-    })
-  }, [])
-
   const handleCSVUpload = useCallback(async (file: File) => {
     try {
       setCsvError(null)
       setExportSummary(null)
       setSummaryExpanded(false)
-      const data = await parseCSV(file)
-      setBarcodes(data)
+      const barcodeList = await parseBarcodeExportFilterFile(file)
+      setBarcodes(barcodeList)
       setCsvFile(file)
-    } catch (err: any) {
-      setCsvError(err.message)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to parse CSV'
+      setCsvError(message)
       setBarcodes([])
       setCsvFile(null)
     }
-  }, [parseCSV])
+  }, [])
 
   const handleExport = async () => {
     if (barcodes.length === 0) {
@@ -155,37 +79,12 @@ export default function BarcodeExport() {
       const summary = response.summary
       setExportSummary(summary)
 
-      // Handle file download
-      let blob: Blob
-      let filename: string
-
-      if (typeof response.data === 'string') {
-        // Base64 encoded
-        const binaryString = atob(response.data)
-        const bytes = new Uint8Array(binaryString.length)
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i)
-        }
-        const mimeType = exportFormat === 'xlsx' 
-          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          : 'text/csv'
-        blob = new Blob([bytes], { type: mimeType })
-      } else {
-        // JSON format
-        blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
-      }
-      
-      filename = response.filename || `barcode_export_${formatLocalDateTime()}.${exportFormat}`
-      
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = filename
-      
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
+      downloadPostExportEnvelope({
+        data: response.data,
+        format: exportFormat,
+        filename: response.filename,
+        defaultFilename: `barcode_export_${formatLocalDateTime()}.${exportFormat}`,
+      })
 
       // Show inline summary
       setSummaryExpanded(true)

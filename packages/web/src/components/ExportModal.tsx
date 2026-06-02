@@ -1,19 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { exportApi } from '../lib/api/export';
-import type { ExportFilters } from '../lib/api/export';
-import { specimenTypesApi, tagsApi } from '../lib/api/reference-data';
-import type { Tag } from '../lib/api/reference-data';
-import type { SpecimenType, StudySubject } from '../lib/api/types';
-import { parseExportCsv, type ExportCsvRow } from '../lib/export-modal-csv'
+import { exportApi } from '../lib/api/export'
+import { tagsApi } from '../lib/api/reference-data'
+import type { Tag } from '../lib/api/reference-data'
+import type { SpecimenType, StudySubject } from '../lib/api/types'
 import { useExportConfigurations } from '../hooks/useExportConfigurations'
-import { formatLocalDateTime } from '../lib/date-utils'
+import { useSingleStudyExportWorkflow } from '../hooks/useSingleStudyExportWorkflow'
 import {
-  findExportConfiguration,
   formatExportConfigId,
   getExportColumnsForConfigId,
 } from '../lib/export-config-selection'
-import { toggleArrayFilterValue } from '../lib/filter-array-toggle'
 import { useModifierHotkey } from '../hooks/useHotkey'
 import { Modal } from '../ui'
 import ExportModalResultSummary from './ExportModalResultSummary'
@@ -40,34 +36,40 @@ export default function ExportModal({
   studyId,
   subjects = [],
 }: ExportModalProps) {
-  const [filters, setFilters] = useState<ExportFilters>({
-    study: studyCode,
-  })
-  const [count, setCount] = useState<number | null>(null)
-  const [loadingCount, setLoadingCount] = useState(false)
-  const [exporting, setExporting] = useState(false)
-  const [exportFormat, setExportFormat] = useState<'csv' | 'xlsx' | 'json'>('csv')
-  const [error, setError] = useState<string | null>(null)
-  
-  // CSV export options
-  const [csvDelimiter, setCsvDelimiter] = useState<',' | ';' | '\t'>(',')
-  const [csvBOM, setCsvBOM] = useState<boolean>(true)
-  const [csvLineEnding, setCsvLineEnding] = useState<'LF' | 'CRLF'>('CRLF')
-  
-  // CSV upload mode
-  const [uploadMode, setUploadMode] = useState<'manual' | 'csv'>('manual')
-  const [csvFile, setCsvFile] = useState<File | null>(null)
-  const [csvData, setCsvData] = useState<ExportCsvRow[]>([])
-  const [csvError, setCsvError] = useState<string | null>(null)
-  const [dateTolerance, setDateTolerance] = useState<number>(0)
-  const [exportSummary, setExportSummary] = useState<{
-    total_containers: number
-    subjects_with_results: Array<{ name: string; count: number }>
-    subjects_no_results: string[]
-    subjects_not_found: string[]
-    errors?: string[]
-  } | null>(null)
-  const [summaryExpanded, setSummaryExpanded] = useState(false)
+  const workflow = useSingleStudyExportWorkflow({ studyCode, isOpen })
+  const {
+    filters,
+    count,
+    loadingCount,
+    exporting,
+    exportFormat,
+    setExportFormat,
+    error: workflowError,
+    csvDelimiter,
+    setCsvDelimiter,
+    csvBOM,
+    setCsvBOM,
+    csvLineEnding,
+    setCsvLineEnding,
+    uploadMode,
+    switchUploadMode,
+    csvData,
+    csvError,
+    dateTolerance,
+    updateDateTolerance,
+    exportSummary,
+    summaryExpanded,
+    setSummaryExpanded,
+    handleCSVUpload,
+    updateFilter,
+    toggleArrayFilter,
+    clearFilters,
+    hasActiveFilters,
+    submitExport,
+  } = workflow
+
+  const [refDataError, setRefDataError] = useState<string | null>(null)
+  const error = refDataError || workflowError
 
   // Load reference data
   const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
@@ -75,8 +77,6 @@ export default function ExportModal({
   const [availableContainerTypes, setAvailableContainerTypes] = useState<string[]>([])
   const [loadingRefData, setLoadingRefData] = useState(true)
   const [focusedConfigIndex, setFocusedConfigIndex] = useState<number | null>(null)
-  const countDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const updateCountRef = useRef<() => Promise<void>>(() => Promise.resolve())
   const {
     configurations: exportConfigurations,
     selectedConfigId,
@@ -88,30 +88,31 @@ export default function ExportModal({
   const loadReferenceData = useCallback(async () => {
     try {
       setLoadingRefData(true)
-      setError(null)
+      setRefDataError(null)
       const [availableTypesRes, tagsRes] = await Promise.all([
         exportApi.availableTypes(studyCode),
         tagsApi.list(),
       ])
-      
-      const availableTypesData = availableTypesRes
-      const tagsData = tagsRes.data
 
       setSpecimenTypes(
-        availableTypesData.specimen_types.map(st => ({
+        availableTypesRes.specimen_types.map((st) => ({
           id: st.id,
           name: st.name,
           created: '',
           lastUpdated: '',
         }))
       )
-      setTags(tagsData)
-      setAvailableContainerTypes(availableTypesData.container_types)
-    } catch (error: any) {
-      console.error('Failed to load reference data:', error)
-      const errorMessage = error?.response?.data?.error || error?.message || 'Failed to load export options'
-      setError(errorMessage)
-      // Set empty arrays to prevent render errors
+      setTags(tagsRes.data)
+      setAvailableContainerTypes(availableTypesRes.container_types)
+    } catch (err: unknown) {
+      console.error('Failed to load reference data:', err)
+      const message =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : err instanceof Error
+            ? err.message
+            : 'Failed to load export options'
+      setRefDataError(message || 'Failed to load export options')
       setSpecimenTypes([])
       setTags([])
       setAvailableContainerTypes([])
@@ -120,110 +121,13 @@ export default function ExportModal({
     }
   }, [studyCode])
 
-  const updateCount = useCallback(async () => {
-    if (uploadMode === 'csv' && csvData.length === 0) {
-      setCount(null)
-      return
-    }
-
-    try {
-      setLoadingCount(true)
-      setError(null)
-      
-      if (uploadMode === 'csv') {
-        // Build subject dates from CSV data
-        const subjectDates: { [key: string]: { exact?: string; from?: string; to?: string } } = {}
-        for (const row of csvData) {
-          if (row.collection_date) {
-            subjectDates[row.subject_name] = { exact: row.collection_date }
-          } else if (row.date_from || row.date_to) {
-            subjectDates[row.subject_name] = {
-              from: row.date_from,
-              to: row.date_to,
-            }
-          }
-        }
-
-        const response = await exportApi.containersCountByNames({
-          study: studyCode,
-          subject_names: csvData.map(row => row.subject_name),
-          subject_dates: Object.keys(subjectDates).length > 0 ? subjectDates : undefined,
-          date_tolerance: dateTolerance,
-          specimen_type_ids: filters.specimen_type_ids,
-          container_types: filters.container_types,
-          date_from: filters.date_from,
-          date_to: filters.date_to,
-          created_from: filters.created_from,
-          created_to: filters.created_to,
-        })
-        setCount(response.count)
-      } else {
-        const response = await exportApi.containersCount(filters)
-        setCount(response.count)
-      }
-    } catch (error: any) {
-      console.error('Failed to get count:', error)
-      setError(error.response?.data?.error || 'Failed to get count')
-      setCount(null)
-    } finally {
-      setLoadingCount(false)
-    }
-  }, [filters, uploadMode, csvData, dateTolerance, studyCode])
-
-  updateCountRef.current = updateCount
-
-  const scheduleUpdateCount = useCallback(() => {
-    if (countDebounceTimerRef.current) {
-      clearTimeout(countDebounceTimerRef.current)
-      countDebounceTimerRef.current = null
-    }
-    countDebounceTimerRef.current = setTimeout(() => {
-      updateCountRef.current()
-      countDebounceTimerRef.current = null
-    }, 500)
-  }, [])
-
-  const handleCSVUpload = useCallback(async (file: File) => {
-    try {
-      setCsvError(null)
-      const data = await parseExportCsv(file)
-      setCsvData(data)
-      setCsvFile(file)
-      setExportSummary(null)
-      setSummaryExpanded(false)
-      scheduleUpdateCount()
-    } catch (err: unknown) {
-      setCsvError(err instanceof Error ? err.message : 'Failed to parse CSV')
-      setCsvData([])
-      setCsvFile(null)
-    }
-  }, [scheduleUpdateCount])
-
-  // Initialize state and load data when modal opens (avoids reset-on-close effect)
   useEffect(() => {
-    if (!isOpen) {
-      if (countDebounceTimerRef.current) {
-        clearTimeout(countDebounceTimerRef.current)
-        countDebounceTimerRef.current = null
-      }
-      return
-    }
-    setError(null)
-    setFilters({ study: studyCode })
-    setUploadMode('manual')
-    setCsvFile(null)
-    setCsvData([])
-    setCsvError(null)
-    setDateTolerance(0)
-    setExportSummary(null)
-    setSummaryExpanded(false)
+    if (!isOpen) return
+    setRefDataError(null)
     loadReferenceData()
     loadExportConfigurations()
-    updateCount()
-     
   }, [isOpen, studyCode])
 
-  // Handle Escape key to close modal
   useEffect(() => {
     if (!isOpen) return
 
@@ -239,159 +143,23 @@ export default function ExportModal({
     }
   }, [isOpen, onClose])
 
-  // Cmd/Ctrl+Enter to trigger export
+  const handleExport = async () => {
+    const result = await submitExport({
+      columns: getExportColumnsForConfigId(exportConfigurations, selectedConfigId) ?? [],
+    })
+    if (result === 'close') {
+      setTimeout(() => {
+        onClose()
+      }, 1000)
+    }
+  }
+
   useModifierHotkey('enter', (e) => {
     if (isOpen && !exporting && count !== 0 && !loadingCount) {
       e.preventDefault()
-      handleExport()
+      void handleExport()
     }
   }, { enabled: isOpen, preventDefault: true })
-
-  const handleExport = async () => {
-    try {
-      setExporting(true)
-      setError(null)
-      setExportSummary(null)
-
-      let response: any
-      let summary: any
-
-      if (uploadMode === 'csv') {
-        // Build subject dates from CSV data
-        const subjectDates: { [key: string]: { exact?: string; from?: string; to?: string } } = {}
-        for (const row of csvData) {
-          if (row.collection_date) {
-            subjectDates[row.subject_name] = { exact: row.collection_date }
-          } else if (row.date_from || row.date_to) {
-            subjectDates[row.subject_name] = {
-              from: row.date_from,
-              to: row.date_to,
-            }
-          }
-        }
-
-        response = await exportApi.containersByNames({
-          study: studyCode,
-          subject_names: csvData.map(row => row.subject_name),
-          subject_dates: Object.keys(subjectDates).length > 0 ? subjectDates : undefined,
-          date_tolerance: dateTolerance,
-          format: exportFormat,
-          columns: getExportColumnsForConfigId(exportConfigurations, selectedConfigId),
-          specimen_type_ids: filters.specimen_type_ids,
-          container_types: filters.container_types,
-          date_from: filters.date_from,
-          date_to: filters.date_to,
-          created_from: filters.created_from,
-          created_to: filters.created_to,
-          csv_delimiter: exportFormat === 'csv' ? csvDelimiter : undefined,
-          csv_bom: exportFormat === 'csv' ? csvBOM : undefined,
-          csv_line_ending: exportFormat === 'csv' ? csvLineEnding : undefined,
-        })
-        summary = response.summary
-        setExportSummary(summary)
-      } else {
-        const csvOptions = exportFormat === 'csv' ? {
-          delimiter: csvDelimiter,
-          includeBOM: csvBOM,
-          lineEnding: csvLineEnding,
-        } : undefined
-        const selectedConfig = findExportConfiguration(exportConfigurations, selectedConfigId)
-        response = await exportApi.containers(filters, exportFormat, selectedConfig?.columns, csvOptions)
-        summary = null
-      }
-
-      // Handle file download
-      let blob: Blob
-      let filename: string
-
-      if (uploadMode === 'csv' && response && typeof response === 'object' && 'data' in response) {
-        // Handle base64 encoded data for CSV/XLSX
-        if (typeof response.data === 'string') {
-          // Base64 encoded
-          const binaryString = atob(response.data)
-          const bytes = new Uint8Array(binaryString.length)
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i)
-          }
-          const mimeType = exportFormat === 'xlsx' 
-            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            : 'text/csv'
-          blob = new Blob([bytes], { type: mimeType })
-        } else {
-          // JSON format
-          blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
-        }
-        filename = response.filename || `study_${studyCode}_export_${formatLocalDateTime()}.${exportFormat}`
-      } else {
-        // Manual mode - existing behavior
-        blob = response instanceof Blob
-          ? response
-          : new Blob([JSON.stringify(response, null, 2)], { type: 'application/json' })
-        const timestamp = formatLocalDateTime()
-        const extension = exportFormat === 'json' ? 'json' : exportFormat === 'xlsx' ? 'xlsx' : 'csv'
-        filename = `study_${studyCode}_export_${timestamp}.${extension}`
-      }
-      
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = filename
-      
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-
-      // Show inline summary if CSV mode
-      if (uploadMode === 'csv' && summary) {
-        setSummaryExpanded(true)
-      } else {
-        // Show success message briefly
-        setTimeout(() => {
-          onClose()
-        }, 1000)
-      }
-    } catch (error: any) {
-      console.error('Export failed:', error)
-      setError(error.response?.data?.error || 'Export failed')
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  const updateFilter = <K extends keyof ExportFilters>(
-    key: K,
-    value: ExportFilters[K]
-  ) => {
-    setFilters(prev => ({ ...prev, [key]: value }))
-    scheduleUpdateCount()
-  }
-
-  const toggleArrayFilter = <K extends keyof ExportFilters>(
-    key: K,
-    value: number | string
-  ) => {
-    setFilters((prev) => toggleArrayFilterValue(prev, key, value))
-    scheduleUpdateCount()
-  }
-
-  const clearFilters = () => {
-    setFilters({ study: studyCode })
-    scheduleUpdateCount()
-  }
-
-  const hasActiveFilters = () => {
-    return !!(
-      filters.specimen_type_ids?.length ||
-      filters.container_types?.length ||
-      filters.date_from ||
-      filters.date_to ||
-      filters.created_from ||
-      filters.created_to ||
-      filters.tag_ids?.length ||
-      filters.subject_ids?.length
-    )
-  }
 
   if (!isOpen) return null
 
@@ -428,10 +196,7 @@ export default function ExportModal({
             <div className="mb-6 border-b border-app-border">
               <nav className="-mb-px flex space-x-8">
                 <button
-                  onClick={() => {
-                    setUploadMode('manual')
-                    scheduleUpdateCount()
-                  }}
+                  onClick={() => switchUploadMode('manual')}
                   className={`py-4 px-1 border-b-2 font-medium text-sm ${
                     uploadMode === 'manual'
                       ? 'border-app-accent text-app-accent'
@@ -441,10 +206,7 @@ export default function ExportModal({
                   Manual Selection
                 </button>
                 <button
-                  onClick={() => {
-                    setUploadMode('csv')
-                    scheduleUpdateCount()
-                  }}
+                  onClick={() => switchUploadMode('csv')}
                   className={`py-4 px-1 border-b-2 font-medium text-sm ${
                     uploadMode === 'csv'
                       ? 'border-app-accent text-app-accent'
@@ -497,10 +259,7 @@ export default function ExportModal({
                     type="number"
                     min="0"
                     value={dateTolerance}
-                    onChange={(e) => {
-                      setDateTolerance(Math.max(0, parseInt(e.target.value) || 0))
-                      scheduleUpdateCount()
-                    }}
+                    onChange={(e) => updateDateTolerance(parseInt(e.target.value) || 0)}
                     className="w-full px-3 py-2 border border-app-border rounded-lg focus:ring-2 focus:ring-app-accent focus:border-app-accent bg-app-card text-app-text"
                     placeholder="0 (exact match)"
                   />
@@ -955,7 +714,7 @@ export default function ExportModal({
                 Cancel
               </button>
               <button
-                onClick={handleExport}
+                onClick={() => void handleExport()}
                 disabled={exporting || count === 0 || loadingCount || (uploadMode === 'csv' && csvData.length === 0)}
                 className="px-4 py-2 text-sm font-medium text-white bg-app-accent rounded-lg hover:bg-app-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
               >

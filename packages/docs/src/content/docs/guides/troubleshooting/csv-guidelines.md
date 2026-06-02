@@ -25,6 +25,33 @@ Always use the YYYY-MM-DD format, zero-pad months and days (use "01" not "1"), a
 
 For date ranges in exports, both `date_from` and `date_to` use the same YYYY-MM-DD format as collection dates. Consistency in date formatting prevents parsing errors and ensures dates are interpreted correctly.
 
+## SampleDB export CSV conventions
+
+SampleDB **CSV download** files — **Container export**, **Specimen export**, **Inventory export**, **Collection table snapshot export**, and import templates — share a common wire format so files behave predictably in Excel, R, and Python.
+
+**Plain cell values (RFC 4180)**
+
+- Values are plain strings, numbers, or dates in cells — not Excel formula wrappers.
+- SampleDB does **not** emit `="001234"`-style formula cells in export CSV. Identifier columns such as barcodes appear as quoted strings when needed, for example `"001234"`.
+- If you need Excel to treat barcodes and IDs as text with leading zeros preserved, use **XLSX download** from **Container export** workflows (Bulk export, Study export modal, Barcode export).
+
+**Default wire settings**
+
+- UTF-8 encoding with BOM (helps Excel detect encoding)
+- CRLF line endings
+- Comma delimiter
+
+**Container export overrides**
+
+On the Export page, Study export modal, and Barcode export, you can change delimiter, BOM, and line ending before download. **Specimen export**, **Inventory export**, and **Collection table snapshot export** use the canonical defaults.
+
+**Bulk export vs collection table snapshot**
+
+- **Bulk export** (Export page) and other **Container export** entry points produce server-side exports using **Export configuration** columns and optional XLSX/JSON formats.
+- **Collection table snapshot export** on a plate, box, bag, or sheet detail page exports the current table view client-side using **Table view configuration** columns — not export configurations.
+
+See [Release Notes](/docs/guides/troubleshooting/release-notes/) for the breaking change that removed Excel formula wrappers from container export CSV.
+
 ## Position Format Requirements
 
 Position formats vary by container type, and getting them right is crucial for successful imports.

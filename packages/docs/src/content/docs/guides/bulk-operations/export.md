@@ -71,11 +71,17 @@ Configurations are managed in the Settings section, where you can create, edit, 
 
 ### Choosing Your Export Format
 
-The system supports three export formats, each suited to different uses. CSV (Comma-Separated Values) format is the most universal—it works with spreadsheet software, text editors, and most data analysis tools. It's a good default choice for most purposes.
+Container export supports three download formats. Pick the format that matches how you will use the file — not every workflow needs Excel.
 
-XLSX format is Excel's native format, which is convenient if you're primarily working in Excel. It preserves formatting better than CSV and can handle more complex data structures, though for most SampleDB exports, CSV works just as well.
+**CSV download** is the default and works well when you will open the file in R, Python, or other scripts; load it into a LIMS or analysis pipeline; or share a lightweight text file with collaborators. CSV uses plain quoted cell values (no Excel formula wrappers). Identifier columns such as barcodes are plain strings in the file. If Excel strips leading zeros when you open CSV, use **XLSX download** instead of expecting CSV to preserve text formatting.
 
-JSON format provides structured data that's easy for programs to parse. If you're importing the data into another system or need programmatic access, JSON might be the right choice. For most users working with spreadsheets, CSV or XLSX will be more practical.
+**XLSX download** is the right choice for Excel-first workflows. Excel workbook export marks identifier and code columns as **text cells**, so leading zeros and long barcodes are preserved when you open the file in Excel. Use XLSX when lab staff will work entirely in Excel and need reliable text formatting without CSV workarounds.
+
+**JSON download** provides structured data for programmatic import into another system. It is less convenient for manual review in a spreadsheet.
+
+On the Export page, Study export modal, and Barcode export, you can override CSV delimiter, UTF-8 BOM, and line ending before download. Defaults (comma, BOM on, CRLF) match SampleDB's canonical **CSV download** conventions described in [CSV File Guidelines](/docs/guides/troubleshooting/csv-guidelines/).
+
+> **Upgrade note:** Older SampleDB container export CSV files used Excel formula wrappers (`="..."`) on some columns. Current releases export plain strings. See [Release Notes](/docs/guides/troubleshooting/release-notes/) if you are updating integrations or scripts.
 
 ### Previewing What Will Be Exported
 
@@ -125,7 +131,7 @@ The default configuration includes all available columns, which is comprehensive
 
 Configurations are managed in Settings, where you can create new ones, edit existing ones, set defaults, and delete ones you no longer need. Once you've set up configurations for your common export needs, using them becomes second nature.
 
-Collection detail pages (micronix plates, cryovial boxes, boxes, bags, and sheets) have a **table view** with a "Columns" dropdown. Table view uses **table view configurations** (separate from export configurations), managed in Settings under Data Management → Table View Configurations. The table shows only columns defined in the selected preset. **Table CSV download** exports the current view—the same columns and rows you see on screen—so you can quickly grab a snapshot without using the main Export page. Export configurations are used only for the Export page, Barcode Export, and Export modal.
+Collection detail pages (micronix plates, cryovial boxes, boxes, bags, and sheets) have a **table view** with a "Columns" dropdown. Table view uses **table view configurations** (separate from export configurations), managed in Settings under Data Management → Table View Configurations. The table shows only columns defined in the selected preset. **Collection table snapshot export** downloads the current view—the same columns and rows you see on screen—as a client-side CSV snapshot. It does not run a server-side container query and does not use **Export configuration** presets. Snapshot CSV uses the same **CSV download** wire conventions (UTF-8 BOM and CRLF by default) as server exports, but only **Container export** workflows (this page, Study export modal, Barcode export) offer XLSX and JSON formats and export-configuration column presets.
 
 ## Troubleshooting Export Issues
 

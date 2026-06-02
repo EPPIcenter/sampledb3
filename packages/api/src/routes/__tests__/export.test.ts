@@ -103,7 +103,7 @@ describe('Export API', () => {
       const spec = await createTestSpecimen(ctx.db, specimenType.id, { studySubjectId: subject.id })
       await createTestStorageContainer(ctx.db, { specimenId: spec.id })
 
-      const res = await ctx.request('/api/export/containers?study=EXPORT&format=csv', {
+      const res = await ctx.request('/api/export/containers?study=EXPORT&format=csv&csv_bom=false&csv_line_ending=LF', {
         method: 'GET',
       })
       expect(res.status).toBe(200)
@@ -111,6 +111,7 @@ describe('Export API', () => {
       expect(contentType).toMatch(/text\/csv|text\/plain/)
       const text = await res.text()
       expect(text.length).toBeGreaterThan(0)
+      expect(text).not.toContain('=""')
     })
 
     it('returns 200 with count_only when study has containers', async () => {
@@ -205,6 +206,108 @@ describe('Export API', () => {
       expect(res.status).toBe(400)
       const data = (await res.json()) as { error?: string }
       expect(data.error).toMatch(/invalid format|csv, xlsx, or json/i)
+    })
+  })
+
+  describe('POST /api/export/containers', () => {
+    it('returns ADR-0002 envelope with base64 CSV, filename, and summary', async () => {
+      const study = await createTestStudy(ctx.db, { title: 'Post Study', shortCode: 'POST1' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Subj1' })
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const spec = await createTestSpecimen(ctx.db, specimenType.id, { studySubjectId: subject.id })
+      await createTestStorageContainer(ctx.db, { specimenId: spec.id })
+
+      const res = await ctx.request('/api/export/containers', {
+        method: 'POST',
+        json: {
+          study: 'POST1',
+          subject_names: ['Subj1'],
+          format: 'csv',
+          csv_bom: false,
+          csv_line_ending: 'LF',
+        },
+      })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        summary?: { total_containers?: number }
+        data?: string
+        format?: string
+        filename?: string
+      }
+      expect(data.format).toBe('csv')
+      expect(data.filename).toMatch(/\.csv$/)
+      expect(typeof data.data).toBe('string')
+      expect(data.summary?.total_containers).toBe(1)
+      expect(Buffer.from(data.data!, 'base64').toString('utf8')).not.toContain('=""')
+    })
+  })
+
+  describe('POST /api/export/containers/validate-studies', () => {
+    it('returns valid and invalid study codes', async () => {
+      await createTestStudy(ctx.db, { title: 'Valid', shortCode: 'VALID' })
+
+      const res = await ctx.request('/api/export/containers/validate-studies', {
+        method: 'POST',
+        json: { study_codes: ['VALID', 'NOPE'] },
+      })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { valid_count?: number; invalid_count?: number; invalid?: string[] }
+      expect(data.valid_count).toBe(1)
+      expect(data.invalid_count).toBe(1)
+      expect(data.invalid).toContain('NOPE')
+    })
+  })
+
+  describe('POST /api/export/containers/multi-study', () => {
+    it('returns ADR-0002 envelope for multi-study CSV export', async () => {
+      const study = await createTestStudy(ctx.db, { title: 'Multi', shortCode: 'MULTI1' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: study.id, name: 'Alice' })
+      const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const spec = await createTestSpecimen(ctx.db, specimenType.id, { studySubjectId: subject.id })
+      await createTestStorageContainer(ctx.db, { specimenId: spec.id })
+
+      const res = await ctx.request('/api/export/containers/multi-study', {
+        method: 'POST',
+        json: {
+          entries: [{ study_short_code: 'MULTI1', subject_name: 'Alice' }],
+          format: 'csv',
+          csv_bom: false,
+          csv_line_ending: 'LF',
+        },
+      })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { format?: string; filename?: string; data?: string; summary?: unknown }
+      expect(data.format).toBe('csv')
+      expect(data.filename).toMatch(/multi_study_export.*\.csv$/)
+      expect(typeof data.data).toBe('string')
+      expect(data.summary).toBeDefined()
+    })
+  })
+
+  describe('POST /api/export/containers/by-barcodes', () => {
+    it('returns ADR-0002 envelope for barcode CSV export', async () => {
+      const res = await ctx.request('/api/export/containers/by-barcodes', {
+        method: 'POST',
+        json: {
+          barcodes: ['UNKNOWN-BARCODE'],
+          format: 'json',
+        },
+      })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        format?: string
+        filename?: string
+        data?: unknown
+        summary?: { barcodes_not_found?: string[] }
+      }
+      expect(data.format).toBe('json')
+      expect(data.filename).toMatch(/barcode_export.*\.json$/)
+      expect(Array.isArray(data.data)).toBe(true)
+      expect(data.summary?.barcodes_not_found).toContain('UNKNOWN-BARCODE')
     })
   })
 
