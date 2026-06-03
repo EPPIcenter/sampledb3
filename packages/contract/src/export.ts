@@ -27,8 +27,9 @@ export interface ContainerExportData {
   container_id: number
   container_type: string
   barcode?: string
+  sublabel?: string
+  sheet_name?: string
   position?: string
-  label?: string
   collection_name?: string
   /** Comma-separated tag names, sorted alphabetically. */
   tags: string

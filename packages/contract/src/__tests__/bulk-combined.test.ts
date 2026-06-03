@@ -165,3 +165,28 @@ describe('bulkCombinedImportResponseSchema', () => {
     expect(result.success).toBe(true)
   })
 })
+
+describe('paper inbound fields', () => {
+  it('rejects barcode on paper container rows', () => {
+    const result = bulkCombinedRequestSchema.safeParse({
+      ...validPayload,
+      subjects: [
+        {
+          subjectName: 'SUBJ-1',
+          specimens: [
+            {
+              specimenTypeName: 'DBS',
+              container: {
+                containerType: 'paper' as const,
+                collectionName: 'Bag1',
+                sheetName: 'Sheet-A',
+                barcode: 'P-1',
+              },
+            },
+          ],
+        },
+      ],
+    })
+    expect(result.success).toBe(false)
+  })
+})

@@ -45,6 +45,7 @@ export {
   bulkCombinedRequestSchema,
   bulkCombinedValidateRequestSchema,
   containerInputSchema,
+  optionalContainerInputSchema,
   bulkCombinedValidateErrorSchema,
   bulkCombinedValidateResponseSchema,
   bulkCombinedImportSummarySchema,

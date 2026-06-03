@@ -6,25 +6,51 @@ const collectionTypeEnum = z.enum(['box', 'bag', 'micronix_plate', 'cryovial_box
 
 const atomicModeEnum = z.enum(['full_file', 'per_subject'])
 
+/** Base container input fields (no refinements — safe for `.partial()`). */
+export const containerInputFieldsSchema = z.object({
+  containerType: containerTypeEnum,
+  collectionName: z.string().optional(),
+  collectionBarcode: z.string().optional(),
+  barcode: z.string().optional(),
+  position: z.string().optional(),
+  sheetName: z.string().optional(),
+  sublabel: z.string().optional(),
+  unitId: z.number().int().optional(),
+  totalQuantity: z.number().optional(),
+  remainingQuantity: z.number().optional(),
+  comment: z.string().optional(),
+  collectionLocationId: z.number().int().optional(),
+})
+
+/** Bulk combined rows allow optional containerType before validation downstream. */
+export const bulkCombinedContainerFieldsSchema = containerInputFieldsSchema.extend({
+  containerType: containerTypeEnum.optional(),
+})
+
+function rejectPaperBarcodeOnWrite(
+  container: { containerType?: z.infer<typeof containerTypeEnum>; barcode?: string | null },
+  ctx: z.RefinementCtx,
+): void {
+  if (container.containerType !== 'paper') return
+  if (container.barcode != null && container.barcode !== '') {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Paper containers use sublabel for spot identifiers, not barcode',
+      path: ['barcode'],
+    })
+  }
+}
+
 /**
  * Container fields on a specimen row in combined bulk import.
  * Supports collection creation via collectionLocationId when the collection is missing.
  */
-export const bulkCombinedContainerSchema = z
-  .object({
-    containerType: containerTypeEnum.optional(),
-    collectionName: z.string().optional(),
-    collectionBarcode: z.string().optional(),
-    barcode: z.string().optional(),
-    position: z.string().optional(),
-    label: z.string().optional(),
-    unitId: z.number().int().optional(),
-    totalQuantity: z.number().optional(),
-    remainingQuantity: z.number().optional(),
-    comment: z.string().optional(),
-    collectionLocationId: z.number().int().optional(),
-  })
+export const bulkCombinedContainerSchema = bulkCombinedContainerFieldsSchema
   .optional()
+  .superRefine((container, ctx) => {
+    if (!container) return
+    rejectPaperBarcodeOnWrite(container, ctx)
+  })
 
 export const bulkCombinedSubjectSpecimenSchema = z.object({
   specimenTypeName: z.string().min(1),
@@ -73,19 +99,13 @@ export type BulkCombinedRequest = z.infer<typeof bulkCombinedRequestSchema>
 export type BulkCombinedValidateRequest = z.infer<typeof bulkCombinedValidateRequestSchema>
 
 /** Shared container input fields (single-specimen and bulk combined). */
-export const containerInputSchema = z.object({
-  containerType: containerTypeEnum,
-  collectionName: z.string().optional(),
-  collectionBarcode: z.string().optional(),
-  barcode: z.string().optional(),
-  position: z.string().optional(),
-  label: z.string().optional(),
-  unitId: z.number().int().optional(),
-  totalQuantity: z.number().optional(),
-  remainingQuantity: z.number().optional(),
-  comment: z.string().optional(),
-  collectionLocationId: z.number().int().optional(),
-})
+export const containerInputSchema = containerInputFieldsSchema.superRefine(rejectPaperBarcodeOnWrite)
+
+/** Optional partial container for POST /specimens (container not required). */
+export const optionalContainerInputSchema = containerInputFieldsSchema
+  .partial()
+  .superRefine(rejectPaperBarcodeOnWrite)
+  .optional()
 
 export const bulkCombinedValidateErrorSchema = z.object({
   subjectIndex: z.number().int(),
