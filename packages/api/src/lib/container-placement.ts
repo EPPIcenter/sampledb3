@@ -73,8 +73,7 @@ export type CryovialSubtypeDetails = {
 }
 
 export type PaperSubtypeDetails = {
-  barcode: string | null
-  position: string | null
+  sublabel: string | null
   sheetId: number | null
   sheetName: string | null
   boxId: number | null
@@ -196,7 +195,6 @@ export async function resolveContainerPlacements(
       .select({
         id: paper.id,
         sheetId: paper.sheetId,
-        position: paper.position,
         collectionName: sheet.name,
         boxId: sheet.boxId,
         bagId: sheet.bagId,
@@ -314,7 +312,6 @@ export async function resolveContainerPlacements(
         type: 'sheet',
         id: p.sheetId,
         name: p.collectionName || 'Unknown',
-        position: p.position ?? null,
       },
       location: locationFields,
       parentCollection,
@@ -383,8 +380,7 @@ export async function resolveContainerSubtypeDetails(
     database
       .select({
         id: paper.id,
-        barcode: paper.barcode,
-        position: paper.position,
+        sublabel: paper.sublabel,
         sheetId: sheet.id,
         sheetName: sheet.name,
         boxId: sheet.boxId,
@@ -428,8 +424,7 @@ export async function resolveContainerSubtypeDetails(
 
   for (const row of paperRows) {
     paperById.set(row.id, {
-      barcode: row.barcode,
-      position: row.position,
+      sublabel: row.sublabel,
       sheetId: row.sheetId,
       sheetName: row.sheetName,
       boxId: row.boxId,

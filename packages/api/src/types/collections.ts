@@ -83,8 +83,7 @@ export interface CryovialTubeEntry {
 export interface PaperEntry {
   type: 'paper'
   id: number
-  barcode: string | null
-  position: string | null
+  sublabel: string | null
   container: EnrichedContainer | null
 }
 

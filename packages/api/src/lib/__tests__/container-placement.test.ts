@@ -214,8 +214,7 @@ describe('resolveContainerPlacements', () => {
     await testDb.insert(paper).values({
       id: container.id,
       sheetId: parentSheet!.id,
-      position: 'S01',
-      barcode: 'P-1',
+      sublabel: 'P-1',
     })
 
     const map = await resolveContainerPlacements(testDb, [container.id])
@@ -225,7 +224,6 @@ describe('resolveContainerPlacements', () => {
         type: 'sheet',
         id: parentSheet!.id,
         name: 'Sheet 1',
-        position: 'S01',
       },
       parentCollection: {
         type: 'box',
@@ -256,7 +254,6 @@ describe('resolveContainerPlacements', () => {
     await testDb.insert(paper).values({
       id: container.id,
       sheetId: parentSheet!.id,
-      position: 'S02',
     })
 
     const map = await resolveContainerPlacements(testDb, [container.id])

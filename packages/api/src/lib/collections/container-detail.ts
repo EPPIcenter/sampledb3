@@ -146,7 +146,7 @@ async function resolveContainerSource(
   }
 }
 
-export async function enrichPaperContainers<T extends { id: number; barcode: string | null; position: string | null }>(
+export async function enrichPaperContainers<T extends { id: number; sublabel: string | null }>(
   database: Database,
   papers: T[],
 ) {
@@ -154,8 +154,7 @@ export async function enrichPaperContainers<T extends { id: number; barcode: str
     papers.map(async (p) => ({
       type: 'paper' as const,
       id: p.id,
-      barcode: p.barcode,
-      position: p.position,
+      sublabel: p.sublabel,
       container: await enrichStorageContainer(database, p.id),
     })),
   )

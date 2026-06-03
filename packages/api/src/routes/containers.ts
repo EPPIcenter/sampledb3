@@ -9,6 +9,8 @@ import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { resolveContainerByBarcode } from '../lib/identifier-resolution'
 import { enrichContainerForApi, enrichContainersForApi } from '../lib/container-api-enrichment'
+import { mapEnrichedContainerToWire, mapEnrichedContainersToWire } from '../lib/container-wire-mapper'
+import { wireJsonResponse } from '../lib/wire-json-response'
 import { handleRouteError, RouteError, containersFetchFailedBody } from '../lib/error-handler'
 
 /**
@@ -82,8 +84,8 @@ containers.get('/', authMiddleware, async (c) => {
     // Enrich containers with location and tags info
     const enrichedContainers = await enrichContainersForApi(database, containersList)
     
-    return c.json({
-      containers: enrichedContainers,
+    return wireJsonResponse(c, {
+      containers: mapEnrichedContainersToWire(enrichedContainers),
       pagination: {
         page,
         limit,
@@ -199,8 +201,8 @@ containers.get('/:id', authMiddleware, async (c) => {
       }
     }
 
-    return c.json({
-      container: enriched,
+    return wireJsonResponse(c, {
+      container: mapEnrichedContainerToWire(enriched),
       specimen: spec,
       source: sourceInfo,
     })
@@ -228,10 +230,11 @@ containers.patch('/:id', memberMiddleware, async (c) => {
       unitId: z.number().int().optional(),
       tagIds: z.array(z.number().int()).optional(), // Replace tags
       barcode: z.union([z.string(), z.null()]).optional(),
+      sublabel: z.union([z.string(), z.null()]).optional(),
     })
     
     const data = schema.parse(body)
-    const { tagIds, unitId, barcode: rawBarcode, ...restData } = data
+    const { tagIds, unitId, barcode: rawBarcode, sublabel: rawSublabel, ...restData } = data
     const updateData: { comment?: string; remainingQuantity?: number; unitId?: number } = { ...restData }
 
     const [container, micronixInfo, cryovialInfo, paperInfo, staticWellInfo] = await Promise.all([
@@ -267,7 +270,11 @@ containers.patch('/:id', memberMiddleware, async (c) => {
     }
 
     let newBarcode: string | null | undefined
+    let newSublabel: string | null | undefined
     if (rawBarcode !== undefined) {
+      if (containerType === 'paper') {
+        return c.json({ error: 'Paper containers use sublabel for spot identifiers, not barcode' }, 400)
+      }
       if (containerType === 'static_well' || !containerType) {
         return c.json({ error: 'Barcode cannot be set for this container type' }, 400)
       }
@@ -294,6 +301,24 @@ containers.patch('/:id', memberMiddleware, async (c) => {
         const takenBy = await resolveContainerByBarcode(database, newBarcode)
         if (takenBy !== null && takenBy !== id) {
           return c.json({ error: `Barcode '${newBarcode}' is already in use` }, 400)
+        }
+      }
+    }
+
+    if (rawSublabel !== undefined) {
+      if (containerType !== 'paper') {
+        return c.json({ error: 'Sublabel can only be set for paper containers' }, 400)
+      }
+      if (rawSublabel === null) {
+        newSublabel = null
+      } else {
+        const trimmed = rawSublabel.trim()
+        newSublabel = trimmed.length === 0 ? null : trimmed
+      }
+      if (newSublabel !== null && newSublabel !== undefined) {
+        const takenBy = await resolveContainerByBarcode(database, newSublabel)
+        if (takenBy !== null && takenBy !== id) {
+          return c.json({ error: `Sublabel '${newSublabel}' is already in use` }, 400)
         }
       }
     }
@@ -337,14 +362,16 @@ containers.patch('/:id', memberMiddleware, async (c) => {
         await database.update(micronixTube).set({ barcode: newBarcode }).where(eq(micronixTube.id, id))
       } else if (containerType === 'cryovial_tube' && newBarcode !== undefined) {
         await database.update(cryovialTube).set({ barcode: newBarcode }).where(eq(cryovialTube.id, id))
-      } else if (containerType === 'paper' && newBarcode !== undefined) {
-        await database.update(paper).set({ barcode: newBarcode }).where(eq(paper.id, id))
       }
+    }
+
+    if (rawSublabel !== undefined && containerType === 'paper') {
+      await database.update(paper).set({ sublabel: newSublabel ?? null }).where(eq(paper.id, id))
     }
 
     // Return enriched container
     const enriched = await enrichContainerForApi(database, updated)
-    return c.json({ container: enriched })
+    return wireJsonResponse(c, { container: mapEnrichedContainerToWire(enriched) })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)

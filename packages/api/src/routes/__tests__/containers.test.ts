@@ -80,6 +80,47 @@ describe('Containers API', () => {
       expect(res.status).toBe(401)
     })
 
+    it('returns omit-on-wire paper container detail', async () => {
+      const now = utcNow()
+      const testStorageType = await createTestStorageType(ctx.db, { name: 'Freezer', description: 'Test' })
+      const testLocation = await createTestLocation(ctx.db, {
+        name: `Paper Loc ${Date.now()}`,
+        parentId: null,
+        storageTypeId: String(testStorageType.id),
+        canContainCollections: true,
+      })
+      const [b] = await ctx.db
+        .insert(box)
+        .values({ name: `BX-GET-${Date.now()}`, locationId: testLocation.id, created: now, lastUpdated: now })
+        .returning()
+      const [sh] = await ctx.db
+        .insert(sheet)
+        .values({ name: '2058121', boxId: b!.id, bagId: null, created: now, lastUpdated: now })
+        .returning()
+      const sp = await createTestSpecimen(ctx.db, (await createTestSpecimenType(ctx.db, { name: 'DBS' })).id)
+      const testUnit = await createTestUnit(ctx.db, { symbol: 'spots', name: 'spots', category: 'count' })
+      const [container] = await ctx.db
+        .insert(storageContainer)
+        .values({ specimenId: sp.id, unitId: testUnit.id, totalQuantity: 1, remainingQuantity: 1, created: now, lastUpdated: now })
+        .returning()
+      await ctx.db.insert(paper).values({ id: container!.id, sheetId: sh!.id, sublabel: 'Spot-A' })
+
+      const res = await ctx.request(`/api/containers/${container!.id}`)
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        container: {
+          containerType: string
+          sublabel?: string
+          collection?: Record<string, unknown>
+        }
+      }
+      expect(data.container.containerType).toBe('paper')
+      expect(data.container.sublabel).toBe('Spot-A')
+      expect(data.container.collection).toEqual({ type: 'sheet', id: sh!.id, name: '2058121' })
+      expect(data.container.collection).not.toHaveProperty('position')
+      expect(data.container.collection).not.toHaveProperty('barcode')
+    })
+
     it('returns 500 with container error shape when get fails', async () => {
       vi.spyOn(containerEnrichment, 'enrichContainerForApi').mockRejectedValueOnce(
         new Error('enrichment failed'),
@@ -234,7 +275,7 @@ describe('Containers API', () => {
       expect(res.status).toBe(400)
     })
 
-    it('updates paper barcode', async () => {
+    it('updates paper sublabel', async () => {
       const now = utcNow()
       const [b] = await ctx.db
         .insert(box)
@@ -249,15 +290,15 @@ describe('Containers API', () => {
         .insert(storageContainer)
         .values({ specimenId: sp.id, unitId: testUnit.id, totalQuantity: 1, remainingQuantity: 1, created: now, lastUpdated: now })
         .returning()
-      await ctx.db.insert(paper).values({ id: container.id, sheetId: sh.id, barcode: 'P-OLD', position: null })
+      await ctx.db.insert(paper).values({ id: container.id, sheetId: sh.id, sublabel: 'P-OLD' })
 
       const res = await ctx.request(`/api/containers/${container.id}`, {
         method: 'PATCH',
-        json: { barcode: 'P-NEW' },
+        json: { sublabel: 'P-NEW' },
       })
       expect(res.status).toBe(200)
       const row = await ctx.db.select().from(paper).where(eq(paper.id, container.id)).get()
-      expect(row?.barcode).toBe('P-NEW')
+      expect(row?.sublabel).toBe('P-NEW')
     })
   })
 })

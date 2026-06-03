@@ -41,6 +41,7 @@ import { createQpcrExperimentsRoutes } from './routes/qpcr-experiments'
 import { handleRouteError } from './lib/error-handler'
 import { requestContextMiddleware } from './middleware/request-context'
 import { getAppBuildId } from './lib/app-build-id'
+import { omitOnWireMiddleware } from './middleware/omit-on-wire'
 import { shouldServeSpaFallback } from './lib/spa-fallback-path'
 import type { Context } from 'hono'
 
@@ -77,6 +78,7 @@ app.use('*', cors({
     : ['http://localhost:5173', 'http://localhost:3000'],
   credentials: true,
 }))
+app.use('*', omitOnWireMiddleware)
 
 // Global error handler - catches all unhandled errors
 app.onError((error, c) => {

@@ -68,8 +68,6 @@ function collectionInfoFromPlacement(
       type: 'sheet',
       id: placement.collection.id,
       name: placement.collection.name,
-      position: placement.collection.position,
-      barcode: paperInfo.barcode,
     }
   }
 
