@@ -87,8 +87,7 @@ interface CryovialTubeEntry {
 interface PaperEntry {
   type: 'paper'
   id: number
-  barcode?: string | null
-  position?: string | null
+  sublabel?: string | null
   container?: unknown
 }
 

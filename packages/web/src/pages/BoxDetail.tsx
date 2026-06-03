@@ -67,7 +67,8 @@ export default function BoxDetail() {
           buildSheetPaperTableRow(
             {
               position: p.position,
-              barcode: p.barcode,
+              sublabel: p.sublabel ?? undefined,
+              barcode: p.barcode ?? undefined,
               containerType: 'paper',
               container: p.container ?? undefined,
               context,

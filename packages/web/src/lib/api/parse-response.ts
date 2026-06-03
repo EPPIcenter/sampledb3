@@ -1,4 +1,9 @@
 import { z } from 'zod'
+import {
+  parseContainerDetailWire as parseContainerDetailWireSchema,
+  parseContainersListWire,
+  type ContainerDetailWire,
+} from '@sampledb/contract/wire'
 import type { EnrichedContainer } from './containers'
 
 /** Thrown when a response body does not match the expected API contract. */
@@ -69,49 +74,18 @@ export function parseSettingsEnvelope<T>(
   return { key: parsed.key, value: parsed.value as T, userId: parsed.userId }
 }
 
-const containerCollectionSchema = z.object({
-  type: z.string(),
-  id: z.number(),
-  name: z.string(),
-  position: z.string().optional(),
-  barcode: z.string().optional(),
-  label: z.string().optional(),
-})
-
-const enrichedContainerSchema = z
-  .object({
-    id: z.number(),
-    specimenId: z.number().optional(),
-    containerType: z.string(),
-    totalQuantity: z.number().nullable().optional(),
-    remainingQuantity: z.number().nullable().optional(),
-    locationPath: z.string().optional(),
-    collection: containerCollectionSchema.nullable().optional(),
-  })
-  .passthrough()
-
-const containerDetailWireSchema = z
-  .object({
-    container: enrichedContainerSchema.optional(),
-    specimen: z.unknown().nullable().optional(),
-    source: z.unknown().nullable().optional(),
-  })
-  .passthrough()
-  .refine(
-    (body) => body.container?.id != null || (body as { id?: number }).id != null,
-    { message: 'container detail requires container.id (nested or legacy flat)' },
-  )
-
-export type ParsedContainerDetailWire = z.infer<typeof containerDetailWireSchema>
+export type ParsedContainerDetailWire = ContainerDetailWire
 
 export function parseContainerDetailWire(body: unknown): ParsedContainerDetailWire {
-  return parseWithSchema(containerDetailWireSchema, body, 'GET /containers/:id')
+  try {
+    return parseContainerDetailWireSchema(body)
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new ApiContractError(`Invalid GET /containers/:id: ${formatIssues(error.issues)}`, error.issues)
+    }
+    throw error
+  }
 }
-
-const containersListSchema = z.object({
-  containers: z.array(enrichedContainerSchema),
-  pagination: paginationMetaSchema.optional(),
-})
 
 export type ContainersListResult = {
   containers: EnrichedContainer[]
@@ -119,9 +93,16 @@ export type ContainersListResult = {
 }
 
 export function parseContainersList(body: unknown): ContainersListResult {
-  const parsed = parseWithSchema(containersListSchema, body, 'GET /containers list')
-  return {
-    containers: parsed.containers as ContainersListResult['containers'],
-    pagination: parsed.pagination,
+  try {
+    const parsed = parseContainersListWire(body)
+    return {
+      containers: parsed.containers as ContainersListResult['containers'],
+      pagination: parsed.pagination,
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new ApiContractError(`Invalid GET /containers list: ${formatIssues(error.issues)}`, error.issues)
+    }
+    throw error
   }
 }

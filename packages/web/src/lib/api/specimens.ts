@@ -36,7 +36,8 @@ type CreateSpecimensBulkData = {
       collectionBarcode?: string
       barcode?: string
       position?: string
-      label?: string
+      sheetName?: string
+      sublabel?: string
       collectionLocationId?: number
     }
   }>
@@ -49,7 +50,8 @@ export type AddContainerData = {
   collectionBarcode?: string
   barcode?: string
   position?: string
-  label?: string
+  sheetName?: string
+  sublabel?: string
   unitId?: number
   totalQuantity?: number
   remainingQuantity?: number

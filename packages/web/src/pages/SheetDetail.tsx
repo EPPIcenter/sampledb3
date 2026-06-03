@@ -59,7 +59,8 @@ export default function SheetDetail() {
     return papers.map((p: CollectionTableEntry) =>
       buildCollectionTableRow({
         position: p.position,
-        barcode: p.barcode,
+        barcode: p.barcode ?? undefined,
+        sublabel: p.sublabel ?? undefined,
         containerType: 'paper',
         container: p.container ?? undefined,
         context,

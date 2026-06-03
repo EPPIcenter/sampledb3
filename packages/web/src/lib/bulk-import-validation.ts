@@ -50,7 +50,7 @@ export function getBulkImportRequiredFields(opts: {
   const containerFields: Record<ContainerType, string[]> = {
     micronix_tube: ['plate_name', 'barcode', 'position'],
     cryovial_tube: ['box_name', 'position'],
-    paper: ['bag_name', 'label'],
+    paper: ['bag_name', 'sheet_name'],
     static_well: ['plate_name', 'position'],
   }
   return [...base, ...containerFields[containerType]]
@@ -63,7 +63,7 @@ export function getBulkImportOptionalFields(
   const optionalFields: Record<ContainerType, string[]> = {
     micronix_tube: ['comment'],
     cryovial_tube: ['barcode', 'comment'],
-    paper: ['comment'],
+    paper: ['sublabel', 'comment'],
     static_well: ['comment'],
   }
   return optionalFields[containerType]
@@ -149,7 +149,8 @@ export function mapBulkImportRowsToPayload(
           collectionBarcode: trimCell(row.collection_barcode) || undefined,
           barcode: trimCell(row.barcode) || undefined,
           position: trimCell(row.position) || undefined,
-          label: trimCell(row.label) || undefined,
+          sheetName: trimCell(row.sheet_name) || undefined,
+          sublabel: trimCell(row.sublabel) || undefined,
           comment: trimCell(row.comment) || undefined,
         }
       }

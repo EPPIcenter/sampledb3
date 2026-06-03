@@ -108,11 +108,23 @@ export default function ContainerDetail() {
   const containerTypeName = getContainerTypeName(effectiveContainerType)
   const containerTypeIcon = getContainerTypeIcon(effectiveContainerType)
 
-  // Primary lab identifier for header: barcode (micronix/cryovial/paper when present), else position, else type
-  const hasBarcode = effectiveCollection?.barcode && (effectiveContainerType === 'micronix_tube' || effectiveContainerType === 'cryovial_tube' || effectiveContainerType === 'paper')
+  // Primary lab identifier for header: barcode (tubes), sublabel (paper), else position, else type
+  const tubeBarcode =
+    effectiveContainerType === 'micronix_tube' || effectiveContainerType === 'cryovial_tube'
+      ? container.barcode ?? effectiveCollection?.barcode
+      : undefined
+  const paperSublabel = effectiveContainerType === 'paper' ? container.sublabel : undefined
+  const hasBarcode = Boolean(tubeBarcode || paperSublabel)
   const containerIdentifier = hasBarcode
-    ? (effectiveCollection!.barcode ?? containerTypeName)
-    : effectiveCollection?.position || effectiveCollection?.label || containerTypeName
+    ? (tubeBarcode ?? paperSublabel ?? containerTypeName)
+    : effectiveCollection?.position || effectiveCollection?.name || containerTypeName
+  const showIdentifierLine =
+    Boolean(
+      effectiveCollection?.position ||
+        tubeBarcode ||
+        paperSublabel ||
+        effectiveCollection?.name,
+    )
 
   // Build breadcrumbs - use identifier instead of ID
   const breadcrumbItems: Array<{ label: string; to?: string }> = []
@@ -192,15 +204,15 @@ export default function ContainerDetail() {
               <div className="text-2xl" style={{ color: 'rgb(var(--app-text-muted))' }}>{containerTypeIcon}</div>
               <div>
                 <h1 className="text-2xl font-bold">{containerTypeName}</h1>
-                {(effectiveCollection?.position || effectiveCollection?.barcode || effectiveCollection?.label) && (
+                {(showIdentifierLine || hasBarcode) && (
                   <div className="mt-1">
                     <span
                       className={
-                        effectiveContainerType === 'micronix_tube' && effectiveCollection?.barcode
+                        effectiveContainerType === 'micronix_tube' && tubeBarcode
                           ? 'storage-barcode text-lg'
                           : 'text-sm font-mono'
                       }
-                      style={effectiveContainerType === 'micronix_tube' && effectiveCollection?.barcode ? undefined : { color: 'rgb(var(--app-text-muted))' }}
+                      style={effectiveContainerType === 'micronix_tube' && tubeBarcode ? undefined : { color: 'rgb(var(--app-text-muted))' }}
                     >
                       {containerIdentifier}
                     </span>
@@ -241,11 +253,19 @@ export default function ContainerDetail() {
             <div className="min-w-0">
               <h3 className="storage-subsection-title mb-2 text-sm font-semibold">Identifier</h3>
               <dl className="space-y-1.5 text-sm">
-                {hasBarcode && (
+                {tubeBarcode && (
                   <div>
                     <dt className="storage-detail-dt text-xs">Barcode</dt>
                     <dd className="storage-detail-dd mt-0.5">
-                      <span className="storage-barcode font-mono text-base">{effectiveCollection!.barcode}</span>
+                      <span className="storage-barcode font-mono text-base">{tubeBarcode}</span>
+                    </dd>
+                  </div>
+                )}
+                {paperSublabel && (
+                  <div>
+                    <dt className="storage-detail-dt text-xs">Sublabel</dt>
+                    <dd className="storage-detail-dd mt-0.5">
+                      <span className="storage-barcode font-mono text-base">{paperSublabel}</span>
                     </dd>
                   </div>
                 )}
@@ -577,9 +597,9 @@ export default function ContainerDetail() {
                                     {getContainerTypeName(effectiveCollection.type)}:
                                   </span>
                                   <span className="storage-detail-dd font-mono">{effectiveCollection.name}</span>
-                                  {(effectiveCollection.position || effectiveCollection.barcode || effectiveCollection.label) && (
+                                  {(effectiveCollection.position || effectiveCollection.barcode || effectiveCollection.name) && (
                                     <span style={{ color: 'rgb(var(--app-text-muted))' }}>
-                                      ({effectiveCollection.position || effectiveCollection.barcode || effectiveCollection.label})
+                                      ({effectiveCollection.position || effectiveCollection.barcode || effectiveCollection.name})
                                     </span>
                                   )}
                                 </div>
@@ -670,9 +690,9 @@ export default function ContainerDetail() {
             remainingQuantity: container.remainingQuantity ?? undefined,
             unit: container.unit,
             containerType: effectiveContainerType,
-            barcode: effectiveCollection?.barcode,
+            barcode: tubeBarcode,
             position: effectiveCollection?.position,
-            label: effectiveCollection?.label,
+            sublabel: paperSublabel,
             specimenTypeName: specimen?.specimenType?.name,
           }}
           onSuccess={handleDerivationCreated}
@@ -692,7 +712,7 @@ export default function ContainerDetail() {
             tags: container.tags,
             unit: container.unit,
             containerType: effectiveContainerType,
-            barcode: effectiveCollection?.barcode,
+            barcode: tubeBarcode ?? paperSublabel,
           }}
           onSuccess={() => {
             refreshContainer()

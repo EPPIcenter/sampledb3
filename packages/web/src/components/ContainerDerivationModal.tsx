@@ -20,7 +20,7 @@ interface ContainerDerivationModalProps {
     containerType?: string
     barcode?: string
     position?: string
-    label?: string
+    sublabel?: string
     specimenTypeName?: string
   }
   onSuccess: () => void
@@ -249,7 +249,7 @@ function ContainerDerivationModalContent({
   const sourceParts: string[] = []
   if (parentContainer?.barcode) sourceParts.push(parentContainer.barcode)
   if (parentContainer?.position) sourceParts.push(parentContainer.position)
-  if (parentContainer?.label) sourceParts.push(parentContainer.label)
+  if (parentContainer?.sublabel) sourceParts.push(parentContainer.sublabel)
   if (parentContainer?.specimenTypeName) sourceParts.push(parentContainer.specimenTypeName)
   const sourceSummary = sourceParts.length > 0 ? sourceParts.join(' · ') : containerTypeLabel
 

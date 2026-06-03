@@ -45,6 +45,7 @@ export interface CollectionTableContext {
 export interface CollectionTableEntry {
   position?: string | null
   barcode?: string | null
+  sublabel?: string | null
   /** Container type string matching export (e.g. micronix_tube, static_well, cryovial_tube, paper). */
   containerType?: string | null
   container?: CollectionEntryContainer | null
@@ -88,8 +89,9 @@ export type CollectionTableRow = Record<string, string | number | null>
 export const COLLECTION_GRID_TABLE_ROW_KEYS = new Set([
   'position',
   'barcode',
+  'sublabel',
+  'sheet_name',
   'container_type',
-  'label',
   'collection_name',
   'status',
   'tags',
@@ -161,8 +163,9 @@ export function buildCollectionTableRow(entry: CollectionTableEntry): Collection
   return {
     position: entry.position ?? '',
     barcode: entry.barcode ?? '',
+    sublabel: entry.sublabel ?? '',
+    sheet_name: entry.context?.collectionName ?? '',
     container_type: entry.containerType ?? '',
-    label: '',
     collection_name: context?.collectionName ?? '',
     status,
     tags,

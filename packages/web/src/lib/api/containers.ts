@@ -43,8 +43,10 @@ export type ContainerSourceInfo =
 
 export type EnrichedContainer = {
   id: number
-  specimenId: number
+  specimenId?: number
   containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well' | 'unknown'
+  barcode?: string
+  sublabel?: string
   comment?: string | null
   remainingQuantity?: number | null
   totalQuantity?: number | null

@@ -54,7 +54,7 @@ describe('parse-response', () => {
   describe('parseContainerDetailWire', () => {
     it('accepts nested container shape', () => {
       const wire = parseContainerDetailWire({
-        container: { id: 9, containerType: 'micronix_tube', specimenId: 1 },
+        container: { id: 9, containerType: 'micronix_tube', barcode: 'MTX-1', specimenId: 1 },
         specimen: null,
         source: null,
       })
@@ -66,6 +66,7 @@ describe('parse-response', () => {
       const wire = parseContainerDetailWire({
         id: 9,
         containerType: 'micronix_tube',
+        barcode: 'MTX-1',
         specimenId: 1,
         specimen: null,
         source: null,
@@ -76,6 +77,46 @@ describe('parse-response', () => {
     it('rejects body without container id', () => {
       expect(() =>
         parseContainerDetailWire({ specimen: null, source: null }),
+      ).toThrow(ApiContractError)
+    })
+
+    it('accepts omit-on-wire paper container without placement nulls', () => {
+      const wire = parseContainerDetailWire({
+        container: {
+          id: 94079,
+          containerType: 'paper',
+          sublabel: 'Spot-A',
+          collection: {
+            type: 'sheet',
+            id: 143,
+            name: '2058121',
+          },
+        },
+        specimen: null,
+        source: null,
+      })
+      expect(wire.container?.containerType).toBe('paper')
+      if (wire.container?.containerType === 'paper') {
+        expect(wire.container.sublabel).toBe('Spot-A')
+      }
+    })
+
+    it('rejects explicit null on optional collection placement fields', () => {
+      expect(() =>
+        parseContainerDetailWire({
+          container: {
+            id: 94079,
+            containerType: 'paper',
+            collection: {
+              type: 'sheet',
+              id: 143,
+              name: '2058121',
+              position: null,
+            },
+          },
+          specimen: null,
+          source: null,
+        }),
       ).toThrow(ApiContractError)
     })
   })

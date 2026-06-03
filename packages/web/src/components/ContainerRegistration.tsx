@@ -16,7 +16,8 @@ export interface ContainerData {
   collectionBarcode?: string
   barcode?: string
   position?: string
-  label?: string
+  sheetName?: string
+  sublabel?: string
   statusId?: number
   comment?: string
   unitId?: number
@@ -58,7 +59,8 @@ export default function ContainerRegistration({
     collectionBarcode: defaultValue?.collectionBarcode || '',
     barcode: defaultValue?.barcode || '',
     position: defaultValue?.position || '',
-    label: defaultValue?.label || '',
+    sheetName: defaultValue?.sheetName || '',
+    sublabel: defaultValue?.sublabel || '',
     comment: defaultValue?.comment || '',
     unitId: defaultValue?.unitId,
     totalQuantity: defaultValue?.totalQuantity,
@@ -219,8 +221,8 @@ export default function ContainerRegistration({
       errors.position = 'Position is required for ' + (containerType === 'micronix_tube' ? 'micronix tubes' : 'cryovial tubes')
     }
 
-    if (containerType === 'paper' && !formData.label) {
-      errors.label = 'Label is required for papers'
+    if (containerType === 'paper' && !formData.sheetName) {
+      errors.sheetName = 'Sheet name is required for papers'
     }
 
     setValidationErrors(errors)
@@ -410,21 +412,35 @@ export default function ContainerRegistration({
               )}
 
               {containerType === 'paper' && (
-                <div>
-                  <label className="block text-sm font-medium text-app-text mb-2">
-                    Label *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.label || ''}
-                    onChange={(e) => handleFieldChange('label', e.target.value)}
-                    placeholder="Enter label"
-                    className={`form-input ${validationErrors.label ? 'border-app-trend-down' : ''}`}
-                  />
-                  {validationErrors.label && (
-                    <p className="mt-1 text-sm text-app-trend-down">{validationErrors.label}</p>
-                  )}
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-app-text mb-2">
+                      Sheet name *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.sheetName || ''}
+                      onChange={(e) => handleFieldChange('sheetName', e.target.value)}
+                      placeholder="Sheet grouping name"
+                      className={`form-input ${validationErrors.sheetName ? 'border-app-trend-down' : ''}`}
+                    />
+                    {validationErrors.sheetName && (
+                      <p className="mt-1 text-sm text-app-trend-down">{validationErrors.sheetName}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-app-text mb-2">
+                      Spot label (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.sublabel || ''}
+                      onChange={(e) => handleFieldChange('sublabel', e.target.value)}
+                      placeholder="Optional spot identifier"
+                      className="form-input"
+                    />
+                  </div>
+                </>
               )}
 
               {/* Unit Selection */}
