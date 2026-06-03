@@ -25,6 +25,8 @@ Once you've entered barcodes, the system processes them to find matching contain
 
 The system shows you a list of found containers, displaying key information like container type, specimen type, collection, and location. This preview helps you verify that the system found the correct containers before you export. If a barcode wasn't found, it's listed separately so you can address it—perhaps the barcode was entered incorrectly, or the container doesn't exist in the system.
 
+For **paper** containers, lookup uses the optional **sublabel** (spot identifier), not tube barcodes. Export columns for paper use `sublabel` and `sheet_name` rather than stuffing paper spot ids into the `barcode` column.
+
 ## Configuring Your Export
 
 Before exporting, choose how the downloaded file should be formatted.

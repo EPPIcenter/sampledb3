@@ -40,7 +40,7 @@ Click **Create Derivation** to open the derivation form. The form shows:
 - **Derived specimen type** — The specimen type of the result (e.g. DNA when extracting from DBS).
 - **Derived container type** — The container that will hold the derived sample: Micronix Tube, Cryovial Tube, or Paper.
 - **Collection (existing)** — Search and select an **existing** collection (plate, box, or sheet) where the new container will go. Create new plates or boxes from Storage first if needed; the single-derivation form only places into existing collections.
-- **Barcode / Position** (or **Label** for paper) — The identifier for the new container within that collection.
+- **Barcode / Position** (or **Sublabel** for paper) — The identifier for the new container within that collection. Paper derivations also require a **sheet name** when creating a new sheet or placing on an existing one.
 - **Derivation date** — When the processing occurred (defaults to today).
 - **Protocol** (optional) — Protocol name or reference.
 - **Notes** (optional) — Any additional information.
@@ -75,7 +75,7 @@ When you're processing many samples at once—perhaps extracting DNA from an ent
 - Review the validation summary (valid / invalid / warnings) and the per-row table. Click **Create derivations** to run the import. All derivations are created in one go, or none if any row fails (all-or-nothing). For a comparison of failure semantics across import types, see [Bulk Import — Atomicity and failure behavior](/docs/guides/bulk-operations/import/#atomicity-and-failure-behavior).
 - After the run, you see success/error counts and a per-row result table, plus a link **Back to Derivations**.
 
-For micronix tube derivations, **plate_name or collection_barcode** is required in each row. For cryovial tube derivations, **box_name or collection_barcode** is required. For paper derivations, **bag_name** is required. These columns tell the system where the derived containers belong. For micronix tube derivations, **container_barcode** is also required in each row; barcodes are scanned and provided by you—the system does not assign them.
+For micronix tube derivations, **plate_name or collection_barcode** is required in each row. For cryovial tube derivations, **box_name or collection_barcode** is required. For paper derivations, **bag_name** is required, along with **sheet_name**; **sublabel** is optional for the spot identifier. These columns tell the system where the derived containers belong. For micronix tube derivations, **container_barcode** is also required in each row; barcodes are scanned and provided by you—the system does not assign them.
 
 When providing **derivation_type** in CSV, use the stored value (for example `aliquot` for Distribution, `dna_extraction` for DNA Extraction). The UI shows human-readable labels.
 

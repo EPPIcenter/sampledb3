@@ -127,7 +127,7 @@ If you find your filters are too restrictive and you're not getting the results 
 
 Export configurations are powerful tools for standardizing your exports. Instead of manually selecting columns each time, you can create configurations that define exactly which columns to include. This ensures consistency across exports and saves time when you regularly export data for the same purposes.
 
-The default configuration includes all available columns, which is comprehensive but can be overwhelming if you only need a few pieces of information. Custom configurations let you create focused exports with just the columns you need. For example, a "Barcode List" configuration might include only study, subject, specimen type, barcode, and position—perfect for generating scanning lists.
+The default configuration includes all available columns, which is comprehensive but can be overwhelming if you only need a few pieces of information. Custom configurations let you create focused exports with just the columns you need. For example, a "Barcode List" configuration might include only study, subject, specimen type, barcode, and position—perfect for generating scanning lists for tubes. For **paper** containers, use **`sublabel`** and **`sheet_name`** export columns instead of stuffing spot identifiers into **`barcode`**.
 
 Configurations are managed in Settings, where you can create new ones, edit existing ones, set defaults, and delete ones you no longer need. Once you've set up configurations for your common export needs, using them becomes second nature.
 

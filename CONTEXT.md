@@ -177,6 +177,20 @@ _Avoid_: Bulk import; import file; treating upload as data entry; open-ended hea
 Feedback returned after a **Container export** submit — match counts, subjects or barcodes not found, subjects with no matching containers, and related warnings. Shown in the UI alongside the downloaded file; returned in the POST response envelope with the export payload.
 _Avoid_: Export report (too vague); **Export filter file** (that is the upload input); **CSV download** (that is the output file); statistics page reporting
 
+### Container wire vocabulary
+
+**Sheet name**:
+The grouping label for a **Sheet** within a box or bag — shared by one or more **Paper** containers on that sheet. Inbound API and bulk import use `sheetName`; persisted as `sheet.name`. Distinct from the per-paper spot identifier.
+_Avoid_: `label` (ambiguous with spot id); treating sheet name as barcode
+
+**Paper sublabel**:
+Optional per-paper spot identifier within a **Sheet** (e.g. to distinguish multiple papers on the same sheet). Inbound API uses `sublabel`; persisted as `paper.sublabel`. On the wire and in export, appears as `sublabel`, not `barcode`.
+_Avoid_: `barcode` for paper containers; grid **position** on paper (not applicable)
+
+**Container placement vs identity**:
+**Placement** is where a container sits in the hierarchy (`collection` on the wire: plate/box/sheet type, id, name; optional grid `position` for tubes/wells only). **Identity** is the lab identifier at the container variant root: `barcode` (micronix/cryovial), `sublabel` (paper).
+_Avoid_: Stuffing paper spot ids into `collection.barcode`; sending JSON `null` for unset optional wire fields
+
 ### System
 
 **SampleDB**:

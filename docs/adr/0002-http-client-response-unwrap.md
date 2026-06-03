@@ -72,9 +72,8 @@ These response wire shapes remain in `packages/web/src/lib/api/parse-response.ts
 
 - `parseSettingsEnvelope` — settings key envelope (`GET`/`PUT /settings/:key`)
 - `parseApiResponseData` — reference-data CRUD list envelope (`{ data, meta? }`)
-- `parseContainerDetailWire`, `parseContainersList` — container detail and list wire formats
 
-Failures throw `ApiContractError`. Wired in `settingsApi.getValue` / `putValue`, `extractData()` (reference-data lists), `containersApi.get` / `list`.
+Container wire shapes live in `@sampledb/contract/wire` (`parseContainerDetailWire`, `parseContainersListWire`, `enrichedContainerWireSchema`). Wired in `containersApi.get` / `list`.
 
 ### Out of scope (for now)
 

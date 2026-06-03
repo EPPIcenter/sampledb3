@@ -61,11 +61,11 @@ The collection date is optional but highly recommended. This records when the sp
 
 When registering a specimen, you have the option to create a container for it immediately. This is useful when you're entering data for specimens that are already physically stored, as it creates the complete record in one step.
 
-If you choose to create a container, you'll need to select the container type. The options depend on what container types are allowed for the specimen type you selected. Micronix Tubes are small tubes typically stored in plates and require a collection name (the plate name), a barcode (which must be unique), and a position in the plate (like "A01" or "B12"). Cryovial Tubes are standard vials stored in boxes and require a collection name and position, with an optional barcode. Papers represent dried blood spot sheets and require a collection name and a label identifier. Static Wells are fixed-position containers in plates and require a collection name and position.
+If you choose to create a container, you'll need to select the container type. The options depend on what container types are allowed for the specimen type you selected. Micronix Tubes are small tubes typically stored in plates and require a collection name (the plate name), a barcode (which must be unique), and a position in the plate (like "A01" or "B12"). Cryovial Tubes are standard vials stored in boxes and require a collection name and position, with an optional barcode. Papers represent dried blood spot sheets and require a box or bag collection name, a **sheet name** (which sheet within that box or bag), and optionally a **sublabel** (spot identifier on the sheet). Static Wells are fixed-position containers in plates and require a collection name and position.
 
 For the collection, you can either select an existing collection (plate, box, or bag) from a dropdown, or you can create a new collection on the spot. If you're creating a new collection, you'll need to specify where it's stored by selecting a location.
 
-The container details vary by type. For Micronix tubes, you'll need to provide a unique barcode and a position. For Cryovial tubes, you'll need a position and can optionally provide a barcode. For Papers, you'll need a label identifier. For Static Wells, you'll need a position. The position format is important—for Micronix and Static Wells, use the format "A01" (letter followed by two digits), while Cryovial positions depend on your box layout.
+The container details vary by type. For Micronix tubes, you'll need to provide a unique barcode and a position. For Cryovial tubes, you'll need a position and can optionally provide a barcode. For Papers, you'll need a sheet name and can optionally provide a sublabel. For Static Wells, you'll need a position. The position format is important—for Micronix and Static Wells, use the format "A01" (letter followed by two digits), while Cryovial positions depend on your box layout.
 
 Once you've filled in all the required information, click "Create Specimen" to save everything. The system will create the specimen, create the subject if needed, create the container if you specified one, and link everything together correctly.
 
@@ -83,7 +83,7 @@ From the subject detail page, you can take several actions. You can add another 
 
 When you navigate to a specimen's detail page, you'll see all the information about that specific sample. The specimen information section shows the specimen type, collection date, source (whether it came from a subject or control batch), and the associated study if it came from a subject.
 
-If the specimen has a container associated with it, you'll see container information including the container type, barcode if applicable, position or label, which collection it belongs to, where that collection is stored (the location), and the container's status (whether it's "In Use" or "Exhausted" based on remaining quantity). When a container has notes, those notes are shown on each container card on the specimen detail page.
+If the specimen has a container associated with it, you'll see container information including the container type, barcode or sublabel when applicable, position for grid-based containers, which collection it belongs to, where that collection is stored (the location), and the container's status (whether it's "In Use" or "Exhausted" based on remaining quantity). When a container has notes, those notes are shown on each container card on the specimen detail page.
 
 If the specimen was derived from another container through processing, you'll see derivation information showing the parent container, what type of derivation was performed (like DNA extraction or dilution), when the derivation occurred, and what protocol was used. This helps you track the complete processing history of your samples.
 
@@ -99,7 +99,7 @@ When creating subjects, use consistent naming conventions throughout your study.
 
 For collection dates, always record them when available. They're important for tracking, reporting, and understanding the timeline of your study. Use consistent date formats (YYYY-MM-DD) throughout your data entry to avoid confusion.
 
-When creating containers, do so when specimens are physically stored. This ensures your records match reality. Use consistent barcode formats if you're using barcodes, and make sure positions follow the correct format for your container type. Double-check positions before saving, as incorrect positions can make it difficult to locate samples later.
+When creating containers, do so when specimens are physically stored. This ensures your records match reality. For tubes, use consistent barcode formats if you're using barcodes, and make sure positions follow the correct format for your container type. For papers, record the sheet name and optional sublabel rather than tube-style barcodes or grid positions. Double-check positions before saving, as incorrect positions can make it difficult to locate samples later.
 
 ## When to Use Bulk Operations
 

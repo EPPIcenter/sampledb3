@@ -15,7 +15,7 @@ The system supports four main container types, each serving different purposes i
 
 **Cryovial Tubes** are standard cryovial tubes stored in boxes, ideal for larger liquid samples like whole blood, plasma, or serum. These require a collection (the box they're stored in) and a position within that box. The position format depends on your box layout—it might be "A5" for a letter-number combination, or just "25" for a numbered position. Barcodes are optional for cryovial tubes, which gives you flexibility if your lab doesn't barcode every tube.
 
-**Paper containers** represent dried blood spot (DBS) sheets or similar paper-based storage. These are stored in boxes or bags and require a collection name and a label identifier. The label can be any text identifier you use to distinguish papers, which is useful since papers might not have barcodes or positions in the same way tubes do.
+**Paper containers** represent dried blood spot (DBS) sheets or similar paper-based storage. These are stored in boxes or bags and require a **sheet name** (which sheet within the box or bag) and optionally a **sublabel** (spot identifier on the sheet). Papers do not use tube-style barcodes or grid positions.
 
 **Static Wells** are fixed-position containers in plates, useful for specific assay formats or when you need to track containers that don't move within their plate. Like micronix tubes, they require a collection and position, using the same A01-H12 format for 96-well plates.
 
@@ -59,23 +59,23 @@ There are two main ways to associate specimens with containers: you can create t
 
 When you're registering a specimen and you know where it will be stored, you can create the container right then. In the specimen registration form, check the "Create container" option, and you'll see additional fields appear. Select the container type that matches your storage method, then either select an existing collection or create a new one on the spot. When choosing a collection, type to search by name; matches show the collection name and storage path (exact and partial matches), and you can create a new collection (name and location) from the same control when the flow allows it.
 
-For each container type, you'll need to provide the appropriate details. Micronix tubes need a barcode (which must be unique across your entire system) and a position in the plate. Cryovial tubes need a position, and you can optionally add a barcode if your lab uses them. Papers need a label identifier. Static wells need a position.
+For each container type, you'll need to provide the appropriate details. Micronix tubes need a barcode (which must be unique across your entire system) and a position in the plate. Cryovial tubes need a position, and you can optionally add a barcode if your lab uses them. Papers need a **sheet name** and can optionally include a **sublabel**. Static wells need a position.
 
 This approach is efficient when you're entering data for specimens that are already physically stored, as it creates the complete record—specimen, container, and collection association—in one step.
 
 ### Adding to Existing Collections
 
-If you've already created collections and want to add specimens to them, you can do so from the collection detail page. Navigate to the collection you want to add to, and you'll see options to add specimens. The interface will guide you through selecting the specimen type, providing specimen details, and entering the container information (barcode, position, or label depending on the container type).
+If you've already created collections and want to add specimens to them, you can do so from the collection detail page. Navigate to the collection you want to add to, and you'll see options to add specimens. The interface will guide you through selecting the specimen type, providing specimen details, and entering the container information (barcode and position for tubes and wells; sheet name and optional sublabel for paper).
 
 This approach is useful when you're populating a collection over time, or when you're organizing specimens that were registered without containers initially.
 
 ### Adding a container from the specimen details page
 
-When viewing a specimen's detail page, you can add a new container for that specimen without re-registering it. In the **Containers** section, click **Add container** to open the form. Choose the container type (allowed types depend on the specimen type), select or create a collection, and enter the required fields (barcode and position for micronix or cryovial tubes, label for paper). This is useful when a specimen gains an additional aliquot or is moved to a new container after initial registration.
+When viewing a specimen's detail page, you can add a new container for that specimen without re-registering it. In the **Containers** section, click **Add container** to open the form. Choose the container type (allowed types depend on the specimen type), select or create a collection, and enter the required fields (barcode and position for micronix or cryovial tubes; **sheet name** and optional **sublabel** for paper). This is useful when a specimen gains an additional aliquot or is moved to a new container after initial registration.
 
 ## Understanding Container Details
 
-When you view a container's detail page, you'll see comprehensive information about that container and its contents. The container type tells you what kind of storage unit it is. If the container has a barcode, you'll see that unique identifier. The position or label shows where the container is located within its collection.
+When you view a container's detail page, you'll see comprehensive information about that container and its contents. The container type tells you what kind of storage unit it is. Tubes show a barcode and grid position when set; papers show an optional sublabel and the sheet they belong to.
 
 You'll see which collection the container belongs to, and through that collection, which location it's stored at. This creates a complete chain: specimen → container → collection → location, which helps you find any sample in your inventory.
 
@@ -96,6 +96,8 @@ For Cryovial tubes, the position format depends on your box layout. Some boxes u
 ## Barcode Management
 
 Barcodes are powerful tools for tracking containers, especially when you're working with many samples. For Micronix tubes, barcodes are required and must be unique across your entire system. This uniqueness ensures that when you scan a barcode, you get exactly one container, which is essential for accurate tracking.
+
+**Paper containers** do not use tube barcodes. Optional **sublabels** identify individual spots on a sheet; **sheet name** identifies which sheet within a box or bag. Barcode export and lookup for paper use sublabel, not the tube `barcode` column.
 
 Barcodes are typically alphanumeric and should be in a scannable format if you plan to use barcode scanners. Common formats include prefixes like "MTX-" followed by numbers, or simpler formats like "M001234". Whatever format you choose, document it so team members can follow the same conventions.
 
