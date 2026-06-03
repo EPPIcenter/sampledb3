@@ -137,8 +137,8 @@ describe('runDemoSeed', () => {
     expect(spotDerivations.length).toBeGreaterThanOrEqual(2)
     expect(extractionDerivations.length).toBeGreaterThanOrEqual(2)
 
-    const dbsPapers = await testDb.select({ id: paper.id, barcode: paper.barcode }).from(paper).all()
-    const ctrlDbs = dbsPapers.filter((p) => p.barcode?.startsWith('CTRL-DBS'))
+    const dbsPapers = await testDb.select({ id: paper.id, sublabel: paper.sublabel }).from(paper).all()
+    const ctrlDbs = dbsPapers.filter((p) => p.sublabel?.startsWith('CTRL-DBS'))
     expect(ctrlDbs.length).toBe(2)
 
     const dnaTubes = await testDb.select({ id: micronixTube.id, barcode: micronixTube.barcode, collectionId: micronixTube.collectionId }).from(micronixTube).all()

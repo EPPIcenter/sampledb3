@@ -43,6 +43,7 @@ export interface CreateDerivationInput {
   collectionType?: CollectionType
   collectionLocationId?: number
   containerBarcode?: string
+  sublabel?: string
   position?: string
   operatorId?: number
 }
@@ -289,8 +290,7 @@ export async function createDerivation(
       await database.insert(paper).values({
         id: child.id,
         sheetId: collectionId,
-        barcode: input.containerBarcode || null,
-        position: input.position ?? null,
+        sublabel: input.sublabel ?? input.containerBarcode ?? null,
       })
       break
     }

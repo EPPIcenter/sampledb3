@@ -31,7 +31,8 @@ type PlacementContainer = {
   collectionBarcode?: string
   barcode?: string
   position?: string
-  label?: string
+  sheetName?: string
+  sublabel?: string
 }
 
 export type ResolvedSpecimenForPlacement = {
@@ -51,9 +52,12 @@ export function buildContainerPlacementCheckRow(
     collectionId,
     collectionKey,
     normalizedPosition: normalizePosition(container.position),
-    barcode: container.barcode?.trim() || null,
+    barcode:
+      containerType === 'paper'
+        ? container.sublabel?.trim() || null
+        : container.barcode?.trim() || null,
     boxKey: containerType === 'paper' ? collectionKey : null,
-    sheetName: containerType === 'paper' ? (container.label ?? 'Sheet-1').trim() : null,
+    sheetName: containerType === 'paper' ? (container.sheetName ?? 'Sheet-1').trim() : null,
   }
 }
 

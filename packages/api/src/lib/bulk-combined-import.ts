@@ -47,7 +47,8 @@ export interface ExtendedContainerData {
   collectionBarcode?: string
   barcode?: string
   position?: string
-  label?: string
+  sheetName?: string
+  sublabel?: string
   unitId?: number
   totalQuantity?: number
   remainingQuantity?: number
@@ -309,7 +310,8 @@ export async function createSubjectWithSpecimensInTx(
         collectionBarcode: container.collectionBarcode,
         barcode: container.barcode,
         position: container.position,
-        label: container.label,
+        sheetName: container.sheetName,
+        sublabel: container.sublabel,
         unitId: preparedContainer.unitId,
         totalQuantity: preparedContainer.totalQuantity,
         remainingQuantity: preparedContainer.remainingQuantity,

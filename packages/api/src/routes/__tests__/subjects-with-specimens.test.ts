@@ -323,8 +323,8 @@ describe('Subjects with Specimens API', () => {
               container: {
                 containerType: 'paper',
                 collectionName: 'BOX-002',
-                label: 'Sheet-1',
-                position: 'A1',
+                sheetName: 'Sheet-1',
+                sublabel: 'Spot-A',
               },
             },
           ],
@@ -342,6 +342,7 @@ describe('Subjects with Specimens API', () => {
         .where(eq(paper.id, data.specimens[0].containerId!))
         .get()
       expect(container?.sheetId).toBe(sheetRecord.id)
+      expect(container?.sublabel).toBe('Spot-A')
     })
 
     it('should create new subject with static well container', async () => {
@@ -1698,7 +1699,7 @@ describe('Subjects with Specimens API', () => {
       })
       expect(res2.status).toBe(400)
 
-      // Test paper without label
+      // Test paper without sheetName
       const res3 = await authenticatedRequest(ctx.createRequestApp(), '/api/subjects/with-specimens', {
         method: 'POST',
         cookie: ctx.cookie,
@@ -1711,7 +1712,7 @@ describe('Subjects with Specimens API', () => {
               container: {
                 containerType: 'paper',
                 collectionName: 'BOX',
-                // Missing label
+                // Missing sheetName
               },
             },
           ],

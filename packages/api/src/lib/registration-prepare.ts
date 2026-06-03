@@ -150,7 +150,8 @@ export async function validateSpecimenContainerRegistration(
     collectionBarcode: container.collectionBarcode,
     barcode: container.barcode,
     position: container.position,
-    label: container.label,
+    sheetName: container.sheetName,
+    sublabel: container.sublabel,
   }
   const containerValidation = validateContainerFieldRequirements(containerType, containerDataForValidation)
   if (!containerValidation.valid) {

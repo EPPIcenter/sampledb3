@@ -98,19 +98,30 @@ describe('container-creation', () => {
       it('returns error when collection name is missing', async () => {
         const result = await validateContainerData(testDb, 'paper', {
           containerType: 'paper',
-          label: 'L1',
+          sheetName: 'L1',
         })
         expect(result.valid).toBe(false)
         expect(result.error).toBe('Collection name is required for papers')
       })
 
-      it('returns error when label is missing', async () => {
+      it('returns error when sheet name is missing', async () => {
         const result = await validateContainerData(testDb, 'paper', {
           containerType: 'paper',
           collectionName: 'Sheet1',
         })
         expect(result.valid).toBe(false)
-        expect(result.error).toBe('Label is required for papers')
+        expect(result.error).toBe('Sheet name is required for papers')
+      })
+
+      it('rejects barcode on paper inbound path', async () => {
+        const result = await validateContainerData(testDb, 'paper', {
+          containerType: 'paper',
+          collectionName: 'Box1',
+          sheetName: 'S1',
+          barcode: 'P-1',
+        })
+        expect(result.valid).toBe(false)
+        expect(result.error).toContain('sublabel')
       })
     })
 
@@ -188,7 +199,7 @@ describe('container-creation', () => {
       const result = await createContainerForSpecimen(spec.id, {
         containerType: 'paper',
         collectionName: 'TestBox',
-        label: 'Sheet2',
+        sheetName: 'Sheet2',
       }, testDb)
 
       expect(result.success).toBe(true)
@@ -203,7 +214,7 @@ describe('container-creation', () => {
       expect(paperRecord!.sheetId).toBe(sheetRecord.id)
     })
 
-    it('creates a new sheet when label does not match existing sheet in box', async () => {
+    it('creates a new sheet when sheetName does not match existing sheet in box', async () => {
       const unit = await createTestUnit(testDb, { symbol: 'spots', name: 'DBS spots', category: 'count' })
       await setContainerDefaults(testDb, {
         paper: { totalQuantity: 100, remainingQuantity: 100, defaultUnitSymbol: 'spots' },
@@ -248,7 +259,7 @@ describe('container-creation', () => {
       const result = await createContainerForSpecimen(spec.id, {
         containerType: 'paper',
         collectionName: 'BoxForNewSheet',
-        label: 'BrandNewSheet',
+        sheetName: 'BrandNewSheet',
       }, testDb)
 
       expect(result.success).toBe(true)

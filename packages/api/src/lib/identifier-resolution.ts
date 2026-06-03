@@ -72,7 +72,7 @@ export async function resolveContainerByBarcode(database: Database, barcode: str
   const paperRec = await database
     .select({ id: paper.id })
     .from(paper)
-    .where(eq(paper.barcode, barcode))
+    .where(eq(paper.sublabel, barcode))
     .get()
   if (paperRec) return paperRec.id
   

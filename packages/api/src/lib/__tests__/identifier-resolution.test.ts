@@ -8,7 +8,9 @@ import {
   resolveStudiesByShortCodes,
   resolveSpecimenTypesByNames,
 } from '../identifier-resolution'
-import { createTestStudy, createTestStudySubject, createTestSpecimenType } from '../../__tests__/helpers/factories'
+import { createTestStudy, createTestStudySubject, createTestSpecimenType, createTestStorageContainer, createTestStorageType, createTestLocation } from '../../__tests__/helpers/factories'
+import { box, sheet, paper } from '../../db/schema'
+import { utcNow } from '../datetime'
 import type { Database } from '../../db/client'
 
 describe('identifier-resolution lib', () => {
@@ -75,6 +77,33 @@ describe('identifier-resolution lib', () => {
     it('returns null for non-existent barcode', async () => {
       const id = await resolveContainerByBarcode(testDb, 'NOBARCODE')
       expect(id).toBeNull()
+    })
+
+    it('returns paper container id when sublabel matches', async () => {
+      const now = utcNow()
+      const storageType = await createTestStorageType(testDb, { name: 'Room' })
+      const loc = await createTestLocation(testDb, {
+        name: 'Paper Loc',
+        storageTypeId: String(storageType.id),
+        path: 'Room',
+      })
+      const [parentBox] = await testDb
+        .insert(box)
+        .values({ name: 'Box-A', locationId: loc.id, created: now, lastUpdated: now })
+        .returning()
+      const [parentSheet] = await testDb
+        .insert(sheet)
+        .values({ name: 'Sheet-A', boxId: parentBox!.id, created: now, lastUpdated: now })
+        .returning()
+      const container = await createTestStorageContainer(testDb, {})
+      await testDb.insert(paper).values({
+        id: container.id,
+        sheetId: parentSheet!.id,
+        sublabel: 'SPOT-42',
+      })
+
+      const id = await resolveContainerByBarcode(testDb, 'SPOT-42')
+      expect(id).toBe(container.id)
     })
   })
 

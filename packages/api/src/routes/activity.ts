@@ -171,7 +171,7 @@ export function createActivityRoutes(database: Database): Hono {
             .from(cryovialTube)
             .where(eq(cryovialTube.id, container.id))
             .get(),
-          database.select({ barcode: paper.barcode, position: paper.position })
+          database.select({ sublabel: paper.sublabel })
             .from(paper)
             .where(eq(paper.id, container.id))
             .get(),
@@ -195,8 +195,8 @@ export function createActivityRoutes(database: Database): Hono {
           position = cryovialInfo.position || null
         } else if (paperInfo) {
           containerType = 'paper'
-          barcode = paperInfo.barcode || null
-          position = paperInfo.position || null
+          barcode = paperInfo.sublabel || null
+          position = null
         } else if (staticWellInfo) {
           containerType = 'static_well'
           position = staticWellInfo.position || null

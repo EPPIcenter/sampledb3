@@ -172,7 +172,7 @@ export async function resolveContainerByBarcode(database: Database, barcode: str
     }
   }
 
-  const paperRec = await database.select().from(paper).where(eq(paper.barcode, barcode)).get()
+  const paperRec = await database.select().from(paper).where(eq(paper.sublabel, barcode)).get()
   if (paperRec) {
     const sheetRec = await database.select({ name: sheet.name }).from(sheet).where(eq(sheet.id, paperRec.sheetId)).get()
     return {
@@ -181,8 +181,8 @@ export async function resolveContainerByBarcode(database: Database, barcode: str
       currentCollectionId: paperRec.sheetId,
       currentCollectionName: sheetRec?.name || null,
       currentCollectionType: 'sheet',
-      currentPosition: paperRec.position || null,
-      barcode: paperRec.barcode || null,
+      currentPosition: null,
+      barcode: paperRec.sublabel || null,
     }
   }
 
@@ -215,11 +215,9 @@ export async function checkPositionAvailability(
       if (cryovial && !excludeContainerIds.includes(cryovial.id)) return { occupied: true, containerId: cryovial.id, containerType: 'cryovial_tube' }
       break
     }
-    case 'sheet': {
-      const paperRec = await database.select({ id: paper.id }).from(paper).where(and(eq(paper.sheetId, collectionId), eq(paper.position, position))).get()
-      if (paperRec && !excludeContainerIds.includes(paperRec.id)) return { occupied: true, containerId: paperRec.id, containerType: 'paper' }
+    case 'sheet':
+      // Paper containers have no grid position; placement is sheet membership only.
       break
-    }
   }
 
   return { occupied: false, containerId: null, containerType: null }
@@ -258,8 +256,8 @@ export async function resolveContainerByContainerId(database: Database, containe
     currentCollectionId: paperRec.sheetId,
     currentCollectionName: (await database.select({ name: sheet.name }).from(sheet).where(eq(sheet.id, paperRec.sheetId)).get())?.name || null,
     currentCollectionType: 'sheet',
-    currentPosition: paperRec.position,
-    barcode: paperRec.barcode,
+    currentPosition: null,
+    barcode: paperRec.sublabel,
   }
 
   return null
@@ -485,7 +483,7 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
             tx.update(cryovialTube).set({ collectionId: targetCollectionId, position: move.targetPosition }).where(eq(cryovialTube.id, info.containerId)).run()
             break
           case 'paper':
-            tx.update(paper).set({ sheetId: targetCollectionId, position: move.targetPosition }).where(eq(paper.id, info.containerId)).run()
+            tx.update(paper).set({ sheetId: targetCollectionId }).where(eq(paper.id, info.containerId)).run()
             break
           case 'static_well':
             tx.update(staticWell).set({ collectionId: targetCollectionId, position: move.targetPosition }).where(eq(staticWell.id, info.containerId)).run()

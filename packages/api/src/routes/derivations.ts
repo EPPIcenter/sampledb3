@@ -50,6 +50,7 @@ const createDerivationSchema = z.object({
   sheetParentType: z.enum(['box', 'bag']).optional(),
   sheetParentName: z.string().optional(),
   containerBarcode: z.string().optional(),
+  sublabel: z.string().optional(),
   position: z.string().optional(),
   operatorId: z.number().optional(),
 })

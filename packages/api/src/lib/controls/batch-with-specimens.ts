@@ -480,8 +480,7 @@ function createContainerSync(
     tx.insert(paper).values({
       id: containerId,
       sheetId: finalSheetId!,
-      barcode: containerData.containerBarcode || null,
-      position: normalizePosition(containerData.position),
+      sublabel: containerData.containerBarcode || null,
     }).run()
   } else if (containerData.type === 'cryovial_tube') {
     let finalCollectionId = prepared.collectionId

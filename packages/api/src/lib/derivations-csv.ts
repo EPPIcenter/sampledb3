@@ -284,7 +284,7 @@ async function resolveParentContainerId(database: DatabaseOrTransaction, row: De
     const paperRec = await database
       .select({ id: paper.id })
       .from(paper)
-      .where(eq(paper.barcode, barcode))
+      .where(eq(paper.sublabel, barcode))
       .get()
     if (paperRec) return paperRec.id
 

@@ -40,7 +40,8 @@ export interface ContainerData {
   collectionBarcode?: string
   barcode?: string
   position?: string
-  label?: string
+  sheetName?: string
+  sublabel?: string
   unitId?: number
   totalQuantity?: number
   remainingQuantity?: number
@@ -209,11 +210,14 @@ export function validateContainerFieldRequirements(
       return { valid: false, error: 'Position (well) is required for cryovial tubes.' }
     }
   } else if (containerType === 'paper') {
+    if (data.barcode != null && data.barcode !== '') {
+      return { valid: false, error: 'Paper containers use sublabel for spot identifiers, not barcode' }
+    }
     if (!data.collectionName) {
       return { valid: false, error: 'Collection name is required for papers' }
     }
-    if (!data.label) {
-      return { valid: false, error: 'Label is required for papers' }
+    if (!data.sheetName) {
+      return { valid: false, error: 'Sheet name is required for papers' }
     }
   } else {
     if (!data.collectionName && !data.collectionBarcode) {
@@ -407,7 +411,7 @@ async function createPaper(
     const dbForValidation = database as unknown as Database
     const { boxId, bagId } = await resolvePaperCollection(data, database, options?.collectionMap)
 
-    const sheetName = data.label!
+    const sheetName = data.sheetName!
     let sheetRecord: { id: number } | undefined
     if (boxId) {
       sheetRecord = await database
@@ -467,8 +471,7 @@ async function createPaper(
     await database.insert(paper).values({
       id: container.id,
       sheetId: sheetRecord.id,
-      barcode: data.barcode || null,
-      position: normalizePosition(data.position),
+      sublabel: data.sublabel?.trim() || null,
     })
 
     return { success: true, containerId: container.id }

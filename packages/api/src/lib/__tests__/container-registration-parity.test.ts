@@ -244,7 +244,7 @@ describe('container registration write parity', () => {
     expect(well!.position).toBe('E01')
   })
 
-  it('paper: bulk specimen creates paper at sheet label', async () => {
+  it('paper: bulk specimen creates paper with sheet name and sublabel', async () => {
     const study = await createTestStudy(testDb, { title: 'Parity Paper', shortCode: 'PPAP' })
     const { specimenType, loc } = await setupContainerType(testDb, 'paper', 'DBS')
     const now = utcNow()
@@ -264,12 +264,13 @@ describe('container registration write parity', () => {
         container: {
           containerType: 'paper',
           collectionName: boxRecord.name,
-          label: 'Spot-A',
+          sheetName: 'Sheet-A',
+          sublabel: 'Spot-A',
         },
       },
     ])
 
     const paperRecord = await testDb.select().from(paper).get()
-    expect(paperRecord).toBeDefined()
+    expect(paperRecord?.sublabel).toBe('Spot-A')
   })
 })
