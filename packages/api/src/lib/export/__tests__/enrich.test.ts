@@ -16,7 +16,8 @@ import {
   createTestTag,
 } from '../../../__tests__/helpers/factories'
 import type { Database } from '../../../db/client'
-import { micronixTube, cryovialTube, cryovialBox, storageContainerTag } from '../../../db/schema'
+import { micronixTube, cryovialTube, cryovialBox, storageContainerTag, box, sheet, paper } from '../../../db/schema'
+import { utcNow } from '../../datetime'
 import { utcNow } from '../../datetime'
 import { enrichContainerData } from '../enrich'
 import { buildContainerQuery } from '../query'
@@ -324,6 +325,64 @@ describe('enrichContainerData', () => {
         barcode: 'PIPE-01',
       })
     })
+  })
+
+  it('enriches paper containers with sublabel and sheet_name, not barcode', async () => {
+    const study = await createTestStudy(testDb, {
+      title: 'Paper Export Study',
+      shortCode: 'PPR1',
+      leadPerson: 'Lead',
+    })
+    const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'PaperSubj' })
+    const specimenType = await createTestSpecimenType(testDb, { name: 'DBS' })
+    const spec = await createTestSpecimen(testDb, specimenType.id, { studySubjectId: subject.id })
+    const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+    const loc = await createTestLocation(testDb, {
+      name: 'Paper Shelf',
+      storageTypeId: String(storageType.id),
+      canContainCollections: true,
+      path: 'Freezer/Paper Shelf',
+    })
+    const now = utcNow()
+    const [parentBox] = await testDb
+      .insert(box)
+      .values({ name: 'DBS-Box', locationId: loc.id, created: now, lastUpdated: now })
+      .returning()
+    const [parentSheet] = await testDb
+      .insert(sheet)
+      .values({ name: 'Sheet-Alpha', boxId: parentBox!.id, created: now, lastUpdated: now })
+      .returning()
+    const container = await createTestStorageContainer(testDb, { specimenId: spec.id })
+    await testDb.insert(paper).values({
+      id: container.id,
+      sheetId: parentSheet!.id,
+      sublabel: 'Spot-7',
+    })
+
+    const enriched = await enrichContainerData(
+      testDb,
+      [container],
+      [
+        {
+          id: spec.id,
+          studySubjectId: subject.id,
+          controlBatchId: null,
+          specimenTypeId: specimenType.id,
+          collectionDate: '2024-06-01',
+          created: spec.created,
+        },
+      ],
+      study as StudyRecord,
+    )
+
+    expect(enriched).toHaveLength(1)
+    expect(enriched[0]).toMatchObject({
+      container_type: 'paper',
+      sublabel: 'Spot-7',
+      sheet_name: 'Sheet-Alpha',
+      collection_name: 'Sheet-Alpha',
+    })
+    expect(enriched[0].barcode).toBeUndefined()
   })
 
   it('includes sorted comma-separated tag names on export rows', async () => {

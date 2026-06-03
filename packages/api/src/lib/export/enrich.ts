@@ -191,13 +191,21 @@ export async function enrichContainerData(
     return [...names].sort((a, b) => a.localeCompare(b)).join(', ')
   }
 
-  function barcodeForContainer(containerId: number): string | undefined {
+  function tubeBarcodeForContainer(containerId: number): string | undefined {
     return (
       subtypes.micronixById.get(containerId)?.barcode ??
       subtypes.cryovialById.get(containerId)?.barcode ??
-      subtypes.paperById.get(containerId)?.barcode ??
       undefined
     )
+  }
+
+  function paperSublabelForContainer(containerId: number): string | undefined {
+    return subtypes.paperById.get(containerId)?.sublabel ?? undefined
+  }
+
+  function paperSheetNameForContainer(containerId: number): string | undefined {
+    const name = subtypes.paperById.get(containerId)?.sheetName
+    return name && name !== 'Unknown' ? name : undefined
   }
 
   // Build enriched data
@@ -209,7 +217,12 @@ export async function enrichContainerData(
 
     const placement = placementMap.get(container.id)!
     const containerType = placement.containerType
-    const barcode = barcodeForContainer(container.id)
+    const barcode =
+      containerType === 'paper' ? undefined : tubeBarcodeForContainer(container.id)
+    const sublabel =
+      containerType === 'paper' ? paperSublabelForContainer(container.id) : undefined
+    const sheet_name =
+      containerType === 'paper' ? paperSheetNameForContainer(container.id) : undefined
     const position = placement.collection?.position ?? undefined
     const collectionName =
       placement.collection?.name && placement.collection.name !== 'Unknown'
@@ -262,6 +275,8 @@ export async function enrichContainerData(
       container_id: container.id,
       container_type: containerType,
       barcode,
+      sublabel,
+      sheet_name,
       position,
       collection_name: collectionName,
       tags: formatTagsForContainer(container.id),

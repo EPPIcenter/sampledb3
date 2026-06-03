@@ -2,6 +2,7 @@ import type { ExportConfigurations } from './settings'
 
 const RETIRED_EXPORT_COLUMN_KEYS: Record<string, string> = {
   state: 'tags',
+  label: 'sheet_name',
 }
 
 /**
