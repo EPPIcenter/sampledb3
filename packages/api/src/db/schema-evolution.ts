@@ -4,7 +4,7 @@ import { applyLegacyBaselineMigration } from './legacy-baseline'
 import { listNumberedMigrations, runSqlMigration } from './migration-runner'
 
 /** Canonical schema level; bump when adding numbered deltas under migrations/. */
-export const CURRENT_SCHEMA_VERSION = 2
+export const CURRENT_SCHEMA_VERSION = 3
 
 const SCHEMA_VERSION_TABLE = 'schema_version'
 const LEGACY_BASELINE_VERSION = 1

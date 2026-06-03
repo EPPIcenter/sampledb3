@@ -59,6 +59,14 @@ describe('schema evolution', () => {
     sqlite.exec(
       'CREATE TABLE settings (key TEXT, user_id INTEGER, value TEXT, PRIMARY KEY (key, user_id))',
     )
+    sqlite.exec('CREATE TABLE storage_container (id INTEGER PRIMARY KEY)')
+    sqlite.exec('CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT)')
+    sqlite.exec(`CREATE TABLE paper (
+      id INTEGER PRIMARY KEY REFERENCES storage_container(id),
+      sheet_id INTEGER NOT NULL REFERENCES sheet(id),
+      barcode TEXT,
+      position TEXT
+    )`)
     sqlite.close()
 
     const { sqlite: opened } = openOperationalDatabase(testDbPath)
@@ -70,13 +78,63 @@ describe('schema evolution', () => {
     opened.close()
   })
 
-  it('applies migration 002 when database is at version 1', () => {
+  it('applies pending migrations when database is at version 1 with legacy paper table', () => {
     const sqlite = new Database(testDbPath)
     sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
     sqlite.exec('INSERT INTO schema_version (version) VALUES (1)')
     sqlite.exec('CREATE TABLE study (id INTEGER PRIMARY KEY)')
+    sqlite.exec('CREATE TABLE storage_container (id INTEGER PRIMARY KEY)')
+    sqlite.exec('CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT)')
+    sqlite.exec(`CREATE TABLE paper (
+      id INTEGER PRIMARY KEY REFERENCES storage_container(id),
+      sheet_id INTEGER NOT NULL REFERENCES sheet(id),
+      barcode TEXT,
+      position TEXT
+    )`)
     evolveOperationalSchema(sqlite)
     expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    sqlite.close()
+  })
+
+  it('applies migration 003 when database is at version 2', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (2)')
+    sqlite.exec(`CREATE TABLE storage_container (id INTEGER PRIMARY KEY)`)
+    sqlite.exec(`CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT)`)
+    sqlite.exec(`CREATE TABLE paper (
+      id INTEGER PRIMARY KEY REFERENCES storage_container(id),
+      sheet_id INTEGER NOT NULL REFERENCES sheet(id),
+      barcode TEXT,
+      position TEXT
+    )`)
+    evolveOperationalSchema(sqlite)
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    const columns = sqlite
+      .prepare(`PRAGMA table_info(paper)`)
+      .all() as Array<{ name: string }>
+    expect(columns.map((c) => c.name).sort()).toEqual(['id', 'sheet_id', 'sublabel'])
+    sqlite.close()
+  })
+
+  it('migration 003 aborts when paper.position has non-empty values', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (2)')
+    sqlite.exec(`CREATE TABLE storage_container (id INTEGER PRIMARY KEY)`)
+    sqlite.exec(`CREATE TABLE sheet (id INTEGER PRIMARY KEY, name TEXT)`)
+    sqlite.exec(`CREATE TABLE paper (
+      id INTEGER PRIMARY KEY REFERENCES storage_container(id),
+      sheet_id INTEGER NOT NULL REFERENCES sheet(id),
+      barcode TEXT,
+      position TEXT
+    )`)
+    sqlite.exec(`INSERT INTO storage_container (id) VALUES (1)`)
+    sqlite.exec(`INSERT INTO sheet (id, name) VALUES (1, 'S1')`)
+    sqlite.exec(`INSERT INTO paper (id, sheet_id, barcode, position) VALUES (1, 1, 'P1', 'A01')`)
+
+    expect(() => evolveOperationalSchema(sqlite)).toThrow(SchemaMigrationError)
+    expect(getRecordedSchemaVersion(sqlite)).toBe(2)
     sqlite.close()
   })
 

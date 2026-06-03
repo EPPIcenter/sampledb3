@@ -353,8 +353,7 @@ export const sheet = sqliteTable('sheet', {
 export const paper = sqliteTable('paper', {
   id: integer('id').primaryKey().references(() => storageContainer.id),
   sheetId: integer('sheet_id').notNull().references(() => sheet.id),
-  barcode: text('barcode'),
-  position: text('position'),
+  sublabel: text('sublabel'),
 })
 
 export const staticWell = sqliteTable('static_well', {

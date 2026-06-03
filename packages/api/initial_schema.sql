@@ -259,8 +259,7 @@ CREATE TABLE IF NOT EXISTS sheet (
 CREATE TABLE IF NOT EXISTS paper (
   id INTEGER PRIMARY KEY REFERENCES storage_container(id),
   sheet_id INTEGER NOT NULL REFERENCES sheet(id),
-  barcode TEXT,
-  position TEXT
+  sublabel TEXT
 );--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS static_well (
   id INTEGER PRIMARY KEY REFERENCES storage_container(id),
@@ -280,7 +279,7 @@ CREATE TABLE IF NOT EXISTS storage_type (
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );--> statement-breakpoint
-INSERT INTO schema_version (version) VALUES (2);--> statement-breakpoint
+INSERT INTO schema_version (version) VALUES (3);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT NOT NULL,
   user_id INTEGER REFERENCES users(id),
