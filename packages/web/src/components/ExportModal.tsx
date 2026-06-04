@@ -1,12 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { exportApi } from '../lib/api/export'
-import { tagsApi } from '../lib/api/reference-data'
-import type { Tag } from '../lib/api/reference-data'
-import type { SpecimenType, StudySubject } from '../lib/api/types'
-import { useExportConfigurations } from '../hooks/useExportConfigurations'
-import { useSingleStudyExportWorkflow } from '../hooks/useSingleStudyExportWorkflow'
-import { getExportColumnsForConfigId } from '../lib/export-config-selection'
-import { useModifierHotkey } from '../hooks/useHotkey'
+import type { StudySubject } from '../lib/api/types'
+import { useStudyExportModalController } from '../hooks/useStudyExportModalController'
 import { Modal } from '../ui'
 import ExportModalResultSummary from './ExportModalResultSummary'
 import ExportModalModeTabs from './export-modal/ExportModalModeTabs'
@@ -32,127 +25,17 @@ export default function ExportModal({
   studyId: _studyId,
   subjects = [],
 }: ExportModalProps) {
-  const workflow = useSingleStudyExportWorkflow({ studyCode, isOpen })
   const {
+    error,
+    modeTabs,
+    csvUpload,
     filters,
-    count,
-    loadingCount,
-    exporting,
-    exportFormat,
-    setExportFormat,
-    error: workflowError,
-    csvDelimiter,
-    setCsvDelimiter,
-    csvBOM,
-    setCsvBOM,
-    csvLineEnding,
-    setCsvLineEnding,
-    uploadMode,
-    switchUploadMode,
-    csvData,
-    csvError,
-    dateTolerance,
-    updateDateTolerance,
-    exportSummary,
-    summaryExpanded,
-    setSummaryExpanded,
-    handleCSVUpload,
-    updateFilter,
-    toggleArrayFilter,
-    clearFilters,
-    hasActiveFilters,
-    submitExport,
-  } = workflow
-
-  const [refDataError, setRefDataError] = useState<string | null>(null)
-  const error = refDataError || workflowError
-
-  const [specimenTypes, setSpecimenTypes] = useState<SpecimenType[]>([])
-  const [tags, setTags] = useState<Tag[]>([])
-  const [availableContainerTypes, setAvailableContainerTypes] = useState<string[]>([])
-  const [loadingRefData, setLoadingRefData] = useState(true)
-  const [focusedConfigIndex, setFocusedConfigIndex] = useState<number | null>(null)
-  const {
-    configurations: exportConfigurations,
-    selectedConfigId,
-    setSelectedConfigId,
-    loading: loadingConfigs,
-    loadConfigurations: loadExportConfigurations,
-  } = useExportConfigurations()
-
-  const loadReferenceData = useCallback(async () => {
-    try {
-      setLoadingRefData(true)
-      setRefDataError(null)
-      const [availableTypesRes, tagsRes] = await Promise.all([
-        exportApi.availableTypes(studyCode),
-        tagsApi.list(),
-      ])
-
-      setSpecimenTypes(
-        availableTypesRes.specimen_types.map((st) => ({
-          id: st.id,
-          name: st.name,
-          created: '',
-          lastUpdated: '',
-        }))
-      )
-      setTags(tagsRes.data)
-      setAvailableContainerTypes(availableTypesRes.container_types)
-    } catch (err: unknown) {
-      console.error('Failed to load reference data:', err)
-      const message =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-          : err instanceof Error
-            ? err.message
-            : 'Failed to load export options'
-      setRefDataError(message || 'Failed to load export options')
-      setSpecimenTypes([])
-      setTags([])
-      setAvailableContainerTypes([])
-    } finally {
-      setLoadingRefData(false)
-    }
-  }, [studyCode])
-
-  useEffect(() => {
-    if (!isOpen) return
-    setRefDataError(null)
-    loadReferenceData()
-    loadExportConfigurations()
-  }, [isOpen, studyCode])
-
-  useEffect(() => {
-    if (!isOpen) return
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [isOpen, onClose])
-
-  const handleExport = async () => {
-    const result = await submitExport({
-      columns: getExportColumnsForConfigId(exportConfigurations, selectedConfigId) ?? [],
-    })
-    if (result === 'close') {
-      setTimeout(() => onClose(), 1000)
-    }
-  }
-
-  useModifierHotkey(
-    'enter',
-    (e) => {
-      if (isOpen && !exporting && count !== 0 && !loadingCount) {
-        e.preventDefault()
-        void handleExport()
-      }
-    },
-    { enabled: isOpen, preventDefault: true }
-  )
+    countPreview,
+    configPicker,
+    format,
+    summary,
+    actionBar,
+  } = useStudyExportModalController({ studyCode, isOpen, onClose })
 
   if (!isOpen) return null
 
@@ -181,73 +64,70 @@ export default function ExportModal({
         </div>
       )}
 
-      <ExportModalModeTabs uploadMode={uploadMode} onSwitchMode={switchUploadMode} />
+      <ExportModalModeTabs uploadMode={modeTabs.uploadMode} onSwitchMode={modeTabs.onSwitchMode} />
 
-      {uploadMode === 'csv' && (
+      {modeTabs.uploadMode === 'csv' && (
         <ExportModalCsvUploadSection
-          csvError={csvError}
-          csvDataLength={csvData.length}
-          dateTolerance={dateTolerance}
-          onUpload={handleCSVUpload}
-          onDateToleranceChange={updateDateTolerance}
+          csvError={csvUpload.csvError}
+          csvDataLength={csvUpload.csvDataLength}
+          dateTolerance={csvUpload.dateTolerance}
+          onUpload={csvUpload.onUpload}
+          onDateToleranceChange={csvUpload.onDateToleranceChange}
         />
       )}
 
       <ExportModalFiltersPanel
-        uploadMode={uploadMode}
-        filters={filters}
-        specimenTypes={specimenTypes}
-        tags={tags}
-        availableContainerTypes={availableContainerTypes}
+        uploadMode={filters.uploadMode}
+        filters={filters.filters}
+        specimenTypes={filters.specimenTypes}
+        tags={filters.tags}
+        availableContainerTypes={filters.availableContainerTypes}
         subjects={subjects}
-        loadingRefData={loadingRefData}
-        hasActiveFilters={hasActiveFilters()}
-        onUpdateFilter={updateFilter}
-        onToggleArrayFilter={toggleArrayFilter}
-        onClearFilters={clearFilters}
+        loadingRefData={filters.loadingRefData}
+        hasActiveFilters={filters.hasActiveFilters}
+        onUpdateFilter={filters.onUpdateFilter}
+        onToggleArrayFilter={filters.onToggleArrayFilter}
+        onClearFilters={filters.onClearFilters}
       />
 
-      <ExportModalCountPreview count={count} loadingCount={loadingCount} />
+      <ExportModalCountPreview count={countPreview.count} loadingCount={countPreview.loadingCount} />
 
       <ExportModalConfigPicker
-        exportConfigurations={exportConfigurations}
-        selectedConfigId={selectedConfigId}
-        loadingConfigs={loadingConfigs}
-        focusedConfigIndex={focusedConfigIndex}
-        onSelectConfig={(configId, index) => {
-          setSelectedConfigId(configId)
-          setFocusedConfigIndex(index)
-        }}
-        onFocusConfig={setFocusedConfigIndex}
+        exportConfigurations={configPicker.exportConfigurations}
+        selectedConfigId={configPicker.selectedConfigId}
+        loadingConfigs={configPicker.loadingConfigs}
+        focusedConfigIndex={configPicker.focusedConfigIndex}
+        onSelectConfig={configPicker.onSelectConfig}
+        onFocusConfig={configPicker.onFocusConfig}
       />
 
       <ExportModalFormatSection
-        exportFormat={exportFormat}
-        csvDelimiter={csvDelimiter}
-        csvBOM={csvBOM}
-        csvLineEnding={csvLineEnding}
-        onExportFormatChange={setExportFormat}
-        onCsvDelimiterChange={setCsvDelimiter}
-        onCsvBOMChange={setCsvBOM}
-        onCsvLineEndingChange={setCsvLineEnding}
+        exportFormat={format.exportFormat}
+        csvDelimiter={format.csvDelimiter}
+        csvBOM={format.csvBOM}
+        csvLineEnding={format.csvLineEnding}
+        onExportFormatChange={format.onExportFormatChange}
+        onCsvDelimiterChange={format.onCsvDelimiterChange}
+        onCsvBOMChange={format.onCsvBOMChange}
+        onCsvLineEndingChange={format.onCsvLineEndingChange}
       />
 
-      {uploadMode === 'csv' && exportSummary && (
+      {summary && (
         <ExportModalResultSummary
-          exportSummary={exportSummary}
-          expanded={summaryExpanded}
-          onToggleExpand={() => setSummaryExpanded(!summaryExpanded)}
+          exportSummary={summary.exportSummary}
+          expanded={summary.expanded}
+          onToggleExpand={summary.onToggleExpand}
         />
       )}
 
       <ExportModalActionBar
-        exporting={exporting}
-        count={count}
-        loadingCount={loadingCount}
-        uploadMode={uploadMode}
-        csvDataLength={csvData.length}
-        onCancel={onClose}
-        onExport={() => void handleExport()}
+        exporting={actionBar.exporting}
+        count={actionBar.count}
+        loadingCount={actionBar.loadingCount}
+        uploadMode={actionBar.uploadMode}
+        csvDataLength={actionBar.csvDataLength}
+        onCancel={actionBar.onCancel}
+        onExport={actionBar.onExport}
       />
     </Modal>
   )
