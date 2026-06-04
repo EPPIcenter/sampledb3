@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { mapPaperInboundFromLegacyRow } from '@sampledb/contract'
 import { controlsApi } from '../../lib/api/controls';
 import { settingsApi } from '../../lib/api/settings';
 import type { ControlDefinition } from '../../lib/api/controls';
@@ -166,21 +167,39 @@ export default function ReviewStep({
         const file = batchRow.file
         for (const row of batchRow.rows) {
           if (!row.specimen_type_name) continue
-          const container = {
-            type: (file.containerType ?? 'paper') as 'paper' | 'cryovial_tube' | 'micronix_tube',
-            ...(file.collectionId != null
-              ? { collectionId: file.collectionId }
-              : {
-                  collectionName: file.collectionName,
-                  collectionLocationId: file.collectionLocationId,
-                  collectionType: file.collectionType,
+          const containerType = (file.containerType ?? 'paper') as 'paper' | 'cryovial_tube' | 'micronix_tube'
+          const container = containerType === 'paper'
+            ? {
+                type: 'paper' as const,
+                ...(file.collectionId != null
+                  ? { collectionId: file.collectionId }
+                  : {
+                      collectionName: file.collectionName,
+                      collectionLocationId: file.collectionLocationId,
+                      collectionType: file.collectionType,
+                    }),
+                ...mapPaperInboundFromLegacyRow({
+                  barcode: row.barcode,
+                  sheet_name: row.sheet_name,
+                  sheetName: file.sheetName,
                 }),
-            containerBarcode: row.barcode,
-            position: row.position ? normalizePosition(row.position) : undefined,
-            quantity: row.quantity ?? 1,
-            unitSymbol: row.unit_symbol ?? fallbackUnitForContainerType(file.containerType ?? 'paper'),
-            ...(file.containerType === 'paper' && (row.sheet_name ?? file.sheetName) != null && { sheetName: (row.sheet_name ?? file.sheetName)!.trim() }),
-          }
+                quantity: row.quantity ?? 1,
+                unitSymbol: row.unit_symbol ?? fallbackUnitForContainerType(containerType),
+              }
+            : {
+                type: containerType,
+                ...(file.collectionId != null
+                  ? { collectionId: file.collectionId }
+                  : {
+                      collectionName: file.collectionName,
+                      collectionLocationId: file.collectionLocationId,
+                      collectionType: file.collectionType,
+                    }),
+                containerBarcode: row.barcode,
+                position: row.position ? normalizePosition(row.position) : undefined,
+                quantity: row.quantity ?? 1,
+                unitSymbol: row.unit_symbol ?? fallbackUnitForContainerType(containerType),
+              }
           if (!specimensMap.has(row.specimen_type_name)) specimensMap.set(row.specimen_type_name, [])
           specimensMap.get(row.specimen_type_name)!.push(container)
         }
@@ -255,17 +274,28 @@ export default function ReviewStep({
       for (const st of specimenTypes) {
         if (st.containers.length === 0) continue
 
-        const containers = st.containers.map(c => ({
-          type: st.containerType,
-          collectionName: c.collectionName,
-          collectionLocationId: c.collectionLocationId,
-          collectionType: c.collectionType,
-          containerBarcode: c.barcode,
-          position: c.position ? normalizePosition(c.position) : undefined,
-          quantity: c.quantity,
-          unitSymbol: c.unitSymbol,
-          sheetName: c.sheetName,
-        }))
+        const containers = st.containers.map(c =>
+          st.containerType === 'paper'
+            ? {
+                type: 'paper' as const,
+                collectionName: c.collectionName,
+                collectionLocationId: c.collectionLocationId,
+                collectionType: c.collectionType,
+                ...mapPaperInboundFromLegacyRow({ barcode: c.barcode, sheetName: c.sheetName }),
+                quantity: c.quantity,
+                unitSymbol: c.unitSymbol,
+              }
+            : {
+                type: st.containerType,
+                collectionName: c.collectionName,
+                collectionLocationId: c.collectionLocationId,
+                collectionType: c.collectionType,
+                containerBarcode: c.barcode,
+                position: c.position ? normalizePosition(c.position) : undefined,
+                quantity: c.quantity,
+                unitSymbol: c.unitSymbol,
+              },
+        )
 
         // Group by specimen type name
         if (!specimensMap.has(st.specimenTypeName)) {
@@ -282,18 +312,32 @@ export default function ReviewStep({
         for (const row of file.rows) {
           if (!row.specimen_type_name) continue
 
-          const container = {
-            type: file.containerType!,
-            collectionId: file.collectionId,
-            collectionName: file.collectionName,
-            collectionLocationId: file.collectionLocationId,
-            collectionType: file.collectionType,
-            containerBarcode: row.barcode,
-            position: row.position ? normalizePosition(row.position) : undefined,
-            quantity: row.quantity || 1,
-            unitSymbol: row.unit_symbol || fallbackUnitForContainerType(file.containerType!),
-            sheetName: file.containerType === 'paper' ? (row.sheet_name ?? file.sheetName)?.trim() ?? undefined : undefined,
-          }
+          const container = file.containerType === 'paper'
+            ? {
+                type: 'paper' as const,
+                collectionId: file.collectionId,
+                collectionName: file.collectionName,
+                collectionLocationId: file.collectionLocationId,
+                collectionType: file.collectionType,
+                ...mapPaperInboundFromLegacyRow({
+                  barcode: row.barcode,
+                  sheet_name: row.sheet_name,
+                  sheetName: file.sheetName,
+                }),
+                quantity: row.quantity || 1,
+                unitSymbol: row.unit_symbol || fallbackUnitForContainerType(file.containerType!),
+              }
+            : {
+                type: file.containerType!,
+                collectionId: file.collectionId,
+                collectionName: file.collectionName,
+                collectionLocationId: file.collectionLocationId,
+                collectionType: file.collectionType,
+                containerBarcode: row.barcode,
+                position: row.position ? normalizePosition(row.position) : undefined,
+                quantity: row.quantity || 1,
+                unitSymbol: row.unit_symbol || fallbackUnitForContainerType(file.containerType!),
+              }
 
           // Group by specimen type name
           if (!specimensMap.has(row.specimen_type_name)) {
