@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { refinePaperContainerInboundWrite } from './paper-container-inbound'
 
 const containerTypeEnum = z.enum(['micronix_tube', 'cryovial_tube', 'paper', 'static_well'])
 
@@ -27,29 +28,11 @@ export const bulkCombinedContainerFieldsSchema = containerInputFieldsSchema.exte
   containerType: containerTypeEnum.optional(),
 })
 
-function rejectPaperBarcodeOnWrite(
-  container: { containerType?: z.infer<typeof containerTypeEnum>; barcode?: string | null },
-  ctx: z.RefinementCtx,
-): void {
-  if (container.containerType !== 'paper') return
-  if (container.barcode != null && container.barcode !== '') {
-    ctx.addIssue({
-      code: 'custom',
-      message: 'Paper containers use sublabel for spot identifiers, not barcode',
-      path: ['barcode'],
-    })
-  }
-}
-
-/**
- * Container fields on a specimen row in combined bulk import.
- * Supports collection creation via collectionLocationId when the collection is missing.
- */
 export const bulkCombinedContainerSchema = bulkCombinedContainerFieldsSchema
   .optional()
   .superRefine((container, ctx) => {
     if (!container) return
-    rejectPaperBarcodeOnWrite(container, ctx)
+    refinePaperContainerInboundWrite(container, ctx)
   })
 
 export const bulkCombinedSubjectSpecimenSchema = z.object({
@@ -99,12 +82,12 @@ export type BulkCombinedRequest = z.infer<typeof bulkCombinedRequestSchema>
 export type BulkCombinedValidateRequest = z.infer<typeof bulkCombinedValidateRequestSchema>
 
 /** Shared container input fields (single-specimen and bulk combined). */
-export const containerInputSchema = containerInputFieldsSchema.superRefine(rejectPaperBarcodeOnWrite)
+export const containerInputSchema = containerInputFieldsSchema.superRefine(refinePaperContainerInboundWrite)
 
 /** Optional partial container for POST /specimens (container not required). */
 export const optionalContainerInputSchema = containerInputFieldsSchema
   .partial()
-  .superRefine(rejectPaperBarcodeOnWrite)
+  .superRefine(refinePaperContainerInboundWrite)
   .optional()
 
 export const bulkCombinedValidateErrorSchema = z.object({

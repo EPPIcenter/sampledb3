@@ -66,3 +66,12 @@ export {
   type BulkCombinedImportResponse,
   type CollectionDeletePreflight,
 } from './bulk-combined'
+export {
+  mapPaperInboundFromLegacyRow,
+  refinePaperContainerInboundWrite,
+  validatePaperDerivationCsvFields,
+  PAPER_USE_SUBLABEL_NOT_BARCODE,
+  PAPER_DERIVATION_USE_SUBLABEL_NOT_CONTAINER_BARCODE,
+  PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION,
+  type PaperInboundWriteFields,
+} from './paper-container-inbound'
