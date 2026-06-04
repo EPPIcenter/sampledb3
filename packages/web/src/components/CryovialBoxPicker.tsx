@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { Location } from '../lib/api/types';
-import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
+import { getRootLocations, getLocationChildren, getLocationLabel, locationParentId } from '../lib/location-tree'
 import { Modal } from '../ui'
 
 export interface CryovialBox {
@@ -101,8 +101,9 @@ export default function CryovialBoxPicker({
         let current: Location | undefined = loc
         while (current) {
           all.add(current.id)
-          if (current.parentId !== null) {
-            current = locations.find((l) => l.id === current!.parentId)
+          const parentId = locationParentId(current)
+          if (parentId != null) {
+            current = locations.find((l) => l.id === parentId)
           } else {
             break
           }
@@ -127,8 +128,8 @@ export default function CryovialBoxPicker({
     const isVisible = filteredLocations.some((f) => {
       if (f.id === loc.id) return true
       // Check if any descendant is in filtered list
-      const checkDescendants = (parentId: number | null): boolean => {
-        const directChildren = locations.filter((l) => l.parentId === parentId)
+      const checkDescendants = (parentId: number): boolean => {
+        const directChildren = getLocationChildren(locations, parentId)
         return directChildren.some((child) => {
           if (filteredLocations.some((f) => f.id === child.id)) return true
           return checkDescendants(child.id)
@@ -224,8 +225,8 @@ export default function CryovialBoxPicker({
     const rootLocations = getRootLocations(locations)
     const rootsWithBoxes = rootLocations.filter((root) => {
       // Include if root or any descendant has boxes
-      const checkDescendants = (parentId: number | null): boolean => {
-        const directChildren = locations.filter((l) => l.parentId === parentId)
+      const checkDescendants = (parentId: number): boolean => {
+        const directChildren = getLocationChildren(locations, parentId)
         return directChildren.some((child) => {
           if ((boxesByLocation[child.id] ?? []).length > 0) return true
           return checkDescendants(child.id)

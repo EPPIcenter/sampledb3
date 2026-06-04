@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import type { Location } from '../lib/api/types';
-import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
+import { getRootLocations, getLocationChildren, getLocationLabel, locationParentId } from '../lib/location-tree'
 
 export interface Collection {
   id: number
@@ -119,8 +119,8 @@ export default function CollectionTreePicker({
       let current: Location | undefined = loc
       while (current) {
         visible.add(current.id)
-        const pid = current.parentId
-        if (pid !== null) {
+        const pid = locationParentId(current)
+        if (pid != null) {
           current = allLocationMap.get(pid)
         } else {
           break
@@ -144,7 +144,7 @@ export default function CollectionTreePicker({
       let current: Location | undefined = loc
       while (current) {
         visible.add(current.id)
-        const pid = current.parentId
+        const pid = locationParentId(current)
         if (pid != null) {
           current = allLocationMap.get(pid)
         } else {
@@ -165,7 +165,7 @@ export default function CollectionTreePicker({
         let current: Location | undefined = loc
         while (current) {
           all.add(current.id)
-          const pid = current.parentId
+          const pid = locationParentId(current)
           if (pid != null) {
             current = allLocationMap.get(pid)
           } else {
@@ -178,7 +178,7 @@ export default function CollectionTreePicker({
           let current: Location | undefined = allLocationMap.get(col.locationId)
           while (current) {
             all.add(current.id)
-            const pid = current.parentId
+            const pid = locationParentId(current)
             if (pid != null) {
               current = allLocationMap.get(pid)
             } else {

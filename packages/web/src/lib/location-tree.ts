@@ -1,5 +1,25 @@
 import { type Location } from './api/types'
 
+/** Omit-on-wire responses omit null keys; treat missing parentId as root. */
+export function locationParentId(loc: Pick<Location, 'parentId'>): number | null {
+  return loc.parentId ?? null
+}
+
+/** Parent id → sorted children (excludes roots; uses {@link locationParentId}). */
+export function buildLocationChildrenMap(locations: Location[]): Map<number, Location[]> {
+  const map = new Map<number, Location[]>()
+  for (const loc of locations) {
+    const parentId = locationParentId(loc)
+    if (parentId == null) continue
+    if (!map.has(parentId)) map.set(parentId, [])
+    map.get(parentId)!.push(loc)
+  }
+  for (const children of map.values()) {
+    children.sort((a, b) => a.name.localeCompare(b.name))
+  }
+  return map
+}
+
 /**
  * Location tree structure built from parent-child relationships.
  * Maps parent ID to array of child locations.
@@ -15,7 +35,7 @@ export function buildLocationTree(locations: Location[]): LocationTree {
   
   // Group by parent_id
   for (const loc of locations) {
-    const parentId = loc.parentId ?? null
+    const parentId = locationParentId(loc)
     if (!tree.has(parentId)) {
       tree.set(parentId, [])
     }
@@ -130,8 +150,9 @@ function addAncestorsAndBuildFiltered(
     const newLocations: number[] = []
     for (const locId of locationsToInclude) {
       const loc = locationMap.get(locId)
-      if (loc?.parentId != null && !locationsToInclude.has(loc.parentId)) {
-        const parent = locationMap.get(loc.parentId)
+      const ancestorParentId = loc ? locationParentId(loc) : null
+      if (ancestorParentId != null && !locationsToInclude.has(ancestorParentId)) {
+        const parent = locationMap.get(ancestorParentId)
         if (parent) {
           newLocations.push(parent.id)
           changed = true
@@ -151,7 +172,7 @@ function buildPrunedSubTreeFromIds(
   for (const locId of keepIds) {
     const loc = locationMap.get(locId)
     if (loc) {
-      const parentId = loc.parentId ?? null
+      const parentId = locationParentId(loc)
       if (!filtered.has(parentId)) filtered.set(parentId, [])
       if (!filtered.get(parentId)!.some((l) => l.id === loc.id)) {
         filtered.get(parentId)!.push(loc)
@@ -263,14 +284,14 @@ export function filterLocationTree(
  * Get all root locations (locations with no parent)
  */
 export function getRootLocations(locations: Location[]): Location[] {
-  return locations.filter(loc => loc.parentId === null)
+  return locations.filter((loc) => locationParentId(loc) === null)
 }
 
 /**
  * Get all children of a location
  */
 export function getLocationChildren(locations: Location[], parentId: number | null): Location[] {
-  return locations.filter(loc => loc.parentId === parentId)
+  return locations.filter((loc) => locationParentId(loc) === parentId)
 }
 
 /**
@@ -281,14 +302,13 @@ export function getLocationAncestors(locations: Location[], locationId: number):
   const locationMap = new Map(locations.map(loc => [loc.id, loc]))
   
   let current = locationMap.get(locationId)
-  while (current?.parentId !== null && current?.parentId !== undefined) {
-    const parent = locationMap.get(current.parentId)
-    if (parent) {
-      ancestors.unshift(parent) // Add to beginning to maintain order
-      current = parent
-    } else {
-      break
-    }
+  while (current) {
+    const parentId = locationParentId(current)
+    if (parentId == null) break
+    const parent = locationMap.get(parentId)
+    if (!parent) break
+    ancestors.unshift(parent)
+    current = parent
   }
   
   return ancestors
@@ -303,7 +323,7 @@ export function getLocationDescendants(locations: Location[], locationId: number
   
   function collectChildren(parentId: number) {
     for (const loc of locations) {
-      if (loc.parentId === parentId) {
+      if (locationParentId(loc) === parentId) {
         descendants.push(loc)
         collectChildren(loc.id)
       }

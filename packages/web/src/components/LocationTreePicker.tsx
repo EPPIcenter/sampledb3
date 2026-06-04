@@ -8,6 +8,7 @@ import {
   getLocationSearchHighlightQuery,
   getRootLocations,
   getLocationAncestors,
+  buildLocationChildrenMap,
 } from '../lib/location-tree'
 import { Modal } from '../ui'
 
@@ -66,23 +67,10 @@ export default function LocationTreePicker({ selected, onChange, filterCollectio
     }
   }
 
-  // Pre-compute location children map for O(1) lookup
-  const locationChildrenMap = useMemo(() => {
-    const map = new Map<number, Location[]>()
-    locations.forEach((loc) => {
-      if (loc.parentId !== null) {
-        if (!map.has(loc.parentId)) {
-          map.set(loc.parentId, [])
-        }
-        map.get(loc.parentId)!.push(loc)
-      }
-    })
-    // Sort children by name
-    for (const children of map.values()) {
-      children.sort((a, b) => a.name.localeCompare(b.name))
-    }
-    return map
-  }, [locations])
+  const locationChildrenMap = useMemo(
+    () => buildLocationChildrenMap(locations),
+    [locations],
+  )
 
   // Pre-compute location map for O(1) lookup
   const locationMap = useMemo(() => {

@@ -351,7 +351,7 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
       </div>
 
       {/* Study Duration and Date Range */}
-      {(displaySummary.collectionDateRange || displaySummary.studyDurationDays !== null) && (
+      {(displaySummary.collectionDateRange || displaySummary.studyDurationDays != null) && (
         <div className={cardClassName ?? 'bg-app-card rounded-lg shadow p-6'}>
           <h3 className="text-lg font-semibold mb-4 dashboard-stat-value">Study Period</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -373,7 +373,7 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
                 </p>
               </div>
             )}
-            {displaySummary.studyDurationDays !== null && (
+            {displaySummary.studyDurationDays != null && (
               <div>
                 <p className="text-sm dashboard-stat-muted mb-1">Study Duration</p>
                 <p className="dashboard-stat-value font-medium">

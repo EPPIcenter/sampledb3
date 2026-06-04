@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { locationsApi } from '../lib/api/locations';
 import type { Location } from '../lib/api/types';
-import { buildLocationTree, filterLocationTree, getLocationLabel, getRootLocations, getLocationChildren, getLocationAncestors } from '../lib/location-tree'
+import { buildLocationTree, filterLocationTree, getLocationLabel, getRootLocations, getLocationChildren, getLocationAncestors, locationParentId } from '../lib/location-tree'
 import { Modal } from '../ui'
 
 interface LocationPickerProps {
@@ -72,8 +72,10 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
           // Recursively add all ancestors up to root
           for (const locId of collectionCapableIds) {
             let current = locationMap.get(locId)
-            while (current && current.parentId !== null) {
-              const parent = locationMap.get(current.parentId)
+            while (current) {
+              const parentId = locationParentId(current)
+              if (parentId == null) break
+              const parent = locationMap.get(parentId)
               if (parent) {
                 locationsToInclude.add(parent.id)
                 current = parent
@@ -219,8 +221,8 @@ export default function LocationPicker({ value, onChange, filterCollectionsOnly 
     // (locations whose parent is not in the current set)
     if (displayRoots.length === 0 && locations.length > 0) {
       const locationIds = new Set(locations.map(loc => loc.id))
-      displayRoots = locations.filter(loc => 
-        loc.parentId === null || !locationIds.has(loc.parentId)
+      displayRoots = locations.filter(
+        (loc) => locationParentId(loc) === null || !locationIds.has(locationParentId(loc)!),
       )
     }
 

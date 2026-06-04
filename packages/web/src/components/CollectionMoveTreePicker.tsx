@@ -1,7 +1,7 @@
  
 import { useState, useMemo, useCallback, memo } from 'react'
 import type { Location } from '../lib/api/types';
-import { getRootLocations, getLocationChildren, getLocationLabel } from '../lib/location-tree'
+import { getRootLocations, getLocationChildren, getLocationLabel, buildLocationChildrenMap, locationParentId } from '../lib/location-tree'
 import type { CollectionType } from '../pages/CollectionMove'
 
 export interface Collection {
@@ -57,24 +57,10 @@ export default function CollectionMoveTreePicker({
     return map
   }, [collections])
 
-  // Pre-compute location children map for O(1) lookup
-  const locationChildrenMap = useMemo(() => {
-    const map = new Map<number, Location[]>()
-    locations.forEach((loc) => {
-       
-      if (loc.parentId !== null) {
-        if (!map.has(loc.parentId)) {
-          map.set(loc.parentId, [])
-        }
-        map.get(loc.parentId)!.push(loc)
-      }
-    })
-    // Sort children by name
-    for (const children of map.values()) {
-      children.sort((a, b) => a.name.localeCompare(b.name))
-    }
-    return map
-  }, [locations])
+  const locationChildrenMap = useMemo(
+    () => buildLocationChildrenMap(locations),
+    [locations],
+  )
 
   // Pre-compute leaf locations (locations with no children)
   const leafLocations = useMemo(() => {
@@ -138,8 +124,9 @@ export default function CollectionMoveTreePicker({
       while (current) {
         visible.add(current.id)
          
-        if (current.parentId !== null) {
-          current = locationMap.get(current.parentId)
+        const parentId = locationParentId(current)
+        if (parentId != null) {
+          current = locationMap.get(parentId)
         } else {
           break
         }
@@ -166,9 +153,11 @@ export default function CollectionMoveTreePicker({
     // Second pass: mark all ancestors of locations with collections
     const markAncestors = (locationId: number) => {
       const loc = locationMap.get(locationId)
-      if (!loc || loc.parentId === null) return
-      visible.add(loc.parentId)
-      markAncestors(loc.parentId)
+      if (!loc) return
+      const parentId = locationParentId(loc)
+      if (parentId == null) return
+      visible.add(parentId)
+      markAncestors(parentId)
     }
     
     visible.forEach((locId) => markAncestors(locId))

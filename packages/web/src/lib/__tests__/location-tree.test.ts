@@ -7,6 +7,7 @@ import {
   getLocationChildren,
   getLocationAncestors,
   getLocationDescendants,
+  buildLocationChildrenMap,
   parseLocationPathSegments,
   getLocationSearchHighlightQuery,
 } from '../location-tree'
@@ -200,6 +201,15 @@ describe('location-tree', () => {
       expect(roots).toHaveLength(2)
       expect(roots.map(r => r.name).sort()).toEqual(['Root1', 'Root2'])
     })
+
+    it('treats omitted parentId as root (omit-on-wire)', () => {
+      const locations: Location[] = [
+        { ...mockLocation(1, 'Root', null), parentId: undefined as unknown as null },
+        mockLocation(2, 'Child', 1),
+      ]
+      expect(getRootLocations(locations)).toHaveLength(1)
+      expect(getRootLocations(locations)[0]?.name).toBe('Root')
+    })
   })
 
   describe('getLocationChildren', () => {
@@ -226,6 +236,24 @@ describe('location-tree', () => {
       expect(ancestors).toHaveLength(2)
       expect(ancestors[0].name).toBe('Root')
       expect(ancestors[1].name).toBe('Mid')
+    })
+
+    it('stops at root when parentId is omitted (omit-on-wire)', () => {
+      const locations: Location[] = [
+        { ...mockLocation(1, 'Root', null), parentId: undefined as unknown as null },
+        mockLocation(2, 'Child', 1),
+      ]
+      expect(getLocationAncestors(locations, 2)).toEqual([locations[0]])
+    })
+  })
+
+  describe('buildLocationChildrenMap', () => {
+    it('indexes children by parent id and ignores roots with omitted parentId', () => {
+      const root = { ...mockLocation(1, 'Root', null), parentId: undefined as unknown as null }
+      const child = mockLocation(2, 'Child', 1)
+      const map = buildLocationChildrenMap([root, child])
+      expect(map.get(1)).toEqual([child])
+      expect(map.has(undefined as unknown as number)).toBe(false)
     })
   })
 

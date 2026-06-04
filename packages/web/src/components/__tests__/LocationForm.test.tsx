@@ -152,4 +152,24 @@ describe('LocationForm', () => {
     expect(screen.getByLabelText(/^name/i)).toHaveValue('Room 101')
     expect(screen.getByLabelText(/description/i)).toHaveValue('Lab room')
   })
+
+  it('treats omitted parentId as root when editing (omit-on-wire)', async () => {
+    await render(
+      <LocationForm
+        location={{
+          id: 5,
+          name: 'Building A',
+          description: '',
+          storageTypeId: '1',
+          canContainCollections: true,
+        } as never}
+        onSave={onSave}
+        onCancel={onCancel}
+      />
+    )
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: /storage type/i })).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/Storage Type \(inherited\)/i)).not.toBeInTheDocument()
+  })
 })

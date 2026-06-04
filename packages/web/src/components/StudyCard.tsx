@@ -71,8 +71,8 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
     return `${formatDate(range.earliest)} - ${formatDate(range.latest)}`
   }
 
-  const formatDuration = (days: number | null) => {
-    if (days === null) return null
+  const formatDuration = (days: number | null | undefined) => {
+    if (days == null) return null
     if (days < 30) return `${days} day${days !== 1 ? 's' : ''}`
     if (days < 365) return `${Math.floor(days / 30)} month${Math.floor(days / 30) !== 1 ? 's' : ''}`
     return `${(days / 365).toFixed(1)} year${(days / 365) !== 1 ? 's' : ''}`
@@ -206,7 +206,7 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
                 </div>
                 {(() => {
                   const duration = summary.studyDurationDays ?? calculateDuration(summary.collectionDateRange)
-                  return duration !== null && (
+                  return duration != null && (
                     <div className="text-xs mt-0.5" style={{ color: 'rgb(var(--app-text-muted))' }}>
                       Duration: {formatDuration(duration)}
                     </div>

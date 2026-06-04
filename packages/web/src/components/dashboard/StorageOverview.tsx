@@ -1,15 +1,12 @@
 import { Link } from 'react-router-dom'
 import { Location } from '../../lib/api/types';
+import { getRootLocations } from '../../lib/location-tree'
 import { SkeletonCard } from '../../ui'
 
 interface StorageOverviewProps {
   locations: Location[]
   locationCounts: Record<string, number>
   loading?: boolean
-}
-
-function getRootLocations(locations: Location[]): Location[] {
-  return locations.filter((loc) => loc.parentId === null)
 }
 
 function getLocationStats(locations: Location[], locationCounts: Record<string, number>) {

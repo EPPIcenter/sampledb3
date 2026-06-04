@@ -3,7 +3,10 @@ import { locationsApi } from '../lib/api/locations';
 import { storageTypesApi } from '../lib/api/reference-data';
 import { Modal } from '../ui'
 import type { Location } from '../lib/api/types';
-import type { StorageType } from '../lib/api/reference-data';interface LocationFormProps {
+import type { StorageType } from '../lib/api/reference-data';
+import { locationParentId } from '../lib/location-tree'
+
+interface LocationFormProps {
   location?: Location | null
   parentId?: number | null
   parentLocation?: Location | null
@@ -15,8 +18,8 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
   const isEdit = !!location
   // When editing, check location.parentId; when creating, check parentId prop
   const isRoot = isEdit
-    ? location.parentId === null
-    : (parentId === null || parentId === undefined)
+    ? locationParentId(location) === null
+    : parentId == null
   const isChild = !isRoot && !isEdit
 
   const [formData, setFormData] = useState({
@@ -24,7 +27,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
     description: location?.description || '',
     storageTypeId: location?.storageTypeId || '',
     canContainCollections: location?.canContainCollections || false,
-    parentId: location?.parentId ?? (isChild ? parentId : null),
+    parentId: location ? locationParentId(location) : (isChild ? parentId : null),
   })
   const [storageTypes, setStorageTypes] = useState<StorageType[]>([])
   const [loading, setLoading] = useState(false)
@@ -73,7 +76,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
         submitData.parentId = null
       } else {
         // Child location - no storageTypeId, inherit from parent
-        submitData.parentId = isChild ? parentId : location?.parentId
+        submitData.parentId = isChild ? parentId : (location ? locationParentId(location) : null)
         submitData.storageTypeId = null
       }
 
@@ -139,8 +142,9 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
                       return parentLocation.path || parentLocation.name
                     }
                     // Fallback to parentId if parentLocation not available
-                    if (location?.parentId) {
-                      return `Location #${location.parentId}`
+                    const editParentId = location ? locationParentId(location) : null
+                    if (editParentId != null) {
+                      return `Location #${editParentId}`
                     }
                     if (parentId) {
                       return `Location #${parentId}`
@@ -172,7 +176,7 @@ export default function LocationForm({ location, parentId, parentLocation, onSav
             </div>
 
             {/* Storage Type - editable for root locations, read-only for child locations */}
-            {isEdit && location.parentId && (
+            {isEdit && locationParentId(location) != null && (
               <div>
                 <label className="block text-sm font-medium text-app-text mb-2">
                   Storage Type (inherited)
