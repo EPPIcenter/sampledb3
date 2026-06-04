@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { derivationsApi } from '../lib/api/derivations';
-import type { Derivation } from '../lib/api/derivations';
+import type { EnrichedContainerWire } from '@sampledb/contract/wire'
+import { derivationsApi } from '../lib/api/derivations'
+import type { Derivation } from '../lib/api/derivations'
+import { containerDisplayIdentifier } from '../lib/container-display'
 import { formatDerivationType } from '../lib/derivation-types'
 import { getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
 
@@ -10,14 +12,16 @@ interface DerivationChainViewProps {
   onClose?: () => void
 }
 
+type ChainContainer = EnrichedContainerWire | null
+
 export default function DerivationChainView({ containerId, onClose }: DerivationChainViewProps) {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [chain, setChain] = useState<{
-    ancestors: Array<{ container: any; derivation: Derivation }>
-    descendants: Array<{ container: any; derivation: Derivation }>
-    current: any
+    ancestors: Array<{ container: ChainContainer; derivation: Derivation }>
+    descendants: Array<{ container: ChainContainer; derivation: Derivation }>
+    current: ChainContainer
   } | null>(null)
 
   useEffect(() => {
@@ -64,6 +68,14 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
 
   const { ancestors, descendants, current } = chain
 
+  const renderContainerIdentifier = (container: ChainContainer) => {
+    const identifier = containerDisplayIdentifier(container ?? undefined)
+    if (!identifier) {
+      return null
+    }
+    return <div className="text-xs text-app-text-muted font-mono">{identifier}</div>
+  }
+
   return (
     <div className="bg-app-card rounded-lg border border-app-border p-6">
       <div className="flex items-center justify-between mb-6">
@@ -95,22 +107,18 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      {getContainerTypeIcon(item.container?.containerType)}
+                      {getContainerTypeIcon(item.container?.containerType ?? 'unknown')}
                       <span className="font-medium text-app-text">
-                        {getContainerTypeName(item.container?.containerType)}
+                        {getContainerTypeName(item.container?.containerType ?? 'unknown')}
                       </span>
                       <span className="text-xs text-app-text-muted">
                         ({formatDerivationType(item.derivation.derivationType)})
                       </span>
                     </div>
-                    {item.container?.collection?.barcode && (
-                      <div className="text-xs text-app-text-muted font-mono">
-                        {item.container.collection.barcode}
-                      </div>
-                    )}
+                    {renderContainerIdentifier(item.container)}
                   </div>
                   <button
-                    onClick={() => navigate(`/containers/${item.container.id}`)}
+                    onClick={() => item.container && navigate(`/containers/${item.container.id}`)}
                     className="text-sm text-app-accent hover:text-app-accent-hover hover:underline flex-shrink-0"
                   >
                     View →
@@ -135,19 +143,15 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                {getContainerTypeIcon(current?.containerType)}
+                {getContainerTypeIcon(current?.containerType ?? 'unknown')}
                 <span className="font-semibold text-app-text">
-                  {getContainerTypeName(current?.containerType)} (Current)
+                  {getContainerTypeName(current?.containerType ?? 'unknown')} (Current)
                 </span>
               </div>
-              {current?.collection?.barcode && (
-                <div className="text-xs text-app-text-muted font-mono">
-                  {current.collection.barcode}
-                </div>
-              )}
+              {renderContainerIdentifier(current)}
             </div>
             <button
-              onClick={() => navigate(`/containers/${current.id}`)}
+              onClick={() => current && navigate(`/containers/${current.id}`)}
               className="text-sm text-app-accent hover:text-app-accent-hover hover:underline flex-shrink-0"
             >
               View →
@@ -175,19 +179,15 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      {getContainerTypeIcon(item.container?.containerType)}
+                      {getContainerTypeIcon(item.container?.containerType ?? 'unknown')}
                       <span className="font-medium text-app-text">
-                        {getContainerTypeName(item.container?.containerType)}
+                        {getContainerTypeName(item.container?.containerType ?? 'unknown')}
                       </span>
                       <span className="text-xs text-app-text-muted">
                         ({formatDerivationType(item.derivation.derivationType)})
                       </span>
                     </div>
-                    {item.container?.collection?.barcode && (
-                      <div className="text-xs text-app-text-muted font-mono">
-                        {item.container.collection.barcode}
-                      </div>
-                    )}
+                    {renderContainerIdentifier(item.container)}
                     {item.derivation.derivationDate && (
                       <div className="text-xs text-app-text-muted">
                         {new Date(item.derivation.derivationDate).toLocaleDateString()}
@@ -195,7 +195,7 @@ export default function DerivationChainView({ containerId, onClose }: Derivation
                     )}
                   </div>
                   <button
-                    onClick={() => navigate(`/containers/${item.container.id}`)}
+                    onClick={() => item.container && navigate(`/containers/${item.container.id}`)}
                     className="text-sm text-app-accent hover:text-app-accent-hover hover:underline flex-shrink-0"
                   >
                     View →

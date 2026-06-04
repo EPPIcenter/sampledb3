@@ -17,6 +17,11 @@ import ContainerEditModal from '../components/ContainerEditModal'
 import DerivationChainView from '../components/DerivationChainView'
 import { useUser } from '../contexts/UserContext'
 import { formatDerivationType } from '../lib/derivation-types'
+import {
+  containerDisplayIdentifier,
+  containerDisplayLabel,
+  hasContainerDisplayIdentifier,
+} from '../lib/container-display'
 import '../styles/storage.css'
 
 function statusColor(name: string): string {
@@ -108,23 +113,18 @@ export default function ContainerDetail() {
   const containerTypeName = getContainerTypeName(effectiveContainerType)
   const containerTypeIcon = getContainerTypeIcon(effectiveContainerType)
 
-  // Primary lab identifier for header: barcode (tubes), sublabel (paper), else position, else type
+  const labIdentifier = containerDisplayIdentifier(container)
   const tubeBarcode =
     effectiveContainerType === 'micronix_tube' || effectiveContainerType === 'cryovial_tube'
-      ? container.barcode ?? effectiveCollection?.barcode
+      ? labIdentifier
       : undefined
-  const paperSublabel = effectiveContainerType === 'paper' ? container.sublabel : undefined
-  const hasBarcode = Boolean(tubeBarcode || paperSublabel)
-  const containerIdentifier = hasBarcode
-    ? (tubeBarcode ?? paperSublabel ?? containerTypeName)
-    : effectiveCollection?.position || effectiveCollection?.name || containerTypeName
-  const showIdentifierLine =
-    Boolean(
-      effectiveCollection?.position ||
-        tubeBarcode ||
-        paperSublabel ||
-        effectiveCollection?.name,
-    )
+  const paperSublabel = effectiveContainerType === 'paper' ? labIdentifier : undefined
+  const containerIdentifier = containerDisplayLabel(container, containerTypeName)
+  const collectionPosition =
+    effectiveCollection && 'position' in effectiveCollection ? effectiveCollection.position : undefined
+  const showIdentifierLine = Boolean(
+    collectionPosition || hasContainerDisplayIdentifier(container) || effectiveCollection?.name,
+  )
 
   // Build breadcrumbs - use identifier instead of ID
   const breadcrumbItems: Array<{ label: string; to?: string }> = []
@@ -204,7 +204,7 @@ export default function ContainerDetail() {
               <div className="text-2xl" style={{ color: 'rgb(var(--app-text-muted))' }}>{containerTypeIcon}</div>
               <div>
                 <h1 className="text-2xl font-bold">{containerTypeName}</h1>
-                {(showIdentifierLine || hasBarcode) && (
+                {(showIdentifierLine || hasContainerDisplayIdentifier(container)) && (
                   <div className="mt-1">
                     <span
                       className={
@@ -269,10 +269,10 @@ export default function ContainerDetail() {
                     </dd>
                   </div>
                 )}
-                {effectiveCollection?.position && (
+                {collectionPosition && (
                   <div>
                     <dt className="storage-detail-dt text-xs">{effectiveContainerType === 'static_well' ? 'Well' : 'Position'}</dt>
-                    <dd className="storage-detail-dd font-mono mt-0.5">{effectiveCollection.position}</dd>
+                    <dd className="storage-detail-dd font-mono mt-0.5">{collectionPosition}</dd>
                   </div>
                 )}
                 {effectiveCollection && (
@@ -283,7 +283,7 @@ export default function ContainerDetail() {
                         to={buildCollectionUrlWithHighlight(
                           effectiveCollection.type,
                           effectiveCollection.id,
-                          effectiveCollection.position,
+                          collectionPosition,
                           container.id
                         )}
                         className="dashboard-link hover:underline font-medium break-all"
@@ -554,9 +554,11 @@ export default function ContainerDetail() {
                     const effectiveLocationPath = container?.locationPath
                     const containerTypeName = effectiveContainerType ? getContainerTypeName(effectiveContainerType) : 'Unknown'
                     const containerTypeIcon = effectiveContainerType ? getContainerTypeIcon(effectiveContainerType) : null
-                    const displayLocationPath = effectiveLocationPath || 
-                      (effectiveLocation ? (effectiveLocation.path || effectiveLocation.name) : null)
-                    
+                    const childCollectionPosition =
+                      effectiveCollection && 'position' in effectiveCollection
+                        ? effectiveCollection.position
+                        : undefined
+                    const childLabIdentifier = container ? containerDisplayIdentifier(container) : undefined
                     return (
                       <div
                         key={derivation.id}
@@ -597,9 +599,9 @@ export default function ContainerDetail() {
                                     {getContainerTypeName(effectiveCollection.type)}:
                                   </span>
                                   <span className="storage-detail-dd font-mono">{effectiveCollection.name}</span>
-                                  {(effectiveCollection.position || effectiveCollection.barcode || effectiveCollection.name) && (
+                                  {(childCollectionPosition || childLabIdentifier) && (
                                     <span style={{ color: 'rgb(var(--app-text-muted))' }}>
-                                      ({effectiveCollection.position || effectiveCollection.barcode || effectiveCollection.name})
+                                      ({childCollectionPosition || childLabIdentifier})
                                     </span>
                                   )}
                                 </div>
@@ -691,7 +693,7 @@ export default function ContainerDetail() {
             unit: container.unit,
             containerType: effectiveContainerType,
             barcode: tubeBarcode,
-            position: effectiveCollection?.position,
+            position: collectionPosition,
             sublabel: paperSublabel,
             specimenTypeName: specimen?.specimenType?.name,
           }}

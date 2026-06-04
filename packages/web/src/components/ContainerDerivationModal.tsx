@@ -72,6 +72,7 @@ function ContainerDerivationModalContent({
     collectionType: undefined,
     collectionLocationId: undefined,
     containerBarcode: '',
+    sublabel: '',
     position: '',
   })
 
@@ -212,8 +213,9 @@ function ContainerDerivationModalContent({
               : formData.containerType === 'paper'
                 ? 'sheet'
                 : undefined) as 'micronix_plate' | 'cryovial_box' | 'sheet' | undefined,
-        containerBarcode: formData.containerBarcode || undefined,
-        position: formData.position || undefined,
+        containerBarcode: formData.containerType === 'paper' ? undefined : (formData.containerBarcode || undefined),
+        sublabel: formData.containerType === 'paper' ? (formData.sublabel || undefined) : undefined,
+        position: formData.containerType === 'paper' ? undefined : (formData.position || undefined),
       }
 
       const response = await derivationsApi.createFromContainer(parentContainerId, payload)
@@ -418,19 +420,19 @@ function ContainerDerivationModalContent({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-app-text mb-1">
-                {formData.containerType === 'paper' ? 'Label' : 'Barcode'}
+                {formData.containerType === 'paper' ? 'Sublabel' : 'Barcode'}
               </label>
               <input
                 type="text"
-                value={formData.containerType === 'paper' ? (formData.position || '') : (formData.containerBarcode || '')}
+                value={formData.containerType === 'paper' ? (formData.sublabel || '') : (formData.containerBarcode || '')}
                 onChange={(e) =>
                   formData.containerType === 'paper'
-                    ? setFormData({ ...formData, position: e.target.value })
+                    ? setFormData({ ...formData, sublabel: e.target.value })
                     : setFormData({ ...formData, containerBarcode: e.target.value })
                 }
                 className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                 disabled={loading}
-                placeholder={formData.containerType === 'paper' ? 'Spot label' : 'e.g. MTX-001'}
+                placeholder={formData.containerType === 'paper' ? 'Spot sublabel' : 'e.g. MTX-001'}
               />
             </div>
             {formData.containerType !== 'paper' && (

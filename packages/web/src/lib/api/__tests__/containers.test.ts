@@ -16,7 +16,7 @@ describe('normalizeContainerDetail', () => {
     containerType: 'micronix_tube' as const,
     barcode: 'MTX-001',
     locationPath: '/Freezer/Plate',
-    collection: { type: 'micronix_plate', id: 2, name: 'Plate1', position: 'A01' },
+    collection: { type: 'micronix_plate' as const, id: 2, name: 'Plate1', position: 'A01' },
   }
   const specimen = {
     id: 1,
@@ -34,7 +34,10 @@ describe('normalizeContainerDetail', () => {
       source: null,
     })
     expect(result.container.id).toBe(42)
-    expect(result.container.barcode).toBe('MTX-001')
+    expect(result.container.containerType).toBe('micronix_tube')
+    if (result.container.containerType === 'micronix_tube') {
+      expect(result.container.barcode).toBe('MTX-001')
+    }
     expect(result.specimen?.specimenType?.name).toBe('Blood')
   })
 
@@ -86,7 +89,10 @@ describe('containersApi', () => {
 
       const result = await containersApi.get(94079)
 
-      expect(result.container.sublabel).toBe('Spot-A')
+      expect(result.container.containerType).toBe('paper')
+      if (result.container.containerType === 'paper') {
+        expect(result.container.sublabel).toBe('Spot-A')
+      }
       expect(result.container.collection).toEqual({
         type: 'sheet',
         id: 143,

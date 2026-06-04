@@ -1,3 +1,4 @@
+import type { EnrichedContainerWire } from '@sampledb/contract/wire'
 import { api } from './client'
 import type { Specimen } from './types'
 interface DerivationProperties {
@@ -34,6 +35,7 @@ export interface CreateDerivationPayload {
   sheetParentType?: 'box' | 'bag'
   sheetParentName?: string
   containerBarcode?: string
+  sublabel?: string
   position?: string
   operatorId?: number
 }
@@ -118,9 +120,9 @@ export const derivationsApi = {
     }>(`/derivations/containers/${containerId}/source`),
   getChain: (containerId: number) =>
     api.get<{
-      ancestors: Array<{ container: any; derivation: Derivation }>
-      descendants: Array<{ container: any; derivation: Derivation }>
-      current: any
+      ancestors: Array<{ container: EnrichedContainerWire | null; derivation: Derivation }>
+      descendants: Array<{ container: EnrichedContainerWire | null; derivation: Derivation }>
+      current: EnrichedContainerWire | null
     }>(`/derivations/containers/${containerId}/derivation-chain`),
   update: (id: number, patch: Partial<Pick<Derivation, 'derivationDate' | 'protocol' | 'notes' | 'properties'>>) =>
     api.patch<{ derivation: Derivation }>(`/derivations/derivations/${id}`, patch),

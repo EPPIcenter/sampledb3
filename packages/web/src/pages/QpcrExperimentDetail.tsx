@@ -706,7 +706,9 @@ export default function QpcrExperimentDetail() {
                                 <> · {wellDetails.container.collection.name}</>
                               )}
                             </p>
-                            {wellDetails.container.collection?.position != null && (
+                            {wellDetails.container.collection &&
+                              'position' in wellDetails.container.collection &&
+                              wellDetails.container.collection.position != null && (
                               <p className="text-xs text-app-text-muted">Position: {wellDetails.container.collection.position}</p>
                             )}
                             {wellDetails.container.id != null ? ( // eslint-disable-line @typescript-eslint/no-unnecessary-condition -- optional container id

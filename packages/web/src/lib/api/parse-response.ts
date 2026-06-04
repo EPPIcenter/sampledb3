@@ -3,8 +3,8 @@ import {
   parseContainerDetailWire as parseContainerDetailWireSchema,
   parseContainersListWire,
   type ContainerDetailWire,
+  type EnrichedContainerWire,
 } from '@sampledb/contract/wire'
-import type { EnrichedContainer } from './containers'
 
 /** Thrown when a response body does not match the expected API contract. */
 export class ApiContractError extends Error {
@@ -88,7 +88,7 @@ export function parseContainerDetailWire(body: unknown): ParsedContainerDetailWi
 }
 
 export type ContainersListResult = {
-  containers: EnrichedContainer[]
+  containers: EnrichedContainerWire[]
   pagination?: { page: number; limit: number; total: number; totalPages: number }
 }
 
@@ -96,7 +96,7 @@ export function parseContainersList(body: unknown): ContainersListResult {
   try {
     const parsed = parseContainersListWire(body)
     return {
-      containers: parsed.containers as ContainersListResult['containers'],
+      containers: parsed.containers,
       pagination: parsed.pagination,
     }
   } catch (error) {

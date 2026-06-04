@@ -159,9 +159,11 @@ export const controlsApi = {
         collectionLocationId?: number
         collectionType?: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
         containerBarcode?: string
+        sublabel?: string
         position?: string
         quantity?: number
         unitSymbol?: string
+        sheetName?: string
       }>
     }>
     createCollections?: Array<{
@@ -182,9 +184,11 @@ export const controlsApi = {
         collectionLocationId?: number
         collectionType?: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
         containerBarcode?: string
+        sublabel?: string
         position?: string
         quantity?: number
         unitSymbol?: string
+        sheetName?: string
       }>
     }>
     createCollections?: Array<{

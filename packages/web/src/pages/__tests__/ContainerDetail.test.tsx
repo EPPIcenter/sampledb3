@@ -35,10 +35,12 @@ import { api } from '../../lib/api/client'
 describe('ContainerDetail', () => {
   beforeEach(() => {
     vi.mocked(api.get).mockResolvedValue({
-      container: { id: 1, containerType: 'micronix_tube' },
-      specimen: {},
-      locationPath: '/Loc/Plate',
-      collection: { type: 'micronix_plate', id: 1, name: 'Plate1', position: 'A01', barcode: 'MT001' },
+      container: {
+        id: 1,
+        containerType: 'micronix_tube',
+        barcode: 'MT001',
+        collection: { type: 'micronix_plate', id: 1, name: 'Plate1', position: 'A01' },
+      },
     })
   })
 
