@@ -14,7 +14,16 @@ SampleDB API responses use a **wire DTO** layer between persistence (Drizzle/SQL
 | **Wire** (HTTP JSON) | Key **omitted** when unset |
 | **Client** (web parse / UI) | TypeScript optional / `undefined` |
 
-Persistence-shaped rows must not be spread directly into JSON responses. Route handlers map enrichment results to wire DTOs; successful JSON responses pass through global `omitOnWireMiddleware` (or explicit `wireJsonResponse`) so `null` and `undefined` keys are omitted.
+Persistence-shaped rows must not be spread directly into JSON responses. Route handlers return wire-shaped payloads via `c.json(...)`; **global `omitOnWireMiddleware`** applies the null-omission policy to every successful JSON response.
+
+### Two responsibilities (do not conflate)
+
+| Layer | Responsibility | Where |
+|-------|----------------|--------|
+| **Null omission** | Remove keys whose values are `null` or `undefined` | Global `omitOnWireMiddleware` → `toWireJson()` |
+| **Semantic mapping** | Discriminated unions, field renaming (`sublabel` vs `barcode`), placement shape | Route-level wire mappers + Zod schemas in `@sampledb/contract/wire` |
+
+Middleware is **permanent infrastructure** for null omission — not a substitute for mappers. Routes where wire shape matters (containers today) must map to explicit wire DTOs **before** `c.json`; middleware only strips remaining nulls.
 
 ## Shared contract
 
@@ -38,10 +47,13 @@ Persistence-shaped rows must not be spread directly into JSON responses. Route h
 
 ## Consequences
 
-- New API endpoints must not spread Drizzle rows into JSON; map to wire DTOs where shape matters, rely on omit-on-wire middleware for generic payloads.
+- New API endpoints must not spread Drizzle rows into JSON; map to wire DTOs where shape matters. Generic CRUD may rely on middleware for null omission only.
+- Do not call `toWireJson()` in route handlers — middleware owns null omission. Route-level mappers focus on semantic shape.
+- Integration tests mount `omitOnWireMiddleware` via the shared route test harness so wire shape matches production.
+- Expand `@sampledb/contract/wire` schemas incrementally where discriminated shape matters; do not wire-schema every CRUD route.
 - Web parsers import `@sampledb/contract/wire` for container responses; optional fields use `.optional()` in Zod, not `.nullish()`.
-- Paper inbound writes use `sheetName` + `sublabel`; tube writes use `barcode`. Export columns split accordingly (`barcode`, `sublabel`, `sheet_name`).
-- Stored export configurations with retired `label` column keys migrate to `sheet_name` on read.
+- Paper inbound writes use `sheetName` + `sublabel`; tube writes use `barcode`. Do not send `containerBarcode` or `position` for paper child containers.
+- Export columns split accordingly (`barcode`, `sublabel`, `sheet_name`). Stored export configurations migrate retired keys on read (`label` → `sheet_name`; append `sublabel` when `barcode` or `sheet_name` is present).
 
 ## Related ADRs
 
