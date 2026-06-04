@@ -117,6 +117,23 @@ describe('schema evolution', () => {
     sqlite.close()
   })
 
+  it('creates legacy paper stub before migration 003 when paper table is missing', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (2)')
+    evolveOperationalSchema(sqlite)
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    const paperTable = sqlite
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='paper'")
+      .get()
+    expect(paperTable).toBeDefined()
+    const columns = sqlite
+      .prepare(`PRAGMA table_info(paper)`)
+      .all() as Array<{ name: string }>
+    expect(columns.map((c) => c.name).sort()).toEqual(['id', 'sheet_id', 'sublabel'])
+    sqlite.close()
+  })
+
   it('migration 003 aborts when paper.position has non-empty values', () => {
     const sqlite = new Database(testDbPath)
     sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')

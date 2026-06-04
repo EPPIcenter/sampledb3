@@ -1,7 +1,10 @@
 import { Database } from 'bun:sqlite'
 import { applyInitialSchema } from './apply-initial-schema'
 import { applyLegacyBaselineMigration } from './legacy-baseline'
+import { ensureLegacyPaperTableForMigration003 } from './migration-preflight'
 import { listNumberedMigrations, runSqlMigration } from './migration-runner'
+
+const PAPER_SUBLABEL_MIGRATION_VERSION = 3
 
 /** Canonical schema level; bump when adding numbered deltas under migrations/. */
 export const CURRENT_SCHEMA_VERSION = 3
@@ -54,6 +57,9 @@ function applyPendingMigrations(sqlite: Database, fromVersion: number): void {
     // 001 runs only via applyLegacyBaselineMigration for unversioned databases.
     if (migration.version === LEGACY_BASELINE_VERSION) {
       continue
+    }
+    if (migration.version === PAPER_SUBLABEL_MIGRATION_VERSION) {
+      ensureLegacyPaperTableForMigration003(sqlite)
     }
     if (process.env.NODE_ENV !== 'production') {
       console.log(`📝 Applying schema migration ${migration.version} (${migration.basename})...`)

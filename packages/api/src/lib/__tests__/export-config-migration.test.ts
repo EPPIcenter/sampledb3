@@ -14,7 +14,7 @@ describe('migrateExportConfigurationColumnKeys', () => {
     })
 
     expect(changed).toBe(true)
-    expect(configs.configurations[0].columns).toEqual(['barcode', 'tags', 'status'])
+    expect(configs.configurations[0].columns).toEqual(['barcode', 'sublabel', 'tags', 'status'])
   })
 
   it('rewrites label to sheet_name in configuration columns', () => {
@@ -29,7 +29,7 @@ describe('migrateExportConfigurationColumnKeys', () => {
     })
 
     expect(changed).toBe(true)
-    expect(configs.configurations[0].columns).toEqual(['barcode', 'sheet_name', 'status'])
+    expect(configs.configurations[0].columns).toEqual(['barcode', 'sheet_name', 'sublabel', 'status'])
   })
 
   it('is idempotent on second run', () => {
@@ -40,5 +40,35 @@ describe('migrateExportConfigurationColumnKeys', () => {
 
     expect(second.changed).toBe(false)
     expect(second.configs.configurations[0].columns).toEqual(['tags'])
+  })
+
+  it('appends sublabel after sheet_name when paper context columns are present', () => {
+    const { configs, changed } = migrateExportConfigurationColumnKeys({
+      configurations: [
+        {
+          name: 'Mixed export',
+          columns: ['barcode', 'sheet_name', 'status'],
+          isDefault: true,
+        },
+      ],
+    })
+
+    expect(changed).toBe(true)
+    expect(configs.configurations[0].columns).toEqual(['barcode', 'sheet_name', 'sublabel', 'status'])
+  })
+
+  it('does not duplicate sublabel when already present', () => {
+    const { configs, changed } = migrateExportConfigurationColumnKeys({
+      configurations: [
+        {
+          name: 'Already migrated',
+          columns: ['barcode', 'sublabel', 'sheet_name'],
+          isDefault: false,
+        },
+      ],
+    })
+
+    expect(changed).toBe(false)
+    expect(configs.configurations[0].columns).toEqual(['barcode', 'sublabel', 'sheet_name'])
   })
 })
