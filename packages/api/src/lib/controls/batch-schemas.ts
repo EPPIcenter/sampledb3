@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { refinePaperContainerInboundWrite } from '@sampledb/contract'
 
 export const createBloodControlBatchSchema = z.object({
   name: z.string().min(1).optional(),
@@ -13,10 +14,13 @@ export const batchContainerInputSchema = z.object({
   collectionLocationId: z.number().int().optional(),
   collectionType: z.enum(['box', 'bag', 'micronix_plate', 'cryovial_box']).optional(),
   containerBarcode: z.string().optional(),
+  sublabel: z.string().optional(),
   position: z.string().optional(),
   quantity: z.number().optional(),
   unitSymbol: z.string().optional(),
   sheetName: z.string().optional(),
+}).superRefine((data, ctx) => {
+  refinePaperContainerInboundWrite(data, ctx)
 })
 
 export const batchSpecimenInputSchema = z.object({

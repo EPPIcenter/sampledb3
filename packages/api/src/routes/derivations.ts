@@ -21,6 +21,9 @@ import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { handleRouteError } from '../lib/error-handler'
+import { enrichContainersForApi } from '../lib/container-api-enrichment'
+import { mapEnrichedContainerToWire } from '../lib/container-wire-mapper'
+import { refinePaperContainerInboundWrite } from '@sampledb/contract'
 
 /**
  * Create derivations routes with database injection
@@ -53,6 +56,8 @@ const createDerivationSchema = z.object({
   sublabel: z.string().optional(),
   position: z.string().optional(),
   operatorId: z.number().optional(),
+}).superRefine((data, ctx) => {
+  refinePaperContainerInboundWrite(data, ctx)
 })
 
 async function createCollectionIfNeeded(database: Database, input: z.infer<typeof createDerivationSchema>) {
@@ -420,10 +425,25 @@ derivations.get('/containers/:id/derivation-chain', authMiddleware, async (c) =>
       .where(eq(storageContainer.id, id))
       .get()
 
+    const rawContainers = [
+      ...ancestors.map((row) => row.container),
+      ...descendants.map((row) => row.container).filter((c): c is NonNullable<typeof c> => c != null),
+      ...(current ? [current] : []),
+    ]
+
+    const enrichedList = await enrichContainersForApi(database, rawContainers)
+    const wireById = new Map(enrichedList.map((row) => [row.id, mapEnrichedContainerToWire(row)]))
+
     return c.json({
-      ancestors,
-      descendants,
-      current,
+      ancestors: ancestors.map((row) => ({
+        container: wireById.get(row.container.id) ?? null,
+        derivation: row.derivation,
+      })),
+      descendants: descendants.map((row) => ({
+        container: row.container ? wireById.get(row.container.id) ?? null : null,
+        derivation: row.derivation,
+      })),
+      current: current ? wireById.get(current.id) ?? null : null,
     })
   } catch (error) {
     return handleRouteError(error, c)

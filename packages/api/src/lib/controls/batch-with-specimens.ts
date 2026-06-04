@@ -40,6 +40,7 @@ export interface CreateBatchWithSpecimensRequest {
         collectionLocationId?: number
         collectionType?: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
         containerBarcode?: string
+        sublabel?: string
         position?: string
         quantity?: number
         unitSymbol?: string
@@ -183,6 +184,7 @@ async function prepareContainerData(
     quantity?: number
     unitSymbol?: string
     sheetName?: string
+    sublabel?: string
   },
   collectionMap: Map<string, number>
 ): Promise<{
@@ -349,8 +351,10 @@ function createContainerSync(
   containerData: {
     type: 'paper' | 'cryovial_tube' | 'micronix_tube'
     containerBarcode?: string
+    sublabel?: string
     position?: string
     quantity?: number
+    sheetName?: string
   },
   prepared: {
     unitId: number
@@ -480,7 +484,7 @@ function createContainerSync(
     tx.insert(paper).values({
       id: containerId,
       sheetId: finalSheetId!,
-      sublabel: containerData.containerBarcode || null,
+      sublabel: containerData.sublabel?.trim() || null,
     }).run()
   } else if (containerData.type === 'cryovial_tube') {
     let finalCollectionId = prepared.collectionId

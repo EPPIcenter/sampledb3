@@ -144,8 +144,7 @@ describe('batch-with-specimens', () => {
                   type: 'paper',
                   collectionName: 'Box1',
                   collectionLocationId: location.id,
-                  position: 'A1',
-                  containerBarcode: 'P001',
+                  sublabel: 'P001',
                   // sheetName omitted
                 },
               ],

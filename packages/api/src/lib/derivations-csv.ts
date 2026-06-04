@@ -19,6 +19,7 @@ import {
   studySubject,
 } from '../db/schema'
 import { and, eq, sql } from 'drizzle-orm'
+import { validatePaperDerivationCsvFields } from '@sampledb/contract'
 import { createDerivation, type CreateDerivationInput } from './derivations'
 
 /**
@@ -94,6 +95,7 @@ export interface DerivationCsvRow {
   bag_name?: string
   collection_barcode?: string
   container_barcode?: string
+  sublabel?: string
   position?: string
 }
 
@@ -183,6 +185,11 @@ function buildChildSummary(row: DerivationCsvRow): string {
   if (pos) parts.push(pos)
   if (parts.length) return parts.join(' · ')
   const cb = (row.container_barcode ?? '').trim()
+  const sublabel = (row.sublabel ?? '').trim()
+  if (containerType === 'paper') {
+    if (sublabel) return sublabel
+    if (cb) return `Sublabel ${cb}`
+  }
   if (cb) return `Barcode ${cb}`
   return 'Child'
 }
@@ -815,6 +822,16 @@ export async function validateDerivationsCsv(
         seenMicronixBarcode.add(barcode)
       }
 
+      if (containerType === 'paper') {
+        const paperFieldError = validatePaperDerivationCsvFields(row)
+        if (paperFieldError) {
+          validationRow.error = paperFieldError
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+      }
+
       // Track unique collections
       const collectionKey = `${collectionName || ''}_${row.collection_barcode || ''}_${containerType}`
       if (!collectionsMap.has(collectionKey) && (collectionName || row.collection_barcode)) {
@@ -901,11 +918,12 @@ export async function importDerivationsFromCsv(
             )
 
             // Use settings for required fields, allow CSV override for defaults
+            const childContainerType = (settings?.containerType || row.container_type!) as 'micronix_tube' | 'cryovial_tube' | 'paper'
             const input: CreateDerivationInput = {
               parentContainerId,
               derivationType: settings?.derivationType || row.derivation_type!,
               specimenTypeName: settings?.specimenTypeName || row.specimen_type_name!,
-              containerType: (settings?.containerType || row.container_type!) as 'micronix_tube' | 'cryovial_tube' | 'paper',
+              containerType: childContainerType,
               quantity: row.quantity ? parseNumber(row.quantity) : settings?.quantity,
               unitSymbol: row.unit_symbol || settings?.unitSymbol,
               quantityUsed: row.quantity_used ? parseNumber(row.quantity_used) : settings?.quantityUsed,
@@ -916,8 +934,9 @@ export async function importDerivationsFromCsv(
               protocol: settings?.protocol || row.protocol!,
               notes: row.notes,
               collectionId: collectionInfo.id,
-              containerBarcode: row.container_barcode,
-              position: row.position,
+              sublabel: childContainerType === 'paper' ? row.sublabel : undefined,
+              containerBarcode: childContainerType === 'paper' ? undefined : row.container_barcode,
+              position: childContainerType === 'paper' ? undefined : row.position,
             }
 
             const result = await createDerivation(tx, input)

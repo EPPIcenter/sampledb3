@@ -421,8 +421,7 @@ export async function runDemoSeed(
       specimenTypeName: 'DBS',
       containerType: 'paper',
       collectionId: dbsSheetId,
-      containerBarcode: `CTRL-DBS-${String(i + 1).padStart(3, '0')}`,
-      position: i === 0 ? 'A01' : 'A02',
+      sublabel: `CTRL-DBS-${String(i + 1).padStart(3, '0')}`,
       derivationDate: '2024-01-02',
       reduceParentQuantity: false,
     })

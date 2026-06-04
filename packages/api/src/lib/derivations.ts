@@ -290,7 +290,7 @@ export async function createDerivation(
       await database.insert(paper).values({
         id: child.id,
         sheetId: collectionId,
-        sublabel: input.sublabel ?? input.containerBarcode ?? null,
+        sublabel: input.sublabel?.trim() || null,
       })
       break
     }
