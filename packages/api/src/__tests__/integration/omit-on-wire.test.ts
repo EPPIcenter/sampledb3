@@ -3,7 +3,6 @@ import {
   setupAuthenticatedRouteTest,
   type AuthenticatedRouteTestContext,
 } from '../helpers/authenticated-route-test'
-import { omitOnWireMiddleware } from '../../middleware/omit-on-wire'
 import { createStudiesRoutes } from '../../routes/studies'
 import { createSettingsRoutes } from '../../routes/settings'
 import { createSpecimensRoutes } from '../../routes/specimens'
@@ -24,7 +23,6 @@ describe('omit-on-wire middleware (integration)', () => {
         role: 'admin',
       },
       mount: (app, { db, sqlite }) => {
-        app.use('*', omitOnWireMiddleware)
         app.route('/api/studies', createStudiesRoutes(db, sqlite))
         app.route('/api/settings', createSettingsRoutes(db))
         app.route('/api/specimens', createSpecimensRoutes(db))

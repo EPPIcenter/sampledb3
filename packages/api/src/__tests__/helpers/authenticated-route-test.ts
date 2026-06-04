@@ -3,6 +3,7 @@ import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import type { Database } from '../../db/client'
 import { setRequestDatabase } from '../../lib/db-context'
 import { handleRouteError } from '../../lib/error-handler'
+import { omitOnWireMiddleware } from '../../middleware/omit-on-wire'
 import { createAuthRoutes } from '../../routes/auth'
 import {
   createTestUser,
@@ -123,6 +124,7 @@ export async function setupAuthenticatedRouteTest(
       await next()
     })
     app.onError((err, c) => handleRouteError(err, c))
+    app.use('*', omitOnWireMiddleware)
     options.mount?.(app, routeCtx)
     extraMount?.(app, routeCtx)
     return app

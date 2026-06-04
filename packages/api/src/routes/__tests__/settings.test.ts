@@ -28,18 +28,16 @@ describe('Settings API', () => {
   })
 
   describe('GET /api/settings', () => {
-    it('returns 200 and object with container_defaults, pagination_settings, etc.', async () => {
+    it('returns 200 with omit-on-wire settings (null keys omitted)', async () => {
       const res = await ctx.request('/api/settings', {
         method: 'GET',
       })
       expect(res.status).toBe(200)
       const data = (await res.json()) as Record<string, unknown>
-      expect(data).toHaveProperty('container_defaults')
-      expect(data).toHaveProperty('pagination_settings')
       expect(data).toHaveProperty('password_requirements')
       expect(data).toHaveProperty('session_settings')
-      expect(data).toHaveProperty('export_configurations')
-      expect(data).toHaveProperty('scanner_configurations')
+      expect(data).not.toHaveProperty('container_defaults')
+      expect(JSON.stringify(data)).not.toMatch(/:\s*null/)
     })
 
     it('returns 401 when not authenticated', async () => {

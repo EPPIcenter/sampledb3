@@ -214,7 +214,7 @@ describe('qPCR Experiments Template', () => {
       const a03 = body.wells.find((w) => w.wellPosition === 'A03')
       expect(a03).toBeDefined()
       expect(a03!.contentType).toBe('negative')
-      expect(a03!.barcode).toBeNull()
+      expect(a03!.barcode).toBeUndefined()
     })
 
     it('sets a single NTC well to empty (removes row)', async () => {
