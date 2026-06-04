@@ -13,6 +13,10 @@ import {
 } from '../../db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { resolveContainerPlacementBundle } from '../container-placement'
+import {
+  projectContainerIdentity,
+  projectContainerPlacementFields,
+} from '../container-projection'
 import type { ContainerExportData, StudyRecord } from './types'
 
 export async function enrichContainerData(
@@ -191,23 +195,6 @@ export async function enrichContainerData(
     return [...names].sort((a, b) => a.localeCompare(b)).join(', ')
   }
 
-  function tubeBarcodeForContainer(containerId: number): string | undefined {
-    return (
-      subtypes.micronixById.get(containerId)?.barcode ??
-      subtypes.cryovialById.get(containerId)?.barcode ??
-      undefined
-    )
-  }
-
-  function paperSublabelForContainer(containerId: number): string | undefined {
-    return subtypes.paperById.get(containerId)?.sublabel ?? undefined
-  }
-
-  function paperSheetNameForContainer(containerId: number): string | undefined {
-    const name = subtypes.paperById.get(containerId)?.sheetName
-    return name && name !== 'Unknown' ? name : undefined
-  }
-
   // Build enriched data
   const enriched: ContainerExportData[] = []
 
@@ -217,17 +204,15 @@ export async function enrichContainerData(
 
     const placement = placementMap.get(container.id)!
     const containerType = placement.containerType
-    const barcode =
-      containerType === 'paper' ? undefined : tubeBarcodeForContainer(container.id)
-    const sublabel =
-      containerType === 'paper' ? paperSublabelForContainer(container.id) : undefined
-    const sheet_name =
-      containerType === 'paper' ? paperSheetNameForContainer(container.id) : undefined
-    const position = placement.collection?.position ?? undefined
-    const collectionName =
-      placement.collection?.name && placement.collection.name !== 'Unknown'
-        ? placement.collection.name
-        : undefined
+    const { position, collectionName } = projectContainerPlacementFields(placement)
+    const identity = projectContainerIdentity(containerType, {
+      micronix: subtypes.micronixById.get(container.id),
+      cryovial: subtypes.cryovialById.get(container.id),
+      paper: subtypes.paperById.get(container.id),
+    })
+    const barcode = containerType === 'paper' ? undefined : identity.barcode
+    const sublabel = containerType === 'paper' ? identity.sublabel : undefined
+    const sheet_name = containerType === 'paper' ? identity.sheetName : undefined
     const locationPath = placement.locationPath
 
     const subjectId = spec.studySubjectId || undefined

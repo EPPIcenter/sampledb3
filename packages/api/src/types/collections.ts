@@ -181,12 +181,13 @@ export interface SheetDetailResponse {
 }
 
 /**
- * Collection info for containers (used in container enrichment)
+ * Placement-only collection info for enriched containers.
+ * Identity (barcode, sublabel) lives on subtype fields — see container-projection.
  */
 export type CollectionInfo =
-  | { type: 'micronix_plate'; id: number; name: string; position?: string | null; barcode?: string | null }
-  | { type: 'cryovial_box'; id: number; name: string; position?: string | null; barcode?: string | null }
-  | { type: 'sheet'; id: number; name: string; position?: string | null; barcode?: string | null }
+  | { type: 'micronix_plate'; id: number; name: string; position?: string | null }
+  | { type: 'cryovial_box'; id: number; name: string; position?: string | null }
+  | { type: 'sheet'; id: number; name: string }
 
 /**
  * Location contents (used in location detail responses)

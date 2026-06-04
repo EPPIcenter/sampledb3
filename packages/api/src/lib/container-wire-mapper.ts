@@ -1,55 +1,12 @@
 import type { EnrichedContainerWire } from '@sampledb/contract/wire'
 import type { EnrichedContainerApi } from './container-api-enrichment'
-
-function omitNulls<T extends Record<string, unknown>>(obj: T): Partial<T> {
-  const result: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(obj)) {
-    if (value !== null && value !== undefined) {
-      result[key] = value
-    }
-  }
-  return result as Partial<T>
-}
-
-function mapSheetCollection(
-  collection: NonNullable<EnrichedContainerApi['collection']>,
-): EnrichedContainerWire['collection'] {
-  if (collection.type !== 'sheet') {
-    return null
-  }
-  return { type: 'sheet', id: collection.id, name: collection.name }
-}
-
-function mapMicronixCollection(
-  collection: NonNullable<EnrichedContainerApi['collection']>,
-): EnrichedContainerWire['collection'] {
-  if (collection.type !== 'micronix_plate') {
-    return null
-  }
-  return omitNulls({
-    type: 'micronix_plate' as const,
-    id: collection.id,
-    name: collection.name,
-    position: collection.position,
-  }) as EnrichedContainerWire['collection']
-}
-
-function mapCryovialCollection(
-  collection: NonNullable<EnrichedContainerApi['collection']>,
-): EnrichedContainerWire['collection'] {
-  if (collection.type !== 'cryovial_box') {
-    return null
-  }
-  return omitNulls({
-    type: 'cryovial_box' as const,
-    id: collection.id,
-    name: collection.name,
-    position: collection.position,
-  }) as EnrichedContainerWire['collection']
-}
+import {
+  mapCollectionInfoToWire,
+  projectContainerIdentity,
+} from './container-projection'
 
 function sharedFields(enriched: EnrichedContainerApi): Record<string, unknown> {
-  return omitNulls({
+  return {
     id: enriched.id,
     specimenId: enriched.specimenId,
     comment: enriched.comment,
@@ -62,49 +19,51 @@ function sharedFields(enriched: EnrichedContainerApi): Record<string, unknown> {
     locationPath: enriched.locationPath,
     created: enriched.created,
     lastUpdated: enriched.lastUpdated,
-  })
+  }
 }
 
-/** Map persistence-shaped API enrichment to omit-on-wire container DTO. */
+/** Map persistence-shaped API enrichment to wire container DTO (null omission via middleware). */
 export function mapEnrichedContainerToWire(enriched: EnrichedContainerApi): EnrichedContainerWire {
   const base = sharedFields(enriched)
+  const identity = projectContainerIdentity(enriched.containerType, {
+    micronix: enriched.micronixTube,
+    cryovial: enriched.cryovialTube,
+    paper: enriched.paper,
+    staticWell: enriched.staticWell,
+  })
+  const collection = mapCollectionInfoToWire(enriched.collection)
 
   switch (enriched.containerType) {
     case 'micronix_tube': {
-      const barcode = enriched.micronixTube?.barcode ?? enriched.collection?.barcode
-      if (!barcode) {
+      if (!identity.barcode) {
         throw new Error(`Micronix container ${enriched.id} missing barcode`)
       }
       return {
         ...base,
         containerType: 'micronix_tube',
-        barcode,
-        collection: enriched.collection ? mapMicronixCollection(enriched.collection) : null,
+        barcode: identity.barcode,
+        collection,
       } as EnrichedContainerWire
     }
-    case 'cryovial_tube': {
-      const barcode = enriched.cryovialTube?.barcode ?? enriched.collection?.barcode ?? undefined
+    case 'cryovial_tube':
       return {
         ...base,
         containerType: 'cryovial_tube',
-        ...(barcode != null ? { barcode } : {}),
-        collection: enriched.collection ? mapCryovialCollection(enriched.collection) : null,
+        ...(identity.barcode != null ? { barcode: identity.barcode } : {}),
+        collection,
       } as EnrichedContainerWire
-    }
-    case 'paper': {
-      const sublabel = enriched.paper?.sublabel ?? undefined
+    case 'paper':
       return {
         ...base,
         containerType: 'paper',
-        ...(sublabel != null ? { sublabel } : {}),
-        collection: enriched.collection ? mapSheetCollection(enriched.collection) : null,
+        ...(identity.sublabel != null ? { sublabel: identity.sublabel } : {}),
+        collection,
       } as EnrichedContainerWire
-    }
     case 'static_well':
       return {
         ...base,
         containerType: 'static_well',
-        collection: enriched.collection ? mapMicronixCollection(enriched.collection) : null,
+        collection,
       } as EnrichedContainerWire
     case 'unknown':
       return {

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test'
+import { toWireJson } from '@sampledb/contract/wire'
 import { mapEnrichedContainerToWire } from '../container-wire-mapper'
 import type { EnrichedContainerApi } from '../container-api-enrichment'
+
+function toWireContainer(enriched: EnrichedContainerApi) {
+  return toWireJson(mapEnrichedContainerToWire(enriched))
+}
 
 describe('mapEnrichedContainerToWire', () => {
   it('maps paper container with sublabel at root and sheet collection without position', () => {
@@ -22,8 +27,6 @@ describe('mapEnrichedContainerToWire', () => {
         type: 'sheet' as const,
         id: 143,
         name: '2058121',
-        position: null,
-        barcode: 'Spot-1',
       },
       paper: {
         sublabel: 'Spot-1',
@@ -34,7 +37,7 @@ describe('mapEnrichedContainerToWire', () => {
       },
     } satisfies EnrichedContainerApi
 
-    expect(mapEnrichedContainerToWire(enriched)).toEqual({
+    expect(toWireContainer(enriched)).toEqual({
       id: 94079,
       specimenId: 1,
       unitId: 1,
@@ -65,7 +68,7 @@ describe('mapEnrichedContainerToWire', () => {
       unit: undefined,
       location: null,
       locationPath: '',
-      collection: { type: 'sheet' as const, id: 1, name: 'S1', position: null, barcode: null },
+      collection: { type: 'sheet' as const, id: 1, name: 'S1' },
       paper: {
         sublabel: null,
         sheetId: 1,
@@ -75,7 +78,7 @@ describe('mapEnrichedContainerToWire', () => {
       },
     } satisfies EnrichedContainerApi
 
-    const wire = mapEnrichedContainerToWire(enriched)
+    const wire = toWireContainer(enriched)
     expect(wire).not.toHaveProperty('sublabel')
     expect(wire.collection).toEqual({ type: 'sheet', id: 1, name: 'S1' })
   })
@@ -100,7 +103,6 @@ describe('mapEnrichedContainerToWire', () => {
         id: 10,
         name: 'Plate1',
         position: 'A01',
-        barcode: 'MTX-001',
       },
       micronixTube: {
         barcode: 'MTX-001',
@@ -111,7 +113,7 @@ describe('mapEnrichedContainerToWire', () => {
       },
     } satisfies EnrichedContainerApi
 
-    expect(mapEnrichedContainerToWire(enriched)).toMatchObject({
+    expect(toWireContainer(enriched)).toMatchObject({
       containerType: 'micronix_tube',
       barcode: 'MTX-001',
       collection: { type: 'micronix_plate', id: 10, name: 'Plate1', position: 'A01' },

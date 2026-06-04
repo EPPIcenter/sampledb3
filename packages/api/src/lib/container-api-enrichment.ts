@@ -11,12 +11,12 @@ import {
 } from '../db/schema'
 import {
   resolveContainerPlacementBundle,
-  type ContainerPlacement,
   type CryovialSubtypeDetails,
   type MicronixSubtypeDetails,
   type PaperSubtypeDetails,
   type StaticWellSubtypeDetails,
 } from './container-placement'
+import { projectContainerCollection } from './container-projection'
 import type { CollectionInfo } from '../types/collections'
 
 export type EnrichedContainerApi = StorageContainer & {
@@ -30,57 +30,6 @@ export type EnrichedContainerApi = StorageContainer & {
   cryovialTube?: CryovialSubtypeDetails
   paper?: PaperSubtypeDetails
   staticWell?: StaticWellSubtypeDetails
-}
-
-function collectionInfoFromPlacement(
-  placement: ContainerPlacement,
-  micronixInfo?: MicronixSubtypeDetails,
-  cryovialInfo?: CryovialSubtypeDetails,
-  paperInfo?: PaperSubtypeDetails,
-  staticWellInfo?: StaticWellSubtypeDetails,
-): CollectionInfo | null {
-  if (placement.containerType === 'unknown' || !placement.collection) {
-    return null
-  }
-
-  if (placement.containerType === 'micronix_tube' && micronixInfo) {
-    return {
-      type: 'micronix_plate',
-      id: placement.collection.id,
-      name: placement.collection.name,
-      position: placement.collection.position,
-      barcode: micronixInfo.barcode,
-    }
-  }
-
-  if (placement.containerType === 'cryovial_tube' && cryovialInfo) {
-    return {
-      type: 'cryovial_box',
-      id: placement.collection.id,
-      name: placement.collection.name,
-      position: placement.collection.position,
-      barcode: cryovialInfo.barcode,
-    }
-  }
-
-  if (placement.containerType === 'paper' && paperInfo) {
-    return {
-      type: 'sheet',
-      id: placement.collection.id,
-      name: placement.collection.name,
-    }
-  }
-
-  if (placement.containerType === 'static_well' && staticWellInfo) {
-    return {
-      type: 'micronix_plate',
-      id: placement.collection.id,
-      name: placement.collection.name,
-      position: placement.collection.position,
-    }
-  }
-
-  return null
 }
 
 /** Batch-enrich storage containers for API responses (placement bundle + tags + unit). */
@@ -142,7 +91,7 @@ export async function enrichContainersForApi(
       unit: unitById.get(container.unitId),
       location: locationInfo,
       locationPath: placement.locationPath ?? '',
-      collection: collectionInfoFromPlacement(placement, micronixInfo, cryovialInfo, paperInfo, staticWellInfo),
+      collection: projectContainerCollection(placement),
       micronixTube: micronixInfo,
       cryovialTube: cryovialInfo,
       paper: paperInfo,

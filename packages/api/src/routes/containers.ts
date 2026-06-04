@@ -10,7 +10,6 @@ import { requireParam } from '../lib/common-validators'
 import { resolveContainerByBarcode } from '../lib/identifier-resolution'
 import { enrichContainerForApi, enrichContainersForApi } from '../lib/container-api-enrichment'
 import { mapEnrichedContainerToWire, mapEnrichedContainersToWire } from '../lib/container-wire-mapper'
-import { wireJsonResponse } from '../lib/wire-json-response'
 import { handleRouteError, RouteError, containersFetchFailedBody } from '../lib/error-handler'
 
 /**
@@ -84,7 +83,7 @@ containers.get('/', authMiddleware, async (c) => {
     // Enrich containers with location and tags info
     const enrichedContainers = await enrichContainersForApi(database, containersList)
     
-    return wireJsonResponse(c, {
+    return c.json({
       containers: mapEnrichedContainersToWire(enrichedContainers),
       pagination: {
         page,
@@ -201,7 +200,7 @@ containers.get('/:id', authMiddleware, async (c) => {
       }
     }
 
-    return wireJsonResponse(c, {
+    return c.json({
       container: mapEnrichedContainerToWire(enriched),
       specimen: spec,
       source: sourceInfo,
@@ -371,7 +370,7 @@ containers.patch('/:id', memberMiddleware, async (c) => {
 
     // Return enriched container
     const enriched = await enrichContainerForApi(database, updated)
-    return wireJsonResponse(c, { container: mapEnrichedContainerToWire(enriched) })
+    return c.json({ container: mapEnrichedContainerToWire(enriched) })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Invalid input', details: error.issues }, 400)
