@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "build": "tsc && tsc-alias",
+    "build": "tsc && tsc-alias && bun scripts/runtime-assets.ts",
     "start": "bun dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
