@@ -52,11 +52,12 @@ Middleware is **permanent infrastructure** for null omission — not a substitut
 - Integration tests mount `omitOnWireMiddleware` via the shared route test harness so wire shape matches production.
 - Expand `@sampledb/contract/wire` schemas incrementally where discriminated shape matters; do not wire-schema every CRUD route.
 - Web parsers import `@sampledb/contract/wire` for container responses; optional fields use `.optional()` in Zod, not `.nullish()`.
-- Paper inbound writes use `sheetName` + `sublabel`; tube writes use `barcode`. Do not send `containerBarcode` or `position` for paper child containers.
+- Inbound container writes use the unified `ContainerWriteInput` shape ([ADR 0006](./0006-unified-container-inbound-write.md)) — same placement/identity split as outbound wire, not flat legacy fields.
 - Export columns split accordingly (`barcode`, `sublabel`, `sheet_name`). Stored export configurations migrate retired keys on read (`label` → `sheet_name`; append `sublabel` when `barcode` or `sheet_name` is present).
 
 ## Related ADRs
 
+- [ADR 0006: Unified container inbound write shape](./0006-unified-container-inbound-write.md) — inbound mirror of this outbound wire model
 - [ADR 0002: HTTP client response unwrap](./0002-http-client-response-unwrap.md) — client parse boundaries and shared contract usage
 - [ADR 0003: SQLite schema evolution](./0003-sqlite-schema-evolution.md) — numbered migrations including 003
 

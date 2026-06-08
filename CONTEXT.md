@@ -108,16 +108,20 @@ A physical storage unit holding all or part of one specimen's material (e.g. a m
 _Avoid_: Vial, tube, well (use as container *types*, not as the domain term); Specimen
 
 **Collection**:
-A group of containers handled together as one physical unit — a plate, box, or bag. Not the act of collecting a sample from a subject.
+A group of containers handled together as one physical unit — a plate, box, bag, or sheet. Not the act of collecting a sample from a subject.
 _Avoid_: Sample collection, plate (when you mean the collection entity), batch (conflicts with control batch)
+
+**Sheet**:
+A **Collection** within a box or bag that groups **Paper** containers sharing a **Sheet name**. A paper container's immediate collection is its sheet; the box or bag is the sheet's parent in storage.
+_Avoid_: Treating the box or bag as the paper container's direct collection; grid **position** (not applicable to paper)
 
 **Location**:
 A place in the storage hierarchy where collections are kept (e.g. freezer, shelf, room).
 _Avoid_: Site (unless referring to an external facility), storage (too vague)
 
 **Container placement**:
-Where a **Container** sits in the physical storage hierarchy — its position within a **Collection**, the collection it belongs to, and the **Location** path where that collection is stored. Distinct from specimen provenance (**Source**, study/control context) and from container identity metadata (barcodes, **Tags**).
-_Avoid_: Enrichment (implementation term); conflating placement with specimen or source lookups
+Where a **Container** sits in the physical storage hierarchy — its position within a **Collection**, the collection it belongs to, and the **Location** path where that collection is stored. For tubes and wells, the immediate **Collection** is a plate or box and may include a grid position. For **Paper** containers, the immediate **Collection** is a **Sheet** (within a box or bag). Distinct from specimen provenance (**Source**, study/control context) and from container identity metadata (barcodes, **Tags**).
+_Avoid_: Enrichment (implementation term); conflating placement with specimen or source lookups; placing paper directly on a box or bag without a sheet
 
 ### Export
 
@@ -180,7 +184,7 @@ _Avoid_: Export report (too vague); **Export filter file** (that is the upload i
 ### Container wire vocabulary
 
 **Sheet name**:
-The grouping label for a **Sheet** within a box or bag — shared by one or more **Paper** containers on that sheet. Inbound API and bulk import use `sheetName`; persisted as `sheet.name`. Distinct from the per-paper spot identifier.
+The name of a **Sheet** **Collection** within a box or bag — shared by one or more **Paper** containers on that sheet. Distinct from the per-paper spot identifier (**Paper sublabel**).
 _Avoid_: `label` (ambiguous with spot id); treating sheet name as barcode
 
 **Paper sublabel**:
@@ -188,8 +192,8 @@ Optional per-paper spot identifier within a **Sheet** (e.g. to distinguish multi
 _Avoid_: `barcode` for paper containers; grid **position** on paper (not applicable)
 
 **Container placement vs identity**:
-**Placement** is where a container sits in the hierarchy (`collection` on the wire: plate/box/sheet type, id, name; optional grid `position` for tubes/wells only). **Identity** is the lab identifier at the container variant root: `barcode` (micronix/cryovial), `sublabel` (paper).
-_Avoid_: Stuffing paper spot ids into `collection.barcode`; sending JSON `null` for unset optional wire fields
+**Placement** is where a container sits in the hierarchy — on the wire, expressed as `collection` (plate, box, or sheet type with id and name; optional grid `position` for tubes/wells only). For **Paper** containers, `collection` is the **Sheet**; a box or bag parent applies only when creating or resolving a sheet by name. **Identity** is the lab identifier at the container variant root: `barcode` (micronix/cryovial), `sublabel` (paper).
+_Avoid_: Stuffing paper spot ids into `collection.barcode`; sending JSON `null` for unset optional wire fields; expressing paper placement as a box/bag with a separate sheet-name field
 
 ### System
 

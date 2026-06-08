@@ -62,7 +62,7 @@ Zod parse at **domain module boundaries**. Shared request schemas live in `@samp
 
 - **Bulk combined import requests** — `bulkCombinedRequestSchema` and `bulkCombinedValidateRequestSchema` for `POST /imports/bulk-combined` and `POST /imports/bulk-combined/validate`. The API parses inbound JSON with these schemas; the web imports API and bulk import payload builder use the inferred TypeScript types (`BulkCombinedRequest`, `BulkCombinedValidateRequest`). Types-only on the web — no runtime Zod parse in the browser for bulk import requests; server validation remains the source of truth for business rules.
 - **Bulk combined import responses** — `bulkCombinedValidateResponseSchema`, `bulkCombinedImportResponseSchema`, and related error/summary schemas. Web `importsApi` uses inferred response types (`BulkCombinedValidateResponse`, `BulkCombinedImportResponse`). Types-only on the web for responses; API routes return shapes matching these schemas.
-- **Shared container input** — `containerInputSchema` primitive for single-specimen and bulk combined container fields.
+- **Container write input** — `containerWriteInputSchema`, `bulkCombinedContainerSchema`, and `optionalContainerInputSchema` for unified inbound container placement ([ADR 0006](./0006-unified-container-inbound-write.md)).
 - **Collection delete preflight** — `collectionDeletePreflightSchema` for delete-with-contents preflight summary.
 - Cross-package conformance tests assert web-built validate payloads and representative response fixtures satisfy contract schemas.
 
