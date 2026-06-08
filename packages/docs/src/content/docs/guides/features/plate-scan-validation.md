@@ -72,5 +72,5 @@ A **unique exact** match on the stem is auto-selected even if longer plate names
 
 ## Related workflows
 
-- **Container move (micronix)** uses the same CSV format and scanner configurations to move tubes to a destination plate. If the destination plate does not exist, the move wizard creates it before resolving tubes. Container move does not perform read-only validation like this page.
+- **Container move (micronix)** uses the same CSV format and scanner configurations to move tubes to a destination plate. If the destination plate does not exist, the move wizard creates it before resolving tubes — you can choose any new plate name in the destination picker, not only the name inferred from the file. Container move does not perform read-only validation like this page.
 - **qPCR experiments** use a similar plate CSV upload for plate layout; validate plate scan is independent and does not create or change experiments.

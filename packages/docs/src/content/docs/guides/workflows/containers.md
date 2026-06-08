@@ -41,7 +41,7 @@ Before you can add containers, you need collections to put them in. Creating col
 
 Micronix plates can be created in several places:
 
-- **Move Micronix Tubes** — When your scan CSV targets a plate that does not exist, the wizard includes a **Create Plates** step: enter the plate name (from the filename or CSV), pick a storage location, and optionally add a plate barcode. See [Container Movement](/docs/guides/bulk-operations/container-movement/).
+- **Move Micronix Tubes** — When your scan CSV targets a plate that does not exist, the wizard includes a **Create Plates** step: pick a storage location and optionally add a plate barcode. On the upload step you can name a new destination plate yourself (any unique name) from the destination plate picker, even when the file name already matched an existing plate. See [Container Movement](/docs/guides/bulk-operations/container-movement/).
 - **Bulk import** — Step 2 (**Create Missing Collections**) when a CSV references a plate that is not in the database.
 - **Specimen registration or Add container** — Use **Create new collection** on the plate field when registering a specimen or adding a container (Micronix tube type).
 

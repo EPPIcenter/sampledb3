@@ -53,9 +53,15 @@ Choose a scanner configuration that matches your CSV format. Upload your file(s)
 
 For each file, confirm the **destination plate**:
 
-- If the inferred name matches exactly one existing plate, it is auto-selected.
-- If the name matches no plate, it is treated as a **new plate** (shown as “New plate — assign a storage location in the next step”). You can also click **Create new plate: …** when the filename suggests a name that is not in the database.
+- If the inferred name matches exactly one existing plate, it is auto-selected. You can still choose a **different** destination — open the destination plate picker and select another existing plate, or create a new plate with **any name** (see below).
+- If the name matches no plate, it is treated as a **new plate** (shown as “New plate — assign a storage location in the next step”).
 - If several plates partially match, pick the correct one from the destination plate picker (search by name, barcode, or location).
+
+**Creating a new destination plate (any name)**
+
+Open the **destination plate picker** for a file. At the bottom of the picker, use **Create new plate**: enter the plate name you want and click **Use name**. The name does not have to match the CSV file name — for example, you can upload `PLATE-001.csv` (which auto-selects an existing `PLATE-001`) and still target a brand-new plate named `PLATE-001-RUN2`. If your search text does not match any existing plate, a **Create new plate: …** shortcut appears above the list. Names must be unique; if a plate with that name already exists, select it from the list instead.
+
+When a new name is selected, the picker shows **New plate** and the upload step reminds you that a storage location is assigned on the next step.
 
 Click **Next: Create Destination Plates** when any destination is new, or **Next: Resolve Containers** when all destinations already exist.
 
