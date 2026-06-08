@@ -18,14 +18,14 @@ From the repo root, with your production database (e.g. `sampledb_database.sqlit
 
 1. Go to **Move Micronix Tubes** (Storage → Move Micronix Tubes or command palette).
 2. Select scanner config **Traxcer** (default), which uses columns **Tube ID** and **Position**.
-3. Upload the 3 CSV files. The destination plate for each file is inferred from the filename (exact match to plate name); if not matched, choose the destination from the dropdown.
-4. Click **Resolve** to resolve barcodes, then confirm source/destination and positions.
-5. Click **Execute Moves**. After the run, tubes will have moved in a cycle (e.g. A→B, B→C, C→A).
+3. Upload the CSV files. The destination plate for each file is inferred from the filename; confirm or pick from the list.
+4. Click **Next: Resolve Containers** (destination plates must already exist for these files).
+5. Review resolved tubes on the **Resolve** step, then click **Execute Moves**.
+
+After the run, tubes will have moved in a cycle (e.g. A→B, B→C, C→A).
 
 ## CSV Format
 
 - **Headers:** `Tube ID`, `Position` (Traxcer scanner config).
-- **Rows:** One row per tube — barcode (Tube ID) and target well position (e.g. A01, B12) on the destination plate.
-- **Filename:** Must match the destination plate name so the UI can auto-select the destination.
-
-For more on container movement, see [Container Movement](/guides/bulk-operations/container-movement/) in the SampleDB documentation.
+- **Rows:** All 96 wells (A01–H12), one row each. Barcode in **Tube ID** for occupied wells; empty cell for empty wells.
+- **Filename:** Should match the destination plate name so the UI can auto-select it.

@@ -102,6 +102,27 @@ describe('inferDestinationPlateForScan', () => {
     )
     expect(r.plateInferenceErrors[0].error).toContain('no plate name column')
   })
+
+  it('auto-selects stem as new plate when no existing plates match', () => {
+    const r = inferDestinationPlateForScan('NEW-PLATE.csv', [], baseConfig, plates)
+    expect(r.inferredPlateName).toBe('NEW-PLATE')
+    expect(r.selectedPlateName).toBe('NEW-PLATE')
+    expect(r.plateInferenceErrors).toHaveLength(0)
+  })
+
+  it('column mode: auto-selects unknown plate name for creation', () => {
+    const rows = [
+      { B: '1', P: 'A01', Rack: 'BRAND-NEW' },
+      { B: '2', P: 'A02', Rack: 'BRAND-NEW' },
+    ]
+    const r = inferDestinationPlateForScan(
+      'scan.csv',
+      rows,
+      { ...baseConfig, plateNameSource: 'column', plateNameColumn: 'Rack' },
+      plates,
+    )
+    expect(r.selectedPlateName).toBe('BRAND-NEW')
+  })
 })
 
 describe('plateNameSourceSummary', () => {

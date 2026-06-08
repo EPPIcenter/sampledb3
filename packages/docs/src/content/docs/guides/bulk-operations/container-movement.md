@@ -11,7 +11,7 @@ The movement process is designed to be safe and reversible where possible. The s
 
 SampleDB supports three types of container movement, each designed for different container types and workflows.
 
-**Micronix Container Movement** handles moving micronix tubes between plates. You can identify containers by their barcodes (which is often the most reliable method) or by their positions in the source plate. The system supports uploading multiple CSV files at once, which is useful when you're moving containers from multiple source plates to different destination plates in a single operation.
+**Micronix Container Movement** handles moving micronix tubes between plates using a **plate scan CSV**—the same format produced by your scanner and used for plate scan validation. You upload one or more files; each file describes the **destination** plate layout (barcode and well position per row). Tubes are identified by **barcode**; the system resolves each barcode to its current source plate automatically. If the destination plate does not exist yet, the wizard can **create it** before resolving tubes. Multi-file upload is supported when you are moving tubes from several source plates to different destination plates in one operation.
 
 **Cryovial Container Movement** handles moving cryovial tubes between boxes. Since cryovial tubes might not always have barcodes, this movement type uses positions to identify containers. Like micronix movement, it supports multi-file operations, allowing you to reorganize many containers efficiently.
 
@@ -23,25 +23,62 @@ Moving micronix containers between plates is a common task, especially when you'
 
 ### Preparing Your CSV File
 
-Your CSV file needs to identify the containers you want to move and specify their destinations. You can identify containers in two ways: by barcode or by position. Using barcodes is often more reliable because barcodes are unique identifiers, but using positions works well if you know the exact positions.
+Micronix moves use a **full plate scan** CSV, not a row-per-move spreadsheet with source and destination columns. Each file represents one destination plate after the move.
 
-If you're using barcodes, your CSV needs columns for the source collection name (the plate the container is currently in), the barcode of the container to move, the target collection name (where you want it to go), and the target position in the destination plate. The barcode must match exactly what's in the system, so double-check for typos.
+With the default **Traxcer** scanner configuration, the columns are **Tube ID** (barcode) and **Position** (target well on the destination plate, e.g. A01). Other scanner configurations use different column names; choose the configuration that matches your export in **Settings → Scanner configurations**.
 
-If you're using positions instead of barcodes, your CSV needs the source collection name, the source position (where the container currently is), the target collection name, and the target position. This approach works well when you're moving containers and you know their positions but might not have barcode scanners available.
+**Requirements:**
 
-The target position must be in the correct format for the destination plate. For 96-well plates, use the A01-H12 format with two-digit columns. Make sure the destination position is available or acceptable to overwrite—the system will warn you if you're overwriting an existing container.
+- The CSV must list **all 96 well positions** (A01–H12) exactly once, as produced by scanning software.
+- Each row with a barcode moves that tube to the given position on the destination plate.
+- Leave the barcode cell **empty** for wells that should be empty on the destination.
+- Positions use the **A01** format: a letter (A–H) followed by two zero-padded digits (01–12). `A1` is not valid.
 
-Your CSV must list **all 96 well positions** (A01–H12) exactly once, as produced by scanning software. You can leave the barcode cell empty for wells that should be empty. When using multiple CSVs targeting the same plate, they together form the move. If a well is empty in your upload but currently has a tube, that tube must appear elsewhere in the move (in any CSV targeting that plate) so it is relocated and no tube is lost. If you don't relocate those tubes, the system shows validation errors on the upload step and you must fix the CSV or destination before continuing.
+**Destination plate name** comes from the **file name** (default) or from a **CSV column** that repeats the plate name on every row, depending on your scanner configuration. Name the file after the destination plate (e.g. `PLATE-002.csv`). The system strips `.csv` and common date/time suffixes (e.g. `_2024-01-15`) when inferring the name.
+
+When using multiple CSVs targeting the **same** destination plate, the files together form the move. If a well is empty in your upload but currently has a tube on that destination plate, that tube must appear elsewhere in the move (in any CSV targeting that plate) so it is relocated and no tube is lost.
 
 ### The Movement Process
 
-Navigate to Container Movement → Micronix to start the process. Choose a scanner configuration that matches your CSV format, then upload your CSV file (or multiple files if you're doing a larger reorganization). If you change the scanner configuration after uploading, the system re-validates your files automatically without needing to re-upload. The system will immediately begin validating and resolving containers. This validation checks that all source containers exist, that they're in the specified source plates, that destination positions are valid, and that there are no conflicts.
+Open **Storage → Move Micronix Tubes** (or use the command palette: **Move Micronix Containers**). The wizard has up to four steps:
 
-The system shows you a list of all containers it found and resolved, which lets you verify that it identified the correct containers. You can review this list to make sure everything looks right before proceeding. If the system can't find a container (perhaps because the barcode is wrong or the position doesn't exist), it will show an error for that row.
+1. **Upload & Configure** — Select a scanner configuration, upload one or more CSV files, and confirm the destination plate for each file.
+2. **Create Plates** *(only when needed)* — If a destination plate name does not exist in the database, assign a storage location (and optional plate barcode) for each new plate, then continue.
+3. **Resolve** — The system looks up each barcode, shows source plates, lists any unresolved barcodes, and lets you choose **atomicity mode** before executing.
+4. **Execute** — Moves are committed; you see per-file results and any errors.
 
-If you're using multiple CSV files, you'll need to specify the destination plate for each file. In **Settings → Scanner configurations**, each configuration can set **Destination plate** to **File name** (default) or **CSV column**. With **File name**, the system derives a stem from the file (without path, `.csv`, and common date/time suffixes such as `_2024-01-15`) and matches it against plate names (exact, then partial). With **CSV column**, the same plate name must appear in that column on every data row in the file; if more than one distinct value appears, the upload is rejected. If exactly one plate’s name **equals** the inferred stem (case-insensitive), that plate is auto-selected—even when other plates only *contain* the stem (e.g. stem `PLATE-A` selects `PLATE-A`, not `PLATE-A-BACKUP`). If there is no unique exact match but exactly one partial match exists, that plate is auto-selected. Otherwise choose from the list. Use the destination plate picker to search by plate name, barcode, or location, or browse the location tree. When the inferred name does not match a single plate exactly, **Suggested from scan** lists similar plates (by name match) at the top of the picker; those same suggestions also appear first in search results. The system validates that each source plate maps to only one destination across all files, which prevents conflicts where the same source plate would need to go to multiple destinations.
+**Upload & Configure**
 
-Once everything is validated and you've confirmed the destinations, click "Execute Moves" to perform all the movements. The system processes all moves together, updating container positions and collection associations. When complete, you'll see a summary showing how many containers were successfully moved and any errors that occurred.
+Choose a scanner configuration that matches your CSV format. Upload your file(s). If you change the configuration after uploading, the system re-validates automatically.
+
+For each file, confirm the **destination plate**:
+
+- If the inferred name matches exactly one existing plate, it is auto-selected.
+- If the name matches no plate, it is treated as a **new plate** (shown as “New plate — assign a storage location in the next step”). You can also click **Create new plate: …** when the filename suggests a name that is not in the database.
+- If several plates partially match, pick the correct one from the destination plate picker (search by name, barcode, or location).
+
+Click **Next: Create Destination Plates** when any destination is new, or **Next: Resolve Containers** when all destinations already exist.
+
+**Create Plates**
+
+For each new destination plate, pick a **location** (required) and optionally enter a **plate barcode**. Click **Create Plates & Continue**. Plates are created in the database before tube resolution runs.
+
+If you return to this step after plates were already created, use **Continue to Resolve** instead of creating duplicates.
+
+**Resolve**
+
+Review resolved tubes, source plates detected, and any **unresolved** barcodes (not found in the database). Fix typos in your CSV on the Upload step if needed.
+
+Choose **atomicity mode**:
+
+- **All-or-nothing (default):** any invalid row blocks all moves.
+- **Best effort:** valid rows are moved; invalid rows are returned as errors.
+
+Click **Execute Moves** when ready. Use **Back** to return to Upload (or Create Plates if destinations still need to be created).
+
+**Multiple files**
+
+When using several CSV files, each file targets its own destination plate. In **Settings → Scanner configurations**, **Destination plate** can be **File name** (default) or **CSV column**. With **File name**, the system derives a stem from the file (without path, `.csv`, and common date suffixes) and matches it against plate names (exact, then partial). With **CSV column**, the same plate name must appear in that column on every data row; if more than one distinct value appears, the upload is rejected. If exactly one plate’s name **equals** the inferred stem (case-insensitive), that plate is auto-selected—even when other plates only *contain* the stem (e.g. stem `PLATE-A` selects `PLATE-A`, not `PLATE-A-BACKUP`). If there is no unique exact match but exactly one partial match exists, that plate is auto-selected. Otherwise choose from the list. The system validates that each source plate maps to only one destination across all files, which prevents conflicts where the same source plate would need to go to multiple destinations.
 
 ## Moving Cryovial Containers
 
@@ -79,7 +116,7 @@ After the move completes, you'll see how many sheets were moved successfully. If
 
 Before executing any moves, the system performs comprehensive validation to prevent problems. For container resolution, it verifies that all containers exist in the system, checks that they're actually in the specified source collections, validates that barcodes or positions are correct, and confirms that containers haven't been deleted or already moved.
 
-Destination validation checks that destination collections exist, verifies that target positions are in the correct format, and warns if target positions are already occupied. The system may allow overwriting in some cases, but it will warn you so you can make an informed decision.
+Destination validation checks that destination collections exist (or will be created on the Create Plates step), verifies that target positions are in the correct format, and ensures tubes on the destination plate are not lost when a well is scanned empty. Relocation validation runs before the Resolve step: if a well is empty in your upload but currently occupied on the destination plate, that tube must appear at another position in the same move batch.
 
 Conflict detection is especially important in multi-file operations. The system checks that the same source container doesn't appear multiple times with different destinations, and it verifies that source collections map consistently to destinations across all files. If the same source plate appears in multiple files but needs to go to different destination plates, the operation will fail with a clear error message explaining the conflict.
 
@@ -106,7 +143,7 @@ It's important to note that undo is only available right after the move—once y
 
 Effective container movement starts with planning. Before creating your CSV files, map out which containers need to move and where they should go. This planning helps you organize your CSV files logically and catch potential conflicts before you start the process.
 
-When preparing CSV files, use the provided templates if available to ensure your format is correct. Validate position formats carefully—for micronix and static wells, use the "A01" format with two digits. For cryovial tubes, match your box layout. Check for typos in barcodes, collection names, and positions, as these are common sources of errors.
+When preparing CSV files, export a full plate scan from your scanner (or match the column layout in **Settings → Scanner configurations**). Validate position formats carefully—for micronix and static wells, use the "A01" format with two digits. For cryovial tubes, match your box layout. Check for typos in barcodes, collection names, and positions, as these are common sources of errors.
 
 For multi-file operations, organize your moves logically. Group moves by destination when possible, as this makes it easier to verify that everything is going to the right place. Be aware that each source collection can only map to one destination across all files, so plan accordingly.
 
@@ -114,11 +151,11 @@ After moving, always verify the results. Check that containers are in the correc
 
 ## Troubleshooting Movement Issues
 
-If the system can't find a container, verify that the barcode or position is correct. Check that the container is actually in the specified source collection, and ensure the container hasn't been deleted or already moved. Typos in barcodes or collection names are common causes of "container not found" errors.
+If the system can't find a container during micronix move **Resolve**, verify barcodes in the CSV match the database exactly. Unresolved tubes are listed on the Resolve step; go **Back** to Upload, fix the CSV, and run **Next: Resolve Containers** again. You do not need to recreate destination plates that already exist.
 
-Invalid position format errors usually mean the position doesn't match the required format. For micronix and static wells, ensure you're using the "A01" format with two-digit columns. For cryovial tubes, verify that positions match your box layout. Check for spaces, typos, or incorrect formats.
+If you see relocation errors on Upload (tube at an empty well “not relocated”), ensure every tube currently on the destination plate either stays in place (barcode in that well) or appears at another well in the same move batch.
 
-If a destination position is already occupied, you have a few options. You can choose a different target position, or if the system allows it, you might be able to overwrite the existing container. Check the warnings the system provides to understand your options.
+If a destination position is already occupied by a different tube, the move may fail at execution depending on atomicity mode. Adjust positions in your scan CSV or resolve conflicts before executing.
 
 Source collection conflicts occur in multi-file operations when the same source collection appears in multiple files with different destinations. The system requires that each source collection maps to only one destination, so you'll need to reorganize your CSV files to resolve the conflict. You might need to split moves into separate operations or consolidate files that target the same destination.
 

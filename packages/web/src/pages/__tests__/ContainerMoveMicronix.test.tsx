@@ -68,6 +68,22 @@ vi.mock('../../lib/api/settings', async () => {
   return createMockedDomainModule('settings', micronixMovePageMock())
 })
 
+vi.mock('../../components/LocationPicker', () => ({
+  default: ({
+    value,
+    onChange,
+    disabled,
+  }: {
+    value: number | null
+    onChange: (id: number | null) => void
+    disabled?: boolean
+  }) => (
+    <button type="button" disabled={disabled} onClick={() => onChange(99)}>
+      {value == null ? 'Select location' : `Location ${value}`}
+    </button>
+  ),
+}))
+
 /** Build a full 96-well CSV (container_barcode,target_position). Overrides: position -> barcode (empty = empty well). */
 function fullPlateCSV(overrides: Record<string, string> = {}): string {
     const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].flatMap((row) =>
@@ -195,7 +211,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('test.csv')).toBeInTheDocument()
         })
         
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(screen.getByText(/CSV file is empty/)).toBeInTheDocument()
@@ -219,7 +235,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('plate.csv')).toBeInTheDocument()
         })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(screen.getByText(/CSV must list all 96 well positions/i)).toBeInTheDocument()
@@ -249,7 +265,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('plate.csv')).toBeInTheDocument()
         })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(screen.getByText(/CSV must list all 96 well positions/i)).toBeInTheDocument()
@@ -279,7 +295,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('plate.csv')).toBeInTheDocument()
         })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(screen.getByText(/CSV must list all 96 well positions/i)).toBeInTheDocument()
@@ -325,11 +341,11 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('PLATE1.csv')).toBeInTheDocument()
         })
         await waitFor(() => {
-            const nextButton = screen.getByText('Next: Resolve Containers')
+            const nextButton = screen.getByRole('button', { name: /^Next:/ })
             expect(nextButton).not.toBeDisabled()
         }, { timeout: 3000 })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(screen.queryByText(/CSV must list all 96 well positions/i)).not.toBeInTheDocument()
@@ -357,7 +373,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('micronix.csv')).toBeInTheDocument()
         })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(screen.getByText(/Position column .* is required/i)).toBeInTheDocument()
@@ -569,10 +585,10 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         })
         await waitFor(() => expect(screen.getByText('PLATE1.csv')).toBeInTheDocument(), { timeout: 3000 })
         await waitFor(() => {
-            expect(screen.getByText('Next: Resolve Containers')).not.toBeDisabled()
+            expect(screen.getByRole('button', { name: /^Next:/ })).not.toBeDisabled()
         }, { timeout: 3000 })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
         await waitFor(() => expect(screen.getByText('Resolved Micronix Tubes')).toBeInTheDocument(), { timeout: 3000 })
 
         fireEvent.click(screen.getByRole('button', { name: /back/i }))
@@ -640,11 +656,11 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('PLATE1.csv')).toBeInTheDocument()
         })
         await waitFor(() => {
-            const nextButton = screen.getByText('Next: Resolve Containers')
+            const nextButton = screen.getByRole('button', { name: /^Next:/ })
             expect(nextButton).not.toBeDisabled()
         }, { timeout: 3000 })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(collectionsApi.resolveContainers).toHaveBeenCalledWith({
@@ -697,10 +713,10 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         fireEvent.click(screen.getByRole('option', { name: /PLATE1/ }))
 
         await waitFor(() => {
-            expect(screen.getByText('Next: Resolve Containers')).not.toBeDisabled()
+            expect(screen.getByRole('button', { name: /^Next:/ })).not.toBeDisabled()
         }, { timeout: 3000 })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(screen.getByText(/Position A01 on plate "PLATE1" is empty.*not relocated/i)).toBeInTheDocument()
@@ -756,11 +772,11 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('PLATE1.csv')).toBeInTheDocument()
         })
         await waitFor(() => {
-            const nextButton = screen.getByText('Next: Resolve Containers')
+            const nextButton = screen.getByRole('button', { name: /^Next:/ })
             expect(nextButton).not.toBeDisabled()
         }, { timeout: 3000 })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(screen.getByText(/Position A01 on plate "PLATE1" is empty.*tube TUBE_AT_A01.*not relocated/i)).toBeInTheDocument()
@@ -805,17 +821,17 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('PLATE1.csv')).toBeInTheDocument()
         })
         await waitFor(() => {
-            const nextButton = screen.getByText('Next: Resolve Containers')
+            const nextButton = screen.getByRole('button', { name: /^Next:/ })
             expect(nextButton).not.toBeDisabled()
         }, { timeout: 3000 })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(screen.getByText(/Position A01 on plate "PLATE1" is empty.*tube TUBE_AT_A01.*not relocated/i)).toBeInTheDocument()
         }, { timeout: 5000 })
-        expect(screen.getByText('Next: Resolve Containers')).toBeInTheDocument()
-        expect(screen.getByText('Next: Resolve Containers')).toBeDisabled()
+        expect(screen.getByRole('button', { name: /^Next:/ })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^Next:/ })).toBeDisabled()
     })
 
     it('relocation validation: no error when tube at empty position is relocated in same file', async () => {
@@ -869,11 +885,11 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('PLATE1.csv')).toBeInTheDocument()
         })
         await waitFor(() => {
-            const nextButton = screen.getByText('Next: Resolve Containers')
+            const nextButton = screen.getByRole('button', { name: /^Next:/ })
             expect(nextButton).not.toBeDisabled()
         }, { timeout: 3000 })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(mockSetSearchParams).toHaveBeenCalled()
@@ -932,11 +948,11 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getAllByText('PLATE1.csv').length).toBeGreaterThanOrEqual(1)
         }, { timeout: 3000 })
         await waitFor(() => {
-            const nextButton = screen.getByText('Next: Resolve Containers')
+            const nextButton = screen.getByRole('button', { name: /^Next:/ })
             expect(nextButton).not.toBeDisabled()
         }, { timeout: 3000 })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(mockSetSearchParams).toHaveBeenCalled()
@@ -986,11 +1002,11 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('PLATE1.csv')).toBeInTheDocument()
         })
         await waitFor(() => {
-            const nextButton = screen.getByText('Next: Resolve Containers')
+            const nextButton = screen.getByRole('button', { name: /^Next:/ })
             expect(nextButton).not.toBeDisabled()
         }, { timeout: 3000 })
 
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(screen.getByRole('button', { name: /execute moves/i })).toBeInTheDocument()
@@ -1065,12 +1081,12 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         
         // Wait for plate to be auto-selected
         await waitFor(() => {
-            const nextButton = screen.getByText('Next: Resolve Containers')
+            const nextButton = screen.getByRole('button', { name: /^Next:/ })
             expect(nextButton).toBeInTheDocument()
             expect(nextButton).not.toBeDisabled()
         }, { timeout: 3000 })
         
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(collectionsApi.resolveContainers).toHaveBeenCalledWith({
@@ -1116,7 +1132,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('PLATE1_2024-01-15.csv')).toBeInTheDocument()
         })
         await waitFor(() => {
-            const nextButton = screen.getByText('Next: Resolve Containers')
+            const nextButton = screen.getByRole('button', { name: /^Next:/ })
             expect(nextButton).toBeInTheDocument()
             expect(nextButton).not.toBeDisabled()
         }, { timeout: 3000 })
@@ -1151,7 +1167,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('MyPlate.csv')).toBeInTheDocument()
         })
         await waitFor(() => {
-            const nextButton = screen.getByText('Next: Resolve Containers')
+            const nextButton = screen.getByRole('button', { name: /^Next:/ })
             expect(nextButton).toBeInTheDocument()
             expect(nextButton).not.toBeDisabled()
         }, { timeout: 3000 })
@@ -1208,11 +1224,11 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         
         // Wait a bit more for plate selection to complete
         await waitFor(() => {
-            const nextButton = screen.getByText('Next: Resolve Containers')
+            const nextButton = screen.getByRole('button', { name: /^Next:/ })
             expect(nextButton).toBeInTheDocument()
         }, { timeout: 3000 })
         
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(screen.getByText(/Some containers are not from micronix plates/i)).toBeInTheDocument()
@@ -1256,9 +1272,9 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
         })
         await waitFor(() => expect(screen.getByText('PLATE1.csv')).toBeInTheDocument(), { timeout: 3000 })
         await waitFor(() => {
-            expect(screen.getByText('Next: Resolve Containers')).not.toBeDisabled()
+            expect(screen.getByRole('button', { name: /^Next:/ })).not.toBeDisabled()
         }, { timeout: 3000 })
-        fireEvent.click(screen.getByText('Next: Resolve Containers'))
+        fireEvent.click(screen.getByRole('button', { name: /^Next:/ }))
 
         await waitFor(() => {
             expect(screen.getByText('Resolved Micronix Tubes')).toBeInTheDocument()
@@ -1280,5 +1296,191 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
                 })
             )
         })
+    })
+
+    it('routes to create plates step when destination plate does not exist', async () => {
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({ collections: [] } as any)
+
+        const csvContent = fullPlateCSV({ A01: 'MTX123' })
+        const file = new File([csvContent], 'NEW-PLATE.csv', { type: 'text/csv' })
+
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input.disabled).toBe(false)
+        })
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: { files: [file] },
+        })
+
+        await waitFor(() => {
+            expect(screen.getByText('NEW-PLATE.csv')).toBeInTheDocument()
+            expect(screen.getByText(/New plate "NEW-PLATE"/i)).toBeInTheDocument()
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: /Next: Create Destination Plates/i }))
+
+        await waitFor(() => {
+            expect(screen.getByRole('heading', { name: 'Create Destination Plates' })).toBeInTheDocument()
+            expect(screen.getByText('NEW-PLATE')).toBeInTheDocument()
+        })
+        expect(collectionsApi.resolveContainers).not.toHaveBeenCalled()
+    })
+
+    it('creates destination plate and continues to resolve', async () => {
+        vi.mocked(collectionsApi.listCollectionsByType)
+            .mockResolvedValueOnce({ collections: [] } as any)
+            .mockResolvedValue({ collections: [{ id: 42, name: 'NEW-PLATE', barcode: null, locationId: 99, itemCount: 0 }] } as any)
+        vi.mocked(collectionsApi.createMicronixPlate).mockResolvedValue({
+            plate: { id: 42, name: 'NEW-PLATE', locationId: 99 },
+        } as any)
+        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({
+            containers: [
+                {
+                    identifier: { barcode: 'MTX123' },
+                    container: {
+                        containerId: 3,
+                        currentCollectionId: 300,
+                        currentCollectionName: 'SourcePlate',
+                        currentCollectionType: 'micronix_plate',
+                        currentPosition: 'B02',
+                        barcode: 'MTX123',
+                    },
+                },
+            ],
+        } as any)
+        vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
+            plate: { id: 42, name: 'NEW-PLATE' },
+            wells: {},
+        } as any)
+
+        const csvContent = fullPlateCSV({ A01: 'MTX123' })
+        const file = new File([csvContent], 'NEW-PLATE.csv', { type: 'text/csv' })
+
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input.disabled).toBe(false)
+        })
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: { files: [file] },
+        })
+
+        await waitFor(() => {
+            expect(screen.getByText('NEW-PLATE.csv')).toBeInTheDocument()
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: /Next: Create Destination Plates/i }))
+
+        await waitFor(() => {
+            expect(screen.getByRole('heading', { name: 'Create Destination Plates' })).toBeInTheDocument()
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: /Select location/i }))
+        fireEvent.click(screen.getByRole('button', { name: /Create Plates & Continue/i }))
+
+        await waitFor(() => {
+            expect(collectionsApi.createMicronixPlate).toHaveBeenCalledWith({
+                name: 'NEW-PLATE',
+                locationId: 99,
+                barcode: undefined,
+            })
+            expect(screen.getByText('Resolved Micronix Tubes')).toBeInTheDocument()
+        })
+    })
+
+    it('back from resolve goes to upload when destination plates already exist', async () => {
+        vi.mocked(collectionsApi.listCollectionsByType)
+            .mockResolvedValueOnce({ collections: [] } as any)
+            .mockResolvedValue({ collections: [{ id: 42, name: 'NEW-PLATE', barcode: null, locationId: 99, itemCount: 0 }] } as any)
+        vi.mocked(collectionsApi.createMicronixPlate).mockResolvedValue({
+            plate: { id: 42, name: 'NEW-PLATE', locationId: 99 },
+        } as any)
+        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({ containers: [] } as any)
+        vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
+            plate: { id: 42, name: 'NEW-PLATE' },
+            wells: {},
+        } as any)
+
+        const csvContent = fullPlateCSV({ A01: 'UNKNOWN-TUBE' })
+        const file = new File([csvContent], 'NEW-PLATE.csv', { type: 'text/csv' })
+
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input.disabled).toBe(false)
+        })
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: { files: [file] },
+        })
+
+        await waitFor(() => expect(screen.getByText('NEW-PLATE.csv')).toBeInTheDocument())
+
+        fireEvent.click(screen.getByRole('button', { name: /Next: Create Destination Plates/i }))
+        await waitFor(() => {
+            expect(screen.getByRole('heading', { name: 'Create Destination Plates' })).toBeInTheDocument()
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: /Select location/i }))
+        fireEvent.click(screen.getByRole('button', { name: /Create Plates & Continue/i }))
+
+        await waitFor(() => {
+            expect(screen.getByText('Resolved Micronix Tubes')).toBeInTheDocument()
+        })
+        expect(screen.getAllByText(/Unresolved/i).length).toBeGreaterThan(0)
+
+        fireEvent.click(screen.getByRole('button', { name: /^Back$/i }))
+
+        await waitFor(() => {
+            expect(screen.getByText('Upload CSV Files')).toBeInTheDocument()
+        })
+        expect(screen.queryByRole('heading', { name: 'Create Destination Plates' })).not.toBeInTheDocument()
+    })
+
+    it('after backing from resolve, upload step skips create and re-resolves', async () => {
+        vi.mocked(collectionsApi.listCollectionsByType)
+            .mockResolvedValueOnce({ collections: [] } as any)
+            .mockResolvedValue({ collections: [{ id: 42, name: 'NEW-PLATE', barcode: null, locationId: 99, itemCount: 0 }] } as any)
+        vi.mocked(collectionsApi.createMicronixPlate).mockResolvedValue({
+            plate: { id: 42, name: 'NEW-PLATE', locationId: 99 },
+        } as any)
+        vi.mocked(collectionsApi.resolveContainers).mockResolvedValue({ containers: [] } as any)
+        vi.mocked(collectionsApi.getMicronixPlate).mockResolvedValue({
+            plate: { id: 42, name: 'NEW-PLATE' },
+            wells: {},
+        } as any)
+
+        const csvContent = fullPlateCSV({ A01: 'UNKNOWN-TUBE' })
+        const file = new File([csvContent], 'NEW-PLATE.csv', { type: 'text/csv' })
+
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input.disabled).toBe(false)
+        })
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: { files: [file] },
+        })
+        await waitFor(() => expect(screen.getByText('NEW-PLATE.csv')).toBeInTheDocument())
+
+        fireEvent.click(screen.getByRole('button', { name: /Next: Create Destination Plates/i }))
+        fireEvent.click(screen.getByRole('button', { name: /Select location/i }))
+        fireEvent.click(screen.getByRole('button', { name: /Create Plates & Continue/i }))
+
+        await waitFor(() => expect(screen.getByText('Resolved Micronix Tubes')).toBeInTheDocument())
+
+        fireEvent.click(screen.getByRole('button', { name: /^Back$/i }))
+        await waitFor(() => expect(screen.getByText('Upload CSV Files')).toBeInTheDocument())
+
+        fireEvent.click(screen.getByRole('button', { name: /Next: Resolve Containers/i }))
+
+        await waitFor(() => {
+            expect(screen.getByText('Resolved Micronix Tubes')).toBeInTheDocument()
+        })
+        expect(collectionsApi.createMicronixPlate).toHaveBeenCalledTimes(1)
     })
 })

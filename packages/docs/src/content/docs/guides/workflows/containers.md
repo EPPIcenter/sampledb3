@@ -39,9 +39,15 @@ Before you can add containers, you need collections to put them in. Creating col
 
 ### Creating a Micronix Plate
 
-To create a micronix plate, navigate to the Locations page or wherever collection creation is available in your interface. Select "Micronix Plate" as the collection type, and you'll see a form asking for a few pieces of information. The name is required and serves as the plate identifier—something like "PLATE-001" or "NAM15-PLATE-01" if you want to include study identifiers. You'll need to select a location where the plate is stored, which helps you find it later. If your plate has a barcode, you can optionally enter it here, which makes it easier to scan and track the plate.
+Micronix plates can be created in several places:
 
-Once you've filled in the required information, click "Create" and the plate will be ready to receive containers. You can start adding micronix tubes to it immediately, or come back later to populate it.
+- **Move Micronix Tubes** — When your scan CSV targets a plate that does not exist, the wizard includes a **Create Plates** step: enter the plate name (from the filename or CSV), pick a storage location, and optionally add a plate barcode. See [Container Movement](/docs/guides/bulk-operations/container-movement/).
+- **Bulk import** — Step 2 (**Create Missing Collections**) when a CSV references a plate that is not in the database.
+- **Specimen registration or Add container** — Use **Create new collection** on the plate field when registering a specimen or adding a container (Micronix tube type).
+
+In each case you provide a **name** (e.g. `PLATE-001` or `NAM15-PLATE-01`), a **location** where the plate is stored, and optionally a **barcode** for scanning the physical plate.
+
+Once created, the plate is ready to receive tubes via import, registration, or a micronix move.
 
 ### Creating a Cryovial Box
 

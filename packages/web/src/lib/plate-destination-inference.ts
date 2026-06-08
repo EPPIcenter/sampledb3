@@ -109,6 +109,10 @@ export function inferDestinationPlateForScan(
     selectedPlateName = candidates[0].name
   } else if (candidates.length > 1 || stem) {
     inferredPlateName = stem || null
+    // No existing plate matches — treat stem as a new destination plate name.
+    if (candidates.length === 0 && stem) {
+      selectedPlateName = stem
+    }
   }
 
   return {

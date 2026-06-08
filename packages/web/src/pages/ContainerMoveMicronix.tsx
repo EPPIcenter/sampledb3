@@ -1,14 +1,22 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link, useNavigate, Navigate } from 'react-router-dom'
 import { useContainerMoveStep, type ContainerMoveAtomicMode } from '../hooks/useContainerMoveStep'
-import { useMicronixMoveBootstrap } from '../hooks/useMoveWorkflow'
+import { useMicronixMoveBootstrap, moveWorkflowKeys } from '../hooks/useMoveWorkflow'
 import { collectionsApi } from '../lib/api/collections';
 import type { PlateCandidate } from '../lib/plate-filename-match'
 import { inferDestinationPlateForScan } from '../lib/plate-destination-inference'
 import { parseScannerPlateCsv, validateScannerPlateCsv } from '../lib/scanner-plate-csv'
 import MicronixPlatePicker, { type MicronixPlate } from '../components/MicronixPlatePicker'
+import LocationPicker from '../components/LocationPicker'
+import {
+  buildPendingDestinationPlates,
+  getMissingDestinationPlateNames,
+  isExistingPlateName,
+  type PendingDestinationPlate,
+} from '../lib/micronix-move-destination-plates'
 import { useUser } from '../contexts/UserContext'
 import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
+import { useQueryClient } from '@tanstack/react-query'
 import '../styles/storage.css'
 
 interface CSVRow {
@@ -57,6 +65,7 @@ interface FileData {
 export default function ContainerMoveMicronix() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
+  const queryClient = useQueryClient()
   const [files, setFiles] = useState<FileData[]>([])
   const { currentStep: effectiveStep, setStep: setSearchStep } = useContainerMoveStep(files.length)
 
@@ -66,6 +75,18 @@ export default function ContainerMoveMicronix() {
   const availablePlates = (bootstrapQuery.data?.plates ?? []) as MicronixPlate[]
   const locations = bootstrapQuery.data?.locations ?? []
   const scannerConfigurations = bootstrapQuery.data?.scannerConfigurations ?? []
+  const missingDestinationPlateNames = useMemo(
+    () => getMissingDestinationPlateNames(files.map((f) => f.selectedPlateName), availablePlates),
+    [files, availablePlates],
+  )
+  const [pendingDestinationPlates, setPendingDestinationPlates] = useState<PendingDestinationPlate[]>([])
+  const destinationPlatesAlreadyCreated = useMemo(
+    () =>
+      pendingDestinationPlates.length > 0 &&
+      pendingDestinationPlates.every((p) => p.status === 'success'),
+    [pendingDestinationPlates],
+  )
+  const [createPlatesStepUsed, setCreatePlatesStepUsed] = useState(false)
   const [moveResult, setMoveResult] = useState<{
     success: boolean
     moved: number
@@ -218,19 +239,199 @@ export default function ContainerMoveMicronix() {
     }
   }
 
+  const resolveContainers = async (plates: MicronixPlate[]) => {
+    // Resolve containers for all files (only rows with barcode; empty barcode = empty well)
+    const allIdentifiers: Array<{ type: 'barcode'; barcode: string; fileIndex: number; rowIndex: number }> = []
+
+    files.forEach((fileData, fileIndex) => {
+      fileData.csvRows.forEach((row, rowIndex) => {
+        const barcode = row.container_barcode.trim()
+        if (barcode !== '') {
+          allIdentifiers.push({
+            type: 'barcode',
+            barcode,
+            fileIndex,
+            rowIndex,
+          })
+        }
+      })
+    })
+
+    const resolveResponse = await collectionsApi.resolveContainers({
+      identifiers: allIdentifiers.map(({ type, barcode }) => ({ type, barcode })),
+    })
+
+    const resolved = resolveResponse.containers
+
+    const resolvedBarcodes = new Set<string>()
+    resolved.forEach((r: any) => {
+      if (r.container) {
+        const barcode = typeof r.identifier === 'string'
+          ? r.identifier
+          : r.identifier?.barcode
+        if (barcode) {
+          resolvedBarcodes.add(barcode)
+        }
+      }
+    })
+
+    const resolvedByFile = new Map<number, ResolvedContainer[]>()
+    resolved.forEach((r: any) => {
+      if (!r.container) return
+
+      const barcode = typeof r.identifier === 'string'
+        ? r.identifier
+        : r.identifier?.barcode
+      if (!barcode) return
+
+      const identifier = allIdentifiers.find(id => id.barcode === barcode)
+      if (identifier) {
+        if (!resolvedByFile.has(identifier.fileIndex)) {
+          resolvedByFile.set(identifier.fileIndex, [])
+        }
+        resolvedByFile.get(identifier.fileIndex)!.push({
+          barcode: barcode,
+          container: r.container,
+        })
+      }
+    })
+
+    const unresolvedByFile = new Map<number, UnresolvedContainer[]>()
+    allIdentifiers.forEach((id) => {
+      if (!resolvedBarcodes.has(id.barcode)) {
+        if (!unresolvedByFile.has(id.fileIndex)) {
+          unresolvedByFile.set(id.fileIndex, [])
+        }
+        const csvRow = files[id.fileIndex].csvRows[id.rowIndex]
+        unresolvedByFile.get(id.fileIndex)!.push({
+          barcode: id.barcode,
+          rowIndex: id.rowIndex + 1,
+          targetPosition: csvRow.target_position || '',
+        })
+      }
+    })
+
+    const invalidContainers = resolved.filter((r: any) =>
+      r.container != null && r.container.currentCollectionType !== 'micronix_plate'
+    )
+
+    if (invalidContainers.length > 0) {
+      setFiles(prev => prev.map((f, i) => {
+        const fileInvalid = resolvedByFile.get(i)?.some(rc =>
+          invalidContainers.some((ic: any) => ic.container.containerId === rc.container.containerId)
+        )
+        if (fileInvalid) {
+          return {
+            ...f,
+            validationErrors: [
+              ...f.validationErrors,
+              { row: 0, error: 'Some containers are not from micronix plates' },
+            ],
+          }
+        }
+        return f
+      }))
+      return false
+    }
+
+    const relocationErrorsByFile = new Map<number, ValidationError[]>()
+    const uniqueDestinationNames = [...new Set(files.map(f => f.selectedPlateName).filter(Boolean))] as string[]
+
+    for (const plateName of uniqueDestinationNames) {
+      const plateId = plates.find(p => p.name === plateName)?.id
+      if (plateId == null) {
+        const fileIndicesTargetingPlate = files
+          .map((f, i) => (f.selectedPlateName === plateName ? i : -1))
+          .filter((i) => i >= 0)
+        const err: ValidationError = {
+          row: 0,
+          error: `Destination plate "${plateName}" could not be found. Create it or select an existing plate.`,
+        }
+        fileIndicesTargetingPlate.forEach((fileIndex) => {
+          if (!relocationErrorsByFile.has(fileIndex)) relocationErrorsByFile.set(fileIndex, [])
+          relocationErrorsByFile.get(fileIndex)!.push(err)
+        })
+        continue
+      }
+
+      const plateResponse = await collectionsApi.getMicronixPlate(plateId)
+      const wells: Record<string, { type: string; barcode?: string | null }> = plateResponse.wells
+
+      const rowsForPlate: { fileIndex: number; row: CSVRow }[] = []
+      files.forEach((fileData, fileIndex) => {
+        if (fileData.selectedPlateName !== plateName) return
+        fileData.csvRows.forEach(row => rowsForPlate.push({ fileIndex, row }))
+      })
+
+      const positionToBarcode = new Map<string, string>()
+      const positionToEmptyFileIndex = new Map<string, number>()
+      for (const { fileIndex, row } of rowsForPlate) {
+        const pos = row.target_position.trim()
+        const barcode = row.container_barcode.trim()
+        if (pos === '') continue
+        if (barcode !== '') {
+          positionToBarcode.set(pos, barcode)
+        } else {
+          if (!positionToEmptyFileIndex.has(pos)) positionToEmptyFileIndex.set(pos, fileIndex)
+        }
+      }
+      const barcodesRelocatedInMove = new Set(positionToBarcode.values())
+      const emptyPositions = [...positionToEmptyFileIndex.keys()].filter(P => !positionToBarcode.has(P))
+
+      for (const P of emptyPositions) {
+        const well = wells[P]
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- well can be undefined when position not in plate data (e.g. empty wells mock in tests)
+        if (well?.type === 'micronix_tube' && well.barcode) {
+          const B = well.barcode
+          if (!barcodesRelocatedInMove.has(B)) {
+            const fileIndex = positionToEmptyFileIndex.get(P) ?? 0
+            const err: ValidationError = {
+              row: 0,
+              error: `Position ${P} on plate "${plateName}" is empty in your upload but tube ${B} is currently there and is not relocated in this move.`,
+            }
+            if (!relocationErrorsByFile.has(fileIndex)) relocationErrorsByFile.set(fileIndex, [])
+            relocationErrorsByFile.get(fileIndex)!.push(err)
+          }
+        }
+      }
+    }
+
+    setFiles(prev => prev.map((f, i) => {
+      const base = {
+        ...f,
+        resolvedContainers: resolvedByFile.get(i) ?? [],
+        unresolvedContainers: unresolvedByFile.get(i) ?? [],
+        isResolved: true,
+      }
+      const relocationErrors = relocationErrorsByFile.get(i) ?? []
+      if (relocationErrors.length === 0) return base
+      const existingWithoutRelocation = f.validationErrors.filter(
+        e => !e.error.includes('not relocated')
+      )
+      return {
+        ...base,
+        validationErrors: [...existingWithoutRelocation, ...relocationErrors],
+      }
+    }))
+
+    const hasRelocationErrors = [...relocationErrorsByFile.values()].some((arr) => arr.length > 0)
+    if (!hasRelocationErrors) {
+      setCurrentStep('resolve')
+    }
+    return !hasRelocationErrors
+  }
+
   const handleValidateAndResolve = async () => {
-    // Validate all files have destination plates
     const filesWithoutPlates = files.filter(f => !f.selectedPlateName)
     if (filesWithoutPlates.length > 0) {
-      // Update validation errors for files without plates
       setFiles(prev => prev.map(f => {
         if (!f.selectedPlateName) {
           return {
             ...f,
             validationErrors: [
               ...f.validationErrors,
-              { row: 0, error: 'Destination plate must be selected for this file' }
-            ]
+              { row: 0, error: 'Destination plate must be selected for this file' },
+            ],
           }
         }
         return f
@@ -238,217 +439,114 @@ export default function ContainerMoveMicronix() {
       return
     }
 
-    // Validate CSV format for all files
     const filesWithErrors = files.filter(f => f.validationErrors.length > 0)
     if (filesWithErrors.length > 0) {
       setCurrentStep('upload')
       return
     }
 
+    const missingPlates = getMissingDestinationPlateNames(
+      files.map((f) => f.selectedPlateName),
+      availablePlates,
+    )
+    if (missingPlates.length > 0) {
+      setPendingDestinationPlates(buildPendingDestinationPlates(missingPlates))
+      setCreatePlatesStepUsed(true)
+      setCurrentStep('create_plates')
+      return
+    }
+
     setLoading(true)
-
     try {
-      // Resolve containers for all files (only rows with barcode; empty barcode = empty well)
-      const allIdentifiers: Array<{ type: 'barcode'; barcode: string; fileIndex: number; rowIndex: number }> = []
-
-      files.forEach((fileData, fileIndex) => {
-        fileData.csvRows.forEach((row, rowIndex) => {
-          const barcode = row.container_barcode.trim()
-          if (barcode !== '') {
-            allIdentifiers.push({
-              type: 'barcode',
-              barcode,
-              fileIndex,
-              rowIndex,
-            })
-          }
-        })
-      })
-
-      const resolveResponse = await collectionsApi.resolveContainers({ 
-        identifiers: allIdentifiers.map(({ type, barcode }) => ({ type, barcode }))
-      })
-
-      const resolved = resolveResponse.containers
-      
-      // Create a set of resolved barcodes for quick lookup
-      // The API returns { identifier, container } where identifier can be the object or the barcode string
-      const resolvedBarcodes = new Set<string>()
-      resolved.forEach((r: any) => {
-        if (r.container) {
-          const barcode = typeof r.identifier === 'string' 
-            ? r.identifier 
-            : r.identifier?.barcode
-          if (barcode) {
-            resolvedBarcodes.add(barcode)
-          }
-        }
-      })
-      
-      // Group resolved containers by file
-      const resolvedByFile = new Map<number, ResolvedContainer[]>()
-      resolved.forEach((r: any) => {
-        if (!r.container) return
-        
-        const barcode = typeof r.identifier === 'string' 
-          ? r.identifier 
-          : r.identifier?.barcode
-        if (!barcode) return
-        
-        // Find the identifier in allIdentifiers to get fileIndex
-        const identifier = allIdentifiers.find(id => id.barcode === barcode)
-        if (identifier) {
-          if (!resolvedByFile.has(identifier.fileIndex)) {
-            resolvedByFile.set(identifier.fileIndex, [])
-          }
-          resolvedByFile.get(identifier.fileIndex)!.push({
-            barcode: barcode,
-            container: r.container,
-          })
-        }
-      })
-
-      // Track unresolved containers by file
-      const unresolvedByFile = new Map<number, UnresolvedContainer[]>()
-      allIdentifiers.forEach((id) => {
-        if (!resolvedBarcodes.has(id.barcode)) {
-          if (!unresolvedByFile.has(id.fileIndex)) {
-            unresolvedByFile.set(id.fileIndex, [])
-          }
-          const csvRow = files[id.fileIndex].csvRows[id.rowIndex]
-          unresolvedByFile.get(id.fileIndex)!.push({
-            barcode: id.barcode,
-            rowIndex: id.rowIndex + 1, // Convert to 1-based for display
-            targetPosition: csvRow.target_position || '',
-          })
-        }
-      })
-
-      // Verify all containers are from micronix plates
-      const invalidContainers = resolved.filter((r: any) => 
-        r.container.currentCollectionType !== 'micronix_plate'
-      )
-      
-      if (invalidContainers.length > 0) {
-        // Add validation errors for invalid containers
-        setFiles(prev => prev.map((f, i) => {
-          const fileInvalid = resolvedByFile.get(i)?.some(rc =>
-            invalidContainers.some((ic: any) => ic.container.containerId === rc.container.containerId)
-          )
-          if (fileInvalid) {
-            return {
-              ...f,
-              validationErrors: [
-                ...f.validationErrors,
-                { row: 0, error: 'Some containers are not from micronix plates' }
-              ]
-            }
-          }
-          return f
-        }))
-        setLoading(false)
-        return
-      }
-
-      // Relocation validation (no tube lost): per destination plate, across all files targeting it
-      const relocationErrorsByFile = new Map<number, ValidationError[]>()
-      const uniqueDestinationNames = [...new Set(files.map(f => f.selectedPlateName).filter(Boolean))] as string[]
-
-      for (const plateName of uniqueDestinationNames) {
-        const plateId = availablePlates.find(p => p.name === plateName)?.id
-        if (plateId == null) {
-          const fileIndicesTargetingPlate = files
-            .map((f, i) => (f.selectedPlateName === plateName ? i : -1))
-            .filter((i) => i >= 0)
-          const err: ValidationError = {
-            row: 0,
-            error: `Destination plate "${plateName}" could not be found. Please select a valid plate from the list.`,
-          }
-          fileIndicesTargetingPlate.forEach((fileIndex) => {
-            if (!relocationErrorsByFile.has(fileIndex)) relocationErrorsByFile.set(fileIndex, [])
-            relocationErrorsByFile.get(fileIndex)!.push(err)
-          })
-          continue
-        }
-
-        const plateResponse = await collectionsApi.getMicronixPlate(plateId)
-        const wells: Record<string, { type: string; barcode?: string | null }> = plateResponse.wells
-
-        // All rows (from any file) targeting this plate
-        const rowsForPlate: { fileIndex: number; row: CSVRow }[] = []
-        files.forEach((fileData, fileIndex) => {
-          if (fileData.selectedPlateName !== plateName) return
-          fileData.csvRows.forEach(row => rowsForPlate.push({ fileIndex, row }))
-        })
-
-        const positionToBarcode = new Map<string, string>()
-        const positionToEmptyFileIndex = new Map<string, number>()
-        for (const { fileIndex, row } of rowsForPlate) {
-          const pos = row.target_position.trim()
-          const barcode = row.container_barcode.trim()
-          if (pos === '') continue
-          if (barcode !== '') {
-            positionToBarcode.set(pos, barcode)
-          } else {
-            if (!positionToEmptyFileIndex.has(pos)) positionToEmptyFileIndex.set(pos, fileIndex)
-          }
-        }
-        const barcodesRelocatedInMove = new Set(positionToBarcode.values())
-        const emptyPositions = [...positionToEmptyFileIndex.keys()].filter(P => !positionToBarcode.has(P))
-
-        for (const P of emptyPositions) {
-          const well = wells[P]
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- well can be undefined when position not in plate data (e.g. empty wells mock in tests)
-          if (well?.type === 'micronix_tube' && well.barcode) {
-            const B = well.barcode
-            if (!barcodesRelocatedInMove.has(B)) {
-              const fileIndex = positionToEmptyFileIndex.get(P) ?? 0
-              const err: ValidationError = {
-                row: 0,
-                error: `Position ${P} on plate "${plateName}" is empty in your upload but tube ${B} is currently there and is not relocated in this move.`,
-              }
-              if (!relocationErrorsByFile.has(fileIndex)) relocationErrorsByFile.set(fileIndex, [])
-              relocationErrorsByFile.get(fileIndex)!.push(err)
-            }
-          }
-        }
-      }
-
-      // Update files with resolved/unresolved and any relocation validation errors
-      setFiles(prev => prev.map((f, i) => {
-        const base = {
-          ...f,
-          resolvedContainers: resolvedByFile.get(i) ?? [],
-          unresolvedContainers: unresolvedByFile.get(i) ?? [],
-          isResolved: true,
-        }
-        const relocationErrors = relocationErrorsByFile.get(i) ?? []
-        if (relocationErrors.length === 0) return base
-        const existingWithoutRelocation = f.validationErrors.filter(
-          e => !e.error.includes('not relocated')
-        )
-        return {
-          ...base,
-          validationErrors: [...existingWithoutRelocation, ...relocationErrors],
-        }
-      }))
-
-      const hasRelocationErrors = [...relocationErrorsByFile.values()].some((arr) => arr.length > 0)
-      if (!hasRelocationErrors) {
-        setCurrentStep('resolve')
-      }
+      await resolveContainers(availablePlates)
     } catch (error: any) {
       console.error('Error resolving containers:', error)
       setFiles(prev => prev.map(f => ({
         ...f,
         validationErrors: [
           ...f.validationErrors,
-          { row: 0, error: error.response?.data?.error || error.message || 'Failed to resolve containers' }
-        ]
+          { row: 0, error: error.response?.data?.error || error.message || 'Failed to resolve containers' },
+        ],
       })))
     } finally {
       setLoading(false)
     }
+  }
+
+  const runResolveWithFreshPlates = async () => {
+    setLoading(true)
+    try {
+      await queryClient.invalidateQueries({ queryKey: moveWorkflowKeys.micronixBootstrap() })
+      const refetchResult = await bootstrapQuery.refetch()
+      const freshPlates = (refetchResult.data?.plates ?? availablePlates) as MicronixPlate[]
+      await resolveContainers(freshPlates)
+    } catch (error: any) {
+      console.error('Error resolving containers:', error)
+      setFiles(prev => prev.map(f => ({
+        ...f,
+        validationErrors: [
+          ...f.validationErrors,
+          {
+            row: 0,
+            error: error.response?.data?.error || error.message || 'Failed to resolve containers',
+          },
+        ],
+      })))
+      setCurrentStep('upload')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCreateDestinationPlates = async () => {
+    const needsLocation = pendingDestinationPlates.filter((p) => p.status !== 'success')
+    if (needsLocation.some((p) => p.locationId == null)) {
+      setPendingDestinationPlates((prev) =>
+        prev.map((p) =>
+          p.status === 'success' || p.locationId != null
+            ? p
+            : { ...p, error: 'Storage location is required' },
+        ),
+      )
+      return
+    }
+
+    setLoading(true)
+    let allSuccess = true
+    const updated = [...pendingDestinationPlates]
+
+    for (let i = 0; i < updated.length; i++) {
+      if (updated[i].status === 'success') continue
+      updated[i] = { ...updated[i], status: 'creating', error: undefined }
+      setPendingDestinationPlates([...updated])
+
+      try {
+        await collectionsApi.createMicronixPlate({
+          name: updated[i].name,
+          locationId: updated[i].locationId!,
+          barcode: updated[i].barcode.trim() || undefined,
+        })
+        updated[i] = { ...updated[i], status: 'success' }
+      } catch (error: unknown) {
+        allSuccess = false
+        const message =
+          error && typeof error === 'object' && 'response' in error
+            ? (error as { response?: { data?: { error?: string } } }).response?.data?.error ??
+              'Failed to create plate'
+            : error instanceof Error
+              ? error.message
+              : 'Failed to create plate'
+        updated[i] = { ...updated[i], status: 'error', error: message }
+      }
+      setPendingDestinationPlates([...updated])
+    }
+
+    if (!allSuccess) {
+      setLoading(false)
+      return
+    }
+
+    await runResolveWithFreshPlates()
   }
 
   const handleExecuteMoves = async () => {
@@ -619,13 +717,22 @@ export default function ContainerMoveMicronix() {
               <span>Upload & Configure</span>
             </div>
             <div className="storage-step-connector" />
+            {createPlatesStepUsed && (
+              <>
+                <div className={`storage-step-item ${effectiveStep === 'create_plates' ? 'storage-step-item--active' : ''}`}>
+                  <span className="storage-step-item__circle">2</span>
+                  <span>Create Plates</span>
+                </div>
+                <div className="storage-step-connector" />
+              </>
+            )}
             <div className={`storage-step-item ${effectiveStep === 'resolve' ? 'storage-step-item--active' : ''}`}>
-              <span className="storage-step-item__circle">2</span>
+              <span className="storage-step-item__circle">{createPlatesStepUsed ? '3' : '2'}</span>
               <span>Resolve</span>
             </div>
             <div className="storage-step-connector" />
             <div className={`storage-step-item ${effectiveStep === 'execute' ? 'storage-step-item--active' : ''}`}>
-              <span className="storage-step-item__circle">3</span>
+              <span className="storage-step-item__circle">{createPlatesStepUsed ? '4' : '3'}</span>
               <span>Execute</span>
             </div>
           </div>
@@ -701,9 +808,12 @@ export default function ContainerMoveMicronix() {
 
                   <div>
                     <h3 className="font-semibold text-app-text mb-2">Workflow</h3>
-                    <p className="mb-2">This process has 3 steps:</p>
+                    <p className="mb-2">This process has {createPlatesStepUsed ? '4' : '3'} steps:</p>
                     <ol className="list-decimal list-inside space-y-1 ml-4">
-                      <li><strong>Upload & Configure:</strong> Upload CSV files and assign destination plates. Click <strong>Next: Resolve Containers</strong> to validate (e.g. tubes removed with no destination) and resolve barcodes.</li>
+                      <li><strong>Upload & Configure:</strong> Upload CSV files and assign destination plates. Click <strong>Next</strong> to validate and continue.</li>
+                      {createPlatesStepUsed && (
+                        <li><strong>Create Plates:</strong> Assign a storage location for any destination plates that do not exist yet.</li>
+                      )}
                       <li><strong>Resolve:</strong> System finds each tube by barcode and identifies source plates</li>
                       <li><strong>Execute:</strong> System performs all moves in a single transaction</li>
                     </ol>
@@ -826,9 +936,26 @@ export default function ContainerMoveMicronix() {
                           onChange={(plateName) => updateFilePlateSelection(index, plateName)}
                           suggestedPlates={fileData.inferredMatches}
                         />
+                        {fileData.selectedPlateName &&
+                          !isExistingPlateName(fileData.selectedPlateName, availablePlates) && (
+                          <p className="text-xs text-app-accent mt-1">
+                            New plate &quot;{fileData.selectedPlateName}&quot; — assign a storage location in the next step.
+                          </p>
+                        )}
+                        {fileData.inferredPlateName &&
+                          !fileData.selectedPlateName &&
+                          !isExistingPlateName(fileData.inferredPlateName, availablePlates) && (
+                          <button
+                            type="button"
+                            onClick={() => updateFilePlateSelection(index, fileData.inferredPlateName!)}
+                            className="mt-2 text-sm text-app-accent underline hover:no-underline"
+                          >
+                            Create new plate: {fileData.inferredPlateName}
+                          </button>
+                        )}
                         {fileData.inferredPlateName && !fileData.selectedPlateName && (
                           <p className="text-xs text-app-text-muted mt-1">
-                            No single plate suggested for &quot;{fileData.inferredPlateName}&quot;. Please select a destination plate.
+                            No single plate suggested for &quot;{fileData.inferredPlateName}&quot;. Select an existing plate or create a new one.
                             {fileData.inferredMatches.length > 0 && (
                               <span className="ml-1">({fileData.inferredMatches.length} similar plate{fileData.inferredMatches.length !== 1 ? 's' : ''} found)</span>
                             )}
@@ -899,7 +1026,119 @@ export default function ContainerMoveMicronix() {
                 disabled={files.length === 0 || loading || files.some(f => !f.selectedPlateName || f.validationErrors.length > 0)}
                 className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Processing...' : 'Next: Resolve Containers'}
+                {loading
+                  ? 'Processing...'
+                  : missingDestinationPlateNames.length > 0
+                    ? 'Next: Create Destination Plates'
+                    : 'Next: Resolve Containers'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Step 2 (optional): Create destination plates */}
+        {effectiveStep === 'create_plates' && (
+          <>
+            <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
+              <h2 className="text-xl font-semibold mb-2">Create Destination Plates</h2>
+              <p className="text-sm text-app-text-muted mb-6">
+                {destinationPlatesAlreadyCreated
+                  ? 'Destination plates are ready. Continue to resolve tubes, or go back to upload to change your CSV.'
+                  : 'The following destination plates do not exist yet. Assign a storage location for each one before continuing.'}
+              </p>
+
+              <div className="space-y-4">
+                {pendingDestinationPlates.map((plate, index) => (
+                  <div key={plate.name} className="border border-app-border rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="font-medium text-app-text">{plate.name}</h3>
+                        <p className="text-xs text-app-text-muted mt-1">New micronix plate</p>
+                      </div>
+                      {plate.status === 'success' && (
+                        <span className="text-app-trend-up text-sm font-medium">Created</span>
+                      )}
+                      {plate.status === 'creating' && (
+                        <span className="text-app-accent text-sm">Creating...</span>
+                      )}
+                      {plate.status === 'error' && (
+                        <span className="text-app-trend-down text-sm">Error</span>
+                      )}
+                    </div>
+
+                    {plate.status === 'error' && plate.error && (
+                      <div className="mb-3 text-sm text-app-trend-down">{plate.error}</div>
+                    )}
+
+                    <div>
+                      <label className="block text-sm font-medium text-app-text mb-2">Location *</label>
+                      <LocationPicker
+                        value={plate.locationId}
+                        onChange={(locationId) => {
+                          setPendingDestinationPlates((prev) => {
+                            const next = [...prev]
+                            next[index] = { ...next[index], locationId, error: undefined }
+                            return next
+                          })
+                        }}
+                        filterCollectionsOnly
+                        disabled={plate.status === 'creating' || plate.status === 'success'}
+                      />
+                    </div>
+
+                    <div className="mt-3">
+                      <label className="block text-sm font-medium text-app-text mb-2">Barcode (optional)</label>
+                      <input
+                        type="text"
+                        value={plate.barcode}
+                        onChange={(e) => {
+                          setPendingDestinationPlates((prev) => {
+                            const next = [...prev]
+                            next[index] = { ...next[index], barcode: e.target.value }
+                            return next
+                          })
+                        }}
+                        disabled={plate.status === 'creating' || plate.status === 'success'}
+                        className="form-input w-full"
+                        placeholder="Enter plate barcode (optional)"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingDestinationPlates([])
+                  setCurrentStep('upload')
+                }}
+                className="storage-btn-secondary"
+                disabled={loading}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={
+                  destinationPlatesAlreadyCreated
+                    ? runResolveWithFreshPlates
+                    : handleCreateDestinationPlates
+                }
+                disabled={
+                  loading ||
+                  pendingDestinationPlates.some((p) => p.status === 'creating') ||
+                  pendingDestinationPlates.length === 0
+                }
+                className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading
+                  ? 'Processing...'
+                  : destinationPlatesAlreadyCreated
+                    ? 'Continue to Resolve'
+                    : 'Create Plates & Continue'}
               </button>
             </div>
           </>
@@ -1020,7 +1259,9 @@ export default function ContainerMoveMicronix() {
 
             <div className="flex justify-end gap-4">
               <button
-                onClick={() => setCurrentStep('upload')}
+                onClick={() => {
+                  setCurrentStep(missingDestinationPlateNames.length > 0 ? 'create_plates' : 'upload')
+                }}
                 className="storage-btn-secondary"
               >
                 Back
@@ -1114,6 +1355,8 @@ export default function ContainerMoveMicronix() {
                   setFiles([])
                   setMoveResult(null)
                   setInstructionsExpanded(false)
+                  setPendingDestinationPlates([])
+                  setCreatePlatesStepUsed(false)
                   setCurrentStep('upload')
                 }}
                 className="storage-btn-primary px-6 py-2"
