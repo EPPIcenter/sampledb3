@@ -61,31 +61,3 @@ export function refinePaperContainerInboundWrite(
   }
 }
 
-/** Map legacy CSV `barcode` column values to paper sublabel + sheet name. */
-export function mapPaperInboundFromLegacyRow(input: {
-  barcode?: string
-  sublabel?: string
-  sheet_name?: string
-  sheetName?: string
-}): { sublabel?: string; sheetName?: string } {
-  const sublabel = input.sublabel?.trim() || input.barcode?.trim() || undefined
-  const sheetName = input.sheetName?.trim() || input.sheet_name?.trim() || undefined
-  return {
-    ...(sublabel ? { sublabel } : {}),
-    ...(sheetName ? { sheetName } : {}),
-  }
-}
-
-/** Validate paper derivation CSV rows that use tube column names. */
-export function validatePaperDerivationCsvFields(row: {
-  container_barcode?: string
-  position?: string
-}): string | undefined {
-  if ((row.container_barcode ?? '').toString().trim()) {
-    return PAPER_DERIVATION_USE_SUBLABEL_NOT_CONTAINER_BARCODE
-  }
-  if ((row.position ?? '').toString().trim()) {
-    return PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION
-  }
-  return undefined
-}

@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'bun:test'
 import {
+  bulkCombinedContainerSchema,
   bulkCombinedRequestSchema,
   bulkCombinedValidateRequestSchema,
   bulkCombinedValidateResponseSchema,
   bulkCombinedImportResponseSchema,
+  optionalContainerInputSchema,
 } from '../bulk-combined'
 
 const validPayload = {
@@ -18,9 +20,12 @@ const validPayload = {
           collectionDate: '2025-01-01',
           container: {
             containerType: 'micronix_tube' as const,
-            collectionName: 'Plate-A',
             barcode: 'BC-1',
-            position: 'A01',
+            collection: {
+              type: 'micronix_plate' as const,
+              name: 'Plate-A',
+              position: 'A01',
+            },
           },
         },
       ],
@@ -38,14 +43,27 @@ describe('bulkCombinedRequestSchema', () => {
     }
   })
 
-  it('accepts optional createCollections', () => {
+  it('rejects legacy flat collectionName on container', () => {
     const result = bulkCombinedRequestSchema.safeParse({
       ...validPayload,
-      createCollections: [
-        { type: 'micronix_plate', name: 'Plate-A', locationId: 1, barcode: 'PL-1' },
+      subjects: [
+        {
+          subjectName: 'SUBJ-1',
+          specimens: [
+            {
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'micronix_tube' as const,
+                collectionName: 'Plate-A',
+                barcode: 'BC-1',
+                position: 'A01',
+              },
+            },
+          ],
+        },
       ],
     })
-    expect(result.success).toBe(true)
+    expect(result.success).toBe(false)
   })
 
   it('rejects empty studyShortCode', () => {
@@ -168,24 +186,39 @@ describe('bulkCombinedImportResponseSchema', () => {
 
 describe('paper inbound fields', () => {
   it('rejects barcode on paper container rows', () => {
-    const result = bulkCombinedRequestSchema.safeParse({
-      ...validPayload,
-      subjects: [
-        {
-          subjectName: 'SUBJ-1',
-          specimens: [
-            {
-              specimenTypeName: 'DBS',
-              container: {
-                containerType: 'paper' as const,
-                collectionName: 'Bag1',
-                sheetName: 'Sheet-A',
-                barcode: 'P-1',
-              },
-            },
-          ],
-        },
-      ],
+    const result = bulkCombinedContainerSchema.safeParse({
+      containerType: 'paper' as const,
+      barcode: 'P-1',
+      collection: {
+        type: 'sheet' as const,
+        name: 'Sheet-A',
+        parent: { type: 'bag' as const, name: 'Bag1' },
+      },
+    })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('optionalContainerInputSchema', () => {
+  it('accepts undefined container', () => {
+    expect(optionalContainerInputSchema.safeParse(undefined).success).toBe(true)
+  })
+
+  it('accepts micronix write shape', () => {
+    const result = optionalContainerInputSchema.safeParse({
+      containerType: 'micronix_tube' as const,
+      barcode: 'BC-1',
+      collection: { type: 'micronix_plate' as const, name: 'Plate-A', position: 'A01' },
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects legacy flat collectionName', () => {
+    const result = optionalContainerInputSchema.safeParse({
+      containerType: 'micronix_tube' as const,
+      collectionName: 'Plate-A',
+      barcode: 'BC-1',
+      position: 'A01',
     })
     expect(result.success).toBe(false)
   })

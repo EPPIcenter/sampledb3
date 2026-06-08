@@ -1,39 +1,44 @@
 import { z } from 'zod'
 import { refinePaperContainerInboundWrite } from './paper-container-inbound'
-
-const containerTypeEnum = z.enum(['micronix_tube', 'cryovial_tube', 'paper', 'static_well'])
-
-const collectionTypeEnum = z.enum(['box', 'bag', 'micronix_plate', 'cryovial_box'])
+import { containerWriteInputSchema } from './write/container-write-input'
 
 const atomicModeEnum = z.enum(['full_file', 'per_subject'])
 
-/** Base container input fields (no refinements — safe for `.partial()`). */
-export const containerInputFieldsSchema = z.object({
-  containerType: containerTypeEnum,
-  collectionName: z.string().optional(),
-  collectionBarcode: z.string().optional(),
-  barcode: z.string().optional(),
-  position: z.string().optional(),
-  sheetName: z.string().optional(),
-  sublabel: z.string().optional(),
+const bulkCombinedContainerBatchFieldsSchema = z.object({
   unitId: z.number().int().optional(),
   totalQuantity: z.number().optional(),
   remainingQuantity: z.number().optional(),
-  comment: z.string().optional(),
-  collectionLocationId: z.number().int().optional(),
 })
 
-/** Bulk combined rows allow optional containerType before validation downstream. */
-export const bulkCombinedContainerFieldsSchema = containerInputFieldsSchema.extend({
-  containerType: containerTypeEnum.optional(),
-})
+const bulkCombinedContainerCoreSchema = containerWriteInputSchema.and(
+  bulkCombinedContainerBatchFieldsSchema,
+)
 
-export const bulkCombinedContainerSchema = bulkCombinedContainerFieldsSchema
-  .optional()
-  .superRefine((container, ctx) => {
-    if (!container) return
-    refinePaperContainerInboundWrite(container, ctx)
+/** Bulk combined container: unified write shape plus optional quantity overrides. */
+export const bulkCombinedContainerSchema = z
+  .unknown()
+  .superRefine((val, ctx) => {
+    if (val == null) return
+    if (typeof val !== 'object') {
+      ctx.addIssue({ code: 'custom', message: 'Invalid container object' })
+      return
+    }
+    const record = val as Record<string, unknown>
+    if (
+      'collectionName' in record ||
+      'collectionLocationId' in record ||
+      'sheetName' in record ||
+      'collectionBarcode' in record
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Use nested collection placement instead of flat collectionName/sheetName fields',
+      })
+    }
+    refinePaperContainerInboundWrite(record as Parameters<typeof refinePaperContainerInboundWrite>[0], ctx)
   })
+  .pipe(bulkCombinedContainerCoreSchema)
+  .optional()
 
 export const bulkCombinedSubjectSpecimenSchema = z.object({
   specimenTypeName: z.string().min(1),
@@ -46,18 +51,10 @@ export const bulkCombinedSubjectSchema = z.object({
   specimens: z.array(bulkCombinedSubjectSpecimenSchema),
 })
 
-export const bulkCombinedCreateCollectionSchema = z.object({
-  type: collectionTypeEnum,
-  name: z.string().min(1),
-  locationId: z.number().int(),
-  barcode: z.string().optional(),
-})
-
 /** POST /imports/bulk-combined request body */
 export const bulkCombinedRequestSchema = z.object({
   studyShortCode: z.string().min(1),
   atomicMode: atomicModeEnum,
-  createCollections: z.array(bulkCombinedCreateCollectionSchema).optional(),
   subjects: z.array(bulkCombinedSubjectSchema),
 })
 
@@ -77,17 +74,45 @@ export const bulkCombinedValidateRequestSchema = bulkCombinedRequestSchema.exten
 export type BulkCombinedContainer = z.infer<typeof bulkCombinedContainerSchema>
 export type BulkCombinedSubjectSpecimen = z.infer<typeof bulkCombinedSubjectSpecimenSchema>
 export type BulkCombinedSubject = z.infer<typeof bulkCombinedSubjectSchema>
-export type BulkCombinedCreateCollection = z.infer<typeof bulkCombinedCreateCollectionSchema>
 export type BulkCombinedRequest = z.infer<typeof bulkCombinedRequestSchema>
 export type BulkCombinedValidateRequest = z.infer<typeof bulkCombinedValidateRequestSchema>
 
-/** Shared container input fields (single-specimen and bulk combined). */
-export const containerInputSchema = containerInputFieldsSchema.superRefine(refinePaperContainerInboundWrite)
+const singleSpecimenContainerBatchFieldsSchema = z.object({
+  unitId: z.number().int().optional(),
+  totalQuantity: z.number().optional(),
+  remainingQuantity: z.number().optional(),
+})
 
-/** Optional partial container for POST /specimens (container not required). */
-export const optionalContainerInputSchema = containerInputFieldsSchema
-  .partial()
-  .superRefine(refinePaperContainerInboundWrite)
+const singleSpecimenContainerCoreSchema = containerWriteInputSchema.and(
+  singleSpecimenContainerBatchFieldsSchema,
+)
+
+function refineSingleSpecimenContainerInbound(val: unknown, ctx: z.RefinementCtx): void {
+  if (val == null) return
+  if (typeof val !== 'object') {
+    ctx.addIssue({ code: 'custom', message: 'Invalid container object' })
+    return
+  }
+  const record = val as Record<string, unknown>
+  if (
+    'collectionName' in record ||
+    'collectionLocationId' in record ||
+    'sheetName' in record ||
+    'collectionBarcode' in record
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Use nested collection placement instead of flat collectionName/sheetName fields',
+    })
+  }
+  refinePaperContainerInboundWrite(record as Parameters<typeof refinePaperContainerInboundWrite>[0], ctx)
+}
+
+/** Optional unified write container for POST /specimens (container not required). */
+export const optionalContainerInputSchema = z
+  .unknown()
+  .superRefine(refineSingleSpecimenContainerInbound)
+  .pipe(singleSpecimenContainerCoreSchema)
   .optional()
 
 export const bulkCombinedValidateErrorSchema = z.object({
@@ -134,7 +159,6 @@ export const collectionDeletePreflightSchema = z.object({
   }),
 })
 
-export type ContainerInput = z.infer<typeof containerInputSchema>
 export type BulkCombinedValidateError = z.infer<typeof bulkCombinedValidateErrorSchema>
 export type BulkCombinedValidateResponse = z.infer<typeof bulkCombinedValidateResponseSchema>
 export type BulkCombinedImportSummary = z.infer<typeof bulkCombinedImportSummarySchema>
