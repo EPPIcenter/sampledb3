@@ -47,7 +47,32 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           push: false
-          load: false
-          tags: sampledb:pr-${{ github.event.pull_request.number || 'manual' }}
+          load: true
+          tags: sampledb:pr-smoke
           cache-from: type=gha,scope=sampledb
           cache-to: type=gha,mode=max,scope=sampledb
+
+      - name: Smoke test container startup
+        run: |
+          docker run -d --name sampledb-smoke \
+            -p 3000:3000 \
+            -e DATABASE_PATH=/tmp/sampledb.sqlite \
+            -e ALLOWED_ORIGINS=http://localhost:3000 \
+            sampledb:pr-smoke
+
+          cleanup() {
+            docker logs sampledb-smoke 2>&1 || true
+            docker rm -f sampledb-smoke 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3000/health >/dev/null; then
+              echo "Health check passed after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Container failed to respond on /health within 30s"
+          exit 1
