@@ -37,7 +37,7 @@ describe('container-columns', () => {
     })
     it('returns correct columns for paper', () => {
       expect(getContainerColumnsForBulkImport('paper')).toBe(
-        'bag_name,label,comment'
+        'box_name,bag_name,sheet_name,sublabel,comment'
       )
     })
     it('returns correct columns for static_well', () => {

@@ -227,7 +227,7 @@ describe('ReviewStep multi-batch CSV', () => {
   })
 })
 
-describe('ReviewStep multi-batch CSV createCollections', () => {
+describe('ReviewStep multi-batch CSV nested collection placement', () => {
   const compositionStrains: CompositionStrains = [{ id: 1, percentage: 100 }]
 
   beforeEach(() => {
@@ -236,7 +236,7 @@ describe('ReviewStep multi-batch CSV createCollections', () => {
     mockCreateBatchWithSpecimens.mockResolvedValue({ batch: { id: 103 }, specimens: [], createdCollections: [] })
   })
 
-  it('passes createCollections when CSV file has collectionName but no collectionId', async () => {
+  it('nests collection.parent when CSV file has collectionName but no collectionId', async () => {
     const def5000: ControlDefinition = {
       id: 10,
       name: 'Def 5000',
@@ -284,9 +284,17 @@ describe('ReviewStep multi-batch CSV createCollections', () => {
       expect(mockCreateBatchWithSpecimens).toHaveBeenCalledTimes(1)
     })
     const payload = mockCreateBatchWithSpecimens.mock.calls[0][0]
-    expect(payload.createCollections).toEqual([
-      { type: 'box', name: 'New Box', locationId: 42 },
-    ])
+    expect(payload).not.toHaveProperty('createCollections')
+    expect(payload.specimens[0].containers[0]).toEqual({
+      containerType: 'paper',
+      collection: {
+        type: 'sheet',
+        name: 'Sheet 1',
+        parent: { type: 'box', name: 'New Box', locationId: 42 },
+      },
+      quantity: 1,
+      unitSymbol: 'spots',
+    })
   })
 })
 

@@ -1,5 +1,6 @@
 import type { EnrichedContainerWire } from '@sampledb/contract/wire'
 import { api } from './client'
+import type { CreateDerivationRequestPayload } from '../derivation-payload'
 import type { Specimen } from './types'
 interface DerivationProperties {
   [key: string]: unknown
@@ -16,29 +17,7 @@ export interface Derivation {
   properties?: DerivationProperties | null
 }
 
-export interface CreateDerivationPayload {
-  derivationType: string
-  specimenTypeName: string
-  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
-  quantity?: number
-  unitSymbol?: string
-  quantityUsed?: number
-  reduceParentQuantity?: boolean
-  derivationDate?: string
-  protocol?: string
-  notes?: string
-  properties?: DerivationProperties
-  collectionId?: number
-   collectionName?: string
-   collectionType?: 'micronix_plate' | 'cryovial_box' | 'sheet'
-   collectionLocationId?: number
-  sheetParentType?: 'box' | 'bag'
-  sheetParentName?: string
-  containerBarcode?: string
-  sublabel?: string
-  position?: string
-  operatorId?: number
-}
+export type CreateDerivationPayload = CreateDerivationRequestPayload
 
 export interface CreateDerivationResponse {
   derivation: Derivation

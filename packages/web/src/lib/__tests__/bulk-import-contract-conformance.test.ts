@@ -38,6 +38,18 @@ describe('bulk import contract conformance', () => {
 
     const result = bulkCombinedValidateRequestSchema.safeParse(payload)
     expect(result.success).toBe(true)
+    const container = payload.subjects[0]!.specimens[0]!.container
+    expect(container).toEqual({
+      containerType: 'micronix_tube',
+      barcode: 'BC-1',
+      collection: {
+        type: 'micronix_plate',
+        name: 'Plate-A',
+        position: 'A01',
+        locationId: 42,
+      },
+    })
+    expect(payload).not.toHaveProperty('createCollections')
   })
 
   it('rejects payloads with invalid atomicMode', () => {

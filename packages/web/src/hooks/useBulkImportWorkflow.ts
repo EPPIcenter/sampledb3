@@ -14,6 +14,7 @@ export const bulkImportKeys = {
 
 export type BulkImportMissingCollection = {
   name: string
+  collectionType?: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
   barcode?: string
   collectionBarcode?: string
   locationId: number | null
@@ -67,24 +68,45 @@ export function useBulkImportTemplateSpecimenTypes(options: {
 /** Resolve which collections from CSV rows are missing on the server. Throws on API failure. */
 export async function fetchBulkImportMissingCollections(params: {
   rows: CSVRow[]
-  collectionType: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
-  getRowCollectionName: (row: CSVRow) => string | undefined
+  collectionType?: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag'
+  getRowCollectionName?: (row: CSVRow) => string | undefined
+  getRowCollectionCheck?: (
+    row: CSVRow
+  ) => { identifier: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' } | undefined
 }): Promise<BulkImportMissingCollection[]> {
-  const { rows, collectionType, getRowCollectionName } = params
+  const { rows, collectionType, getRowCollectionName, getRowCollectionCheck } = params
 
-  const uniqueCollections = new Set<string>()
+  const checkData: Array<{ identifier: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' }> =
+    []
+  const seen = new Set<string>()
+
   for (const row of rows) {
-    const collectionName = getRowCollectionName(row)
-    if (collectionName) uniqueCollections.add(collectionName)
-    if (row.collection_barcode) uniqueCollections.add(row.collection_barcode)
+    if (getRowCollectionCheck) {
+      const check = getRowCollectionCheck(row)
+      if (check) {
+        const key = `${check.type}:${check.identifier}`
+        if (!seen.has(key)) {
+          checkData.push(check)
+          seen.add(key)
+        }
+      }
+    } else if (collectionType && getRowCollectionName) {
+      const collectionName = getRowCollectionName(row)
+      if (collectionName && !seen.has(`${collectionType}:${collectionName}`)) {
+        checkData.push({ identifier: collectionName, type: collectionType })
+        seen.add(`${collectionType}:${collectionName}`)
+      }
+    }
+    if (row.collection_barcode && collectionType) {
+      const key = `${collectionType}:${row.collection_barcode}`
+      if (!seen.has(key)) {
+        checkData.push({ identifier: row.collection_barcode, type: collectionType })
+        seen.add(key)
+      }
+    }
   }
 
-  if (uniqueCollections.size === 0) return []
-
-  const checkData = Array.from(uniqueCollections).map((identifier) => ({
-    identifier,
-    type: collectionType,
-  }))
+  if (checkData.length === 0) return []
 
   const response = await collectionsApi.check({ collections: checkData })
   const results = response.results
@@ -92,23 +114,27 @@ export async function fetchBulkImportMissingCollections(params: {
   const missing: BulkImportMissingCollection[] = []
   const found = new Set<string>()
 
-  for (const result of results) {
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i]
+    const check = checkData[i]
     if (!result.exists) {
       const isBarcode =
         result.identifier.match(/^[A-Z0-9-]+$/) != null && result.identifier.length > 5
 
-      if (!found.has(result.identifier)) {
+      const dedupeKey = `${check.type}:${result.identifier}`
+      if (!found.has(dedupeKey)) {
         missing.push({
           name: isBarcode ? '' : result.identifier,
+          collectionType: check.type,
           barcode: isBarcode ? result.identifier : undefined,
           collectionBarcode: isBarcode ? result.identifier : undefined,
           locationId: null,
           status: 'pending',
         })
-        found.add(result.identifier)
+        found.add(dedupeKey)
       }
     } else {
-      found.add(result.identifier)
+      found.add(`${check.type}:${result.identifier}`)
     }
   }
 

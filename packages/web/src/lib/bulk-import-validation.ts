@@ -4,6 +4,7 @@
  */
 import type { ContainerType } from './container-types'
 import { getCollectionNameColumn } from './container-columns'
+import type { FlatBulkImportContainer } from './bulk-import-payload'
 
 export interface CSVRow {
   [key: string]: string
@@ -50,7 +51,7 @@ export function getBulkImportRequiredFields(opts: {
   const containerFields: Record<ContainerType, string[]> = {
     micronix_tube: ['plate_name', 'barcode', 'position'],
     cryovial_tube: ['box_name', 'position'],
-    paper: ['bag_name', 'sheet_name'],
+    paper: ['box_name', 'bag_name', 'sheet_name'],
     static_well: ['plate_name', 'position'],
   }
   return [...base, ...containerFields[containerType]]
@@ -98,15 +99,60 @@ export function parseBulkImportCSV(text: string): CSVRow[] {
   return rows
 }
 
+/** Resolve paper parent from bulk import CSV row (exactly one of box_name or bag_name). */
+export function resolveBulkImportPaperParent(
+  row: CSVRow
+):
+  | { parentCollectionType: 'box' | 'bag'; collectionName: string }
+  | { error: string }
+  | undefined {
+  const boxName = trimCell(row.box_name)
+  const bagName = trimCell(row.bag_name)
+  if (boxName && bagName) {
+    return { error: 'Provide either box_name or bag_name, not both' }
+  }
+  if (boxName) {
+    return { parentCollectionType: 'box', collectionName: boxName }
+  }
+  if (bagName) {
+    return { parentCollectionType: 'bag', collectionName: bagName }
+  }
+  return undefined
+}
+
 /** Get collection name/identifier from a CSV row (type-specific column only: plate_name, box_name, or bag_name). */
 export function getBulkImportRowCollectionName(
   row: CSVRow,
   containerType: ContainerType | 'none' | ''
 ): string | undefined {
+  if (containerType === 'paper') {
+    const parent = resolveBulkImportPaperParent(row)
+    if (!parent || 'error' in parent) return undefined
+    return parent.collectionName
+  }
   const column = getCollectionNameColumn(containerType)
   if (!column) return undefined
   const t = trimCell(row[column])
   return t || undefined
+}
+
+/** Per-row collection check for missing-collection resolution (supports mixed box/bag paper rows). */
+export function getBulkImportRowCollectionCheck(
+  row: CSVRow,
+  containerType: ContainerType | 'none' | ''
+): { identifier: string; type: 'micronix_plate' | 'cryovial_box' | 'box' | 'bag' } | undefined {
+  if (containerType === 'paper') {
+    const parent = resolveBulkImportPaperParent(row)
+    if (!parent || 'error' in parent) return undefined
+    return {
+      identifier: parent.collectionName,
+      type: parent.parentCollectionType,
+    }
+  }
+  const collectionType = getBulkImportCollectionType(containerType)
+  const name = getBulkImportRowCollectionName(row, containerType)
+  if (!collectionType || !name) return undefined
+  return { identifier: name, type: collectionType }
 }
 
 function getRowCollectionName(
@@ -143,9 +189,8 @@ export function mapBulkImportRowsToPayload(
         collectionDate: row.collection_date || undefined,
       }
       if (containerType !== 'none' && containerType !== '') {
-        spec.container = {
+        let container: FlatBulkImportContainer = {
           containerType,
-          collectionName: getRowCollectionName(row, containerType),
           collectionBarcode: trimCell(row.collection_barcode) || undefined,
           barcode: trimCell(row.barcode) || undefined,
           position: trimCell(row.position) || undefined,
@@ -153,6 +198,22 @@ export function mapBulkImportRowsToPayload(
           sublabel: trimCell(row.sublabel) || undefined,
           comment: trimCell(row.comment) || undefined,
         }
+        if (containerType === 'paper') {
+          const parent = resolveBulkImportPaperParent(row)
+          if (parent && !('error' in parent)) {
+            container = {
+              ...container,
+              parentCollectionType: parent.parentCollectionType,
+              collectionName: parent.collectionName,
+            }
+          }
+        } else {
+          container = {
+            ...container,
+            collectionName: getRowCollectionName(row, containerType),
+          }
+        }
+        spec.container = container
       }
       data.push(spec)
     }

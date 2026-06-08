@@ -39,7 +39,7 @@ export function getContainerColumnsForBulkImport(containerType: ContainerType): 
     case 'cryovial_tube':
       return 'box_name,barcode,position,comment'
     case 'paper':
-      return 'bag_name,sheet_name,sublabel,comment'
+      return 'box_name,bag_name,sheet_name,sublabel,comment'
     case 'static_well':
       return 'plate_name,position,comment'
     default:

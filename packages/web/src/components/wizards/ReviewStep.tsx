@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
-import { mapPaperInboundFromLegacyRow } from '@sampledb/contract'
 import { controlsApi } from '../../lib/api/controls';
+import {
+  flatControlBatchContainerToWriteInput,
+  type FlatControlBatchContainer,
+} from '../../lib/control-batch-payload'
 import { settingsApi } from '../../lib/api/settings';
 import type { ControlDefinition } from '../../lib/api/controls';
 import { normalizePosition, groupRowsByDensity } from '../../lib/control-batch-csv'
@@ -152,18 +155,7 @@ export default function ReviewStep({
         if (definitionId == null) continue // eslint-disable-line @typescript-eslint/no-unnecessary-condition
         const nameRes = await controlsApi.suggestBatchName(definitionId, productionDate)
         const batchName = nameRes.name
-        const specimensMap = new Map<string, Array<{
-          type: 'paper' | 'cryovial_tube' | 'micronix_tube'
-          collectionId?: number
-          collectionName?: string
-          collectionLocationId?: number
-          collectionType?: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-          containerBarcode?: string
-          position?: string
-          quantity?: number
-          unitSymbol?: string
-          sheetName?: string
-        }>>()
+        const specimensMap = new Map<string, FlatControlBatchContainer[]>()
         const file = batchRow.file
         for (const row of batchRow.rows) {
           if (!row.specimen_type_name) continue
@@ -178,11 +170,8 @@ export default function ReviewStep({
                       collectionLocationId: file.collectionLocationId,
                       collectionType: file.collectionType,
                     }),
-                ...mapPaperInboundFromLegacyRow({
-                  barcode: row.barcode,
-                  sheet_name: row.sheet_name,
-                  sheetName: file.sheetName,
-                }),
+                sublabel: row.barcode,
+                sheetName: (row.sheet_name as string | undefined) || file.sheetName,
                 quantity: row.quantity ?? 1,
                 unitSymbol: row.unit_symbol ?? fallbackUnitForContainerType(containerType),
               }
@@ -207,24 +196,16 @@ export default function ReviewStep({
           specimenTypeName,
           containers,
         }))
-        const createCollections: Array<{ type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'; name: string; locationId: number }> = []
-        if (file.collectionName && file.collectionLocationId != null && !file.collectionId) {
-          createCollections.push({
-            type: file.collectionType || (file.containerType === 'paper' ? 'box' :
-                  file.containerType === 'cryovial_tube' ? 'cryovial_box' :
-                  'micronix_plate'),
-            name: file.collectionName,
-            locationId: file.collectionLocationId,
-          })
-        }
         const res = await controlsApi.createBatchWithSpecimens({
           batch: {
             controlDefinitionId: definitionId,
             name: batchName,
             productionDate,
           },
-          specimens,
-          createCollections,
+          specimens: specimens.map(({ specimenTypeName, containers }) => ({
+            specimenTypeName,
+            containers: containers.map(flatControlBatchContainerToWriteInput),
+          })),
         })
         const batchId = res.batch?.id
         if (batchId != null) lastBatchId = batchId
@@ -257,18 +238,7 @@ export default function ReviewStep({
     try {
       // Build request payload - group by specimen type across ALL sources
       // Use a Map to group containers by specimen type name
-      const specimensMap = new Map<string, Array<{
-        type: 'paper' | 'cryovial_tube' | 'micronix_tube'
-        collectionId?: number
-        collectionName?: string
-        collectionLocationId?: number
-        collectionType?: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-        containerBarcode?: string
-        position?: string
-        quantity?: number
-        unitSymbol?: string
-        sheetName?: string
-      }>>()
+      const specimensMap = new Map<string, FlatControlBatchContainer[]>()
 
       // Add manual specimen types
       for (const st of specimenTypes) {
@@ -281,7 +251,8 @@ export default function ReviewStep({
                 collectionName: c.collectionName,
                 collectionLocationId: c.collectionLocationId,
                 collectionType: c.collectionType,
-                ...mapPaperInboundFromLegacyRow({ barcode: c.barcode, sheetName: c.sheetName }),
+                sublabel: c.barcode,
+                sheetName: c.sheetName,
                 quantity: c.quantity,
                 unitSymbol: c.unitSymbol,
               }
@@ -319,11 +290,8 @@ export default function ReviewStep({
                 collectionName: file.collectionName,
                 collectionLocationId: file.collectionLocationId,
                 collectionType: file.collectionType,
-                ...mapPaperInboundFromLegacyRow({
-                  barcode: row.barcode,
-                  sheet_name: row.sheet_name,
-                  sheetName: file.sheetName,
-                }),
+                sublabel: row.barcode,
+                sheetName: (row.sheet_name as string | undefined) || file.sheetName,
                 quantity: row.quantity || 1,
                 unitSymbol: row.unit_symbol || fallbackUnitForContainerType(file.containerType!),
               }
@@ -347,10 +315,9 @@ export default function ReviewStep({
         }
       }
 
-      // Convert map to array format
       const specimens = Array.from(specimensMap.entries()).map(([specimenTypeName, containers]) => ({
         specimenTypeName,
-        containers,
+        containers: containers.map(flatControlBatchContainerToWriteInput),
       }))
 
       if (specimens.length === 0) {
@@ -359,69 +326,10 @@ export default function ReviewStep({
         return
       }
 
-      // Build collections to create
-      const createCollections: Array<{
-        type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-        name: string
-        locationId: number
-        barcode?: string
-      }> = []
-
-      // Collect unique collections from manual entries
-      const manualCollections = new Map<string, { name: string; locationId: number; type: string }>()
-      for (const st of specimenTypes) {
-        for (const c of st.containers) {
-          if (c.collectionName && c.collectionLocationId && !c.collectionId) {
-            const key = `${c.collectionName}-${c.collectionLocationId}`
-            if (!manualCollections.has(key)) {
-              let collectionType: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-              if (st.containerType === 'paper') {
-                collectionType = c.collectionType || 'box'
-              } else if (st.containerType === 'cryovial_tube') {
-                collectionType = 'cryovial_box'
-              } else {
-                collectionType = 'micronix_plate'
-              }
-              manualCollections.set(key, {
-                name: c.collectionName,
-                locationId: c.collectionLocationId,
-                type: collectionType,
-              })
-            }
-          }
-        }
-      }
-
-      for (const coll of manualCollections.values()) {
-        createCollections.push({
-          type: coll.type as any,
-          name: coll.name,
-          locationId: coll.locationId,
-        })
-      }
-
-      // Add CSV collections
-      for (const file of csvFiles) {
-        if (file.collectionName && file.collectionLocationId && !file.collectionId) {
-          createCollections.push({
-            type: file.collectionType || (file.containerType === 'paper' ? 'box' : 
-                  file.containerType === 'cryovial_tube' ? 'cryovial_box' : 
-                  'micronix_plate'),
-            name: file.collectionName,
-            locationId: file.collectionLocationId,
-          })
-        }
-      }
-
       if (isAddMode && existingBatchId) {
-        // Add specimens to existing batch
-        const response = await controlsApi.addSpecimensToBatch(existingBatchId, {
-          specimens,
-          createCollections,
-        })
+        await controlsApi.addSpecimensToBatch(existingBatchId, { specimens })
         onSuccess(existingBatchId)
       } else {
-        // Create new batch with specimens
         const response = await controlsApi.createBatchWithSpecimens({
           batch: {
             controlDefinitionId: batchInfo.controlDefinitionId,
@@ -430,7 +338,6 @@ export default function ReviewStep({
             properties: batchInfo.properties,
           },
           specimens,
-          createCollections,
         })
         
         // Extract batch ID from response
@@ -454,13 +361,13 @@ export default function ReviewStep({
     specimenTypes.reduce((sum, st) => sum + st.containers.length, 0) +
     csvFiles.reduce((sum, f) => sum + f.rows.length, 0)
 
-  // Count collections to create - use same logic as createCollections building
+  // Count collections to create (nested placement with locationId, no existing collection id)
   const collectionsToCreateSet = new Set<string>()
   // Collect unique collections from manual entries (same logic as in handleSubmit)
   for (const st of specimenTypes) {
     for (const c of st.containers) {
       if (c.collectionName && c.collectionLocationId && !c.collectionId) {
-        // Use same key format as createCollections to ensure consistency
+        // Unique by name + location for display count
         const key = `${c.collectionName}-${c.collectionLocationId}`
         collectionsToCreateSet.add(key)
       }

@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react'
 import { derivationsApi } from '../lib/api/derivations';
 import type { CreateDerivationPayload } from '../lib/api/derivations';
+import {
+  flatDerivationFormToWriteInput,
+  type FlatDerivationContainerForm,
+} from '../lib/derivation-payload'
 import { specimenTypesApi } from '../lib/api/reference-data';
 import { collectionsApi } from '../lib/api/collections';
 import type { SpecimenType } from '../lib/api/types';
@@ -55,22 +59,20 @@ function ContainerDerivationModalContent({
   const [allowedContainerTypes, setAllowedContainerTypes] = useState<string[]>([])
   const [collectionOptions, setCollectionOptions] = useState<CollectionOption[]>([])
 
-  const [formData, setFormData] = useState<CreateDerivationPayload>({
+  const [formData, setFormData] = useState({
     derivationType: 'dna_extraction',
     specimenTypeName: '',
-    containerType: 'micronix_tube',
+    containerType: 'micronix_tube' as FlatDerivationContainerForm['containerType'],
     quantity: 1.0,
     unitSymbol: '',
-    quantityUsed: undefined,
+    quantityUsed: undefined as number | undefined,
     reduceParentQuantity: true,
     derivationDate: new Date().toISOString().split('T')[0],
     protocol: '',
     notes: '',
-    properties: undefined,
-    collectionId: undefined,
-    collectionName: undefined,
-    collectionType: undefined,
-    collectionLocationId: undefined,
+    properties: undefined as Record<string, unknown> | undefined,
+    collectionId: undefined as number | undefined,
+    collectionName: undefined as string | undefined,
     containerBarcode: '',
     sublabel: '',
     position: '',
@@ -143,7 +145,7 @@ function ContainerDerivationModalContent({
         if (!containerTypes.includes(formData.containerType)) {
           setFormData(prev => ({
             ...prev,
-            containerType: containerTypes.length > 0 ? (containerTypes[0] as CreateDerivationPayload['containerType']) : 'micronix_tube',
+            containerType: containerTypes.length > 0 ? (containerTypes[0] as FlatDerivationContainerForm['containerType']) : 'micronix_tube',
           }))
         }
       } catch (err: unknown) {
@@ -191,11 +193,31 @@ function ContainerDerivationModalContent({
       setLoading(false)
       return
     }
+    if (formData.containerType === 'paper' && formData.collectionId == null) {
+      setError('Select an existing sheet for paper derivations')
+      setLoading(false)
+      return
+    }
+    if (
+      formData.containerType !== 'paper' &&
+      !formData.collectionId &&
+      !formData.collectionName?.trim()
+    ) {
+      setError('Collection is required')
+      setLoading(false)
+      return
+    }
     try {
       const payload: CreateDerivationPayload = {
         derivationType: formData.derivationType,
         specimenTypeName: formData.specimenTypeName,
-        containerType: formData.containerType,
+        container: flatDerivationFormToWriteInput({
+          containerType: formData.containerType,
+          collectionId: formData.collectionId,
+          containerBarcode: formData.containerBarcode || undefined,
+          sublabel: formData.sublabel || undefined,
+          position: formData.position || undefined,
+        }),
         quantity: formData.quantity,
         unitSymbol: formData.unitSymbol || undefined,
         quantityUsed: formData.quantityUsed,
@@ -204,18 +226,6 @@ function ContainerDerivationModalContent({
         protocol: formData.protocol || undefined,
         notes: formData.notes || undefined,
         properties: formData.properties,
-        collectionId: formData.collectionId,
-        collectionName: formData.collectionName,
-        collectionType: (formData.containerType === 'micronix_tube'
-            ? 'micronix_plate'
-            : formData.containerType === 'cryovial_tube'
-              ? 'cryovial_box'
-              : formData.containerType === 'paper'
-                ? 'sheet'
-                : undefined) as 'micronix_plate' | 'cryovial_box' | 'sheet' | undefined,
-        containerBarcode: formData.containerType === 'paper' ? undefined : (formData.containerBarcode || undefined),
-        sublabel: formData.containerType === 'paper' ? (formData.sublabel || undefined) : undefined,
-        position: formData.containerType === 'paper' ? undefined : (formData.position || undefined),
       }
 
       const response = await derivationsApi.createFromContainer(parentContainerId, payload)
@@ -345,7 +355,7 @@ function ContainerDerivationModalContent({
             <select
               value={formData.containerType}
               onChange={(e) => {
-                const newType = e.target.value as CreateDerivationPayload['containerType']
+                const newType = e.target.value as FlatDerivationContainerForm['containerType']
                 setFormData({ ...formData, containerType: newType, collectionId: undefined, collectionName: undefined })
               }}
               className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
@@ -394,7 +404,6 @@ function ContainerDerivationModalContent({
                     ...prev,
                     collectionId: v?.id,
                     collectionName: v?.name ?? undefined,
-                    collectionLocationId: undefined,
                   }))
                 }}
                 allowCreate={false}
@@ -411,7 +420,9 @@ function ContainerDerivationModalContent({
                 disabled={loading}
               />
               <p className="text-xs text-app-text-muted mt-1">
-                Search and select an existing collection. Create new plates/boxes from Storage first if needed.
+                {formData.containerType === 'paper'
+                  ? 'Search and select an existing sheet. Create new sheets from Storage or specimen registration first.'
+                  : 'Search and select an existing collection. Create new plates/boxes from Storage first if needed.'}
               </p>
             </div>
           )}

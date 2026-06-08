@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Modal } from '../ui'
 import ContainerRegistration, { type ContainerData } from './ContainerRegistration'
-import { specimensApi } from '../lib/api/specimens';
+import { specimensApi } from '../lib/api/specimens'
+import { flatContainerRegistrationToWriteInput } from '../lib/specimen-container-payload'
 import { specimenTypesApi } from '../lib/api/reference-data';
 import '../styles/subject-specimen.css'
 
@@ -55,19 +56,7 @@ export default function AddContainerForSpecimenModal({
     setError(null)
     setLoading(true)
     try {
-      await specimensApi.addContainer(specimenId, {
-        containerType: containerData.containerType,
-        collectionName: containerData.collectionName,
-        collectionBarcode: containerData.collectionBarcode,
-        barcode: containerData.barcode,
-        position: containerData.position,
-        sheetName: containerData.sheetName,
-        sublabel: containerData.sublabel,
-        unitId: containerData.unitId,
-        totalQuantity: containerData.totalQuantity,
-        remainingQuantity: containerData.remainingQuantity,
-        comment: containerData.comment,
-      })
+      await specimensApi.addContainer(specimenId, flatContainerRegistrationToWriteInput(containerData))
       onSuccess()
       onClose()
     } catch (err: unknown) {

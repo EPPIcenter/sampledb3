@@ -6,6 +6,8 @@ import {
   getBulkImportOptionalFields,
   getBulkImportCollectionType,
   getBulkImportRowCollectionName,
+  resolveBulkImportPaperParent,
+  getBulkImportRowCollectionCheck,
 } from '../bulk-import-validation'
 
 describe('bulk-import-validation', () => {
@@ -150,6 +152,32 @@ describe('bulk-import-validation', () => {
           'micronix_tube'
         )
       ).toBeUndefined()
+    })
+    it('returns box_name for paper when box_name is populated', () => {
+      expect(
+        getBulkImportRowCollectionName({ box_name: 'Box-A', bag_name: '' }, 'paper')
+      ).toBe('Box-A')
+    })
+    it('returns bag_name for paper when bag_name is populated', () => {
+      expect(
+        getBulkImportRowCollectionName({ box_name: '', bag_name: 'Bag-A' }, 'paper')
+      ).toBe('Bag-A')
+    })
+  })
+
+  describe('resolveBulkImportPaperParent', () => {
+    it('rejects both box_name and bag_name', () => {
+      const result = resolveBulkImportPaperParent({ box_name: 'B1', bag_name: 'G1' })
+      expect(result).toEqual({ error: 'Provide either box_name or bag_name, not both' })
+    })
+  })
+
+  describe('getBulkImportRowCollectionCheck', () => {
+    it('returns bag type for paper bag rows', () => {
+      expect(getBulkImportRowCollectionCheck({ bag_name: 'Bag-A' }, 'paper')).toEqual({
+        identifier: 'Bag-A',
+        type: 'bag',
+      })
     })
   })
 })

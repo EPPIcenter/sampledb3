@@ -1,5 +1,14 @@
+import type { ContainerWriteInput } from '@sampledb/contract'
 import { api } from './client'
 import type { Study, StudySubject, Specimen } from './types'
+
+type WithSpecimensContainerWriteInput = ContainerWriteInput & {
+  mode?: 'create' | 'link' | 'skip'
+  containerId?: number
+  unitId?: number
+  totalQuantity?: number
+  remainingQuantity?: number
+}
 
 export interface SubjectSummarySpecimen {
   id: number
@@ -88,22 +97,7 @@ export const subjectsApi = {
     specimens: Array<{
       specimenTypeName: string
       collectionDate?: string
-      container?: {
-        mode?: 'create' | 'link' | 'skip'
-        containerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
-        containerBarcode?: string
-        containerId?: number
-        collectionName?: string
-        collectionBarcode?: string
-        barcode?: string
-        position?: string
-        label?: string
-        unitId?: number
-        totalQuantity?: number
-        remainingQuantity?: number
-        comment?: string
-        collectionLocationId?: number
-      }
+      container?: WithSpecimensContainerWriteInput
     }>
   }) =>
     api.post<{

@@ -1,5 +1,13 @@
+import type { ContainerWriteInput } from '@sampledb/contract'
 import { api } from './client'
 import type { Specimen } from './types'
+
+type BulkSpecimenContainerWriteInput = ContainerWriteInput & {
+  unitId?: number
+  totalQuantity?: number
+  remainingQuantity?: number
+  comment?: string
+}
 
 type SpecimensListResponse = { specimens: Specimen[]; pagination?: { total: number } }
 type SpecimenResponse = { specimen: Specimen }
@@ -19,6 +27,7 @@ type CreateSpecimenData = {
   specimenTypeName?: string
   collectionDate?: string
   containerBarcode?: string
+  container?: BulkSpecimenContainerWriteInput
 }
 
 type CreateSpecimensBulkData = {
@@ -30,33 +39,12 @@ type CreateSpecimensBulkData = {
     specimenTypeName: string
     collectionDate?: string
     containerBarcode?: string
-    container?: {
-      containerType?: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
-      collectionName?: string
-      collectionBarcode?: string
-      barcode?: string
-      position?: string
-      sheetName?: string
-      sublabel?: string
-      collectionLocationId?: number
-    }
+    container?: BulkSpecimenContainerWriteInput
   }>
 }
 
 /** Payload for adding a container to an existing specimen (POST /specimens/:id/containers). */
-export type AddContainerData = {
-  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
-  collectionName?: string
-  collectionBarcode?: string
-  barcode?: string
-  position?: string
-  sheetName?: string
-  sublabel?: string
-  unitId?: number
-  totalQuantity?: number
-  remainingQuantity?: number
-  comment?: string
-}
+export type AddContainerData = BulkSpecimenContainerWriteInput
 
 export type SpecimenListParams = {
   study?: string

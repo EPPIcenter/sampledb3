@@ -17,6 +17,7 @@ import {
   parseBulkImportCSV,
   mapBulkImportRowsToPayload,
   getBulkImportRowCollectionName,
+  getBulkImportRowCollectionCheck,
   type CSVRow,
   type BulkImportValidationError,
   type ImportType as LibImportType,
@@ -267,13 +268,21 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
       if (importType !== 'subjects' && containerType !== 'none') {
         const collectionType = getCollectionType()
-        if (collectionType) {
+        if (collectionType || containerType === 'paper') {
           try {
-            const missing = await fetchBulkImportMissingCollections({
-              rows,
-              collectionType,
-              getRowCollectionName,
-            })
+            const missing = await fetchBulkImportMissingCollections(
+              containerType === 'paper'
+                ? {
+                    rows,
+                    getRowCollectionCheck: (row) =>
+                      getBulkImportRowCollectionCheck(row, containerType),
+                  }
+                : {
+                    rows,
+                    collectionType: collectionType!,
+                    getRowCollectionName,
+                  }
+            )
             setMissingCollections(missing)
 
             if (missing.length > 0) {
@@ -312,8 +321,8 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
 
   const handleCreateCollections = async () => {
     setWorkflowLoading(true)
-    const collectionType = getCollectionType()
-    if (!collectionType) {
+    const defaultCollectionType = getCollectionType()
+    if (!defaultCollectionType && containerType !== 'paper') {
       setWorkflowLoading(false)
       return
     }
@@ -331,29 +340,32 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       try {
         const name = collection.name || (collection.barcode ? `Collection-${collection.barcode}` : `Collection-${Date.now()}`)
         const barcode = collection.barcode || collection.collectionBarcode
+        const itemCollectionType = collection.collectionType ?? defaultCollectionType
 
-        if (collectionType === 'micronix_plate') {
+        if (itemCollectionType === 'micronix_plate') {
           await collectionsApi.createMicronixPlate({
             name,
             locationId: collection.locationId,
             barcode,
           })
-        } else if (collectionType === 'cryovial_box') {
+        } else if (itemCollectionType === 'cryovial_box') {
           await collectionsApi.createCryovialBox({
             name,
             locationId: collection.locationId,
             barcode,
           })
-        } else if (collectionType === 'box') {
+        } else if (itemCollectionType === 'box') {
           await collectionsApi.createBox({
             name,
             locationId: collection.locationId,
           })
-        } else {
+        } else if (itemCollectionType === 'bag') {
           await collectionsApi.createBag({
             name,
             locationId: collection.locationId,
           })
+        } else {
+          throw new Error(`Unsupported collection type: ${String(itemCollectionType)}`)
         }
 
         updated[i].status = 'success'

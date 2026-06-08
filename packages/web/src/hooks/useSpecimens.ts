@@ -6,6 +6,11 @@ import { studiesApi } from '../lib/api/studies'
 import { controlsApi } from '../lib/api/controls'
 import type { Specimen } from '../lib/api/types'
 import type { ContainerData } from '../components/ContainerRegistration'
+import {
+  flatContainerRegistrationToWriteInput,
+  isFlatContainerRegistration,
+  type SpecimenContainerWriteInput,
+} from '../lib/specimen-container-payload'
 import { useToast } from '../contexts/ToastContext'
 import { invalidateDashboardQueries } from './useDashboard'
 import { studyKeys } from './useStudies'
@@ -46,7 +51,8 @@ export type CreateSpecimenInput = {
   specimenTypeName?: string
   collectionDate?: string
   containerBarcode?: string
-  container?: ContainerData
+  /** Flat form state; mapped to write shape before API call. */
+  container?: ContainerData | SpecimenContainerWriteInput
   /** When known before create (e.g. form state); API response studyId takes precedence. */
   studyId?: number
 }
@@ -167,8 +173,18 @@ export function useCreateSpecimen(options?: { silent?: boolean }) {
   const { success, error: showError } = useToast()
 
   return useMutation({
-    mutationFn: async ({ studyId: _studyIdHint, ...data }: CreateSpecimenInput) => {
-      const res = await specimensApi.create(data)
+    mutationFn: async ({ studyId: _studyIdHint, container, ...data }: CreateSpecimenInput) => {
+      const payload = {
+        ...data,
+        ...(container
+          ? {
+              container: isFlatContainerRegistration(container)
+                ? flatContainerRegistrationToWriteInput(container)
+                : container,
+            }
+          : {}),
+      }
+      const res = await specimensApi.create(payload)
       return res.specimen
     },
     onError: (err: unknown) => {

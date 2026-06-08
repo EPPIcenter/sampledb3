@@ -8,12 +8,20 @@ import { collectionsApi } from '../lib/api/collections';
 import { settingsApi } from '../lib/api/settings';
 import { unitsApi } from '../lib/api/reference-data';
 import type { ContainerDefaults } from '../lib/api/settings';
-import type { Unit } from '../lib/api/types';export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+import type { Unit } from '../lib/api/types'
+import CollectionAssignment, {
+  type CollectionAssignmentChange,
+} from './wizards/CollectionAssignment'
+
+export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
 export interface ContainerData {
   containerType: ContainerType
+  /** Paper sheet parent collection type (default box). */
+  parentCollectionType?: 'box' | 'bag'
   collectionName?: string
   collectionBarcode?: string
+  collectionLocationId?: number
   barcode?: string
   position?: string
   sheetName?: string
@@ -55,8 +63,10 @@ export default function ContainerRegistration({
   const [containerType, setContainerType] = useState<ContainerType>(initialContainerType || 'micronix_tube')
   const [formData, setFormData] = useState<ContainerData>({
     containerType: initialContainerType || 'micronix_tube',
+    parentCollectionType: defaultValue?.parentCollectionType ?? 'box',
     collectionName: defaultValue?.collectionName || '',
     collectionBarcode: defaultValue?.collectionBarcode || '',
+    collectionLocationId: defaultValue?.collectionLocationId,
     barcode: defaultValue?.barcode || '',
     position: defaultValue?.position || '',
     sheetName: defaultValue?.sheetName || '',
@@ -77,7 +87,7 @@ export default function ContainerRegistration({
   const [collectionSelectedId, setCollectionSelectedId] = useState<number | undefined>(undefined)
   const [collectionLocationPath, setCollectionLocationPath] = useState<string | null>(null)
 
-  const getCollectionType = (): CollectionType => {
+  const getCollectionListType = (): CollectionType => {
     switch (containerType) {
       case 'micronix_tube':
       case 'static_well':
@@ -85,13 +95,43 @@ export default function ContainerRegistration({
       case 'cryovial_tube':
         return 'cryovial_box'
       case 'paper':
-        return 'box'
+        return formData.parentCollectionType ?? 'box'
       default:
         return 'box'
     }
   }
 
-  const effectiveCollectionType = getCollectionType()
+  const effectiveCollectionType = getCollectionListType()
+  const paperParentType = formData.parentCollectionType ?? 'box'
+
+  const handlePaperCollectionAssignment = (updates: CollectionAssignmentChange) => {
+    setFormData((prev) => {
+      const next = { ...prev }
+      if (updates.collectionType !== undefined) {
+        const prevType = prev.parentCollectionType ?? 'box'
+        const parentType: 'box' | 'bag' = updates.collectionType === 'bag' ? 'bag' : 'box'
+        next.parentCollectionType = parentType
+        if (parentType !== prevType) {
+          next.collectionName = ''
+          next.collectionLocationId = undefined
+        }
+      }
+      if (updates.collectionName !== undefined) {
+        next.collectionName = updates.collectionName
+      }
+      if (updates.collectionLocationId !== undefined) {
+        next.collectionLocationId = updates.collectionLocationId ?? undefined
+      }
+      return next
+    })
+    if (updates.collectionId !== undefined) {
+      setCollectionSelectedId(updates.collectionId)
+    }
+    if (updates.collectionName === '') {
+      setCollectionSelectedId(undefined)
+      setCollectionLocationPath(null)
+    }
+  }
 
   // When allowed types are restricted and current type is not allowed, reset to first allowed
   useEffect(() => {
@@ -148,7 +188,14 @@ export default function ContainerRegistration({
     const type = effectiveCollectionType
     setCollectionSelectedId(undefined)
     setCollectionLocationPath(null)
-    if (type !== 'micronix_plate' && type !== 'cryovial_box' && type !== 'box') return
+    if (
+      type !== 'micronix_plate' &&
+      type !== 'cryovial_box' &&
+      type !== 'box' &&
+      type !== 'bag'
+    ) {
+      return
+    }
     let cancelled = false
     collectionsApi.listCollectionsByType(type).then((res) => {
       if (cancelled) return
@@ -166,7 +213,7 @@ export default function ContainerRegistration({
     return () => {
       cancelled = true
     }
-  }, [effectiveCollectionType])
+  }, [effectiveCollectionType, containerType, paperParentType])
 
   const loadUnits = async () => {
     try {
@@ -318,46 +365,64 @@ export default function ContainerRegistration({
 
           <div className="space-y-4">
               {/* Collection Selection */}
-              <div>
-                <CollectionSelectOrCreate
-                  collectionType={effectiveCollectionType}
-                  collections={collectionOptions}
-                  value={
-                    formData.collectionName
-                      ? (collectionSelectedId != null
-                          ? {
-                              id: collectionSelectedId,
-                              name: formData.collectionName,
-                              locationPath: collectionLocationPath ?? undefined,
-                            }
-                          : { name: formData.collectionName, id: undefined, locationPath: undefined })
-                      : null
-                  }
-                  onChange={(v: CollectionSelectValue | null) => {
-                    if (v == null) {
-                      handleFieldChange('collectionName', '')
-                      handleFieldChange('collectionBarcode', '')
-                      setCollectionSelectedId(undefined)
-                      setCollectionLocationPath(null)
-                      return
+              {containerType === 'paper' ? (
+                <div>
+                  <CollectionAssignment
+                    containerType="paper"
+                    collectionType={paperParentType}
+                    collectionName={formData.collectionName ?? ''}
+                    collectionLocationId={formData.collectionLocationId ?? null}
+                    collectionId={collectionSelectedId}
+                    collectionOptions={collectionOptions}
+                    allowCreateCollection
+                    onChange={handlePaperCollectionAssignment}
+                  />
+                  {validationErrors.collection && (
+                    <p className="mt-1 text-sm text-app-trend-down">{validationErrors.collection}</p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <CollectionSelectOrCreate
+                    collectionType={effectiveCollectionType}
+                    collections={collectionOptions}
+                    value={
+                      formData.collectionName
+                        ? (collectionSelectedId != null
+                            ? {
+                                id: collectionSelectedId,
+                                name: formData.collectionName,
+                                locationPath: collectionLocationPath ?? undefined,
+                              }
+                            : { name: formData.collectionName, id: undefined, locationPath: undefined })
+                        : null
                     }
-                    handleFieldChange('collectionName', v.name)
-                    handleFieldChange('collectionBarcode', '')
-                    setCollectionSelectedId(v.id)
-                    setCollectionLocationPath(v.locationPath ?? null)
-                  }}
-                  allowCreate
-                  label={`Collection (${effectiveCollectionType === 'micronix_plate' ? 'Plate' : 'Box'}) *`}
-                  placeholder={
-                    effectiveCollectionType === 'micronix_plate'
-                      ? 'Type to search or enter plate name'
-                      : 'Type to search or enter box name'
-                  }
-                />
-                {validationErrors.collection && (
-                  <p className="mt-1 text-sm text-app-trend-down">{validationErrors.collection}</p>
-                )}
-              </div>
+                    onChange={(v: CollectionSelectValue | null) => {
+                      if (v == null) {
+                        handleFieldChange('collectionName', '')
+                        handleFieldChange('collectionBarcode', '')
+                        setCollectionSelectedId(undefined)
+                        setCollectionLocationPath(null)
+                        return
+                      }
+                      handleFieldChange('collectionName', v.name)
+                      handleFieldChange('collectionBarcode', '')
+                      setCollectionSelectedId(v.id)
+                      setCollectionLocationPath(v.locationPath ?? null)
+                    }}
+                    allowCreate
+                    label={`Collection (${effectiveCollectionType === 'micronix_plate' ? 'Plate' : 'Box'}) *`}
+                    placeholder={
+                      effectiveCollectionType === 'micronix_plate'
+                        ? 'Type to search or enter plate name'
+                        : 'Type to search or enter box name'
+                    }
+                  />
+                  {validationErrors.collection && (
+                    <p className="mt-1 text-sm text-app-trend-down">{validationErrors.collection}</p>
+                  )}
+                </div>
+              )}
 
               {/* Container-specific fields */}
               {containerType === 'micronix_tube' && (

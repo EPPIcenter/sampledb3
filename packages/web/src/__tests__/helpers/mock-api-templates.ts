@@ -459,6 +459,7 @@ const micronixMoveApis = {
     listCollectionsByType: vi.fn(),
     moveContainers: vi.fn(),
     getMicronixPlate: vi.fn(),
+    createMicronixPlate: vi.fn(),
   },
   locationsApi: { list: vi.fn() },
   settingsApi: {

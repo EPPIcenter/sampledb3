@@ -1,6 +1,6 @@
 /** Shared types for CSV-based container move wizards (micronix, cryovial). */
 
-export type ContainerMoveCsvStep = 'upload' | 'resolve' | 'execute'
+export type ContainerMoveCsvStep = 'upload' | 'create_plates' | 'resolve' | 'execute'
 export type ContainerMoveAtomicMode = 'all_or_nothing' | 'best_effort'
 
 export interface ContainerMoveValidationError {

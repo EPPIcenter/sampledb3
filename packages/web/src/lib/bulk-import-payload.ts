@@ -1,8 +1,12 @@
 /**
  * Build API payloads for bulk import in one place so validate and import stay aligned.
  */
-import type { BulkCombinedRequest, BulkCombinedValidateRequest } from '@sampledb/contract'
-import { getBulkImportCollectionType } from './bulk-import-validation'
+import type {
+  BulkCombinedContainer,
+  BulkCombinedRequest,
+  BulkCombinedValidateRequest,
+  ContainerWriteInput,
+} from '@sampledb/contract'
 import type { BulkCombinedAtomicMode } from './api/imports'
 import type { ContainerType } from './container-types'
 
@@ -11,6 +15,20 @@ export interface MissingCollectionForPayload {
   barcode?: string
   locationId: number | null
   collectionBarcode?: string
+}
+
+/** Internal flat container shape from CSV row mapping (specimens bulk still uses this). */
+export interface FlatBulkImportContainer {
+  containerType: ContainerType
+  parentCollectionType?: 'box' | 'bag'
+  collectionName?: string
+  collectionBarcode?: string
+  barcode?: string
+  position?: string
+  sheetName?: string
+  sublabel?: string
+  comment?: string
+  collectionLocationId?: number
 }
 
 export function buildCollectionLocationMap(
@@ -28,52 +46,114 @@ export function buildCollectionLocationMap(
   return collectionLocationMap
 }
 
-/** Same as POST /specimens/bulk: attach collectionLocationId for collections created in the wizard. */
+function resolveCollectionLocationId(
+  flat: FlatBulkImportContainer,
+  collectionLocationMap: Map<string, number>
+): number | undefined {
+  if (flat.collectionLocationId != null) {
+    return flat.collectionLocationId
+  }
+  if (flat.collectionName) {
+    const byName = collectionLocationMap.get(flat.collectionName)
+    if (byName != null) return byName
+  }
+  if (flat.collectionBarcode) {
+    const byBarcode = collectionLocationMap.get(flat.collectionBarcode)
+    if (byBarcode != null) return byBarcode
+  }
+  return undefined
+}
+
+/** Map flat wizard/CSV container fields to unified bulk-combined write shape. */
+export function flatBulkContainerToWriteInput(
+  flat: FlatBulkImportContainer,
+  collectionLocationMap: Map<string, number>
+): BulkCombinedContainer {
+  const locationId = resolveCollectionLocationId(flat, collectionLocationMap)
+  const comment = flat.comment
+  const locationField = locationId != null ? { locationId } : {}
+
+  if (flat.containerType === 'micronix_tube') {
+    const write: ContainerWriteInput = {
+      containerType: 'micronix_tube',
+      barcode: flat.barcode ?? '',
+      ...(comment ? { comment } : {}),
+      collection: {
+        type: 'micronix_plate',
+        ...(flat.collectionName ? { name: flat.collectionName } : {}),
+        ...(flat.collectionBarcode ? { barcode: flat.collectionBarcode } : {}),
+        ...(flat.position ? { position: flat.position } : {}),
+        ...locationField,
+      },
+    }
+    return write
+  }
+
+  if (flat.containerType === 'cryovial_tube') {
+    const write: ContainerWriteInput = {
+      containerType: 'cryovial_tube',
+      ...(flat.barcode ? { barcode: flat.barcode } : {}),
+      ...(comment ? { comment } : {}),
+      collection: {
+        type: 'cryovial_box',
+        ...(flat.collectionName ? { name: flat.collectionName } : {}),
+        ...(flat.collectionBarcode ? { barcode: flat.collectionBarcode } : {}),
+        ...(flat.position ? { position: flat.position } : {}),
+        ...locationField,
+      },
+    }
+    return write
+  }
+
+  if (flat.containerType === 'static_well') {
+    const write: ContainerWriteInput = {
+      containerType: 'static_well',
+      ...(comment ? { comment } : {}),
+      collection: {
+        type: 'micronix_plate',
+        ...(flat.collectionName ? { name: flat.collectionName } : {}),
+        ...(flat.collectionBarcode ? { barcode: flat.collectionBarcode } : {}),
+        ...(flat.position ? { position: flat.position } : {}),
+        ...locationField,
+      },
+    }
+    return write
+  }
+
+  const write: ContainerWriteInput = {
+    containerType: 'paper',
+    ...(flat.sublabel ? { sublabel: flat.sublabel } : {}),
+    ...(comment ? { comment } : {}),
+    collection: {
+      type: 'sheet',
+      ...(flat.sheetName ? { name: flat.sheetName } : {}),
+      ...(flat.collectionName
+        ? {
+            parent: {
+              type: flat.parentCollectionType ?? 'box',
+              name: flat.collectionName,
+              ...locationField,
+            },
+          }
+        : {}),
+    },
+  }
+  return write
+}
+
+/** Map flat CSV/wizard rows to POST /specimens/bulk nested container write shape. */
 export function buildSpecimensWithLocationIds(
   data: Record<string, unknown>[],
   collectionLocationMap: Map<string, number>
 ): Record<string, unknown>[] {
   return data.map((spec) => {
     if (!spec.container) return spec
-    const container = spec.container as Record<string, unknown>
-    const locationId = container.collectionName
-      ? collectionLocationMap.get(container.collectionName as string)
-      : container.collectionBarcode
-        ? collectionLocationMap.get(container.collectionBarcode as string)
-        : undefined
-    if (locationId == null) return spec
-    return {
-      ...spec,
-      container: { ...container, collectionLocationId: locationId },
-    }
+    const container = flatBulkContainerToWriteInput(
+      spec.container as FlatBulkImportContainer,
+      collectionLocationMap
+    )
+    return { ...spec, container }
   })
-}
-
-export function buildCreateCollectionsForBulkCombined(params: {
-  atomicMode: BulkCombinedAtomicMode
-  missingCollections: MissingCollectionForPayload[]
-  /** From getBulkImportCollectionType(containerType) */
-  collectionApiType: ReturnType<typeof getBulkImportCollectionType>
-}): BulkCombinedRequest['createCollections'] {
-  const { atomicMode, missingCollections, collectionApiType } = params
-  if (atomicMode !== 'full_file' || !collectionApiType) {
-    return undefined
-  }
-  if (!missingCollections.some((c) => c.locationId != null)) {
-    return undefined
-  }
-  return missingCollections
-    .filter((c) => c.locationId != null)
-    .map((c) => {
-      const name =
-        c.name || (c.barcode ? `Collection-${c.barcode}` : `Collection-${Date.now()}`)
-      return {
-        type: collectionApiType,
-        name,
-        locationId: c.locationId!,
-        barcode: c.barcode ?? c.collectionBarcode,
-      }
-    })
 }
 
 /** Strip validate-only rowIndex before POST /imports/bulk-combined. */
@@ -83,7 +163,6 @@ export function toBulkCombinedImportRequest(
   return {
     studyShortCode: payload.studyShortCode,
     atomicMode: payload.atomicMode,
-    createCollections: payload.createCollections,
     subjects: payload.subjects.map(({ subjectName, specimens }) => ({
       subjectName,
       specimens: specimens.map(({ specimenTypeName, collectionDate, container }) => ({
@@ -106,9 +185,8 @@ export function buildBulkCombinedRequestPayload(
     atomicMode: BulkCombinedAtomicMode
   }
 ): BulkCombinedValidateRequest {
-  const { fixedStudyShortCode, missingCollections, atomicMode, containerType } = opts
+  const { fixedStudyShortCode, missingCollections } = opts
   const collectionLocationMap = buildCollectionLocationMap(missingCollections)
-  const collectionApiType = getBulkImportCollectionType(containerType)
 
   const subjectMap = new Map<string, BulkCombinedValidateRequest['subjects'][number]['specimens']>()
 
@@ -121,24 +199,11 @@ export function buildBulkCombinedRequestPayload(
       subjectMap.set(key, [])
     }
 
-    let containerData = spec.container as BulkCombinedValidateRequest['subjects'][number]['specimens'][number]['container']
-    if (containerData && containerData.collectionName) {
-      const locationId = collectionLocationMap.get(containerData.collectionName)
-      if (locationId != null) {
-        containerData = {
-          ...containerData,
-          collectionLocationId: locationId,
-        }
-      }
-    } else if (containerData && containerData.collectionBarcode) {
-      const locationId = collectionLocationMap.get(containerData.collectionBarcode)
-      if (locationId != null) {
-        containerData = {
-          ...containerData,
-          collectionLocationId: locationId,
-        }
-      }
-    }
+    const rawContainer = spec.container as FlatBulkImportContainer | undefined
+    const containerData =
+      rawContainer != null
+        ? flatBulkContainerToWriteInput(rawContainer, collectionLocationMap)
+        : undefined
 
     subjectMap.get(key)!.push({
       specimenTypeName: spec.specimenTypeName as string,
@@ -158,16 +223,9 @@ export function buildBulkCombinedRequestPayload(
     }
   })
 
-  const createCollections = buildCreateCollectionsForBulkCombined({
-    atomicMode,
-    missingCollections,
-    collectionApiType,
-  })
-
   return {
     studyShortCode,
-    atomicMode,
-    createCollections,
+    atomicMode: opts.atomicMode,
     subjects,
   }
 }

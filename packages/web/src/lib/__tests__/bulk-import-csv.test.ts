@@ -77,6 +77,7 @@ describe('buildBulkImportTemplateContent', () => {
       specimenTypeNames: ['Blood Spot'],
     })
     expect(csvContent).toContain('Blood Spot')
+    expect(csvContent).toContain('box_name')
     expect(csvContent).toContain('bag_name')
     expect(csvContent).not.toContain('position')
   })

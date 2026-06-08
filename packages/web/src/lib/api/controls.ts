@@ -1,4 +1,5 @@
 import { api } from './client'
+import type { ControlBatchContainerWriteInput } from '../control-batch-payload'
 import type { SubjectSummary, SubjectSummarySpecimen, SubjectSummaryResponse } from './subjects'
 interface BloodControlProperties {
   strains?: Array<{ id: number; name?: string; percentage?: number } | number>
@@ -152,50 +153,14 @@ export const controlsApi = {
     specimens: Array<{
       specimenTypeName: string
       collectionDate?: string
-      containers: Array<{
-        type: 'paper' | 'cryovial_tube' | 'micronix_tube'
-        collectionId?: number
-        collectionName?: string
-        collectionLocationId?: number
-        collectionType?: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-        containerBarcode?: string
-        sublabel?: string
-        position?: string
-        quantity?: number
-        unitSymbol?: string
-        sheetName?: string
-      }>
-    }>
-    createCollections?: Array<{
-      type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-      name: string
-      locationId: number
-      barcode?: string
+      containers: ControlBatchContainerWriteInput[]
     }>
   }) => api.post<{ batch: ControlBatch; specimens: Array<{ id: number; specimenTypeName: string; containerCount: number; containerIds: number[] }>; createdCollections: Array<{ type: string; id: number; name: string }> }>('/blood-controls/batches/create-with-specimens', data),
   addSpecimensToBatch: (batchId: number, data: {
     specimens: Array<{
       specimenTypeName: string
       collectionDate?: string
-      containers: Array<{
-        type: 'paper' | 'cryovial_tube' | 'micronix_tube'
-        collectionId?: number
-        collectionName?: string
-        collectionLocationId?: number
-        collectionType?: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-        containerBarcode?: string
-        sublabel?: string
-        position?: string
-        quantity?: number
-        unitSymbol?: string
-        sheetName?: string
-      }>
-    }>
-    createCollections?: Array<{
-      type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-      name: string
-      locationId: number
-      barcode?: string
+      containers: ControlBatchContainerWriteInput[]
     }>
   }) => api.post<{ specimens: Array<{ id: number; specimenTypeName: string; containerCount: number; containerIds: number[] }>; createdCollections: Array<{ type: string; id: number; name: string }> }>(`/blood-controls/batches/${batchId}/specimens/bulk`, data),
   validateCSV: (data: { csvText: string }) => api.post<{ valid: boolean; errors: Array<{ row: number; field?: string; error: string }>; preview: Array<Record<string, any>> }>('/blood-controls/batches/validate-csv', data),
