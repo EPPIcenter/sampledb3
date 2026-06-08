@@ -25,36 +25,18 @@ import { collectContainerPlacementErrors } from './container-placement-validatio
 import {
   bulkCombinedCollectionMessages,
   prepareCombinedSubjectContainerBatch,
-  resolveContainerCollection,
 } from './registration-prepare'
-import {
-  assertLocationCanContainCollections,
-  CollectionLocationNotAllowedError,
-  CollectionLocationNotFoundError,
-  createOrResolveCollection,
-  LOCATION_CANNOT_CONTAIN_COLLECTIONS,
-} from './collections/collection-lifecycle'
 import {
   createContainerForSpecimen,
   type ContainerData,
 } from './container-creation'
+import {
+  resolveContainerPlacement,
+  toContainerWriteInput,
+  type BulkCombinedContainerInput,
+} from './container-write-placement'
 
-export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
-
-export interface ExtendedContainerData {
-  containerType: ContainerType
-  collectionName?: string
-  collectionBarcode?: string
-  barcode?: string
-  position?: string
-  sheetName?: string
-  sublabel?: string
-  unitId?: number
-  totalQuantity?: number
-  remainingQuantity?: number
-  comment?: string
-  collectionLocationId?: number
-}
+export type { BulkCombinedContainerInput }
 
 export { normalizePosition } from './normalize-position'
 
@@ -64,7 +46,7 @@ export interface WithSpecimensPayload {
   specimens: Array<{
     specimenTypeName: string
     collectionDate?: string
-    container?: ExtendedContainerData
+    container?: BulkCombinedContainerInput
   }>
 }
 
@@ -92,7 +74,7 @@ interface PreparedSubject {
   resolvedSpecimens: Array<{
     specimenTypeId: number
     collectionDate?: string
-    container?: ExtendedContainerData
+    container?: BulkCombinedContainerInput
   }>
   preparedContainers: Array<{ unitId: number; totalQuantity: number; remainingQuantity: number }>
   collectionMap: Map<string, number>
@@ -140,17 +122,11 @@ async function revalidatePreparedSubjectInTx(
         throw new ValidationError(`${specimenLabel}: ${unitValidation.error ?? 'invalid unit for container type'}`)
       }
 
-      const collectionResolution = await resolveContainerCollection(
-        dbTx,
-        container.containerType,
-        container,
-        { messages: bulkCombinedCollectionMessages }
-      )
-      if (collectionResolution.error) {
-        throw new ValidationError(`${specimenLabel}: ${collectionResolution.error}`)
-      }
-      if (collectionResolution.collectionId !== null) {
-        prepared.collectionMap.set(collectionResolution.collectionKey, collectionResolution.collectionId)
+      try {
+        await resolveContainerPlacement(dbTx, toContainerWriteInput(container), prepared.collectionMap)
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Invalid container placement'
+        throw new ValidationError(`${specimenLabel}: ${message}`)
       }
     }
   }
@@ -188,7 +164,7 @@ export async function prepareSubjectWithSpecimens(
     resolvedSpecimens.push({
       specimenTypeId,
       collectionDate: spec.collectionDate,
-      container: spec.container as ExtendedContainerData | undefined,
+      container: spec.container,
     })
   }
 
@@ -304,19 +280,14 @@ export async function createSubjectWithSpecimensInTx(
 
     if (spec.container?.containerType) {
       const container = spec.container
+      const writeInput = toContainerWriteInput(container)
+      const resolved = await resolveContainerPlacement(tx, writeInput, collectionMap)
       const containerData: ContainerData = {
-        containerType: container.containerType,
-        collectionName: container.collectionName,
-        collectionBarcode: container.collectionBarcode,
-        barcode: container.barcode,
-        position: container.position,
-        sheetName: container.sheetName,
-        sublabel: container.sublabel,
+        ...resolved,
         unitId: preparedContainer.unitId,
         totalQuantity: preparedContainer.totalQuantity,
         remainingQuantity: preparedContainer.remainingQuantity,
-        comment: container.comment,
-        collectionLocationId: container.collectionLocationId,
+        comment: 'comment' in writeInput ? writeInput.comment : undefined,
       }
       const containerResult = await createContainerForSpecimen(specimenId, containerData, tx, {
         userId,
@@ -375,18 +346,12 @@ export async function runOneSubjectWithSpecimens(
 export interface BulkCombinedPayload {
   studyShortCode: string
   atomicMode: 'full_file' | 'per_subject'
-  createCollections?: Array<{
-    type: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-    name: string
-    locationId: number
-    barcode?: string
-  }>
   subjects: Array<{
     subjectName: string
     specimens: Array<{
       specimenTypeName: string
       collectionDate?: string
-      container?: ExtendedContainerData
+      container?: BulkCombinedContainerInput
     }>
   }>
 }
@@ -407,7 +372,7 @@ export async function runBulkCombinedImport(
   payload: BulkCombinedPayload,
   userId: number | undefined
 ): Promise<BulkCombinedResult> {
-  const { studyShortCode, atomicMode, createCollections = [], subjects } = payload
+  const { studyShortCode, atomicMode, subjects } = payload
   const results: OneSubjectResult[] = []
   const errors: Array<{ index: number; error: string }> = []
 
@@ -439,21 +404,7 @@ export async function runBulkCombinedImport(
     return { summary, results, errors: errors.length > 0 ? errors : undefined }
   }
 
-  // full_file: one transaction with optional collection creation
-  for (const coll of createCollections) {
-    try {
-      assertLocationCanContainCollections(database, coll.locationId)
-    } catch (error) {
-      if (error instanceof CollectionLocationNotFoundError) {
-        throw new ValidationError('Location not found')
-      }
-      if (error instanceof CollectionLocationNotAllowedError) {
-        throw new ValidationError(LOCATION_CANNOT_CONTAIN_COLLECTIONS)
-      }
-      throw error
-    }
-  }
-
+  // full_file: one transaction for all subjects
   const allPrepared: PreparedSubject[] = []
   const mergedCollectionMap = new Map<string, number>()
   for (let i = 0; i < subjects.length; i++) {
@@ -473,22 +424,6 @@ export async function runBulkCombinedImport(
       await revalidatePreparedSubjectInTx(tx, allPrepared[i], i)
     }
 
-    for (const coll of createCollections) {
-      const key = `${coll.type}-${coll.name}`
-      if (mergedCollectionMap.has(key)) continue
-      await createOrResolveCollection(
-        tx,
-        {
-          type: coll.type,
-          name: coll.name,
-          locationId: coll.locationId,
-          barcode: coll.barcode ?? null,
-          userId,
-          now,
-        },
-        mergedCollectionMap
-      )
-    }
     const out: OneSubjectResult[] = []
     for (let i = 0; i < allPrepared.length; i++) {
       const prepared = allPrepared[i]

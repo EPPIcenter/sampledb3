@@ -23,7 +23,7 @@ import { requireParam } from '../lib/common-validators'
 import {
   runOneSubjectWithSpecimens,
   formatOneSubjectWithSpecimensResponse,
-  type ExtendedContainerData,
+  type BulkCombinedContainerInput,
 } from '../lib/bulk-combined-import'
 import { withSpecimensRequestSchema } from '../lib/schemas'
 import { mergeSubjects } from '../lib/subjects/merge'
@@ -343,7 +343,7 @@ subjects.post('/with-specimens', memberMiddleware, async (c) => {
         specimens: data.specimens.map((sp) => ({
           specimenTypeName: sp.specimenTypeName,
           collectionDate: sp.collectionDate,
-          container: sp.container as ExtendedContainerData | undefined,
+          container: sp.container as BulkCombinedContainerInput | undefined,
         })),
       },
       user?.id

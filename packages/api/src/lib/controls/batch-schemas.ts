@@ -1,27 +1,55 @@
 import { z } from 'zod'
-import { refinePaperContainerInboundWrite } from '@sampledb/contract'
+import { containerWriteInputSchema, refinePaperContainerInboundWrite } from '@sampledb/contract'
 
-export const createBloodControlBatchSchema = z.object({
-  name: z.string().min(1).optional(),
-  productionDate: z.string().optional(),
-  properties: z.record(z.string(), z.any()).optional(),
-})
-
-export const batchContainerInputSchema = z.object({
-  type: z.enum(['paper', 'cryovial_tube', 'micronix_tube']),
-  collectionId: z.number().int().optional(),
-  collectionName: z.string().optional(),
-  collectionLocationId: z.number().int().optional(),
-  collectionType: z.enum(['box', 'bag', 'micronix_plate', 'cryovial_box']).optional(),
-  containerBarcode: z.string().optional(),
-  sublabel: z.string().optional(),
-  position: z.string().optional(),
+const batchContainerExtraFieldsSchema = z.object({
   quantity: z.number().optional(),
   unitSymbol: z.string().optional(),
-  sheetName: z.string().optional(),
-}).superRefine((data, ctx) => {
-  refinePaperContainerInboundWrite(data, ctx)
 })
+
+const batchContainerCoreSchema = containerWriteInputSchema
+  .and(batchContainerExtraFieldsSchema)
+  .superRefine((data, ctx) => {
+    if (data.containerType === 'static_well') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'static_well is not supported in control batch create-with-specimens',
+      })
+    }
+    refinePaperContainerInboundWrite(data, ctx)
+  })
+
+export const batchContainerInputSchema = z
+  .unknown()
+  .superRefine((val, ctx) => {
+    if (val == null) return
+    if (typeof val !== 'object') {
+      ctx.addIssue({ code: 'custom', message: 'Invalid container object' })
+      return
+    }
+    const record = val as Record<string, unknown>
+    if ('type' in record) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Use containerType instead of type',
+        path: ['type'],
+      })
+    }
+    if (
+      'collectionName' in record ||
+      'collectionLocationId' in record ||
+      'collectionId' in record ||
+      'collectionType' in record ||
+      'containerBarcode' in record ||
+      'sheetName' in record
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Use nested collection placement instead of flat collectionName/sheetName fields',
+      })
+    }
+    refinePaperContainerInboundWrite(record as Parameters<typeof refinePaperContainerInboundWrite>[0], ctx)
+  })
+  .pipe(batchContainerCoreSchema)
 
 export const batchSpecimenInputSchema = z.object({
   specimenTypeName: z.string().min(1),
@@ -29,11 +57,10 @@ export const batchSpecimenInputSchema = z.object({
   containers: z.array(batchContainerInputSchema),
 })
 
-export const batchCollectionCreateSchema = z.object({
-  type: z.enum(['box', 'bag', 'micronix_plate', 'cryovial_box']),
-  name: z.string().min(1),
-  locationId: z.number().int(),
-  barcode: z.string().optional(),
+export const createBloodControlBatchSchema = z.object({
+  name: z.string().min(1).optional(),
+  productionDate: z.string().optional(),
+  properties: z.record(z.string(), z.any()).optional(),
 })
 
 export const createBatchWithSpecimensSchema = z.object({
@@ -44,12 +71,10 @@ export const createBatchWithSpecimensSchema = z.object({
     properties: z.record(z.string(), z.any()).optional(),
   }),
   specimens: z.array(batchSpecimenInputSchema).min(1),
-  createCollections: z.array(batchCollectionCreateSchema).optional(),
 })
 
 export const addSpecimensToBatchSchema = z.object({
   specimens: z.array(batchSpecimenInputSchema).min(1),
-  createCollections: z.array(batchCollectionCreateSchema).optional(),
 })
 
 export const validateControlBatchCsvSchema = z.object({
@@ -57,5 +82,6 @@ export const validateControlBatchCsvSchema = z.object({
 })
 
 export type CreateBloodControlBatchInput = z.infer<typeof createBloodControlBatchSchema>
+export type BatchContainerInput = z.infer<typeof batchContainerInputSchema>
 export type CreateBatchWithSpecimensInput = z.infer<typeof createBatchWithSpecimensSchema>
 export type AddSpecimensToBatchInput = z.infer<typeof addSpecimensToBatchSchema>

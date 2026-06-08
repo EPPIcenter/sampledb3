@@ -141,9 +141,9 @@ describe('Imports API', () => {
       expect(persisted.find((s) => s.name === 'PARTIAL-BAD')).toBeUndefined()
     })
 
-    it('returns 400 when createCollections specifies a location that cannot contain collections', async () => {
+    it('returns 400 when container collection locationId cannot contain collections', async () => {
       await createTestStudy(ctx.db, { title: 'Location Check Study', shortCode: 'LOCCHECK' })
-      await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const testSpecimenType = await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
       const storageType = await createTestStorageType(ctx.db, { name: 'Freezer', description: 'Test' })
       const noCollLoc = await createTestLocation(ctx.db, {
         name: 'No Collections Here',
@@ -151,19 +151,40 @@ describe('Imports API', () => {
         storageTypeId: String(storageType.id),
         canContainCollections: false,
       })
+      const testUnit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await ctx.db.insert(specimenTypeContainerType).values({
+        specimenTypeId: testSpecimenType.id,
+        containerType: 'micronix_tube',
+      })
+      await ctx.db.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: testUnit.id })
+      await setContainerDefaults(ctx.db, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
 
       const res = await ctx.request('/api/imports/bulk-combined', {
         method: 'POST',
         json: {
           studyShortCode: 'LOCCHECK',
           atomicMode: 'full_file',
-          createCollections: [
-            { type: 'micronix_plate', name: 'Plate1', locationId: noCollLoc.id },
-          ],
           subjects: [
             {
               subjectName: 'SUBJ1',
-              specimens: [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-01' }],
+              specimens: [
+                {
+                  specimenTypeName: 'Whole Blood',
+                  collectionDate: '2025-01-01',
+                  container: {
+                    containerType: 'micronix_tube',
+                    barcode: 'BC-LOC',
+                    collection: {
+                      type: 'micronix_plate',
+                      name: 'Plate1',
+                      locationId: noCollLoc.id,
+                      position: 'A01',
+                    },
+                  },
+                },
+              ],
             },
           ],
         },
@@ -215,10 +236,13 @@ describe('Imports API', () => {
                   collectionDate: '2025-01-01',
                   container: {
                     containerType: 'cryovial_tube',
-                    collectionName: 'NewBox',
-                    collectionLocationId: noCollLoc.id,
                     barcode: 'BC1',
-                    position: 'A01',
+                    collection: {
+                      type: 'cryovial_box',
+                      name: 'NewBox',
+                      locationId: noCollLoc.id,
+                      position: 'A01',
+                    },
                   },
                 },
               ],
@@ -260,7 +284,6 @@ describe('Imports API', () => {
         json: {
           studyShortCode: 'UNITDEF',
           atomicMode: 'full_file',
-          createCollections: [{ type: 'micronix_plate', name: 'PlateUnit', locationId: loc.id }],
           subjects: [
             {
               subjectName: 'SUBJ1',
@@ -270,11 +293,13 @@ describe('Imports API', () => {
                   collectionDate: '2025-01-01',
                   container: {
                     containerType: 'micronix_tube',
-                    collectionName: 'PlateUnit',
-                    collectionLocationId: loc.id,
                     barcode: 'BC1',
-                    position: 'A01',
-                    // unitId deliberately omitted - backend should use default
+                    collection: {
+                      type: 'micronix_plate',
+                      name: 'PlateUnit',
+                      locationId: loc.id,
+                      position: 'A01',
+                    },
                   },
                 },
               ],
@@ -348,9 +373,9 @@ describe('Imports API', () => {
       expect(data.errors.some((e) => e.message.includes('Nonexistent Type') || e.message.includes('not found'))).toBe(true)
     })
 
-    it('returns valid: false when createCollections location cannot contain collections', async () => {
+    it('returns valid: false when container collection locationId cannot contain collections', async () => {
       await createTestStudy(ctx.db, { title: 'Val Loc', shortCode: 'VALLOC' })
-      await createTestSpecimenType(ctx.db, { name: 'Blood' })
+      const testSpecimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
       const storageType = await createTestStorageType(ctx.db, { name: 'Freezer', description: 'Test' })
       const noCollLoc = await createTestLocation(ctx.db, {
         name: 'No Coll',
@@ -358,14 +383,40 @@ describe('Imports API', () => {
         storageTypeId: String(storageType.id),
         canContainCollections: false,
       })
+      const testUnit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await ctx.db.insert(specimenTypeContainerType).values({
+        specimenTypeId: testSpecimenType.id,
+        containerType: 'micronix_tube',
+      })
+      await ctx.db.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: testUnit.id })
+      await setContainerDefaults(ctx.db, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
       const res = await ctx.request('/api/imports/bulk-combined/validate', {
         method: 'POST',
         json: {
           studyShortCode: 'VALLOC',
           atomicMode: 'full_file',
-          createCollections: [{ type: 'micronix_plate', name: 'P1', locationId: noCollLoc.id }],
           subjects: [
-            { subjectName: 'S1', specimens: [{ specimenTypeName: 'Blood', collectionDate: '2025-01-01' }] },
+            {
+              subjectName: 'S1',
+              specimens: [
+                {
+                  specimenTypeName: 'Blood',
+                  collectionDate: '2025-01-01',
+                  container: {
+                    containerType: 'micronix_tube',
+                    barcode: 'BC-VAL',
+                    collection: {
+                      type: 'micronix_plate',
+                      name: 'P1',
+                      locationId: noCollLoc.id,
+                      position: 'A01',
+                    },
+                  },
+                },
+              ],
+            },
           ],
         },
       })

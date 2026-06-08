@@ -25,6 +25,8 @@ import {
   specimen,
   storageContainer,
   micronixTube,
+  box,
+  paper,
 } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
@@ -138,8 +140,7 @@ describe('Specimens API', () => {
             collectionDate,
             container: {
               containerType: 'cryovial_tube' as const,
-              collectionName: 'BULK-BOX',
-              position: 'A01',
+              collection: { type: 'cryovial_box', name: 'BULK-BOX', position: 'A01' },
             },
           },
           {
@@ -150,8 +151,7 @@ describe('Specimens API', () => {
             collectionDate,
             container: {
               containerType: 'cryovial_tube' as const,
-              collectionName: 'BULK-BOX',
-              position: 'A02',
+              collection: { type: 'cryovial_box', name: 'BULK-BOX', position: 'A02' },
             },
           },
         ],
@@ -178,6 +178,28 @@ describe('Specimens API', () => {
       expect(count).toHaveLength(1)
     })
 
+    it('returns 400 for legacy flat collectionName on bulk container', async () => {
+      const res = await ctx.request('/api/specimens/bulk', {
+        method: 'POST',
+        json: {
+          specimens: [
+            {
+              sourceType: 'subject',
+              studyShortCode: 'BLK01',
+              subjectName: 'BULK-SUBJ',
+              specimenTypeName: 'Whole Blood',
+              container: {
+                containerType: 'cryovial_tube',
+                collectionName: 'BULK-BOX',
+                position: 'A01',
+              },
+            },
+          ],
+        },
+      })
+      expect(res.status).toBe(400)
+    })
+
     it('returns 400 on validation error and creates no specimens (all-or-nothing)', async () => {
       const before = await ctx.db.select({ id: specimen.id }).from(specimen)
       const res = await ctx.request('/api/specimens/bulk', {
@@ -191,8 +213,7 @@ describe('Specimens API', () => {
               specimenTypeName: 'Nonexistent Type',
               container: {
                 containerType: 'cryovial_tube',
-                collectionName: 'BULK-BOX',
-                position: 'A01',
+                collection: { type: 'cryovial_box', name: 'BULK-BOX', position: 'A01' },
               },
             },
           ],
@@ -219,9 +240,8 @@ describe('Specimens API', () => {
           collectionDate: '2024-06-02',
           container: {
             containerType: 'micronix_tube',
-            collectionName: 'MISSING-PLATE',
             barcode: 'MID-ROLLBACK-001',
-            position: 'B01',
+            collection: { type: 'micronix_plate', name: 'MISSING-PLATE', position: 'B01' },
           },
         },
       })
@@ -286,8 +306,7 @@ describe('Specimens API', () => {
               collectionDate: '2024-07-01',
               container: {
                 containerType: 'cryovial_tube',
-                collectionName: 'V-BOX',
-                position: 'A01',
+                collection: { type: 'cryovial_box', name: 'V-BOX', position: 'A01' },
               },
             },
           ],
@@ -309,7 +328,10 @@ describe('Specimens API', () => {
               studyShortCode: 'VBLK',
               subjectName: 'V-SUBJ',
               specimenTypeName: 'Unknown Type',
-              container: { containerType: 'cryovial_tube', collectionName: 'V-BOX', position: 'A01' },
+              container: {
+                containerType: 'cryovial_tube',
+                collection: { type: 'cryovial_box', name: 'V-BOX', position: 'A01' },
+              },
             },
           ],
         },
@@ -368,14 +390,17 @@ describe('Specimens API', () => {
       })
     })
 
-    it('returns 201 and containerId and creates container for specimen', async () => {
+    it('returns 201 and containerId for ContainerWriteInput micronix payload', async () => {
       const res = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
         method: 'POST',
         json: {
           containerType: 'micronix_tube',
-          collectionName: 'ADD-PLATE',
           barcode: 'ADD-TUBE-001',
-          position: 'A01',
+          collection: {
+            type: 'micronix_plate',
+            name: 'ADD-PLATE',
+            position: 'A01',
+          },
         },
       })
       expect(res.status).toBe(201)
@@ -401,9 +426,12 @@ describe('Specimens API', () => {
         method: 'POST',
         json: {
           containerType: 'micronix_tube',
-          collectionName: 'ADD-PLATE',
           barcode: 'ADD-404',
-          position: 'B01',
+          collection: {
+            type: 'micronix_plate',
+            name: 'ADD-PLATE',
+            position: 'B01',
+          },
         },
       })
       expect(res.status).toBe(404)
@@ -420,14 +448,76 @@ describe('Specimens API', () => {
         method: 'POST',
         json: {
           containerType: 'micronix_tube',
-          collectionName: 'ADD-PLATE',
           barcode: 'ADD-BAD-TYPE',
-          position: 'C01',
+          collection: {
+            type: 'micronix_plate',
+            name: 'ADD-PLATE',
+            position: 'C01',
+          },
         },
       })
       expect(res.status).toBe(400)
       const body = (await res.json()) as { error?: string }
       expect(body.error).toMatch(/container type|not allowed|specimen type/i)
+    })
+
+    it('returns 201 for paper ContainerWriteInput with box parent and sheet', async () => {
+      await ctx.db.delete(specimenTypeContainerType).where(eq(specimenTypeContainerType.specimenTypeId, testSpecimenType.id))
+      await ctx.db.insert(specimenTypeContainerType).values({
+        specimenTypeId: testSpecimenType.id,
+        containerType: 'paper',
+      })
+      const micronixUnit = await ctx.db
+        .select({ unitId: containerTypeUnit.unitId })
+        .from(containerTypeUnit)
+        .where(eq(containerTypeUnit.containerType, 'micronix_tube'))
+        .get()
+      await ctx.db.insert(containerTypeUnit).values({
+        containerType: 'paper',
+        unitId: micronixUnit!.unitId,
+      })
+
+      const [boxRecord] = await ctx.db
+        .insert(box)
+        .values({
+          name: 'ADD-BOX',
+          locationId: testLocation.id,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+
+      const res = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'paper',
+          sublabel: 'Spot-Route',
+          collection: {
+            type: 'sheet',
+            name: 'Sheet-Route',
+            parent: { type: 'box', name: boxRecord.name },
+          },
+        },
+      })
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as { containerId?: number }
+      expect(data.containerId).toBeDefined()
+
+      const paperRecord = await ctx.db.select().from(paper).where(eq(paper.id, data.containerId!)).get()
+      expect(paperRecord?.sublabel).toBe('Spot-Route')
+    })
+
+    it('returns 400 for legacy flat collectionName payload', async () => {
+      const res = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'micronix_tube',
+          collectionName: 'ADD-PLATE',
+          barcode: 'LEGACY-1',
+          position: 'A01',
+        },
+      })
+      expect(res.status).toBe(400)
     })
   })
 })

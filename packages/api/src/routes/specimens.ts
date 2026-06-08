@@ -5,7 +5,13 @@ import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { listSpecimens } from '../lib/specimens/specimen-read'
 import { validateSpecimenData } from '../lib/validation'
+import type { ContainerWriteInput } from '@sampledb/contract'
 import { createContainerForSpecimen, type ContainerData } from '../lib/container-creation'
+import {
+  resolveContainerPlacement,
+  toContainerWriteInput,
+  type BulkCombinedContainerInput,
+} from '../lib/container-write-placement'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { containerSchema, containerSchemaRequired, containerSchemaWithLocation } from '../lib/schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
@@ -103,7 +109,7 @@ specimens.post('/:id/containers', memberMiddleware, async (c) => {
     }
 
     const body = await c.req.json()
-    const data = containerSchemaRequired.parse(body) as ContainerData
+    const data = containerSchemaRequired.parse(body) as ContainerWriteInput
 
     const user = c.get('user')
     const result = await createContainerForSpecimen(id, data, dbInstance, user?.id)
@@ -179,7 +185,17 @@ specimens.post('/', memberMiddleware, async (c) => {
 
     if (data.container) {
       try {
-        const result = await createContainerForSpecimen(newSpecimen.id, data.container as ContainerData, dbInstance, user?.id)
+        const container = data.container as BulkCombinedContainerInput
+        const writeInput = toContainerWriteInput(container)
+        const resolved = await resolveContainerPlacement(dbInstance, writeInput)
+        const containerPayload: ContainerData = {
+          ...resolved,
+          unitId: container.unitId,
+          totalQuantity: container.totalQuantity,
+          remainingQuantity: container.remainingQuantity,
+          comment: 'comment' in writeInput ? writeInput.comment : undefined,
+        }
+        const result = await createContainerForSpecimen(newSpecimen.id, containerPayload, dbInstance, user?.id)
         if (!result.success) {
           await dbInstance.delete(storageContainer).where(eq(storageContainer.specimenId, newSpecimen.id))
           await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))
@@ -217,7 +233,6 @@ specimens.post('/bulk', memberMiddleware, async (c) => {
         subjectName: z.string().optional(),
         specimenTypeName: z.string().min(1),
         collectionDate: z.string().optional(),
-        containerBarcode: z.string().optional(),
         container: containerSchemaWithLocation,
       })),
     })
@@ -261,7 +276,6 @@ specimens.post('/bulk/validate', memberMiddleware, async (c) => {
         subjectName: z.string().optional(),
         specimenTypeName: z.string().min(1),
         collectionDate: z.string().optional(),
-        containerBarcode: z.string().optional(),
         container: containerSchemaWithLocation,
       })),
     })

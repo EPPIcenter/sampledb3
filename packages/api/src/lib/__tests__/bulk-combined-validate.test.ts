@@ -76,17 +76,51 @@ describe('bulk-combined-validate', () => {
       expect(result.errors.some((e) => e.message.toLowerCase().includes('date') || e.message.includes('Invalid collection date'))).toBe(true)
     })
 
-    it('returns invalid when createCollections uses location that cannot contain collections', async () => {
+    it('returns invalid when container collection locationId cannot contain collections', async () => {
+      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
       const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
       const loc = await createTestLocation(testDb, {
         name: 'Shelf',
         storageTypeId: String(storageType.id),
         canContainCollections: false,
       })
+      const now = utcNow()
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: specimenType.id,
+        containerType: 'micronix_tube',
+        created: now,
+        lastUpdated: now,
+      })
+      await setContainerDefaults(testDb, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+
       const result = await validateBulkCombinedPayload(testDb, {
-        studyShortCode: 'ST1',
-        createCollections: [{ type: 'micronix_plate', name: 'Plate1', locationId: loc.id }],
-        subjects: [{ subjectName: 'Subj1', specimens: [] }],
+        studyShortCode: study.shortCode,
+        subjects: [
+          {
+            subjectName: 'Subj1',
+            specimens: [
+              {
+                specimenTypeName: specimenType.name,
+                collectionDate: '2024-01-15',
+                container: {
+                  containerType: 'micronix_tube',
+                  barcode: 'MT-LOC',
+                  collection: {
+                    type: 'micronix_plate',
+                    name: 'Plate1',
+                    locationId: loc.id,
+                    position: 'A01',
+                  },
+                },
+              },
+            ],
+          },
+        ],
       })
       expect(result.valid).toBe(false)
       expect(result.errors.some((e) => e.message.includes('cannot contain collections'))).toBe(true)
@@ -140,8 +174,8 @@ describe('bulk-combined-validate', () => {
                 collectionDate: '2024-01-15',
                 container: {
                   containerType: 'micronix_tube',
-                  position: 'A01',
                   barcode: 'MT001',
+                  collection: { type: 'micronix_plate', position: 'A01' },
                 },
               },
             ],
@@ -152,7 +186,7 @@ describe('bulk-combined-validate', () => {
       expect(
         result.errors.some(
           (e) =>
-            e.message.includes('Plate/box name or barcode is required') ||
+            e.message.includes('plate_name') ||
             e.message.includes('Collection name or barcode is required') ||
             e.message.includes('not found')
         )
@@ -196,9 +230,8 @@ describe('bulk-combined-validate', () => {
                 collectionDate: '2024-01-15',
                 container: {
                   containerType: 'micronix_tube',
-                  collectionName: plate.name,
-                  position: 'A01',
                   barcode: '',
+                  collection: { type: 'micronix_plate', name: plate.name, position: 'A01' },
                 },
               },
             ],
@@ -246,9 +279,8 @@ describe('bulk-combined-validate', () => {
                 collectionDate: '2024-01-15',
                 container: {
                   containerType: 'micronix_tube',
-                  collectionName: plate.name,
-                  position: '',
                   barcode: 'MT001',
+                  collection: { type: 'micronix_plate', name: plate.name, position: '' },
                 },
               },
             ],

@@ -19,7 +19,12 @@ import {
   studySubject,
 } from '../db/schema'
 import { and, eq, sql } from 'drizzle-orm'
-import { validatePaperDerivationCsvFields } from '@sampledb/contract'
+import {
+  csvRowToContainerWriteInput,
+  PAPER_DERIVATION_USE_SUBLABEL_NOT_CONTAINER_BARCODE,
+  PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION,
+  type ContainerCsvRow,
+} from '@sampledb/contract'
 import { createDerivation, type CreateDerivationInput } from './derivations'
 
 /**
@@ -93,6 +98,7 @@ export interface DerivationCsvRow {
   plate_name?: string
   box_name?: string
   bag_name?: string
+  sheet_name?: string
   collection_barcode?: string
   container_barcode?: string
   sublabel?: string
@@ -198,8 +204,9 @@ function getCollectionNameForType(
   row: DerivationCsvRow,
   containerType: DerivationCsvRow['container_type'] | 'micronix_tube',
 ): string | undefined {
+  // Column names align with csvRowToContainerWriteInput (contract write CSV mapper).
   if (containerType === 'cryovial_tube') return row.box_name
-  if (containerType === 'paper') return row.bag_name
+  if (containerType === 'paper') return row.box_name || row.bag_name
   return row.plate_name
 }
 
@@ -207,8 +214,29 @@ function getCollectionNameLabelForType(
   containerType: DerivationCsvRow['container_type'] | 'micronix_tube',
 ): string {
   if (containerType === 'cryovial_tube') return 'box_name'
-  if (containerType === 'paper') return 'bag_name'
+  if (containerType === 'paper') return 'box_name or bag_name'
   return 'plate_name'
+}
+
+function derivationCsvRowToContainerWrite(
+  row: DerivationCsvRow,
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper',
+) {
+  const csvRow: ContainerCsvRow = {
+    container_type: containerType,
+    plate_name: row.plate_name,
+    box_name: row.box_name,
+    bag_name: row.bag_name,
+    sheet_name: row.sheet_name,
+    collection_barcode: row.collection_barcode,
+    barcode: containerType === 'paper' ? undefined : row.container_barcode,
+    sublabel: row.sublabel,
+    position: row.position,
+  }
+  return csvRowToContainerWriteInput(csvRow, {
+    defaultContainerType: containerType,
+    requireSheetName: containerType === 'paper',
+  })
 }
 
 // Extremely small CSV parser: handles commas and quoted fields
@@ -664,11 +692,14 @@ export async function validateDerivationsCsv(
         invalidCount++
         continue
       }
-      if (containerType === 'paper' && !collectionName) {
-        validationRow.error = 'bag_name is required for paper derivations'
-        validationRows.push(validationRow)
-        invalidCount++
-        continue
+      if (containerType === 'paper') {
+        const paperParse = derivationCsvRowToContainerWrite(row, 'paper')
+        if (!paperParse.success) {
+          validationRow.error = paperParse.error
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
       }
 
       // Resolve parent container
@@ -823,9 +854,14 @@ export async function validateDerivationsCsv(
       }
 
       if (containerType === 'paper') {
-        const paperFieldError = validatePaperDerivationCsvFields(row)
-        if (paperFieldError) {
-          validationRow.error = paperFieldError
+        if ((row.container_barcode ?? '').toString().trim()) {
+          validationRow.error = PAPER_DERIVATION_USE_SUBLABEL_NOT_CONTAINER_BARCODE
+          validationRows.push(validationRow)
+          invalidCount++
+          continue
+        }
+        if ((row.position ?? '').toString().trim()) {
+          validationRow.error = PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION
           validationRows.push(validationRow)
           invalidCount++
           continue
@@ -910,33 +946,32 @@ export async function importDerivationsFromCsv(
           const row = rows[i]
           try {
             const parentContainerId = await resolveParentContainerId(tx, row)
+            const childContainerType = (settings?.containerType || row.container_type!) as 'micronix_tube' | 'cryovial_tube' | 'paper'
+            const containerParsed = derivationCsvRowToContainerWrite(row, childContainerType)
+            if (!containerParsed.success) {
+              throw new Error(containerParsed.error)
+            }
             const collectionInfo = await resolveCollectionId(
               tx,
-              row.container_type || settings?.containerType || 'micronix_tube',
-              getCollectionNameForType(row, row.container_type || settings?.containerType || 'micronix_tube'),
+              childContainerType,
+              getCollectionNameForType(row, childContainerType),
               row.collection_barcode,
             )
 
-            // Use settings for required fields, allow CSV override for defaults
-            const childContainerType = (settings?.containerType || row.container_type!) as 'micronix_tube' | 'cryovial_tube' | 'paper'
             const input: CreateDerivationInput = {
               parentContainerId,
               derivationType: settings?.derivationType || row.derivation_type!,
               specimenTypeName: settings?.specimenTypeName || row.specimen_type_name!,
-              containerType: childContainerType,
+              container: containerParsed.data,
               quantity: row.quantity ? parseNumber(row.quantity) : settings?.quantity,
               unitSymbol: row.unit_symbol || settings?.unitSymbol,
               quantityUsed: row.quantity_used ? parseNumber(row.quantity_used) : settings?.quantityUsed,
-              reduceParentQuantity: row.reduce_parent_quantity !== undefined 
-                ? parseBoolean(row.reduce_parent_quantity) 
+              reduceParentQuantity: row.reduce_parent_quantity !== undefined
+                ? parseBoolean(row.reduce_parent_quantity)
                 : settings?.reduceParentQuantity,
               derivationDate: settings?.derivationDate || row.derivation_date!,
               protocol: settings?.protocol || row.protocol!,
               notes: row.notes,
-              collectionId: collectionInfo.id,
-              sublabel: childContainerType === 'paper' ? row.sublabel : undefined,
-              containerBarcode: childContainerType === 'paper' ? undefined : row.container_barcode,
-              position: childContainerType === 'paper' ? undefined : row.position,
             }
 
             const result = await createDerivation(tx, input)
@@ -999,29 +1034,21 @@ export async function importDerivationsFromCsv(
       try {
         const parentContainerId = await resolveParentContainerId(database, row)
         const containerType = (settings?.containerType || row.container_type || 'micronix_tube') as 'micronix_tube' | 'cryovial_tube' | 'paper'
+        const containerParsed = derivationCsvRowToContainerWrite(row, containerType)
+        if (!containerParsed.success) {
+          results.push({
+            index: i,
+            success: false,
+            error: containerParsed.error,
+          })
+          continue
+        }
         const collectionInfo = await resolveCollectionId(
           database,
-          row.container_type || settings?.containerType || 'micronix_tube',
-          getCollectionNameForType(row, row.container_type || settings?.containerType || 'micronix_tube'),
+          containerType,
+          getCollectionNameForType(row, containerType),
           row.collection_barcode,
         )
-
-        if (collectionInfo.id === undefined && (containerType === 'micronix_tube' || containerType === 'cryovial_tube')) {
-          results.push({
-            index: i,
-            success: false,
-            error: `collectionId is required for ${containerType} derivations`,
-          })
-          continue
-        }
-        if (collectionInfo.id === undefined && containerType === 'paper') {
-          results.push({
-            index: i,
-            success: false,
-            error: 'collectionId (sheetId) is required for paper derivations',
-          })
-          continue
-        }
 
         results.push({
           index: i,

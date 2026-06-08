@@ -1,27 +1,24 @@
+import type { ContainerWriteInput } from '@sampledb/contract'
 import type { Database } from '../db/client'
 import type { ExtractTablesWithRelations } from 'drizzle-orm'
 import type { SQLiteTransaction } from 'drizzle-orm/sqlite-core'
 import type * as schema from '../db/schema'
 import {
   containerDerivation,
-  cryovialBox,
-  cryovialTube,
-  micronixPlate,
-  micronixTube,
-  paper,
-  sheet,
   specimen,
   specimenType,
   storageContainer,
-  studySubject,
-  controlBatch,
   unit,
 } from '../db/schema'
 import { and, eq, sql } from 'drizzle-orm'
-import { resolveCollection, type CollectionType } from './collections/collection-resolve'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { getDefaultUnit } from './defaults'
 import { utcNow } from './datetime'
+import {
+  createContainerForSpecimen,
+  type ContainerData,
+} from './container-creation'
+import { resolveContainerPlacement } from './container-write-placement'
 
 export type DerivationType = string
 
@@ -29,7 +26,7 @@ export interface CreateDerivationInput {
   parentContainerId: number
   derivationType: DerivationType
   specimenTypeName: string
-  containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
+  container: ContainerWriteInput
   quantity?: number
   unitSymbol?: string
   quantityUsed?: number
@@ -37,14 +34,7 @@ export interface CreateDerivationInput {
   derivationDate?: string
   protocol?: string
   notes?: string
-  properties?: Record<string, any>
-  collectionId?: number
-  collectionName?: string
-  collectionType?: CollectionType
-  collectionLocationId?: number
-  containerBarcode?: string
-  sublabel?: string
-  position?: string
+  properties?: Record<string, unknown>
   operatorId?: number
 }
 
@@ -54,12 +44,16 @@ export interface DerivationWarning {
 }
 
 export interface CreateDerivationResult {
-  derivation: any
-  parentContainer: any
-  childContainer: any
-  specimen: any
+  derivation: typeof containerDerivation.$inferSelect
+  parentContainer: typeof storageContainer.$inferSelect
+  childContainer: typeof storageContainer.$inferSelect
+  specimen: typeof specimen.$inferSelect | undefined
   warnings: DerivationWarning[]
 }
+
+type DatabaseOrTransaction =
+  | Database
+  | SQLiteTransaction<'sync', void, typeof schema, ExtractTablesWithRelations<typeof schema>>
 
 async function findOrCreateDerivedSpecimen(
   database: DatabaseOrTransaction,
@@ -86,25 +80,24 @@ async function findOrCreateDerivedSpecimen(
     throw new Error(`Specimen type '${specimenTypeName}' not found`)
   }
 
-  // Build match condition: same source (subject OR control batch) and same specimen type/date
-  let where = eq(specimen.specimenTypeId, type.id) as any
+  let where = eq(specimen.specimenTypeId, type.id) as ReturnType<typeof and>
 
   if (parentSpecimen.studySubjectId) {
     where = and(
       where,
       eq(specimen.studySubjectId, parentSpecimen.studySubjectId),
       sql`${specimen.controlBatchId} IS NULL`,
-    ) as any
+    )!
   } else if (parentSpecimen.controlBatchId) {
     where = and(
       where,
       eq(specimen.controlBatchId, parentSpecimen.controlBatchId),
       sql`${specimen.studySubjectId} IS NULL`,
-    ) as any
+    )!
   }
 
   if (parentSpecimen.collectionDate) {
-    where = and(where, eq(specimen.collectionDate, parentSpecimen.collectionDate)) as any
+    where = and(where, eq(specimen.collectionDate, parentSpecimen.collectionDate))!
   }
 
   const existing = await database
@@ -129,17 +122,15 @@ async function findOrCreateDerivedSpecimen(
     })
     .returning()
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime invariant per avoid-masking-bugs: insert must return row
   if (!created) throw new Error('Insert did not return specimen row')
   return created.id
 }
 
 async function resolveUnitIdForChild(
   database: DatabaseOrTransaction,
-  containerType: CreateDerivationInput['containerType'],
+  containerType: ContainerWriteInput['containerType'],
   unitSymbol?: string,
 ): Promise<number> {
-  // If explicit symbol is provided, use it
   if (unitSymbol) {
     const u = await database
       .select()
@@ -152,8 +143,7 @@ async function resolveUnitIdForChild(
     return u.id
   }
 
-  // Use the default unit for the child container type
-  return await getDefaultUnit(database as Database, containerType)
+  return getDefaultUnit(database as Database, containerType)
 }
 
 async function adjustParentQuantity(
@@ -198,8 +188,6 @@ async function adjustParentQuantity(
   return { updatedParent: updated, warnings }
 }
 
-type DatabaseOrTransaction = Database | SQLiteTransaction<'sync', void, typeof schema, ExtractTablesWithRelations<typeof schema>>
-
 export async function createDerivation(
   database: DatabaseOrTransaction,
   input: CreateDerivationInput,
@@ -216,7 +204,6 @@ export async function createDerivation(
 
   const derivedSpecimenId = await findOrCreateDerivedSpecimen(database, parent.specimenId, input.specimenTypeName)
 
-  // Validate container type is allowed for the specimen type
   const specType = await database
     .select()
     .from(specimenType)
@@ -230,77 +217,42 @@ export async function createDerivation(
   const containerTypeValidation = await validateContainerTypeForSpecimenType(
     database as Database,
     specType.id,
-    input.containerType
+    input.container.containerType
   )
 
   if (!containerTypeValidation.valid) {
     throw new Error(containerTypeValidation.error || 'Container type not allowed for this specimen type')
   }
 
-  const unitId = await resolveUnitIdForChild(database, input.containerType, input.unitSymbol)
+  const collectionMap = new Map<string, number>()
+  const placement = await resolveContainerPlacement(database, input.container, collectionMap)
+  const unitId = await resolveUnitIdForChild(database, input.container.containerType, input.unitSymbol)
   const quantity = input.quantity ?? 1.0
 
-  // Resolve collection if only name/type provided
-  let collectionId = input.collectionId
-  if (!collectionId && input.collectionName && input.collectionType) {
-    const resolved = await resolveCollection(input.collectionName, input.collectionType as CollectionType, database as Database)
-    if (!resolved) {
-      throw new Error(`Collection '${input.collectionName}' (${input.collectionType}) not found`)
-    }
-    collectionId = resolved
+  const containerData: ContainerData = {
+    ...placement,
+    unitId,
+    totalQuantity: quantity,
+    remainingQuantity: quantity,
   }
 
-  const now = utcNow()
-  const [child] = await database
-    .insert(storageContainer)
-    .values({
-      specimenId: derivedSpecimenId,
-      unitId,
-      totalQuantity: quantity,
-      remainingQuantity: quantity,
-      created: now,
-      lastUpdated: now,
-    })
-    .returning()
+  const containerResult = await createContainerForSpecimen(derivedSpecimenId, containerData, database, {
+    collectionMap,
+    skipValidation: true,
+  })
 
-  // Link to physical subtype table
-  switch (input.containerType) {
-    case 'micronix_tube': {
-      if (!collectionId) throw new Error('collectionId is required for micronix_tube derivations')
-      await database.insert(micronixTube).values({
-        id: child.id,
-        collectionId: collectionId,
-        barcode: input.containerBarcode!,
-        position: input.position ?? null,
-      })
-      break
-    }
-    case 'cryovial_tube': {
-      if (!collectionId) throw new Error('collectionId is required for cryovial_tube derivations')
-      await database.insert(cryovialTube).values({
-        id: child.id,
-        collectionId: collectionId,
-        barcode: input.containerBarcode || null,
-        position: input.position ?? null,
-      })
-      break
-    }
-    case 'paper': {
-      if (!collectionId) throw new Error('collectionId (sheetId) is required for paper derivations')
-      await database.insert(paper).values({
-        id: child.id,
-        sheetId: collectionId,
-        sublabel: input.sublabel?.trim() || null,
-      })
-      break
-    }
-    case 'static_well': {
-      // For now, we treat static wells like micronix_plate-based wells
-      await database.insert(sheet).values // placeholder to satisfy type imports; no-op for now
-      throw new Error('static_well derivations are not yet implemented')
-    }
-    default:
-      throw new Error(`Unsupported container type: ${input.containerType}`)
+  if (!containerResult.success || containerResult.containerId == null) {
+    throw new Error(containerResult.error || 'Failed to create child container')
+  }
+
+  const child = await database
+    .select()
+    .from(storageContainer)
+    .where(eq(storageContainer.id, containerResult.containerId))
+    .get()
+
+  if (!child) {
+    throw new Error('Child container not found after creation')
   }
 
   const { updatedParent, warnings } = await adjustParentQuantity(
@@ -310,6 +262,7 @@ export async function createDerivation(
     input.reduceParentQuantity ?? true,
   )
 
+  const now = utcNow()
   const [derivation] = await database
     .insert(containerDerivation)
     .values({
@@ -339,5 +292,3 @@ export async function createDerivation(
     warnings,
   }
 }
-
-

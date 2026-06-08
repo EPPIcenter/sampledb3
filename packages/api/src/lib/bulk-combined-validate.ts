@@ -12,7 +12,7 @@ import {
 import { getDefaultUnit } from './defaults'
 import { resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
 import {
-  type ExtendedContainerData,
+  type BulkCombinedContainerInput,
   type BulkCombinedPayload,
 } from './bulk-combined-import'
 import {
@@ -20,16 +20,9 @@ import {
   prepareCombinedSubjectContainerBatch,
 } from './registration-prepare'
 import {
-  assertLocationCanContainCollections,
-  CollectionLocationNotAllowedError,
-  CollectionLocationNotFoundError,
-  LOCATION_CANNOT_CONTAIN_COLLECTIONS,
-} from './collections/collection-lifecycle'
-import {
   collectContainerPlacementErrors,
   type ContainerPlacementCheckRow,
 } from './container-placement-validation'
-
 /** Map orchestrator field messages to combined-import UX copy. */
 function combinedContainerErrorMessage(message: string): string {
   if (message.includes('Position (well) is required')) {
@@ -57,7 +50,7 @@ export type BulkCombinedValidatePayload = Omit<BulkCombinedPayload, 'subjects'> 
     specimens: Array<{
       specimenTypeName: string
       collectionDate?: string
-      container?: ExtendedContainerData
+      container?: BulkCombinedContainerInput
       rowIndex?: number
     }>
   }>
@@ -74,25 +67,10 @@ export async function validateBulkCombinedPayload(
   payload: BulkCombinedValidatePayload
 ): Promise<BulkCombinedValidateResult> {
   const errors: BulkCombinedValidateError[] = []
-  const { studyShortCode, createCollections = [], subjects } = payload
+  const { studyShortCode, subjects } = payload
 
   const add = (subjectIndex: number, specimenIndex: number, message: string, rowIndex?: number) => {
     errors.push({ subjectIndex, specimenIndex, message, ...(rowIndex !== undefined && { rowIndex }) })
-  }
-
-  for (let c = 0; c < createCollections.length; c++) {
-    const coll = createCollections[c]
-    try {
-      assertLocationCanContainCollections(database, coll.locationId)
-    } catch (error) {
-      if (error instanceof CollectionLocationNotFoundError) {
-        add(0, 0, `Location not found for collection '${coll.name}' (${coll.type})`)
-      } else if (error instanceof CollectionLocationNotAllowedError) {
-        add(0, 0, `${LOCATION_CANNOT_CONTAIN_COLLECTIONS} Collection '${coll.name}' uses location ID ${coll.locationId}.`)
-      } else {
-        throw error
-      }
-    }
   }
 
   const studyValidation = await validateStudyShortCode(database, studyShortCode)
@@ -106,9 +84,6 @@ export async function validateBulkCombinedPayload(
   const placementRows: ContainerPlacementCheckRow[] = []
   const placementContexts: ContainerRowContext[] = []
   const toBeCreatedKeys = new Set<string>()
-  for (const coll of createCollections) {
-    toBeCreatedKeys.add(`${coll.type}-${coll.name}`)
-  }
 
   for (let subjectIndex = 0; subjectIndex < subjects.length; subjectIndex++) {
     const subj = subjects[subjectIndex]
@@ -127,7 +102,7 @@ export async function validateBulkCombinedPayload(
     const resolvedForPrepare: Array<{
       specimenTypeId: number
       collectionDate?: string
-      container?: ExtendedContainerData
+      container?: BulkCombinedContainerInput
       specimenIndex: number
       rowIndex?: number
     }> = []
@@ -200,7 +175,11 @@ export async function validateBulkCombinedPayload(
       const prepRow = containerPrep.result.placementRows[placementRowIndex]
       if (!prepRow) break
 
-      if (resolvedRow.container.collectionLocationId) {
+      const c = resolvedRow.container.collection
+      const willCreateByName =
+        (c && 'locationId' in c && c.locationId != null) ||
+        (c && 'parent' in c && c.parent?.locationId != null)
+      if (willCreateByName) {
         toBeCreatedKeys.add(prepRow.collectionKey)
       }
 

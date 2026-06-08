@@ -3,7 +3,7 @@ import {
   bulkCombinedContainerSchema,
   bulkCombinedRequestSchema,
   bulkCombinedValidateRequestSchema,
-  containerInputSchema,
+  containerWriteInputSchema,
   optionalContainerInputSchema,
 } from '@sampledb/contract'
 
@@ -14,19 +14,19 @@ export {
 
 /**
  * Container schema for single specimen creation (POST /).
- * Resolves collections by name/barcode only; does not support collectionLocationId.
+ * Unified ContainerWriteInput shape (ADR 0006); resolves existing collections by id/name/barcode only.
  */
 export const containerSchema = optionalContainerInputSchema
 
 /**
  * Container schema for POST /specimens/:id/containers (add container to existing specimen).
- * Container object is required; containerType is required.
+ * Unified ContainerWriteInput shape (ADR 0006).
  */
-export const containerSchemaRequired = containerInputSchema
+export const containerSchemaRequired = containerWriteInputSchema
 
 /**
- * Extended container schema for bulk endpoints (POST /bulk, imports) that support
- * collection creation. Includes collectionLocationId for creating collections when missing.
+ * Extended container schema for bulk endpoints (POST /bulk, imports).
+ * Nested collection.locationId (or collection.parent.locationId for paper) supports create-by-name.
  */
 export const containerSchemaWithLocation = bulkCombinedContainerSchema
 

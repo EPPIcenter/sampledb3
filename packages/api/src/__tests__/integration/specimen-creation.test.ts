@@ -112,6 +112,35 @@ describe('Specimen Creation Integration Tests', () => {
     expect(data.specimen.specimenTypeId).toBe(specimenType.id)
   })
 
+  it('rejects legacy flat collectionName on optional container', async () => {
+    const study = await createTestStudy(ctx.db, {
+      title: 'Test Study',
+      shortCode: 'TEST003',
+    })
+    const subject = await createTestStudySubject(ctx.db, {
+      studyId: study.id,
+      name: 'Subject 3',
+    })
+    const specimenType = await createTestSpecimenType(ctx.db, { name: 'Blood' })
+
+    const response = await ctx.request('/api/specimens', {
+      method: 'POST',
+      json: {
+        sourceType: 'subject',
+        sourceId: subject.id,
+        specimenTypeId: specimenType.id,
+        container: {
+          containerType: 'micronix_tube',
+          collectionName: 'Legacy-Plate',
+          barcode: 'LEGACY-1',
+          position: 'A01',
+        },
+      },
+    })
+
+    expect(response.status).toBe(400)
+  })
+
   it('should create a specimen with container', async () => {
     const study = await createTestStudy(ctx.db, {
       title: 'Test Study',
@@ -148,9 +177,8 @@ describe('Specimen Creation Integration Tests', () => {
         collectionDate: '2024-01-01',
         container: {
           containerType: 'micronix_tube',
-          collectionName: plate.name,
           barcode: 'TEST001',
-          position: 'A01',
+          collection: { type: 'micronix_plate', name: plate.name, position: 'A01' },
         },
       },
     })

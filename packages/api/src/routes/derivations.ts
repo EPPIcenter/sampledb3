@@ -5,11 +5,6 @@ import {
   containerDerivation,
   storageContainer,
   specimen,
-  micronixPlate,
-  cryovialBox,
-  box,
-  bag,
-  sheet,
   studySubject,
   study,
   controlBatch,
@@ -17,13 +12,12 @@ import {
 } from '../db/schema'
 import { and, eq } from 'drizzle-orm'
 import { createDerivation } from '../lib/derivations'
+import { createDerivationRequestSchema } from '../lib/derivation-schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
-import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { handleRouteError } from '../lib/error-handler'
 import { enrichContainersForApi } from '../lib/container-api-enrichment'
 import { mapEnrichedContainerToWire } from '../lib/container-wire-mapper'
-import { refinePaperContainerInboundWrite } from '@sampledb/contract'
 
 /**
  * Create derivations routes with database injection
@@ -34,155 +28,6 @@ export function createDerivationsRoutes(database: Database): Hono {
   const authMiddleware = createAuthMiddleware(database)
   const memberMiddleware = createMemberMiddleware(database)
 
-const createDerivationSchema = z.object({
-  derivationType: z.string(),
-  specimenTypeName: z.string(),
-  containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', 'static_well']),
-  quantity: z.number().optional(),
-  unitSymbol: z.string().optional(),
-  quantityUsed: z.number().optional(),
-  reduceParentQuantity: z.boolean().optional().default(true),
-  derivationDate: z.string().optional(),
-  protocol: z.string().optional(),
-  notes: z.string().optional(),
-  properties: z.record(z.string(), z.any()).optional(),
-  collectionId: z.number().optional(),
-  collectionName: z.string().optional(),
-  collectionType: z.enum(['micronix_plate', 'cryovial_box', 'sheet', 'box', 'bag']).optional(),
-  collectionLocationId: z.number().optional(),
-  sheetParentType: z.enum(['box', 'bag']).optional(),
-  sheetParentName: z.string().optional(),
-  containerBarcode: z.string().optional(),
-  sublabel: z.string().optional(),
-  position: z.string().optional(),
-  operatorId: z.number().optional(),
-}).superRefine((data, ctx) => {
-  refinePaperContainerInboundWrite(data, ctx)
-})
-
-async function createCollectionIfNeeded(database: Database, input: z.infer<typeof createDerivationSchema>) {
-  if (input.collectionId || !input.collectionName || !input.collectionType || !input.collectionLocationId) {
-    return input.collectionId
-  }
-
-  const name = input.collectionName
-  const locationId = input.collectionLocationId
-  const now = utcNow()
-
-  switch (input.collectionType) {
-    case 'micronix_plate': {
-      const [plate] = await database.insert(micronixPlate).values({
-        name,
-        locationId,
-        barcode: null,
-        created: now,
-        lastUpdated: now,
-      }).returning()
-      return plate.id
-    }
-    case 'cryovial_box': {
-      const [boxRow] = await database.insert(cryovialBox).values({
-        name,
-        locationId,
-        barcode: null,
-        created: now,
-        lastUpdated: now,
-      }).returning()
-      return boxRow.id
-    }
-    case 'box': {
-      const [boxRow] = await database.insert(box).values({
-        name,
-        locationId,
-        created: now,
-        lastUpdated: now,
-      }).returning()
-      return boxRow.id
-    }
-    case 'bag': {
-      const [bagRow] = await database.insert(bag).values({
-        name,
-        locationId,
-        created: now,
-        lastUpdated: now,
-      }).returning()
-      return bagRow.id
-    }
-    case 'sheet': {
-      // For sheets, we need a box or bag parent. Check input for sheetParentType and sheetParentName.
-      if (!input.sheetParentType || !input.sheetParentName) {
-        throw new Error('sheetParentType and sheetParentName are required for sheet creation')
-      }
-
-      let parentId: number
-
-      if (input.sheetParentType === 'box') {
-        // Find or create box at the location
-        let boxRecord = await database
-          .select()
-          .from(box)
-          .where(and(eq(box.name, input.sheetParentName), eq(box.locationId, locationId)))
-          .get()
-
-        if (!boxRecord) {
-          // Create new box
-          const [newBox] = await database.insert(box).values({
-            name: input.sheetParentName,
-            locationId,
-            created: now,
-            lastUpdated: now,
-          }).returning()
-          parentId = newBox.id
-        } else {
-          parentId = boxRecord.id
-        }
-
-        // Create sheet with boxId
-        const [newSheet] = await database.insert(sheet).values({
-          name,
-          boxId: parentId,
-          bagId: null,
-          created: now,
-          lastUpdated: now,
-        }).returning()
-        return newSheet.id
-      } else {
-        // Find or create bag at the location
-        let bagRecord = await database
-          .select()
-          .from(bag)
-          .where(and(eq(bag.name, input.sheetParentName), eq(bag.locationId, locationId)))
-          .get()
-
-        if (!bagRecord) {
-          // Create new bag
-          const [newBag] = await database.insert(bag).values({
-            name: input.sheetParentName,
-            locationId,
-            created: now,
-            lastUpdated: now,
-          }).returning()
-          parentId = newBag.id
-        } else {
-          parentId = bagRecord.id
-        }
-
-        // Create sheet with bagId
-        const [newSheet] = await database.insert(sheet).values({
-          name,
-          boxId: null,
-          bagId: parentId,
-          created: now,
-          lastUpdated: now,
-        }).returning()
-        return newSheet.id
-      }
-    }
-    default:
-      return input.collectionId
-  }
-}
-
 // Create derivation from parent container
 derivations.post('/containers/:id/derive', memberMiddleware, async (c) => {
   try {
@@ -192,14 +37,11 @@ derivations.post('/containers/:id/derive', memberMiddleware, async (c) => {
     }
 
     const body = await c.req.json()
-    const input = createDerivationSchema.parse(body)
-
-    const collectionId = await createCollectionIfNeeded(database, input)
+    const input = createDerivationRequestSchema.parse(body)
 
     const result = await createDerivation(database, {
       parentContainerId: id,
       ...input,
-      collectionId,
     })
 
     return c.json(result)

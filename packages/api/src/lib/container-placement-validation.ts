@@ -5,7 +5,6 @@
 import type { Database } from '../db/client'
 import { micronixTube, cryovialTube, staticWell } from '../db/schema'
 import { eq, and } from 'drizzle-orm'
-import { ValidationError } from './error-handler'
 import { normalizePosition } from './normalize-position'
 
 export type PlacementContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
@@ -35,12 +34,6 @@ type PlacementContainer = {
   sublabel?: string
 }
 
-export type ResolvedSpecimenForPlacement = {
-  specimenTypeId: number
-  collectionDate?: string
-  container?: PlacementContainer
-}
-
 export function buildContainerPlacementCheckRow(
   container: PlacementContainer,
   collectionId: number | null,
@@ -59,16 +52,6 @@ export function buildContainerPlacementCheckRow(
     boxKey: containerType === 'paper' ? collectionKey : null,
     sheetName: containerType === 'paper' ? (container.sheetName ?? 'Sheet-1').trim() : null,
   }
-}
-
-export function collectionKeyForContainer(container: PlacementContainer): string {
-  const containerType = container.containerType
-  if (containerType === 'paper') {
-    return `box-${container.collectionName ?? ''}`
-  }
-  const collectionType = containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
-  const identifier = container.collectionName || container.collectionBarcode
-  return `${collectionType}-${identifier ?? ''}`
 }
 
 export async function collectContainerPlacementErrors(
@@ -193,26 +176,4 @@ export async function collectContainerPlacementErrors(
   }
 
   return errors
-}
-
-export async function validateContainerPlacementInPayload(
-  database: Database,
-  resolvedSpecimens: ResolvedSpecimenForPlacement[],
-  collectionMap: Map<string, number>
-): Promise<void> {
-  const rows: ContainerPlacementCheckRow[] = []
-
-  for (const spec of resolvedSpecimens) {
-    if (!spec.container?.containerType) continue
-
-    const container = spec.container
-    const collectionKey = collectionKeyForContainer(container)
-    const collectionId = collectionMap.get(collectionKey) ?? null
-    rows.push(buildContainerPlacementCheckRow(container, collectionId, collectionKey))
-  }
-
-  const errors = await collectContainerPlacementErrors(database, rows)
-  if (errors.length > 0) {
-    throw new ValidationError(errors[0].message, { specimenIndex: errors[0].rowIndex })
-  }
 }

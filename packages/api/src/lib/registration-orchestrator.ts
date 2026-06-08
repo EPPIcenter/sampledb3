@@ -10,7 +10,11 @@ import {
 } from './container-creation'
 import { findExistingStudySpecimen, findExistingControlSpecimen } from './specimen-helpers'
 import { utcNow } from './datetime'
-import type { ExtendedContainerData } from './bulk-combined-import'
+import {
+  resolveContainerPlacement,
+  toContainerWriteInput,
+  type BulkCombinedContainerInput,
+} from './container-write-placement'
 import {
   bulkSpecimenPayloadKey,
   prepareRegistrationBatchForSpecimens,
@@ -35,7 +39,6 @@ export {
   bulkSpecimenPayloadKey,
   prepareRegistrationBatchForSpecimens,
   prepareCombinedSubjectContainerBatch,
-  resolveContainerCollection,
   validateSpecimenContainerRegistration,
 } from './registration-prepare'
 
@@ -135,24 +138,19 @@ export async function createBulkSpecimenRows(
       const { row, index } = prepared[i]
       const specimenRecord = specimensOut[i]
       if (!row.container?.containerType) continue
-      const container = row.container as ExtendedContainerData
-      const containerData: ContainerData = {
-        containerType: container.containerType,
-        collectionName: container.collectionName,
-        collectionBarcode: container.collectionBarcode,
-        barcode: container.barcode,
-        position: container.position,
-        sheetName: container.sheetName,
-        sublabel: container.sublabel,
+      const container = row.container as BulkCombinedContainerInput
+      const writeInput = toContainerWriteInput(container)
+      const resolved = await resolveContainerPlacement(dbTx, writeInput)
+      const containerPayload: ContainerData = {
+        ...resolved,
         unitId: container.unitId,
         totalQuantity: container.totalQuantity,
         remainingQuantity: container.remainingQuantity,
-        comment: container.comment,
-        collectionLocationId: container.collectionLocationId,
+        comment: 'comment' in writeInput ? writeInput.comment : undefined,
       }
       const containerResult = await createContainerForSpecimen(
         specimenRecord.id,
-        containerData,
+        containerPayload,
         dbTx,
         userId
       )

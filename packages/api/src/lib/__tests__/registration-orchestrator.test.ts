@@ -121,9 +121,8 @@ describe('registration-orchestrator', () => {
           specimenTypeName: specimenType.name,
           container: {
             containerType: 'micronix_tube',
-            collectionName: plate.name,
-            position: 'A01',
             barcode: 'DUP001',
+            collection: { type: 'micronix_plate', name: plate.name, position: 'A01' },
           },
         },
         {
@@ -133,9 +132,8 @@ describe('registration-orchestrator', () => {
           specimenTypeName: specimenType.name,
           container: {
             containerType: 'micronix_tube',
-            collectionName: plate.name,
-            position: 'A02',
             barcode: 'DUP001',
+            collection: { type: 'micronix_plate', name: plate.name, position: 'A02' },
           },
         },
       ])
@@ -180,9 +178,8 @@ describe('registration-orchestrator', () => {
           specimenTypeName: specimenType.name,
           container: {
             containerType: 'micronix_tube',
-            collectionName: plate.name,
-            position: 'A01',
             barcode: 'EXISTING',
+            collection: { type: 'micronix_plate', name: plate.name, position: 'A01' },
           },
         },
       ])

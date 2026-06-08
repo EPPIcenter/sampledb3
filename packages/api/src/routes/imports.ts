@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { Database } from '../db/client'
 import { importDerivationsFromCsv, validateDerivationsCsv, type BulkDerivationSettings } from '../lib/derivations-csv'
-import { runBulkCombinedImport, type ExtendedContainerData } from '../lib/bulk-combined-import'
+import { runBulkCombinedImport, type BulkCombinedContainerInput } from '../lib/bulk-combined-import'
 import { validateBulkCombinedPayload } from '../lib/bulk-combined-validate'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
@@ -75,7 +75,7 @@ imports.post('/derivations-csv/validate', memberMiddleware, async (c) => {
 })
 
 // Bulk combined import (subjects + specimens + containers) with configurable atomicity
-// Body: { studyShortCode, atomicMode: 'full_file' | 'per_subject', createCollections?: [...], subjects: [...] }
+// Body: { studyShortCode, atomicMode: 'full_file' | 'per_subject', subjects: [...] }
 imports.post('/bulk-combined', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
@@ -87,13 +87,12 @@ imports.post('/bulk-combined', memberMiddleware, async (c) => {
     const result = await runBulkCombinedImport(database, {
       studyShortCode: data.studyShortCode,
       atomicMode: data.atomicMode,
-      createCollections: data.createCollections,
       subjects: data.subjects.map((s) => ({
         subjectName: s.subjectName,
         specimens: s.specimens.map((sp) => ({
           specimenTypeName: sp.specimenTypeName,
           collectionDate: sp.collectionDate,
-          container: sp.container as ExtendedContainerData | undefined,
+          container: sp.container as BulkCombinedContainerInput | undefined,
         })),
       })),
     }, user?.id)
@@ -126,13 +125,12 @@ imports.post('/bulk-combined/validate', memberMiddleware, async (c) => {
     const result = await validateBulkCombinedPayload(database, {
       studyShortCode: data.studyShortCode,
       atomicMode: data.atomicMode,
-      createCollections: data.createCollections,
       subjects: data.subjects.map((s) => ({
         subjectName: s.subjectName,
         specimens: s.specimens.map((sp) => ({
           specimenTypeName: sp.specimenTypeName,
           collectionDate: sp.collectionDate,
-          container: sp.container as ExtendedContainerData | undefined,
+          container: sp.container as BulkCombinedContainerInput | undefined,
           rowIndex: sp.rowIndex,
         })),
       })),

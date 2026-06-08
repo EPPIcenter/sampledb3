@@ -10,7 +10,7 @@ import {
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
 import { createDerivation } from '../derivations'
-import { specimenTypeContainerType } from '../../db/schema'
+import { specimenTypeContainerType, containerTypeUnit } from '../../db/schema'
 import { storageContainer } from '../../db/schema'
 import { micronixTube } from '../../db/schema'
 import type { Database } from '../../db/client'
@@ -39,10 +39,11 @@ describe('derivations', () => {
           parentContainerId: 99999,
           derivationType: 'aliquot',
           specimenTypeName: 'DNA',
-          containerType: 'micronix_tube',
-          collectionId: 1,
-          containerBarcode: 'MT001',
-          position: 'A01',
+          container: {
+            containerType: 'micronix_tube',
+            barcode: 'MT001',
+            collection: { type: 'micronix_plate', id: 1, position: 'A01' },
+          },
         })
       ).rejects.toThrow('Parent container not found')
     })
@@ -78,10 +79,11 @@ describe('derivations', () => {
           parentContainerId: container!.id,
           derivationType: 'aliquot',
           specimenTypeName: 'NonExistentType',
-          containerType: 'micronix_tube',
-          collectionId: plate.id,
-          containerBarcode: 'MT002',
-          position: 'A02',
+          container: {
+            containerType: 'micronix_tube',
+            barcode: 'MT002',
+            collection: { type: 'micronix_plate', id: plate.id, position: 'A02' },
+          },
         })
       ).rejects.toThrow("Specimen type 'NonExistentType' not found")
     })
@@ -100,6 +102,10 @@ describe('derivations', () => {
         specimenTypeId: specimenType.id,
         containerType: 'micronix_tube',
         created: now,
+      })
+      await testDb.insert(containerTypeUnit).values({
+        containerType: 'micronix_tube',
+        unitId: unit.id,
       })
       const specimen = await createTestSpecimen(testDb, specimenType.id)
       const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
@@ -128,10 +134,11 @@ describe('derivations', () => {
         parentContainerId: parentContainer!.id,
         derivationType: 'aliquot',
         specimenTypeName: 'DNA',
-        containerType: 'micronix_tube',
-        collectionId: targetPlate.id,
-        containerBarcode: 'MT-CHILD',
-        position: 'A01',
+        container: {
+          containerType: 'micronix_tube',
+          barcode: 'MT-CHILD',
+          collection: { type: 'micronix_plate', id: targetPlate.id, position: 'A01' },
+        },
       })
 
       expect(result.derivation).toBeDefined()

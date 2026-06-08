@@ -8,18 +8,28 @@ import { validateSpecimenData, validateContainerTypeForSpecimenType } from './va
 import {
   validateContainerFieldRequirements,
   type ContainerData,
-  type ContainerType,
 } from './container-creation'
-import { resolveCollection } from './collections/collection-resolve'
 import {
   buildContainerPlacementCheckRow,
   collectContainerPlacementErrors,
   type ContainerPlacementCheckRow,
 } from './container-placement-validation'
-import type { ExtendedContainerData } from './bulk-combined-import'
+import {
+  assertLocationCanContainCollections,
+  CollectionLocationNotAllowedError,
+  CollectionLocationNotFoundError,
+  LOCATION_CANNOT_CONTAIN_COLLECTIONS,
+} from './collections/collection-lifecycle'
+import {
+  lookupWriteInputCollectionId,
+  placementContainerFromWriteInput,
+  resolveContainerPlacement,
+  toContainerWriteInput,
+  type BulkCombinedContainerInput,
+} from './container-write-placement'
 
-export type BulkSpecimenContainerInput = Omit<ExtendedContainerData, 'containerType'> & {
-  containerType?: ExtendedContainerData['containerType']
+export type BulkSpecimenContainerInput = Omit<BulkCombinedContainerInput, 'containerType'> & {
+  containerType?: BulkCombinedContainerInput['containerType']
 }
 
 export type BulkSpecimenValidateRow = {
@@ -29,7 +39,6 @@ export type BulkSpecimenValidateRow = {
   subjectName?: string
   specimenTypeName: string
   collectionDate?: string
-  containerBarcode?: string
   container?: BulkSpecimenContainerInput
 }
 
@@ -62,58 +71,10 @@ type CollectionResolutionMessages = {
   boxNotFound: (name: string) => string
 }
 
-const bulkSpecimenCollectionMessages: CollectionResolutionMessages = {
-  collectionNotFound: (identifier) =>
-    `Collection '${identifier}' not found. Create it first or use Combined import with a location.`,
-  boxNotFound: (name) =>
-    `Box '${name}' not found. Create it first or use Combined import with a location.`,
-}
-
 export const bulkCombinedCollectionMessages: CollectionResolutionMessages = {
   collectionNotFound: (identifier) =>
-    `Collection '${identifier}' not found. Provide collectionLocationId to create it.`,
-  boxNotFound: (name) => `Box '${name}' not found. Provide collectionLocationId to create it.`,
-}
-
-export async function resolveContainerCollection(
-  database: Database,
-  containerType: ContainerType,
-  container: ExtendedContainerData,
-  options?: { messages?: CollectionResolutionMessages }
-): Promise<{ collectionId: number | null; collectionKey: string; error?: string }> {
-  const messages = options?.messages ?? bulkSpecimenCollectionMessages
-
-  if (containerType === 'paper') {
-    if (!container.collectionName) {
-      return { collectionId: null, collectionKey: '', error: 'Box name (collection name) is required for paper' }
-    }
-    const collectionKey = `box-${container.collectionName}`
-    const existingBox = await resolveCollection(container.collectionName, 'box', database)
-    if (!existingBox && !container.collectionLocationId) {
-      return {
-        collectionId: null,
-        collectionKey,
-        error: messages.boxNotFound(container.collectionName),
-      }
-    }
-    return { collectionId: existingBox, collectionKey }
-  }
-
-  const collectionType = containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
-  const identifier = container.collectionName || container.collectionBarcode
-  if (!identifier) {
-    return { collectionId: null, collectionKey: '', error: 'Plate/box name or barcode is required' }
-  }
-  const collectionKey = `${collectionType}-${identifier}`
-  const existingId = await resolveCollection(identifier, collectionType, database)
-  if (!existingId && !container.collectionLocationId) {
-    return {
-      collectionId: null,
-      collectionKey,
-      error: messages.collectionNotFound(identifier),
-    }
-  }
-  return { collectionId: existingId, collectionKey }
+    `Collection '${identifier}' not found. Provide collection.locationId to create it.`,
+  boxNotFound: (name) => `Box '${name}' not found. Provide collection.parent.locationId to create it.`,
 }
 
 export type SpecimenContainerRegistrationResult =
@@ -128,10 +89,11 @@ export type SpecimenContainerRegistrationResult =
 export async function validateSpecimenContainerRegistration(
   database: Database,
   specimenTypeId: number,
-  container: ExtendedContainerData,
-  options?: { messages?: CollectionResolutionMessages }
+  container: BulkCombinedContainerInput,
+  _options?: { messages?: CollectionResolutionMessages }
 ): Promise<SpecimenContainerRegistrationResult> {
-  const containerType = container.containerType
+  const writeInput = toContainerWriteInput(container)
+  const containerType = writeInput.containerType
   const containerTypeValidation = await validateContainerTypeForSpecimenType(
     database,
     specimenTypeId,
@@ -144,31 +106,45 @@ export async function validateSpecimenContainerRegistration(
     }
   }
 
-  const containerDataForValidation: ContainerData = {
-    containerType,
-    collectionName: container.collectionName,
-    collectionBarcode: container.collectionBarcode,
-    barcode: container.barcode,
-    position: container.position,
-    sheetName: container.sheetName,
-    sublabel: container.sublabel,
+  let containerData: ContainerData
+  try {
+    containerData = await resolveContainerPlacement(database, writeInput)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Invalid container placement'
+    return { valid: false, error: message }
   }
-  const containerValidation = validateContainerFieldRequirements(containerType, containerDataForValidation)
+
+  const containerValidation = validateContainerFieldRequirements(containerType, containerData)
   if (!containerValidation.valid) {
     return { valid: false, error: containerValidation.error || 'Invalid container data' }
   }
 
-  const collectionResolution = await resolveContainerCollection(database, containerType, container, options)
-  if (collectionResolution.error) {
-    return { valid: false, error: collectionResolution.error }
+  const collection = writeInput.collection
+  const locationId =
+    containerData.collectionLocationId ??
+    (collection && 'locationId' in collection ? collection.locationId : undefined) ??
+    (collection && 'parent' in collection ? collection.parent?.locationId : undefined)
+  if (locationId != null) {
+    try {
+      assertLocationCanContainCollections(database, locationId)
+    } catch (error) {
+      if (error instanceof CollectionLocationNotFoundError) {
+        return { valid: false, error: 'Location not found' }
+      }
+      if (error instanceof CollectionLocationNotAllowedError) {
+        return { valid: false, error: LOCATION_CANNOT_CONTAIN_COLLECTIONS }
+      }
+      throw error
+    }
   }
 
+  const collectionResolution = await lookupWriteInputCollectionId(database, writeInput)
   return {
     valid: true,
     collectionId: collectionResolution.collectionId,
     collectionKey: collectionResolution.collectionKey,
     placementRow: buildContainerPlacementCheckRow(
-      container,
+      placementContainerFromWriteInput(writeInput),
       collectionResolution.collectionId,
       collectionResolution.collectionKey
     ),
@@ -185,7 +161,7 @@ export function bulkSpecimenPayloadKey(row: BulkSpecimenValidateRow, resolved: R
 export type CombinedSubjectSpecimenRow = {
   specimenTypeId: number
   collectionDate?: string
-  container?: ExtendedContainerData
+  container?: BulkCombinedContainerInput
 }
 
 export type CombinedContainerPrepareResult = {
@@ -225,17 +201,8 @@ export async function prepareCombinedSubjectContainerBatch(
       return { valid: false, specimenIndex, message: containerRegistration.error }
     }
 
-    const collectionResolution = await resolveContainerCollection(
-      database,
-      spec.container.containerType,
-      spec.container,
-      { messages }
-    )
-    if (collectionResolution.error) {
-      return { valid: false, specimenIndex, message: collectionResolution.error }
-    }
-    if (collectionResolution.collectionId !== null) {
-      collectionMap.set(collectionResolution.collectionKey, collectionResolution.collectionId)
+    if (containerRegistration.collectionId !== null) {
+      collectionMap.set(containerRegistration.collectionKey, containerRegistration.collectionId)
     }
 
     placementRows.push(containerRegistration.placementRow)
@@ -287,7 +254,7 @@ export async function prepareRegistrationBatchForSpecimens(
       const containerRegistration = await validateSpecimenContainerRegistration(
         database,
         validation.resolved.specimenTypeId,
-        row.container as ExtendedContainerData
+        row.container as BulkCombinedContainerInput
       )
       if (!containerRegistration.valid) {
         errors.push({ index, message: containerRegistration.error })

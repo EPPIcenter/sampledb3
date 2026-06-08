@@ -245,15 +245,12 @@ export async function runDemoSeed(
     {
       studyShortCode: 'DEMO01',
       atomicMode: 'full_file',
-      createCollections: [
-        { type: 'micronix_plate', name: 'DEMO-PLATE-001', locationId: shelfLocationId },
-      ],
       subjects: [
-        { subjectName: 'DEMO-SUBJ-001', specimens: [{ specimenTypeName: 'DNA (DBS)', collectionDate: '2024-01-15', container: { containerType: 'micronix_tube', collectionName: 'DEMO-PLATE-001', barcode: 'DEMO8000001', position: 'A01', collectionLocationId: shelfLocationId } }] },
-        { subjectName: 'DEMO-SUBJ-002', specimens: [{ specimenTypeName: 'DNA (DBS)', collectionDate: '2024-01-15', container: { containerType: 'micronix_tube', collectionName: 'DEMO-PLATE-001', barcode: 'DEMO8000002', position: 'A02', collectionLocationId: shelfLocationId } }] },
-        { subjectName: 'DEMO-SUBJ-003', specimens: [{ specimenTypeName: 'DNA (DBS)', collectionDate: '2024-01-15', container: { containerType: 'micronix_tube', collectionName: 'DEMO-PLATE-001', barcode: 'DEMO8000003', position: 'A03', collectionLocationId: shelfLocationId } }] },
-        { subjectName: 'DEMO-SUBJ-004', specimens: [{ specimenTypeName: 'DNA (DBS)', collectionDate: '2024-01-16', container: { containerType: 'micronix_tube', collectionName: 'DEMO-PLATE-001', barcode: 'DEMO8000004', position: 'A04', collectionLocationId: shelfLocationId } }] },
-        { subjectName: 'DEMO-SUBJ-005', specimens: [{ specimenTypeName: 'DNA (DBS)', collectionDate: '2024-01-16', container: { containerType: 'micronix_tube', collectionName: 'DEMO-PLATE-001', barcode: 'DEMO8000005', position: 'A05', collectionLocationId: shelfLocationId } }] },
+        { subjectName: 'DEMO-SUBJ-001', specimens: [{ specimenTypeName: 'DNA (DBS)', collectionDate: '2024-01-15', container: { containerType: 'micronix_tube', barcode: 'DEMO8000001', collection: { type: 'micronix_plate', name: 'DEMO-PLATE-001', locationId: shelfLocationId, position: 'A01' } } }] },
+        { subjectName: 'DEMO-SUBJ-002', specimens: [{ specimenTypeName: 'DNA (DBS)', collectionDate: '2024-01-15', container: { containerType: 'micronix_tube', barcode: 'DEMO8000002', collection: { type: 'micronix_plate', name: 'DEMO-PLATE-001', locationId: shelfLocationId, position: 'A02' } } }] },
+        { subjectName: 'DEMO-SUBJ-003', specimens: [{ specimenTypeName: 'DNA (DBS)', collectionDate: '2024-01-15', container: { containerType: 'micronix_tube', barcode: 'DEMO8000003', collection: { type: 'micronix_plate', name: 'DEMO-PLATE-001', locationId: shelfLocationId, position: 'A03' } } }] },
+        { subjectName: 'DEMO-SUBJ-004', specimens: [{ specimenTypeName: 'DNA (DBS)', collectionDate: '2024-01-16', container: { containerType: 'micronix_tube', barcode: 'DEMO8000004', collection: { type: 'micronix_plate', name: 'DEMO-PLATE-001', locationId: shelfLocationId, position: 'A04' } } }] },
+        { subjectName: 'DEMO-SUBJ-005', specimens: [{ specimenTypeName: 'DNA (DBS)', collectionDate: '2024-01-16', container: { containerType: 'micronix_tube', barcode: 'DEMO8000005', collection: { type: 'micronix_plate', name: 'DEMO-PLATE-001', locationId: shelfLocationId, position: 'A05' } } }] },
       ],
     },
     1 // userId
@@ -314,16 +311,16 @@ export async function runDemoSeed(
       specimenTypeName: 'Plasma',
       collectionDate: '2024-01-01',
       containers: [{
-        type: 'micronix_tube',
-        collectionName: 'CTRL-PLATE-NEG',
-        collectionLocationId: shelfLocationId,
-        containerBarcode: 'CTRL9000001',
-        position: 'A01',
+        containerType: 'micronix_tube',
+        barcode: 'CTRL9000001',
+        collection: {
+          type: 'micronix_plate',
+          name: 'CTRL-PLATE-NEG',
+          locationId: shelfLocationId,
+          position: 'A01',
+        },
       }],
     }],
-    createCollections: [
-      { type: 'micronix_plate', name: 'CTRL-PLATE-NEG', locationId: shelfLocationId },
-    ],
   })
 
   const controlBatchResult2 = await createBatchWithSpecimens(database, {
@@ -332,16 +329,16 @@ export async function runDemoSeed(
       specimenTypeName: 'Plasma',
       collectionDate: '2024-01-01',
       containers: [{
-        type: 'micronix_tube',
-        collectionName: 'CTRL-PLATE-POS',
-        collectionLocationId: shelfLocationId,
-        containerBarcode: 'CTRL9000002',
-        position: 'A01',
+        containerType: 'micronix_tube',
+        barcode: 'CTRL9000002',
+        collection: {
+          type: 'micronix_plate',
+          name: 'CTRL-PLATE-POS',
+          locationId: shelfLocationId,
+          position: 'A01',
+        },
       }],
     }],
-    createCollections: [
-      { type: 'micronix_plate', name: 'CTRL-PLATE-POS', locationId: shelfLocationId },
-    ],
   })
 
   // One Whole Blood specimen (type+date+batch) with 2 aliquots in containers
@@ -353,24 +350,27 @@ export async function runDemoSeed(
         collectionDate: '2024-01-01',
         containers: [
           {
-            type: 'cryovial_tube',
-            collectionName: 'CTRL-BOX-BLOOD',
-            collectionLocationId: shelfLocationId,
-            containerBarcode: 'CTRL8000001',
-            position: 'A01',
+            containerType: 'cryovial_tube',
+            barcode: 'CTRL8000001',
+            collection: {
+              type: 'cryovial_box',
+              name: 'CTRL-BOX-BLOOD',
+              locationId: shelfLocationId,
+              position: 'A01',
+            },
           },
           {
-            type: 'cryovial_tube',
-            collectionName: 'CTRL-BOX-BLOOD',
-            collectionLocationId: shelfLocationId,
-            containerBarcode: 'CTRL8000002',
-            position: 'A02',
+            containerType: 'cryovial_tube',
+            barcode: 'CTRL8000002',
+            collection: {
+              type: 'cryovial_box',
+              name: 'CTRL-BOX-BLOOD',
+              locationId: shelfLocationId,
+              position: 'A02',
+            },
           },
         ],
       },
-    ],
-    createCollections: [
-      { type: 'cryovial_box', name: 'CTRL-BOX-BLOOD', locationId: shelfLocationId },
     ],
   })
 
@@ -419,9 +419,11 @@ export async function runDemoSeed(
       parentContainerId: bloodContainerId,
       derivationType: 'spot',
       specimenTypeName: 'DBS',
-      containerType: 'paper',
-      collectionId: dbsSheetId,
-      sublabel: `CTRL-DBS-${String(i + 1).padStart(3, '0')}`,
+      container: {
+        containerType: 'paper',
+        sublabel: `CTRL-DBS-${String(i + 1).padStart(3, '0')}`,
+        collection: { type: 'sheet', id: dbsSheetId },
+      },
       derivationDate: '2024-01-02',
       reduceParentQuantity: false,
     })
@@ -433,10 +435,15 @@ export async function runDemoSeed(
       parentContainerId: dbsContainerIds[i],
       derivationType: 'extraction',
       specimenTypeName: 'DNA (DBS)',
-      containerType: 'micronix_tube',
-      collectionId: bloodDnaPlateId,
-      containerBarcode: `CTRL-DNA-${String(i + 1).padStart(3, '0')}`,
-      position: i === 0 ? 'A01' : 'A02',
+      container: {
+        containerType: 'micronix_tube',
+        barcode: `CTRL-DNA-${String(i + 1).padStart(3, '0')}`,
+        collection: {
+          type: 'micronix_plate',
+          id: bloodDnaPlateId,
+          position: i === 0 ? 'A01' : 'A02',
+        },
+      },
       derivationDate: '2024-01-03',
       reduceParentQuantity: false,
     })

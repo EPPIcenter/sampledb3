@@ -13,7 +13,7 @@ import {
 } from '../helpers/factories'
 import { createDerivationsRoutes } from '../../routes/derivations'
 import { setContainerDefaults } from '../../lib/settings'
-import { specimenTypeContainerType, storageContainer, micronixTube } from '../../db/schema'
+import { specimenTypeContainerType, containerTypeUnit, storageContainer, micronixTube } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../../lib/datetime'
 
@@ -34,6 +34,10 @@ async function createParentContainerFixture(db: Database) {
     specimenTypeId: specimenType.id,
     containerType: 'micronix_tube',
     created: now,
+  })
+  await db.insert(containerTypeUnit).values({
+    containerType: 'micronix_tube',
+    unitId: unit.id,
   })
 
   const specimen = await createTestSpecimen(db, specimenType.id)
@@ -104,10 +108,11 @@ describe('Derivation Workflow Integration Tests', () => {
       json: {
         derivationType: 'aliquot',
         specimenTypeName: 'DNA',
-        containerType: 'micronix_tube',
-        collectionId: targetPlateId,
-        containerBarcode: 'MT-CHILD',
-        position: 'A01',
+        container: {
+          containerType: 'micronix_tube',
+          barcode: 'MT-CHILD',
+          collection: { type: 'micronix_plate', id: targetPlateId, position: 'A01' },
+        },
       },
     })
 
@@ -138,10 +143,11 @@ describe('Derivation Workflow Integration Tests', () => {
       json: {
         derivationType: 'aliquot',
         specimenTypeName: 'DNA',
-        containerType: 'micronix_tube',
-        collectionId: targetPlateId,
-        containerBarcode: 'MT-CHILD-2',
-        position: 'A02',
+        container: {
+          containerType: 'micronix_tube',
+          barcode: 'MT-CHILD-2',
+          collection: { type: 'micronix_plate', id: targetPlateId, position: 'A02' },
+        },
       },
     })
     expect(deriveRes.status).toBe(200)

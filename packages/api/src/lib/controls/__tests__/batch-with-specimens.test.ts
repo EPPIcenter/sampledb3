@@ -8,7 +8,8 @@ import {
   createTestMicronixPlate,
   createTestUnit,
 } from '../../../__tests__/helpers/factories'
-import { setContainerDefaults } from '../../settings'
+import { setContainerDefaults, clearSettingsCache } from '../../settings'
+import { clearDefaultsCache } from '../../defaults'
 import { createBatchWithSpecimens } from '../batch-with-specimens'
 import { specimenTypeContainerType, containerTypeUnit, storageContainer, box } from '../../../db/schema'
 import { eq } from 'drizzle-orm'
@@ -20,12 +21,15 @@ describe('batch-with-specimens', () => {
   let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
 
   beforeEach(async () => {
+    clearSettingsCache()
+    clearDefaultsCache()
     const setup = await setupTestDatabase()
     testDb = setup.db
     sqlite = setup.sqlite
   })
 
   afterEach(() => {
+    clearDefaultsCache()
     if (sqlite) {
       cleanupTestDatabase(sqlite)
     }
@@ -40,7 +44,11 @@ describe('batch-with-specimens', () => {
             {
               specimenTypeName: 'DNA',
               containers: [
-                { type: 'micronix_tube', collectionId: 1, position: 'A01', containerBarcode: 'MT1' },
+                {
+                  containerType: 'micronix_tube',
+                  barcode: 'MT1',
+                  collection: { type: 'micronix_plate', id: 1, position: 'A01' },
+                },
               ],
             },
           ],
@@ -57,7 +65,11 @@ describe('batch-with-specimens', () => {
             {
               specimenTypeName: 'NonExistentType',
               containers: [
-                { type: 'micronix_tube', collectionId: 1, position: 'A01', containerBarcode: 'MT1' },
+                {
+                  containerType: 'micronix_tube',
+                  barcode: 'MT1',
+                  collection: { type: 'micronix_plate', id: 1, position: 'A01' },
+                },
               ],
             },
           ],
@@ -96,10 +108,9 @@ describe('batch-with-specimens', () => {
             specimenTypeName: 'DNA',
             containers: [
               {
-                type: 'micronix_tube',
-                collectionId: plate.id,
-                position: 'A01',
-                containerBarcode: 'MT001',
+                containerType: 'micronix_tube',
+                barcode: 'MT001',
+                collection: { type: 'micronix_plate', id: plate.id, position: 'A01' },
               },
             ],
           },
@@ -141,17 +152,18 @@ describe('batch-with-specimens', () => {
               specimenTypeName: 'DNA',
               containers: [
                 {
-                  type: 'paper',
-                  collectionName: 'Box1',
-                  collectionLocationId: location.id,
+                  containerType: 'paper',
                   sublabel: 'P001',
-                  // sheetName omitted
+                  collection: {
+                    type: 'sheet',
+                    parent: { type: 'box', name: 'Box1', locationId: location.id },
+                  },
                 },
               ],
             },
           ],
         })
-      ).rejects.toThrow(/Sheet name is required for paper/)
+      ).rejects.toThrow(/sheet_name is required for paper/i)
     })
 
     it('throws when container type is not allowed for specimen type', async () => {
@@ -186,10 +198,9 @@ describe('batch-with-specimens', () => {
               specimenTypeName: 'RNA',
               containers: [
                 {
-                  type: 'cryovial_tube',
-                  collectionId: plate.id,
-                  position: 'A01',
-                  containerBarcode: 'CV001',
+                  containerType: 'cryovial_tube',
+                  barcode: 'CV001',
+                  collection: { type: 'cryovial_box', id: plate.id, position: 'A01' },
                 },
               ],
             },
@@ -225,14 +236,26 @@ describe('batch-with-specimens', () => {
           {
             specimenTypeName: 'TypeA',
             containers: [
-              { type: 'micronix_tube', collectionId: plate.id, position: 'A01', containerBarcode: 'MT-A1' },
-              { type: 'micronix_tube', collectionId: plate.id, position: 'A02', containerBarcode: 'MT-A2' },
+              {
+                containerType: 'micronix_tube',
+                barcode: 'MT-A1',
+                collection: { type: 'micronix_plate', id: plate.id, position: 'A01' },
+              },
+              {
+                containerType: 'micronix_tube',
+                barcode: 'MT-A2',
+                collection: { type: 'micronix_plate', id: plate.id, position: 'A02' },
+              },
             ],
           },
           {
             specimenTypeName: 'TypeB',
             containers: [
-              { type: 'micronix_tube', collectionId: plate.id, position: 'B01', containerBarcode: 'MT-B1' },
+              {
+                containerType: 'micronix_tube',
+                barcode: 'MT-B1',
+                collection: { type: 'micronix_plate', id: plate.id, position: 'B01' },
+              },
             ],
           },
         ],
@@ -264,51 +287,45 @@ describe('batch-with-specimens', () => {
         created: now,
       })
       const storageType = await createTestStorageType(testDb, { name: 'Shelf' })
-      const locA = await createTestLocation(testDb, { name: 'Location A', storageTypeId: String(storageType.id) })
+      const locA = await createTestLocation(testDb, {
+        name: 'Location A',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
 
-      const result1 = await createBatchWithSpecimens(testDb, {
+      await createBatchWithSpecimens(testDb, {
         batch: { controlDefinitionId: definition.id, name: 'Batch-1' },
         specimens: [{
           specimenTypeName: 'DBS',
           containers: [{
-            type: 'paper',
-            collectionName: 'Shared Box',
-            collectionLocationId: locA.id,
-            collectionType: 'box',
-            sheetName: 'Sheet 1',
+            containerType: 'paper',
+            collection: {
+              type: 'sheet',
+              name: 'Sheet 1',
+              parent: { type: 'box', name: 'Shared Box', locationId: locA.id },
+            },
           }],
-        }],
-        createCollections: [{
-          type: 'box',
-          name: 'Shared Box',
-          locationId: locA.id,
         }],
       })
 
-      const result2 = await createBatchWithSpecimens(testDb, {
+      await createBatchWithSpecimens(testDb, {
         batch: { controlDefinitionId: definition.id, name: 'Batch-2' },
         specimens: [{
           specimenTypeName: 'DBS',
           containers: [{
-            type: 'paper',
-            collectionName: 'Shared Box',
-            collectionLocationId: locA.id,
-            collectionType: 'box',
-            sheetName: 'Sheet 2',
+            containerType: 'paper',
+            collection: {
+              type: 'sheet',
+              name: 'Sheet 2',
+              parent: { type: 'box', name: 'Shared Box', locationId: locA.id },
+            },
           }],
-        }],
-        createCollections: [{
-          type: 'box',
-          name: 'Shared Box',
-          locationId: locA.id,
         }],
       })
 
       const boxes = await testDb.select().from(box)
       const matchingBoxes = boxes.filter(b => b.name === 'Shared Box')
       expect(matchingBoxes).toHaveLength(1)
-      expect(result1.createdCollections).toHaveLength(1)
-      expect(result2.createdCollections).toHaveLength(1)
     })
 
     it('uses default unit for container when unitSymbol is omitted', async () => {
@@ -339,11 +356,9 @@ describe('batch-with-specimens', () => {
             specimenTypeName: 'DNA',
             containers: [
               {
-                type: 'micronix_tube',
-                collectionId: plate.id,
-                position: 'A01',
-                containerBarcode: 'MT001',
-                // unitSymbol deliberately omitted
+                containerType: 'micronix_tube',
+                barcode: 'MT001',
+                collection: { type: 'micronix_plate', id: plate.id, position: 'A01' },
               },
             ],
           },

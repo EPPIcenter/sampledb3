@@ -13,6 +13,8 @@ import {
   createTestLocation,
   createTestMicronixPlate,
   createTestUnit,
+  createTestSpecimen,
+  createTestControlDefinition,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults, clearSettingsCache } from '../settings'
 import { clearDefaultsCache } from '../defaults'
@@ -25,10 +27,15 @@ import {
   staticWell,
   paper,
   box,
+  bag,
+  sheet,
 } from '../../db/schema'
 import { utcNow } from '../datetime'
 import { createBulkSpecimenRows } from '../registration-orchestrator'
 import { runBulkCombinedImport } from '../bulk-combined-import'
+import { createContainerForSpecimen } from '../container-creation'
+import { createBatchWithSpecimens } from '../controls/batch-with-specimens'
+import type { ContainerWriteInput } from '@sampledb/contract'
 
 async function setupContainerType(
   testDb: Database,
@@ -97,9 +104,8 @@ describe('container registration write parity', () => {
         collectionDate: '2025-06-01',
         container: {
           containerType: 'micronix_tube',
-          collectionName: plate.name,
           barcode: 'MIC-PARITY-1',
-          position: 'A1',
+          collection: { type: 'micronix_plate', name: plate.name, position: 'A1' },
         },
       },
     ])
@@ -128,9 +134,8 @@ describe('container registration write parity', () => {
                 collectionDate: '2025-06-02',
                 container: {
                   containerType: 'micronix_tube',
-                  collectionName: plate.name,
                   barcode: 'MIC-PARITY-2',
-                  position: 'B1',
+                  collection: { type: 'micronix_plate', name: plate.name, position: 'B1' },
                 },
               },
             ],
@@ -169,9 +174,8 @@ describe('container registration write parity', () => {
         collectionDate: '2025-06-01',
         container: {
           containerType: 'cryovial_tube',
-          collectionName: boxRecord.name,
           barcode: 'CRY-PARITY-1',
-          position: 'C1',
+          collection: { type: 'cryovial_box', name: boxRecord.name, position: 'C1' },
         },
       },
     ])
@@ -190,9 +194,8 @@ describe('container registration write parity', () => {
                 collectionDate: '2025-06-02',
                 container: {
                   containerType: 'cryovial_tube',
-                  collectionName: boxRecord.name,
                   barcode: 'CRY-PARITY-2',
-                  position: 'D1',
+                  collection: { type: 'cryovial_box', name: boxRecord.name, position: 'D1' },
                 },
               },
             ],
@@ -229,8 +232,7 @@ describe('container registration write parity', () => {
                 collectionDate: '2025-06-01',
                 container: {
                   containerType: 'static_well',
-                  collectionName: plate.name,
-                  position: 'E1',
+                  collection: { type: 'micronix_plate', name: plate.name, position: 'E1' },
                 },
               },
             ],
@@ -263,14 +265,183 @@ describe('container registration write parity', () => {
         collectionDate: '2025-06-01',
         container: {
           containerType: 'paper',
-          collectionName: boxRecord.name,
-          sheetName: 'Sheet-A',
           sublabel: 'Spot-A',
+          collection: {
+            type: 'sheet',
+            name: 'Sheet-A',
+            parent: { type: 'box', name: boxRecord.name },
+          },
         },
       },
     ])
 
     const paperRecord = await testDb.select().from(paper).get()
     expect(paperRecord?.sublabel).toBe('Spot-A')
+  })
+
+  it('paper: bulk specimen and direct write input produce equivalent paper rows', async () => {
+    const study = await createTestStudy(testDb, { title: 'Parity Write', shortCode: 'PWRT' })
+    const { specimenType, loc } = await setupContainerType(testDb, 'paper', 'DBS')
+    const now = utcNow()
+    const [boxRecord] = await testDb
+      .insert(box)
+      .values({ name: 'ParityBox', locationId: loc.id, created: now, lastUpdated: now })
+      .returning()
+    const subjectLegacy = await createTestStudySubject(testDb, { studyId: study.id, name: 'LegacySubj' })
+
+    const bulkResult = await createBulkSpecimenRows(testDb, [
+      {
+        sourceType: 'subject',
+        studyShortCode: study.shortCode,
+        subjectName: subjectLegacy.name,
+        specimenTypeName: specimenType.name,
+        collectionDate: '2025-06-01',
+        container: {
+          containerType: 'paper',
+          sublabel: 'Spot-Legacy',
+          collection: {
+            type: 'sheet',
+            name: 'Sheet-Legacy',
+            parent: { type: 'box', name: boxRecord.name },
+          },
+        },
+      },
+    ])
+    expect(bulkResult.success).toBe(true)
+
+    const writeSpec = await createTestSpecimen(testDb, specimenType.id, {
+      studySubjectId: subjectLegacy.id,
+    })
+
+    const writeInput: ContainerWriteInput = {
+      containerType: 'paper',
+      sublabel: 'Spot-Write',
+      collection: {
+        type: 'sheet',
+        name: 'Sheet-Write',
+        parent: { type: 'box', name: boxRecord.name },
+      },
+    }
+
+    const writeResult = await createContainerForSpecimen(writeSpec.id, writeInput, testDb)
+    expect(writeResult.success).toBe(true)
+
+    const papers = await testDb.select().from(paper)
+    expect(papers).toHaveLength(2)
+    expect(papers.map((p) => p.sublabel).sort()).toEqual(['Spot-Legacy', 'Spot-Write'])
+  })
+
+  it('paper with bag parent: bulk specimen and combined import produce equivalent rows', async () => {
+    const study = await createTestStudy(testDb, { title: 'Parity Bag', shortCode: 'PBAG' })
+    const { specimenType, loc } = await setupContainerType(testDb, 'paper', 'DBS-Bag')
+    const now = utcNow()
+    await testDb
+      .insert(bag)
+      .values({ name: 'ImportBag', locationId: loc.id, created: now, lastUpdated: now })
+    const subjectBulk = await createTestStudySubject(testDb, { studyId: study.id, name: 'BagBulk' })
+
+    const writeInput: ContainerWriteInput = {
+      containerType: 'paper',
+      sublabel: 'Spot-Bag',
+      collection: {
+        type: 'sheet',
+        name: 'Sheet-Bag',
+        parent: { type: 'bag', name: 'ImportBag' },
+      },
+    }
+
+    await createBulkSpecimenRows(testDb, [
+      {
+        sourceType: 'subject',
+        studyShortCode: study.shortCode,
+        subjectName: subjectBulk.name,
+        specimenTypeName: specimenType.name,
+        collectionDate: '2025-06-01',
+        container: writeInput,
+      },
+    ])
+
+    await runBulkCombinedImport(
+      testDb,
+      {
+        studyShortCode: study.shortCode,
+        atomicMode: 'full_file',
+        subjects: [
+          {
+            subjectName: 'BagCombined',
+            specimens: [
+              {
+                specimenTypeName: specimenType.name,
+                collectionDate: '2025-06-02',
+                container: {
+                  containerType: 'paper',
+                  sublabel: 'Spot-Bag-2',
+                  collection: {
+                    type: 'sheet',
+                    name: 'Sheet-Bag-2',
+                    parent: { type: 'bag', name: 'ImportBag' },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+      undefined
+    )
+
+    const papers = await testDb.select().from(paper)
+    expect(papers).toHaveLength(2)
+    expect(papers.map((p) => p.sublabel).sort()).toEqual(['Spot-Bag', 'Spot-Bag-2'])
+
+    const sheets = await testDb.select().from(sheet)
+    expect(sheets.every((s) => s.bagId != null && s.boxId == null)).toBe(true)
+  })
+
+  it('micronix_tube: control batch and bulk specimen produce same barcode and plate placement', async () => {
+    const study = await createTestStudy(testDb, { title: 'Parity Batch', shortCode: 'PBAT' })
+    const { specimenType, loc } = await setupContainerType(testDb, 'micronix_tube', 'BatchBlood')
+    const plate = await createTestMicronixPlate(testDb, { name: 'BatchPlate', locationId: loc.id })
+    const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'BatchSubj' })
+    const definition = await createTestControlDefinition(testDb, { name: 'BatchDef' })
+
+    await createBulkSpecimenRows(testDb, [
+      {
+        sourceType: 'subject',
+        studyShortCode: study.shortCode,
+        subjectName: subject.name,
+        specimenTypeName: specimenType.name,
+        collectionDate: '2025-06-01',
+        container: {
+          containerType: 'micronix_tube',
+          barcode: 'BATCH-PARITY-1',
+          collection: { type: 'micronix_plate', name: plate.name, position: 'C1' },
+        },
+      },
+    ])
+
+    await createBatchWithSpecimens(testDb, {
+      batch: { controlDefinitionId: definition.id, name: 'BatchParity' },
+      specimens: [
+        {
+          specimenTypeName: specimenType.name,
+          containers: [
+            {
+              containerType: 'micronix_tube',
+              barcode: 'BATCH-PARITY-2',
+              collection: { type: 'micronix_plate', id: plate.id, position: 'D1' },
+            },
+          ],
+        },
+      ],
+    })
+
+    const tubes = await testDb
+      .select()
+      .from(micronixTube)
+      .where(eq(micronixTube.collectionId, plate.id))
+    expect(tubes.map((t) => t.barcode).sort()).toEqual(['BATCH-PARITY-1', 'BATCH-PARITY-2'])
+    expect(tubes.find((t) => t.barcode === 'BATCH-PARITY-1')?.position).toBe('C01')
+    expect(tubes.find((t) => t.barcode === 'BATCH-PARITY-2')?.position).toBe('D01')
   })
 })

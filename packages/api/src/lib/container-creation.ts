@@ -27,6 +27,8 @@ import {
 import { utcNow } from './datetime'
 import { normalizePosition } from './normalize-position'
 import { ValidationError } from './error-handler'
+import type { ContainerWriteInput } from '@sampledb/contract'
+import { isContainerWriteInput, resolveContainerPlacement } from './container-write-placement'
 
 type DatabaseOrTransaction =
   | Database
@@ -48,6 +50,8 @@ export interface ContainerData {
   comment?: string
   /** When collection does not exist, create it at this location (combined import). */
   collectionLocationId?: number
+  /** Paper parent collection type when creating by name (default box). */
+  parentCollectionType?: 'box' | 'bag'
 }
 
 export type CreateContainerForSpecimenOptions = {
@@ -152,9 +156,11 @@ async function resolvePaperCollection(
   collectionMap?: Map<string, number>
 ): Promise<{ boxId: number | null; bagId: number | null }> {
   const boxName = data.collectionName!
-  const key = `box-${boxName}`
+  const parentType = data.parentCollectionType ?? 'box'
+  const key = parentType === 'bag' ? `bag-${boxName}` : `box-${boxName}`
   if (collectionMap?.has(key)) {
-    return { boxId: collectionMap.get(key)!, bagId: null }
+    const id = collectionMap.get(key)!
+    return parentType === 'bag' ? { boxId: null, bagId: id } : { boxId: id, bagId: null }
   }
   const boxRecord = await database.select({ id: box.id }).from(box).where(eq(box.name, boxName)).get()
   if (boxRecord) {
@@ -168,6 +174,23 @@ async function resolvePaperCollection(
   if (data.collectionLocationId) {
     guardCollectionLocation(database, data.collectionLocationId)
     const now = utcNow()
+    const parentType = data.parentCollectionType ?? 'box'
+    if (parentType === 'bag') {
+      const bagKey = `bag-${boxName}`
+      const inserted = await database
+        .insert(bag)
+        .values({
+          name: boxName,
+          locationId: data.collectionLocationId,
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+      const newBag = inserted[0]
+      if (!newBag) throw new Error('Insert did not return bag row')
+      collectionMap?.set(bagKey, newBag.id)
+      return { boxId: null, bagId: newBag.id }
+    }
     const inserted = await database
       .insert(box)
       .values({
@@ -537,7 +560,7 @@ async function createStaticWell(
 
 export async function createContainerForSpecimen(
   specimenId: number,
-  data: ContainerData,
+  data: ContainerData | ContainerWriteInput,
   database: DatabaseOrTransaction,
   options?: CreateContainerForSpecimenOptions | number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
@@ -545,8 +568,20 @@ export async function createContainerForSpecimen(
     typeof options === 'number' ? { userId: options } : (options ?? {})
   const dbForValidation = database as unknown as Database
 
+  let containerData: ContainerData
+  try {
+    containerData = isContainerWriteInput(data)
+      ? await resolveContainerPlacement(database, data, opts.collectionMap)
+      : data
+  } catch (error: unknown) {
+    if (error instanceof ValidationError) {
+      return { success: false, error: error.message }
+    }
+    throw error
+  }
+
   if (!opts.skipValidation) {
-    const validation = await validateContainerData(dbForValidation, data.containerType, data)
+    const validation = await validateContainerData(dbForValidation, containerData.containerType, containerData)
     if (!validation.valid) return { success: false, error: validation.error }
 
     const specimenRecord = await database
@@ -561,23 +596,23 @@ export async function createContainerForSpecimen(
     const containerTypeValidation = await validateContainerTypeForSpecimenType(
       dbForValidation,
       specimenRecord.specimenTypeId,
-      data.containerType
+      containerData.containerType
     )
     if (!containerTypeValidation.valid) {
       return { success: false, error: containerTypeValidation.error }
     }
   }
 
-  switch (data.containerType) {
+  switch (containerData.containerType) {
     case 'micronix_tube':
-      return createMicronixTube(specimenId, data, database, opts)
+      return createMicronixTube(specimenId, containerData, database, opts)
     case 'cryovial_tube':
-      return createCryovialTube(specimenId, data, database, opts)
+      return createCryovialTube(specimenId, containerData, database, opts)
     case 'paper':
-      return createPaper(specimenId, data, database, opts)
+      return createPaper(specimenId, containerData, database, opts)
     case 'static_well':
-      return createStaticWell(specimenId, data, database, opts)
+      return createStaticWell(specimenId, containerData, database, opts)
     default:
-      return { success: false, error: `Unsupported container type: ${data.containerType}` }
+      return { success: false, error: `Unsupported container type: ${containerData.containerType}` }
   }
 }
