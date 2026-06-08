@@ -26,7 +26,6 @@ type CreateSpecimenData = {
   specimenTypeId?: number
   specimenTypeName?: string
   collectionDate?: string
-  containerBarcode?: string
   container?: BulkSpecimenContainerWriteInput
 }
 
@@ -38,8 +37,7 @@ type CreateSpecimensBulkData = {
     subjectName?: string
     specimenTypeName: string
     collectionDate?: string
-    containerBarcode?: string
-    container?: BulkSpecimenContainerWriteInput
+    container: BulkSpecimenContainerWriteInput
   }>
 }
 

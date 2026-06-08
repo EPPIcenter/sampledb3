@@ -4,7 +4,7 @@ export type FlatDerivationContainerForm = {
   containerType: 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
   collectionId?: number
   collectionName?: string
-  containerBarcode?: string
+  barcode?: string
   sublabel?: string
   position?: string
 }
@@ -64,7 +64,7 @@ export function flatDerivationFormToWriteInput(
   if (flat.containerType === 'micronix_tube') {
     return {
       containerType: 'micronix_tube',
-      barcode: flat.containerBarcode ?? '',
+      barcode: flat.barcode ?? '',
       ...(flat.collectionId != null
         ? {
             collection: {
@@ -87,7 +87,7 @@ export function flatDerivationFormToWriteInput(
 
   return {
     containerType: 'cryovial_tube',
-    ...(flat.containerBarcode ? { barcode: flat.containerBarcode } : {}),
+    ...(flat.barcode ? { barcode: flat.barcode } : {}),
     ...(flat.collectionId != null
       ? {
           collection: {

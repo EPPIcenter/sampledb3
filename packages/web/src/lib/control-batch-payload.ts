@@ -23,7 +23,7 @@ export type FlatControlBatchContainer = {
   collectionName?: string
   collectionLocationId?: number
   collectionType?: 'box' | 'bag' | 'micronix_plate' | 'cryovial_box'
-  containerBarcode?: string
+  barcode?: string
   sublabel?: string
   sheetName?: string
   position?: string
@@ -93,7 +93,7 @@ export function flatControlBatchContainerToWriteInput(
 
     return {
       containerType: 'micronix_tube',
-      barcode: flat.containerBarcode ?? '',
+      barcode: flat.barcode ?? '',
       ...(collection ? { collection } : {}),
       ...(quantity != null ? { quantity } : {}),
       ...(unitSymbol ? { unitSymbol } : {}),
@@ -118,7 +118,7 @@ export function flatControlBatchContainerToWriteInput(
 
   return {
     containerType: 'cryovial_tube',
-    ...(flat.containerBarcode ? { barcode: flat.containerBarcode } : {}),
+    ...(flat.barcode ? { barcode: flat.barcode } : {}),
     ...(collection ? { collection } : {}),
     ...(quantity != null ? { quantity } : {}),
     ...(unitSymbol ? { unitSymbol } : {}),

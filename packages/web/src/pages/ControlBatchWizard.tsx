@@ -40,7 +40,10 @@ export interface SpecimenTypeConfig {
 export interface ContainerConfig {
   id: string
   position?: string
+  /** Tube identifier (micronix/cryovial). */
   barcode?: string
+  /** Paper spot identifier. */
+  sublabel?: string
   quantity: number
   unitSymbol: string
   collectionId?: number
@@ -57,6 +60,7 @@ export interface CSVFileData {
     specimen_type_name: string
     position?: string
     barcode?: string
+    sublabel?: string
     quantity?: number
     unit_symbol?: string
     /** Optional density; when present, rows are grouped by density for batch creation */

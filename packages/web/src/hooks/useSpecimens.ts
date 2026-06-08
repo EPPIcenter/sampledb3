@@ -50,7 +50,6 @@ export type CreateSpecimenInput = {
   specimenTypeId?: number
   specimenTypeName?: string
   collectionDate?: string
-  containerBarcode?: string
   /** Flat form state; mapped to write shape before API call. */
   container?: ContainerData | SpecimenContainerWriteInput
   /** When known before create (e.g. form state); API response studyId takes precedence. */
