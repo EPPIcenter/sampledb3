@@ -5,6 +5,7 @@ export interface CSVContainerRow {
   specimen_type_name: string
   position?: string
   barcode?: string
+  sublabel?: string
   quantity?: number
   unit_symbol?: string
   /** Optional density (numeric); when present, rows are grouped by density for batch creation */
@@ -101,7 +102,7 @@ export function parseContainerCSV(csvText: string, filename: string): ParsedCSVF
   // Parse header
   const header = rows[0].map(h => h.toLowerCase().trim())
   const requiredColumns = ['specimen_type_name']
-  const optionalColumns = ['position', 'barcode', 'quantity', 'unit_symbol', 'density', 'sheet_name']
+  const optionalColumns = ['position', 'barcode', 'sublabel', 'quantity', 'unit_symbol', 'density', 'sheet_name']
 
   // Check for required columns
   const missingRequired = requiredColumns.filter(col => !header.includes(col))
@@ -117,6 +118,7 @@ export function parseContainerCSV(csvText: string, filename: string): ParsedCSVF
   const specimenTypeIdx = header.indexOf('specimen_type_name')
   const positionIdx = header.indexOf('position')
   const barcodeIdx = header.indexOf('barcode')
+  const sublabelIdx = header.indexOf('sublabel')
   const quantityIdx = header.indexOf('quantity')
   const unitSymbolIdx = header.indexOf('unit_symbol')
   const densityIdx = header.indexOf('density')
@@ -158,6 +160,10 @@ export function parseContainerCSV(csvText: string, filename: string): ParsedCSVF
 
     if (barcodeIdx >= 0 && row[barcodeIdx]) {
       parsedRow.barcode = row[barcodeIdx].trim()
+    }
+
+    if (sublabelIdx >= 0 && row[sublabelIdx]) {
+      parsedRow.sublabel = row[sublabelIdx].trim()
     }
 
     if (quantityIdx >= 0 && row[quantityIdx]) {
@@ -269,7 +275,7 @@ export function generateCSVTemplate(
 
   if (containerType === 'paper') {
     return buildCsv(
-      ['specimen_type_name', 'barcode', 'quantity', 'density', 'sheet_name'],
+      ['specimen_type_name', 'sublabel', 'quantity', 'density', 'sheet_name'],
       [
         [firstType.name, '', 5, 100, 'Sheet1'],
         [secondType.name, '', 5, 200, 'Sheet2'],

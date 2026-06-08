@@ -73,7 +73,7 @@ function ContainerDerivationModalContent({
     properties: undefined as Record<string, unknown> | undefined,
     collectionId: undefined as number | undefined,
     collectionName: undefined as string | undefined,
-    containerBarcode: '',
+    barcode: '',
     sublabel: '',
     position: '',
   })
@@ -214,7 +214,7 @@ function ContainerDerivationModalContent({
         container: flatDerivationFormToWriteInput({
           containerType: formData.containerType,
           collectionId: formData.collectionId,
-          containerBarcode: formData.containerBarcode || undefined,
+          barcode: formData.barcode || undefined,
           sublabel: formData.sublabel || undefined,
           position: formData.position || undefined,
         }),
@@ -435,11 +435,11 @@ function ContainerDerivationModalContent({
               </label>
               <input
                 type="text"
-                value={formData.containerType === 'paper' ? (formData.sublabel || '') : (formData.containerBarcode || '')}
+                value={formData.containerType === 'paper' ? (formData.sublabel || '') : (formData.barcode || '')}
                 onChange={(e) =>
                   formData.containerType === 'paper'
                     ? setFormData({ ...formData, sublabel: e.target.value })
-                    : setFormData({ ...formData, containerBarcode: e.target.value })
+                    : setFormData({ ...formData, barcode: e.target.value })
                 }
                 className="w-full px-3 py-2 border border-app-border rounded-md focus:outline-none focus:ring-2 focus:ring-app-accent"
                 disabled={loading}

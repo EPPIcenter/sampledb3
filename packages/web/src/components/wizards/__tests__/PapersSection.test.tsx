@@ -9,14 +9,14 @@ const paperContainers: ContainerConfig[] = [
     id: 'c-1',
     quantity: 1,
     unitSymbol: 'spots',
-    barcode: 'BC1',
+    sublabel: 'Spot-A',
     position: 'A1',
   },
   {
     id: 'c-2',
     quantity: 2,
     unitSymbol: 'spots',
-    barcode: 'BC2',
+    sublabel: 'Spot-B',
     position: 'A2',
   },
 ]
@@ -26,7 +26,7 @@ describe('PapersSection', () => {
     vi.clearAllMocks()
   })
 
-  it('renders paper rows with barcode, position, quantity, unit', () => {
+  it('renders paper rows with sublabel, position, quantity, unit', () => {
     const onUpdate = vi.fn()
     const onAdd = vi.fn()
     const onRemove = vi.fn()
@@ -41,9 +41,9 @@ describe('PapersSection', () => {
       />
     )
 
-    const barcodeInputs = screen.getAllByPlaceholderText('Barcode')
-    expect(barcodeInputs[0]).toHaveValue('BC1')
-    expect(barcodeInputs[1]).toHaveValue('BC2')
+    const sublabelInputs = screen.getAllByPlaceholderText('Sublabel')
+    expect(sublabelInputs[0]).toHaveValue('Spot-A')
+    expect(sublabelInputs[1]).toHaveValue('Spot-B')
     expect(screen.getByDisplayValue('A1')).toBeInTheDocument()
     expect(screen.getByDisplayValue('1')).toBeInTheDocument()
     const unitInputs = screen.getAllByPlaceholderText('Unit')
@@ -84,10 +84,10 @@ describe('PapersSection', () => {
       />
     )
 
-    const barcodeInputs = screen.getAllByPlaceholderText('Barcode')
-    fireEvent.change(barcodeInputs[0], { target: { value: 'NEW' } })
+    const sublabelInputs = screen.getAllByPlaceholderText('Sublabel')
+    fireEvent.change(sublabelInputs[0], { target: { value: 'NEW' } })
 
-    expect(onUpdate).toHaveBeenCalledWith('st-1', 'c-1', { barcode: 'NEW' })
+    expect(onUpdate).toHaveBeenCalledWith('st-1', 'c-1', { sublabel: 'NEW' })
   })
 
   it('calls onRemove when remove button is clicked', async () => {

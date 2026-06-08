@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import type { ContainerWriteInput } from '@sampledb/contract'
 import { specimensApi } from '../lib/api/specimens';
 import { useStudies } from '../hooks/useStudies'
 import { useSpecimenTypes } from '../hooks/useReferenceData'
@@ -10,7 +11,7 @@ interface SpecimenEntry {
   subjectName: string
   specimenTypeName: string
   collectionDate?: string
-  containerBarcode?: string
+  barcode?: string
 }
 
 interface CollectionSpecimenEntryProps {
@@ -21,9 +22,37 @@ interface CollectionSpecimenEntryProps {
   onCancel?: () => void
 }
 
+function buildContainerForEntry(
+  collectionType: 'micronix_plate' | 'cryovial_box',
+  collectionId: number,
+  position: string,
+  barcode?: string
+): ContainerWriteInput {
+  if (collectionType === 'micronix_plate') {
+    return {
+      containerType: 'micronix_tube',
+      barcode: barcode ?? '',
+      collection: {
+        type: 'micronix_plate',
+        id: collectionId,
+        position,
+      },
+    }
+  }
+  return {
+    containerType: 'cryovial_tube',
+    ...(barcode ? { barcode } : {}),
+    collection: {
+      type: 'cryovial_box',
+      id: collectionId,
+      position,
+    },
+  }
+}
+
 export default function CollectionSpecimenEntry({
   collectionType,
-  collectionId: _collectionId,
+  collectionId,
   positions,
   onSuccess,
   onCancel,
@@ -99,7 +128,12 @@ export default function CollectionSpecimenEntry({
         subjectName: entry.subjectName,
         specimenTypeName: entry.specimenTypeName,
         collectionDate: entry.collectionDate || undefined,
-        containerBarcode: entry.containerBarcode || undefined,
+        container: buildContainerForEntry(
+          collectionType,
+          collectionId,
+          entry.position,
+          entry.barcode
+        ),
       }))
 
       const response = await specimensApi.createBulk({ specimens })
@@ -225,8 +259,8 @@ export default function CollectionSpecimenEntry({
                       <td className="px-3 py-2 border-b">
                         <input
                           type="text"
-                          value={entry.containerBarcode || ''}
-                          onChange={(e) => updateEntry(position, 'containerBarcode', e.target.value)}
+                          value={entry.barcode || ''}
+                          onChange={(e) => updateEntry(position, 'barcode', e.target.value)}
                           placeholder="Barcode"
                           className="w-full px-2 py-1 border border-app-border rounded text-sm"
                         />

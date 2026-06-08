@@ -7,7 +7,7 @@ describe('control-batch-payload', () => {
       type: 'micronix_tube',
       collectionName: 'Plate-A',
       collectionLocationId: 42,
-      containerBarcode: 'BC-1',
+      barcode: 'BC-1',
       position: 'A01',
       quantity: 2,
       unitSymbol: 'uL',

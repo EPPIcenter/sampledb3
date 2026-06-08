@@ -60,12 +60,12 @@ describe('control-batch-csv', () => {
       })
     })
 
-    it('parses sheet_name column for paper CSV', () => {
-      const csv = 'specimen_type_name,barcode,quantity,unit_symbol,density,sheet_name\nWhole Blood,,5,spots,100,Sheet1\nPlasma,,5,spots,200,Sheet2'
+    it('parses sheet_name and sublabel columns for paper CSV', () => {
+      const csv = 'specimen_type_name,sublabel,quantity,unit_symbol,density,sheet_name\nWhole Blood,Spot-A,5,spots,100,Sheet1\nPlasma,Spot-B,5,spots,200,Sheet2'
       const result = parseContainerCSV(csv, 'paper.csv')
       expect(result.rows).toHaveLength(2)
-      expect(result.rows[0]).toMatchObject({ specimen_type_name: 'Whole Blood', sheet_name: 'Sheet1' })
-      expect(result.rows[1]).toMatchObject({ specimen_type_name: 'Plasma', sheet_name: 'Sheet2' })
+      expect(result.rows[0]).toMatchObject({ specimen_type_name: 'Whole Blood', sublabel: 'Spot-A', sheet_name: 'Sheet1' })
+      expect(result.rows[1]).toMatchObject({ specimen_type_name: 'Plasma', sublabel: 'Spot-B', sheet_name: 'Sheet2' })
     })
 
     it('skips empty rows and collects validation errors for missing specimen type', () => {
@@ -192,7 +192,7 @@ describe('control-batch-csv', () => {
 
     it('generates paper template without unit column (default unit used)', () => {
       const out = generateCSVTemplate('paper', types)
-      expect(out).toContain('specimen_type_name,barcode,quantity,density,sheet_name')
+      expect(out).toContain('specimen_type_name,sublabel,quantity,density,sheet_name')
       expect(out).not.toContain('unit_symbol')
       expect(out).toContain('Whole Blood')
       expect(out).toContain('Sheet1')
@@ -313,7 +313,7 @@ describe('control-batch-csv', () => {
 
   describe('inferContainerTypeFromHeader', () => {
     it('returns paper when header includes sheet_name', () => {
-      expect(inferContainerTypeFromHeader(['specimen_type_name', 'barcode', 'sheet_name'])).toBe('paper')
+      expect(inferContainerTypeFromHeader(['specimen_type_name', 'sublabel', 'sheet_name'])).toBe('paper')
       expect(inferContainerTypeFromHeader(['Sheet_Name', 'specimen_type_name'])).toBe('paper')
     })
 

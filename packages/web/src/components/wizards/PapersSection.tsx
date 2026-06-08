@@ -67,10 +67,10 @@ export default function PapersSection({
             >
               <input
                 type="text"
-                placeholder="Barcode"
-                value={container.barcode || ''}
+                placeholder="Sublabel"
+                value={container.sublabel || ''}
                 onChange={(e) =>
-                  onUpdate(specimenTypeId, container.id, { barcode: e.target.value })
+                  onUpdate(specimenTypeId, container.id, { sublabel: e.target.value })
                 }
                 className="px-2 py-1 border border-app-border rounded text-sm bg-app-card text-app-text"
               />
