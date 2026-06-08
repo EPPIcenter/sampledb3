@@ -28,6 +28,10 @@ interface MicronixPlatePickerProps {
   loading?: boolean
   /** Ordered inference candidates (e.g. from filename/CSV); shown at top when ambiguous. */
   suggestedPlates?: PlateCandidate[]
+  /** When true, user can pick a plate name that does not exist yet (creation happens elsewhere). */
+  allowCreateNew?: boolean
+  /** Default name for the create-new field (e.g. filename stem). */
+  suggestedNewPlateName?: string | null
 }
 
 export default function MicronixPlatePicker({
@@ -38,9 +42,12 @@ export default function MicronixPlatePicker({
   disabled = false,
   loading = false,
   suggestedPlates,
+  allowCreateNew = false,
+  suggestedNewPlateName,
 }: MicronixPlatePickerProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [newPlateName, setNewPlateName] = useState('')
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
   const suggestedRows = useMemo(() => {
@@ -178,10 +185,25 @@ export default function MicronixPlatePicker({
   }, [plates, locations, search, suggestionRank])
 
   const selectedPlate = plates.find((p) => p.name === value)
+  const isNewPlateName = Boolean(value?.trim() && !selectedPlate)
+  const existingPlateNames = useMemo(() => new Set(plates.map((p) => p.name)), [plates])
+  const trimmedNewPlateName = newPlateName.trim()
+  const newPlateNameAlreadyExists =
+    trimmedNewPlateName.length > 0 && existingPlateNames.has(trimmedNewPlateName)
+
+  useEffect(() => {
+    if (!open || !allowCreateNew) return
+    setNewPlateName(suggestedNewPlateName?.trim() || search.trim() || '')
+  }, [open, allowCreateNew, suggestedNewPlateName])
 
   const handleSelect = (plateName: string) => {
     onChange(plateName)
     setOpen(false)
+  }
+
+  const handleUseNewPlateName = () => {
+    if (!trimmedNewPlateName || newPlateNameAlreadyExists) return
+    handleSelect(trimmedNewPlateName)
   }
 
   const renderLocationNode = (loc: Location, depth: number = 0): React.ReactNode => {
@@ -423,11 +445,23 @@ export default function MicronixPlatePicker({
         type="button"
         onClick={() => !disabled && setOpen(true)}
         disabled={disabled}
+        aria-label={
+          isNewPlateName
+            ? `Destination plate: ${value} (new plate)`
+            : selectedPlate
+              ? `Destination plate: ${selectedPlate.name}`
+              : 'Select target plate'
+        }
         className={`w-full px-3 py-2 border border-app-border rounded-lg shadow-sm bg-app-card text-left focus:outline-none focus:ring-2 focus:ring-app-accent focus:border-app-accent ${
           disabled ? 'bg-app-surface text-app-text-muted cursor-not-allowed' : 'hover:border-app-border'
         }`}
       >
-        {selectedPlate ? (
+        {isNewPlateName ? (
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-app-text">{value}</span>
+            <span className="text-xs text-app-accent shrink-0">New plate</span>
+          </div>
+        ) : selectedPlate ? (
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-app-text">{selectedPlate.name}</span>
             {selectedPlate.locationPath && (
@@ -510,6 +544,20 @@ export default function MicronixPlatePicker({
                       </div>
                     </div>
                   )}
+                  {allowCreateNew && search.trim() && matchingPlates.length === 0 && (
+                    <div className="mb-4">
+                      <button
+                        type="button"
+                        onClick={() => handleSelect(search.trim())}
+                        className="w-full text-left px-3 py-3 min-h-[44px] border border-app-accent/40 rounded-lg bg-app-accent-muted/30 hover:bg-app-accent-muted text-app-text transition-colors"
+                      >
+                        <span className="text-sm font-medium">Create new plate: {search.trim()}</span>
+                        <span className="block text-[10px] text-app-text-muted mt-0.5">
+                          Assign a storage location in the next step.
+                        </span>
+                      </button>
+                    </div>
+                  )}
                   {search.trim() && matchingPlates.length > 0 && (
                     <div className="mb-4">
                       <div className="px-3 py-1.5 bg-app-surface border-b border-app-border text-xs font-medium text-app-text-muted sticky top-0 rounded-t-lg">
@@ -564,6 +612,43 @@ export default function MicronixPlatePicker({
                 </div>
               )}
             </div>
+
+            {allowCreateNew && (
+              <div className="mt-4 pt-4 border-t border-app-border">
+                <p className="text-xs font-semibold text-app-text mb-2">Create new plate</p>
+                <p className="text-xs text-app-text-muted mb-2">
+                  Use any name — even when the scan filename matches an existing plate.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newPlateName}
+                    onChange={(e) => setNewPlateName(e.target.value)}
+                    placeholder="Plate name"
+                    className="flex-1 form-input text-sm"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleUseNewPlateName()
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleUseNewPlateName}
+                    disabled={!trimmedNewPlateName || newPlateNameAlreadyExists}
+                    className="px-3 py-2 text-sm border border-app-border rounded-lg text-app-text hover:bg-app-surface disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    Use name
+                  </button>
+                </div>
+                {newPlateNameAlreadyExists && (
+                  <p className="text-xs text-app-text-muted mt-1">
+                    A plate named &quot;{trimmedNewPlateName}&quot; already exists — select it above.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="mt-4 flex justify-end">
               <button

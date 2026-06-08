@@ -706,7 +706,7 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('data.csv')).toBeInTheDocument()
         })
 
-        fireEvent.click(screen.getByText('Select target plate...'))
+        fireEvent.click(screen.getByRole('button', { name: /destination plate: data/i }))
         await waitFor(() => {
             expect(screen.getByText('Select Micronix Plate')).toBeInTheDocument()
         })
@@ -1482,5 +1482,46 @@ describe('ContainerMoveMicronix', { timeout: 8_000 }, () => {
             expect(screen.getByText('Resolved Micronix Tubes')).toBeInTheDocument()
         })
         expect(collectionsApi.createMicronixPlate).toHaveBeenCalledTimes(1)
+    })
+
+    it('allows creating a destination plate with a custom name when filename matches an existing plate', async () => {
+        vi.mocked(collectionsApi.listCollectionsByType).mockResolvedValue({
+            collections: [{ id: 1, name: 'PLATE-001', barcode: null, locationId: 2, itemCount: 0 }],
+        } as any)
+        vi.mocked(locationsApi.list).mockResolvedValue({
+            locations: [
+                { id: 1, name: 'Freezer', path: 'Freezer', parentId: null, canContainCollections: true },
+                { id: 2, name: 'Shelf', path: 'Freezer / Shelf', parentId: 1, canContainCollections: true },
+            ],
+        } as any)
+
+        const csvContent = fullPlateCSV({ A01: 'MTX123' })
+        const file = new File([csvContent], 'PLATE-001.csv', { type: 'text/csv' })
+
+        const { container } = await renderWithProviders(<ContainerMoveMicronix />)
+        await waitFor(() => {
+            const input = container.querySelector('input[type="file"]') as HTMLInputElement
+            expect(input.disabled).toBe(false)
+        })
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: { files: [file] },
+        })
+
+        await waitFor(() => {
+            expect(screen.getByText('PLATE-001.csv')).toBeInTheDocument()
+            expect(screen.getByRole('button', { name: /destination plate: plate-001/i })).toBeInTheDocument()
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: /destination plate: plate-001/i }))
+        await screen.findByRole('heading', { name: 'Select Micronix Plate' })
+
+        fireEvent.change(screen.getByPlaceholderText('Plate name'), { target: { value: 'CUSTOM-DEST' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Use name' }))
+
+        await waitFor(() => {
+            expect(screen.getByText(/New plate "CUSTOM-DEST"/i)).toBeInTheDocument()
+            expect(screen.getByRole('button', { name: /Next: Create Destination Plates/i })).not.toBeDisabled()
+        })
     })
 })

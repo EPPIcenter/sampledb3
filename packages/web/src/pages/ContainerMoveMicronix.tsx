@@ -935,6 +935,8 @@ export default function ContainerMoveMicronix() {
                           value={fileData.selectedPlateName || undefined}
                           onChange={(plateName) => updateFilePlateSelection(index, plateName)}
                           suggestedPlates={fileData.inferredMatches}
+                          allowCreateNew
+                          suggestedNewPlateName={fileData.inferredPlateName}
                         />
                         {fileData.selectedPlateName &&
                           !isExistingPlateName(fileData.selectedPlateName, availablePlates) && (
@@ -950,12 +952,12 @@ export default function ContainerMoveMicronix() {
                             onClick={() => updateFilePlateSelection(index, fileData.inferredPlateName!)}
                             className="mt-2 text-sm text-app-accent underline hover:no-underline"
                           >
-                            Create new plate: {fileData.inferredPlateName}
+                            Use inferred name: {fileData.inferredPlateName}
                           </button>
                         )}
                         {fileData.inferredPlateName && !fileData.selectedPlateName && (
                           <p className="text-xs text-app-text-muted mt-1">
-                            No single plate suggested for &quot;{fileData.inferredPlateName}&quot;. Select an existing plate or create a new one.
+                            No single plate suggested for &quot;{fileData.inferredPlateName}&quot;. Select an existing plate or create a new one with any name.
                             {fileData.inferredMatches.length > 0 && (
                               <span className="ml-1">({fileData.inferredMatches.length} similar plate{fileData.inferredMatches.length !== 1 ? 's' : ''} found)</span>
                             )}

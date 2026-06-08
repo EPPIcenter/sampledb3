@@ -176,4 +176,76 @@ describe('MicronixPlatePicker', () => {
     expect(options[1]).toHaveAccessibleName(/PLATE-001/i)
     expect(options[options.length - 1]).toHaveAccessibleName(/PLATE-003-OTHER/i)
   })
+
+  it('shows new plate label when value is not an existing plate', async () => {
+    await render(
+      <MicronixPlatePicker
+        locations={mockLocations}
+        plates={mockPlates}
+        value="CUSTOM-PLATE"
+        onChange={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('button', { name: /destination plate: custom-plate \(new plate\)/i })).toBeInTheDocument()
+    expect(screen.getByText('New plate')).toBeInTheDocument()
+  })
+
+  it('allowCreateNew: user can pick a custom plate name', async () => {
+    const onChange = vi.fn()
+    await render(
+      <MicronixPlatePicker
+        locations={mockLocations}
+        plates={mockPlates}
+        value="PLATE-001"
+        onChange={onChange}
+        allowCreateNew
+        suggestedNewPlateName="PLATE-001"
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /destination plate: plate-001/i }))
+    await screen.findByRole('heading', { name: 'Select Micronix Plate' })
+
+    const nameInput = screen.getByPlaceholderText('Plate name')
+    fireEvent.change(nameInput, { target: { value: 'MY-NEW-PLATE' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Use name' }))
+
+    expect(onChange).toHaveBeenCalledWith('MY-NEW-PLATE')
+    expect(screen.queryByRole('heading', { name: 'Select Micronix Plate' })).not.toBeInTheDocument()
+  })
+
+  it('allowCreateNew: disables use name when plate already exists', async () => {
+    await render(
+      <MicronixPlatePicker
+        locations={mockLocations}
+        plates={mockPlates}
+        onChange={vi.fn()}
+        allowCreateNew
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /select target plate/i }))
+    await screen.findByRole('heading', { name: 'Select Micronix Plate' })
+
+    fireEvent.change(screen.getByPlaceholderText('Plate name'), { target: { value: 'PLATE-002' } })
+    expect(screen.getByRole('button', { name: 'Use name' })).toBeDisabled()
+    expect(screen.getByText(/already exists/i)).toBeInTheDocument()
+  })
+
+  it('allowCreateNew: search with no matches offers create from search text', async () => {
+    const onChange = vi.fn()
+    await render(
+      <MicronixPlatePicker
+        locations={mockLocations}
+        plates={mockPlates}
+        onChange={onChange}
+        allowCreateNew
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /select target plate/i }))
+    await screen.findByRole('heading', { name: 'Select Micronix Plate' })
+    fireEvent.change(screen.getByPlaceholderText(/search by location/i), {
+      target: { value: 'BRAND-NEW' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /create new plate: brand-new/i }))
+    expect(onChange).toHaveBeenCalledWith('BRAND-NEW')
+  })
 })
