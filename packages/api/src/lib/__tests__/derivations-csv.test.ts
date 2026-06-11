@@ -70,6 +70,21 @@ describe('derivations-csv', () => {
       // Parser collapses "" to single " inside quoted field
       expect(rows[0].notes).toBe('double')
     })
+
+    it('strips a UTF-8 BOM so the first header is usable', () => {
+      const text = '\uFEFFparent_container_id,derivation_type\n1,Extraction'
+      const rows = parseCsv(text)
+      expect(rows.length).toBe(1)
+      expect(rows[0].parent_container_id).toBe('1')
+    })
+
+    it('handles newlines inside quoted fields', () => {
+      const text = 'parent_container_id,notes\n1,"line one\nline two"'
+      const rows = parseCsv(text)
+      expect(rows.length).toBe(1)
+      expect(rows[0].parent_container_id).toBe('1')
+      expect(rows[0].notes).toBe('line one\nline two')
+    })
   })
 
   describe('validateDerivationsCsv', () => {

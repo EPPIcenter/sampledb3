@@ -16,6 +16,7 @@ import {
 import { and, eq, sql } from 'drizzle-orm'
 import {
   csvRowToContainerWriteInput,
+  parseCsv as parseCsvCells,
   PAPER_DERIVATION_USE_SUBLABEL_NOT_CONTAINER_BARCODE,
   PAPER_DERIVATION_USE_SUBLABEL_NOT_POSITION,
   type ContainerCsvRow,
@@ -235,40 +236,21 @@ function derivationCsvRowToContainerWrite(
   })
 }
 
-// Extremely small CSV parser: handles commas and quoted fields
+/**
+ * Parse derivation CSV text into header-keyed rows using the shared contract
+ * parser (handles quoting, BOM, and embedded newlines). Blank lines are
+ * skipped, matching the previous line-based parser.
+ */
 export function parseCsv(text: string): DerivationCsvRow[] {
-  const lines = text.split(/\r?\n/).filter(l => l.trim() !== '')
-  if (lines.length === 0) return []
+  const cells = parseCsvCells(text)
+    .filter(row => !(row.length === 1 && row[0].trim() === ''))
+  if (cells.length === 0) return []
 
-  const parseLine = (line: string): string[] => {
-    const result: string[] = []
-    let current = ''
-    let inQuotes = false
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i]
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"'
-          i++
-        } else {
-          inQuotes = !inQuotes
-        }
-      } else if (ch === ',' && !inQuotes) {
-        result.push(current)
-        current = ''
-      } else {
-        current += ch
-      }
-    }
-    result.push(current)
-    return result
-  }
-
-  const headers = parseLine(lines[0]).map(h => h.trim())
+  const headers = cells[0].map(h => h.trim())
   const rows: DerivationCsvRow[] = []
 
-  for (let i = 1; i < lines.length; i++) {
-    const cols = parseLine(lines[i])
+  for (let i = 1; i < cells.length; i++) {
+    const cols = cells[i]
     const row: any = {}
     headers.forEach((h, idx) => {
       row[h as keyof DerivationCsvRow] = cols[idx]?.trim()
