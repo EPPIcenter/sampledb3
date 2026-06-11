@@ -1,6 +1,7 @@
 import type { Database } from '../db/client'
 import { study, studySubject, specimenType, micronixTube, storageContainer, cryovialTube, paper } from '../db/schema'
 import { eq, and, inArray } from 'drizzle-orm'
+import type { DatabaseOrTransaction } from './db-types'
 
 /**
  * Resolve study short code to study ID
@@ -51,7 +52,7 @@ export async function resolveSpecimenTypeByName(database: Database, name: string
 /**
  * Resolve container barcode to container ID
  */
-export async function resolveContainerByBarcode(database: Database, barcode: string): Promise<number | null> {
+export async function resolveContainerByBarcode(database: DatabaseOrTransaction, barcode: string): Promise<number | null> {
   // Try micronix tube
   const micronix = await database
     .select({ id: micronixTube.id })
