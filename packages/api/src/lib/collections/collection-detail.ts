@@ -14,7 +14,7 @@ import {
 } from '../../db/schema'
 import { formatLocationPath } from '../container-enrichment'
 import { normalizePosition } from '../normalize-position'
-import { enrichPaperContainers, enrichStorageContainer, attachTagsToEnrichedContainers } from './container-detail'
+import { enrichPaperContainers, enrichStorageContainers, attachTagsToEnrichedContainers } from './container-detail'
 
 export async function getMicronixPlateDetail(database: Database, id: number) {
   const plate = await database.select().from(micronixPlate).where(eq(micronixPlate.id, id)).get()
@@ -26,15 +26,18 @@ export async function getMicronixPlateDetail(database: Database, id: number) {
     database.select().from(staticWell).where(eq(staticWell.collectionId, id)),
   ])
 
-  const tubeEntries = await Promise.all(
-    tubes.map(async (t) => ({
-      type: 'micronix_tube' as const,
-      id: t.id,
-      barcode: t.barcode,
-      position: t.position,
-      container: await enrichStorageContainer(database, t.id),
-    })),
-  )
+  const enrichedById = await enrichStorageContainers(database, [
+    ...tubes.map((t) => t.id),
+    ...wells.map((w) => w.id),
+  ])
+
+  const tubeEntries = tubes.map((t) => ({
+    type: 'micronix_tube' as const,
+    id: t.id,
+    barcode: t.barcode,
+    position: t.position,
+    container: enrichedById.get(t.id) ?? null,
+  }))
 
   const tubeContainersWithTags = await attachTagsToEnrichedContainers(
     database,
@@ -44,14 +47,12 @@ export async function getMicronixPlateDetail(database: Database, id: number) {
     entry.container = tubeContainersWithTags[index]
   })
 
-  const wellEntries = await Promise.all(
-    wells.map(async (w) => ({
-      type: 'static_well' as const,
-      id: w.id,
-      position: w.position,
-      container: await enrichStorageContainer(database, w.id),
-    })),
-  )
+  const wellEntries = wells.map((w) => ({
+    type: 'static_well' as const,
+    id: w.id,
+    position: w.position,
+    container: enrichedById.get(w.id) ?? null,
+  }))
 
   const wellContainersWithTags = await attachTagsToEnrichedContainers(
     database,
@@ -83,15 +84,14 @@ export async function getCryovialBoxDetail(database: Database, id: number) {
   const loc = await database.select().from(location).where(eq(location.id, boxRecord.locationId)).get()
   const tubes = await database.select().from(cryovialTube).where(eq(cryovialTube.collectionId, id))
 
-  const tubeEntries = await Promise.all(
-    tubes.map(async (t) => ({
-      kind: 'cryovial_tube' as const,
-      id: t.id,
-      barcode: t.barcode,
-      position: t.position,
-      container: await enrichStorageContainer(database, t.id),
-    })),
-  )
+  const cryovialEnrichedById = await enrichStorageContainers(database, tubes.map((t) => t.id))
+  const tubeEntries = tubes.map((t) => ({
+    kind: 'cryovial_tube' as const,
+    id: t.id,
+    barcode: t.barcode,
+    position: t.position,
+    container: cryovialEnrichedById.get(t.id) ?? null,
+  }))
 
   const tubeContainersWithTags = await attachTagsToEnrichedContainers(
     database,

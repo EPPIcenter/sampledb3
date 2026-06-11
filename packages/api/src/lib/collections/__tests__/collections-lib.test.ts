@@ -10,7 +10,7 @@ import {
   createTestStorageContainer,
 } from '../../../__tests__/helpers/factories'
 import type { Database } from '../../../db/client'
-import { enrichStorageContainer } from '../container-detail'
+import { enrichStorageContainer, enrichStorageContainers } from '../container-detail'
 import { listAllCollections, listCollectionsByType } from '../collection-list'
 import { getMicronixPlateDetail } from '../collection-detail'
 import { micronixTube } from '../../../db/schema'
@@ -108,6 +108,31 @@ describe('collections lib', () => {
   describe('enrichStorageContainer', () => {
     it('returns null for missing container', async () => {
       expect(await enrichStorageContainer(testDb, 99999)).toBeNull()
+    })
+  })
+
+  describe('enrichStorageContainers (batch)', () => {
+    it('returns an empty map for empty input', async () => {
+      expect((await enrichStorageContainers(testDb, [])).size).toBe(0)
+    })
+
+    it('enriches multiple containers with unit and specimen type, omitting missing ids', async () => {
+      const unit = await createTestUnit(testDb, { symbol: 'mL', name: 'milliliter', category: 'volume' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Batch Type' })
+      const specA = await createTestSpecimen(testDb, specimenType.id)
+      const specB = await createTestSpecimen(testDb, specimenType.id)
+      const containerA = await createTestStorageContainer(testDb, { specimenId: specA.id, unitId: unit.id })
+      const containerB = await createTestStorageContainer(testDb, { specimenId: specB.id, unitId: unit.id })
+
+      const enriched = await enrichStorageContainers(testDb, [containerA.id, containerB.id, 99999])
+
+      expect(enriched.size).toBe(2)
+      const a = enriched.get(containerA.id)
+      expect(a?.unit?.symbol).toBe('mL')
+      expect(a?.specimenTypeName).toBe('Batch Type')
+      expect(a?.specimen?.id).toBe(specA.id)
+      expect(enriched.get(containerB.id)?.specimenId).toBe(specB.id)
+      expect(enriched.has(99999)).toBe(false)
     })
   })
 })
