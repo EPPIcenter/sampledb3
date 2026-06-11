@@ -1,13 +1,8 @@
 import type { Database } from '../../db/client'
 import {
   storageContainer,
-  specimen,
   specimenType,
   studySubject,
-  controlBatch,
-  controlDefinition,
-  unit,
-  strain,
   storageContainerTag,
   tag,
 } from '../../db/schema'
@@ -17,6 +12,7 @@ import {
   projectContainerIdentity,
   projectContainerPlacementFields,
 } from '../container-projection'
+import { resolveSpecimenSources } from '../specimens/provenance'
 import type { ContainerExportData, StudyRecord } from './types'
 
 export async function enrichContainerData(
@@ -53,121 +49,10 @@ export async function enrichContainerData(
     : []
   const subjectMap = new Map(subjects.map(s => [s.id, s.name]))
 
-  // Get control batch information for all specimens
-  const controlBatchIds = [...new Set(specimens.filter(s => s.controlBatchId !== null).map(s => s.controlBatchId!))]
-  const controlBatches = controlBatchIds.length > 0
-    ? await database
-        .select({
-          id: controlBatch.id,
-          name: controlBatch.name,
-          controlDefinitionId: controlBatch.controlDefinitionId,
-        })
-        .from(controlBatch)
-        .where(inArray(controlBatch.id, controlBatchIds))
-    : []
-  const controlBatchMap = new Map(controlBatches.map(cb => [cb.id, cb.name]))
-  const controlBatchToDefinitionMap = new Map(controlBatches.map(cb => [cb.id, cb.controlDefinitionId]))
-
-  // Get control definitions for these batches
-  const controlDefinitionIds = [...new Set(Array.from(controlBatchToDefinitionMap.values()))]
-  const controlDefinitions = controlDefinitionIds.length > 0
-    ? await database
-        .select({
-          id: controlDefinition.id,
-          name: controlDefinition.name,
-          controlType: controlDefinition.controlType,
-          properties: controlDefinition.properties,
-          created: controlDefinition.created,
-          lastUpdated: controlDefinition.lastUpdated,
-        })
-        .from(controlDefinition)
-        .where(inArray(controlDefinition.id, controlDefinitionIds))
-    : []
-  const controlDefinitionMap = new Map(controlDefinitions.map(cd => [cd.id, cd]))
-
-  // Get units for target density (extract from properties)
-  const unitIds = new Set<number>()
-  for (const cd of controlDefinitions) {
-    const props = cd.properties as any
-    if (props?.targetDensityUnitId) {
-      unitIds.add(props.targetDensityUnitId)
-    }
-  }
-  const unitsResult = unitIds.size > 0
-    ? await database
-        .select({
-          id: unit.id,
-          symbol: unit.symbol,
-        })
-        .from(unit)
-        .where(inArray(unit.id, Array.from(unitIds)))
-    : []
-  const units = unitsResult as Array<{ id: number; symbol: string }>
-  const unitMap = new Map<number, string>(units.map(u => [u.id, u.symbol]))
-
-  // Get all strains for name lookup
-  const allStrains = await database.select().from(strain)
-  const strainNameMap = new Map(allStrains.map(s => [s.id, s.name]))
-  
-  // Build strain map from properties JSON: controlDefinitionId -> array of {name, percentage}
-  const strainMap = new Map<number, Array<{ name: string; percentage: number }>>()
-  for (const cd of controlDefinitions) {
-    const props = cd.properties as any
-    if (props?.strains && Array.isArray(props.strains)) {
-      const strains = props.strains.map((s: any) => {
-        if (typeof s === 'number') {
-          return { name: strainNameMap.get(s) || `Strain ${s}`, percentage: 0 }
-        }
-        return {
-          name: s.name || strainNameMap.get(s.id) || `Strain ${s.id}`,
-          percentage: s.percentage || 0,
-        }
-      })
-      if (strains.length > 0) {
-        strainMap.set(cd.id, strains)
-      }
-    }
-  }
-
-  // Build control batch to definition map for quick lookup
-  const batchToDefinitionMap = new Map<number, {
-    id: number
-    name: string
-    controlType: string
-    targetDensity: number | null
-    targetDensityUnitId: number | null
-    properties: unknown
-    created: string
-    lastUpdated: string
-    unitSymbol?: string
-    strainComposition?: string
-  }>()
-  for (const cb of controlBatches) {
-    const def = controlDefinitionMap.get(cb.controlDefinitionId)
-    if (def) {
-      const props = def.properties as any
-      const targetDensity = props?.targetDensity
-      const targetDensityUnitId = props?.targetDensityUnitId
-      const unitSymbol: string | undefined = targetDensityUnitId ? unitMap.get(targetDensityUnitId) : props?.targetDensityUnitSymbol
-      const strains = strainMap.get(def.id)
-      const strainComposition: string | undefined = strains && strains.length > 0
-        ? strains.map(s => `${s.name} (${s.percentage}%)`).join('; ')
-        : undefined
-      
-      batchToDefinitionMap.set(cb.id, {
-        id: def.id,
-        name: def.name,
-        controlType: def.controlType,
-        targetDensity: targetDensity || null,
-        targetDensityUnitId: targetDensityUnitId || null,
-        properties: def.properties,
-        created: def.created,
-        lastUpdated: def.lastUpdated,
-        unitSymbol,
-        strainComposition,
-      })
-    }
-  }
+  // Control-batch provenance (definition, density, strain composition) comes
+  // from the shared Specimen Source resolver — one source of truth across
+  // container reads, derivations, qPCR, and export.
+  const sourceMap = await resolveSpecimenSources(database, specimens.map(s => s.id))
 
   const { placements: placementMap, subtypes } = await resolveContainerPlacementBundle(database, containerIds)
 
@@ -217,21 +102,20 @@ export async function enrichContainerData(
 
     const subjectId = spec.studySubjectId || undefined
     const controlBatchId = spec.controlBatchId || undefined
+    const source = sourceMap.get(spec.id)
+    const controlSource = source?.type === 'control' ? source : undefined
     // For control batches, use control batch name as subject_name; otherwise use actual subject name
-    const subjectName = subjectId 
-      ? subjectMap.get(subjectId) 
-      : controlBatchId 
-        ? controlBatchMap.get(controlBatchId) 
-        : undefined
+    const subjectName = subjectId
+      ? subjectMap.get(subjectId)
+      : controlSource?.name
 
     // Get control batch details if this is a control batch
-    const controlBatchName = controlBatchId ? controlBatchMap.get(controlBatchId) : undefined
-    const controlBatchDetails = controlBatchId ? batchToDefinitionMap.get(controlBatchId) : undefined
-    const controlDefinitionName = controlBatchDetails?.name
-    const controlType = controlBatchDetails?.controlType
-    const targetDensity = controlBatchDetails?.targetDensity ?? undefined
-    const targetDensityUnit = controlBatchDetails?.unitSymbol
-    const strainComposition = controlBatchDetails?.strainComposition
+    const controlBatchName = controlSource?.name
+    const controlDefinitionName = controlSource?.definitionName ?? undefined
+    const controlType = controlSource?.controlType
+    const targetDensity = controlSource?.targetDensity ?? undefined
+    const targetDensityUnit = controlSource?.targetDensityUnit ?? undefined
+    const strainComposition = controlSource?.strainComposition ?? undefined
 
     // Filter by container type if specified
     if (containerTypeFilter && containerTypeFilter.length > 0 && !containerTypeFilter.includes(containerType)) {

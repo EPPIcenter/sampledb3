@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
-import { storageContainer, specimen, unit, micronixTube, cryovialTube, paper, staticWell, studySubject, study, specimenType, controlBatch, controlDefinition, tag, storageContainerTag } from '../db/schema'
+import { storageContainer, specimen, unit, micronixTube, cryovialTube, paper, staticWell, specimenType, tag, storageContainerTag } from '../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
@@ -8,6 +8,7 @@ import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { resolveContainerByBarcode } from '../lib/identifier-resolution'
+import { resolveSpecimenSource } from '../lib/specimens/provenance'
 import { enrichContainerForApi, enrichContainersForApi } from '../lib/container-api-enrichment'
 import { mapEnrichedContainerToWire, mapEnrichedContainersToWire } from '../lib/container-wire-mapper'
 import { handleRouteError, RouteError, containersFetchFailedBody } from '../lib/error-handler'
@@ -142,63 +143,7 @@ containers.get('/:id', authMiddleware, async (c) => {
       .where(eq(specimen.id, container.specimenId))
       .get()
 
-    // Get source information
-    let sourceInfo: any = null
-    if (spec) {
-      if (spec.studySubjectId) {
-        const subject = await database
-          .select({
-            id: studySubject.id,
-            name: studySubject.name,
-            studyId: studySubject.studyId,
-            studyTitle: study.title,
-            studyCode: study.shortCode,
-          })
-          .from(studySubject)
-          .leftJoin(study, eq(studySubject.studyId, study.id))
-          .where(eq(studySubject.id, spec.studySubjectId))
-          .get()
-        
-        if (subject) {
-          sourceInfo = {
-            type: 'subject',
-            id: subject.id,
-            name: subject.name,
-            study: {
-              id: subject.studyId,
-              title: subject.studyTitle,
-              code: subject.studyCode,
-            },
-          }
-        }
-      } else if (spec.controlBatchId) {
-        const batch = await database
-          .select({
-            id: controlBatch.id,
-            name: controlBatch.name,
-            productionDate: controlBatch.productionDate,
-            definitionId: controlDefinition.id,
-            definitionName: controlDefinition.name,
-          })
-          .from(controlBatch)
-          .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
-          .where(eq(controlBatch.id, spec.controlBatchId))
-          .get()
-
-        if (batch) {
-          sourceInfo = {
-            type: 'control',
-            id: batch.id,
-            name: batch.name,
-            productionDate: batch.productionDate,
-            definition: {
-              id: batch.definitionId,
-              name: batch.definitionName,
-            }
-          }
-        }
-      }
-    }
+    const sourceInfo = spec ? await resolveSpecimenSource(database, container.specimenId) : null
 
     return c.json({
       container: mapEnrichedContainerToWire(enriched),

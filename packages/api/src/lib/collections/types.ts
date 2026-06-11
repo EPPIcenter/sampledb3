@@ -1,26 +1,6 @@
-export type ContainerSource =
-  | {
-      type: 'subject'
-      id: number
-      name: string
-      study: {
-        id: number
-        title: string
-        code: string
-        leadPerson: string
-      }
-    }
-  | {
-      type: 'control'
-      id: number
-      name: string
-      definitionName: string | null
-      controlType: string
-      targetDensity: number | null
-      targetDensityUnit: string | null
-      strainComposition: string | null
-    }
-  | null
+import type { SpecimenSource } from '../specimens/provenance'
+
+export type ContainerSource = SpecimenSource | null
 
 export type EnrichedStorageContainer = {
   id: number

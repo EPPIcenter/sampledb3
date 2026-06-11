@@ -8,13 +8,12 @@ import {
   qpcrWellResult,
   qpcrAmplificationData,
   specimen,
-  studySubject,
-  study,
   controlBatch,
   controlDefinition,
   storageContainer,
 } from '../db/schema'
 import { eq, inArray, sql, asc, desc } from 'drizzle-orm'
+import { resolveSpecimenSources, type SpecimenSource } from '../lib/specimens/provenance'
 import { parseBioradCsv, parseQuantStudioXls } from '../lib/qpcr-result-parse'
 import { z } from 'zod'
 import { handleRouteError } from '../lib/error-handler'
@@ -29,66 +28,20 @@ import { normalizeWellPosition, parsePlateCSV, validateWellPosition } from '../l
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 
-type WellSource =
-  | { type: 'subject'; id: number; name: string; study: { id: number; title: string; code: string } }
-  | { type: 'control'; id: number; name: string; definitionName: string | null; controlType: string }
-  | null
-
 /**
- * Enrich a well with source (subject vs control) when specimen_id is set
+ * Attach the Source (subject vs control provenance) to each well, resolving
+ * all wells' specimens in one batched lookup.
  */
-async function enrichWellSource(
+async function attachWellSources<W extends { specimenId: number | null }>(
   database: Database,
-  specimenId: number | null
-): Promise<WellSource> {
-  if (specimenId == null) return null
-  const spec = await database.select().from(specimen).where(eq(specimen.id, specimenId)).get()
-  if (!spec) return null
-  if (spec.studySubjectId != null) {
-    const subj = await database
-      .select({
-        id: studySubject.id,
-        name: studySubject.name,
-        studyId: studySubject.studyId,
-        studyTitle: study.title,
-        studyCode: study.shortCode,
-      })
-      .from(studySubject)
-      .leftJoin(study, eq(studySubject.studyId, study.id))
-      .where(eq(studySubject.id, spec.studySubjectId))
-      .get()
-    if (subj && subj.studyTitle != null && subj.studyCode != null) {
-      return {
-        type: 'subject',
-        id: subj.id,
-        name: subj.name,
-        study: { id: subj.studyId, title: subj.studyTitle, code: subj.studyCode },
-      }
-    }
-  }
-  if (spec.controlBatchId != null) {
-    const batch = await database
-      .select({
-        id: controlBatch.id,
-        name: controlBatch.name,
-        definitionName: controlDefinition.name,
-        controlType: controlDefinition.controlType,
-      })
-      .from(controlBatch)
-      .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
-      .where(eq(controlBatch.id, spec.controlBatchId))
-      .get()
-    if (batch && batch.definitionName != null && batch.controlType != null) {
-      return {
-        type: 'control',
-        id: batch.id,
-        name: batch.name,
-        definitionName: batch.definitionName,
-        controlType: batch.controlType,
-      }
-    }
-  }
-  return null
+  wells: W[],
+): Promise<Array<W & { source: SpecimenSource | null }>> {
+  const specimenIds = wells.map((w) => w.specimenId).filter((value): value is number => value != null)
+  const sources = await resolveSpecimenSources(database, specimenIds)
+  return wells.map((w) => ({
+    ...w,
+    source: w.specimenId != null ? sources.get(w.specimenId) ?? null : null,
+  }))
 }
 
 const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -254,12 +207,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         .select()
         .from(qpcrExperimentWell)
         .where(eq(qpcrExperimentWell.qpcrExperimentId, id))
-      const wellsWithSource = await Promise.all(
-        wells.map(async (w) => {
-          const source = await enrichWellSource(database, w.specimenId)
-          return { ...w, source }
-        })
-      )
+      const wellsWithSource = await attachWellSources(database, wells)
       const experimentWithTargets = {
         ...exp,
         targets: targets.map((t) => ({
@@ -652,12 +600,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         .select()
         .from(qpcrExperimentWell)
         .where(eq(qpcrExperimentWell.qpcrExperimentId, id))
-      const wellsWithSource = await Promise.all(
-        wells.map(async (w) => {
-          const source = await enrichWellSource(database, w.specimenId)
-          return { ...w, source }
-        })
-      )
+      const wellsWithSource = await attachWellSources(database, wells)
       return c.json({ wells: wellsWithSource }, 200)
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -771,7 +714,7 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
   /** Sample name for template: barcode when present (study or control in micronix tube), otherwise label for controls or empty. */
   function sampleNameForWell(
     well: { contentType: string | null; standardDensity: number | null; barcode: string | null },
-    _source: WellSource | null
+    _source: SpecimenSource | null
   ): string {
     if (well.barcode) return well.barcode
     if (well.contentType !== 'standard' && well.contentType !== 'negative') return ''
@@ -875,14 +818,9 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         .select()
         .from(qpcrExperimentWell)
         .where(eq(qpcrExperimentWell.qpcrExperimentId, id))
-      const wellsWithSource = await Promise.all(
-        wells.map(async (w) => {
-          const source = await enrichWellSource(database, w.specimenId)
-          return { well: w, source }
-        })
-      )
-      const wellMap = new Map<string, { well: typeof wells[0]; source: WellSource }>()
-      wellsWithSource.forEach(({ well, source }) => wellMap.set(well.wellPosition, { well, source }))
+      const wellsWithSource = await attachWellSources(database, wells)
+      const wellMap = new Map<string, { well: typeof wells[0]; source: SpecimenSource | null }>()
+      wellsWithSource.forEach(({ source, ...well }) => wellMap.set(well.wellPosition, { well, source }))
 
       const instrumentType = exp.instrumentType
 

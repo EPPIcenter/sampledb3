@@ -4,17 +4,12 @@ import {
   storageContainer,
   specimen,
   specimenType,
-  studySubject,
-  study,
-  controlBatch,
-  controlDefinition,
   unit,
-  strain,
   storageContainerTag,
   tag,
 } from '../../db/schema'
-import { parseControlProperties } from '../control-properties'
-import type { ContainerSource, EnrichedStorageContainer } from './types'
+import { resolveSpecimenSource } from '../specimens/provenance'
+import type { EnrichedStorageContainer } from './types'
 
 /** Load storage container with specimen, unit, and subject/control source context. */
 export async function enrichStorageContainer(
@@ -44,7 +39,7 @@ export async function enrichStorageContainer(
     specimenTypeName = st?.name ?? null
   }
 
-  const source = await resolveContainerSource(database, spec)
+  const source = await resolveSpecimenSource(database, container.specimenId)
 
   return {
     id: container.id,
@@ -58,91 +53,6 @@ export async function enrichStorageContainer(
     specimen: spec || null,
     specimenTypeName,
     source,
-  }
-}
-
-async function resolveContainerSource(
-  database: Database,
-  spec: typeof specimen.$inferSelect | undefined,
-): Promise<ContainerSource> {
-  if (!spec) return null
-
-  if (spec.studySubjectId) {
-    const subject = await database
-      .select({
-        id: studySubject.id,
-        name: studySubject.name,
-        studyId: studySubject.studyId,
-        studyTitle: study.title,
-        studyCode: study.shortCode,
-        studyLeadPerson: study.leadPerson,
-      })
-      .from(studySubject)
-      .leftJoin(study, eq(studySubject.studyId, study.id))
-      .where(eq(studySubject.id, spec.studySubjectId))
-      .get()
-
-    if (subject?.studyTitle && subject.studyCode) {
-      return {
-        type: 'subject',
-        id: subject.id,
-        name: subject.name,
-        study: {
-          id: subject.studyId,
-          title: subject.studyTitle,
-          code: subject.studyCode,
-          leadPerson: subject.studyLeadPerson ?? '',
-        },
-      }
-    }
-    return null
-  }
-
-  if (!spec.controlBatchId) return null
-
-  const batch = await database
-    .select({
-      id: controlBatch.id,
-      name: controlBatch.name,
-      definitionName: controlDefinition.name,
-      controlType: controlDefinition.controlType,
-      definitionProperties: controlDefinition.properties,
-    })
-    .from(controlBatch)
-    .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
-    .where(eq(controlBatch.id, spec.controlBatchId))
-    .get()
-
-  if (!batch?.definitionName || !batch.controlType) return null
-
-  const strainRows = await database.select().from(strain)
-  const strainMap = new Map(strainRows.map((s) => [s.id, { name: s.name }]))
-  const parsed = parseControlProperties(batch.definitionProperties, strainMap)
-
-  let targetDensityUnit = parsed.unitSymbol ?? null
-  if (parsed.targetDensityUnitId && !targetDensityUnit) {
-    const u = await database
-      .select({ symbol: unit.symbol })
-      .from(unit)
-      .where(eq(unit.id, parsed.targetDensityUnitId))
-      .get()
-    targetDensityUnit = u?.symbol ?? null
-  }
-
-  const strainComposition =
-    parsed.strains.length > 0
-      ? parsed.strains.map((s) => `${s.name} (${s.percentage ?? 0}%)`).join('; ')
-      : null
-
-  return {
-    type: 'control',
-    id: batch.id,
-    name: batch.name,
-    definitionName: batch.definitionName,
-    controlType: batch.controlType,
-    targetDensity: parsed.targetDensity ?? null,
-    targetDensityUnit,
-    strainComposition,
   }
 }
 
