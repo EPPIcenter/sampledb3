@@ -81,6 +81,10 @@ _Avoid_: Source container / derived container (acceptable in UI copy, but prefer
 
 _Note_: The derivation type labeled **Distribution** in the UI (`aliquot` in CSV imports and stored records) means distribution as a *tracked processing step* (parent → child, new specimen) — not the same as adding a second container to the same specimen.
 
+**Scan move**:
+A CSV-driven bulk relocation of **Containers** within one collection type (micronix plate or cryovial box). Lab staff upload one or more move CSVs — scanner output for micronix, a fixed three-column format for cryovial — each mapped to one destination **Collection**; SampleDB resolves each container, validates that no tube is silently lost, and executes all moves as one operation. Changes **Container placement** only — no new specimens, no derivation records.
+_Avoid_: **Derivation** / Distribution (a scan move transforms nothing); collection move (relocating a whole collection to a new **Location**); "container move CSV" (implementation term)
+
 ### Configuration
 
 **Reference data**:

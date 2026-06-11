@@ -6,8 +6,7 @@ import type { ScannerConfiguration } from '../lib/api/settings';
 import { usePlateScanBootstrap } from '../hooks/useExportWorkflow'
 import { PageError } from '../ui'
 import { extractPlateStemFromFilename, findPlateCandidatesFromStem } from '../lib/plate-filename-match'
-import { parseScannerPlateCsv } from '../lib/scanner-plate-csv'
-import { inferDestinationPlateForScan } from '../lib/plate-destination-inference'
+import { ingestScanCsvText, micronixScanMoveVariant } from '../lib/scan-move'
 import '../styles/storage.css'
 
 
@@ -139,38 +138,54 @@ function downloadInferenceReport(report: InferenceReport): void {
 
 type PlateMode = 'select_plate' | 'infer_plate'
 
+/**
+ * Plate inference via the scan-move ingest stage (ADR 0008, second consumer).
+ * Only inference-kind errors block here: format rules (e.g. the full-plate
+ * check) don't apply — partial or malformed scans are exactly what this page
+ * exists to report against the database.
+ */
 function applyPlateInferenceForValidation(
   text: string,
   fileName: string,
   configId: string | null,
   configs: ScannerConfiguration[],
   plateList: Array<{ id: number; name: string }>
-): { error: string | null; candidateRows: Array<{ id: number; name: string; matchType: string }> } {
+): {
+  error: string | null
+  candidateRows: Array<{ id: number; name: string; matchType: string }>
+  autoSelectedId: number | null
+} {
   const config = configId ? configs.find((c) => c.id === configId) : undefined
   if (!config) {
+    // No scanner configuration (zero-config install): filename-stem suggestions only.
     const stem = extractPlateStemFromFilename(fileName)
     const cands = findPlateCandidatesFromStem(stem, plateList)
     return {
       error: null,
-      candidateRows: cands.map((c) => ({ id: c.id, name: c.name, matchType: c.matchType })),
+      candidateRows: cands,
+      autoSelectedId: cands.length === 1 ? cands[0].id : null,
     }
   }
-  const rows = parseScannerPlateCsv(text, config)
-  const inference = inferDestinationPlateForScan(fileName, rows, config, plateList)
-  if (inference.plateInferenceErrors.length > 0) {
+  const file = ingestScanCsvText(
+    micronixScanMoveVariant,
+    { name: fileName, text: () => Promise.resolve(text) },
+    text,
+    { collections: plateList, scannerConfig: config },
+  )
+  const inferenceErrors = file.validationErrors.filter((e) => e.kind === 'inference')
+  if (inferenceErrors.length > 0) {
     return {
-      error: inference.plateInferenceErrors.map((e) => e.error).join(' '),
+      error: inferenceErrors.map((e) => e.error).join(' '),
       candidateRows: [],
+      autoSelectedId: null,
     }
   }
-  return {
-    error: null,
-    candidateRows: inference.inferredMatches.map((c) => ({
-      id: c.id,
-      name: c.name,
-      matchType: c.matchType,
-    })),
-  }
+  // selectedDestinationName may be a proposed *new* plate name (no candidate
+  // match) — validation can't create plates, so only existing ids auto-select.
+  const autoSelectedId = file.selectedDestinationName
+    ? file.inferredMatches.find((c) => c.name === file.selectedDestinationName)?.id ?? null
+    : null
+  return { error: null, candidateRows: file.inferredMatches, autoSelectedId }
 }
 
 export default function PlateScanValidation() {
@@ -198,7 +213,7 @@ export default function PlateScanValidation() {
   useEffect(() => {
     if (!csvText || !csvFile || !selectedConfigId || scannerConfigurations.length === 0) return
     const list = plates.map((p) => ({ id: p.id, name: p.name }))
-    const { error: inferErr, candidateRows } = applyPlateInferenceForValidation(
+    const { error: inferErr, candidateRows, autoSelectedId } = applyPlateInferenceForValidation(
       csvText,
       csvFile.name,
       selectedConfigId,
@@ -213,8 +228,7 @@ export default function PlateScanValidation() {
     }
     setCandidates(candidateRows)
     if (plateMode === 'infer_plate') {
-      const single = candidateRows.length === 1 ? candidateRows[0].id : null
-      setSelectedPlateId(single)
+      setSelectedPlateId(autoSelectedId)
     }
   }, [selectedConfigId, csvText, csvFile, scannerConfigurations, plates, plateMode])
 
@@ -234,7 +248,7 @@ export default function PlateScanValidation() {
     setCsvFile(file)
     setCsvText(text)
     const list = plates.map((p) => ({ id: p.id, name: p.name }))
-    const { error: inferErr, candidateRows } = applyPlateInferenceForValidation(
+    const { error: inferErr, candidateRows, autoSelectedId } = applyPlateInferenceForValidation(
       text,
       file.name,
       selectedConfigId,
@@ -248,11 +262,7 @@ export default function PlateScanValidation() {
       return
     }
     setCandidates(candidateRows)
-    if (candidateRows.length === 1) {
-      setSelectedPlateId(candidateRows[0].id)
-    } else {
-      setSelectedPlateId(null)
-    }
+    setSelectedPlateId(autoSelectedId)
   }
 
   const handleValidate = async () => {

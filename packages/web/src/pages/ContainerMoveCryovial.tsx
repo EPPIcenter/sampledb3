@@ -1,245 +1,59 @@
-import { useState, useRef } from 'react'
-import { useNavigate, Navigate } from 'react-router-dom'
-import { useContainerMoveStep, type ContainerMoveAtomicMode } from '../hooks/useContainerMoveStep'
-import { useCryovialMoveBootstrap } from '../hooks/useMoveWorkflow'
-import { collectionsApi } from '../lib/api/collections';
+import { useState, useRef, useCallback } from 'react'
+import { Navigate } from 'react-router-dom'
+import { useCryovialMoveBootstrap, moveWorkflowKeys } from '../hooks/useMoveWorkflow'
+import { useScanMoveWorkflow } from '../hooks/useScanMoveWorkflow'
+import { cryovialScanMoveVariant } from '../lib/scan-move'
 import { downloadCsv } from '../lib/csv'
 import { generateCryovialMoveTemplate } from '../lib/cryovial-move-template'
 import CryovialBoxPicker, { type CryovialBox } from '../components/CryovialBoxPicker'
+import LocationPicker from '../components/LocationPicker'
+import { isExistingPlateName } from '../lib/micronix-move-destination-plates'
 import { useUser } from '../contexts/UserContext'
 import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
+import { useQueryClient } from '@tanstack/react-query'
 import '../styles/storage.css'
 
-interface CSVRow {
-  [key: string]: string
-}
-
-interface ValidationError {
-  row: number
-  error: string
-}
-
-interface ContainerInfo {
-  containerId: number
-  containerType: string
-  currentCollectionId: number | null
-  currentCollectionName: string | null
-  currentCollectionType: string | null
-  currentPosition: string | null
-  barcode?: string | null
-}
-
-interface ResolvedContainer {
-  identifier: string
-  container: ContainerInfo
-}
-
-interface UnresolvedContainer {
-  identifier: string
-  rowIndex: number
-  targetPosition: string
-}
-
-interface FileData {
-  file: File
-  inferredBoxName: string | null
-  inferredMatches: CryovialBox[]
-  selectedBoxName: string | null
-  csvRows: CSVRow[]
-  resolvedContainers: ResolvedContainer[]
-  unresolvedContainers: UnresolvedContainer[]
-  validationErrors: ValidationError[]
-  isResolved: boolean
-  preview: CSVRow[]
-}
-
 export default function ContainerMoveCryovial() {
-  const navigate = useNavigate()
   const { canWrite } = useUser()
-  const [files, setFiles] = useState<FileData[]>([])
-  const { currentStep: effectiveStep, setStep: setSearchStep } = useContainerMoveStep(files.length)
-  const [loading, setLoading] = useState(false)
+  const queryClient = useQueryClient()
   const bootstrapQuery = useCryovialMoveBootstrap()
   const bootstrapStatus = fromQuery(bootstrapQuery)
   const availableBoxes = (bootstrapQuery.data?.boxes ?? []) as CryovialBox[]
   const locations = bootstrapQuery.data?.locations ?? []
-  const [moveResult, setMoveResult] = useState<{
-    success: boolean
-    moved: number
-    errors?: ValidationError[]
-    fileResults?: Array<{
-      filename: string
-      destinationBox: string
-      moved: number
-      errors?: ValidationError[]
-    }>
-  } | null>(null)
-  const [atomicMode, setAtomicMode] = useState<ContainerMoveAtomicMode>('all_or_nothing')
+
+  const refreshCollections = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: moveWorkflowKeys.cryovialBootstrap() })
+    const refetchResult = await bootstrapQuery.refetch()
+    return (refetchResult.data?.boxes ?? []) as CryovialBox[]
+  }, [queryClient, bootstrapQuery])
+
+  const wf = useScanMoveWorkflow({
+    variant: cryovialScanMoveVariant,
+    collections: availableBoxes,
+    refreshCollections,
+  })
+  const { files, pendingDestinations, createDestinationsStepUsed, atomicMode, moveResult } = wf.state
+  const effectiveStep = wf.step
+  const loading = wf.loading
+  const createBoxesStepUsed = createDestinationsStepUsed
+  const missingDestinationBoxNames = wf.missingDestinationNames
+  const destinationBoxesAlreadyCreated = wf.destinationsAlreadyCreated
+
   const [instructionsExpanded, setInstructionsExpanded] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const setCurrentStep = setSearchStep
 
   if (!canWrite) {
     return <Navigate to="/" replace />
   }
 
-  // Parse filename to infer box name - requires exact match
-  const parseFilename = (filename: string): string => {
-    // Remove .csv extension and trim
-    const baseName = filename.replace(/\.csv$/i, '').trim()
-    if (!baseName) return ''
-    
-    // Find exact match (case-insensitive)
-    const exactMatch = availableBoxes.find(b => 
-      b.name.toLowerCase() === baseName.toLowerCase()
-    )
-    
-    return exactMatch ? exactMatch.name : ''
-  }
-
-  // Find matching boxes for a given inferred name (for exact matches, should only return 0 or 1)
-  const findMatchingBoxes = (inferredName: string): CryovialBox[] => {
-    if (!inferredName) return []
-    
-    // With exact matching, we should only get 0 or 1 match
-    // But handle case where there might be duplicate names (case-insensitive)
-    const inferredLower = inferredName.toLowerCase()
-    return availableBoxes.filter(b => 
-      b.name.toLowerCase() === inferredLower
-    )
-  }
-
-  const parseCSV = (text: string): CSVRow[] => {
-    const lines = text.split('\n').filter(line => line.trim())
-    if (lines.length < 2) return []
-
-    const headers = lines[0].split(',').map(h => h.trim())
-    const rows: CSVRow[] = []
-
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',')
-      const row: CSVRow = {}
-      headers.forEach((header, j) => {
-        row[header] = values[j]?.trim() || ''
-      })
-      rows.push(row)
-    }
-
-    return rows
-  }
-
-  const validateCSV = (rows: CSVRow[]): { valid: boolean; errors: ValidationError[] } => {
-    const errors: ValidationError[] = []
-
-    if (rows.length === 0) {
-      return { valid: false, errors: [{ row: 0, error: 'CSV file is empty' }] }
-    }
-
-    // For cryovial, we need source_collection_name, source_position, and target_position
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]
-      if (!row.source_collection_name || row.source_collection_name.trim() === '') {
-        errors.push({
-          row: i + 1,
-          error: 'source_collection_name is required but missing or empty',
-        })
-      }
-      if (!row.source_position || row.source_position.trim() === '') {
-        errors.push({
-          row: i + 1,
-          error: 'source_position is required but missing or empty',
-        })
-      }
-      if (!row.target_position || row.target_position.trim() === '') {
-        errors.push({
-          row: i + 1,
-          error: 'target_position is required but missing or empty',
-        })
-      }
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-    }
-  }
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || [])
     if (selectedFiles.length === 0) return
-
-    setLoading(true)
-    setMoveResult(null)
-
-    try {
-      const newFiles: FileData[] = []
-
-      for (const file of selectedFiles) {
-        const text = await file.text()
-        const csvRows = parseCSV(text)
-        const validation = validateCSV(csvRows)
-        
-        // Get preview (first 5 rows)
-        const preview = csvRows.slice(0, 5)
-        
-        // Infer box name from filename
-        const inferredName = parseFilename(file.name)
-        const matches = findMatchingBoxes(inferredName)
-        
-        let inferredBoxName: string | null = null
-        let selectedBoxName: string | null = null
-        
-        if (matches.length === 1) {
-          // Single match - auto-select
-          inferredBoxName = matches[0].name
-          selectedBoxName = matches[0].name
-        } else if (matches.length > 1) {
-          // Multiple matches - require user selection
-          inferredBoxName = inferredName
-        } else if (inferredName) {
-          // No matches but we have an inferred name - require user selection
-          inferredBoxName = inferredName
-        }
-
-        newFiles.push({
-          file,
-          inferredBoxName,
-          inferredMatches: matches,
-          selectedBoxName,
-          csvRows,
-          resolvedContainers: [],
-          unresolvedContainers: [],
-          validationErrors: validation.errors,
-          isResolved: false,
-          preview,
-        })
-      }
-
-      setFiles(newFiles)
-      setCurrentStep('upload')
-    } catch (error: any) {
-      console.error('Error processing files:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const updateFileBoxSelection = (fileIndex: number, boxName: string | null) => {
-    setFiles(prev => prev.map((f, i) => {
-      if (i !== fileIndex) return f
-      return {
-        ...f,
-        selectedBoxName: boxName,
-        resolvedContainers: [],
-        unresolvedContainers: [],
-        isResolved: false,
-      }
-    }))
+    void wf.ingestFiles(selectedFiles)
   }
 
   const removeFile = (fileIndex: number) => {
-    setFiles(prev => prev.filter((_, i) => i !== fileIndex))
+    wf.removeFile(fileIndex)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -249,293 +63,7 @@ export default function ContainerMoveCryovial() {
     downloadCsv(generateCryovialMoveTemplate(), 'cryovial_move_template.csv')
   }
 
-  const handleValidateAndResolve = async () => {
-    // Validate all files have destination boxes
-    const filesWithoutBoxes = files.filter(f => !f.selectedBoxName)
-    if (filesWithoutBoxes.length > 0) {
-      // Update validation errors for files without boxes
-      setFiles(prev => prev.map(f => {
-        if (!f.selectedBoxName) {
-          return {
-            ...f,
-            validationErrors: [
-              ...f.validationErrors,
-              { row: 0, error: 'Destination box must be selected for this file' }
-            ]
-          }
-        }
-        return f
-      }))
-      return
-    }
-
-    // Validate CSV format for all files
-    const filesWithErrors = files.filter(f => f.validationErrors.length > 0)
-    if (filesWithErrors.length > 0) {
-      setCurrentStep('upload')
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      // Resolve containers for all files (position-based for cryovial)
-      const allIdentifiers: Array<{ type: 'position'; sourceCollectionName: string; sourcePosition: string; fileIndex: number; rowIndex: number }> = []
-      
-      files.forEach((fileData, fileIndex) => {
-        fileData.csvRows.forEach((row, rowIndex) => {
-          allIdentifiers.push({
-            type: 'position',
-            sourceCollectionName: row.source_collection_name.trim(),
-            sourcePosition: row.source_position.trim(),
-            fileIndex,
-            rowIndex,
-          })
-        })
-      })
-
-      const resolveResponse = await collectionsApi.resolveContainers({ 
-        identifiers: allIdentifiers.map(({ type, sourceCollectionName, sourcePosition }) => ({ 
-          type, 
-          sourceCollectionName, 
-          sourcePosition 
-        }))
-      })
-
-      const resolved = resolveResponse.containers
-      
-      // Create a set of resolved identifiers for quick lookup
-      const resolvedIdentifiers = new Set<string>()
-      resolved.forEach((r: any) => {
-        if (r.container) {
-          const identifier = typeof r.identifier === 'string' 
-            ? r.identifier 
-            : `${r.identifier.sourceCollectionName}:${r.identifier.sourcePosition}`
-          if (identifier) {
-            resolvedIdentifiers.add(identifier)
-          }
-        }
-      })
-      
-      // Group resolved containers by file
-      const resolvedByFile = new Map<number, ResolvedContainer[]>()
-      resolved.forEach((r: any) => {
-        if (!r.container) return
-        
-        const identifier = typeof r.identifier === 'string' 
-          ? r.identifier 
-          : `${r.identifier.sourceCollectionName}:${r.identifier.sourcePosition}`
-        if (!identifier) return
-        
-        // Find the identifier in allIdentifiers to get fileIndex
-        const id = allIdentifiers.find(id => 
-          `${id.sourceCollectionName}:${id.sourcePosition}` === identifier
-        )
-        if (id) {
-          if (!resolvedByFile.has(id.fileIndex)) {
-            resolvedByFile.set(id.fileIndex, [])
-          }
-          resolvedByFile.get(id.fileIndex)!.push({
-            identifier: identifier,
-            container: r.container,
-          })
-        }
-      })
-
-      // Track unresolved containers by file
-      const unresolvedByFile = new Map<number, UnresolvedContainer[]>()
-      allIdentifiers.forEach((id) => {
-        const identifierKey = `${id.sourceCollectionName}:${id.sourcePosition}`
-        if (!resolvedIdentifiers.has(identifierKey)) {
-          if (!unresolvedByFile.has(id.fileIndex)) {
-            unresolvedByFile.set(id.fileIndex, [])
-          }
-          const csvRow = files[id.fileIndex].csvRows[id.rowIndex]
-          unresolvedByFile.get(id.fileIndex)!.push({
-            identifier: identifierKey,
-            rowIndex: id.rowIndex + 1, // Convert to 1-based for display
-            targetPosition: csvRow.target_position || '',
-          })
-        }
-      })
-
-      // Update files with resolved and unresolved containers
-      setFiles(prev => prev.map((f, i) => ({
-        ...f,
-        resolvedContainers: resolvedByFile.get(i) || [],
-        unresolvedContainers: unresolvedByFile.get(i) || [],
-        isResolved: true,
-      })))
-
-      // Verify all containers are from cryovial boxes
-      const invalidContainers = resolved.filter((r: any) => 
-        r.container.currentCollectionType !== 'cryovial_box'
-      )
-      
-      if (invalidContainers.length > 0) {
-        // Add validation errors for invalid containers
-        setFiles(prev => prev.map((f, i) => {
-          const fileInvalid = resolvedByFile.get(i)?.some(rc => 
-            invalidContainers.some((ic: any) => ic.container.containerId === rc.container.containerId)
-          )
-          if (fileInvalid) {
-            return {
-              ...f,
-              validationErrors: [
-                ...f.validationErrors,
-                { row: 0, error: 'Some containers are not from cryovial boxes' }
-              ]
-            }
-          }
-          return f
-        }))
-        setLoading(false)
-      return
-    }
-
-      setCurrentStep('resolve')
-    } catch (error: any) {
-      console.error('Error resolving containers:', error)
-      setFiles(prev => prev.map(f => ({
-        ...f,
-        validationErrors: [
-          ...f.validationErrors,
-          { row: 0, error: error.response?.data?.error || error.message || 'Failed to resolve containers' }
-        ]
-      })))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleExecuteMoves = async () => {
-    setLoading(true)
-    setMoveResult(null)
-
-    try {
-      // Build moves from all files
-      const allMoves: Array<{
-        identifier: { type: 'position'; sourceCollectionName: string; sourcePosition: string }
-        targetPosition: string
-        fileIndex: number
-      }> = []
-
-      files.forEach((fileData, fileIndex) => {
-        fileData.csvRows.forEach(row => {
-          allMoves.push({
-        identifier: {
-          type: 'position' as const,
-          sourceCollectionName: row.source_collection_name.trim(),
-          sourcePosition: row.source_position.trim(),
-        },
-            targetPosition: row.target_position.trim(),
-            fileIndex,
-          })
-        })
-      })
-
-      // Build mappings from source boxes to destination boxes
-      // Check for conflicts: same source box mapping to different destinations
-      const sourceToDest = new Map<string, string>()
-      const sourceToFiles = new Map<string, number[]>()
-      
-      files.forEach((fileData, fileIndex) => {
-        const destinationBox = fileData.selectedBoxName!
-        fileData.resolvedContainers.forEach(rc => {
-          const sourceBox = rc.container.currentCollectionName
-          if (sourceBox) {
-            if (!sourceToFiles.has(sourceBox)) {
-              sourceToFiles.set(sourceBox, [])
-            }
-            sourceToFiles.get(sourceBox)!.push(fileIndex)
-            
-            // Check for conflict
-            const existingDest = sourceToDest.get(sourceBox)
-            if (existingDest && existingDest !== destinationBox) {
-              throw new Error(
-                `Source box "${sourceBox}" appears in multiple files with different destinations: ` +
-                `"${existingDest}" and "${destinationBox}". Each source box must map to a single destination.`
-              )
-            }
-            
-            sourceToDest.set(sourceBox, destinationBox)
-          }
-        })
-      })
-
-      const moveMappings = Array.from(sourceToDest.entries()).map(([from, to]) => ({
-        fromCollectionName: from,
-        toCollectionName: to,
-      }))
-
-      const response = await collectionsApi.moveContainers({
-        collectionType: 'cryovial_box',
-        atomicMode,
-        mappings: moveMappings,
-        moves: allMoves.map(({ identifier, targetPosition }) => ({
-          identifier,
-          targetPosition,
-        })),
-      })
-
-      // Calculate per-file results
-      const fileResults = files.map((fileData, fileIndex) => {
-        const fileMoves = allMoves.filter(m => m.fileIndex === fileIndex)
-        const moved = response.success ? fileMoves.length : 0
-        const errors = response.errors?.filter((e: ValidationError) => {
-          // Map errors back to file if possible (this is approximate)
-          const errorRow = e.row
-          return errorRow > 0 && errorRow <= fileData.csvRows.length
-        })
-        
-        return {
-          filename: fileData.file.name,
-          destinationBox: fileData.selectedBoxName!,
-          moved,
-          errors,
-        }
-      })
-
-      if (response.success) {
-        setMoveResult({
-          success: true,
-          moved: response.moved,
-          fileResults,
-        })
-        setCurrentStep('execute')
-      } else {
-        setMoveResult({
-          success: false,
-          moved: response.moved || 0,
-          errors: response.errors,
-          fileResults,
-        })
-        setCurrentStep('execute')
-      }
-    } catch (error: any) {
-      // Standardized error format from backend: { error, moved, errors }
-      const errorData = error.response?.data || {}
-      const errorMessages: ValidationError[] = errorData.errors || []
-      const moved = errorData.moved || 0
-      
-      // If no errors array, create one from the error message
-      if (errorMessages.length === 0) {
-        errorMessages.push({
-          row: 0,
-          error: errorData.error || error.message || 'Failed to move containers',
-        })
-      }
-      
-      setMoveResult({
-        success: false,
-        moved,
-        errors: errorMessages,
-      })
-      setCurrentStep('execute')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Resolve, create-boxes, and execute logic live in the scan move core (lib/scan-move).
 
   // Get all unique source boxes across all files
   const getAllSourceBoxes = (): string[] => {
@@ -575,13 +103,22 @@ export default function ContainerMoveCryovial() {
               <span>Upload & Configure</span>
             </div>
             <div className="storage-step-connector" />
+            {createBoxesStepUsed && (
+              <>
+                <div className={`storage-step-item ${effectiveStep === 'create_plates' ? 'storage-step-item--active' : ''}`}>
+                  <span className="storage-step-item__circle">2</span>
+                  <span>Create Boxes</span>
+                </div>
+                <div className="storage-step-connector" />
+              </>
+            )}
             <div className={`storage-step-item ${effectiveStep === 'resolve' ? 'storage-step-item--active' : ''}`}>
-              <span className="storage-step-item__circle">2</span>
+              <span className="storage-step-item__circle">{createBoxesStepUsed ? '3' : '2'}</span>
               <span>Resolve</span>
             </div>
             <div className="storage-step-connector" />
             <div className={`storage-step-item ${effectiveStep === 'execute' ? 'storage-step-item--active' : ''}`}>
-              <span className="storage-step-item__circle">3</span>
+              <span className="storage-step-item__circle">{createBoxesStepUsed ? '4' : '3'}</span>
               <span>Execute</span>
             </div>
           </div>
@@ -638,15 +175,19 @@ export default function ContainerMoveCryovial() {
                       <li>Example: If box is named &quot;BOX-001&quot;, name your file <code className="bg-app-surface px-1 rounded">BOX-001.csv</code></li>
                       <li>Example: If box is named &quot;1022&quot;, name your file <code className="bg-app-surface px-1 rounded">1022.csv</code></li>
                       <li>Matching is case-insensitive, but the filename must match exactly (no extra characters)</li>
+                      <li>If the filename matches no existing box, it is proposed as a new box — assign its storage location in the create step</li>
                       <li>If the box name cannot be inferred, you'll be prompted to select it manually</li>
                     </ul>
                   </div>
 
                   <div>
                     <h3 className="font-semibold text-app-text mb-2">Workflow</h3>
-                    <p className="mb-2">This process has 3 steps:</p>
+                    <p className="mb-2">This process has {createBoxesStepUsed ? '4' : '3'} steps:</p>
                     <ol className="list-decimal list-inside space-y-1 ml-4">
                       <li><strong>Upload & Configure:</strong> Upload CSV files and assign destination boxes</li>
+                      {createBoxesStepUsed && (
+                        <li><strong>Create Boxes:</strong> Assign a storage location for any destination boxes that do not exist yet.</li>
+                      )}
                       <li><strong>Resolve:</strong> System finds each tube by position and identifies source boxes</li>
                       <li><strong>Execute:</strong> System performs all moves in a single transaction</li>
                     </ol>
@@ -682,7 +223,7 @@ export default function ContainerMoveCryovial() {
                     <div key={index} className="border border-app-border rounded-lg p-4">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
-                          <h3 className="font-semibold text-app-text">{fileData.file.name}</h3>
+                          <h3 className="font-semibold text-app-text">{fileData.filename}</h3>
                           <p className="text-sm text-app-text-muted mt-1">
                             {fileData.csvRows.length} row{fileData.csvRows.length !== 1 ? 's' : ''}
                           </p>
@@ -701,21 +242,27 @@ export default function ContainerMoveCryovial() {
                         <label className="block text-sm font-medium text-app-text mb-2">
                           Destination Box:
                         </label>
-                        {fileData.inferredBoxName && fileData.selectedBoxName && fileData.inferredMatches.length === 1 ? (
+                        {fileData.inferredDestinationName && fileData.selectedDestinationName && fileData.inferredMatches.length === 1 ? (
                           <div className="text-sm text-app-text bg-app-trend-up/10 border border-app-trend-up/30 rounded p-2">
-                            ✓ Inferred: <span className="font-semibold">{fileData.selectedBoxName}</span>
+                            ✓ Inferred: <span className="font-semibold">{fileData.selectedDestinationName}</span>
                           </div>
                         ) : (
                           <CryovialBoxPicker
                             locations={locations}
                             boxes={availableBoxes}
-                            value={fileData.selectedBoxName || undefined}
-                            onChange={(boxName) => updateFileBoxSelection(index, boxName)}
+                            value={fileData.selectedDestinationName || undefined}
+                            onChange={(boxName) => wf.selectDestination(index, boxName)}
                           />
                         )}
-                        {fileData.inferredBoxName && !fileData.selectedBoxName && (
+                        {fileData.selectedDestinationName &&
+                          !isExistingPlateName(fileData.selectedDestinationName, availableBoxes) && (
+                          <p className="text-xs text-app-accent mt-1">
+                            New box &quot;{fileData.selectedDestinationName}&quot; — assign a storage location in the next step.
+                          </p>
+                        )}
+                        {fileData.inferredDestinationName && !fileData.selectedDestinationName && (
                           <p className="text-xs text-app-text-muted mt-1">
-                            No exact match found for &quot;{fileData.inferredBoxName}&quot;. Please select a destination box.
+                            No exact match found for &quot;{fileData.inferredDestinationName}&quot;. Please select a destination box.
                             {fileData.inferredMatches.length > 0 && (
                               <span className="ml-1">({fileData.inferredMatches.length} similar box{fileData.inferredMatches.length !== 1 ? 'es' : ''} found)</span>
                             )}
@@ -778,11 +325,115 @@ export default function ContainerMoveCryovial() {
 
             <div className="flex justify-end gap-4">
               <button
-                onClick={handleValidateAndResolve}
-                disabled={files.length === 0 || loading || files.some(f => !f.selectedBoxName || f.validationErrors.length > 0)}
+                onClick={() => void wf.next()}
+                disabled={files.length === 0 || loading || files.some(f => !f.selectedDestinationName || f.validationErrors.length > 0)}
                 className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Processing...' : 'Next: Resolve Containers'}
+                {loading
+                  ? 'Processing...'
+                  : missingDestinationBoxNames.length > 0
+                    ? 'Next: Create Destination Boxes'
+                    : 'Next: Resolve Containers'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Step 2 (optional): Create destination boxes */}
+        {effectiveStep === 'create_plates' && (
+          <>
+            <div className="storage-card p-6 mb-6 storage-reveal storage-reveal-2">
+              <h2 className="text-xl font-semibold mb-2">Create Destination Boxes</h2>
+              <p className="text-sm text-app-text-muted mb-6">
+                {destinationBoxesAlreadyCreated
+                  ? 'Destination boxes are ready. Continue to resolve tubes, or go back to upload to change your CSV.'
+                  : 'The following destination boxes do not exist yet. Assign a storage location for each one before continuing.'}
+              </p>
+
+              <div className="space-y-4">
+                {pendingDestinations.map((box, index) => (
+                  <div key={box.name} className="border border-app-border rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="font-medium text-app-text">{box.name}</h3>
+                        <p className="text-xs text-app-text-muted mt-1">New cryovial box</p>
+                      </div>
+                      {box.status === 'success' && (
+                        <span className="text-app-trend-up text-sm font-medium">Created</span>
+                      )}
+                      {box.status === 'creating' && (
+                        <span className="text-app-accent text-sm">Creating...</span>
+                      )}
+                      {box.status === 'error' && (
+                        <span className="text-app-trend-down text-sm">Error</span>
+                      )}
+                    </div>
+
+                    {box.status === 'error' && box.error && (
+                      <div className="mb-3 text-sm text-app-trend-down">{box.error}</div>
+                    )}
+
+                    <div>
+                      <label className="block text-sm font-medium text-app-text mb-2">Location *</label>
+                      <LocationPicker
+                        value={box.locationId}
+                        onChange={(locationId) => {
+                          wf.updatePendingDestination(index, { locationId, error: undefined })
+                        }}
+                        filterCollectionsOnly
+                        disabled={box.status === 'creating' || box.status === 'success'}
+                      />
+                    </div>
+
+                    <div className="mt-3">
+                      <label className="block text-sm font-medium text-app-text mb-2">Barcode (optional)</label>
+                      <input
+                        type="text"
+                        value={box.barcode}
+                        onChange={(e) => {
+                          wf.updatePendingDestination(index, { barcode: e.target.value })
+                        }}
+                        disabled={box.status === 'creating' || box.status === 'success'}
+                        className="form-input w-full"
+                        placeholder="Enter box barcode (optional)"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  wf.clearPendingDestinations()
+                  wf.goToStep('upload')
+                }}
+                className="storage-btn-secondary"
+                disabled={loading}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  void (destinationBoxesAlreadyCreated
+                    ? wf.resolveWithFreshCollections()
+                    : wf.createDestinationsAndResolve())
+                }
+                disabled={
+                  loading ||
+                  pendingDestinations.some((p) => p.status === 'creating') ||
+                  pendingDestinations.length === 0
+                }
+                className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading
+                  ? 'Processing...'
+                  : destinationBoxesAlreadyCreated
+                    ? 'Continue to Resolve'
+                    : 'Create Boxes & Continue'}
               </button>
             </div>
           </>
@@ -821,9 +472,9 @@ export default function ContainerMoveCryovial() {
               <div className="mt-6 space-y-4">
                 {files.map((fileData, index) => (
                   <div key={index} className="border border-app-border rounded-lg p-4">
-                    <h4 className="font-semibold text-app-text mb-2">{fileData.file.name}</h4>
+                    <h4 className="font-semibold text-app-text mb-2">{fileData.filename}</h4>
                     <p className="text-sm text-app-text mb-2">
-                      Destination: <span className="font-semibold">{fileData.selectedBoxName}</span>
+                      Destination: <span className="font-semibold">{fileData.selectedDestinationName}</span>
                     </p>
                     <p className="text-sm text-app-text mb-2">
                       Resolved: {fileData.resolvedContainers.length} of {fileData.csvRows.length} tubes
@@ -852,7 +503,7 @@ export default function ContainerMoveCryovial() {
                                     {unresolved.rowIndex}
                                   </td>
                                   <td className="px-3 py-2 whitespace-nowrap text-app-trend-down font-mono">
-                                    {unresolved.identifier}
+                                    {unresolved.identifierKey}
                                   </td>
                                   <td className="px-3 py-2 whitespace-nowrap text-app-trend-down">
                                     {unresolved.targetPosition || <span className="text-app-text-muted italic">N/A</span>}
@@ -876,7 +527,7 @@ export default function ContainerMoveCryovial() {
                       name="cryovial-atomic-mode"
                       value="all_or_nothing"
                       checked={atomicMode === 'all_or_nothing'}
-                      onChange={() => setAtomicMode('all_or_nothing')}
+                      onChange={() => wf.setAtomicMode('all_or_nothing')}
                       className="mt-1"
                     />
                     <span className="text-sm text-app-text">
@@ -889,7 +540,7 @@ export default function ContainerMoveCryovial() {
                       name="cryovial-atomic-mode"
                       value="best_effort"
                       checked={atomicMode === 'best_effort'}
-                      onChange={() => setAtomicMode('best_effort')}
+                      onChange={() => wf.setAtomicMode('best_effort')}
                       className="mt-1"
                     />
                     <span className="text-sm text-app-text">
@@ -902,13 +553,15 @@ export default function ContainerMoveCryovial() {
 
             <div className="flex justify-end gap-4">
               <button
-                onClick={() => setCurrentStep('upload')}
+                onClick={() => {
+                  wf.goToStep(missingDestinationBoxNames.length > 0 ? 'create_plates' : 'upload')
+                }}
                 className="storage-btn-secondary"
               >
                 Back
               </button>
               <button
-                onClick={handleExecuteMoves}
+                onClick={() => void wf.executeMoves()}
                 disabled={files.some(f => f.resolvedContainers.length === 0)}
                 className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -957,7 +610,7 @@ export default function ContainerMoveCryovial() {
                           {result.moved} moved
                         </span>
                       </div>
-                      <p className="text-sm text-app-text-muted">Destination: {result.destinationBox}</p>
+                      <p className="text-sm text-app-text-muted">Destination: {result.destinationName}</p>
                       {result.errors && result.errors.length > 0 && (
                         <ul className="mt-2 list-disc list-inside text-sm text-app-trend-down">
                           {result.errors.map((error, j) => (
@@ -993,10 +646,11 @@ export default function ContainerMoveCryovial() {
             <div className="flex justify-end gap-4">
               <button
                 onClick={() => {
-                  setFiles([])
-                  setMoveResult(null)
+                  wf.reset()
                   setInstructionsExpanded(false)
-                  setCurrentStep('upload')
+                  if (fileInputRef.current) {
+                    fileInputRef.current.value = ''
+                  }
                 }}
                 className="storage-btn-primary px-6 py-2"
               >

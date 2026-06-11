@@ -1,104 +1,43 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { Link, useNavigate, Navigate } from 'react-router-dom'
-import { useContainerMoveStep, type ContainerMoveAtomicMode } from '../hooks/useContainerMoveStep'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Link, Navigate } from 'react-router-dom'
 import { useMicronixMoveBootstrap, moveWorkflowKeys } from '../hooks/useMoveWorkflow'
-import { collectionsApi } from '../lib/api/collections';
-import type { PlateCandidate } from '../lib/plate-filename-match'
-import { inferDestinationPlateForScan } from '../lib/plate-destination-inference'
-import { parseScannerPlateCsv, validateScannerPlateCsv } from '../lib/scanner-plate-csv'
+import { useScanMoveWorkflow } from '../hooks/useScanMoveWorkflow'
+import { micronixScanMoveVariant } from '../lib/scan-move'
 import MicronixPlatePicker, { type MicronixPlate } from '../components/MicronixPlatePicker'
 import LocationPicker from '../components/LocationPicker'
-import {
-  buildPendingDestinationPlates,
-  getMissingDestinationPlateNames,
-  isExistingPlateName,
-  type PendingDestinationPlate,
-} from '../lib/micronix-move-destination-plates'
+import { isExistingPlateName } from '../lib/micronix-move-destination-plates'
 import { useUser } from '../contexts/UserContext'
 import { PageError, fromQuery, getQueryErrorMessage } from '../ui'
 import { useQueryClient } from '@tanstack/react-query'
 import '../styles/storage.css'
 
-interface CSVRow {
-  [key: string]: string
-}
-
-interface ValidationError {
-  row: number
-  error: string
-}
-
-interface ContainerInfo {
-  containerId: number
-  containerType: string
-  currentCollectionId: number | null
-  currentCollectionName: string | null
-  currentCollectionType: string | null
-  currentPosition: string | null
-  barcode?: string | null
-}
-
-interface ResolvedContainer {
-  barcode: string
-  container: ContainerInfo
-}
-
-interface UnresolvedContainer {
-  barcode: string
-  rowIndex: number
-  targetPosition: string
-}
-
-interface FileData {
-  file: File
-  inferredPlateName: string | null
-  inferredMatches: PlateCandidate[]
-  selectedPlateName: string | null
-  csvRows: CSVRow[]
-  resolvedContainers: ResolvedContainer[]
-  unresolvedContainers: UnresolvedContainer[]
-  validationErrors: ValidationError[]
-  isResolved: boolean
-  preview: CSVRow[]
-}
-
 export default function ContainerMoveMicronix() {
-  const navigate = useNavigate()
   const { canWrite } = useUser()
   const queryClient = useQueryClient()
-  const [files, setFiles] = useState<FileData[]>([])
-  const { currentStep: effectiveStep, setStep: setSearchStep } = useContainerMoveStep(files.length)
-
-  const [loading, setLoading] = useState(false)
   const bootstrapQuery = useMicronixMoveBootstrap()
   const bootstrapStatus = fromQuery(bootstrapQuery)
   const availablePlates = (bootstrapQuery.data?.plates ?? []) as MicronixPlate[]
   const locations = bootstrapQuery.data?.locations ?? []
   const scannerConfigurations = bootstrapQuery.data?.scannerConfigurations ?? []
-  const missingDestinationPlateNames = useMemo(
-    () => getMissingDestinationPlateNames(files.map((f) => f.selectedPlateName), availablePlates),
-    [files, availablePlates],
-  )
-  const [pendingDestinationPlates, setPendingDestinationPlates] = useState<PendingDestinationPlate[]>([])
-  const destinationPlatesAlreadyCreated = useMemo(
-    () =>
-      pendingDestinationPlates.length > 0 &&
-      pendingDestinationPlates.every((p) => p.status === 'success'),
-    [pendingDestinationPlates],
-  )
-  const [createPlatesStepUsed, setCreatePlatesStepUsed] = useState(false)
-  const [moveResult, setMoveResult] = useState<{
-    success: boolean
-    moved: number
-    errors?: ValidationError[]
-    fileResults?: Array<{
-      filename: string
-      destinationPlate: string
-      moved: number
-      errors?: ValidationError[]
-    }>
-  } | null>(null)
-  const [atomicMode, setAtomicMode] = useState<ContainerMoveAtomicMode>('all_or_nothing')
+
+  const refreshCollections = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: moveWorkflowKeys.micronixBootstrap() })
+    const refetchResult = await bootstrapQuery.refetch()
+    return (refetchResult.data?.plates ?? []) as MicronixPlate[]
+  }, [queryClient, bootstrapQuery])
+
+  const wf = useScanMoveWorkflow({
+    variant: micronixScanMoveVariant,
+    collections: availablePlates,
+    refreshCollections,
+  })
+  const { files, pendingDestinations, createDestinationsStepUsed, atomicMode, moveResult } = wf.state
+  const effectiveStep = wf.step
+  const loading = wf.loading
+  const createPlatesStepUsed = createDestinationsStepUsed
+  const missingDestinationPlateNames = wf.missingDestinationNames
+  const destinationPlatesAlreadyCreated = wf.destinationsAlreadyCreated
+
   const [instructionsExpanded, setInstructionsExpanded] = useState(false)
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -112,572 +51,34 @@ export default function ContainerMoveMicronix() {
     }
   }, [scannerConfigurations, selectedConfigId])
 
-  const configRevalidateRequestIdRef = useRef<string | null>(null)
-
   const handleConfigChange = (newId: string) => {
     setSelectedConfigId(newId)
     if (files.length === 0) return
     const config = scannerConfigurations.find((c) => c.id === newId)
     if (!config) return
-    const requestId = newId
-    configRevalidateRequestIdRef.current = requestId
-    setLoading(true)
-    const revalidate = async () => {
-      const updated: FileData[] = []
-      for (const fileData of files) {
-        try {
-          const text = await fileData.file.text()
-          const csvRows = parseScannerPlateCsv(text, config)
-          const validation = validateScannerPlateCsv(csvRows, config)
-          const inference = inferDestinationPlateForScan(fileData.file.name, csvRows, config, availablePlates)
-          const validationErrors = [...validation.errors, ...inference.plateInferenceErrors]
-          const preview = csvRows.slice(0, 5)
-          updated.push({
-            ...fileData,
-            csvRows,
-            validationErrors,
-            preview,
-            inferredPlateName: inference.inferredPlateName,
-            inferredMatches: inference.inferredMatches,
-            selectedPlateName: inference.selectedPlateName,
-            resolvedContainers: [],
-            unresolvedContainers: [],
-            isResolved: false,
-          })
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'Failed to parse or validate with new config'
-          updated.push({
-            ...fileData,
-            validationErrors: [{ row: 0, error: message }],
-          })
-        }
-      }
-      if (configRevalidateRequestIdRef.current === requestId) {
-        setFiles(updated)
-        setCurrentStep('upload')
-      }
-    }
-    revalidate().finally(() => {
-      if (configRevalidateRequestIdRef.current === requestId) {
-        setLoading(false)
-      }
-    })
+    void wf.reingestFiles(config)
   }
-
-  const setCurrentStep = setSearchStep
 
   if (!canWrite) {
     return <Navigate to="/" replace />
   }
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || [])
     if (selectedFiles.length === 0) return
-
-    setLoading(true)
-    setMoveResult(null)
-
-    try {
-      const newFiles: FileData[] = []
-
-      const selectedConfig = scannerConfigurations.find(c => c.id === selectedConfigId)
-      if (!selectedConfig) {
-        setLoading(false)
-        return
-      }
-
-      for (const file of selectedFiles) {
-        const text = await file.text()
-        const csvRows = parseScannerPlateCsv(text, selectedConfig)
-        const validation = validateScannerPlateCsv(csvRows, selectedConfig)
-        const inference = inferDestinationPlateForScan(file.name, csvRows, selectedConfig, availablePlates)
-        const validationErrors = [...validation.errors, ...inference.plateInferenceErrors]
-
-        const preview = csvRows.slice(0, 5)
-
-        newFiles.push({
-          file,
-          inferredPlateName: inference.inferredPlateName,
-          inferredMatches: inference.inferredMatches,
-          selectedPlateName: inference.selectedPlateName,
-          csvRows,
-          resolvedContainers: [],
-          unresolvedContainers: [],
-          validationErrors,
-          isResolved: false,
-          preview,
-        })
-      }
-
-      setFiles(newFiles)
-      setCurrentStep('upload')
-    } catch (error: any) {
-      console.error('Error processing files:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const updateFilePlateSelection = (fileIndex: number, plateName: string | null) => {
-    setFiles(prev => prev.map((f, i) => {
-      if (i !== fileIndex) return f
-      return {
-        ...f,
-        selectedPlateName: plateName,
-        resolvedContainers: [],
-        unresolvedContainers: [],
-        isResolved: false,
-        validationErrors: f.validationErrors.filter(e => !e.error.includes('not relocated')),
-      }
-    }))
+    const selectedConfig = scannerConfigurations.find((c) => c.id === selectedConfigId)
+    if (!selectedConfig) return
+    void wf.ingestFiles(selectedFiles, selectedConfig)
   }
 
   const removeFile = (fileIndex: number) => {
-    setFiles(prev => prev.filter((_, i) => i !== fileIndex))
+    wf.removeFile(fileIndex)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
 
-  const resolveContainers = async (plates: MicronixPlate[]) => {
-    // Resolve containers for all files (only rows with barcode; empty barcode = empty well)
-    const allIdentifiers: Array<{ type: 'barcode'; barcode: string; fileIndex: number; rowIndex: number }> = []
-
-    files.forEach((fileData, fileIndex) => {
-      fileData.csvRows.forEach((row, rowIndex) => {
-        const barcode = row.container_barcode.trim()
-        if (barcode !== '') {
-          allIdentifiers.push({
-            type: 'barcode',
-            barcode,
-            fileIndex,
-            rowIndex,
-          })
-        }
-      })
-    })
-
-    const resolveResponse = await collectionsApi.resolveContainers({
-      identifiers: allIdentifiers.map(({ type, barcode }) => ({ type, barcode })),
-    })
-
-    const resolved = resolveResponse.containers
-
-    const resolvedBarcodes = new Set<string>()
-    resolved.forEach((r: any) => {
-      if (r.container) {
-        const barcode = typeof r.identifier === 'string'
-          ? r.identifier
-          : r.identifier?.barcode
-        if (barcode) {
-          resolvedBarcodes.add(barcode)
-        }
-      }
-    })
-
-    const resolvedByFile = new Map<number, ResolvedContainer[]>()
-    resolved.forEach((r: any) => {
-      if (!r.container) return
-
-      const barcode = typeof r.identifier === 'string'
-        ? r.identifier
-        : r.identifier?.barcode
-      if (!barcode) return
-
-      const identifier = allIdentifiers.find(id => id.barcode === barcode)
-      if (identifier) {
-        if (!resolvedByFile.has(identifier.fileIndex)) {
-          resolvedByFile.set(identifier.fileIndex, [])
-        }
-        resolvedByFile.get(identifier.fileIndex)!.push({
-          barcode: barcode,
-          container: r.container,
-        })
-      }
-    })
-
-    const unresolvedByFile = new Map<number, UnresolvedContainer[]>()
-    allIdentifiers.forEach((id) => {
-      if (!resolvedBarcodes.has(id.barcode)) {
-        if (!unresolvedByFile.has(id.fileIndex)) {
-          unresolvedByFile.set(id.fileIndex, [])
-        }
-        const csvRow = files[id.fileIndex].csvRows[id.rowIndex]
-        unresolvedByFile.get(id.fileIndex)!.push({
-          barcode: id.barcode,
-          rowIndex: id.rowIndex + 1,
-          targetPosition: csvRow.target_position || '',
-        })
-      }
-    })
-
-    const invalidContainers = resolved.filter((r: any) =>
-      r.container != null && r.container.currentCollectionType !== 'micronix_plate'
-    )
-
-    if (invalidContainers.length > 0) {
-      setFiles(prev => prev.map((f, i) => {
-        const fileInvalid = resolvedByFile.get(i)?.some(rc =>
-          invalidContainers.some((ic: any) => ic.container.containerId === rc.container.containerId)
-        )
-        if (fileInvalid) {
-          return {
-            ...f,
-            validationErrors: [
-              ...f.validationErrors,
-              { row: 0, error: 'Some containers are not from micronix plates' },
-            ],
-          }
-        }
-        return f
-      }))
-      return false
-    }
-
-    const relocationErrorsByFile = new Map<number, ValidationError[]>()
-    const uniqueDestinationNames = [...new Set(files.map(f => f.selectedPlateName).filter(Boolean))] as string[]
-
-    for (const plateName of uniqueDestinationNames) {
-      const plateId = plates.find(p => p.name === plateName)?.id
-      if (plateId == null) {
-        const fileIndicesTargetingPlate = files
-          .map((f, i) => (f.selectedPlateName === plateName ? i : -1))
-          .filter((i) => i >= 0)
-        const err: ValidationError = {
-          row: 0,
-          error: `Destination plate "${plateName}" could not be found. Create it or select an existing plate.`,
-        }
-        fileIndicesTargetingPlate.forEach((fileIndex) => {
-          if (!relocationErrorsByFile.has(fileIndex)) relocationErrorsByFile.set(fileIndex, [])
-          relocationErrorsByFile.get(fileIndex)!.push(err)
-        })
-        continue
-      }
-
-      const plateResponse = await collectionsApi.getMicronixPlate(plateId)
-      const wells: Record<string, { type: string; barcode?: string | null }> = plateResponse.wells
-
-      const rowsForPlate: { fileIndex: number; row: CSVRow }[] = []
-      files.forEach((fileData, fileIndex) => {
-        if (fileData.selectedPlateName !== plateName) return
-        fileData.csvRows.forEach(row => rowsForPlate.push({ fileIndex, row }))
-      })
-
-      const positionToBarcode = new Map<string, string>()
-      const positionToEmptyFileIndex = new Map<string, number>()
-      for (const { fileIndex, row } of rowsForPlate) {
-        const pos = row.target_position.trim()
-        const barcode = row.container_barcode.trim()
-        if (pos === '') continue
-        if (barcode !== '') {
-          positionToBarcode.set(pos, barcode)
-        } else {
-          if (!positionToEmptyFileIndex.has(pos)) positionToEmptyFileIndex.set(pos, fileIndex)
-        }
-      }
-      const barcodesRelocatedInMove = new Set(positionToBarcode.values())
-      const emptyPositions = [...positionToEmptyFileIndex.keys()].filter(P => !positionToBarcode.has(P))
-
-      for (const P of emptyPositions) {
-        const well = wells[P]
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- well can be undefined when position not in plate data (e.g. empty wells mock in tests)
-        if (well?.type === 'micronix_tube' && well.barcode) {
-          const B = well.barcode
-          if (!barcodesRelocatedInMove.has(B)) {
-            const fileIndex = positionToEmptyFileIndex.get(P) ?? 0
-            const err: ValidationError = {
-              row: 0,
-              error: `Position ${P} on plate "${plateName}" is empty in your upload but tube ${B} is currently there and is not relocated in this move.`,
-            }
-            if (!relocationErrorsByFile.has(fileIndex)) relocationErrorsByFile.set(fileIndex, [])
-            relocationErrorsByFile.get(fileIndex)!.push(err)
-          }
-        }
-      }
-    }
-
-    setFiles(prev => prev.map((f, i) => {
-      const base = {
-        ...f,
-        resolvedContainers: resolvedByFile.get(i) ?? [],
-        unresolvedContainers: unresolvedByFile.get(i) ?? [],
-        isResolved: true,
-      }
-      const relocationErrors = relocationErrorsByFile.get(i) ?? []
-      if (relocationErrors.length === 0) return base
-      const existingWithoutRelocation = f.validationErrors.filter(
-        e => !e.error.includes('not relocated')
-      )
-      return {
-        ...base,
-        validationErrors: [...existingWithoutRelocation, ...relocationErrors],
-      }
-    }))
-
-    const hasRelocationErrors = [...relocationErrorsByFile.values()].some((arr) => arr.length > 0)
-    if (!hasRelocationErrors) {
-      setCurrentStep('resolve')
-    }
-    return !hasRelocationErrors
-  }
-
-  const handleValidateAndResolve = async () => {
-    const filesWithoutPlates = files.filter(f => !f.selectedPlateName)
-    if (filesWithoutPlates.length > 0) {
-      setFiles(prev => prev.map(f => {
-        if (!f.selectedPlateName) {
-          return {
-            ...f,
-            validationErrors: [
-              ...f.validationErrors,
-              { row: 0, error: 'Destination plate must be selected for this file' },
-            ],
-          }
-        }
-        return f
-      }))
-      return
-    }
-
-    const filesWithErrors = files.filter(f => f.validationErrors.length > 0)
-    if (filesWithErrors.length > 0) {
-      setCurrentStep('upload')
-      return
-    }
-
-    const missingPlates = getMissingDestinationPlateNames(
-      files.map((f) => f.selectedPlateName),
-      availablePlates,
-    )
-    if (missingPlates.length > 0) {
-      setPendingDestinationPlates(buildPendingDestinationPlates(missingPlates))
-      setCreatePlatesStepUsed(true)
-      setCurrentStep('create_plates')
-      return
-    }
-
-    setLoading(true)
-    try {
-      await resolveContainers(availablePlates)
-    } catch (error: any) {
-      console.error('Error resolving containers:', error)
-      setFiles(prev => prev.map(f => ({
-        ...f,
-        validationErrors: [
-          ...f.validationErrors,
-          { row: 0, error: error.response?.data?.error || error.message || 'Failed to resolve containers' },
-        ],
-      })))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const runResolveWithFreshPlates = async () => {
-    setLoading(true)
-    try {
-      await queryClient.invalidateQueries({ queryKey: moveWorkflowKeys.micronixBootstrap() })
-      const refetchResult = await bootstrapQuery.refetch()
-      const freshPlates = (refetchResult.data?.plates ?? availablePlates) as MicronixPlate[]
-      await resolveContainers(freshPlates)
-    } catch (error: any) {
-      console.error('Error resolving containers:', error)
-      setFiles(prev => prev.map(f => ({
-        ...f,
-        validationErrors: [
-          ...f.validationErrors,
-          {
-            row: 0,
-            error: error.response?.data?.error || error.message || 'Failed to resolve containers',
-          },
-        ],
-      })))
-      setCurrentStep('upload')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleCreateDestinationPlates = async () => {
-    const needsLocation = pendingDestinationPlates.filter((p) => p.status !== 'success')
-    if (needsLocation.some((p) => p.locationId == null)) {
-      setPendingDestinationPlates((prev) =>
-        prev.map((p) =>
-          p.status === 'success' || p.locationId != null
-            ? p
-            : { ...p, error: 'Storage location is required' },
-        ),
-      )
-      return
-    }
-
-    setLoading(true)
-    let allSuccess = true
-    const updated = [...pendingDestinationPlates]
-
-    for (let i = 0; i < updated.length; i++) {
-      if (updated[i].status === 'success') continue
-      updated[i] = { ...updated[i], status: 'creating', error: undefined }
-      setPendingDestinationPlates([...updated])
-
-      try {
-        await collectionsApi.createMicronixPlate({
-          name: updated[i].name,
-          locationId: updated[i].locationId!,
-          barcode: updated[i].barcode.trim() || undefined,
-        })
-        updated[i] = { ...updated[i], status: 'success' }
-      } catch (error: unknown) {
-        allSuccess = false
-        const message =
-          error && typeof error === 'object' && 'response' in error
-            ? (error as { response?: { data?: { error?: string } } }).response?.data?.error ??
-              'Failed to create plate'
-            : error instanceof Error
-              ? error.message
-              : 'Failed to create plate'
-        updated[i] = { ...updated[i], status: 'error', error: message }
-      }
-      setPendingDestinationPlates([...updated])
-    }
-
-    if (!allSuccess) {
-      setLoading(false)
-      return
-    }
-
-    await runResolveWithFreshPlates()
-  }
-
-  const handleExecuteMoves = async () => {
-    setLoading(true)
-    setMoveResult(null)
-
-    try {
-      // Build moves from all files
-      const allMoves: Array<{
-        identifier: { type: 'barcode'; barcode: string }
-        targetPosition: string
-        fileIndex: number
-      }> = []
-
-      files.forEach((fileData, fileIndex) => {
-        fileData.csvRows.forEach(row => {
-          const barcode = row.container_barcode.trim()
-          if (barcode === '') return // empty well; no move for this row
-          allMoves.push({
-            identifier: {
-              type: 'barcode' as const,
-              barcode,
-            },
-            targetPosition: row.target_position.trim(),
-            fileIndex,
-          })
-        })
-      })
-
-      // Build mappings from source plates to destination plates
-      // Check for conflicts: same source plate mapping to different destinations
-      const sourceToDest = new Map<string, string>()
-      const sourceToFiles = new Map<string, number[]>()
-      
-      files.forEach((fileData, fileIndex) => {
-        const destinationPlate = fileData.selectedPlateName!
-        fileData.resolvedContainers.forEach(rc => {
-          const sourcePlate = rc.container.currentCollectionName
-          if (sourcePlate) {
-            if (!sourceToFiles.has(sourcePlate)) {
-              sourceToFiles.set(sourcePlate, [])
-            }
-            sourceToFiles.get(sourcePlate)!.push(fileIndex)
-            
-            // Check for conflict
-            const existingDest = sourceToDest.get(sourcePlate)
-            if (existingDest && existingDest !== destinationPlate) {
-              throw new Error(
-                `Source plate "${sourcePlate}" appears in multiple files with different destinations: ` +
-                `"${existingDest}" and "${destinationPlate}". Each source plate must map to a single destination.`
-              )
-            }
-            
-            sourceToDest.set(sourcePlate, destinationPlate)
-          }
-        })
-      })
-
-      const moveMappings = Array.from(sourceToDest.entries()).map(([from, to]) => ({
-        fromCollectionName: from,
-        toCollectionName: to,
-      }))
-
-      const response = await collectionsApi.moveContainers({
-        collectionType: 'micronix_plate',
-        atomicMode,
-        mappings: moveMappings,
-        moves: allMoves.map(({ identifier, targetPosition }) => ({
-          identifier,
-          targetPosition,
-        })),
-      })
-
-      // Calculate per-file results
-      const fileResults = files.map((fileData, fileIndex) => {
-        const fileMoves = allMoves.filter(m => m.fileIndex === fileIndex)
-        const moved = response.success ? fileMoves.length : 0
-        const errors = response.errors?.filter((e: ValidationError) => {
-          // Map errors back to file if possible (this is approximate)
-          const errorRow = e.row
-          return errorRow > 0 && errorRow <= fileData.csvRows.length
-        })
-        
-        return {
-          filename: fileData.file.name,
-          destinationPlate: fileData.selectedPlateName!,
-          moved,
-          errors,
-        }
-      })
-
-      if (response.success) {
-        setMoveResult({
-          success: true,
-          moved: response.moved,
-          fileResults,
-        })
-        setCurrentStep('execute')
-      } else {
-        setMoveResult({
-          success: false,
-          moved: response.moved || 0,
-          errors: response.errors,
-          fileResults,
-        })
-        setCurrentStep('execute')
-      }
-    } catch (error: any) {
-      // Standardized error format from backend: { error, moved, errors }
-      const errorData = error.response?.data || {}
-      const errorMessages: ValidationError[] = errorData.errors || []
-      const moved = errorData.moved || 0
-      
-      // If no errors array, create one from the error message
-      if (errorMessages.length === 0) {
-        errorMessages.push({
-          row: 0,
-          error: errorData.error || error.message || 'Failed to move containers',
-        })
-      }
-      
-      setMoveResult({
-        success: false,
-        moved,
-        errors: errorMessages,
-      })
-      setCurrentStep('execute')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Resolve, create-plates, and execute logic live in the scan move core (lib/scan-move).
 
   // Get all unique source plates across all files
   const getAllSourcePlates = (): string[] => {
@@ -899,7 +300,7 @@ export default function ContainerMoveMicronix() {
                     <div key={index} className="border border-app-border rounded-lg p-4">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
-                          <h3 className="font-semibold text-app-text">{fileData.file.name}</h3>
+                          <h3 className="font-semibold text-app-text">{fileData.filename}</h3>
                           <p className="text-sm text-app-text-muted mt-1">
                             {fileData.csvRows.length} row{fileData.csvRows.length !== 1 ? 's' : ''}
                           </p>
@@ -919,7 +320,7 @@ export default function ContainerMoveMicronix() {
                           Destination Plate:
                         </label>
                         {fileData.inferredMatches.length === 1 &&
-                          fileData.selectedPlateName === fileData.inferredMatches[0].name &&
+                          fileData.selectedDestinationName === fileData.inferredMatches[0].name &&
                           (() => {
                             const cfg = scannerConfigurations.find((c) => c.id === selectedConfigId)
                             const fromCol = cfg?.plateNameSource === 'column' && cfg.plateNameColumn?.trim()
@@ -932,32 +333,32 @@ export default function ContainerMoveMicronix() {
                         <MicronixPlatePicker
                           locations={locations}
                           plates={availablePlates}
-                          value={fileData.selectedPlateName || undefined}
-                          onChange={(plateName) => updateFilePlateSelection(index, plateName)}
+                          value={fileData.selectedDestinationName || undefined}
+                          onChange={(plateName) => wf.selectDestination(index, plateName)}
                           suggestedPlates={fileData.inferredMatches}
                           allowCreateNew
-                          suggestedNewPlateName={fileData.inferredPlateName}
+                          suggestedNewPlateName={fileData.inferredDestinationName}
                         />
-                        {fileData.selectedPlateName &&
-                          !isExistingPlateName(fileData.selectedPlateName, availablePlates) && (
+                        {fileData.selectedDestinationName &&
+                          !isExistingPlateName(fileData.selectedDestinationName, availablePlates) && (
                           <p className="text-xs text-app-accent mt-1">
-                            New plate &quot;{fileData.selectedPlateName}&quot; — assign a storage location in the next step.
+                            New plate &quot;{fileData.selectedDestinationName}&quot; — assign a storage location in the next step.
                           </p>
                         )}
-                        {fileData.inferredPlateName &&
-                          !fileData.selectedPlateName &&
-                          !isExistingPlateName(fileData.inferredPlateName, availablePlates) && (
+                        {fileData.inferredDestinationName &&
+                          !fileData.selectedDestinationName &&
+                          !isExistingPlateName(fileData.inferredDestinationName, availablePlates) && (
                           <button
                             type="button"
-                            onClick={() => updateFilePlateSelection(index, fileData.inferredPlateName!)}
+                            onClick={() => wf.selectDestination(index, fileData.inferredDestinationName!)}
                             className="mt-2 text-sm text-app-accent underline hover:no-underline"
                           >
-                            Use inferred name: {fileData.inferredPlateName}
+                            Use inferred name: {fileData.inferredDestinationName}
                           </button>
                         )}
-                        {fileData.inferredPlateName && !fileData.selectedPlateName && (
+                        {fileData.inferredDestinationName && !fileData.selectedDestinationName && (
                           <p className="text-xs text-app-text-muted mt-1">
-                            No single plate suggested for &quot;{fileData.inferredPlateName}&quot;. Select an existing plate or create a new one with any name.
+                            No single plate suggested for &quot;{fileData.inferredDestinationName}&quot;. Select an existing plate or create a new one with any name.
                             {fileData.inferredMatches.length > 0 && (
                               <span className="ml-1">({fileData.inferredMatches.length} similar plate{fileData.inferredMatches.length !== 1 ? 's' : ''} found)</span>
                             )}
@@ -1024,8 +425,8 @@ export default function ContainerMoveMicronix() {
 
             <div className="flex justify-end gap-4">
               <button
-                onClick={handleValidateAndResolve}
-                disabled={files.length === 0 || loading || files.some(f => !f.selectedPlateName || f.validationErrors.length > 0)}
+                onClick={() => void wf.next()}
+                disabled={files.length === 0 || loading || files.some(f => !f.selectedDestinationName || f.validationErrors.length > 0)}
                 className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading
@@ -1050,7 +451,7 @@ export default function ContainerMoveMicronix() {
               </p>
 
               <div className="space-y-4">
-                {pendingDestinationPlates.map((plate, index) => (
+                {pendingDestinations.map((plate, index) => (
                   <div key={plate.name} className="border border-app-border rounded-lg p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div>
@@ -1077,11 +478,7 @@ export default function ContainerMoveMicronix() {
                       <LocationPicker
                         value={plate.locationId}
                         onChange={(locationId) => {
-                          setPendingDestinationPlates((prev) => {
-                            const next = [...prev]
-                            next[index] = { ...next[index], locationId, error: undefined }
-                            return next
-                          })
+                          wf.updatePendingDestination(index, { locationId, error: undefined })
                         }}
                         filterCollectionsOnly
                         disabled={plate.status === 'creating' || plate.status === 'success'}
@@ -1094,11 +491,7 @@ export default function ContainerMoveMicronix() {
                         type="text"
                         value={plate.barcode}
                         onChange={(e) => {
-                          setPendingDestinationPlates((prev) => {
-                            const next = [...prev]
-                            next[index] = { ...next[index], barcode: e.target.value }
-                            return next
-                          })
+                          wf.updatePendingDestination(index, { barcode: e.target.value })
                         }}
                         disabled={plate.status === 'creating' || plate.status === 'success'}
                         className="form-input w-full"
@@ -1114,8 +507,8 @@ export default function ContainerMoveMicronix() {
               <button
                 type="button"
                 onClick={() => {
-                  setPendingDestinationPlates([])
-                  setCurrentStep('upload')
+                  wf.clearPendingDestinations()
+                  wf.goToStep('upload')
                 }}
                 className="storage-btn-secondary"
                 disabled={loading}
@@ -1124,15 +517,15 @@ export default function ContainerMoveMicronix() {
               </button>
               <button
                 type="button"
-                onClick={
-                  destinationPlatesAlreadyCreated
-                    ? runResolveWithFreshPlates
-                    : handleCreateDestinationPlates
+                onClick={() =>
+                  void (destinationPlatesAlreadyCreated
+                    ? wf.resolveWithFreshCollections()
+                    : wf.createDestinationsAndResolve())
                 }
                 disabled={
                   loading ||
-                  pendingDestinationPlates.some((p) => p.status === 'creating') ||
-                  pendingDestinationPlates.length === 0
+                  pendingDestinations.some((p) => p.status === 'creating') ||
+                  pendingDestinations.length === 0
                 }
                 className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -1179,9 +572,9 @@ export default function ContainerMoveMicronix() {
               <div className="mt-6 space-y-4">
                 {files.map((fileData, index) => (
                   <div key={index} className="border border-app-border rounded-lg p-4">
-                    <h4 className="font-semibold text-app-text mb-2">{fileData.file.name}</h4>
+                    <h4 className="font-semibold text-app-text mb-2">{fileData.filename}</h4>
                     <p className="text-sm text-app-text mb-2">
-                      Destination: <span className="font-semibold">{fileData.selectedPlateName}</span>
+                      Destination: <span className="font-semibold">{fileData.selectedDestinationName}</span>
                     </p>
                     <p className="text-sm text-app-text mb-2">
                       Resolved: {fileData.resolvedContainers.length} of {fileData.csvRows.length} tubes
@@ -1210,7 +603,7 @@ export default function ContainerMoveMicronix() {
                                     {unresolved.rowIndex}
                                   </td>
                                   <td className="px-3 py-2 whitespace-nowrap text-app-trend-down font-mono">
-                                    {unresolved.barcode}
+                                    {unresolved.identifierKey}
                                   </td>
                                   <td className="px-3 py-2 whitespace-nowrap text-app-trend-down">
                                     {unresolved.targetPosition || <span className="text-app-text-muted italic">N/A</span>}
@@ -1235,7 +628,7 @@ export default function ContainerMoveMicronix() {
                       name="micronix-atomic-mode"
                       value="all_or_nothing"
                       checked={atomicMode === 'all_or_nothing'}
-                      onChange={() => setAtomicMode('all_or_nothing')}
+                      onChange={() => wf.setAtomicMode('all_or_nothing')}
                       className="mt-1"
                     />
                     <span className="text-sm text-app-text">
@@ -1248,7 +641,7 @@ export default function ContainerMoveMicronix() {
                       name="micronix-atomic-mode"
                       value="best_effort"
                       checked={atomicMode === 'best_effort'}
-                      onChange={() => setAtomicMode('best_effort')}
+                      onChange={() => wf.setAtomicMode('best_effort')}
                       className="mt-1"
                     />
                     <span className="text-sm text-app-text">
@@ -1262,14 +655,14 @@ export default function ContainerMoveMicronix() {
             <div className="flex justify-end gap-4">
               <button
                 onClick={() => {
-                  setCurrentStep(missingDestinationPlateNames.length > 0 ? 'create_plates' : 'upload')
+                  wf.goToStep(missingDestinationPlateNames.length > 0 ? 'create_plates' : 'upload')
                 }}
                 className="storage-btn-secondary"
               >
                 Back
               </button>
               <button
-                onClick={handleExecuteMoves}
+                onClick={() => void wf.executeMoves()}
                 disabled={files.some(f => f.resolvedContainers.length === 0)}
                 className="storage-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -1318,7 +711,7 @@ export default function ContainerMoveMicronix() {
                           {result.moved} moved
                         </span>
                       </div>
-                      <p className="text-sm text-app-text-muted">Destination: {result.destinationPlate}</p>
+                      <p className="text-sm text-app-text-muted">Destination: {result.destinationName}</p>
                       {result.errors && result.errors.length > 0 && (
                         <ul className="mt-2 list-disc list-inside text-sm text-app-trend-down">
                           {result.errors.map((error, j) => (
@@ -1354,12 +747,11 @@ export default function ContainerMoveMicronix() {
             <div className="flex justify-end gap-4">
               <button
                 onClick={() => {
-                  setFiles([])
-                  setMoveResult(null)
+                  wf.reset()
                   setInstructionsExpanded(false)
-                  setPendingDestinationPlates([])
-                  setCreatePlatesStepUsed(false)
-                  setCurrentStep('upload')
+                  if (fileInputRef.current) {
+                    fileInputRef.current.value = ''
+                  }
                 }}
                 className="storage-btn-primary px-6 py-2"
               >
