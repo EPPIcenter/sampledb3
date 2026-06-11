@@ -8,7 +8,9 @@ export {
   unknownContainerWireSchema,
   parseContainerDetailWire,
   parseContainersListWire,
+  specimenSummaryWireSchema,
   type EnrichedContainerWire,
   type ContainerDetailWire,
   type ContainersListWire,
+  type SpecimenSummaryWire,
 } from './container-wire'

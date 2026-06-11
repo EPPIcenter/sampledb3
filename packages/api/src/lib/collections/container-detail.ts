@@ -64,7 +64,18 @@ export async function enrichStorageContainers(
       comment: container.comment,
       created: container.created,
       lastUpdated: container.lastUpdated,
-      specimen: spec,
+      // Project to the wire summary; audit columns stay out of responses (ADR 0005).
+      specimen: spec
+        ? {
+            id: spec.id,
+            studySubjectId: spec.studySubjectId,
+            controlBatchId: spec.controlBatchId,
+            specimenTypeId: spec.specimenTypeId,
+            collectionDate: spec.collectionDate,
+            created: spec.created,
+            lastUpdated: spec.lastUpdated,
+          }
+        : null,
       specimenTypeName: spec?.specimenTypeId != null ? typeNameById.get(spec.specimenTypeId) ?? null : null,
       source: sourceMap.get(container.specimenId) ?? null,
     })

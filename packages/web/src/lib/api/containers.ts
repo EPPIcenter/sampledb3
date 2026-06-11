@@ -1,4 +1,4 @@
-import type { EnrichedContainerWire } from '@sampledb/contract/wire'
+import type { EnrichedContainerWire, SpecimenSummaryWire } from '@sampledb/contract/wire'
 import { api } from './client'
 import {
   parseContainerDetailWire,
@@ -10,16 +10,7 @@ export type { EnrichedContainerWire as EnrichedContainer }
 
 export type ContainerCollectionInfo = NonNullable<EnrichedContainerWire['collection']>
 
-export type ContainerSpecimenSummary = {
-  id: number
-  studySubjectId?: number | null
-  controlBatchId?: number | null
-  specimenTypeId: number
-  collectionDate?: string | null
-  created: string
-  lastUpdated: string
-  specimenType?: { id: number; name: string } | null
-}
+export type ContainerSpecimenSummary = SpecimenSummaryWire
 
 export type ContainerSourceInfo =
   | {
@@ -70,7 +61,7 @@ export function normalizeContainerDetail(
   }
   return {
     container,
-    specimen: (body.specimen as ContainerSpecimenSummary | null) ?? null,
+    specimen: body.specimen ?? null,
     source: (body.source as ContainerSourceInfo | null) ?? null,
   }
 }

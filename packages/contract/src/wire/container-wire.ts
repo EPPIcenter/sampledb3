@@ -108,10 +108,26 @@ export const enrichedContainerWireSchema = z.discriminatedUnion('containerType',
 
 export type EnrichedContainerWire = z.infer<typeof enrichedContainerWireSchema>
 
+/** Specimen summary attached to container detail (nulls omitted on wire). */
+export const specimenSummaryWireSchema = z
+  .object({
+    id: z.number(),
+    studySubjectId: z.number().nullable().optional(),
+    controlBatchId: z.number().nullable().optional(),
+    specimenTypeId: z.number(),
+    collectionDate: z.string().nullable().optional(),
+    created: z.string(),
+    lastUpdated: z.string(),
+    specimenType: z.object({ id: z.number(), name: z.string() }).nullable().optional(),
+  })
+  .strict()
+
+export type SpecimenSummaryWire = z.infer<typeof specimenSummaryWireSchema>
+
 const containerDetailWireSchema = z
   .object({
     container: enrichedContainerWireSchema.optional(),
-    specimen: z.unknown().nullable().optional(),
+    specimen: specimenSummaryWireSchema.nullable().optional(),
     source: z.unknown().nullable().optional(),
   })
   .passthrough()

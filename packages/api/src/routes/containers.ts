@@ -11,6 +11,7 @@ import { resolveContainerByBarcode } from '../lib/identifier-resolution'
 import { resolveSpecimenSource } from '../lib/specimens/provenance'
 import { enrichContainerForApi, enrichContainersForApi } from '../lib/container-api-enrichment'
 import { mapEnrichedContainerToWire, mapEnrichedContainersToWire } from '../lib/container-wire-mapper'
+import type { SpecimenSummaryWire } from '@sampledb/contract/wire'
 import { handleRouteError, RouteError, containersFetchFailedBody } from '../lib/error-handler'
 
 /**
@@ -123,25 +124,26 @@ containers.get('/:id', authMiddleware, async (c) => {
 
     const enriched = await enrichContainerForApi(database, container)
 
-    // Get specimen details with type
-    const spec = await database
-      .select({
-        id: specimen.id,
-        studySubjectId: specimen.studySubjectId,
-        controlBatchId: specimen.controlBatchId,
-        specimenTypeId: specimen.specimenTypeId,
-        collectionDate: specimen.collectionDate,
-        created: specimen.created,
-        lastUpdated: specimen.lastUpdated,
-        specimenType: {
-          id: specimenType.id,
-          name: specimenType.name,
-        },
-      })
-      .from(specimen)
-      .leftJoin(specimenType, eq(specimen.specimenTypeId, specimenType.id))
-      .where(eq(specimen.id, container.specimenId))
-      .get()
+    // Get specimen details with type (projected to the wire summary, ADR 0005)
+    const spec: SpecimenSummaryWire | null =
+      (await database
+        .select({
+          id: specimen.id,
+          studySubjectId: specimen.studySubjectId,
+          controlBatchId: specimen.controlBatchId,
+          specimenTypeId: specimen.specimenTypeId,
+          collectionDate: specimen.collectionDate,
+          created: specimen.created,
+          lastUpdated: specimen.lastUpdated,
+          specimenType: {
+            id: specimenType.id,
+            name: specimenType.name,
+          },
+        })
+        .from(specimen)
+        .leftJoin(specimenType, eq(specimen.specimenTypeId, specimenType.id))
+        .where(eq(specimen.id, container.specimenId))
+        .get()) ?? null
 
     const sourceInfo = spec ? await resolveSpecimenSource(database, container.specimenId) : null
 

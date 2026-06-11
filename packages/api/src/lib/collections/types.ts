@@ -1,3 +1,4 @@
+import type { SpecimenSummaryWire } from '@sampledb/contract/wire'
 import type { SpecimenSource } from '../specimens/provenance'
 
 export type ContainerSource = SpecimenSource | null
@@ -11,7 +12,7 @@ export type EnrichedStorageContainer = {
   comment: string | null
   created: string
   lastUpdated: string
-  specimen: typeof import('../../db/schema').specimen.$inferSelect | null
+  specimen: SpecimenSummaryWire | null
   specimenTypeName: string | null
   source: ContainerSource
 }
