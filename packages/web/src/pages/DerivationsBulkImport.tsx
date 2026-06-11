@@ -12,16 +12,18 @@ import { useUser } from '../contexts/UserContext'
 import LocationPicker from '../components/LocationPicker'
 import { PageError } from '../ui'
 import { DERIVATION_TYPES } from '../lib/derivation-types'
+import {
+  deriveMissingCollections,
+  getRequiredAndOptionalColumns,
+  parseCsvPreview,
+  parseFullCsv,
+  resolveTemplateParentType,
+  serializeToCsv,
+  type MissingDerivationCollection,
+  type ParentContainerType,
+  type SourceType,
+} from '../lib/derivations-bulk-import'
 import '../styles/storage.css'
-
-interface MissingDerivationCollection {
-  name?: string
-  barcode?: string
-  containerType: 'micronix_tube' | 'cryovial_tube'
-  locationId: number | null
-  status: 'pending' | 'creating' | 'success' | 'error'
-  error?: string
-}
 
 const CONTAINER_TYPES = [
   { value: 'micronix_tube', label: 'Micronix Tube' },
@@ -35,112 +37,6 @@ const SOURCE_TYPES = [
 ]
 
 type UrlStep = 'upload' | 'collections' | 'review' | 'import'
-type SourceType = 'control_batch' | 'study_subject'
-type ParentContainerType = 'paper' | 'cryovial_tube' | 'micronix_tube'
-
-function parseCsvPreview(csv: string): Record<string, string>[] {
-  const lines = csv.trim().split(/\r?\n/).filter((l) => l.trim())
-  if (lines.length < 2) return []
-  const headers = lines[0].split(',').map((h) => h.trim())
-  const rows: Record<string, string>[] = []
-  for (let i = 1; i < Math.min(6, lines.length); i++) {
-    const values = lines[i].split(',')
-    const row: Record<string, string> = {}
-    headers.forEach((header, j) => {
-      row[header] = values[j]?.trim() ?? ''
-    })
-    rows.push(row)
-  }
-  return rows
-}
-
-/** Parse full CSV into headers and rows (naive split; used for editable review). */
-function parseFullCsv(csv: string): { headers: string[]; rows: Record<string, string>[] } {
-  const lines = csv.trim().split(/\r?\n/).filter((l) => l.trim())
-  if (lines.length < 2) return { headers: [], rows: [] }
-  const headers = lines[0].split(',').map((h) => h.trim())
-  const rows: Record<string, string>[] = []
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',')
-    const row: Record<string, string> = {}
-    headers.forEach((header, j) => {
-      row[header] = values[j]?.trim() ?? ''
-    })
-    rows.push(row)
-  }
-  return { headers, rows }
-}
-
-/** Serialize headers and rows back to CSV (escape values that contain comma or quote). */
-function serializeToCsv(headers: string[], rows: Record<string, string>[]): string {
-  const escape = (v: string): string => {
-    if (v.includes(',') || v.includes('"') || v.includes('\n')) {
-      return `"${v.replace(/"/g, '""')}"`
-    }
-    return v
-  }
-  const headerLine = headers.map(escape).join(',')
-  const dataLines = rows.map((r) => headers.map((h) => escape(r[h] ?? '')).join(','))
-  return [headerLine, ...dataLines].join('\n')
-}
-
-/** Required and optional CSV columns for the current source, parent type, and settings. */
-function getRequiredAndOptionalColumns(
-  sourceType: SourceType,
-  parentContainerType: ParentContainerType,
-  settings: BulkDerivationSettings
-): { required: string[]; optional: string[] } {
-  const required: string[] = []
-  const optional: string[] = []
-
-  // Parent identification (required)
-  if (sourceType === 'control_batch') {
-    required.push('parent_control_batch_name', 'parent_specimen_type_name')
-    if (parentContainerType === 'cryovial_tube') {
-      required.push('parent_box_barcode', 'parent_position')
-    }
-  } else {
-    if (parentContainerType === 'paper') {
-      required.push('parent_study_short_code', 'parent_subject_name', 'parent_specimen_type_name')
-      optional.push('parent_collection_date')
-    } else if (parentContainerType === 'cryovial_tube') {
-      required.push('parent_box_barcode', 'parent_position')
-    } else {
-      required.push('parent_container_barcode')
-    }
-  }
-
-  // Per-row derivation fields (required in CSV when not set in Import settings)
-  if (!settings.derivationType) required.push('derivation_type')
-  if (!settings.specimenTypeName) required.push('specimen_type_name')
-  if (!settings.containerType) required.push('container_type')
-  if (!settings.protocol) required.push('protocol')
-  if (!settings.derivationDate) required.push('derivation_date')
-
-  // Derived container placement
-  const fixedContainerType = settings.containerType
-  if (fixedContainerType === 'micronix_tube') {
-    required.push('plate_name or collection_barcode')
-  } else if (fixedContainerType === 'cryovial_tube') {
-    required.push('box_name or collection_barcode')
-  } else if (fixedContainerType === 'paper') {
-    required.push('bag_name')
-  } else {
-    required.push('plate_name / box_name / bag_name (depends on container_type)')
-    optional.push('collection_barcode')
-  }
-  required.push('position')
-  optional.push('container_barcode')
-  optional.push('notes')
-
-  // Quantity fields: only optional in CSV when not set in Import settings
-  if (settings.quantity === undefined) optional.push('quantity')
-  if (!settings.unitSymbol) optional.push('unit_symbol')
-  if (settings.quantityUsed === undefined) optional.push('quantity_used')
-  if (settings.reduceParentQuantity === undefined) optional.push('reduce_parent_quantity')
-
-  return { required, optional }
-}
 
 export default function DerivationsBulkImport() {
   const navigate = useNavigate()
@@ -210,21 +106,10 @@ export default function DerivationsBulkImport() {
   }, [effectiveStep, currentStep, setSearchParams])
 
   // Pure derivation: compute base list from validationResult during render
-  const baseMissingCollections = useMemo(() => {
-    if (!validationResult?.collections.length) return []
-    const needCreation = validationResult.collections.filter(
-      (c): c is typeof c & { containerType: 'micronix_tube' | 'cryovial_tube' } =>
-        c.status === 'will_be_created' &&
-        (c.containerType === 'micronix_tube' || c.containerType === 'cryovial_tube')
-    )
-    return needCreation.map((c) => ({
-      name: c.name,
-      barcode: c.barcode,
-      containerType: c.containerType,
-      locationId: null as number | null,
-      status: 'pending' as const,
-    }))
-  }, [validationResult])
+  const baseMissingCollections = useMemo(
+    () => deriveMissingCollections(validationResult),
+    [validationResult]
+  )
 
   // User-driven updates (locationId, status, error) keyed by index
   const [userUpdates, setUserUpdates] = useState<Record<number, Partial<MissingDerivationCollection>>>({})
@@ -418,15 +303,10 @@ export default function DerivationsBulkImport() {
       specimenTypes = undefined
     }
 
-    let parentType: TemplateOptions['parentType']
-    if (sourceType === 'control_batch') {
-      parentType =
-        parentContainerType === 'cryovial_tube' ? 'control_batch' : 'control_batch'
-    } else {
-      if (parentContainerType === 'paper') parentType = 'study_subject'
-      else if (parentContainerType === 'cryovial_tube') parentType = 'cryovial_position'
-      else parentType = 'barcode'
-    }
+    const parentType: TemplateOptions['parentType'] = resolveTemplateParentType(
+      sourceType,
+      parentContainerType
+    )
 
     const template = generateDerivationsTemplate({
       parentType,
