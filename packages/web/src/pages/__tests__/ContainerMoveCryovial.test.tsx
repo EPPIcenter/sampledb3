@@ -238,11 +238,11 @@ describe('ContainerMoveCryovial', () => {
             expect(screen.getByText('data.csv')).toBeInTheDocument()
         })
 
-        fireEvent.click(screen.getByText('Select target box...'))
+        fireEvent.click(screen.getByRole('button', { name: /destination box: data \(new box\)/i }))
         await waitFor(() => {
-            expect(screen.getByText('Select Cryovial Box')).toBeInTheDocument()
+            expect(screen.getByRole('heading', { name: 'Select Cryovial Box' })).toBeInTheDocument()
         })
-        fireEvent.click(screen.getByRole('button', { name: /BOX1 0 items/ }))
+        fireEvent.click(screen.getByRole('option', { name: /BOX1/i }))
 
         await waitFor(() => {
             expect(screen.getByText('Next: Resolve Containers')).not.toBeDisabled()
@@ -259,11 +259,11 @@ describe('ContainerMoveCryovial', () => {
         await waitFor(() => {
             expect(screen.getByText('Next: Resolve Containers')).toBeInTheDocument()
         })
-        fireEvent.click(screen.getByRole('button', { name: /BOX1/ }))
+        fireEvent.click(screen.getByRole('button', { name: /destination box: box1/i }))
         await waitFor(() => {
-            expect(screen.getByText('Select Cryovial Box')).toBeInTheDocument()
+            expect(screen.getByRole('heading', { name: 'Select Cryovial Box' })).toBeInTheDocument()
         })
-        fireEvent.click(screen.getByRole('button', { name: /BOX2 0 items/ }))
+        fireEvent.click(screen.getByRole('option', { name: /BOX2/i }))
 
         fireEvent.click(screen.getByText('Next: Resolve Containers'))
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, within } from '../../__tests__/helpers/render'
+import { render, screen, fireEvent, within, act } from '../../__tests__/helpers/render'
 import MicronixPlatePicker, { type MicronixPlate } from '../MicronixPlatePicker'
 import type { Location } from '../../lib/api/types'
 
@@ -121,14 +121,22 @@ describe('MicronixPlatePicker', () => {
     fireEvent.click(screen.getByRole('button', { name: /select target plate/i }))
     await screen.findByRole('heading', { name: 'Select Micronix Plate' })
     const searchInput = screen.getByPlaceholderText(/search by location/i)
-    fireEvent.change(searchInput, { target: { value: 'PLATE-001' } })
-    await screen.findByText('Matching plates')
-    const listbox = screen.getByRole('listbox', { name: /plate list/i })
-    expect(listbox).toBeInTheDocument()
-    const plateOption = within(listbox).getByRole('option', { name: /PLATE-001/i })
-    fireEvent.click(plateOption)
-    expect(onChange).toHaveBeenCalledWith('PLATE-001')
-    expect(screen.queryByRole('heading', { name: 'Select Micronix Plate' })).not.toBeInTheDocument()
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.change(searchInput, { target: { value: 'PLATE-001' } })
+      act(() => {
+        vi.advanceTimersByTime(250)
+      })
+      expect(screen.getByText('Matching plates')).toBeInTheDocument()
+      const listbox = screen.getByRole('listbox', { name: /plate list/i })
+      const plateOption = within(listbox).getByRole('option', { name: /PLATE-001/i })
+      fireEvent.click(plateOption)
+      expect(onChange).toHaveBeenCalledWith('PLATE-001')
+      expect(screen.queryByRole('heading', { name: 'Select Micronix Plate' })).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows Suggested from scan in inference order when multiple suggestions and no value', async () => {
@@ -166,15 +174,24 @@ describe('MicronixPlatePicker', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /select target plate/i }))
     await screen.findByRole('heading', { name: 'Select Micronix Plate' })
-    fireEvent.change(screen.getByPlaceholderText(/search by location/i), {
-      target: { value: 'PLATE' },
-    })
-    await screen.findByText('Matching plates')
-    const listbox = screen.getByRole('listbox', { name: /plate list/i })
-    const options = within(listbox).getAllByRole('option')
-    expect(options[0]).toHaveAccessibleName(/PLATE-002/i)
-    expect(options[1]).toHaveAccessibleName(/PLATE-001/i)
-    expect(options[options.length - 1]).toHaveAccessibleName(/PLATE-003-OTHER/i)
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.change(screen.getByPlaceholderText(/search by location/i), {
+        target: { value: 'PLATE' },
+      })
+      act(() => {
+        vi.advanceTimersByTime(250)
+      })
+      expect(screen.getByText('Matching plates')).toBeInTheDocument()
+      const listbox = screen.getByRole('listbox', { name: /plate list/i })
+      const options = within(listbox).getAllByRole('option')
+      expect(options[0]).toHaveAccessibleName(/PLATE-002/i)
+      expect(options[1]).toHaveAccessibleName(/PLATE-001/i)
+      expect(options[options.length - 1]).toHaveAccessibleName(/PLATE-003-OTHER/i)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows new plate label when value is not an existing plate', async () => {
@@ -242,10 +259,19 @@ describe('MicronixPlatePicker', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /select target plate/i }))
     await screen.findByRole('heading', { name: 'Select Micronix Plate' })
-    fireEvent.change(screen.getByPlaceholderText(/search by location/i), {
-      target: { value: 'BRAND-NEW' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: /create new plate: brand-new/i }))
-    expect(onChange).toHaveBeenCalledWith('BRAND-NEW')
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.change(screen.getByPlaceholderText(/search by location/i), {
+        target: { value: 'BRAND-NEW' },
+      })
+      act(() => {
+        vi.advanceTimersByTime(250)
+      })
+      fireEvent.click(screen.getByRole('button', { name: /create new plate: brand-new/i }))
+      expect(onChange).toHaveBeenCalledWith('BRAND-NEW')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
