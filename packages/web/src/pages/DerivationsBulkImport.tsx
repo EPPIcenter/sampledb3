@@ -1,25 +1,19 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { useNavigate, useSearchParams, Navigate, Link } from 'react-router-dom'
-import { derivationsApi } from '../lib/api/derivations';
-import type { BulkDerivationSettings, ValidationResult, DerivationCsvImportResultRow } from '../lib/api/derivations';
-import { collectionsApi } from '../lib/api/collections';
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate, Navigate, Link } from 'react-router-dom'
+import type { BulkDerivationSettings } from '../lib/api/derivations';
 import { specimenTypesApi } from '../lib/api/reference-data';
 import { getCollectionNameColumn } from '../lib/container-columns'
 import { generateDerivationsTemplate, type TemplateOptions } from '../lib/template-generator'
 import { useDerivationsBulkImportBootstrap } from '../hooks/useDerivationsBulkImportBootstrap'
-import { useDerivationsBulkCsvWorkflow } from '../hooks/useDerivationsBulkCsvWorkflow'
+import { useDerivationsBulkImportWorkflow } from '../hooks/useDerivationsBulkImportWorkflow'
 import { useUser } from '../contexts/UserContext'
 import LocationPicker from '../components/LocationPicker'
 import { PageError } from '../ui'
 import { DERIVATION_TYPES } from '../lib/derivation-types'
 import {
-  deriveMissingCollections,
   getRequiredAndOptionalColumns,
   parseCsvPreview,
-  parseFullCsv,
   resolveTemplateParentType,
-  serializeToCsv,
-  type MissingDerivationCollection,
   type ParentContainerType,
   type SourceType,
 } from '../lib/derivations-bulk-import'
@@ -36,28 +30,10 @@ const SOURCE_TYPES = [
   { value: 'study_subject', label: 'Study Subject (e.g., participant specimens)' },
 ]
 
-type UrlStep = 'upload' | 'collections' | 'review' | 'import'
-
 export default function DerivationsBulkImport() {
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const currentStep = (searchParams.get('step') as UrlStep | null) ?? 'upload'
   const { canWrite } = useUser()
 
-  const setCurrentStep = (step: UrlStep) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.set('step', step)
-      return next
-    })
-  }
-
-  if (!canWrite) {
-    return <Navigate to="/derivations" replace />
-  }
-
-  const [workflowLoading, setWorkflowLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [defaultsExpanded, setDefaultsExpanded] = useState(false)
 
   const [sourceType, setSourceType] = useState<SourceType>('control_batch')
@@ -76,7 +52,29 @@ export default function DerivationsBulkImport() {
     validateParentQuantity: false,
   })
 
-  const derivationsCsvWorkflow = useDerivationsBulkCsvWorkflow(settings)
+  const {
+    state,
+    loading: workflowLoading,
+    missingCollections,
+    loadCsvText,
+    failFileRead,
+    clearFile,
+    validateAndContinue,
+    setReviewCell,
+    setCollectionLocation,
+    goToStep,
+    createCollections,
+    importCsv,
+  } = useDerivationsBulkImportWorkflow({ settings })
+  const {
+    step: currentStep,
+    csvContent,
+    reviewHeaders,
+    reviewRows,
+    validationResult,
+    importResults,
+    error,
+  } = state
 
   const bootstrap = useDerivationsBulkImportBootstrap(settings.specimenTypeName)
   const { specimenTypes, units, allowedContainerTypes, bootstrapLoading, bootstrapError, containerTypesError } =
@@ -84,50 +82,7 @@ export default function DerivationsBulkImport() {
   const formDisabled = workflowLoading || bootstrapLoading
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [csvContent, setCsvContent] = useState<string>('')
-  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
-  const [importResults, setImportResults] = useState<DerivationCsvImportResultRow[] | null>(null)
   const importResultsRef = useRef<HTMLDivElement>(null)
-  /** Editable rows for review step; headers from parsed CSV. */
-  const [reviewHeaders, setReviewHeaders] = useState<string[]>([])
-  const [reviewRows, setReviewRows] = useState<Record<string, string>[]>([])
-
-  const effectiveStep: UrlStep =
-    currentStep !== 'upload' && !csvContent ? 'upload' : currentStep
-
-  useEffect(() => {
-    if (effectiveStep === 'upload' && currentStep !== 'upload') {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev)
-        next.set('step', 'upload')
-        return next
-      })
-    }
-  }, [effectiveStep, currentStep, setSearchParams])
-
-  // Pure derivation: compute base list from validationResult during render
-  const baseMissingCollections = useMemo(
-    () => deriveMissingCollections(validationResult),
-    [validationResult]
-  )
-
-  // User-driven updates (locationId, status, error) keyed by index
-  const [userUpdates, setUserUpdates] = useState<Record<number, Partial<MissingDerivationCollection>>>({})
-  const prevValidationResultRef = useRef<ValidationResult | null>(null)
-  const validationResultChanged = validationResult !== prevValidationResultRef.current
-  if (validationResultChanged) {
-    prevValidationResultRef.current = validationResult
-    setUserUpdates({})
-  }
-
-  // Display list: merge base with user overrides (skip overrides when validation just changed to avoid stale flash)
-  const missingCollections = useMemo(
-    () =>
-      validationResultChanged
-        ? baseMissingCollections
-        : baseMissingCollections.map((item, i) => ({ ...item, ...userUpdates[i] })),
-    [baseMissingCollections, userUpdates, validationResultChanged]
-  )
 
   useEffect(() => {
     if (
@@ -142,8 +97,6 @@ export default function DerivationsBulkImport() {
     }
   }, [settings.containerType, allowedContainerTypes])
 
-  // Synchronize viewport with DOM: scroll to results section after import completes.
-  // (Effect is appropriate here: we react to state-driven DOM update, not the click itself.)
   useEffect(() => {
     if (importResults != null) {
       importResultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -155,143 +108,29 @@ export default function DerivationsBulkImport() {
     if (!file) return
     const reader = new FileReader()
     reader.onload = (event) => {
-      const text = (event.target?.result as string) || ''
-      setCsvContent(text)
-      setError(null)
-      setValidationResult(null)
-      setImportResults(null)
+      loadCsvText((event.target?.result as string) || '')
     }
-    reader.onerror = () => setError('Failed to read file')
+    reader.onerror = () => failFileRead()
     reader.readAsText(file)
   }
 
   const handleClearFile = () => {
-    setCsvContent('')
-    setValidationResult(null)
-    setImportResults(null)
-    setReviewHeaders([])
-    setReviewRows([])
-    setError(null)
+    clearFile()
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
 
-  const validateCsv = async (): Promise<ValidationResult | null> => {
-    if (!csvContent.trim()) {
-      setError('Please upload a CSV file')
-      return null
-    }
-    setWorkflowLoading(true)
-    setError(null)
-    try {
-      const result = await derivationsCsvWorkflow.validateCsv(csvContent)
-      setValidationResult(result)
-      return result
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to validate CSV')
-      return null
-    } finally {
-      setWorkflowLoading(false)
-    }
+  const handleValidateAndContinue = (e: React.FormEvent) => {
+    void validateAndContinue(e)
   }
 
-  const handleValidateAndContinue = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const result = await validateCsv()
-    if (!result) return
-    const { headers, rows } = parseFullCsv(csvContent)
-    setReviewHeaders(headers)
-    setReviewRows(rows.map((r) => ({ ...r })))
-    const hasMissingCollections = result.collections.some(
-      (c) =>
-        c.status === 'will_be_created' &&
-        (c.containerType === 'micronix_tube' || c.containerType === 'cryovial_tube')
-    )
-    if (hasMissingCollections) {
-      setCurrentStep('collections')
-    } else {
-      setCurrentStep('review')
-    }
+  const handleImport = () => {
+    void importCsv()
   }
 
-  const getCsvForImport = (): string => {
-    if (reviewHeaders.length > 0 && reviewRows.length > 0) {
-      return serializeToCsv(reviewHeaders, reviewRows)
-    }
-    return csvContent
-  }
-
-  const handleImport = async () => {
-    const csvToSend = getCsvForImport()
-    if (!csvToSend.trim()) {
-      setError('Please upload a CSV file')
-      return
-    }
-    setWorkflowLoading(true)
-    setError(null)
-    try {
-      const response = await derivationsCsvWorkflow.importCsv(csvToSend)
-      setImportResults(response.rows)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to import derivations')
-    } finally {
-      setWorkflowLoading(false)
-    }
-  }
-
-  const handleCreateCollections = async () => {
-    if (missingCollections.length === 0) return
-    let allSuccess = true
-
-    for (let i = 0; i < missingCollections.length; i++) {
-      const coll = missingCollections[i]
-      if (coll.status === 'success' || !coll.locationId) continue
-
-      setUserUpdates((prev) => ({ ...prev, [i]: { ...prev[i], status: 'creating' } }))
-
-      try {
-        const name =
-          coll.name ||
-          (coll.barcode ? `Collection-${coll.barcode}` : `Collection-${Date.now()}`)
-        const barcode = coll.barcode
-
-        if (coll.containerType === 'micronix_tube') {
-          await collectionsApi.createMicronixPlate({
-            name,
-            locationId: coll.locationId!,
-            barcode,
-          })
-        } else {
-          await collectionsApi.createCryovialBox({
-            name,
-            locationId: coll.locationId!,
-            barcode,
-          })
-        }
-
-        setUserUpdates((prev) => ({ ...prev, [i]: { ...prev[i], status: 'success', name } }))
-      } catch (err: unknown) {
-        const errObj = err as { response?: { data?: { error?: string } } }
-        setUserUpdates((prev) => ({
-          ...prev,
-          [i]: {
-            ...prev[i],
-            status: 'error',
-            error: errObj.response?.data?.error || 'Failed to create collection',
-          },
-        }))
-        allSuccess = false
-      }
-    }
-
-    if (allSuccess) {
-      setError(null)
-      const { headers, rows } = parseFullCsv(csvContent)
-      setReviewHeaders(headers)
-      setReviewRows(rows.map((r) => ({ ...r })))
-      setCurrentStep('review')
-    }
+  const handleCreateCollections = () => {
+    void createCollections()
   }
 
   const downloadTemplate = async () => {
@@ -335,6 +174,10 @@ export default function DerivationsBulkImport() {
   const warningCount =
     importResults?.filter((r) => r.warnings && r.warnings.length > 0).length ?? 0
 
+  if (!canWrite) {
+    return <Navigate to="/derivations" replace />
+  }
+
   return (
     <div className="storage-page">
       <div className="container mx-auto px-4 py-8 relative z-10">
@@ -349,28 +192,28 @@ export default function DerivationsBulkImport() {
         <div className="storage-card p-4 mb-6 storage-reveal storage-reveal-1">
           <div className="storage-step-indicator">
             <div
-              className={`storage-step-item ${effectiveStep === 'upload' ? 'storage-step-item--active' : ''}`}
+              className={`storage-step-item ${currentStep === 'upload' ? 'storage-step-item--active' : ''}`}
             >
               <span className="storage-step-item__circle">1</span>
               <span>Upload</span>
             </div>
             <div className="storage-step-connector" />
             <div
-              className={`storage-step-item ${effectiveStep === 'collections' ? 'storage-step-item--active' : ''}`}
+              className={`storage-step-item ${currentStep === 'collections' ? 'storage-step-item--active' : ''}`}
             >
               <span className="storage-step-item__circle">2</span>
               <span>Collections</span>
             </div>
             <div className="storage-step-connector" />
             <div
-              className={`storage-step-item ${effectiveStep === 'review' ? 'storage-step-item--active' : ''}`}
+              className={`storage-step-item ${currentStep === 'review' ? 'storage-step-item--active' : ''}`}
             >
               <span className="storage-step-item__circle">3</span>
               <span>Review & Edit</span>
             </div>
             <div className="storage-step-connector" />
             <div
-              className={`storage-step-item ${effectiveStep === 'import' ? 'storage-step-item--active' : ''}`}
+              className={`storage-step-item ${currentStep === 'import' ? 'storage-step-item--active' : ''}`}
             >
               <span className="storage-step-item__circle">4</span>
               <span>Import</span>
@@ -406,7 +249,7 @@ export default function DerivationsBulkImport() {
         )}
 
         {/* Step: Upload */}
-        {effectiveStep === 'upload' && (
+        {currentStep === 'upload' && (
           <div className="storage-card p-6 storage-reveal storage-reveal-2">
             <form onSubmit={handleValidateAndContinue} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -709,14 +552,18 @@ export default function DerivationsBulkImport() {
                     <div className="border-t border-app-border pt-3 mt-1 space-y-1.5 text-app-text-muted">
                       <p>
                         <span className="font-medium text-app-text">
-                          {settings.containerType
-                            ? `${getCollectionNameColumn(settings.containerType)!}${settings.containerType === 'paper' ? '' : ' or collection_barcode'}`
-                            : 'plate_name / box_name / bag_name (based on container_type)'}
+                          {settings.containerType === 'paper'
+                            ? 'box_name or bag_name'
+                            : settings.containerType
+                              ? `${getCollectionNameColumn(settings.containerType)!} or collection_barcode`
+                              : 'plate_name / box_name / bag_name (based on container_type)'}
                         </span>
                         {' '}
-                        — Required collection identifier. For tube types, collection barcode can also be used. Collections are created if they don&apos;t exist.
+                        — Required collection identifier. For tube types, collection barcode can also be used. For paper, provide exactly one of box_name or bag_name, plus sheet_name. Collections are created if they don&apos;t exist.
                       </p>
+                      {settings.containerType !== 'paper' && (
                       <p><span className="font-medium text-app-text">position</span> — Position in the collection (e.g. A01, B02).</p>
+                      )}
                       <p><span className="font-medium text-app-text">quantity, unit_symbol, quantity_used, reduce_parent_quantity</span> — Optional. You can set these in Import settings (same for all rows) or provide columns in the CSV (per row). Use <code className="bg-app-surface px-1 rounded text-xs">quantity_used</code> and <code className="bg-app-surface px-1 rounded text-xs">reduce_parent_quantity</code> to reduce the parent&apos;s remaining quantity (e.g. DBS spot count). Not a blocker if missing or if data is imperfect.</p>
                       <p className="pt-1"><span className="font-medium text-app-text">parent_specimen_type_name</span> is the <em>parent</em> specimen type (e.g. DBS, Whole Blood). The <em>derived</em> specimen type (e.g. DNA (DBS)) is set in Import settings or in the <code className="bg-app-surface px-1 rounded text-xs">specimen_type_name</code> column.</p>
                     </div>
@@ -827,7 +674,7 @@ export default function DerivationsBulkImport() {
         )}
 
         {/* Step: Collections */}
-        {effectiveStep === 'collections' && missingCollections.length > 0 && (
+        {currentStep === 'collections' && missingCollections.length > 0 && (
           <div className="space-y-6">
             <div className="storage-card p-6 storage-reveal storage-reveal-2">
               <h2 className="storage-section-title text-xl font-semibold mb-2">
@@ -875,10 +722,7 @@ export default function DerivationsBulkImport() {
                       <LocationPicker
                         value={coll.locationId ?? null}
                         onChange={(locationId) => {
-                          setUserUpdates((prev) => ({
-                            ...prev,
-                            [index]: { ...prev[index], locationId: locationId ?? null },
-                          }))
+                          setCollectionLocation(index, locationId ?? null)
                         }}
                         filterCollectionsOnly
                         disabled={coll.status === 'creating' || coll.status === 'success'}
@@ -890,7 +734,7 @@ export default function DerivationsBulkImport() {
               <div className="flex gap-3 mt-4 pt-4 border-t">
                 <button
                   type="button"
-                  onClick={() => setCurrentStep('upload')}
+                  onClick={() => goToStep('upload')}
                   className="storage-btn-secondary"
                   disabled={formDisabled}
                 >
@@ -917,7 +761,7 @@ export default function DerivationsBulkImport() {
         )}
 
         {/* Step: Review & Edit */}
-        {effectiveStep === 'review' && reviewHeaders.length > 0 && (
+        {currentStep === 'review' && reviewHeaders.length > 0 && (
           <div className="space-y-6">
             <div className="storage-card p-6 storage-reveal storage-reveal-2">
               <h2 className="storage-section-title text-xl font-semibold mb-2">
@@ -948,12 +792,7 @@ export default function DerivationsBulkImport() {
                               type="text"
                               value={row[header] ?? ''}
                               onChange={(e) => {
-                                const value = e.target.value
-                                setReviewRows((prev) =>
-                                  prev.map((r, i) =>
-                                    i === rowIndex ? { ...r, [header]: value } : r
-                                  )
-                                )
+                                setReviewCell(rowIndex, header, e.target.value)
                               }}
                               className="w-full px-2 py-1 border border-app-border rounded text-app-text focus:ring-1 focus:ring-app-accent focus:border-app-accent"
                             />
@@ -968,7 +807,7 @@ export default function DerivationsBulkImport() {
                 <button
                   type="button"
                   onClick={() =>
-                    setCurrentStep(
+                    goToStep(
                       missingCollections.length > 0 ? 'collections' : 'upload'
                     )
                   }
@@ -978,9 +817,8 @@ export default function DerivationsBulkImport() {
                 </button>
                 <button
                   type="button"
-                  onClick={async () => {
-                    await handleImport()
-                    setCurrentStep('import')
+                  onClick={() => {
+                    void handleImport()
                   }}
                   disabled={formDisabled}
                   className="storage-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
@@ -993,7 +831,7 @@ export default function DerivationsBulkImport() {
         )}
 
         {/* Step: Import (Create derivations or result) */}
-        {effectiveStep === 'import' && validationResult && (
+        {currentStep === 'import' && validationResult && (
           <div className="space-y-6">
             <div className="storage-card p-6 storage-reveal storage-reveal-2">
               <h2 className="storage-section-title text-xl font-semibold mb-4">
@@ -1153,7 +991,7 @@ export default function DerivationsBulkImport() {
                 <div className="flex gap-3 pt-4 border-t">
                   <button
                     type="button"
-                    onClick={() => setCurrentStep('upload')}
+                    onClick={() => goToStep('upload')}
                     className="storage-btn-secondary"
                     disabled={formDisabled}
                   >
