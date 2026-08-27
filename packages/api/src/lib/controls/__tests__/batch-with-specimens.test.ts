@@ -163,7 +163,7 @@ describe('batch-with-specimens', () => {
             },
           ],
         })
-      ).rejects.toThrow(/sheet_name is required for paper/i)
+      ).rejects.toThrow(/Sheet name is required for papers/i)
     })
 
     it('throws when container type is not allowed for specimen type', async () => {

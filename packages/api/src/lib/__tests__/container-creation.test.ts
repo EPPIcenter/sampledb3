@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { setupTestDatabase, cleanupTestDatabase } from '../../__tests__/helpers/db-setup'
 import type { Database } from '../../db/client'
-import { validateContainerData, createContainerForSpecimen } from '../container-creation'
+import { validateContainerWriteFields, createContainerForSpecimen } from '../container-creation'
 import {
   createTestSpecimenType,
   createTestStorageType,
@@ -41,34 +41,32 @@ describe('container-creation', () => {
     }
   })
 
-  describe('validateContainerData', () => {
+  describe('validateContainerWriteFields', () => {
     describe('micronix_tube', () => {
-      it('returns error when barcode is missing', async () => {
-        const result = await validateContainerData(testDb, 'micronix_tube', {
+      it('returns error when barcode is missing', () => {
+        const result = validateContainerWriteFields({
           containerType: 'micronix_tube',
-          collectionName: 'Plate1',
-          position: 'A01',
+          barcode: '',
+          collection: { type: 'micronix_plate', name: 'Plate1', position: 'A01' },
         })
         expect(result.valid).toBe(false)
         expect(result.error).toBe('Barcode is required for micronix tubes')
       })
 
-      it('returns error when collection name and barcode are missing', async () => {
-        const result = await validateContainerData(testDb, 'micronix_tube', {
+      it('returns error when collection name and barcode are missing', () => {
+        const result = validateContainerWriteFields({
           containerType: 'micronix_tube',
           barcode: 'MT001',
-          position: 'A01',
         })
         expect(result.valid).toBe(false)
         expect(result.error).toBe('Collection name or barcode is required')
       })
 
-      it('returns error when position is missing', async () => {
-        const result = await validateContainerData(testDb, 'micronix_tube', {
+      it('returns error when position is missing', () => {
+        const result = validateContainerWriteFields({
           containerType: 'micronix_tube',
           barcode: 'MT001',
-          collectionName: 'Plate1',
-          position: '',
+          collection: { type: 'micronix_plate', name: 'Plate1', position: '' },
         })
         expect(result.valid).toBe(false)
         expect(result.error).toContain('Position')
@@ -76,20 +74,18 @@ describe('container-creation', () => {
     })
 
     describe('cryovial_tube', () => {
-      it('returns error when collection name and barcode are missing', async () => {
-        const result = await validateContainerData(testDb, 'cryovial_tube', {
+      it('returns error when collection name and barcode are missing', () => {
+        const result = validateContainerWriteFields({
           containerType: 'cryovial_tube',
-          position: 'A01',
         })
         expect(result.valid).toBe(false)
         expect(result.error).toBe('Collection name or barcode is required')
       })
 
-      it('returns error when position is empty', async () => {
-        const result = await validateContainerData(testDb, 'cryovial_tube', {
+      it('returns error when position is empty', () => {
+        const result = validateContainerWriteFields({
           containerType: 'cryovial_tube',
-          collectionName: 'Box1',
-          position: '   ',
+          collection: { type: 'cryovial_box', name: 'Box1', position: '   ' },
         })
         expect(result.valid).toBe(false)
         expect(result.error).toContain('Position')
@@ -97,50 +93,49 @@ describe('container-creation', () => {
     })
 
     describe('paper', () => {
-      it('returns error when collection name is missing', async () => {
-        const result = await validateContainerData(testDb, 'paper', {
+      it('returns error when collection name is missing', () => {
+        const result = validateContainerWriteFields({
           containerType: 'paper',
-          sheetName: 'L1',
+          collection: { type: 'sheet', name: 'L1' },
         })
         expect(result.valid).toBe(false)
         expect(result.error).toBe('Collection name is required for papers')
       })
 
-      it('returns error when sheet name is missing', async () => {
-        const result = await validateContainerData(testDb, 'paper', {
+      it('returns error when sheet name is missing', () => {
+        const result = validateContainerWriteFields({
           containerType: 'paper',
-          collectionName: 'Sheet1',
+          collection: { type: 'sheet', parent: { type: 'box', name: 'Sheet1' } },
         })
         expect(result.valid).toBe(false)
         expect(result.error).toBe('Sheet name is required for papers')
       })
 
-      it('rejects barcode on paper inbound path', async () => {
-        const result = await validateContainerData(testDb, 'paper', {
+      it('rejects barcode on paper inbound path', () => {
+        const result = validateContainerWriteFields({
           containerType: 'paper',
-          collectionName: 'Box1',
-          sheetName: 'S1',
+          collection: { type: 'sheet', name: 'S1', parent: { type: 'box', name: 'Box1' } },
           barcode: 'P-1',
-        })
+        } as Parameters<typeof validateContainerWriteFields>[0])
         expect(result.valid).toBe(false)
         expect(result.error).toContain('sublabel')
       })
     })
 
     describe('static_well', () => {
-      it('returns error when collection name and barcode are missing', async () => {
-        const result = await validateContainerData(testDb, 'static_well', {
+      it('returns error when collection name and barcode are missing', () => {
+        const result = validateContainerWriteFields({
           containerType: 'static_well',
-          position: 'A01',
+          collection: { type: 'micronix_plate', position: 'A01' },
         })
         expect(result.valid).toBe(false)
         expect(result.error).toBe('Collection name or barcode is required')
       })
 
-      it('returns error when position is missing', async () => {
-        const result = await validateContainerData(testDb, 'static_well', {
+      it('returns error when position is missing', () => {
+        const result = validateContainerWriteFields({
           containerType: 'static_well',
-          collectionName: 'Plate1',
+          collection: { type: 'micronix_plate', name: 'Plate1' },
         })
         expect(result.valid).toBe(false)
         expect(result.error).toContain('Position')
