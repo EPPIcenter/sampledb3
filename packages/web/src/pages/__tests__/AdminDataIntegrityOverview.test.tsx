@@ -16,6 +16,7 @@ function emptyIntegrityReport() {
     storageContainerTagOrphans: [],
     duplicateBarcodes: [],
     locationPathInconsistencies: [],
+    containersWithNoGridPosition: [],
   }
 }
 
@@ -39,6 +40,20 @@ describe('AdminDataIntegrityOverview', () => {
     await waitFor(() => {
       expect(screen.getByText('Empty collections')).toBeInTheDocument()
       expect(screen.getByText('Integrity report')).toBeInTheDocument()
+    })
+  })
+
+  it('does not count containers with no grid position as integrity issues', async () => {
+    vi.mocked(adminApi.getIntegrityReport).mockResolvedValue({
+      ...emptyIntegrityReport(),
+      duplicateBarcodes: [{ barcode: 'DUP', containerType: 'micronix_tube', ids: [1, 2] }],
+      containersWithNoGridPosition: [
+        { id: 9, containerType: 'micronix_tube', collectionId: 3 },
+      ],
+    })
+    await render(<AdminDataIntegrityOverview />)
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /integrity report/i })).toHaveTextContent('1')
     })
   })
 

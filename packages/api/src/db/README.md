@@ -6,7 +6,9 @@ See [ADR-0003: SQLite schema evolution](../../../docs/adr/0003-sqlite-schema-evo
 
 ## Opening a database
 
-Use `openOperationalDatabase(optionalPath?)` from the client module. It resolves the file path, enables WAL, runs schema evolution, and returns Drizzle + raw `bun:sqlite` handles. Importing the client module does **not** open a connection.
+Use `openOperationalDatabase(optionalPath?)` from the client module. It resolves the file path, enables WAL, turns on foreign keys, runs schema evolution, and returns Drizzle + raw `bun:sqlite` handles. Importing the client module does **not** open a connection.
+
+Multi-statement writes that `await` must use `withWriteTransaction` from `write-transaction.ts`. Drizzle's bun-sqlite `db.transaction(async () => …)` commits when the callback first yields; it does not await the returned Promise.
 
 Tests should use the same entry point (e.g. `openOperationalDatabase(':memory:')` via `setupTestDatabase()`).
 

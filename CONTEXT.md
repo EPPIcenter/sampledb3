@@ -124,8 +124,12 @@ A place in the storage hierarchy where collections are kept (e.g. freezer, shelf
 _Avoid_: Site (unless referring to an external facility), storage (too vague)
 
 **Container placement**:
-Where a **Container** sits in the physical storage hierarchy — its position within a **Collection**, the collection it belongs to, and the **Location** path where that collection is stored. For tubes and wells, the immediate **Collection** is a plate or box and may include a grid position. For **Paper** containers, the immediate **Collection** is a **Sheet** (within a box or bag). Distinct from specimen provenance (**Source**, study/control context) and from container identity metadata (barcodes, **Tags**).
+Where a **Container** sits in the physical storage hierarchy — its **grid position** within a **Collection**, the collection it belongs to, and the **Location** path where that collection is stored. For tubes and wells, the immediate **Collection** is a plate or box. For **Paper** containers, the immediate **Collection** is a **Sheet** (within a box or bag). Distinct from specimen provenance (**Source**, study/control context) and from container identity metadata (barcodes, **Tags**).
 _Avoid_: Enrichment (implementation term); conflating placement with specimen or source lookups; placing paper directly on a box or bag without a sheet
+
+**Grid position**:
+The well or slot of a tube or well **Container** in its plate or box (e.g. A01). Optional: a tube or well may belong to a **Collection** with no grid position (legacy rows). At most one Container occupies a given grid position in a Collection; a missing position occupies no cell. Not applicable to **Paper**.
+_Avoid_: Well (as the domain term); treating a missing position as occupying a slot; requiring every tube to have a position before it can exist in a Collection
 
 ### Export
 

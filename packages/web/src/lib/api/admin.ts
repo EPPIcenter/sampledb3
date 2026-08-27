@@ -81,6 +81,12 @@ export interface LocationPathInconsistencyItem {
   expectedPath: string
 }
 
+export interface ContainerWithNoGridPositionItem {
+  id: number
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'static_well'
+  collectionId: number
+}
+
 export interface IntegrityReport {
   emptyCollections: EmptyCollectionItem[]
   collectionsWithMissingLocation: CollectionWithMissingLocationItem[]
@@ -93,6 +99,7 @@ export interface IntegrityReport {
   storageContainerTagOrphans: StorageContainerTagOrphanItem[]
   duplicateBarcodes: DuplicateBarcodeItem[]
   locationPathInconsistencies: LocationPathInconsistencyItem[]
+  containersWithNoGridPosition: ContainerWithNoGridPositionItem[]
 }
 
 export interface CollectionWithMissingLocationItem {

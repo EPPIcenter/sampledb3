@@ -12,6 +12,7 @@ import {
 } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
 import { resolveCollection, type CollectionType } from './collections/collection-resolve'
+import { checkGridPositionOccupancy } from './container-occupancy'
 
 /** Staging prefix for position updates so swaps on one plate do not violate UNIQUE(collection_id, position) mid-transaction. */
 const MOVE_STAGING_PREFIX = '__mv_'
@@ -199,28 +200,21 @@ export async function checkPositionAvailability(
   position: string | null,
   excludeContainerIds: number[] = []
 ): Promise<{ occupied: boolean; containerId: number | null; containerType: ContainerType | null }> {
-  if (!position) return { occupied: false, containerId: null, containerType: null }
-
-  switch (collectionType) {
-    case 'micronix_plate': {
-      const tubeRec = await database.select({ id: micronixTube.id }).from(micronixTube).where(and(eq(micronixTube.collectionId, collectionId), eq(micronixTube.position, position))).get()
-      if (tubeRec && !excludeContainerIds.includes(tubeRec.id)) return { occupied: true, containerId: tubeRec.id, containerType: 'micronix_tube' }
-
-      const well = await database.select({ id: staticWell.id }).from(staticWell).where(and(eq(staticWell.collectionId, collectionId), eq(staticWell.position, position))).get()
-      if (well && !excludeContainerIds.includes(well.id)) return { occupied: true, containerId: well.id, containerType: 'static_well' }
-      break
-    }
-    case 'cryovial_box': {
-      const cryovial = await database.select({ id: cryovialTube.id }).from(cryovialTube).where(and(eq(cryovialTube.collectionId, collectionId), eq(cryovialTube.position, position))).get()
-      if (cryovial && !excludeContainerIds.includes(cryovial.id)) return { occupied: true, containerId: cryovial.id, containerType: 'cryovial_tube' }
-      break
-    }
-    case 'sheet':
-      // Paper containers have no grid position; placement is sheet membership only.
-      break
+  if (collectionType !== 'micronix_plate' && collectionType !== 'cryovial_box') {
+    return { occupied: false, containerId: null, containerType: null }
   }
 
-  return { occupied: false, containerId: null, containerType: null }
+  const result = await checkGridPositionOccupancy(database, {
+    collectionKind: collectionType,
+    collectionId,
+    position,
+    excludeContainerIds,
+  })
+  return {
+    occupied: result.occupied,
+    containerId: result.containerId,
+    containerType: result.occupyingType,
+  }
 }
 
 export interface ContainerIdentifier {

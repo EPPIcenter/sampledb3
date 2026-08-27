@@ -385,6 +385,37 @@ export default function AdminDataIntegrityReport() {
           </table>
         </div>
       </IntegritySection>
+
+      <IntegritySection
+        title="Containers with no grid position"
+        count={report.containersWithNoGridPosition.length}
+        description="Tubes or wells in a collection with no well or slot assigned. Legacy rows are allowed; they do not occupy a grid position. Assign a position via edit or scan move when you know the well."
+      >
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-full">
+            <thead>
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Container ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-app-text-muted uppercase tracking-wider">Collection ID</th>
+              </tr>
+            </thead>
+            <tbody className="bg-app-card divide-y divide-app-border">
+              {report.containersWithNoGridPosition.map((row) => (
+                <tr key={`${row.containerType}-${row.id}`} className="hover:bg-app-surface">
+                  <td className="px-4 py-3 text-sm">
+                    <Link to={`/containers/${row.id}`} className="text-[rgb(var(--app-accent))] hover:underline">
+                      {row.id}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{row.containerType}</td>
+                  <td className="px-4 py-3 text-sm">{row.collectionId}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </IntegritySection>
     </div>
   )
 }

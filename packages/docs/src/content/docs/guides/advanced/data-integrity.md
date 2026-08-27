@@ -27,6 +27,7 @@ The **Integrity report** sub-page lists rows that failed one or more checks. Eac
 - **Storage container tag orphans** — tag links that reference a deleted container or tag.
 - **Duplicate barcodes (micronix)** — micronix tubes that share the same barcode (schema expects unique barcodes). Duplicate barcodes on cryovial tubes are **not** treated as a data integrity issue.
 - **Location path inconsistencies** — locations whose stored `path` does not match the path computed from the parent chain.
+- **Containers with no grid position** — tubes or wells in a collection with no well or slot. Legacy rows are allowed and do **not** count toward the overview issue total. Assign a position via edit or scan move when the well is known.
 
 ## Empty collections
 
@@ -56,7 +57,7 @@ A **collection** is a container that can hold items: micronix plates, cryovial b
 Admins can call the data-audit API directly:
 
 - **GET** `/api/admin/data-audit/empty-collections` — returns `{ collections: [...] }` for all empty collections (type, id, name, locationId, locationPath).
-- **GET** `/api/admin/data-audit/integrity-report` — returns the full integrity report: `emptyCollections`, `collectionsWithMissingLocation`, `containersWithMissingSpecimen`, `subtypeOrphans`, `sheetsWithMissingBoxOrBag`, `specimensWithMissingSubjectOrBatch`, `studySubjectsWithMissingStudy`, `derivationBrokenRefs`, `storageContainerTagOrphans`, `duplicateBarcodes`, `locationPathInconsistencies`. Each field is an array of the corresponding item type.
+- **GET** `/api/admin/data-audit/integrity-report` — returns the full integrity report: `emptyCollections`, `collectionsWithMissingLocation`, `containersWithMissingSpecimen`, `subtypeOrphans`, `sheetsWithMissingBoxOrBag`, `specimensWithMissingSubjectOrBatch`, `studySubjectsWithMissingStudy`, `derivationBrokenRefs`, `storageContainerTagOrphans`, `duplicateBarcodes`, `locationPathInconsistencies`, `containersWithNoGridPosition`. Each field is an array of the corresponding item type.
 - **POST** `/api/admin/data-audit/empty-collections/delete` — body: `{ ids: { micronix_plate?: number[], cryovial_box?: number[], box?: number[], bag?: number[] } }`. Deletes only collections that are currently empty; returns `{ deleted: number, errors?: string[] }`.
 
 All routes require an authenticated admin session (cookie or credentials).

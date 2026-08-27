@@ -22,6 +22,7 @@ import {
   type ContainerCsvRow,
 } from '@sampledb/contract'
 import { createDerivation, type CreateDerivationInput } from './derivations'
+import { withWriteTransaction } from '../db/write-transaction'
 import { resolveParentContainerId } from './derivations/parent-container-resolver'
 
 /**
@@ -639,7 +640,7 @@ export async function importDerivationsFromCsv(
     let transactionError: unknown = null
     
     try {
-      await database.transaction(async (tx) => {
+      await withWriteTransaction(database, async (tx) => {
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i]
           try {

@@ -335,6 +335,12 @@ export interface LocationPathInconsistencyItem {
   expectedPath: string
 }
 
+export interface ContainerWithNoGridPositionItem {
+  id: number
+  containerType: 'micronix_tube' | 'cryovial_tube' | 'static_well'
+  collectionId: number
+}
+
 export interface IntegrityReport {
   emptyCollections: EmptyCollectionItem[]
   collectionsWithMissingLocation: CollectionWithMissingLocationItem[]
@@ -347,6 +353,7 @@ export interface IntegrityReport {
   storageContainerTagOrphans: StorageContainerTagOrphanItem[]
   duplicateBarcodes: DuplicateBarcodeItem[]
   locationPathInconsistencies: LocationPathInconsistencyItem[]
+  containersWithNoGridPosition: ContainerWithNoGridPositionItem[]
 }
 
 /** Collections (plates, boxes, bags) whose locationId does not exist in location. */
@@ -489,6 +496,30 @@ export async function listLocationPathInconsistencies(db: Database): Promise<Loc
   return results
 }
 
+/** Tube or well Containers in a Collection with no grid position. Informational — not a constraint violation. */
+export async function listContainersWithNoGridPosition(db: Database): Promise<ContainerWithNoGridPositionItem[]> {
+  const results: ContainerWithNoGridPositionItem[] = []
+  const micronix = await db.select({ id: micronixTube.id, collectionId: micronixTube.collectionId, position: micronixTube.position }).from(micronixTube)
+  for (const row of micronix) {
+    if (row.position == null || row.position.trim() === '') {
+      results.push({ id: row.id, containerType: 'micronix_tube', collectionId: row.collectionId })
+    }
+  }
+  const cryovial = await db.select({ id: cryovialTube.id, collectionId: cryovialTube.collectionId, position: cryovialTube.position }).from(cryovialTube)
+  for (const row of cryovial) {
+    if (row.position == null || row.position.trim() === '') {
+      results.push({ id: row.id, containerType: 'cryovial_tube', collectionId: row.collectionId })
+    }
+  }
+  const wells = await db.select({ id: staticWell.id, collectionId: staticWell.collectionId, position: staticWell.position }).from(staticWell)
+  for (const row of wells) {
+    if (row.position == null || row.position.trim() === '') {
+      results.push({ id: row.id, containerType: 'static_well', collectionId: row.collectionId })
+    }
+  }
+  return results
+}
+
 /** Build full integrity report (all checks). */
 export async function getIntegrityReport(db: Database): Promise<IntegrityReport> {
   const [
@@ -503,6 +534,7 @@ export async function getIntegrityReport(db: Database): Promise<IntegrityReport>
     storageContainerTagOrphans,
     duplicateBarcodes,
     locationPathInconsistencies,
+    containersWithNoGridPosition,
   ] = await Promise.all([
     listEmptyCollections(db),
     listCollectionsWithMissingLocation(db),
@@ -515,6 +547,7 @@ export async function getIntegrityReport(db: Database): Promise<IntegrityReport>
     listStorageContainerTagOrphans(db),
     listDuplicateBarcodes(db),
     listLocationPathInconsistencies(db),
+    listContainersWithNoGridPosition(db),
   ])
   return {
     emptyCollections,
@@ -528,5 +561,6 @@ export async function getIntegrityReport(db: Database): Promise<IntegrityReport>
     storageContainerTagOrphans,
     duplicateBarcodes,
     locationPathInconsistencies,
+    containersWithNoGridPosition,
   }
 }

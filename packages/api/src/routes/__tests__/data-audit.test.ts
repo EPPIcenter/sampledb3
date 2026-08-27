@@ -244,6 +244,7 @@ describe('Data audit API', () => {
         storageContainerTagOrphans: unknown[]
         duplicateBarcodes: unknown[]
         locationPathInconsistencies: unknown[]
+        containersWithNoGridPosition: unknown[]
       }
       expect(Array.isArray(data.emptyCollections)).toBe(true)
       expect(Array.isArray(data.collectionsWithMissingLocation)).toBe(true)
@@ -256,6 +257,7 @@ describe('Data audit API', () => {
       expect(Array.isArray(data.storageContainerTagOrphans)).toBe(true)
       expect(Array.isArray(data.duplicateBarcodes)).toBe(true)
       expect(Array.isArray(data.locationPathInconsistencies)).toBe(true)
+      expect(Array.isArray(data.containersWithNoGridPosition)).toBe(true)
     })
 
     it('includes containers with missing specimen in report', async () => {
@@ -461,6 +463,33 @@ describe('Data audit API', () => {
       expect(match!.storedPath).toBe('WrongPath')
       expect(match!.expectedPath).toContain('RootPath')
       expect(match!.expectedPath).toContain('ChildPath')
+    })
+
+    it('includes containers with no grid position and does not treat them as missing elsewhere', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'ShelfPos', description: '' })
+      const loc = await createTestLocation(ctx.db, { name: 'LocPos', storageTypeId: String(storageType.id), canContainCollections: true })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'PlateNoPos', locationId: loc.id })
+      const specType = await createTestSpecimenType(ctx.db, { name: 'STNoPos' })
+      const spec = await createTestSpecimen(ctx.db, specType.id)
+      const container = await createTestStorageContainer(ctx.db, { specimenId: spec.id })
+      await ctx.db.insert(micronixTube).values({
+        id: container.id,
+        collectionId: plate.id,
+        barcode: 'BC-nopos',
+        position: null,
+      })
+
+      const res = await ctx.request('/api/admin/data-audit/integrity-report', {
+        method: 'GET',
+      })
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as {
+        containersWithNoGridPosition: Array<{ id: number; containerType: string; collectionId: number }>
+      }
+      const match = data.containersWithNoGridPosition.find((row) => row.id === container.id)
+      expect(match).toBeDefined()
+      expect(match!.containerType).toBe('micronix_tube')
+      expect(match!.collectionId).toBe(plate.id)
     })
   })
 })

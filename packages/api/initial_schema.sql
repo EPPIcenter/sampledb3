@@ -206,6 +206,7 @@ CREATE TABLE IF NOT EXISTS micronix_tube (
   barcode TEXT NOT NULL UNIQUE,
   position TEXT
 );--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS micronix_tube_collection_position_idx ON micronix_tube(collection_id, position) WHERE position IS NOT NULL;--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS cryovial_box (
   id INTEGER PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES location(id),
@@ -223,6 +224,7 @@ CREATE TABLE IF NOT EXISTS cryovial_tube (
   barcode TEXT,
   position TEXT
 );--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS cryovial_tube_collection_position_idx ON cryovial_tube(collection_id, position) WHERE position IS NOT NULL;--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS box (
   id INTEGER PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES location(id),
@@ -266,6 +268,7 @@ CREATE TABLE IF NOT EXISTS static_well (
   collection_id INTEGER NOT NULL REFERENCES micronix_plate(id),
   position TEXT
 );--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS static_well_collection_position_idx ON static_well(collection_id, position) WHERE position IS NOT NULL;--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS strain (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
@@ -279,7 +282,7 @@ CREATE TABLE IF NOT EXISTS storage_type (
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );--> statement-breakpoint
-INSERT INTO schema_version (version) VALUES (3);--> statement-breakpoint
+INSERT INTO schema_version (version) VALUES (4);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT NOT NULL,
   user_id INTEGER REFERENCES users(id),

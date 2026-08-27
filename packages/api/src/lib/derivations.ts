@@ -15,6 +15,7 @@ import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { getDefaultUnit } from './defaults'
 import { utcNow } from './datetime'
 import { createContainerForSpecimen, pickContainerQuantity } from './container-creation'
+import { withWriteTransaction } from '../db/write-transaction'
 
 export type DerivationType = string
 
@@ -188,6 +189,16 @@ export async function createDerivation(
   database: DatabaseOrTransaction,
   input: CreateDerivationInput,
 ): Promise<CreateDerivationResult> {
+  if (!('$client' in database)) {
+    return createDerivationInTx(database, input)
+  }
+  return withWriteTransaction(database, (db) => createDerivationInTx(db, input))
+}
+
+async function createDerivationInTx(
+  database: DatabaseOrTransaction,
+  input: CreateDerivationInput,
+): Promise<CreateDerivationResult> {
   const parent = await database
     .select()
     .from(storageContainer)
@@ -226,7 +237,6 @@ export async function createDerivation(
 
   const containerResult = await createContainerForSpecimen(derivedSpecimenId, input.container, database, {
     collectionMap,
-    skipValidation: true,
     quantity: pickContainerQuantity({ unitId, totalQuantity: quantity, remainingQuantity: quantity }),
   })
 

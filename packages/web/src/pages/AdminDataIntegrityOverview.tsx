@@ -40,6 +40,7 @@ export default function AdminDataIntegrityOverview() {
     report.storageContainerTagOrphans.length +
     report.duplicateBarcodes.length +
     report.locationPathInconsistencies.length
+    // containersWithNoGridPosition is informational and is not an integrity issue count
 
   return (
     <div className="space-y-6">

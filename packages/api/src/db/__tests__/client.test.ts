@@ -29,6 +29,9 @@ describe('Database Client', () => {
     const db = new Database(testDbPath)
     db.exec('CREATE TABLE study (id INTEGER PRIMARY KEY)')
     db.exec('CREATE TABLE settings (key TEXT, user_id INTEGER, value TEXT, PRIMARY KEY (key, user_id))')
+    db.exec(`CREATE TABLE micronix_tube (id INTEGER PRIMARY KEY, collection_id INTEGER NOT NULL, barcode TEXT, position TEXT)`)
+    db.exec(`CREATE TABLE cryovial_tube (id INTEGER PRIMARY KEY, collection_id INTEGER NOT NULL, barcode TEXT, position TEXT)`)
+    db.exec(`CREATE TABLE static_well (id INTEGER PRIMARY KEY, collection_id INTEGER NOT NULL, position TEXT)`)
     // Intentionally omit paper — migration 003 preflight creates legacy stub
     // Intentionally do NOT create error_logs
     const before = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='error_logs'").get()

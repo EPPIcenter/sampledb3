@@ -8,6 +8,8 @@ import {
   createTestLocation,
   createTestUnit,
   createTestControlDefinition,
+  createTestMicronixPlate,
+  createTestSpecimen,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
 import {
@@ -278,6 +280,76 @@ describe('container-creation', () => {
         .get()
       expect(newSheet).toBeDefined()
       expect(newSheet!.boxId).toBe(boxRecord.id)
+    })
+  })
+
+  describe('createContainerForSpecimen (grid position occupancy)', () => {
+    async function setupMicronixCreate() {
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(testDb, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'static_well', unitId: unit.id })
+      const specType = await createTestSpecimenType(testDb, { name: 'BloodOcc' })
+      const now = utcNow()
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: specType.id,
+        containerType: 'micronix_tube',
+        created: now,
+      })
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: specType.id,
+        containerType: 'static_well',
+        created: now,
+      })
+      const storageType = await createTestStorageType(testDb, { name: 'FreezerOcc' })
+      const loc = await createTestLocation(testDb, {
+        name: 'LocOcc',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      const plate = await createTestMicronixPlate(testDb, { name: 'OccPlate', locationId: loc.id })
+      const spec = await createTestSpecimen(testDb, specType.id)
+      return { spec, plate }
+    }
+
+    it('rejects a second micronix tube in the same grid position', async () => {
+      const { spec, plate } = await setupMicronixCreate()
+      const first = await createContainerForSpecimen(spec.id, {
+        containerType: 'micronix_tube',
+        barcode: 'OCC-1',
+        collection: { type: 'micronix_plate', id: plate.id, position: 'A01' },
+      }, testDb)
+      expect(first.success).toBe(true)
+
+      const second = await createContainerForSpecimen(spec.id, {
+        containerType: 'micronix_tube',
+        barcode: 'OCC-2',
+        collection: { type: 'micronix_plate', id: plate.id, position: 'A01' },
+      }, testDb)
+      expect(second.success).toBe(false)
+      expect(second.error).toMatch(/already used/)
+    })
+
+    it('rejects a static well in a grid position occupied by a micronix tube', async () => {
+      const { spec, plate } = await setupMicronixCreate()
+      const tube = await createContainerForSpecimen(spec.id, {
+        containerType: 'micronix_tube',
+        barcode: 'OCC-TUBE',
+        collection: { type: 'micronix_plate', id: plate.id, position: 'B01' },
+      }, testDb)
+      expect(tube.success).toBe(true)
+
+      const well = await createContainerForSpecimen(spec.id, {
+        containerType: 'static_well',
+        collection: { type: 'micronix_plate', id: plate.id, position: 'B01' },
+      }, testDb)
+      expect(well.success).toBe(false)
+      expect(well.error).toMatch(/already used/)
     })
   })
 })

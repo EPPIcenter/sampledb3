@@ -12,6 +12,26 @@ import {
 import { openOperationalDatabase } from '../open'
 import { SchemaMigrationError, runSqlMigrationStatements } from '../migration-runner'
 
+function createGridPositionTables(sqlite: Database): void {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS micronix_tube (
+    id INTEGER PRIMARY KEY,
+    collection_id INTEGER NOT NULL,
+    barcode TEXT,
+    position TEXT
+  )`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS cryovial_tube (
+    id INTEGER PRIMARY KEY,
+    collection_id INTEGER NOT NULL,
+    barcode TEXT,
+    position TEXT
+  )`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS static_well (
+    id INTEGER PRIMARY KEY,
+    collection_id INTEGER NOT NULL,
+    position TEXT
+  )`)
+}
+
 describe('schema evolution', () => {
   let testDbPath: string
 
@@ -53,6 +73,18 @@ describe('schema evolution', () => {
     sqlite.close()
   })
 
+  it('openOperationalDatabase enables foreign keys on empty and reconnect', () => {
+    const first = openOperationalDatabase(testDbPath)
+    const emptyFk = first.sqlite.prepare('PRAGMA foreign_keys').get() as { foreign_keys: number }
+    expect(emptyFk.foreign_keys).toBe(1)
+    first.sqlite.close()
+
+    const second = openOperationalDatabase(testDbPath)
+    const reconnectFk = second.sqlite.prepare('PRAGMA foreign_keys').get() as { foreign_keys: number }
+    expect(reconnectFk.foreign_keys).toBe(1)
+    second.sqlite.close()
+  })
+
   it('legacy unversioned database gains error_logs and schema_version 1 then upgrades to current', () => {
     const sqlite = new Database(testDbPath)
     sqlite.exec('CREATE TABLE study (id INTEGER PRIMARY KEY)')
@@ -67,6 +99,7 @@ describe('schema evolution', () => {
       barcode TEXT,
       position TEXT
     )`)
+    createGridPositionTables(sqlite)
     sqlite.close()
 
     const { sqlite: opened } = openOperationalDatabase(testDbPath)
@@ -91,6 +124,7 @@ describe('schema evolution', () => {
       barcode TEXT,
       position TEXT
     )`)
+    createGridPositionTables(sqlite)
     evolveOperationalSchema(sqlite)
     expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
     sqlite.close()
@@ -108,6 +142,7 @@ describe('schema evolution', () => {
       barcode TEXT,
       position TEXT
     )`)
+    createGridPositionTables(sqlite)
     evolveOperationalSchema(sqlite)
     expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
     const columns = sqlite
@@ -121,6 +156,7 @@ describe('schema evolution', () => {
     const sqlite = new Database(testDbPath)
     sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
     sqlite.exec('INSERT INTO schema_version (version) VALUES (2)')
+    createGridPositionTables(sqlite)
     evolveOperationalSchema(sqlite)
     expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
     const paperTable = sqlite
@@ -152,6 +188,39 @@ describe('schema evolution', () => {
 
     expect(() => evolveOperationalSchema(sqlite)).toThrow(SchemaMigrationError)
     expect(getRecordedSchemaVersion(sqlite)).toBe(2)
+    sqlite.close()
+  })
+
+  it('applies migration 004 unique indexes when database is at version 3', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (3)')
+    createGridPositionTables(sqlite)
+    evolveOperationalSchema(sqlite)
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    const names = sqlite
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='index' AND name LIKE '%collection_position%'`,
+      )
+      .all() as Array<{ name: string }>
+    expect(names.map((row) => row.name).sort()).toEqual([
+      'cryovial_tube_collection_position_idx',
+      'micronix_tube_collection_position_idx',
+      'static_well_collection_position_idx',
+    ])
+    sqlite.close()
+  })
+
+  it('migration 004 aborts when duplicate occupied grid positions exist', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (3)')
+    createGridPositionTables(sqlite)
+    sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES (1, 1, 'A', 'A01')`)
+    sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES (2, 1, 'B', 'A01')`)
+
+    expect(() => evolveOperationalSchema(sqlite)).toThrow(SchemaMigrationError)
+    expect(getRecordedSchemaVersion(sqlite)).toBe(3)
     sqlite.close()
   })
 

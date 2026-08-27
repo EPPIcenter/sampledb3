@@ -281,7 +281,6 @@ export async function createSubjectWithSpecimensInTx(
       const containerResult = await createContainerForSpecimen(specimenId, writeInput, tx, {
         userId,
         collectionMap,
-        skipValidation: true,
         quantity: pickContainerQuantity(preparedContainer),
       })
       if (!containerResult.success || !containerResult.containerId) {
