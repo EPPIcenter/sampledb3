@@ -53,5 +53,5 @@ Container read paths also attach a **Specimen** summary alongside the source. Th
 ## Non-goals
 
 - Changing how **Source** alternates beyond Subject / Control batch (Reagent, Cell line, etc. per `CONTEXT.md`) are modeled — only subject and control are resolved today.
-- A unified container read view (`getContainerView`) — the five read paths still own their own payload assembly; only source resolution and the specimen summary shape are shared.
+- A unified container read view — completed in [ADR 0009](./0009-container-read-view.md).
 - Caching or memoizing resolution across requests.

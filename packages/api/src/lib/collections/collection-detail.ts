@@ -14,7 +14,7 @@ import {
 } from '../../db/schema'
 import { formatLocationPath } from '../container-enrichment'
 import { normalizePosition } from '../normalize-position'
-import { enrichPaperContainers, enrichStorageContainers, attachTagsToEnrichedContainers } from './container-detail'
+import { enrichPaperContainers, enrichStorageContainers } from './container-detail'
 
 export async function getMicronixPlateDetail(database: Database, id: number) {
   const plate = await database.select().from(micronixPlate).where(eq(micronixPlate.id, id)).get()
@@ -39,28 +39,12 @@ export async function getMicronixPlateDetail(database: Database, id: number) {
     container: enrichedById.get(t.id) ?? null,
   }))
 
-  const tubeContainersWithTags = await attachTagsToEnrichedContainers(
-    database,
-    tubeEntries.map((entry) => entry.container),
-  )
-  tubeEntries.forEach((entry, index) => {
-    entry.container = tubeContainersWithTags[index]
-  })
-
   const wellEntries = wells.map((w) => ({
     type: 'static_well' as const,
     id: w.id,
     position: w.position,
     container: enrichedById.get(w.id) ?? null,
   }))
-
-  const wellContainersWithTags = await attachTagsToEnrichedContainers(
-    database,
-    wellEntries.map((entry) => entry.container),
-  )
-  wellEntries.forEach((entry, index) => {
-    entry.container = wellContainersWithTags[index]
-  })
 
   const wellsByPosition: Record<string, (typeof tubeEntries)[number] | (typeof wellEntries)[number]> = {}
   for (const entry of [...tubeEntries, ...wellEntries]) {
@@ -92,14 +76,6 @@ export async function getCryovialBoxDetail(database: Database, id: number) {
     position: t.position,
     container: cryovialEnrichedById.get(t.id) ?? null,
   }))
-
-  const tubeContainersWithTags = await attachTagsToEnrichedContainers(
-    database,
-    tubeEntries.map((entry) => entry.container),
-  )
-  tubeEntries.forEach((entry, index) => {
-    entry.container = tubeContainersWithTags[index]
-  })
 
   const positions: Record<string, typeof tubeEntries> = {}
   for (const entry of tubeEntries) {

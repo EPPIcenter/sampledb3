@@ -15,6 +15,7 @@ export type EnrichedStorageContainer = {
   specimen: SpecimenSummaryWire | null
   specimenTypeName: string | null
   source: ContainerSource
+  tags: Array<{ id: number; name: string }>
 }
 
 export type CollectionLocationSummary = {

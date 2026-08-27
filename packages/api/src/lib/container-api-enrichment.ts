@@ -1,22 +1,12 @@
-import { eq, inArray } from 'drizzle-orm'
 import type { Database } from '../db/client'
-import {
-  location,
-  storageContainerTag,
-  tag,
-  unit,
-  type Location,
-  type StorageContainer,
-  type Unit,
-} from '../db/schema'
-import {
-  resolveContainerPlacementBundle,
-  type CryovialSubtypeDetails,
-  type MicronixSubtypeDetails,
-  type PaperSubtypeDetails,
-  type StaticWellSubtypeDetails,
+import type { Location, StorageContainer, Unit } from '../db/schema'
+import type {
+  CryovialSubtypeDetails,
+  MicronixSubtypeDetails,
+  PaperSubtypeDetails,
+  StaticWellSubtypeDetails,
 } from './container-placement'
-import { projectContainerCollection } from './container-projection'
+import { loadContainerReadViews, type ContainerReadView } from './container-read-view'
 import type { CollectionInfo } from '../types/collections'
 
 export type EnrichedContainerApi = StorageContainer & {
@@ -32,72 +22,29 @@ export type EnrichedContainerApi = StorageContainer & {
   staticWell?: StaticWellSubtypeDetails
 }
 
-/** Batch-enrich storage containers for API responses (placement bundle + tags + unit). */
+export function toEnrichedContainerApi(view: ContainerReadView): EnrichedContainerApi {
+  return {
+    ...view.container,
+    containerType: view.containerType,
+    tags: view.tags,
+    unit: view.unit,
+    location: view.location,
+    locationPath: view.locationPath,
+    collection: view.collection,
+    micronixTube: view.micronixTube,
+    cryovialTube: view.cryovialTube,
+    paper: view.paper,
+    staticWell: view.staticWell,
+  }
+}
+
+/** Batch-enrich storage containers for API responses from the Container read view. */
 export async function enrichContainersForApi(
   database: Database,
   containers: StorageContainer[],
 ): Promise<EnrichedContainerApi[]> {
-  if (containers.length === 0) {
-    return []
-  }
-
-  const ids = containers.map((container) => container.id)
-  const unitIds = [...new Set(containers.map((container) => container.unitId))]
-
-  const [{ placements, subtypes }, units, tagRows] = await Promise.all([
-    resolveContainerPlacementBundle(database, ids),
-    database.select().from(unit).where(inArray(unit.id, unitIds)),
-    database
-      .select({ containerId: storageContainerTag.storageContainerId, id: tag.id, name: tag.name })
-      .from(tag)
-      .innerJoin(storageContainerTag, eq(tag.id, storageContainerTag.tagId))
-      .where(inArray(storageContainerTag.storageContainerId, ids)),
-  ])
-
-  const locationIds = [
-    ...new Set(
-      [...placements.values()]
-        .map((placement) => placement.location?.id)
-        .filter((id): id is number => id != null),
-    ),
-  ]
-
-  const locations =
-    locationIds.length > 0
-      ? await database.select().from(location).where(inArray(location.id, locationIds))
-      : []
-
-  const unitById = new Map(units.map((row) => [row.id, row]))
-  const locationById = new Map(locations.map((row) => [row.id, row]))
-  const tagsByContainerId = new Map<number, Array<{ id: number; name: string }>>()
-  for (const row of tagRows) {
-    const list = tagsByContainerId.get(row.containerId) ?? []
-    list.push({ id: row.id, name: row.name })
-    tagsByContainerId.set(row.containerId, list)
-  }
-
-  return containers.map((container) => {
-    const placement = placements.get(container.id)!
-    const micronixInfo = subtypes.micronixById.get(container.id)
-    const cryovialInfo = subtypes.cryovialById.get(container.id)
-    const paperInfo = subtypes.paperById.get(container.id)
-    const staticWellInfo = subtypes.staticWellById.get(container.id)
-    const locationInfo = placement.location ? locationById.get(placement.location.id) ?? null : null
-
-    return {
-      ...container,
-      containerType: placement.containerType,
-      tags: tagsByContainerId.get(container.id) ?? [],
-      unit: unitById.get(container.unitId),
-      location: locationInfo,
-      locationPath: placement.locationPath ?? '',
-      collection: projectContainerCollection(placement),
-      micronixTube: micronixInfo,
-      cryovialTube: cryovialInfo,
-      paper: paperInfo,
-      staticWell: staticWellInfo,
-    }
-  })
+  const views = await loadContainerReadViews(database, containers)
+  return views.map(toEnrichedContainerApi)
 }
 
 export async function enrichContainerForApi(

@@ -6,6 +6,7 @@ import {
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createContainersRoutes } from '../containers'
 import * as containerEnrichment from '../../lib/container-api-enrichment'
+import * as containerReadView from '../../lib/container-read-view'
 import { utcNow } from '../../lib/datetime'
 import {
   createTestStudy,
@@ -38,6 +39,7 @@ describe('Containers API', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     ctx.cleanup()
   })
 
@@ -122,7 +124,7 @@ describe('Containers API', () => {
     })
 
     it('returns 500 with container error shape when get fails', async () => {
-      vi.spyOn(containerEnrichment, 'enrichContainerForApi').mockRejectedValueOnce(
+      vi.spyOn(containerReadView, 'loadContainerReadViews').mockRejectedValueOnce(
         new Error('enrichment failed'),
       )
       const now = utcNow()
