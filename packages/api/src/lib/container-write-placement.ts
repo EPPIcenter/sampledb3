@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm'
 import { bag, box, cryovialBox, micronixPlate, sheet } from '../db/schema'
 import { resolveCollection, resolveCollectionByBarcode } from './collections/collection-resolve'
 import { ValidationError } from './error-handler'
-import type { ContainerData } from './container-creation'
+import type { ContainerData, ContainerQuantity } from './container-creation'
 
 type DatabaseOrTransaction =
   | Database
@@ -228,18 +228,7 @@ async function resolveSheetCollection(
   }
 }
 
-export function isContainerWriteInput(
-  data: ContainerData | ContainerWriteInput,
-): data is ContainerWriteInput {
-  return (
-    'collection' in data &&
-    data.collection != null &&
-    typeof data.collection === 'object' &&
-    'type' in data.collection
-  )
-}
-
-/** Resolve nested ContainerWriteInput placement to flat ContainerData for persistence. */
+/** Resolve nested ContainerWriteInput placement for persistence internals. */
 export async function resolveContainerPlacement(
   database: DatabaseOrTransaction,
   input: ContainerWriteInput,
@@ -291,11 +280,7 @@ export async function resolveContainerPlacement(
   }
 }
 
-export type BulkCombinedContainerInput = ContainerWriteInput & {
-  unitId?: number
-  totalQuantity?: number
-  remainingQuantity?: number
-}
+export type BulkCombinedContainerInput = ContainerWriteInput & ContainerQuantity
 
 export function toContainerWriteInput(container: BulkCombinedContainerInput): ContainerWriteInput {
   const { unitId: _unitId, totalQuantity: _totalQuantity, remainingQuantity: _remainingQuantity, ...write } =

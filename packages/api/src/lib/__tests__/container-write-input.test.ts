@@ -188,7 +188,7 @@ describe('createContainerForSpecimen with ContainerWriteInput', () => {
     expect(paperRecord?.sheetId).toBe(sheetRecord!.id)
   })
 
-  it('legacy flat ContainerData and ContainerWriteInput produce equivalent paper rows', async () => {
+  it('creates paper on the same existing box whether parent is named or identified by id', async () => {
     const { spec, specType, batch, loc, now } = await setupPaperSpecimen(testDb)
 
     const [boxRecord] = await testDb
@@ -205,50 +205,48 @@ describe('createContainerForSpecimen with ContainerWriteInput', () => {
       })
       .returning()
 
-    const legacyResult = await createContainerForSpecimen(
+    const byName = await createContainerForSpecimen(
       spec.id,
       {
         containerType: 'paper',
-        collectionName: boxRecord.name,
-        sheetName: 'Sheet-Legacy',
-        sublabel: 'Spot-Legacy',
-      },
-      testDb,
-    )
-    expect(legacyResult.success).toBe(true)
-
-    const writeResult = await createContainerForSpecimen(
-      spec2.id,
-      {
-        containerType: 'paper',
-        sublabel: 'Spot-Write',
+        sublabel: 'Spot-Name',
         collection: {
           type: 'sheet',
-          name: 'Sheet-Write',
+          name: 'Sheet-Name',
           parent: { type: 'box', name: boxRecord.name },
         },
       },
       testDb,
     )
-    expect(writeResult.success).toBe(true)
+    const byId = await createContainerForSpecimen(
+      spec2.id,
+      {
+        containerType: 'paper',
+        sublabel: 'Spot-Id',
+        collection: {
+          type: 'sheet',
+          name: 'Sheet-Id',
+          parent: { type: 'box', id: boxRecord.id },
+        },
+      },
+      testDb,
+    )
+    expect(byName.success).toBe(true)
+    expect(byId.success).toBe(true)
 
-    const legacyPaper = await testDb
+    const paperByName = await testDb
       .select()
       .from(paperTable)
-      .where(eq(paperTable.id, legacyResult.containerId!))
+      .where(eq(paperTable.id, byName.containerId!))
       .get()
-    const writePaper = await testDb
+    const paperById = await testDb
       .select()
       .from(paperTable)
-      .where(eq(paperTable.id, writeResult.containerId!))
+      .where(eq(paperTable.id, byId.containerId!))
       .get()
-
-    expect(legacyPaper?.sublabel).toBe('Spot-Legacy')
-    expect(writePaper?.sublabel).toBe('Spot-Write')
-
-    const legacySheet = await testDb.select().from(sheet).where(eq(sheet.id, legacyPaper!.sheetId)).get()
-    const writeSheet = await testDb.select().from(sheet).where(eq(sheet.id, writePaper!.sheetId)).get()
-    expect(legacySheet?.boxId).toBe(boxRecord.id)
-    expect(writeSheet?.boxId).toBe(boxRecord.id)
+    const sheetByName = await testDb.select().from(sheet).where(eq(sheet.id, paperByName!.sheetId)).get()
+    const sheetById = await testDb.select().from(sheet).where(eq(sheet.id, paperById!.sheetId)).get()
+    expect(sheetByName?.boxId).toBe(boxRecord.id)
+    expect(sheetById?.boxId).toBe(boxRecord.id)
   })
 })

@@ -198,8 +198,11 @@ describe('container-creation', () => {
 
       const result = await createContainerForSpecimen(spec.id, {
         containerType: 'paper',
-        collectionName: 'TestBox',
-        sheetName: 'Sheet2',
+        collection: {
+          type: 'sheet',
+          name: 'Sheet2',
+          parent: { type: 'box', name: 'TestBox' },
+        },
       }, testDb)
 
       expect(result.success).toBe(true)
@@ -258,8 +261,11 @@ describe('container-creation', () => {
 
       const result = await createContainerForSpecimen(spec.id, {
         containerType: 'paper',
-        collectionName: 'BoxForNewSheet',
-        sheetName: 'BrandNewSheet',
+        collection: {
+          type: 'sheet',
+          name: 'BrandNewSheet',
+          parent: { type: 'box', name: 'BoxForNewSheet' },
+        },
       }, testDb)
 
       expect(result.success).toBe(true)
