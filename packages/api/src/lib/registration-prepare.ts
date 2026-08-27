@@ -5,10 +5,7 @@
 import type { Database } from '../db/client'
 import { specimen } from '../db/schema'
 import { validateSpecimenData, validateContainerTypeForSpecimenType } from './validation'
-import {
-  validateContainerFieldRequirements,
-  type ContainerData,
-} from './container-creation'
+import { validateContainerWriteFields } from './container-creation'
 import {
   buildContainerPlacementCheckRow,
   collectContainerPlacementErrors,
@@ -21,9 +18,9 @@ import {
   LOCATION_CANNOT_CONTAIN_COLLECTIONS,
 } from './collections/collection-lifecycle'
 import {
+  assertWriteInputPlacementResolvable,
   lookupWriteInputCollectionId,
   placementContainerFromWriteInput,
-  resolveContainerPlacement,
   toContainerWriteInput,
   type BulkCombinedContainerInput,
 } from './container-write-placement'
@@ -106,22 +103,20 @@ export async function validateSpecimenContainerRegistration(
     }
   }
 
-  let containerData: ContainerData
+  const containerValidation = validateContainerWriteFields(writeInput)
+  if (!containerValidation.valid) {
+    return { valid: false, error: containerValidation.error || 'Invalid container data' }
+  }
+
   try {
-    containerData = await resolveContainerPlacement(database, writeInput)
+    await assertWriteInputPlacementResolvable(database, writeInput)
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Invalid container placement'
     return { valid: false, error: message }
   }
 
-  const containerValidation = validateContainerFieldRequirements(containerType, containerData)
-  if (!containerValidation.valid) {
-    return { valid: false, error: containerValidation.error || 'Invalid container data' }
-  }
-
   const collection = writeInput.collection
   const locationId =
-    containerData.collectionLocationId ??
     (collection && 'locationId' in collection ? collection.locationId : undefined) ??
     (collection && 'parent' in collection ? collection.parent?.locationId : undefined)
   if (locationId != null) {

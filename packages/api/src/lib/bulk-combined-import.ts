@@ -26,9 +26,9 @@ import {
   bulkCombinedCollectionMessages,
   prepareCombinedSubjectContainerBatch,
 } from './registration-prepare'
-import { createContainerForSpecimen, pickContainerQuantity } from './container-creation'
+import { createContainerForSpecimen, pickContainerQuantity, validateContainerWriteFields } from './container-creation'
 import {
-  resolveContainerPlacement,
+  assertWriteInputPlacementResolvable,
   toContainerWriteInput,
   type BulkCombinedContainerInput,
 } from './container-write-placement'
@@ -119,8 +119,13 @@ async function revalidatePreparedSubjectInTx(
         throw new ValidationError(`${specimenLabel}: ${unitValidation.error ?? 'invalid unit for container type'}`)
       }
 
+      const writeInput = toContainerWriteInput(container)
+      const fieldValidation = validateContainerWriteFields(writeInput)
+      if (!fieldValidation.valid) {
+        throw new ValidationError(`${specimenLabel}: ${fieldValidation.error ?? 'Invalid container data'}`)
+      }
       try {
-        await resolveContainerPlacement(dbTx, toContainerWriteInput(container), prepared.collectionMap)
+        await assertWriteInputPlacementResolvable(dbTx, writeInput, prepared.collectionMap)
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Invalid container placement'
         throw new ValidationError(`${specimenLabel}: ${message}`)
