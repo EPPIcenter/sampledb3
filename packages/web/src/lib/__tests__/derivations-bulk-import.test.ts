@@ -139,6 +139,31 @@ describe('getRequiredAndOptionalColumns', () => {
     expect(required).not.toContain('derivation_type')
     expect(required).not.toContain('specimen_type_name')
     expect(required).toContain('plate_name or collection_barcode')
+    expect(required).toContain('position')
+  })
+
+  it('paper child placement requires box_name or bag_name and sheet_name, not bag_name only', () => {
+    const { required, optional } = getRequiredAndOptionalColumns('control_batch', 'paper', {
+      ...emptySettings,
+      containerType: 'paper',
+    })
+    expect(required).toContain('box_name or bag_name')
+    expect(required).toContain('sheet_name')
+    expect(required).not.toContain('bag_name')
+    expect(required).not.toContain('position')
+    expect(optional).toContain('sublabel')
+    expect(optional).not.toContain('container_barcode')
+    expect(optional).not.toContain('position')
+  })
+
+  it('unfixed child type requires the real position column, not sheet_name or a labelled alias', () => {
+    const { required, optional } = getRequiredAndOptionalColumns('control_batch', 'paper', emptySettings)
+    expect(required).toContain('position')
+    expect(required).not.toContain('position (tube types)')
+    expect(required).not.toContain('sheet_name')
+    expect(optional).toContain('sheet_name')
+    expect(optional).toContain('sublabel')
+    expect(optional).toContain('container_barcode')
   })
 
   it('quantity fields are optional only when not set in settings', () => {
