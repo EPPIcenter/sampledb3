@@ -4,14 +4,10 @@
  */
 import type { Database } from '../db/client'
 import { specimen } from '../db/schema'
-import {
-  createContainerForSpecimen,
-  type ContainerData,
-} from './container-creation'
+import { createContainerForSpecimen, pickContainerQuantity } from './container-creation'
 import { findExistingStudySpecimen, findExistingControlSpecimen } from './specimen-helpers'
 import { utcNow } from './datetime'
 import {
-  resolveContainerPlacement,
   toContainerWriteInput,
   type BulkCombinedContainerInput,
 } from './container-write-placement'
@@ -140,20 +136,10 @@ export async function createBulkSpecimenRows(
       if (!row.container?.containerType) continue
       const container = row.container as BulkCombinedContainerInput
       const writeInput = toContainerWriteInput(container)
-      const resolved = await resolveContainerPlacement(dbTx, writeInput)
-      const containerPayload: ContainerData = {
-        ...resolved,
-        unitId: container.unitId,
-        totalQuantity: container.totalQuantity,
-        remainingQuantity: container.remainingQuantity,
-        comment: 'comment' in writeInput ? writeInput.comment : undefined,
-      }
-      const containerResult = await createContainerForSpecimen(
-        specimenRecord.id,
-        containerPayload,
-        dbTx,
-        userId
-      )
+      const containerResult = await createContainerForSpecimen(specimenRecord.id, writeInput, dbTx, {
+        userId,
+        quantity: pickContainerQuantity(container),
+      })
       if (!containerResult.success || !containerResult.containerId) {
         throw new Error(containerResult.error ?? `Row ${index}: failed to create container`)
       }

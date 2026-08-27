@@ -14,11 +14,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { getDefaultUnit } from './defaults'
 import { utcNow } from './datetime'
-import {
-  createContainerForSpecimen,
-  type ContainerData,
-} from './container-creation'
-import { resolveContainerPlacement } from './container-write-placement'
+import { createContainerForSpecimen, pickContainerQuantity } from './container-creation'
 
 export type DerivationType = string
 
@@ -225,20 +221,13 @@ export async function createDerivation(
   }
 
   const collectionMap = new Map<string, number>()
-  const placement = await resolveContainerPlacement(database, input.container, collectionMap)
   const unitId = await resolveUnitIdForChild(database, input.container.containerType, input.unitSymbol)
   const quantity = input.quantity ?? 1.0
 
-  const containerData: ContainerData = {
-    ...placement,
-    unitId,
-    totalQuantity: quantity,
-    remainingQuantity: quantity,
-  }
-
-  const containerResult = await createContainerForSpecimen(derivedSpecimenId, containerData, database, {
+  const containerResult = await createContainerForSpecimen(derivedSpecimenId, input.container, database, {
     collectionMap,
     skipValidation: true,
+    quantity: pickContainerQuantity({ unitId, totalQuantity: quantity, remainingQuantity: quantity }),
   })
 
   if (!containerResult.success || containerResult.containerId == null) {

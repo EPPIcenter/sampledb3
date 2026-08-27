@@ -6,9 +6,8 @@ import { z } from 'zod'
 import { listSpecimens } from '../lib/specimens/specimen-read'
 import { validateSpecimenData } from '../lib/validation'
 import type { ContainerWriteInput } from '@sampledb/contract'
-import { createContainerForSpecimen, type ContainerData } from '../lib/container-creation'
+import { createContainerForSpecimen, pickContainerQuantity } from '../lib/container-creation'
 import {
-  resolveContainerPlacement,
   toContainerWriteInput,
   type BulkCombinedContainerInput,
 } from '../lib/container-write-placement'
@@ -187,15 +186,10 @@ specimens.post('/', memberMiddleware, async (c) => {
       try {
         const container = data.container as BulkCombinedContainerInput
         const writeInput = toContainerWriteInput(container)
-        const resolved = await resolveContainerPlacement(dbInstance, writeInput)
-        const containerPayload: ContainerData = {
-          ...resolved,
-          unitId: container.unitId,
-          totalQuantity: container.totalQuantity,
-          remainingQuantity: container.remainingQuantity,
-          comment: 'comment' in writeInput ? writeInput.comment : undefined,
-        }
-        const result = await createContainerForSpecimen(newSpecimen.id, containerPayload, dbInstance, user?.id)
+        const result = await createContainerForSpecimen(newSpecimen.id, writeInput, dbInstance, {
+          userId: user?.id,
+          quantity: pickContainerQuantity(container),
+        })
         if (!result.success) {
           await dbInstance.delete(storageContainer).where(eq(storageContainer.specimenId, newSpecimen.id))
           await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))

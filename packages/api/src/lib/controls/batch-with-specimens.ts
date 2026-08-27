@@ -19,10 +19,10 @@ import { findExistingControlSpecimen } from '../specimen-helpers'
 import { utcNow } from '../datetime'
 import {
   createContainerForSpecimen,
-  type ContainerData,
+  pickContainerQuantity,
+  type ContainerQuantity,
   type ContainerType,
 } from '../container-creation'
-import { resolveContainerPlacement } from '../container-write-placement'
 import type { BatchContainerInput } from './batch-schemas'
 
 export interface CreateBatchWithSpecimensRequest {
@@ -62,12 +62,16 @@ async function getUnitIdBySymbol(
   return getDefaultUnit(database, containerType)
 }
 
+type PreparedBatchContainer = {
+  writeInput: ContainerWriteInput
+  quantity?: ContainerQuantity
+}
+
 async function prepareBatchContainer(
   database: Database,
   specimenTypeId: number,
   input: BatchContainerInput,
-  collectionMap: Map<string, number>
-): Promise<ContainerData> {
+): Promise<PreparedBatchContainer> {
   const containerTypeValidation = await validateContainerTypeForSpecimenType(
     database,
     specimenTypeId,
@@ -78,25 +82,22 @@ async function prepareBatchContainer(
   }
 
   const { quantity, unitSymbol, ...writeInput } = input
-  const placement = await resolveContainerPlacement(
-    database,
-    writeInput as ContainerWriteInput,
-    collectionMap
-  )
 
   let unitId: number | undefined
   if (unitSymbol) {
-    unitId = await getUnitIdBySymbol(database, unitSymbol, placement.containerType)
-    const unitValidation = await validateUnitForContainerType(database, placement.containerType, unitId)
+    unitId = await getUnitIdBySymbol(database, unitSymbol, writeInput.containerType)
+    const unitValidation = await validateUnitForContainerType(database, writeInput.containerType, unitId)
     if (!unitValidation.valid) {
       throw new Error(unitValidation.error || 'Unit validation failed')
     }
   }
 
   return {
-    ...placement,
-    ...(unitId != null ? { unitId } : {}),
-    ...(quantity != null ? { totalQuantity: quantity, remainingQuantity: quantity } : {}),
+    writeInput: writeInput as ContainerWriteInput,
+    quantity: pickContainerQuantity({
+      unitId,
+      ...(quantity != null ? { totalQuantity: quantity, remainingQuantity: quantity } : {}),
+    }),
   }
 }
 
@@ -130,13 +131,12 @@ function mergeSpecimensByTypeAndDate<T extends { specimenTypeName: string; colle
 async function prepareSpecimensForBatch(
   database: Database,
   specimens: CreateBatchWithSpecimensRequest['specimens'],
-  collectionMap: Map<string, number>
 ) {
   const specimensToCreate = mergeSpecimensByTypeAndDate(specimens)
   const preparedSpecimens: Array<{
     specType: { id: number; name: string }
     specData: (typeof specimensToCreate)[number]
-    preparedContainers: ContainerData[]
+    preparedContainers: PreparedBatchContainer[]
   }> = []
 
   for (const specData of specimensToCreate) {
@@ -150,11 +150,11 @@ async function prepareSpecimensForBatch(
       throw new Error(`Specimen type not found: ${specData.specimenTypeName}`)
     }
 
-    const preparedContainers: ContainerData[] = []
+    const preparedContainers: PreparedBatchContainer[] = []
     for (const containerInput of specData.containers) {
       try {
         preparedContainers.push(
-          await prepareBatchContainer(database, specType.id, containerInput, collectionMap)
+          await prepareBatchContainer(database, specType.id, containerInput)
         )
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error)
@@ -214,7 +214,7 @@ export async function createBatchWithSpecimens(
     batchName = await generateUniqueBatchName(database, definition.name, data.batch.productionDate)
   }
 
-  const preparedSpecimens = await prepareSpecimensForBatch(database, data.specimens, collectionMap)
+  const preparedSpecimens = await prepareSpecimensForBatch(database, data.specimens)
 
   return database.transaction(async (tx) => {
     const batchResult = await tx
@@ -252,10 +252,11 @@ export async function createBatchWithSpecimens(
       const specimenId = extractId(specimenRecord)
 
       const containerIds: number[] = []
-      for (const containerData of preparedContainers) {
-        const containerResult = await createContainerForSpecimen(specimenId, containerData, tx, {
+      for (const prepared of preparedContainers) {
+        const containerResult = await createContainerForSpecimen(specimenId, prepared.writeInput, tx, {
           collectionMap,
           skipValidation: true,
+          quantity: prepared.quantity,
         })
         if (!containerResult.success || containerResult.containerId == null) {
           throw new Error(containerResult.error || 'Failed to create container')
@@ -309,7 +310,7 @@ export async function addSpecimensToBatch(
   }
 
   const collectionMap = new Map<string, number>()
-  const preparedSpecimens = await prepareSpecimensForBatch(database, data.specimens, collectionMap)
+  const preparedSpecimens = await prepareSpecimensForBatch(database, data.specimens)
 
   return database.transaction(async (tx) => {
     const createdSpecimens: CreatedSpecimen[] = []
@@ -343,10 +344,11 @@ export async function addSpecimensToBatch(
       }
 
       const containerIds: number[] = []
-      for (const containerData of preparedContainers) {
-        const containerResult = await createContainerForSpecimen(specimenId, containerData, tx, {
+      for (const prepared of preparedContainers) {
+        const containerResult = await createContainerForSpecimen(specimenId, prepared.writeInput, tx, {
           collectionMap,
           skipValidation: true,
+          quantity: prepared.quantity,
         })
         if (!containerResult.success || containerResult.containerId == null) {
           throw new Error(containerResult.error || 'Failed to create container')

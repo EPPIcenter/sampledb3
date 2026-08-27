@@ -28,7 +28,7 @@ import { utcNow } from './datetime'
 import { normalizePosition } from './normalize-position'
 import { ValidationError } from './error-handler'
 import type { ContainerWriteInput } from '@sampledb/contract'
-import { isContainerWriteInput, resolveContainerPlacement } from './container-write-placement'
+import { resolveContainerPlacement } from './container-write-placement'
 
 type DatabaseOrTransaction =
   | Database
@@ -36,6 +36,7 @@ type DatabaseOrTransaction =
 
 export type ContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
+/** Resolved placement + quantity for persistence internals — not an inbound write dialect. */
 export interface ContainerData {
   containerType: ContainerType
   collectionName?: string
@@ -54,12 +55,28 @@ export interface ContainerData {
   parentCollectionType?: 'box' | 'bag'
 }
 
+export type ContainerQuantity = {
+  unitId?: number
+  totalQuantity?: number
+  remainingQuantity?: number
+}
+
+export function pickContainerQuantity(src: ContainerQuantity): ContainerQuantity | undefined {
+  const quantity: ContainerQuantity = {
+    ...(src.unitId != null ? { unitId: src.unitId } : {}),
+    ...(src.totalQuantity != null ? { totalQuantity: src.totalQuantity } : {}),
+    ...(src.remainingQuantity != null ? { remainingQuantity: src.remainingQuantity } : {}),
+  }
+  return Object.keys(quantity).length > 0 ? quantity : undefined
+}
+
 export type CreateContainerForSpecimenOptions = {
   userId?: number
   /** Mutable map of collection keys to ids; updated when collections are auto-created. */
   collectionMap?: Map<string, number>
   /** Skip field/DB validation when caller already validated (e.g. combined import prepare). */
   skipValidation?: boolean
+  quantity?: ContainerQuantity
 }
 
 function guardCollectionLocation(
@@ -560,7 +577,7 @@ async function createStaticWell(
 
 export async function createContainerForSpecimen(
   specimenId: number,
-  data: ContainerData | ContainerWriteInput,
+  data: ContainerWriteInput,
   database: DatabaseOrTransaction,
   options?: CreateContainerForSpecimenOptions | number
 ): Promise<{ success: boolean; containerId?: number; error?: string }> {
@@ -570,9 +587,10 @@ export async function createContainerForSpecimen(
 
   let containerData: ContainerData
   try {
-    containerData = isContainerWriteInput(data)
-      ? await resolveContainerPlacement(database, data, opts.collectionMap)
-      : data
+    containerData = {
+      ...(await resolveContainerPlacement(database, data, opts.collectionMap)),
+      ...(opts.quantity ?? {}),
+    }
   } catch (error: unknown) {
     if (error instanceof ValidationError) {
       return { success: false, error: error.message }

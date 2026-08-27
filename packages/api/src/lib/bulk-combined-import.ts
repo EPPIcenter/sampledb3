@@ -26,10 +26,7 @@ import {
   bulkCombinedCollectionMessages,
   prepareCombinedSubjectContainerBatch,
 } from './registration-prepare'
-import {
-  createContainerForSpecimen,
-  type ContainerData,
-} from './container-creation'
+import { createContainerForSpecimen, pickContainerQuantity } from './container-creation'
 import {
   resolveContainerPlacement,
   toContainerWriteInput,
@@ -281,18 +278,11 @@ export async function createSubjectWithSpecimensInTx(
     if (spec.container?.containerType) {
       const container = spec.container
       const writeInput = toContainerWriteInput(container)
-      const resolved = await resolveContainerPlacement(tx, writeInput, collectionMap)
-      const containerData: ContainerData = {
-        ...resolved,
-        unitId: preparedContainer.unitId,
-        totalQuantity: preparedContainer.totalQuantity,
-        remainingQuantity: preparedContainer.remainingQuantity,
-        comment: 'comment' in writeInput ? writeInput.comment : undefined,
-      }
-      const containerResult = await createContainerForSpecimen(specimenId, containerData, tx, {
+      const containerResult = await createContainerForSpecimen(specimenId, writeInput, tx, {
         userId,
         collectionMap,
         skipValidation: true,
+        quantity: pickContainerQuantity(preparedContainer),
       })
       if (!containerResult.success || !containerResult.containerId) {
         throw new ValidationError(
