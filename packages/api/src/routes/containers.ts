@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
-import { storageContainer, specimen, unit, micronixTube, cryovialTube, paper, staticWell, specimenType, tag, storageContainerTag } from '../db/schema'
+import { storageContainer, micronixTube, cryovialTube, paper, staticWell, tag, storageContainerTag } from '../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { validatePage, validateLimit } from '../lib/constants'
@@ -8,10 +8,9 @@ import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { resolveContainerByBarcode } from '../lib/identifier-resolution'
-import { resolveSpecimenSource } from '../lib/specimens/provenance'
-import { enrichContainerForApi, enrichContainersForApi } from '../lib/container-api-enrichment'
+import { enrichContainerForApi, enrichContainersForApi, toEnrichedContainerApi } from '../lib/container-api-enrichment'
+import { loadContainerReadViews } from '../lib/container-read-view'
 import { mapEnrichedContainerToWire, mapEnrichedContainersToWire } from '../lib/container-wire-mapper'
-import type { SpecimenSummaryWire } from '@sampledb/contract/wire'
 import { handleRouteError, RouteError, containersFetchFailedBody } from '../lib/error-handler'
 
 /**
@@ -122,35 +121,15 @@ containers.get('/:id', authMiddleware, async (c) => {
       return c.json({ error: 'Container not found' }, 404)
     }
 
-    const enriched = await enrichContainerForApi(database, container)
-
-    // Get specimen details with type (projected to the wire summary, ADR 0005)
-    const spec: SpecimenSummaryWire | null =
-      (await database
-        .select({
-          id: specimen.id,
-          studySubjectId: specimen.studySubjectId,
-          controlBatchId: specimen.controlBatchId,
-          specimenTypeId: specimen.specimenTypeId,
-          collectionDate: specimen.collectionDate,
-          created: specimen.created,
-          lastUpdated: specimen.lastUpdated,
-          specimenType: {
-            id: specimenType.id,
-            name: specimenType.name,
-          },
-        })
-        .from(specimen)
-        .leftJoin(specimenType, eq(specimen.specimenTypeId, specimenType.id))
-        .where(eq(specimen.id, container.specimenId))
-        .get()) ?? null
-
-    const sourceInfo = spec ? await resolveSpecimenSource(database, container.specimenId) : null
+    const [view] = await loadContainerReadViews(database, [container])
+    if (!view) {
+      return c.json({ error: 'Container not found' }, 404)
+    }
 
     return c.json({
-      container: mapEnrichedContainerToWire(enriched),
-      specimen: spec,
-      source: sourceInfo,
+      container: mapEnrichedContainerToWire(toEnrichedContainerApi(view)),
+      specimen: view.specimen,
+      source: view.source,
     })
   } catch (error: unknown) {
     return handleRouteError(
