@@ -109,6 +109,7 @@ export function openOperationalDatabase(dbPath?: string): {
 
   const sqlite = new SQLiteDatabase(resolvedPath)
   sqlite.exec('PRAGMA journal_mode = WAL')
+  sqlite.exec('PRAGMA foreign_keys = ON')
 
   try {
     evolveOperationalSchema(sqlite)

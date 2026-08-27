@@ -255,7 +255,6 @@ export async function createBatchWithSpecimens(
       for (const prepared of preparedContainers) {
         const containerResult = await createContainerForSpecimen(specimenId, prepared.writeInput, tx, {
           collectionMap,
-          skipValidation: true,
           quantity: prepared.quantity,
         })
         if (!containerResult.success || containerResult.containerId == null) {
@@ -347,7 +346,6 @@ export async function addSpecimensToBatch(
       for (const prepared of preparedContainers) {
         const containerResult = await createContainerForSpecimen(specimenId, prepared.writeInput, tx, {
           collectionMap,
-          skipValidation: true,
           quantity: prepared.quantity,
         })
         if (!containerResult.success || containerResult.containerId == null) {

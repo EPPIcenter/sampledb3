@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, check, primaryKey, unique, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real, check, primaryKey, unique, uniqueIndex, index } from 'drizzle-orm/sqlite-core'
 import { sql, type InferSelectModel } from 'drizzle-orm'
 
 // Type exports for all database tables
@@ -288,7 +288,11 @@ export const micronixTube = sqliteTable('micronix_tube', {
   collectionId: integer('collection_id').notNull().references(() => micronixPlate.id),
   barcode: text('barcode').notNull().unique(),
   position: text('position'),
-})
+}, (table) => ({
+  collectionPositionUniq: uniqueIndex('micronix_tube_collection_position_idx')
+    .on(table.collectionId, table.position)
+    .where(sql`${table.position} IS NOT NULL`),
+}))
 
 export const cryovialBox = sqliteTable('cryovial_box', {
   id: integer('id').primaryKey(),
@@ -308,7 +312,11 @@ export const cryovialTube = sqliteTable('cryovial_tube', {
   collectionId: integer('collection_id').notNull().references(() => cryovialBox.id),
   barcode: text('barcode'),
   position: text('position'),
-})
+}, (table) => ({
+  collectionPositionUniq: uniqueIndex('cryovial_tube_collection_position_idx')
+    .on(table.collectionId, table.position)
+    .where(sql`${table.position} IS NOT NULL`),
+}))
 
 export const box = sqliteTable('box', {
   id: integer('id').primaryKey(),
@@ -360,7 +368,11 @@ export const staticWell = sqliteTable('static_well', {
   id: integer('id').primaryKey().references(() => storageContainer.id),
   collectionId: integer('collection_id').notNull().references(() => micronixPlate.id),
   position: text('position'),
-})
+}, (table) => ({
+  collectionPositionUniq: uniqueIndex('static_well_collection_position_idx')
+    .on(table.collectionId, table.position)
+    .where(sql`${table.position} IS NOT NULL`),
+}))
 
 // Additional reference tables
 export const strain = sqliteTable('strain', {

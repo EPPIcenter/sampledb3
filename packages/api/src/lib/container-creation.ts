@@ -29,6 +29,7 @@ import { normalizePosition } from './normalize-position'
 import { ValidationError } from './error-handler'
 import type { ContainerWriteInput } from '@sampledb/contract'
 import { resolveContainerPlacement } from './container-write-placement'
+import { checkGridPositionOccupancy, occupiedGridPositionMessage } from './container-occupancy'
 
 type DatabaseOrTransaction =
   | Database
@@ -74,8 +75,6 @@ export type CreateContainerForSpecimenOptions = {
   userId?: number
   /** Mutable map of collection keys to ids; updated when collections are auto-created. */
   collectionMap?: Map<string, number>
-  /** Skip field/DB validation when caller already validated (e.g. combined import prepare). */
-  skipValidation?: boolean
   quantity?: ContainerQuantity
 }
 
@@ -322,8 +321,17 @@ async function createMicronixTube(
   try {
     const dbForValidation = database as unknown as Database
     const collectionId = await resolveMicronixPlateId(data, database, options?.collectionMap)
+    const position = normalizePosition(data.position)
+    const occupancy = await checkGridPositionOccupancy(dbForValidation, {
+      collectionKind: 'micronix_plate',
+      collectionId,
+      position,
+    })
+    if (occupancy.occupied && position) {
+      return { success: false, error: occupiedGridPositionMessage(position, 'micronix_plate') }
+    }
 
-    if (!options?.skipValidation && data.barcode) {
+    if (data.barcode) {
       const existing = await database
         .select({ id: micronixTube.id })
         .from(micronixTube)
@@ -365,7 +373,7 @@ async function createMicronixTube(
       id: container.id,
       collectionId,
       barcode: data.barcode!,
-      position: normalizePosition(data.position),
+      position,
     })
 
     return { success: true, containerId: container.id }
@@ -386,8 +394,17 @@ async function createCryovialTube(
   try {
     const dbForValidation = database as unknown as Database
     const collectionId = await resolveCryovialBoxId(data, database, options?.collectionMap)
+    const position = normalizePosition(data.position)
+    const occupancy = await checkGridPositionOccupancy(dbForValidation, {
+      collectionKind: 'cryovial_box',
+      collectionId,
+      position,
+    })
+    if (occupancy.occupied && position) {
+      return { success: false, error: occupiedGridPositionMessage(position, 'cryovial_box') }
+    }
 
-    if (!options?.skipValidation && data.barcode) {
+    if (data.barcode) {
       const existing = await database
         .select({ id: cryovialTube.id })
         .from(cryovialTube)
@@ -429,7 +446,7 @@ async function createCryovialTube(
       id: container.id,
       collectionId,
       barcode: data.barcode || null,
-      position: normalizePosition(data.position),
+      position,
     })
 
     return { success: true, containerId: container.id }
@@ -532,6 +549,15 @@ async function createStaticWell(
   try {
     const dbForValidation = database as unknown as Database
     const collectionId = await resolveMicronixPlateId(data, database, options?.collectionMap)
+    const position = normalizePosition(data.position)
+    const occupancy = await checkGridPositionOccupancy(dbForValidation, {
+      collectionKind: 'micronix_plate',
+      collectionId,
+      position,
+    })
+    if (occupancy.occupied && position) {
+      return { success: false, error: occupiedGridPositionMessage(position, 'micronix_plate') }
+    }
 
     const defaultUnitId = await getDefaultUnit(dbForValidation, 'static_well')
     const finalUnitId = data.unitId || defaultUnitId
@@ -563,7 +589,7 @@ async function createStaticWell(
     await database.insert(staticWell).values({
       id: container.id,
       collectionId,
-      position: normalizePosition(data.position),
+      position,
     })
 
     return { success: true, containerId: container.id }
@@ -598,27 +624,25 @@ export async function createContainerForSpecimen(
     throw error
   }
 
-  if (!opts.skipValidation) {
-    const validation = await validateContainerData(dbForValidation, containerData.containerType, containerData)
-    if (!validation.valid) return { success: false, error: validation.error }
+  const validation = await validateContainerData(dbForValidation, containerData.containerType, containerData)
+  if (!validation.valid) return { success: false, error: validation.error }
 
-    const specimenRecord = await database
-      .select({ specimenTypeId: specimen.specimenTypeId })
-      .from(specimen)
-      .where(eq(specimen.id, specimenId))
-      .get()
-    if (!specimenRecord) {
-      return { success: false, error: 'Specimen not found' }
-    }
+  const specimenRecord = await database
+    .select({ specimenTypeId: specimen.specimenTypeId })
+    .from(specimen)
+    .where(eq(specimen.id, specimenId))
+    .get()
+  if (!specimenRecord) {
+    return { success: false, error: 'Specimen not found' }
+  }
 
-    const containerTypeValidation = await validateContainerTypeForSpecimenType(
-      dbForValidation,
-      specimenRecord.specimenTypeId,
-      containerData.containerType
-    )
-    if (!containerTypeValidation.valid) {
-      return { success: false, error: containerTypeValidation.error }
-    }
+  const containerTypeValidation = await validateContainerTypeForSpecimenType(
+    dbForValidation,
+    specimenRecord.specimenTypeId,
+    containerData.containerType
+  )
+  if (!containerTypeValidation.valid) {
+    return { success: false, error: containerTypeValidation.error }
   }
 
   switch (containerData.containerType) {

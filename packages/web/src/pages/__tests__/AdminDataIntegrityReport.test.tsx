@@ -16,6 +16,7 @@ function emptyIntegrityReport() {
     storageContainerTagOrphans: [],
     duplicateBarcodes: [],
     locationPathInconsistencies: [],
+    containersWithNoGridPosition: [],
   }
 }
 
@@ -38,6 +39,20 @@ describe('AdminDataIntegrityReport', () => {
     await render(<AdminDataIntegrityReport />)
     await waitFor(() => {
       expect(screen.getByText(/read-only checks/i)).toBeInTheDocument()
+    })
+  })
+
+  it('shows containers with no grid position when present', async () => {
+    vi.mocked(adminApi.getIntegrityReport).mockResolvedValue({
+      ...emptyIntegrityReport(),
+      containersWithNoGridPosition: [
+        { id: 42, containerType: 'micronix_tube', collectionId: 7 },
+      ],
+    })
+    await render(<AdminDataIntegrityReport />)
+    await waitFor(() => {
+      expect(screen.getByText('Containers with no grid position')).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: '42' })).toHaveAttribute('href', '/containers/42')
     })
   })
 
