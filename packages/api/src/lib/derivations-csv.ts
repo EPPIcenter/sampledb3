@@ -46,6 +46,11 @@ function toUserFriendlyDerivationError(rawMessage: string): string {
   return rawMessage
 }
 
+/** A CSV value conflicts only with a shared setting that is set; '' means "In CSV (per row)". */
+function conflictsWithSetting(csvValue: string | undefined, settingValue: string): boolean {
+  return !!csvValue && settingValue !== '' && csvValue !== settingValue
+}
+
 export interface BulkDerivationSettings {
   // When set, same for all rows; when empty string, column must be in CSV (per row)
   derivationType: string
@@ -351,31 +356,31 @@ export async function validateDerivationsCsv(
     try {
       // Validate required fields from settings
       if (settings) {
-        if (row.derivation_type && row.derivation_type !== settings.derivationType) {
+        if (conflictsWithSetting(row.derivation_type, settings.derivationType)) {
           validationRow.error = 'derivation_type in CSV conflicts with shared settings. Remove derivation_type from CSV.'
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        if (row.specimen_type_name && row.specimen_type_name !== settings.specimenTypeName) {
+        if (conflictsWithSetting(row.specimen_type_name, settings.specimenTypeName)) {
           validationRow.error = 'specimen_type_name in CSV conflicts with shared settings. Remove specimen_type_name from CSV.'
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        if (row.container_type && row.container_type !== settings.containerType) {
+        if (conflictsWithSetting(row.container_type, settings.containerType)) {
           validationRow.error = 'container_type in CSV conflicts with shared settings. Remove container_type from CSV.'
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        if (row.protocol && row.protocol !== settings.protocol) {
+        if (conflictsWithSetting(row.protocol, settings.protocol)) {
           validationRow.error = 'protocol in CSV conflicts with shared settings. Remove protocol from CSV.'
           validationRows.push(validationRow)
           invalidCount++
           continue
         }
-        if (row.derivation_date && row.derivation_date !== settings.derivationDate) {
+        if (conflictsWithSetting(row.derivation_date, settings.derivationDate)) {
           validationRow.error = 'derivation_date in CSV conflicts with shared settings. Remove derivation_date from CSV.'
           validationRows.push(validationRow)
           invalidCount++
@@ -613,19 +618,19 @@ export async function importDerivationsFromCsv(
   // Validate that required fields from settings are not in CSV
   if (settings) {
     for (const row of rows) {
-      if (row.derivation_type && row.derivation_type !== settings.derivationType) {
+      if (conflictsWithSetting(row.derivation_type, settings.derivationType)) {
         throw new Error(`Row ${rows.indexOf(row) + 1}: derivation_type in CSV conflicts with shared settings. Remove derivation_type from CSV.`)
       }
-      if (row.specimen_type_name && row.specimen_type_name !== settings.specimenTypeName) {
+      if (conflictsWithSetting(row.specimen_type_name, settings.specimenTypeName)) {
         throw new Error(`Row ${rows.indexOf(row) + 1}: specimen_type_name in CSV conflicts with shared settings. Remove specimen_type_name from CSV.`)
       }
-      if (row.container_type && row.container_type !== settings.containerType) {
+      if (conflictsWithSetting(row.container_type, settings.containerType)) {
         throw new Error(`Row ${rows.indexOf(row) + 1}: container_type in CSV conflicts with shared settings. Remove container_type from CSV.`)
       }
-      if (row.protocol && row.protocol !== settings.protocol) {
+      if (conflictsWithSetting(row.protocol, settings.protocol)) {
         throw new Error(`Row ${rows.indexOf(row) + 1}: protocol in CSV conflicts with shared settings. Remove protocol from CSV.`)
       }
-      if (row.derivation_date && row.derivation_date !== settings.derivationDate) {
+      if (conflictsWithSetting(row.derivation_date, settings.derivationDate)) {
         throw new Error(`Row ${rows.indexOf(row) + 1}: derivation_date in CSV conflicts with shared settings. Remove derivation_date from CSV.`)
       }
     }
