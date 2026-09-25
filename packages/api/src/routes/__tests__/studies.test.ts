@@ -5,7 +5,7 @@ import {
   type AuthenticatedRouteTestContext,
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createStudiesRoutes } from '../studies'
-import { createTestStudy } from '../../__tests__/helpers/factories'
+import { createTestStudy, createTestSpecimenType, createTestUnit } from '../../__tests__/helpers/factories'
 
 describe('Studies API (list, get, create, update)', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -147,5 +147,37 @@ describe('Studies API (list, get, create, update)', () => {
       })
       expect(res.status).toBe(401)
     })
+  })
+
+  describe('GET /api/studies/:id/summary', () => {
+    it('handles studies with more specimens than SQLite allows as bound parameters', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Big Study', shortCode: 'BIG01' })
+      const type = await createTestSpecimenType(ctx.db, { name: 'DBS' })
+      const unit = await createTestUnit(ctx.db, { symbol: 'spots', name: 'spots', category: 'count' })
+      const count = 70_000
+      ctx.sqlite.exec('BEGIN')
+      const addSubject = ctx.sqlite.prepare(
+        "INSERT INTO study_subject (study_id, name, created, last_updated) VALUES (?, ?, '2024-01-01', '2024-01-01')",
+      )
+      const addSpecimen = ctx.sqlite.prepare(
+        "INSERT INTO specimen (study_subject_id, specimen_type_id, collection_date, created, last_updated) VALUES (?, ?, '2024-01-01', '2024-01-01', '2024-01-01')",
+      )
+      const addContainer = ctx.sqlite.prepare(
+        "INSERT INTO storage_container (specimen_id, unit_id, total_quantity, remaining_quantity, created, last_updated) VALUES (?, ?, 1, 1, '2024-01-01', '2024-01-01')",
+      )
+      for (let i = 0; i < count; i++) {
+        const subject = addSubject.run(studyRecord.id, `S${i}`)
+        const spec = addSpecimen.run(subject.lastInsertRowid, type.id)
+        addContainer.run(spec.lastInsertRowid, unit.id)
+      }
+      ctx.sqlite.exec('COMMIT')
+
+      const res = await ctx.request(`/api/studies/${studyRecord.id}/summary`)
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { summary: { totalSpecimens: number; totalContainers: number } }
+      expect(data.summary.totalSpecimens).toBe(count)
+      expect(data.summary.totalContainers).toBe(count)
+    }, 60_000)
   })
 })
