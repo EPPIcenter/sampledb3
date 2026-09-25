@@ -7,7 +7,10 @@ import {
   createTestMicronixPlate,
   createTestStorageContainer,
   createTestStorageType,
+  createTestSpecimen,
+  createTestSpecimenType,
 } from '../../../__tests__/helpers/factories'
+import { utcNow } from '../../datetime'
 import { micronixTube } from '../../../db/schema'
 import { getDashboardStatistics } from '../dashboard-stats'
 
@@ -58,6 +61,27 @@ describe('dashboard-stats', () => {
     expect(data.containers.total).toBe(0)
     expect(data.storage.byLocation).toEqual([])
     expect(data.storage._summary).toBeUndefined()
+  })
+
+  it('does not report whole-database totals for an unknown study', async () => {
+    const type = await createTestSpecimenType(testDb, { name: 'Blood' })
+    await createTestSpecimen(testDb, type.id)
+
+    const all = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, {})
+    const unknown = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, { study: 'NONEXISTENT' })
+
+    expect(all.specimens.total).toBe(1)
+    expect(unknown.specimens.total).toBe(0)
+  })
+
+  it('includes records created on the created_to date', async () => {
+    const type = await createTestSpecimenType(testDb, { name: 'Blood' })
+    await createTestSpecimen(testDb, type.id)
+    const today = utcNow().slice(0, 10)
+
+    const data = await getDashboardStatistics(testDb, sqlite as SQLiteDatabase, { created_to: today })
+
+    expect(data.specimens.total).toBe(1)
   })
 
   it('includes containers at a filtered location', async () => {

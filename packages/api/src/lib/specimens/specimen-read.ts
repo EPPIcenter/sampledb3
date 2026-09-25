@@ -3,6 +3,7 @@ import { specimen, storageContainer, studySubject, study, specimenType, controlB
 import { eq, and, like, or, sql } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../constants'
 import { resolveContainerByBarcode } from '../identifier-resolution'
+import { dateToUpperBound } from '../statistics/helpers'
 
 export type ListSpecimensQuery = {
   sourceType?: string
@@ -150,7 +151,7 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
     conditions.push(sql`${specimen.created} >= ${createdFrom}`)
   }
   if (createdTo) {
-    conditions.push(sql`${specimen.created} <= ${createdTo}`)
+    conditions.push(dateToUpperBound(specimen.created, createdTo))
   }
 
   if (barcode) {

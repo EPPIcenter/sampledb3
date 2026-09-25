@@ -20,6 +20,7 @@ import type {
   StudyRecord,
 } from './types'
 import { buildExportSummary, validateStudyCodes } from './validate'
+import { dateToUpperBound } from '../statistics/helpers'
 
 export async function buildContainerQuery(database: Database, filters: ExportFilters) {
   // First, get the study and its subjects
@@ -158,7 +159,7 @@ export async function buildContainerQuery(database: Database, filters: ExportFil
   }
 
   if (filters.created_to) {
-    containerConditions.push(lte(storageContainer.created, filters.created_to))
+    containerConditions.push(dateToUpperBound(storageContainer.created, filters.created_to))
   }
 
   // Get matching containers

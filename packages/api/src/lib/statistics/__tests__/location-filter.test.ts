@@ -8,7 +8,8 @@ import {
   createTestStorageContainer,
   createTestStorageType,
 } from '../../../__tests__/helpers/factories'
-import { micronixTube } from '../../../db/schema'
+import { micronixTube, staticWell, box, bag, sheet, paper } from '../../../db/schema'
+import { utcNow } from '../../datetime'
 import {
   resolveContainerIdsAtLocations,
   resolveStatisticsLocationFilter,
@@ -92,5 +93,29 @@ describe('location-filter', () => {
     const ids = await resolveContainerIdsAtLocations(testDb, [loc.id])
 
     expect(ids).toEqual([container.id])
+  })
+
+  it('resolveContainerIdsAtLocations includes static wells and papers in boxes and bags', async () => {
+    const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+    const loc = await createTestLocation(testDb, { name: 'Freezer A', storageTypeId: String(storageType.id) })
+    const now = utcNow()
+    const plate = await createTestMicronixPlate(testDb, { name: 'P1', locationId: loc.id })
+    const well = await createTestStorageContainer(testDb)
+    await testDb.insert(staticWell).values({ id: well.id, collectionId: plate.id, position: 'A01' })
+    const [boxRow] = await testDb.insert(box).values({ name: 'Box1', locationId: loc.id, created: now, lastUpdated: now }).returning()
+    const [bagRow] = await testDb.insert(bag).values({ name: 'Bag1', locationId: loc.id, created: now, lastUpdated: now }).returning()
+    const [boxSheet] = await testDb.insert(sheet).values({ name: 'S1', boxId: boxRow.id }).returning()
+    const [bagSheet] = await testDb.insert(sheet).values({ name: 'S1', bagId: bagRow.id }).returning()
+    const reuse = { specimenId: well.specimenId, unitId: well.unitId! }
+    const paperInBox = await createTestStorageContainer(testDb, reuse)
+    const paperInBag = await createTestStorageContainer(testDb, reuse)
+    await testDb.insert(paper).values([
+      { id: paperInBox.id, sheetId: boxSheet.id },
+      { id: paperInBag.id, sheetId: bagSheet.id },
+    ])
+
+    const ids = await resolveContainerIdsAtLocations(testDb, [loc.id])
+
+    expect(ids.sort((a, b) => a - b)).toEqual([well.id, paperInBox.id, paperInBag.id].sort((a, b) => a - b))
   })
 })
