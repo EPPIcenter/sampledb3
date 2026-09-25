@@ -17,7 +17,7 @@ import {
   type ContainerInfo,
 } from '../container-move'
 import { storageContainer } from '../../db/schema'
-import { micronixTube } from '../../db/schema'
+import { micronixTube, staticWell } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../datetime'
 
@@ -464,6 +464,100 @@ describe('container-move', () => {
 
       const movedToA02 = await resolveContainerByPosition(testDb, 'BestEffortPlate', 'micronix_plate', 'A02')
       expect(movedToA02?.barcode).toBe('MT-BESTEFFORT-001')
+    })
+  })
+
+  describe('position normalization and occupancy', () => {
+    async function setupPlate(name = 'NormPlate') {
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(testDb, { name, locationId: location.id })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
+      const specimen = await createTestSpecimen(testDb, specimenType.id)
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const newContainerId = async () => {
+        const now = utcNow()
+        const [container] = await testDb
+          .insert(storageContainer)
+          .values({ specimenId: specimen.id, unitId: unit.id, totalQuantity: 1, remainingQuantity: 1, created: now, lastUpdated: now })
+          .returning()
+        return container!.id
+      }
+      const addTube = async (barcode: string, position: string) => {
+        const id = await newContainerId()
+        await testDb.insert(micronixTube).values({ id, collectionId: plate.id, barcode, position })
+        return id
+      }
+      const addWell = async (position: string) => {
+        const id = await newContainerId()
+        await testDb.insert(staticWell).values({ id, collectionId: plate.id, position })
+        return id
+      }
+      return { plate, addTube, addWell }
+    }
+
+    it('stores a normalized target position and resolves a non-padded source position', async () => {
+      const { plate, addTube } = await setupPlate()
+      await addTube('MT-NORM-1', 'A01')
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: plate.name, toCollectionName: plate.name }],
+        moves: [{ identifier: { type: 'position', sourceCollectionName: plate.name, sourcePosition: 'a1' }, targetPosition: 'b1' }],
+      })
+
+      expect(result.success).toBe(true)
+      const [tube] = await testDb.select().from(micronixTube).all()
+      expect(tube.position).toBe('B01')
+    })
+
+    it('treats non-padded and padded targets in one batch as the same cell', async () => {
+      const { plate, addTube } = await setupPlate()
+      await addTube('MT-DUP-1', 'A01')
+      await addTube('MT-DUP-2', 'A02')
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: plate.name, toCollectionName: plate.name }],
+        moves: [
+          { identifier: { type: 'barcode', barcode: 'MT-DUP-1' }, targetPosition: 'C1' },
+          { identifier: { type: 'barcode', barcode: 'MT-DUP-2' }, targetPosition: 'C01' },
+        ],
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.moved).toBe(0)
+    })
+
+    it('best_effort does not move a container into the cell of one whose move failed', async () => {
+      const { plate, addTube, addWell } = await setupPlate()
+      await addWell('A01')
+      await addTube('MT-Y', 'B01')
+      await addTube('MT-T9', 'D01')
+
+      const result = await executeMoves(testDb, {
+        atomicMode: 'best_effort',
+        mappings: [{ fromCollectionName: plate.name, toCollectionName: plate.name }],
+        moves: [
+          { identifier: { type: 'position', sourceCollectionName: plate.name, sourcePosition: 'A01' }, targetPosition: 'C01' },
+          { identifier: { type: 'barcode', barcode: 'MT-Y' }, targetPosition: 'C01' },
+          { identifier: { type: 'barcode', barcode: 'MT-T9' }, targetPosition: 'A01' },
+        ],
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.moved).toBe(0)
+      const [well] = await testDb.select().from(staticWell).all()
+      expect(well.position).toBe('A01')
+      const tubes = await testDb.select().from(micronixTube).all()
+      expect(tubes.find((t) => t.barcode === 'MT-T9')?.position).toBe('D01')
+    })
+
+    it('resolves a static well by container_id', async () => {
+      const { plate, addWell } = await setupPlate()
+      const wellId = await addWell('A01')
+
+      const info = await resolveContainerByIdentifier(testDb, { type: 'container_id', containerId: wellId })
+      expect(info?.containerType).toBe('static_well')
+      expect(info?.currentCollectionName).toBe(plate.name)
     })
   })
 })

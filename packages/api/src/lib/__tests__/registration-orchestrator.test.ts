@@ -12,7 +12,7 @@ import {
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
 import { validateBulkSpecimenRows } from '../registration-orchestrator'
-import { specimenTypeContainerType, containerTypeUnit, micronixTube } from '../../db/schema'
+import { specimenTypeContainerType, containerTypeUnit, micronixTube, staticWell } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../datetime'
 
@@ -186,6 +186,45 @@ describe('registration-orchestrator', () => {
 
       expect(result.valid).toBe(false)
       expect(result.errors.some((e) => e.message.includes("Barcode 'EXISTING' already exists"))).toBe(true)
+    })
+
+    it('returns invalid when a micronix tube targets a cell held by a static well', async () => {
+      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
+      const subject = await createTestStudySubject(testDb, { studyId: study.id, name: 'Subj1' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const loc = await createTestLocation(testDb, {
+        name: 'Loc',
+        storageTypeId: String(storageType.id),
+        canContainCollections: true,
+      })
+      const plate = await createTestMicronixPlate(testDb, { name: 'Plate1', locationId: loc.id })
+      const now = utcNow()
+      await testDb.insert(specimenTypeContainerType).values({
+        specimenTypeId: specimenType.id,
+        containerType: 'micronix_tube',
+        created: now,
+        lastUpdated: now,
+      })
+      const container = await createTestStorageContainer(testDb)
+      await testDb.insert(staticWell).values({ id: container.id, collectionId: plate.id, position: 'A01' })
+
+      const result = await validateBulkSpecimenRows(testDb, [
+        {
+          sourceType: 'subject',
+          studyShortCode: study.shortCode,
+          subjectName: subject.name,
+          specimenTypeName: specimenType.name,
+          container: {
+            containerType: 'micronix_tube',
+            barcode: 'NEW-TUBE',
+            collection: { type: 'micronix_plate', name: plate.name, position: 'A1' },
+          },
+        },
+      ])
+
+      expect(result.valid).toBe(false)
+      expect(result.errors.some((e) => e.message.includes('Position A01 is already used'))).toBe(true)
     })
   })
 })
