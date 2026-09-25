@@ -1,3 +1,4 @@
+import { parseCsv } from '@sampledb/contract'
 import type { ScannerConfiguration } from './settings'
 
 /** Normalize well position to A01 style (row + 2-digit column) */
@@ -30,13 +31,13 @@ export function parsePlateCSV(
   csvText: string,
   config: ScannerConfiguration
 ): { wellPosition: string; barcode: string }[] {
-  const lines = csvText.split('\n').map((l) => l.trim()).filter(Boolean)
+  // Shared parser: handles quoted fields ("A01","FR123"), BOM, and CRLF.
+  const lines = parseCsv(csvText).filter((cells) => cells.some((cell) => cell.trim() !== ''))
   if (lines.length <= config.skipRows) return []
-  const headerLine = lines[config.skipRows]
-  const headers = headerLine.split(',').map((h) => h.trim())
+  const headers = lines[config.skipRows].map((h) => h.trim())
   const rows: { wellPosition: string; barcode: string }[] = []
   for (let i = config.skipRows + 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map((v) => v.trim())
+    const values = lines[i].map((v) => v.trim())
     const row: Record<string, string> = {}
     headers.forEach((h, j) => {
       row[h] = values[j] ?? ''
