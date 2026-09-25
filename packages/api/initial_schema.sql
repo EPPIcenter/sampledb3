@@ -259,6 +259,7 @@ CREATE TABLE IF NOT EXISTS sheet (
          (box_id IS NULL AND bag_id IS NOT NULL) OR
          (box_id IS NULL AND bag_id IS NULL))
 );--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS sheet_box_name_idx ON sheet(box_id, name) WHERE box_id IS NOT NULL;--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS paper (
   id INTEGER PRIMARY KEY REFERENCES storage_container(id),
   sheet_id INTEGER NOT NULL REFERENCES sheet(id),
@@ -283,7 +284,7 @@ CREATE TABLE IF NOT EXISTS storage_type (
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );--> statement-breakpoint
-INSERT INTO schema_version (version) VALUES (5);--> statement-breakpoint
+INSERT INTO schema_version (version) VALUES (6);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT NOT NULL,
   user_id INTEGER REFERENCES users(id),

@@ -11,7 +11,7 @@ import {
   sheet,
 } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
-import { resolveCollection, type CollectionType } from './collections/collection-resolve'
+import { resolveCollection, resolveSheetsByName, type CollectionType } from './collections/collection-resolve'
 import { checkGridPositionOccupancy } from './container-occupancy'
 import { normalizePosition } from './normalize-position'
 
@@ -42,6 +42,9 @@ export interface MoveOperation {
 export interface CollectionMapping {
   fromCollectionName: string
   toCollectionName: string
+  /** For sheets: box or bag holding the source / target sheet (sheet names repeat). */
+  fromParentName?: string
+  toParentName?: string
 }
 
 export interface BatchMoveRequest {
@@ -378,6 +381,23 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
     const mappingMap = new Map<number, number>()
     const mappingErrors: string[] = []
     for (const m of mappings) {
+      if (collectionType === 'sheet') {
+        // Every sheet with the source name (in fromParentName, if given) maps to the one
+        // target sheet; the target must be unambiguous.
+        const fromIds = await resolveSheetsByName(database, m.fromCollectionName, m.fromParentName)
+        const toIds = await resolveSheetsByName(database, m.toCollectionName, m.toParentName)
+        if (fromIds.length === 0) mappingErrors.push(`Source collection "${m.fromCollectionName}" not found`)
+        if (toIds.length === 0) mappingErrors.push(`Target collection "${m.toCollectionName}" not found`)
+        if (toIds.length > 1) {
+          mappingErrors.push(
+            `Target sheet "${m.toCollectionName}" matches ${toIds.length} sheets; set toParentName to the box or bag that holds it`,
+          )
+        }
+        if (fromIds.length > 0 && toIds.length === 1) {
+          for (const fromId of fromIds) mappingMap.set(fromId, toIds[0])
+        }
+        continue
+      }
       const fromId = await resolveCollection(m.fromCollectionName, collectionType, database)
       const toId = await resolveCollection(m.toCollectionName, collectionType, database)
       if (fromId && toId) {

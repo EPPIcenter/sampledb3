@@ -7,7 +7,7 @@ import { listNumberedMigrations, runSqlMigration } from './migration-runner'
 const PAPER_SUBLABEL_MIGRATION_VERSION = 3
 
 /** Canonical schema level; bump when adding numbered deltas under migrations/. */
-export const CURRENT_SCHEMA_VERSION = 5
+export const CURRENT_SCHEMA_VERSION = 6
 
 const SCHEMA_VERSION_TABLE = 'schema_version'
 const LEGACY_BASELINE_VERSION = 1

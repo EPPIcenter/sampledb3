@@ -356,7 +356,8 @@ export const sheet = sqliteTable('sheet', {
     (${t.boxId} IS NULL AND ${t.bagId} IS NOT NULL) OR
     (${t.boxId} IS NULL AND ${t.bagId} IS NULL)
   `),
-  unq: unique().on(t.name, t.boxId, t.bagId)
+  unq: unique().on(t.name, t.boxId, t.bagId),
+  boxNameUniq: uniqueIndex('sheet_box_name_idx').on(t.boxId, t.name).where(sql`${t.boxId} IS NOT NULL`),
 }))
 
 export const paper = sqliteTable('paper', {

@@ -10,7 +10,7 @@ import {
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
 import { runBulkCombinedImport } from '../bulk-combined-import'
-import { moveSheetsToCollection, SheetNotFoundError } from '../collections/sheet-move'
+import { moveSheetsToCollection, SheetNameConflictError, SheetNotFoundError } from '../collections/sheet-move'
 import {
   specimenTypeContainerType,
   containerTypeUnit,
@@ -115,5 +115,16 @@ describe('multi-step writes roll back on failure', () => {
 
     const [after] = await testDb.select().from(sheet).where(eq(sheet.id, s1.id))
     expect(after.boxId).toBe(boxA.id)
+  })
+
+  it('sheet move refuses a name that already exists in the target box', async () => {
+    const { loc } = await setupMicronixPlate()
+    const now = utcNow()
+    const [boxA] = await testDb.insert(box).values({ name: 'BoxA', locationId: loc.id, created: now, lastUpdated: now }).returning()
+    const [boxB] = await testDb.insert(box).values({ name: 'BoxB', locationId: loc.id, created: now, lastUpdated: now }).returning()
+    const [moving] = await testDb.insert(sheet).values({ name: 'Sheet-1', boxId: boxA.id }).returning()
+    await testDb.insert(sheet).values({ name: 'Sheet-1', boxId: boxB.id })
+
+    await expect(moveSheetsToCollection(testDb, [moving.id], boxB.id, 'box')).rejects.toBeInstanceOf(SheetNameConflictError)
   })
 })
