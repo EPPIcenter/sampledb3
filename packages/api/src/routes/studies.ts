@@ -23,6 +23,7 @@ import { createAuthMiddleware, createMemberMiddleware, createAdminMiddleware } f
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 import { withWriteTransaction } from '../db/write-transaction'
+import { assertNotUsedInQpcr } from '../lib/qpcr-usage'
 
 /** Short code prefix for tutorial namespace. Any study whose short code starts with this (case-insensitive) may be deleted by any member. Only admins may rename a study into or out of this namespace. */
 const TUTORIAL_SHORT_CODE_PREFIX = 'TUT'
@@ -736,6 +737,8 @@ studies.delete('/:id', memberMiddleware, async (c) => {
         .where(inArray(storageContainer.specimenId, specimenIds))
       containerIds = containers.map((c) => c.id)
     }
+
+    await assertNotUsedInQpcr(database, { containerIds, specimenIds }, `study '${existingStudy.shortCode}'`)
 
     const SQLITE_BATCH = 500
     const runBatch = <T>(ids: number[], fn: (batch: number[]) => void) => {

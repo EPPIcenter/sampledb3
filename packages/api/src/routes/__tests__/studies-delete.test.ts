@@ -14,7 +14,15 @@ import {
   createTestStorageContainer,
 } from '../../__tests__/helpers/factories'
 import { eq } from 'drizzle-orm'
-import { study, studySubject, specimen, storageContainer, specimenTypeContainerType } from '../../db/schema'
+import {
+  study,
+  studySubject,
+  specimen,
+  storageContainer,
+  specimenTypeContainerType,
+  qpcrExperiment,
+  qpcrExperimentWell,
+} from '../../db/schema'
 
 describe('Studies DELETE (cascade)', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -116,6 +124,33 @@ describe('Studies DELETE (cascade)', () => {
 
     const remainingContainers = await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, testContainer.id))
     expect(remainingContainers.length).toBe(0)
+  })
+
+  it('returns 409 and keeps the study when its containers are used in a qPCR experiment', async () => {
+    const testSpecimenType = await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+    const testStudy = await createTestStudy(ctx.db, { title: 'Study In qPCR', shortCode: 'QPCR01' })
+    const testSubject = await createTestStudySubject(ctx.db, { studyId: testStudy.id, name: 'Subject A' })
+    const testSpecimen = await createTestSpecimen(ctx.db, testSpecimenType.id, { studySubjectId: testSubject.id })
+    const testUnit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+    const testContainer = await createTestStorageContainer(ctx.db, { specimenId: testSpecimen.id, unitId: testUnit.id })
+    const [exp] = await ctx.db
+      .insert(qpcrExperiment)
+      .values({ name: 'Plate run', templateFormat: 'biorad', status: 'results_uploaded' })
+      .returning()
+    await ctx.db.insert(qpcrExperimentWell).values({
+      qpcrExperimentId: exp.id,
+      wellPosition: 'A01',
+      storageContainerId: testContainer.id,
+      specimenId: testSpecimen.id,
+    })
+
+    const res = await ctx.request(`/api/studies/${testStudy.id}`, { method: 'DELETE' })
+
+    expect(res.status).toBe(409)
+    const data = (await res.json()) as { error?: string }
+    expect(data.error).toContain("'Plate run'")
+    expect(await ctx.db.select().from(study).where(eq(study.id, testStudy.id))).toHaveLength(1)
+    expect(await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, testContainer.id))).toHaveLength(1)
   })
 
   it('returns 404 when study does not exist', async () => {
