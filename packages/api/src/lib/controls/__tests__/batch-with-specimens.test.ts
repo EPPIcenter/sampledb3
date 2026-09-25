@@ -10,8 +10,8 @@ import {
 } from '../../../__tests__/helpers/factories'
 import { setContainerDefaults, clearSettingsCache } from '../../settings'
 import { clearDefaultsCache } from '../../defaults'
-import { createBatchWithSpecimens } from '../batch-with-specimens'
-import { specimenTypeContainerType, containerTypeUnit, storageContainer, box } from '../../../db/schema'
+import { createBatchWithSpecimens, createBatchesWithSpecimens } from '../batch-with-specimens'
+import { specimenTypeContainerType, containerTypeUnit, storageContainer, box, controlBatch } from '../../../db/schema'
 import { eq } from 'drizzle-orm'
 import type { Database } from '../../../db/client'
 import { utcNow } from '../../datetime'
@@ -370,6 +370,38 @@ describe('batch-with-specimens', () => {
       const created = await testDb.select().from(storageContainer).where(eq(storageContainer.id, containerId!)).get()
       expect(created).toBeDefined()
       expect(created.unitId).toBe(unit.id)
+    })
+  })
+
+  describe('createBatchesWithSpecimens', () => {
+    it('creates no batches when a later batch fails', async () => {
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(testDb, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      const def100 = await createTestControlDefinition(testDb, { name: 'D100' })
+      const def200 = await createTestControlDefinition(testDb, { name: 'D200' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      await testDb.insert(specimenTypeContainerType).values({ specimenTypeId: specimenType.id, containerType: 'micronix_tube', created: utcNow() })
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(testDb, { name: 'Plate1', locationId: location.id })
+      const tube = (barcode: string, position: string) => ({
+        containerType: 'micronix_tube' as const,
+        barcode,
+        collection: { type: 'micronix_plate' as const, id: plate.id, position },
+      })
+
+      await expect(
+        createBatchesWithSpecimens(testDb, [
+          { batch: { controlDefinitionId: def100.id, name: 'B100' }, specimens: [{ specimenTypeName: 'DNA', containers: [tube('MT1', 'A01')] }] },
+          { batch: { controlDefinitionId: def200.id, name: 'B200' }, specimens: [{ specimenTypeName: 'Nope', containers: [tube('MT2', 'A02')] }] },
+        ]),
+      ).rejects.toThrow(/Batch 2 \('B200'\).*No batches were created/)
+
+      expect(await testDb.select().from(controlBatch).all()).toHaveLength(0)
+      expect(await testDb.select().from(storageContainer).all()).toHaveLength(0)
     })
   })
 })

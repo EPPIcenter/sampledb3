@@ -5,7 +5,8 @@ import {
   type FlatControlBatchContainer,
 } from '../../lib/control-batch-payload'
 import { settingsApi } from '../../lib/api/settings';
-import type { ControlDefinition } from '../../lib/api/controls';
+import { getQueryErrorMessage } from '../../ui'
+import type { ControlDefinition, CreateBatchWithSpecimensRequest } from '../../lib/api/controls';
 import { normalizePosition, groupRowsByDensity } from '../../lib/control-batch-csv'
 import type { BatchInfo, SpecimenTypeConfig, CSVFileData, CompositionStrains } from '../../pages/ControlBatchWizard'
 
@@ -147,7 +148,7 @@ export default function ReviewStep({
 
     setSubmitting(true)
     try {
-      let lastBatchId: number | null = null
+      const batchPayloads: CreateBatchWithSpecimensRequest[] = []
       for (const batchRow of multiBatchRows) {
         const definitionId = batchRow.candidates.length === 1
           ? batchRow.candidates[0]!.id
@@ -196,7 +197,7 @@ export default function ReviewStep({
           specimenTypeName,
           containers,
         }))
-        const res = await controlsApi.createBatchWithSpecimens({
+        batchPayloads.push({
           batch: {
             controlDefinitionId: definitionId,
             name: batchName,
@@ -207,16 +208,19 @@ export default function ReviewStep({
             containers: containers.map(flatControlBatchContainerToWriteInput),
           })),
         })
-        const batchId = res.batch?.id
-        if (batchId != null) lastBatchId = batchId
       }
-      if (lastBatchId != null) onSuccess(lastBatchId)
-      else {
+      if (batchPayloads.length === 0) {
         setError('No batches were created')
+        return
       }
+      // One request: the server creates every batch or none, so a retry cannot duplicate.
+      const res = await controlsApi.createBatchesWithSpecimens({ batches: batchPayloads })
+      const created = res.batches
+      if (created.length > 0) onSuccess(created[created.length - 1].batch.id)
+      else setError('No batches were created')
     } catch (err: unknown) {
       console.error('Multi-batch submit failed:', err)
-      setError(err instanceof Error ? err.message : 'Failed to create batches')
+      setError(getQueryErrorMessage(err, 'Failed to create batches'))
     } finally {
       setSubmitting(false)
     }

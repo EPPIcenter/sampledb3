@@ -379,3 +379,25 @@ export async function addSpecimensToBatch(
     }
   })
 }
+
+/**
+ * Create several batches with their specimens in one transaction, so a failure on any
+ * batch leaves none of them behind (retrying would otherwise duplicate the earlier ones).
+ */
+export async function createBatchesWithSpecimens(
+  database: Database,
+  batches: CreateBatchWithSpecimensRequest[],
+): Promise<Array<Awaited<ReturnType<typeof createBatchWithSpecimens>>>> {
+  return withWriteTransaction(database, async (tx) => {
+    const results: Array<Awaited<ReturnType<typeof createBatchWithSpecimens>>> = []
+    for (const [index, data] of batches.entries()) {
+      try {
+        results.push(await createBatchWithSpecimens(tx, data))
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new ValidationError(`Batch ${index + 1} ('${data.batch.name}'): ${message}. No batches were created.`)
+      }
+    }
+    return results
+  })
+}

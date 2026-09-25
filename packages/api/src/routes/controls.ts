@@ -21,11 +21,13 @@ import { validateControlBatchCsv } from '../lib/controls/batch-csv-validate'
 import {
   createBloodControlBatchSchema,
   createBatchWithSpecimensSchema,
+  createBatchesWithSpecimensSchema,
   addSpecimensToBatchSchema,
   validateControlBatchCsvSchema,
 } from '../lib/controls/batch-schemas'
 import {
   createBatchWithSpecimens,
+  createBatchesWithSpecimens,
   addSpecimensToBatch,
 } from '../lib/controls/batch-with-specimens'
 import { getBloodControlBatchSummary } from '../lib/controls/batch-summary'
@@ -717,6 +719,18 @@ controls.post('/:id/batches', memberMiddleware, async (c) => {
 })
 
 // Create batch with specimens
+// Create several batches (one per density) all-or-nothing
+controls.post('/batches/create-many-with-specimens', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const data = createBatchesWithSpecimensSchema.parse(body)
+    const results = await createBatchesWithSpecimens(dbInstance, data.batches)
+    return c.json({ batches: results }, 201)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
 controls.post('/batches/create-with-specimens', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()

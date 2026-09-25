@@ -5,6 +5,7 @@ import type { BatchInfo, CSVFileData, CompositionStrains } from '../../../pages/
 import type { ControlDefinition } from '../../../lib/api/controls'
 
 const mockCreateBatchWithSpecimens = vi.fn()
+const mockCreateBatchesWithSpecimens = vi.fn()
 const mockSuggestBatchName = vi.fn()
 
 vi.mock('../../../lib/api/controls', async () => {
@@ -12,6 +13,7 @@ vi.mock('../../../lib/api/controls', async () => {
   return createMockedDomainModule('controls', {
     controlsApi: {
       createBatchWithSpecimens: (...args: unknown[]) => mockCreateBatchWithSpecimens(...args),
+      createBatchesWithSpecimens: (...args: unknown[]) => mockCreateBatchesWithSpecimens(...args),
       suggestBatchName: (...args: unknown[]) => mockSuggestBatchName(...args),
     },
   })
@@ -65,7 +67,7 @@ describe('ReviewStep multi-batch CSV', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockSuggestBatchName.mockResolvedValue({ name: 'Suggested Batch' })
-    mockCreateBatchWithSpecimens.mockResolvedValue({ batch: { id: 101 }, specimens: [], createdCollections: [] })
+    mockCreateBatchesWithSpecimens.mockResolvedValue({ batches: [{ batch: { id: 101 }, specimens: [], createdCollections: [] }] })
   })
 
   it('does not call createBatchWithSpecimens when a density has no matching definition', async () => {
@@ -107,7 +109,7 @@ describe('ReviewStep multi-batch CSV', () => {
     expect(submitBtn).toBeDisabled()
 
     fireEvent.click(submitBtn)
-    expect(mockCreateBatchWithSpecimens).not.toHaveBeenCalled()
+    expect(mockCreateBatchesWithSpecimens).not.toHaveBeenCalled()
   })
 
   it('calls createBatchWithSpecimens with correct definition IDs when all densities match', async () => {
@@ -158,11 +160,13 @@ describe('ReviewStep multi-batch CSV', () => {
     fireEvent.click(submitBtn)
 
     await waitFor(() => {
-      expect(mockCreateBatchWithSpecimens).toHaveBeenCalledTimes(2)
+      // Both densities go in one all-or-nothing request.
+      expect(mockCreateBatchesWithSpecimens).toHaveBeenCalledTimes(1)
     })
     expect(mockSuggestBatchName).toHaveBeenCalled()
-    const createCalls = mockCreateBatchWithSpecimens.mock.calls
-    const definitionIds = createCalls.map((c) => c[0].batch.controlDefinitionId)
+    const batches = mockCreateBatchesWithSpecimens.mock.calls[0][0].batches as Array<{ batch: { controlDefinitionId: number } }>
+    expect(batches).toHaveLength(2)
+    const definitionIds = batches.map((b) => b.batch.controlDefinitionId)
     expect(definitionIds).toContain(10)
     expect(definitionIds).toContain(11)
   })
@@ -217,13 +221,43 @@ describe('ReviewStep multi-batch CSV', () => {
     fireEvent.click(submitBtn)
 
     await waitFor(() => {
-      expect(mockCreateBatchWithSpecimens).toHaveBeenCalledTimes(1)
+      expect(mockCreateBatchesWithSpecimens).toHaveBeenCalledTimes(1)
     })
-    expect(mockCreateBatchWithSpecimens).toHaveBeenCalledWith(
-      expect.objectContaining({
-        batch: expect.objectContaining({ controlDefinitionId: 21 }),
-      })
+    expect(mockCreateBatchesWithSpecimens).toHaveBeenCalledWith({
+      batches: [expect.objectContaining({ batch: expect.objectContaining({ controlDefinitionId: 21 }) })],
+    })
+  })
+})
+
+describe('ReviewStep multi-batch CSV errors', () => {
+  it("shows the server's error instead of the HTTP status text", async () => {
+    vi.clearAllMocks()
+    mockSuggestBatchName.mockResolvedValue({ name: 'Suggested Batch' })
+    mockCreateBatchesWithSpecimens.mockRejectedValue(
+      Object.assign(new Error('Request failed with status code 400'), {
+        response: { data: { error: "Batch 2 ('B'): Specimen type not found. No batches were created." } },
+      }),
     )
+    const def5000: ControlDefinition = {
+      id: 10, name: 'Def 5000', controlType: 'blood', created: '', lastUpdated: '', targetDensity: 5000, unitSymbol: 'µL',
+    }
+    render(
+      <ReviewStep
+        batchInfo={makeBatchInfo()}
+        compositionStrains={[{ id: 1, percentage: 100 }]}
+        compositionDefinitions={[def5000]}
+        specimenTypes={[]}
+        csvFiles={[makeCsvFile({ rows: [{ specimen_type_name: 'Whole Blood', density: 5000 }] })]}
+        onBack={() => {}}
+        onCancel={() => {}}
+        onSuccess={() => {}}
+        isAddMode={false}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Create Batch/i }))
+
+    expect(await screen.findByText(/No batches were created/)).toBeInTheDocument()
   })
 })
 
@@ -233,7 +267,7 @@ describe('ReviewStep multi-batch CSV nested collection placement', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockSuggestBatchName.mockResolvedValue({ name: 'Suggested Batch' })
-    mockCreateBatchWithSpecimens.mockResolvedValue({ batch: { id: 103 }, specimens: [], createdCollections: [] })
+    mockCreateBatchesWithSpecimens.mockResolvedValue({ batches: [{ batch: { id: 103 }, specimens: [], createdCollections: [] }] })
   })
 
   it('nests collection.parent when CSV file has collectionName but no collectionId', async () => {
@@ -281,9 +315,9 @@ describe('ReviewStep multi-batch CSV nested collection placement', () => {
     fireEvent.click(submitBtn)
 
     await waitFor(() => {
-      expect(mockCreateBatchWithSpecimens).toHaveBeenCalledTimes(1)
+      expect(mockCreateBatchesWithSpecimens).toHaveBeenCalledTimes(1)
     })
-    const payload = mockCreateBatchWithSpecimens.mock.calls[0][0]
+    const payload = mockCreateBatchesWithSpecimens.mock.calls[0][0].batches[0]
     expect(payload).not.toHaveProperty('createCollections')
     expect(payload.specimens[0].containers[0]).toEqual({
       containerType: 'paper',
