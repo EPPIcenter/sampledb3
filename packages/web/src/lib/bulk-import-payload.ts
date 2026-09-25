@@ -161,9 +161,10 @@ export function toBulkCombinedImportRequest(
   payload: BulkCombinedValidateRequest
 ): BulkCombinedRequest {
   return {
-    studyShortCode: payload.studyShortCode,
+    ...(payload.studyShortCode ? { studyShortCode: payload.studyShortCode } : {}),
     atomicMode: payload.atomicMode,
-    subjects: payload.subjects.map(({ subjectName, specimens }) => ({
+    subjects: payload.subjects.map(({ studyShortCode, subjectName, specimens }) => ({
+      studyShortCode,
       subjectName,
       specimens: specimens.map(({ specimenTypeName, collectionDate, container }) => ({
         specimenTypeName,
@@ -188,15 +189,18 @@ export function buildBulkCombinedRequestPayload(
   const { fixedStudyShortCode, missingCollections } = opts
   const collectionLocationMap = buildCollectionLocationMap(missingCollections)
 
-  const subjectMap = new Map<string, BulkCombinedValidateRequest['subjects'][number]['specimens']>()
+  // Group by (study, subject): the same subject name in two studies is two subjects.
+  const subjectMap = new Map<string, BulkCombinedValidateRequest['subjects'][number]>()
 
   for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
     const spec = data[rowIndex]
-    const studyShortCode = (spec.studyShortCode as string | undefined) ?? fixedStudyShortCode ?? ''
+    const studyShortCode = fixedStudyShortCode ?? (spec.studyShortCode as string | undefined) ?? ''
     const subjectName = spec.subjectName as string
-    const key = `${studyShortCode}:${subjectName}`
-    if (!subjectMap.has(key)) {
-      subjectMap.set(key, [])
+    const key = JSON.stringify([studyShortCode, subjectName])
+    let subject = subjectMap.get(key)
+    if (!subject) {
+      subject = { studyShortCode, subjectName, specimens: [] }
+      subjectMap.set(key, subject)
     }
 
     const rawContainer = spec.container as FlatBulkImportContainer | undefined
@@ -205,7 +209,7 @@ export function buildBulkCombinedRequestPayload(
         ? flatBulkContainerToWriteInput(rawContainer, collectionLocationMap)
         : undefined
 
-    subjectMap.get(key)!.push({
+    subject.specimens.push({
       specimenTypeName: spec.specimenTypeName as string,
       collectionDate: spec.collectionDate as string | undefined,
       container: containerData,
@@ -213,19 +217,9 @@ export function buildBulkCombinedRequestPayload(
     })
   }
 
-  const studyShortCode = fixedStudyShortCode ?? (data[0] ? (data[0].studyShortCode as string) : undefined) ?? ''
-
-  const subjects = Array.from(subjectMap.entries()).map(([key, specimens]) => {
-    const [, subjectName] = key.split(':') as [string, string]
-    return {
-      subjectName,
-      specimens,
-    }
-  })
-
   return {
-    studyShortCode,
+    ...(fixedStudyShortCode ? { studyShortCode: fixedStudyShortCode } : {}),
     atomicMode: opts.atomicMode,
-    subjects,
+    subjects: Array.from(subjectMap.values()),
   }
 }

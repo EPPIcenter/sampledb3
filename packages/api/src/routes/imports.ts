@@ -75,7 +75,8 @@ imports.post('/derivations-csv/validate', memberMiddleware, async (c) => {
 })
 
 // Bulk combined import (subjects + specimens + containers) with configurable atomicity
-// Body: { studyShortCode, atomicMode: 'full_file' | 'per_subject', subjects: [...] }
+// Body: { studyShortCode?, atomicMode: 'full_file' | 'per_subject', subjects: [{ studyShortCode?, subjectName, specimens }] }
+// A subject's studyShortCode overrides the top-level default, so one file can span several studies.
 imports.post('/bulk-combined', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()
@@ -88,6 +89,7 @@ imports.post('/bulk-combined', memberMiddleware, async (c) => {
       studyShortCode: data.studyShortCode,
       atomicMode: data.atomicMode,
       subjects: data.subjects.map((s) => ({
+        studyShortCode: s.studyShortCode,
         subjectName: s.subjectName,
         specimens: s.specimens.map((sp) => ({
           specimenTypeName: sp.specimenTypeName,
@@ -126,6 +128,7 @@ imports.post('/bulk-combined/validate', memberMiddleware, async (c) => {
       studyShortCode: data.studyShortCode,
       atomicMode: data.atomicMode,
       subjects: data.subjects.map((s) => ({
+        studyShortCode: s.studyShortCode,
         subjectName: s.subjectName,
         specimens: s.specimens.map((sp) => ({
           specimenTypeName: sp.specimenTypeName,

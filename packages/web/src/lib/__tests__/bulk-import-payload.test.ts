@@ -122,12 +122,68 @@ describe('bulk-import-payload', () => {
       ],
       { containerType: 'none', fixedStudyShortCode: undefined, missingCollections: [], atomicMode: 'per_subject' }
     )
-    expect(p.studyShortCode).toBe('S')
+    expect(p.subjects[0]!.studyShortCode).toBe('S')
     expect(p.subjects).toHaveLength(1)
     expect(p.subjects[0]!.specimens).toHaveLength(2)
     expect(p.subjects[0]!.specimens[0]!.rowIndex).toBe(1)
     expect(p.subjects[0]!.specimens[1]!.rowIndex).toBe(2)
     expect(p).not.toHaveProperty('createCollections')
+  })
+
+  it('buildBulkCombinedRequestPayload keeps each row\'s study for a mixed-study plate', () => {
+    const plateRow = (studyShortCode: string, subjectName: string, position: string) => ({
+      studyShortCode,
+      subjectName,
+      specimenTypeName: 'DBS',
+      container: {
+        containerType: 'micronix_tube',
+        collectionName: 'Plate-1',
+        barcode: `BC-${position}`,
+        position,
+      },
+    })
+    const p = buildBulkCombinedRequestPayload(
+      [
+        plateRow('STA', 'P001', 'A01'),
+        plateRow('STB', 'P001', 'A02'),
+        plateRow('STC', 'P002', 'A03'),
+        plateRow('STA', 'P003', 'A04'),
+      ],
+      { containerType: 'micronix_tube', fixedStudyShortCode: undefined, missingCollections: [], atomicMode: 'full_file' }
+    )
+    expect(p.subjects.map((s) => [s.studyShortCode, s.subjectName])).toEqual([
+      ['STA', 'P001'],
+      ['STB', 'P001'],
+      ['STC', 'P002'],
+      ['STA', 'P003'],
+    ])
+    expect(p).not.toHaveProperty('studyShortCode')
+    expect(toBulkCombinedImportRequest(p).subjects.map((s) => s.studyShortCode)).toEqual([
+      'STA',
+      'STB',
+      'STC',
+      'STA',
+    ])
+  })
+
+  it('buildBulkCombinedRequestPayload applies the fixed study to every subject', () => {
+    const p = buildBulkCombinedRequestPayload(
+      [
+        { studyShortCode: 'FIXED', subjectName: 'A', specimenTypeName: 'T' },
+        { studyShortCode: 'FIXED', subjectName: 'B', specimenTypeName: 'T' },
+      ],
+      { containerType: 'none', fixedStudyShortCode: 'FIXED', missingCollections: [], atomicMode: 'full_file' }
+    )
+    expect(p.studyShortCode).toBe('FIXED')
+    expect(p.subjects.map((s) => s.studyShortCode)).toEqual(['FIXED', 'FIXED'])
+  })
+
+  it('buildBulkCombinedRequestPayload preserves subject names containing colons', () => {
+    const p = buildBulkCombinedRequestPayload(
+      [{ studyShortCode: 'S', subjectName: 'SITE:001', specimenTypeName: 'T' }],
+      { containerType: 'none', fixedStudyShortCode: undefined, missingCollections: [], atomicMode: 'full_file' }
+    )
+    expect(p.subjects[0]!.subjectName).toBe('SITE:001')
   })
 
   it('flatBulkContainerToWriteInput nests paper with box parent', () => {

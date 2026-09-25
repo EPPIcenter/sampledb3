@@ -74,6 +74,30 @@ describe('bulkCombinedRequestSchema', () => {
     expect(result.success).toBe(false)
   })
 
+  it('accepts per-subject study codes without a top-level study', () => {
+    const { studyShortCode: _omit, ...rest } = validPayload
+    const result = bulkCombinedRequestSchema.safeParse({
+      ...rest,
+      subjects: [
+        { ...validPayload.subjects[0], studyShortCode: 'STA' },
+        { subjectName: 'SUBJ-2', studyShortCode: 'STB', specimens: [] },
+      ],
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects a subject with no study when there is no top-level study', () => {
+    const { studyShortCode: _omit, ...rest } = validPayload
+    const result = bulkCombinedRequestSchema.safeParse({
+      ...rest,
+      subjects: [
+        { ...validPayload.subjects[0], studyShortCode: 'STA' },
+        { subjectName: 'SUBJ-2', specimens: [] },
+      ],
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('rejects invalid atomicMode', () => {
     const result = bulkCombinedRequestSchema.safeParse({
       ...validPayload,

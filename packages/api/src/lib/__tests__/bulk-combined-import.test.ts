@@ -180,5 +180,64 @@ describe('bulk-combined-import', () => {
       expect(result.summary.subjectsCreated).toBe(2)
       expect(result.summary.specimensCreated).toBe(2)
     })
+
+    for (const atomicMode of ['full_file', 'per_subject'] as const) {
+      it(`places each subject in its own study for a mixed-study plate (${atomicMode})`, async () => {
+        const studyA = await createTestStudy(testDb, { title: 'Study A', shortCode: 'STA' })
+        const studyB = await createTestStudy(testDb, { title: 'Study B', shortCode: 'STB' })
+        const studyC = await createTestStudy(testDb, { title: 'Study C', shortCode: 'STC' })
+        const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+        const specimens = [{ specimenTypeName: specimenType.name, collectionDate: '2024-01-15' }]
+
+        const result = await runBulkCombinedImport(
+          testDb,
+          {
+            atomicMode,
+            subjects: [
+              { studyShortCode: 'STA', subjectName: 'P001', specimens },
+              { studyShortCode: 'STB', subjectName: 'P001', specimens },
+              { studyShortCode: 'STC', subjectName: 'P002', specimens },
+            ],
+          },
+          undefined
+        )
+
+        expect(result.errors).toBeUndefined()
+        expect(result.summary.subjectsCreated).toBe(3)
+        expect(result.summary.specimensCreated).toBe(3)
+        const subjects = await testDb.select().from(studySubject).all()
+        expect(subjects.map((s) => [s.studyId, s.name]).sort()).toEqual(
+          [
+            [studyA.id, 'P001'],
+            [studyB.id, 'P001'],
+            [studyC.id, 'P002'],
+          ].sort()
+        )
+      })
+    }
+
+    it('uses the top-level study for subjects without their own study', async () => {
+      const studyA = await createTestStudy(testDb, { title: 'Study A', shortCode: 'STA' })
+      const studyB = await createTestStudy(testDb, { title: 'Study B', shortCode: 'STB' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      const specimens = [{ specimenTypeName: specimenType.name, collectionDate: '2024-01-15' }]
+
+      await runBulkCombinedImport(
+        testDb,
+        {
+          studyShortCode: 'STA',
+          atomicMode: 'full_file',
+          subjects: [
+            { subjectName: 'Default', specimens },
+            { studyShortCode: 'STB', subjectName: 'Override', specimens },
+          ],
+        },
+        undefined
+      )
+
+      const subjects = await testDb.select().from(studySubject).all()
+      expect(subjects.find((s) => s.name === 'Default')?.studyId).toBe(studyA.id)
+      expect(subjects.find((s) => s.name === 'Override')?.studyId).toBe(studyB.id)
+    })
   })
 })

@@ -15,6 +15,8 @@ You can also open **Bulk import** from **More actions** on a study detail page. 
 
 **Subjects with Specimens (Combined).** Creates subjects that do not exist, then their specimens. Use this when you are loading a new study or you are not sure which subjects are already in the system.
 
+One file can hold samples from several studies, for example a plate shared by three studies. Each row goes into the study in its own `study_short_code` column. A subject name that appears under two study codes becomes two separate subjects, one in each study.
+
 For **Specimens Only** or **Combined** with a container type, the same container columns are required: `position` for micronix, cryovial, and static wells; for papers, exactly one of `box_name` or `bag_name`, plus `sheet_name`.
 
 ### Import from a study page

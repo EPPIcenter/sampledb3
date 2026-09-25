@@ -338,9 +338,11 @@ export async function runOneSubjectWithSpecimens(
 }
 
 export interface BulkCombinedPayload {
-  studyShortCode: string
+  /** Default study for subjects that do not set their own studyShortCode. */
+  studyShortCode?: string
   atomicMode: 'full_file' | 'per_subject'
   subjects: Array<{
+    studyShortCode?: string
     subjectName: string
     specimens: Array<{
       specimenTypeName: string
@@ -348,6 +350,25 @@ export interface BulkCombinedPayload {
       container?: BulkCombinedContainerInput
     }>
   }>
+}
+
+/** A subject's own study wins over the payload-level default. */
+export function resolveSubjectStudyShortCode(
+  payloadStudyShortCode: string | undefined,
+  subject: { studyShortCode?: string }
+): string | undefined {
+  return subject.studyShortCode ?? payloadStudyShortCode
+}
+
+function requireSubjectStudyShortCode(
+  payloadStudyShortCode: string | undefined,
+  subject: { studyShortCode?: string; subjectName: string }
+): string {
+  const studyShortCode = resolveSubjectStudyShortCode(payloadStudyShortCode, subject)
+  if (!studyShortCode) {
+    throw new ValidationError(`Subject '${subject.subjectName}': study short code is required`)
+  }
+  return studyShortCode
 }
 
 export interface BulkCombinedResult {
@@ -375,7 +396,11 @@ export async function runBulkCombinedImport(
       try {
         const one = await runOneSubjectWithSpecimens(
           database,
-          { studyShortCode, subjectName: subjects[i].subjectName, specimens: subjects[i].specimens },
+          {
+            studyShortCode: requireSubjectStudyShortCode(studyShortCode, subjects[i]),
+            subjectName: subjects[i].subjectName,
+            specimens: subjects[i].specimens,
+          },
           userId
         )
         results.push(one)
@@ -404,7 +429,7 @@ export async function runBulkCombinedImport(
   for (let i = 0; i < subjects.length; i++) {
     const prepared = await prepareSubjectWithSpecimens(
       database,
-      studyShortCode,
+      requireSubjectStudyShortCode(studyShortCode, subjects[i]),
       subjects[i].subjectName,
       subjects[i].specimens
     )

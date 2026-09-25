@@ -74,6 +74,29 @@ describe('Imports API', () => {
   })
 
   describe('POST /api/imports/bulk-combined', () => {
+    it('imports a mixed-study plate into each subject\'s own study', async () => {
+      const studyA = await createTestStudy(ctx.db, { title: 'Mixed A', shortCode: 'MIXA' })
+      const studyB = await createTestStudy(ctx.db, { title: 'Mixed B', shortCode: 'MIXB' })
+      await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const specimens = [{ specimenTypeName: 'Whole Blood', collectionDate: '2025-01-01' }]
+      const body = {
+        atomicMode: 'full_file',
+        subjects: [
+          { studyShortCode: 'MIXA', subjectName: 'SUBJ-1', specimens },
+          { studyShortCode: 'MIXB', subjectName: 'SUBJ-1', specimens },
+        ],
+      }
+
+      const validateRes = await ctx.request('/api/imports/bulk-combined/validate', { method: 'POST', json: body })
+      expect(validateRes.status).toBe(200)
+      expect(await validateRes.json()).toMatchObject({ valid: true })
+
+      const res = await ctx.request('/api/imports/bulk-combined', { method: 'POST', json: body })
+      expect(res.status).toBe(201)
+      const subjects = await ctx.db.select().from(studySubject).where(eq(studySubject.name, 'SUBJ-1'))
+      expect(subjects.map((s) => s.studyId).sort()).toEqual([studyA.id, studyB.id].sort())
+    })
+
     it('full_file mode rolls back all data when any subject is invalid', async () => {
       await createTestStudy(ctx.db, { title: 'Import Study', shortCode: 'IMPBULK' })
       await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })

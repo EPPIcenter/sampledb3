@@ -309,5 +309,34 @@ describe('bulk-combined-validate', () => {
       expect(errWithRow).toBeDefined()
       expect(errWithRow?.message).toContain('NonExistent')
     })
+
+    it('validates each subject against its own study', async () => {
+      await createTestStudy(testDb, { title: 'Study A', shortCode: 'STA' })
+      await createTestStudy(testDb, { title: 'Study B', shortCode: 'STB' })
+      await createTestSpecimenType(testDb, { name: 'DNA' })
+      const result = await validateBulkCombinedPayload(testDb, {
+        subjects: [
+          {
+            studyShortCode: 'STA',
+            subjectName: 'P001',
+            specimens: [{ specimenTypeName: 'DNA', collectionDate: '2024-01-01', rowIndex: 1 }],
+          },
+          {
+            studyShortCode: 'STB',
+            subjectName: 'P001',
+            specimens: [{ specimenTypeName: 'DNA', collectionDate: '2024-01-01', rowIndex: 2 }],
+          },
+          {
+            studyShortCode: 'NOPE',
+            subjectName: 'P002',
+            specimens: [{ specimenTypeName: 'DNA', collectionDate: '2024-01-01', rowIndex: 3 }],
+          },
+        ],
+      })
+      expect(result.valid).toBe(false)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0]).toMatchObject({ subjectIndex: 2, rowIndex: 3 })
+      expect(result.errors[0]!.message.toLowerCase()).toContain('study')
+    })
   })
 })

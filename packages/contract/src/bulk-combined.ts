@@ -47,29 +47,55 @@ export const bulkCombinedSubjectSpecimenSchema = z.object({
 })
 
 export const bulkCombinedSubjectSchema = z.object({
+  /** Study for this subject; overrides the request-level studyShortCode. */
+  studyShortCode: z.string().min(1).optional(),
   subjectName: z.string().min(1),
   specimens: z.array(bulkCombinedSubjectSpecimenSchema),
 })
 
-/** POST /imports/bulk-combined request body */
-export const bulkCombinedRequestSchema = z.object({
-  studyShortCode: z.string().min(1),
+/** Every subject needs a study, either its own or the request-level default. */
+function refineEverySubjectHasStudy(
+  val: { studyShortCode?: string; subjects: Array<{ studyShortCode?: string }> },
+  ctx: z.RefinementCtx,
+): void {
+  if (val.studyShortCode) return
+  val.subjects.forEach((subject, index) => {
+    if (!subject.studyShortCode) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['subjects', index, 'studyShortCode'],
+        message: 'studyShortCode is required on each subject when no request-level studyShortCode is given',
+      })
+    }
+  })
+}
+
+const bulkCombinedRequestObjectSchema = z.object({
+  /** Default study for subjects that do not set their own studyShortCode. */
+  studyShortCode: z.string().min(1).optional(),
   atomicMode: atomicModeEnum,
   subjects: z.array(bulkCombinedSubjectSchema),
 })
 
+/** POST /imports/bulk-combined request body */
+export const bulkCombinedRequestSchema = bulkCombinedRequestObjectSchema.superRefine(
+  refineEverySubjectHasStudy,
+)
+
 /** POST /imports/bulk-combined/validate — specimens may include rowIndex for CSV alignment */
-export const bulkCombinedValidateRequestSchema = bulkCombinedRequestSchema.extend({
-  subjects: z.array(
-    bulkCombinedSubjectSchema.extend({
-      specimens: z.array(
-        bulkCombinedSubjectSpecimenSchema.extend({
-          rowIndex: z.number().int().optional(),
-        }),
-      ),
-    }),
-  ),
-})
+export const bulkCombinedValidateRequestSchema = bulkCombinedRequestObjectSchema
+  .extend({
+    subjects: z.array(
+      bulkCombinedSubjectSchema.extend({
+        specimens: z.array(
+          bulkCombinedSubjectSpecimenSchema.extend({
+            rowIndex: z.number().int().optional(),
+          }),
+        ),
+      }),
+    ),
+  })
+  .superRefine(refineEverySubjectHasStudy)
 
 export type BulkCombinedContainer = z.infer<typeof bulkCombinedContainerSchema>
 export type BulkCombinedSubjectSpecimen = z.infer<typeof bulkCombinedSubjectSpecimenSchema>

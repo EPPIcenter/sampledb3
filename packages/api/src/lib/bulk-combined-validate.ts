@@ -12,6 +12,7 @@ import {
 import { getDefaultUnit } from './defaults'
 import { resolveSubjectByNameAndStudy, resolveSpecimenTypeByName } from './identifier-resolution'
 import {
+  resolveSubjectStudyShortCode,
   type BulkCombinedContainerInput,
   type BulkCombinedPayload,
 } from './bulk-combined-import'
@@ -46,6 +47,7 @@ export interface BulkCombinedValidateResult {
 /** Payload for validate: same as BulkCombinedPayload but specimens may include optional rowIndex */
 export type BulkCombinedValidatePayload = Omit<BulkCombinedPayload, 'subjects'> & {
   subjects: Array<{
+    studyShortCode?: string
     subjectName: string
     specimens: Array<{
       specimenTypeName: string
@@ -73,12 +75,23 @@ export async function validateBulkCombinedPayload(
     errors.push({ subjectIndex, specimenIndex, message, ...(rowIndex !== undefined && { rowIndex }) })
   }
 
-  const studyValidation = await validateStudyShortCode(database, studyShortCode)
-  let studyId: number | null = null
-  if (!studyValidation.valid || !studyValidation.studyId) {
-    add(0, 0, studyValidation.error ?? 'Invalid study')
-  } else {
-    studyId = studyValidation.studyId
+  const studyValidations = new Map<string, Awaited<ReturnType<typeof validateStudyShortCode>>>()
+  const resolveStudyId = async (subjectIndex: number, rowIndex: number | undefined): Promise<number | null> => {
+    const code = resolveSubjectStudyShortCode(studyShortCode, subjects[subjectIndex])
+    if (!code) {
+      add(subjectIndex, 0, 'Study short code is required', rowIndex)
+      return null
+    }
+    let studyValidation = studyValidations.get(code)
+    if (!studyValidation) {
+      studyValidation = await validateStudyShortCode(database, code)
+      studyValidations.set(code, studyValidation)
+    }
+    if (!studyValidation.valid || !studyValidation.studyId) {
+      add(subjectIndex, 0, studyValidation.error ?? 'Invalid study', rowIndex)
+      return null
+    }
+    return studyValidation.studyId
   }
 
   const placementRows: ContainerPlacementCheckRow[] = []
@@ -88,13 +101,15 @@ export async function validateBulkCombinedPayload(
   for (let subjectIndex = 0; subjectIndex < subjects.length; subjectIndex++) {
     const subj = subjects[subjectIndex]
     const trimmedName = subj.subjectName.trim()
+    const firstRowIndex = subj.specimens[0]?.rowIndex
+    const studyId = await resolveStudyId(subjectIndex, firstRowIndex)
 
     if (studyId !== null) {
       const existingSubjectId = await resolveSubjectByNameAndStudy(database, trimmedName, studyId)
       if (!existingSubjectId) {
         const nameValidation = await validateSubjectName(database, studyId, trimmedName)
         if (!nameValidation.valid) {
-          add(subjectIndex, 0, nameValidation.error ?? 'Invalid subject name')
+          add(subjectIndex, 0, nameValidation.error ?? 'Invalid subject name', firstRowIndex)
         }
       }
     }
