@@ -5,14 +5,13 @@ import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { listSpecimens } from '../lib/specimens/specimen-read'
 import { validateSpecimenData } from '../lib/validation'
-import type { ContainerWriteInput } from '@sampledb/contract'
 import { createContainerForSpecimen, pickContainerQuantity } from '../lib/container-creation'
 import {
   toContainerWriteInput,
   type BulkCombinedContainerInput,
 } from '../lib/container-write-placement'
 import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
-import { containerSchema, containerSchemaRequired, containerSchemaWithLocation } from '../lib/schemas'
+import { containerSchema, containerSchemaWithLocation } from '../lib/schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
@@ -108,10 +107,18 @@ specimens.post('/:id/containers', memberMiddleware, async (c) => {
     }
 
     const body = await c.req.json()
-    const data = containerSchemaRequired.parse(body) as ContainerWriteInput
+    // Same shape as POST /specimens: write input plus optional unitId/quantity overrides.
+    const parsed = containerSchema.parse(body)
+    if (parsed == null) {
+      throw new ValidationError('Container is required')
+    }
+    const container = parsed as BulkCombinedContainerInput
 
     const user = c.get('user')
-    const result = await createContainerForSpecimen(id, data, dbInstance, user?.id)
+    const result = await createContainerForSpecimen(id, toContainerWriteInput(container), dbInstance, {
+      userId: user?.id,
+      quantity: pickContainerQuantity(container),
+    })
 
     if (!result.success) {
       return c.json({ error: result.error || 'Failed to create container' }, 400)
