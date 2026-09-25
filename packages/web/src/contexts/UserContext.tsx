@@ -11,6 +11,14 @@ let userCachedUser: User | null = null
 let userCachedLoading = true
 let userCachedError: string | null = null
 
+/** For tests: forget the once-per-app-load user cache so each test starts signed out. */
+export function resetUserContextForTesting(): void {
+  userDidInit = false
+  userCachedUser = null
+  userCachedLoading = true
+  userCachedError = null
+}
+
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
