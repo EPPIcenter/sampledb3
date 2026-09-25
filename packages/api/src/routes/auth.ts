@@ -49,6 +49,14 @@ const loginSchema = z.object({
   password: z.string().min(1),
 })
 
+/** Usernames cannot contain "@", so a username can never be confused with an email at login. */
+const usernameSchema = z
+  .string()
+  .min(1)
+  .refine((value) => !value.includes('@'), { message: 'Username cannot contain "@"' })
+  .optional()
+  .nullable()
+
 // Dynamic register schema - password min length will be set based on settings
 const createRegisterSchema = async () => {
   const passwordRequirements = await getPasswordRequirementsFromDb()
@@ -59,7 +67,7 @@ const createRegisterSchema = async () => {
   return z.object({
     email: z.string().email(),
     name: z.string().min(1),
-    username: z.string().min(1).optional().nullable(),
+    username: usernameSchema,
     password: z.string().min(minLength),
     role: z.enum(['admin', 'member', 'viewer']).default('member'),
   })
@@ -113,7 +121,7 @@ const createSelfRegisterSchema = async () => {
   return z.object({
     email: z.string().email(),
     name: z.string().min(1),
-    username: z.string().min(1).optional().nullable(),
+    username: usernameSchema,
     password: z.string().min(minLength),
   })
 }
@@ -245,7 +253,7 @@ auth.patch('/me', authMiddleware, async (c) => {
     const updateSchema = z.object({
       name: z.string().min(1).optional(),
       email: z.string().email().optional(),
-      username: z.string().min(1).optional().nullable(),
+      username: usernameSchema,
     })
     const data = updateSchema.parse(body)
 
@@ -527,7 +535,7 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
     const updateSchema = z.object({
       name: z.string().min(1).optional(),
       email: z.string().email().optional(),
-      username: z.string().min(1).optional().nullable(),
+      username: usernameSchema,
       role: z.enum(['admin', 'member', 'viewer']).optional(),
     })
     const data = updateSchema.parse(body)

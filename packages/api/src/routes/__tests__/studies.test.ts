@@ -90,6 +90,15 @@ describe('Studies API (list, get, create, update)', () => {
       expect(data.study.shortCode).toBe('NEW01')
     })
 
+    it('returns 409, not 500, for a duplicate title', async () => {
+      const body = { title: 'Dup Study', shortCode: 'DUP01', isLongitudinal: false, leadPerson: 'Lead' }
+      await ctx.request('/api/studies', { method: 'POST', json: body })
+      const res = await ctx.request('/api/studies', { method: 'POST', json: { ...body, shortCode: 'DUP02' } })
+      expect(res.status).toBe(409)
+      const data = (await res.json()) as { error: string }
+      expect(data.error).toBe('A record with this title already exists.')
+    })
+
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/studies', {
         method: 'POST',

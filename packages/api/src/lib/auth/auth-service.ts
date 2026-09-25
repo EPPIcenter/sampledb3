@@ -1,4 +1,4 @@
-import { eq, and, isNull, or } from 'drizzle-orm'
+import { eq, and, isNull } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { nanoid } from 'nanoid'
 import type { Database } from '../../db/client'
@@ -29,16 +29,18 @@ export async function findActiveUserByEmailOrUsername(
   database: Database,
   emailOrUsername: string
 ): Promise<typeof usersTable.$inferSelect | null> {
+  // Email first: a username must never shadow another user's email address.
+  const byEmail = await database
+    .select()
+    .from(users)
+    .where(and(eq(users.email, emailOrUsername), isNull(users.deletedAt)))
+    .get()
+  if (byEmail) return byEmail
   return (
     (await database
       .select()
       .from(users)
-      .where(
-        and(
-          or(eq(users.email, emailOrUsername), eq(users.username, emailOrUsername)),
-          isNull(users.deletedAt)
-        )
-      )
+      .where(and(eq(users.username, emailOrUsername), isNull(users.deletedAt)))
       .get()) ?? null
   )
 }

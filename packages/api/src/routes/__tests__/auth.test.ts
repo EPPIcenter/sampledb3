@@ -388,6 +388,31 @@ describe('Auth API', () => {
       expect(cookies).toContain('session_id')
     })
 
+    it('matches an email before a username that equals it', async () => {
+      await testDb.insert(users).values({
+        email: 'squatter@example.com',
+        name: 'Squatter',
+        username: 'victim@example.com',
+        passwordHash: await bcrypt.hash('squatter123', 10),
+        role: 'member',
+        createdAt: utcNow(),
+        approvedAt: utcNow(),
+      })
+      await createTestUser(testDb, { email: 'victim@example.com', name: 'Victim', password: 'password123' })
+
+      const res = await createTestClient(app).api.auth.login.$post({
+        json: { emailOrUsername: 'victim@example.com', password: 'password123' },
+      })
+      expect(res.status).toBe(200)
+    })
+
+    it('rejects a username containing "@"', async () => {
+      const res = await createTestClient(app).api.auth['self-register'].$post({
+        json: { email: 'new@example.com', name: 'New', username: 'other@example.com', password: 'password123' },
+      })
+      expect(res.status).toBe(400)
+    })
+
     it('should reject invalid username', async () => {
       const client = createTestClient(app)
       const res = await client.api.auth.login.$post({
