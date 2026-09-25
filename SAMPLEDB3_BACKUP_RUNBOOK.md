@@ -182,6 +182,10 @@ RESTIC_PASSWORD=replace-with-your-restic-password
 RESTIC_TAG=sampledb
 BACKUP_STDIN_FILENAME=sampledb.sqlite
 RUN_RESTIC_FORGET=1
+
+# Optional: second restic repo. Init it once, then the script runs restic copy.
+# RESTIC_COPY_REPOSITORY=local:/mnt/offsite/sampledb3-restic
+# RESTIC_COPY_PASSWORD=
 ```
 
 Lock down the file:
@@ -263,7 +267,7 @@ EnvironmentFile=/etc/sampledb3/backup.env
 ExecStart=/opt/sampledb3/ops/backup/backup-db-restic.sh
 ```
 
-`RequiresMountsFor=/opt/sampledb3/backups` is important when the restic repository is on a mounted CIFS share.
+`RequiresMountsFor=/opt/sampledb3/backups` is important when the restic repository is on a mounted CIFS share. Do not add a `RESTIC_COPY_REPOSITORY` mount here. If that mount is down, systemd would skip the unit and you would miss the local snapshot.
 
 ### 2. Create the Timer
 
@@ -337,6 +341,30 @@ This keeps:
 - 60 monthly snapshots
 
 `--prune` removes unreferenced repository data after old snapshots are forgotten.
+
+If `RESTIC_COPY_REPOSITORY` is set, the same forget policy runs on the copy dest after `restic copy`.
+
+## Optional second restic repository
+
+To keep an off-site copy of the same snapshots, set `RESTIC_COPY_REPOSITORY` in `/etc/sampledb3/backup.env` and initialize that repo once:
+
+```bash
+sudo mkdir -p /mnt/offsite/sampledb3-restic
+sudo chmod 700 /mnt/offsite/sampledb3-restic
+sudo bash -c 'set -a; source /etc/sampledb3/backup.env; set +a
+  RESTIC_REPOSITORY="$RESTIC_COPY_REPOSITORY"
+  restic init
+'
+```
+
+The next backup copies snapshots that the dest does not already have. Verify with:
+
+```bash
+sudo bash -c 'set -a; source /etc/sampledb3/backup.env; set +a
+  RESTIC_REPOSITORY="$RESTIC_COPY_REPOSITORY"
+  restic snapshots --tag sampledb
+'
+```
 
 ## Restore the Latest Backup
 

@@ -24,6 +24,7 @@ This guide complements [Deployment](/docs/guides/advanced/deployment/). Backups 
 - **sqlite3** (online backup via `.backup` to a temp file in the script; `$TMPDIR` must have space ≥ DB size)
 - **restic** initialized once: `restic init` against your `RESTIC_REPOSITORY`
 - Environment: `DATABASE_PATH`, `RESTIC_REPOSITORY`, `RESTIC_PASSWORD` (see `ops/backup/backup.env.example`)
+- Optional second repo: set `RESTIC_COPY_REPOSITORY` and `restic init` that location too (`restic copy` needs restic 0.12+)
 
 ## Automated backup (Docker bind mount)
 
@@ -38,7 +39,7 @@ set -a && source /path/to/ops/backup/backup.env && set +a
 
 Copy `ops/backup/backup.env.example` to `backup.env`, fill in values, and **never commit** `backup.env`.
 
-Optional: after each backup, apply retention (7 daily / 4 weekly / 6 monthly) by setting `RUN_RESTIC_FORGET=1` in `backup.env` (or run `restic forget` on a separate weekly timer).
+Optional: after each backup, apply retention (14 daily / 12 weekly / 60 monthly) by setting `RUN_RESTIC_FORGET=1` in `backup.env` (or run `restic forget` on a separate weekly timer).
 
 ### systemd (timer)
 
@@ -86,12 +87,25 @@ Adjust `OnCalendar` (e.g. `hourly` or `*-*-* 02:30:00`) to match your RPO.
 30 2 * * * set -a; . /etc/sampledb/backup.env; set +a; /opt/sampledb/ops/backup/backup-db-restic.sh >> /var/log/sampledb-backup.log 2>&1
 ```
 
+### Optional second repository
+
+To replicate snapshots after each successful backup, set `RESTIC_COPY_REPOSITORY` in `backup.env` (for example `local:/mnt/offsite/sampledb-restic`). Initialize that repo once:
+
+```bash
+set -a && source /path/to/ops/backup/backup.env && set +a
+RESTIC_REPOSITORY="$RESTIC_COPY_REPOSITORY" restic init
+```
+
+The script then runs `restic copy` from `RESTIC_REPOSITORY` to `RESTIC_COPY_REPOSITORY`. If `RUN_RESTIC_FORGET=1`, forget/prune runs on both repos.
+
+Do not add the copy dest to systemd `RequiresMountsFor` on the backup unit. If that mount is down, systemd skips the whole unit and you miss the local snapshot. A failed copy still exits non-zero after the local snapshot is stored, so you still get an alert.
+
 ### Named Docker volume (no host path)
 
 If the DB is only inside a container:
 
 ```bash
-docker exec sampledb sh -c 'f=$(mktemp) && sqlite3 /data/sampledb.sqlite ".backup $f" && cat "$f" && rm -f "$f"' | \
+docker exec sampledb3 sh -c 'f=$(mktemp) && sqlite3 /data/sampledb.sqlite ".backup $f" && cat "$f" && rm -f "$f"' | \
   restic backup --stdin --stdin-filename sampledb.sqlite --tag sampledb
 ```
 
@@ -114,7 +128,7 @@ Use this when recovering from corruption, bad migration, or lost host.
 
 Avoid any writer touching the SQLite file while you replace it.
 
-- **Docker:** `docker compose stop sampledb` (or stop the service on the host).
+- **Docker:** `docker compose stop sampledb3` (or stop the service on the host).
 - **fly.io:** scale to 0 or stop the machine so nothing writes to `/data`.
 
 ### 2. List and pick a snapshot
