@@ -9,6 +9,7 @@ import { getQueryErrorMessage } from '../../ui'
 import type { ControlDefinition, CreateBatchWithSpecimensRequest } from '../../lib/api/controls';
 import { normalizePosition, groupRowsByDensity } from '../../lib/control-batch-csv'
 import type { BatchInfo, SpecimenTypeConfig, CSVFileData, CompositionStrains } from '../../pages/ControlBatchWizard'
+import { localToday } from '../../lib/date-utils'
 
 /** Row key for batch definition selection: fileIndex + densityKey (numeric density for matching). */
 function batchRowKey(fileIndex: number, densityKey: number | undefined): string {
@@ -122,7 +123,7 @@ export default function ReviewStep({
 
   const handleMultiBatchSubmit = async () => {
     setError(null)
-    const productionDate = batchInfo.productionDate || new Date().toISOString().split('T')[0]
+    const productionDate = batchInfo.productionDate || localToday()
 
     for (const file of csvFiles) {
       const hasCollection =
