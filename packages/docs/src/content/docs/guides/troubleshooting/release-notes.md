@@ -1,13 +1,13 @@
 ---
-title: Release Notes
+title: Release notes
 description: Notable SampleDB changes and upgrade guidance
 ---
 
-This page summarizes user-visible changes that may affect exports, imports, or integrations. For day-to-day export workflows, see [Bulk Export](/docs/guides/bulk-operations/export/), [Barcode Export](/docs/guides/advanced/barcode-export/), and [CSV File Guidelines](/docs/guides/troubleshooting/csv-guidelines/).
+User-visible changes that can affect exports, imports, or integrations. For daily export work, see [Multi-study export](/docs/guides/bulk-operations/export/), [Micronix barcode export](/docs/guides/advanced/barcode-export/), and [CSV file guidelines](/docs/guides/troubleshooting/csv-guidelines/).
 
 ## Container export CSV format (breaking change)
 
-SampleDB **container export** CSV files (Bulk export, Study export modal, Barcode export, and GET `/export/containers`) now use **plain RFC 4180 cell values** — quoted strings where needed, without Excel formula wrappers.
+SampleDB **container export** CSV files (Multi-Study Export, Study export modal, Micronix Barcode Export, and GET `/export/containers`) now use **plain RFC 4180 cell values**: quoted strings where needed, without Excel formula wrappers.
 
 **What changed**
 
@@ -30,10 +30,10 @@ SampleDB **container export** CSV files (Bulk export, Study export modal, Barcod
 
 - **Specimen export** and **Inventory export** (command palette) were already plain CSV.
 - **Collection table snapshot export** on collection detail pages uses the same CSV download conventions; cell content was not wrapped in Excel formulas.
-- Import templates and **Export filter file** uploads are separate from download format; see [CSV File Guidelines](/docs/guides/troubleshooting/csv-guidelines/).
+- Import templates and **Export filter file** uploads are separate from download format; see [CSV file guidelines](/docs/guides/troubleshooting/csv-guidelines/).
 
 ## Related documentation
 
-- [Bulk Export](/docs/guides/bulk-operations/export/) — CSV vs XLSX guidance for multi-study container export
-- [Barcode Export](/docs/guides/advanced/barcode-export/) — barcode-driven container export
-- [CSV File Guidelines](/docs/guides/troubleshooting/csv-guidelines/) — import and export CSV conventions
+- [Multi-study export](/docs/guides/bulk-operations/export/): CSV vs XLSX guidance for multi-study container export
+- [Micronix barcode export](/docs/guides/advanced/barcode-export/): barcode-driven container export
+- [CSV file guidelines](/docs/guides/troubleshooting/csv-guidelines/): import and export CSV conventions

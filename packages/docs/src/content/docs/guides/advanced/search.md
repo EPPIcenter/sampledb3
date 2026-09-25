@@ -1,72 +1,41 @@
 ---
-title: Search & Navigation
-description: Master search functionality and navigation shortcuts
+title: Search and navigation
+description: Find records with search, and run commands from the command palette
 ---
 
-SampleDB provides powerful search capabilities and keyboard shortcuts to help you navigate quickly and find information efficiently. Learning to use these features effectively can significantly speed up your workflow, whether you're looking for a specific study, finding a container by barcode, or navigating to a particular section of the system.
+SampleDB has two different shortcuts. They look similar. They do different jobs.
 
-The search functionality works across multiple data types, allowing you to find studies, subjects, specimens, containers, locations, and control batches from a single search interface. Combined with keyboard shortcuts and the command palette, these features make it easy to move through the system quickly and efficiently.
+- **Ctrl+K** (Windows/Linux) or **Cmd+K** (Mac) opens **search**. The floating cluster shows the same shortcut next to the search button.
+- **Ctrl+Shift+K** or **Cmd+Shift+K** opens the **command palette**. The floating cluster shows that shortcut next to the command button.
 
-## Understanding Global Search
+Neither shortcut runs if the focus is already in a text field. Click outside the field first, or use the floating buttons.
 
-Global search is available from multiple places in the interface, making it easy to find information from wherever you happen to be working. From the Dashboard, you can use the search box in Quick Actions to quickly find items. Type your query and press Enter, and the system searches across all searchable data types.
+Press **?** for the keyboard shortcut help modal.
 
-The command palette provides another way to access search. Press Ctrl+K (Windows/Linux) or Cmd+K (Mac) to open the command palette, then type your search query. The palette shows matching results, and you can select from them to navigate directly to the item you want.
+## Search
 
-Some interfaces may also provide a search bar in the header that's available from most pages. This persistent search access ensures you can always find what you need quickly.
+On the dashboard, type in the search field under **Lab Overview** and click **Search** or press Enter. The placeholder is "Search by barcode, study code, subject, or ID". Slash (`/`) focuses that field when you are not typing in another input.
 
-## What You Can Search
+From any page, press **Ctrl+K** / **Cmd+K**, or click the search button in the floating cluster. The search modal placeholder is "Search by barcode, ID, study code, subject name, location...". Location text can appear on collection and container results. Search does not return location records of their own.
 
-The search functionality covers multiple data types, making it a powerful tool for finding information. You can search for studies by name, short code, or lead person. This is particularly useful when you know a study's short code and want to jump directly to it.
+A default search looks for specimens, containers, studies, subjects, collections (plates, boxes, bags), and control batches.
 
-You can search for subjects by name, which helps you find specific subjects quickly. You can search for specimens by ID, barcode, or type, making it easy to locate specific samples. You can search for containers by barcode or ID, which is especially useful when you have a barcode and need to find the container.
+Click a result to open it. Escape closes the modal.
 
-You can search for locations by name or path, helping you find storage locations quickly. And you can search for control batches by name, making it easy to locate specific batches.
+## Command palette
 
-## Using Search Effectively
+Press **Ctrl+Shift+K** / **Cmd+Shift+K**, or click the command button in the floating cluster.
 
-Effective search starts with being specific. More specific queries return better results, so if you know a study's short code, use that rather than a partial name. Study short codes work particularly well for finding studies, as they're designed to be unique identifiers.
+Type to filter commands. Use the arrow keys, then Enter to run one. Escape closes the palette.
 
-Try partial matches if exact searches don't work. The search function finds partial matches, so you don't need to type the complete name. Use barcodes when you have them, as they're unique identifiers that will find exactly one item.
+Command labels include **Go to Dashboard**, **Go to Studies**, **Create New Study**, **Create New Specimen**, **Open Barcode Export**, **Go to Application Settings**, and **Open Documentation**. Write access hides some create and import commands.
 
-## Understanding the Command Palette
+## Other shortcuts
 
-The command palette provides quick access to actions and navigation throughout the system. Opening it is simple: press Ctrl+K (Windows/Linux) or Cmd+K (Mac), or click the command icon if one is available in your interface.
+- **Escape** closes modals.
+- **Ctrl+Enter** / **Cmd+Enter** submits some forms, including the study form (the button is **Create**).
+- **Tab** and **Shift+Tab** move between fields.
 
-The command palette organizes commands into categories that make it easy to find what you need. Navigation commands let you go directly to major sections like Dashboard, Studies, Specimens, or Locations. Create commands provide quick access to creation forms for studies, specimens, subjects, and other items. Export commands give you quick access to export functionality. And bulk operation commands let you jump directly to container movement and other bulk operations.
+You can bookmark detail-page URLs for a study, subject, specimen, or container.
 
-Using commands is straightforward: open the command palette, type to filter commands (the list narrows as you type), use arrow keys to navigate through results, press Enter to execute a command, and press Escape to close the palette without doing anything.
-
-## Keyboard Shortcuts
-
-Learning keyboard shortcuts can significantly speed up your workflow. The most important shortcut is Ctrl/Cmd + K to open the command palette, which gives you quick access to almost everything in the system.
-
-Escape closes modals and cancels actions, which is useful when you've opened something by mistake or changed your mind. Enter submits forms and confirms actions on many forms, though some forms may use Ctrl/Cmd + Enter for submission.
-
-Form navigation uses Tab to move forward between fields and Shift + Tab to move backward. This standard navigation works throughout the system and makes form filling efficient.
-
-Standard browser shortcuts also work: Ctrl/Cmd + R refreshes the page, Ctrl/Cmd + F finds text on the current page, and browser back/forward buttons work for navigation history.
-
-## Quick Navigation Tips
-
-You can bookmark or share direct links to specific pages in the system. Study detail pages, subject detail pages, specimen detail pages, and container detail pages all have URLs that you can bookmark or share. This makes it easy to return to specific items or share links with collaborators.
-
-Sidebar navigation provides quick access to major sections. Click sidebar items to navigate, expand or collapse sections as needed, and use it for quick access to the parts of the system you use most frequently.
-
-Some pages show breadcrumbs that help you understand where you are in the system and provide quick navigation to parent pages. Clicking breadcrumb items takes you to related pages, making it easy to navigate through hierarchical structures.
-
-## Best Practices for Search and Navigation
-
-Effective search and navigation starts with using unique identifiers when possible. Barcodes and short codes work best because they're designed to be unique. If your first search doesn't work, try different terms or variations—sometimes the exact wording matters.
-
-Use the command palette frequently—it's often faster than clicking through menus, especially for actions you perform regularly. Learn the keyboard shortcuts that are most useful for your workflow, as they can save significant time over the course of a day.
-
-## Troubleshooting Search Issues
-
-If search isn't finding items you expect, check your spelling first—typos are a common cause of failed searches. Try partial matches if exact searches don't work, and use unique identifiers like barcodes or IDs when you have them. Verify that the item exists in the system, as search can only find items that are actually present.
-
-If the command palette isn't working, check if your focus is in an input field—you may need to click elsewhere first to ensure the keyboard shortcut is captured. Try clicking the command icon if one is available, or refresh the page and try again if the shortcut seems unresponsive.
-
-## What's Next?
-
-Now that you understand search and navigation, you might want to explore [Dashboard Overview](/docs/guides/getting-started/dashboard/) to see how search integrates with the dashboard, check out [Studies Management](/docs/guides/workflows/studies/) to practice navigating to studies, or review [Settings](/docs/guides/advanced/settings/) to configure application preferences.
+If search misses an item, check spelling, try a barcode or short code, and confirm the record exists. If a shortcut does nothing, click outside the current input and try again.

@@ -88,11 +88,11 @@ _Avoid_: **Derivation** / Distribution (a scan move transforms nothing); collect
 ### Configuration
 
 **Reference data**:
-System-wide configuration that defines what SampleDB can store and how it is organized — specimen types, units, storage types, locations, strains, tags, and related lookup entities. Set up during initial configuration; updated as lab needs evolve.
-_Avoid_: Master data (unless that is your org's term), metadata (too vague)
+System-wide catalog managed in the **Reference Data** UI: specimen types, units, storage types, strains, and tags. Locations are also configuration (they define the storage hierarchy) but are managed on the **Locations** page, not as a Reference Data tab.
+_Avoid_: Treating locations as a Reference Data tab; Master data (unless that is your org's term); metadata (too vague)
 
 **Operational data**:
-Day-to-day records created through lab work — studies, subjects, specimens, containers, controls, derivations, and imports.
+Day-to-day records created through lab work — studies, subjects, specimens, containers, collections, controls, derivations, and imports.
 _Avoid_: Transactional data (acceptable in developer docs, but "operational" matches lab vocabulary)
 
 **Tag**:
@@ -134,23 +134,23 @@ _Avoid_: Well (as the domain term); treating a missing position as occupying a s
 ### Export
 
 **Container export**:
-Server-side export of operational **Container** records with specimen, source, and placement context, formatted using an **Export configuration**. Entry points include **Bulk export**, single-study export (Study export modal), and **Barcode export**.
-_Avoid_: Bulk export (when you mean the full server-side category); collection table snapshot export; using "sample" in export column headers
+Server-side export of operational **Container** records with specimen, source, and placement context, formatted using an **Export configuration**. Entry points include **Multi-Study Export** (page heading **Export Containers (Multi-Study)**), the Study export modal, and **Micronix Barcode Export**.
+_Avoid_: Using "bulk export" as the umbrella for all container exports; collection table snapshot export; using "sample" in export column headers
 
 **Bulk export**:
-The multi-study **Container export** workflow on the Export page — lab staff upload a subject-list CSV spanning one or more studies and download matching containers.
+The multi-study **Container export** workflow. Sidebar label is **Multi-Study Export**; the page heading is **Export Containers (Multi-Study)**. Lab staff upload a subject-list CSV spanning one or more studies and download matching containers.
 _Avoid_: Using "bulk export" as the umbrella for all container exports, barcode export, or collection table CSV
 
 **Barcode export**:
-A **Container export** entry point driven by an uploaded barcode list rather than a subject list.
-_Avoid_: Bulk export (different filter input); collection table snapshot export
+A **Container export** entry point driven by a CSV of micronix tube barcodes rather than a subject list. Sidebar and page heading are **Micronix Barcode Export**. Command palette label is **Open Barcode Export**.
+_Avoid_: Bulk export (different filter input); collection table snapshot export; paste/scanner entry on this page
 
 **Collection table snapshot export**:
 Client-side CSV of the current collection table view on a plate, box, bag, or sheet detail page — what is visible in the grid, using **Table view configuration** columns. No server-side container query. Uses the same **CSV download** conventions and download behaviour as other export paths.
 _Avoid_: Container export; bulk export; export configuration (those apply to server-side container exports only)
 
 **Export configuration**:
-Reference-data preset defining which columns appear in **Container export** downloads (Export page, Study export modal, barcode export).
+Preset defining which columns appear in **Container export** downloads (Multi-Study Export, Study export modal, Micronix Barcode Export). Managed in Application Settings, not in the Reference Data UI.
 _Avoid_: Table view configuration; conflating with collection table snapshot export
 
 **Table view configuration**:

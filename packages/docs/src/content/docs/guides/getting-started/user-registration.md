@@ -1,41 +1,30 @@
 ---
-title: User Registration
-description: How users register themselves and how administrators approve accounts
+title: User registration
+description: Self-registration and administrator approval
 ---
 
-After initial setup, SampleDB allows users to register themselves. New accounts require administrator approval before users can sign in. This workflow ensures that only authorized personnel gain access to your laboratory's sample management system.
+After setup, people can create their own accounts. They cannot sign in until an administrator approves them.
 
-## Self-Registration Flow
+## Create an account
 
-1. Navigate to the sign-in page and click **Create account**.
-2. Enter your email, name, password (at least 8 characters), and confirm your password.
+1. On the sign-in page, click **Create account**.
+2. Enter email, name, password (at least 8 characters), and confirm password.
 3. Click **Create account**.
-4. You will see a confirmation message: "An administrator will approve your account before you can sign in."
-5. Wait for an administrator to approve your account.
-6. Once approved, sign in with your email and password as usual.
+4. The page shows: "An administrator will approve your account before you can sign in."
 
-## Approving User Accounts (Administrators)
+Sign in with the same email and password after approval.
 
-Administrators approve new user accounts from the User Management page:
+## Approve a user (administrators)
 
-1. Sign in as an administrator.
-2. Go to **Admin** → **User Management** (or navigate to `/admin/users`).
-3. Users with **Pending** status are awaiting approval.
-4. Click the green checkmark (approve) button next to the user's name to approve their account.
-5. The user can now sign in with their registered email and password.
+1. Go to **Admin → User Management**.
+2. Pending accounts show an amber **Pending** badge in Name and **Pending** in Status.
+3. Click the approve control (tooltip **Approve user**). There is no visible text button labeled Approve.
+4. Status becomes **Approved**.
 
-Pending users are marked with an amber "Pending" badge in the Name column and show "Pending" in the Status column. Approved users show "Approved" in green.
+**Add User** on the same page creates an account that is already approved.
 
-## Admin-Created Users
+## Sign-in errors
 
-Administrators can also create user accounts directly from the User Management page using **Add User**. Accounts created this way are approved immediately and do not require the approval step. This is useful when onboarding team members who already have authorization to use the system.
+**Your account is pending approval.** Registration worked. An administrator has not approved the account yet.
 
-## Troubleshooting
-
-### "Your account is pending approval"
-
-If you see this message when trying to sign in, your registration was successful but an administrator has not yet approved your account. Contact your SampleDB administrator to request approval.
-
-### "Email already in use"
-
-This means another user (including a pending user) has already registered with that email address. Use a different email or contact your administrator if you believe this is an error.
+**Email already in use.** That address is already registered, including pending accounts.

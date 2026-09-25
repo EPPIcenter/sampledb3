@@ -15,7 +15,7 @@ The repo `docker-compose.yml` pins a published image on `ghcr.io` (see the `imag
 
 **Bleeding edge (pre-release):** Every push to the default branch **rebuilds and moves** a single `nightly` tag in GHCR—there is no long-lived per-commit name for `main` builds, so the registry does not keep a full history of nightlies (old digests become **untagged** and are pruned in the background on a schedule). For **stable** production deploys, use a **versioned** image from a GitHub release (semver tags, `latest`, and release `sha-*` are all retained). Set `image:` to e.g. `ghcr.io/<org>/<repo>:nightly` to always pull the current `main` build, or a semver tag to pin a release.
 
-To build the image from source instead, add a `docker-compose.override.yml` (or a separate compose file) that sets `build: .` and removes the `image:` for the `sampledb` and `demo-seed` services, then run the same commands below.
+To build the image from source instead, add a `docker-compose.override.yml` (or a separate compose file) that sets `build: .` and removes the `image:` for the `sampledb3` service, then run the same commands below.
 
 Optional: copy `.env.example` from the repo root to `.env` and adjust variables; `docker compose` reads `.env` automatically.
 
@@ -41,7 +41,7 @@ The API serves the frontend and uses SPA fallback: reloading or opening subpages
 | `ERROR_LOG_LEVEL` | `error` | Minimum level: `info`, `warning`, `error`. |
 | `ERROR_LOG_RETENTION_DAYS` | — | Days to retain error logs before cleanup. |
 | `OPENAPI_ENABLED` | `false` (in prod) | Set to `true` to expose OpenAPI docs at `/api/docs` in production. |
-| `APP_BUILD_ID` | `dev` (in the official image) | Identifies a deployment for the **web** bundle and the API. CI images set this to the Git commit SHA. The SPA compares this value to `GET /api/app-version` to show a **refresh** banner if the user’s tab is behind the server. Override in compose if you build the image with a custom tag. |
+| `APP_BUILD_ID` | Git commit SHA (in official images) | Identifies a deployment for the **web** bundle and the API. CI sets this to the Git commit SHA when publishing images; `dev` is only the Dockerfile ARG default for local image builds, and the app falls back to `local-dev` when the variable is unset. The SPA compares this value to `GET /api/app-version` to show a **refresh** banner if the user’s tab is behind the server. Override in compose if you build the image with a custom tag. |
 
 The database lives at `$HOST_DATA_DIR/sampledb.sqlite` on the host, so your backup script can read it directly when run from cron or systemd.
 
@@ -51,10 +51,10 @@ For existing databases created before the error-logging feature, the `error_logs
 
 ### Seeding a demo database (Docker)
 
-To populate the database with demo data before starting the app:
+To populate the database with demo data before starting the app, run the seed script as a one-off command in the app image (there is no separate seed service in `docker-compose.yml`):
 
 ```bash
-docker compose run --rm demo-seed
+docker compose run --rm sampledb3 bun /app/packages/api/dist/lib/demo-seed.js
 docker compose up -d
 ```
 
@@ -107,7 +107,7 @@ Full runbook, systemd/cron examples, and quarterly restore drills: [Backup and r
 
 The repo includes `ops/backup/backup-db-restic.sh`. It runs SQLite’s online `.backup` into a **temporary file** under `$TMPDIR`, then streams that file into `restic backup --stdin` so restores always see `sampledb.sqlite`. Ensure `$TMPDIR` has free space ≥ database size during the run.
 
-**Requirements:** `restic`, `sqlite3` (3.34+), and env vars: `DATABASE_PATH`, `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`.
+**Requirements:** `restic`, `sqlite3` (3.34+), and env vars: `DATABASE_PATH`, `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`. Set `RESTIC_COPY_REPOSITORY` to `restic copy` snapshots to a second repo after backup.
 
 ### How to access the SQLite file
 
@@ -122,7 +122,7 @@ set -a && source ops/backup/backup.env && set +a   # copy from backup.env.exampl
 **docker-compose with named volume** (if you changed docker-compose to use a named volume instead):
 
 ```bash
-docker exec sampledb sh -c 'f=$(mktemp) && sqlite3 /data/sampledb.sqlite ".backup $f" && cat "$f" && rm -f "$f"' | \
+docker exec sampledb3 sh -c 'f=$(mktemp) && sqlite3 /data/sampledb.sqlite ".backup $f" && cat "$f" && rm -f "$f"' | \
   restic backup --stdin --stdin-filename sampledb.sqlite --tag sampledb ...
 ```
 
@@ -157,5 +157,5 @@ Stop the app, replace the database file, then restart.
 Set `RUN_RESTIC_FORGET=1` in `backup.env` to run forget after each successful backup, or on a separate schedule:
 
 ```bash
-restic forget --tag sampledb --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+restic forget --tag sampledb --keep-daily 14 --keep-weekly 12 --keep-monthly 60 --prune
 ```

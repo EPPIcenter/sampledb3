@@ -4,20 +4,20 @@ import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
-	site: 'https://docs.example.com',
+	site: 'https://sampledb.fly.dev',
 	base: '/docs',
 	trailingSlash: 'always',
 	integrations: [
 		starlight({
 			title: 'SampleDB User Guide',
-			description: 'User guide for SampleDB — specimen inventory and workflow for research and clinical labs',
+			description: 'User guide for SampleDB, specimen inventory and workflow for research and clinical labs',
 			logo: {
 				src: './src/assets/icon.png',
 				alt: 'SampleDB',
 				replacesTitle: false,
 			},
 			social: [
-				{ icon: 'github', label: 'GitHub', href: 'https://github.com/withastro/starlight' },
+				{ icon: 'github', label: 'GitHub', href: 'https://github.com/eppicenter/sampledb3' },
 			],
 			customCss: [
 				'./src/styles/custom.css',

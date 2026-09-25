@@ -1,110 +1,75 @@
 ---
-title: Subjects & Specimens
-description: Create subjects and register individual specimens
+title: Subjects and specimens
+description: Create subjects and register specimens one at a time
 ---
 
-Subjects are the participants or sample sources within a study, and specimens are the actual biological samples collected from those subjects. This guide covers how to create subjects and register specimens individually, which is useful when you're adding a few items at a time or when you need to enter data that doesn't fit neatly into a bulk import workflow.
+A **subject** is a participant or sample source in a study. The name must be unique within that study. A **specimen** is the registered biological sample from one collection event. One subject can have many specimens. Each specimen belongs to one source, usually a subject.
 
-Understanding the relationship between subjects and specimens is key to using SampleDB effectively. A subject represents the source—whether that's a patient in a clinical trial, an animal in a research study, or any other sample source. Each subject can have multiple specimens collected over time, especially in longitudinal studies where you track samples across multiple collection dates.
+This page covers one-at-a-time entry. For many rows, see [Bulk import](/docs/guides/bulk-operations/import/).
 
-## Understanding Subjects and Specimens
+## Create a subject
 
-### What is a Subject?
+Subjects are created from their study, or during specimen registration.
 
-A subject represents a study participant, an individual sample source, or a unique identifier within a study. In a clinical trial, each subject might be a patient. In a research study, subjects might be animals, cell lines, or other sources. The key is that each subject has a unique name within their study, and that subject can have multiple specimens associated with them.
+1. Open the study.
+2. Click **Create Subject** in the header, or **Add subject** on the Subjects tab. In the command palette the same action is **Create New Subject**.
+3. Enter the subject name, then click **Create Subject**.
 
-Each subject has a name that serves as a unique identifier within the study. This name might be something like "SUBJ-001" or "P001" depending on your lab's naming conventions. The subject is associated with a specific study, and that association determines which study's data the subject belongs to. Over time, as you collect samples, the subject accumulates specimens that represent the biological materials collected from or associated with that subject.
+If the name already exists in the study, SampleDB rejects it.
 
-### What is a Specimen?
+## Register a specimen
 
-A specimen represents an actual biological sample—the blood, plasma, DNA, or other material you're managing. Each specimen represents a specific collection event, so if you collect Whole Blood from a subject on Monday and Plasma from the same subject on Friday, those are two separate specimens even though they came from the same subject.
+Open the form from any of these places:
 
-Each specimen has a specimen type that defines what kind of sample it is, like Whole Blood, Plasma, Serum, or DNA. It has a collection date that records when the sample was actually collected. It has a source that identifies where it came from—typically a subject, but it could also come from a control batch, reagent, cell line, plasmid, or standard. And optionally, it can be associated with a physical container for storage tracking.
+- On the Dashboard, in **Quick Actions**, click **Register New Specimen**.
+- On a subject detail page, click **Add Specimen**. The subject is already selected.
+- On the Specimens page, click **New Specimen**.
+- Press Ctrl+Shift+K or Cmd+Shift+K and run **Create New Specimen**. That command is available on the Dashboard, the Specimens page, and subject detail pages. Ctrl+K or Cmd+K opens search, not the command palette.
 
-The relationship between subjects and specimens is one-to-many: one subject can have many specimens, but each specimen belongs to one subject (or other source). This structure allows you to track all the samples collected from a single subject over time, which is especially valuable in longitudinal studies.
+### Specimen fields
 
-## Creating a Subject
+1. Select a source type. **Subject** is the usual choice. The other options are **Control**, **Reagent**, **Cell Line**, **Plasmid**, and **Standard**.
+2. If the source is **Subject**, select the study or enter its short code, then select the subject. To create the subject in the same step, select the **Create New Subject** checkbox and enter the name.
+3. Select a **Specimen Type** from Reference Data.
+4. Optional: enter **Collection Date** as YYYY-MM-DD. If you leave it blank, the specimen is saved without a date. SampleDB does not default to today.
 
-You can create a subject from a couple of different places in the interface, depending on where you are and what workflow makes sense for your situation.
+### Add a container
 
-### Creating from the Study Detail Page
+Select **Add Container** to create a container in the same step. Allowed types depend on the specimen type.
 
-If you're already working with a specific study, the most natural place to add a subject is from that study's detail page. Navigate to the study you want to add a subject to, and you'll see an "Add Subject" or "Create New Subject" button. Click that button, and you'll see a simple form asking for the subject name.
+- **Micronix Tubes.** Collection name (plate), unique barcode, position such as `A01`.
+- **Cryovial Tubes.** Collection name (box) and position. Barcode is optional.
+- **Papers.** Box or bag collection name, **sheet name**, optional **spot label**. CSV and API still call that field `sublabel`.
+- **Static Wells.** Collection name. Position is optional, same A01-H12 format as micronix.
 
-Enter the subject name following your lab's naming conventions. The name must be unique within the study, so if you try to use a name that already exists, the system will let you know. Once you've entered the name, click "Create" and the subject will be added to the study immediately.
+You can pick an existing collection or create one and assign a location. The form also has **Unit (Optional)** and total and remaining quantity, prefilled for the container type.
 
-### Creating from the Subjects Page
+Click **Create**. SampleDB creates the specimen, the subject if you asked for one, and the container if you filled those fields.
 
-If you prefer to work from a central subjects page, or if you're not sure which study you want to add the subject to, you can navigate to the Subjects section (if it's available in your navigation). From there, click "New Subject" and you'll see a form that asks you to select the study first, then enter the subject name.
+## Subject detail page
 
-This approach is useful when you're adding subjects to multiple studies or when you want to see all subjects in one place before deciding where to add a new one.
+The header shows the subject name, study, **Edit Subject**, and **Add Specimen**.
 
-## Registering a Specimen
+Below that, specimens are grouped by collection date. Each entry shows specimen type and container information, with links to the records. Container notes appear under the specimen when they exist.
 
-Registering specimens is one of the most common tasks you'll perform in SampleDB. The system provides several ways to access the specimen registration form, making it easy to add specimens from wherever you happen to be working.
+Statistics show specimen count, collection date range, and a breakdown by specimen type.
 
-### Finding the Registration Form
+## Specimen detail page
 
-You can register a specimen from several places. The Dashboard provides a "Register New Specimen" button in the Quick Actions section, which is perfect when you're starting fresh and want to quickly add a specimen. If you're already viewing a subject's detail page, you'll see an "Add Specimen" button that's contextually aware of which subject you're working with. The Specimens page has a "New Specimen" button if you're browsing specimens. And you can always use the command palette (press Ctrl+K or Cmd+K) and search for "Create New Specimen" to access it from anywhere in the system.
+The page shows specimen type, collection date, source, and study when the source is a subject.
 
-### Filling Out the Specimen Form
+For each container: type, barcode or sublabel, position for grid containers, collection, location, and status. Status is **In Use** when remaining quantity is greater than zero, and **Exhausted** when remaining quantity is zero. Container notes appear on each container card.
 
-The specimen registration form asks for several pieces of information, some required and some optional. The first thing you'll need to specify is the source type, which determines where the specimen came from. The most common choice is "Subject", which means the specimen came from a study subject. But you can also choose "Control" for specimens from control batches, "Reagent" for reagent samples, "Cell Line" for cell line samples, "Plasmid" for plasmid samples, or "Standard" for standard reference samples.
+Derivation history is on the container detail page, not the specimen page. That page links to the parent container, derivation type, date, and protocol.
 
-If you selected "Subject" as the source type, you'll need to specify which study the subject belongs to. You can either select the study from a dropdown or enter the study short code directly if you know it. Then you'll need to specify which subject the specimen came from. You can select an existing subject from a dropdown, or if the subject doesn't exist yet, you can enter the subject name and check the "Create new subject" box to create the subject automatically when you create the specimen.
+## Edit subjects and specimens
 
-Next, you'll need to specify the specimen type, which defines what kind of biological sample this is. You can select from available specimen types in a dropdown, or if you know the exact name, you can type it in. The specimen type must exist in your Reference Data, so if you're typing it in, make sure the spelling and capitalization match exactly.
+On the subject detail page, click **Edit Subject** to change the name. Downstream exports that used the old name will not match until you update them.
 
-The collection date is optional but highly recommended. This records when the specimen was actually collected, which is important for tracking, reporting, and understanding the timeline of your study. The date should be in YYYY-MM-DD format (like 2024-01-15). If you don't specify a collection date, the system will default to today's date, which is fine for same-day entries but should be corrected if the specimen was collected earlier.
+Specimen records cannot be edited in the app after creation. Ask an administrator if a correction is required.
 
-### Creating Containers for Specimens
+## When to use bulk import
 
-When registering a specimen, you have the option to create a container for it immediately. This is useful when you're entering data for specimens that are already physically stored, as it creates the complete record in one step.
+Use [Bulk import](/docs/guides/bulk-operations/import/) when you have more than a handful of subjects or specimens. Use this page for a few records or for cases that do not fit a CSV.
 
-If you choose to create a container, you'll need to select the container type. The options depend on what container types are allowed for the specimen type you selected. Micronix Tubes are small tubes typically stored in plates and require a collection name (the plate name), a barcode (which must be unique), and a position in the plate (like "A01" or "B12"). Cryovial Tubes are standard vials stored in boxes and require a collection name and position, with an optional barcode. Papers represent dried blood spot sheets and require a box or bag collection name, a **sheet name** (which sheet within that box or bag), and optionally a **sublabel** (spot identifier on the sheet). Static Wells are fixed-position containers in plates and require a collection name and position.
-
-For the collection, you can either select an existing collection (plate, box, or bag) from a dropdown, or you can create a new collection on the spot. If you're creating a new collection, you'll need to specify where it's stored by selecting a location.
-
-The container details vary by type. For Micronix tubes, you'll need to provide a unique barcode and a position. For Cryovial tubes, you'll need a position and can optionally provide a barcode. For Papers, you'll need a sheet name and can optionally provide a sublabel. For Static Wells, you'll need a position. The position format is important—for Micronix and Static Wells, use the format "A01" (letter followed by two digits), while Cryovial positions depend on your box layout.
-
-Once you've filled in all the required information, click "Create Specimen" to save everything. The system will create the specimen, create the subject if needed, create the container if you specified one, and link everything together correctly.
-
-## Viewing and Managing Subject Details
-
-When you navigate to a subject's detail page, you'll see a comprehensive view of everything related to that subject. At the top, you'll see the basic subject information: the name, which study they belong to, and when the subject was created in the system.
-
-Below that, you'll see a table showing all specimens that have been collected from this subject. The table shows the specimen type, collection date, container information if applicable, and provides links to view the full details of each specimen or container. When containers have notes, those notes are shown under each specimen in the timeline. This gives you a complete picture of what samples you have from this subject and when they were collected.
-
-The page also shows subject statistics that summarize the data. You'll see the total number of specimens, the date range of collections (earliest and latest dates), and a breakdown showing how many of each specimen type have been collected. These statistics help you understand the subject's sample history at a glance.
-
-From the subject detail page, you can take several actions. You can add another specimen by clicking "Add Specimen", which opens the registration form with the subject already selected. You can edit the subject name if needed, though you should be careful with this as subject names may be referenced in exports and other operations.
-
-## Viewing Specimen Details
-
-When you navigate to a specimen's detail page, you'll see all the information about that specific sample. The specimen information section shows the specimen type, collection date, source (whether it came from a subject or control batch), and the associated study if it came from a subject.
-
-If the specimen has a container associated with it, you'll see container information including the container type, barcode or sublabel when applicable, position for grid-based containers, which collection it belongs to, where that collection is stored (the location), and the container's status (whether it's "In Use" or "Exhausted" based on remaining quantity). When a container has notes, those notes are shown on each container card on the specimen detail page.
-
-If the specimen was derived from another container through processing, you'll see derivation information showing the parent container, what type of derivation was performed (like DNA extraction or dilution), when the derivation occurred, and what protocol was used. This helps you track the complete processing history of your samples.
-
-## Making Changes to Subjects and Specimens
-
-You can edit a subject's name after creation, which is useful if you discover a typo or need to update the identifier. Navigate to the subject detail page and click "Edit Subject" to modify the name. However, you should be careful with this, as subject names may be referenced in exports and other operations, so changing them could affect downstream processes.
-
-Most specimen details cannot be edited after creation, which helps maintain data integrity. The collection date may be editable in some cases if you discover an error, but other details like specimen type and source are typically locked. If you need to make significant changes to specimen information, you should contact your administrator, as some corrections may require special handling.
-
-## Best Practices for Data Entry
-
-When creating subjects, use consistent naming conventions throughout your study. This makes it easier to find subjects later and ensures your data is organized. Document your naming scheme so team members can follow it, and avoid special characters that might cause issues in CSV exports or other operations.
-
-For collection dates, always record them when available. They're important for tracking, reporting, and understanding the timeline of your study. Use consistent date formats (YYYY-MM-DD) throughout your data entry to avoid confusion.
-
-When creating containers, do so when specimens are physically stored. This ensures your records match reality. For tubes, use consistent barcode formats if you're using barcodes, and make sure positions follow the correct format for your container type. For papers, record the sheet name and optional sublabel rather than tube-style barcodes or grid positions. Double-check positions before saving, as incorrect positions can make it difficult to locate samples later.
-
-## When to Use Bulk Operations
-
-While individual entry is perfect for adding a few items or handling special cases, if you have many subjects and specimens to add, consider using the bulk import feature instead. Bulk import allows you to upload a CSV file with all your data and process everything at once, which is much more efficient than creating items individually. The bulk import guide covers this process in detail and includes templates to help you format your data correctly.
-
-## What's Next?
-
-Now that you understand how to create subjects and register specimens individually, you might want to learn about [Container Management](/docs/guides/workflows/containers/) to understand how to organize specimens in containers, explore [Bulk Import](/docs/guides/bulk-operations/import/) to learn how to add multiple subjects and specimens efficiently, or return to [Studies Management](/docs/guides/workflows/studies/) to continue organizing your research projects.
+For storage after registration, see [Containers](/docs/guides/workflows/containers/).

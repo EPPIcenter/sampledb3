@@ -7,7 +7,9 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "check": "bash scripts/check-stale-claims.sh",
+    "dump-ui-labels": "bash scripts/dump-ui-labels.sh"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.37.2",

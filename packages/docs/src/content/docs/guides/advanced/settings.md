@@ -1,72 +1,53 @@
 ---
-title: Settings
-description: Configure application settings, export configurations, and table view configurations
+title: Application Settings
+description: Configure appearance, export presets, scanner layouts, and admin defaults
 ---
 
-The Settings page allows you to configure various aspects of SampleDB, including export configurations, table view configurations (for collection table columns), default settings, and system preferences. The Settings UI uses a consistent "modern precision lab" visual theme aligned with the rest of the app; behavior is unchanged. Understanding how to configure these settings helps you customize the system to match your laboratory's workflows and ensures exports and other operations work the way you need them to.
+The page title and sidebar label are **Application Settings**. Open it from the sidebar, or press **Ctrl+Shift+K** / **Cmd+Shift+K** and run **Go to Application Settings**.
 
-Export configurations are particularly important, as they determine which columns appear in exported data files. Creating and managing these configurations ensures your exports include the right information and are formatted appropriately for your needs.
+The left column lists categories and sections. What you see depends on your role. Members see appearance, pagination, about, export configurations, and scanner configurations. Administrators also see container defaults, container type units, password requirements, session settings, and table view configurations.
 
-## Accessing Settings
+Changes in a section save when you complete that section's action. There is no page-wide Save.
 
-Navigate to Settings in the sidebar to access the configuration interface. You can also use the command palette (press Ctrl+K or Cmd+K) and search for "Settings" to jump directly to the settings page.
+## Application Settings
 
-## Understanding Export Configurations
+**Appearance.** Choose **Light**, **Dark**, **Sepia**, **Ocean**, **Warm dark**, **High contrast**, **Forest**, or **Rose**. The choice is stored in the browser and applied on every load. You can also change the theme from the theme control in the bottom-right floating cluster.
 
-Export configurations define which columns appear in exported data files. When you export data—whether through bulk export, barcode export, or other export methods—you can select a configuration that determines what information is included. Export configurations are used only for the Export page, Barcode Export, and Export modal. Collection table view (plates, boxes, bags, sheets) uses **table view configurations** instead; see "Other Settings" below.
+**Pagination.** How many rows list pages show.
 
-The Settings page shows a list of all export configurations in your system, displays which configuration is set as the default (if any), and shows configuration details that help you understand what each configuration includes. Changes to export configurations—including shared configurations—are saved as soon as you add, edit, delete, or set a default; there is no separate "save" step.
+**About.** Web and API build identifiers for this deployment.
 
-## Creating Export Configurations
+**Container Defaults** (admin). Default quantity used when creating a container of each type. Default units are set under **Container Type Units**.
 
-Creating a new export configuration starts with clicking "New Configuration" or "Add Configuration". You'll need to provide a name for the configuration, which should be descriptive enough that you understand what it's for. Examples might be "Standard Report", "Minimal Export", or "Analysis-Ready".
+**Container Type Units** (admin). Allowed units per container type, and the default unit for that type.
 
-Optionally, you can add a description that explains what the configuration is for and when to use it. This documentation helps team members understand which configuration to select for different purposes.
+## Security Settings (admin)
 
-You can check "Is Default" to make this configuration the default selection in export interfaces. Only one configuration can be default at a time, so setting a new default removes default status from the previous one.
+**Password Requirements.** Minimum length and related rules for new passwords.
 
-Next, you'll select which columns to include by checking boxes for the columns you want. Uncheck columns you don't need. The system shows all available columns, and you can create configurations with any combination. Once you've selected your columns, click Save and the configuration is immediately available for use in exports.
+**Session Settings.** How long a signed-in session lasts.
 
-## Editing and Managing Configurations
+## Data Management
 
-You can edit configurations after creation to update names, descriptions, default status, or column selections. Find the configuration in the list, click "Edit", make your changes, and save. Updates are immediately available in export interfaces.
+### Export Configurations
 
-Setting a default configuration makes it the automatic selection in export interfaces, which saves time if you usually export with the same column set. To set a default, edit a configuration, check "Is Default", and save. The previous default automatically loses its default status.
+Used by **Multi-Study Export**, **Micronix Barcode Export**, and the study export modal. Collection table views use **Table View Configurations** instead.
 
-Deleting configurations is straightforward, but you cannot delete the default configuration. If you want to delete the current default, first set another configuration as default, then you can delete the one you no longer need.
+Two tabs:
 
-## Common Configuration Use Cases
+- **Shared Configurations.** Visible to everyone. Administrators click **+ Add Shared Configuration**.
+- **My Configurations.** Visible only to you. Click **+ Add Personal Configuration**.
 
-Different workflows call for different export configurations. A standard report configuration might include commonly needed columns like study information, subject information, specimen type, collection date, and container details. This provides comprehensive information for most reporting needs.
+Each configuration has a name and a column list. **Set as Default** marks one configuration as the default for that tab. **Edit** and **Delete** change or remove a row. If you delete the default and other configurations remain, the first remaining row becomes the default. Deleting asks for confirmation.
 
-A minimal export configuration might include just essential identifiers, barcodes, and positions. This creates lightweight exports that are perfect for quick lookups or when you only need basic information.
+The create/edit form submit button is **Add** on **Shared Configurations**, **Create** on **My Configurations**, and **Save** when you are editing.
 
-An analysis-ready configuration might include all relevant data columns, formatted appropriately for analysis tools, and include metadata that's useful for statistical analysis. This ensures exports are ready to use in analysis software without additional formatting.
+### Table View Configurations (admin)
 
-## Other Settings
+Presets for columns on plate, box, bag, and sheet collection tables. One preset can be default. A table CSV download uses the columns currently shown, not an export configuration.
 
-**Table view configurations** (Data Management, admin only) define presets for which columns appear in the collection table view on plate, box, bag, and sheet detail pages. One preset can be set as the default. Table CSV download exports the current view columns. This is separate from export configurations, which apply only to the Export page and barcode export. New installations get a default "Default" preset at setup. For existing databases upgraded before this feature, run the seed script once (from repo root: `DATABASE_PATH=/path/to/sampledb.sqlite bun --filter @sampledb/api run seed-table-view-config`) to add the default table view configuration; the script is idempotent and does nothing if configs already exist.
+New installs receive a **Default** preset during setup.
 
-**Appearance** (Application Settings) lets you choose the application theme: Light, Dark, Sepia, Ocean, Warm dark, High contrast, Forest (dark green), or Rose (warm pink). Your choice is saved and applied on every load. You can also change the theme from the theme control in the bottom-right floating action cluster (hover to expand, then click the theme button to open the dropdown).
+### Scanner Configurations
 
-Depending on your system configuration, you may see additional settings beyond export and table view configurations. System preferences might include default date formats, display options, or notification settings. User preferences might include interface preferences, display options, or personal settings that customize your experience.
-
-These additional settings vary by system configuration, so check what's available in your instance and configure them according to your preferences and needs.
-
-## Best Practices for Settings Management
-
-Effective settings management starts with creating standard configurations that your team uses regularly. Set up common configurations for your typical export needs, and name them clearly so team members understand what each one is for. Use descriptions to explain configurations, especially if their purposes aren't immediately obvious from the name.
-
-Set sensible defaults that match your most common use case, which saves time by making the right configuration automatically selected. Review configurations periodically and update them as needs change, keeping them current and useful.
-
-For configuration organization, group configurations by purpose to make it easier to find what you need. Keep configurations current by updating them as your needs evolve, and coordinate with your team to ensure everyone understands available configurations and when to use them. Document changes when configurations are modified, noting when and why changes were made.
-
-## Troubleshooting Settings Issues
-
-If a configuration doesn't appear in export dropdowns, refresh the export page to ensure it picks up new configurations. Verify that the configuration was saved correctly, check that the configuration name is correct, and ensure the configuration hasn't been deleted.
-
-If you can't delete a configuration, it's likely because it's set as the default. Set another configuration as default first, then you can delete the one you no longer need. The system prevents deleting the default to ensure there's always a default available.
-
-## What's Next?
-
-Now that you understand settings, you might want to explore [Bulk Export](/docs/guides/bulk-operations/export/) to see how export configurations are used, check out [Barcode Export](/docs/guides/advanced/barcode-export/) to see configurations in barcode exports, or review [Reference Data](/docs/guides/reference-data/overview/) to understand other system configuration options.
+Named layouts for plate-scanner CSV files (column names, header rows, how the destination plate is inferred). The same configurations are used for container move and qPCR plate upload. See [Validate a plate scan](/docs/guides/features/plate-scan-validation/) and [Container movement](/docs/guides/bulk-operations/container-movement/).

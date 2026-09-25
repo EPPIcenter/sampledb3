@@ -1,14 +1,14 @@
 ---
 title: Welcome to SampleDB
-description: User guide for SampleDB — specimen inventory and workflow for research and clinical labs
+description: User guide for SampleDB, specimen inventory and workflow for research and clinical labs
 template: splash
 hero:
   tagline: Track specimens, storage, and lab workflows from study setup to the freezer
   actions:
-    - text: Get Started
+    - text: Get started
       link: /docs/guides/getting-started/setup/
       icon: right-arrow
-    - text: Dashboard Overview
+    - text: Dashboard
       link: /docs/guides/getting-started/dashboard/
       icon: document
       variant: minimal
@@ -18,95 +18,79 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## What is SampleDB?
 
-SampleDB is a specimen inventory and workflow system for research and clinical labs. It helps lab staff and biobank operators track biological samples from study enrollment through physical storage — with bulk CSV import and export, quality controls, container derivations, and assay preparation workflows such as qPCR plate layout.
+SampleDB is a specimen inventory and workflow system for research and clinical labs. Lab staff and biobank operators use it to track biological material from study enrollment through physical storage, including bulk CSV import and export, quality controls, container derivations, and qPCR plate layout.
 
-SampleDB also tracks **quality control specimens** — reference materials produced in defined batches, separate from study subjects. Once specimens are registered, the same storage tools apply whether the material came from a study subject or a control batch.
+SampleDB also tracks **quality control specimens**: reference materials produced in defined batches, separate from study subjects. After you register a specimen, the same storage tools apply whether the material came from a study subject or a control batch.
 
-## Understanding the Core Concepts
+## Core concepts
 
-SampleDB organizes laboratory data around two related hierarchies. Most day-to-day work starts with provenance — *where did this material come from?* — and then moves to storage — *where is it now?*
+Most day-to-day work starts with provenance (where the material came from) and then storage (where it is now).
 
-### Where did it come from? (Provenance)
+### Provenance
 
-**Studies** are the top-level unit for research projects and clinical trials. Each study has a unique short code (like "NAM15" or "TCC08") used in imports, exports, and searches.
+**Studies** are the top-level unit for research projects and clinical trials. Each study has a unique short code (like NAM15 or TCC08) used in imports, exports, and searches.
 
-**Subjects** are participants or sample sources within a study. Each subject has a unique name within that study and can have many specimens collected over time.
+**Subjects** are participants or sample sources within a study. Each subject has a unique name within that study and can have many specimens.
 
-**Specimens** are the collected unit — the registered record of biological material from a specific collection event (whole blood, plasma, DNA, and so on). In casual conversation you might say "sample"; in SampleDB the domain term is **Specimen**. Each specimen has a type, an optional collection date, and a **source** — typically a subject, or alternatively a control batch.
+**Specimens** are the registered record of biological material from a specific collection event. In casual conversation you might say "sample". In SampleDB the domain term is **Specimen**. Each specimen has a type, an optional collection date, and a **source**, typically a subject or a control batch.
 
-Quality control specimens follow a parallel path: **Control definition → Control batch → Specimen**. Strain-mixture controls (synthetic parasite mixtures) add a **Composition** layer above definitions. See the [Blood Controls](/docs/guides/features/blood-controls/) guide for details.
+Quality control specimens follow a parallel path: **Control definition → Control batch → Specimen**. Strain-mixture controls add a **Composition** layer above definitions. See [Blood Controls](/docs/guides/features/blood-controls/).
 
-### Where is it stored? (Physical storage)
+### Physical storage
 
-**Containers** are the physical storage units that hold specimen material — micronix tubes, cryovials, dried blood spot papers, and other types. One specimen can have multiple containers; each container holding part of the same specimen is an **aliquot**.
+**Containers** hold specimen material: micronix tubes, cryovials, dried blood spot papers, and other types. One specimen can have multiple containers. Each container that holds part of the same specimen is an **aliquot**.
 
-**Collections** group containers handled together as one physical unit — a micronix plate, cryovial box, or bag. A collection is not the act of collecting a sample from a subject.
+**Collections** group containers handled together as one physical unit: a micronix plate, cryovial box, or bag. A collection is not the act of collecting a sample from a subject.
 
-**Locations** are places in your storage hierarchy where collections are kept (building → room → freezer → shelf, or whatever matches your lab). Locations are configured in [Reference Data](/docs/guides/reference-data/overview/) and referenced when placing collections.
+**Locations** are places in your storage hierarchy where collections sit. Manage them under **Browse Data → Locations**, not in Reference Data. See [Locations](/docs/guides/workflows/locations/).
 
-A specimen may exist without a container until it is physically stored. When it is stored, the chain is: **Specimen → Container → Collection → Location**.
+A specimen can exist without a container until it is stored. When it is stored, the chain is **Specimen → Container → Collection → Location**.
 
 ### Processing and configuration
 
-**Derivations** track transformations — when material in a parent container is processed into a child container (for example, DNA extraction), usually creating a new specimen. This is distinct from aliquoting, which divides the same specimen across multiple containers without a transformation record. See [Derivations](/docs/guides/features/derivations/).
+**Derivations** record a transformation from a parent container into a child container, usually with a new specimen type. Aliquoting splits the same specimen across containers without a derivation record. See [Derivations](/docs/guides/features/derivations/).
 
-**Reference data** is system-wide configuration — specimen types, units, storage types, locations, strains, and related lookup data — set up during initial configuration and updated as your lab evolves. Day-to-day records (studies, specimens, containers, controls) are **operational data**.
+**Reference data** is system-wide configuration: specimen types, tags, storage types, strains, and units. Studies, specimens, containers, locations, and controls are operational data. See [Reference data](/docs/guides/reference-data/overview/).
 
-## Getting Started
+## Getting started
 
 <CardGrid stagger>
-	<Card title="Initial Setup" icon="setting">
-		Complete the setup wizard to configure your SampleDB instance with specimen types, units, storage locations, and more.
-		[Get Started →](/docs/guides/getting-started/setup/)
+	<Card title="Initial setup" icon="setting">
+		Four-step wizard: admin account, specimen types and units, storage types, optional strains. Finish Setup sends you to sign-in, not the dashboard.
+		[Setup](/docs/guides/getting-started/setup/)
 	</Card>
-	<Card title="User Journey Guide" icon="right-arrow">
-		Walk through creating a study, importing subjects, and importing specimens using tutorial data (TUT01) you can delete afterward.
-		[Start Journey →](/docs/guides/getting-started/user-journey/)
+	<Card title="Tutorial walkthrough" icon="right-arrow">
+		Create study TUT01, import subjects and specimens, then delete the study. Any user can delete a TUT short code.
+		[Walkthrough](/docs/guides/getting-started/user-journey/)
 	</Card>
-	<Card title="Dashboard Overview" icon="document">
-		Learn how to navigate the dashboard, understand key metrics, and use quick actions to speed up your workflow.
-		[View Guide →](/docs/guides/getting-started/dashboard/)
+	<Card title="Dashboard" icon="document">
+		Lab Overview: search, Quick Actions, metrics, recent studies, and sidebar labels.
+		[Dashboard](/docs/guides/getting-started/dashboard/)
 	</Card>
-	<Card title="Create Your First Study" icon="add-document">
-		Start by creating a study, then add subjects and register specimens. Follow our step-by-step workflows.
-		[Studies Guide →](/docs/guides/workflows/studies/)
+	<Card title="Studies" icon="add-document">
+		Create a study, set the longitudinal flag (it cannot change later), then add subjects.
+		[Studies](/docs/guides/workflows/studies/)
 	</Card>
-	<Card title="Bulk Import" icon="pencil">
-		Import subjects and specimens in bulk using CSV files. Perfect for getting started with existing data.
-		[Import Guide →](/docs/guides/bulk-operations/import/)
+	<Card title="Bulk import" icon="pencil">
+		CSV import for subjects and specimens, with validation before write.
+		[Import](/docs/guides/bulk-operations/import/)
 	</Card>
 </CardGrid>
 
-## How This Guide is Organized
+## How this guide is organized
 
-This documentation is organized to help you whether you're just getting started or looking for information on specific features. Each section builds on previous concepts, but you can also jump to any topic that interests you.
-
-**Getting Started** guides walk you through your first steps with SampleDB. The initial setup process configures your system with the specimen types, units, and storage infrastructure your lab uses. Once setup is complete, the dashboard becomes your home base, showing key metrics and providing quick access to common tasks.
-
-**Core Workflows** cover the day-to-day operations you'll perform most frequently. You'll learn how to create and manage studies, add subjects and register specimens, organize samples in containers, and set up your storage location hierarchy. These guides include step-by-step instructions and practical examples.
-
-**Bulk Operations** help you work efficiently with large datasets. Whether you're importing hundreds of subjects from a spreadsheet, exporting containers for analysis, or reorganizing containers between collections, these guides show you how to handle bulk operations safely and effectively.
-
-**Specialized Features** dive into advanced functionality for specific use cases. [Blood Controls](/docs/guides/features/blood-controls/) covers control definitions, batches, and inventory — including strain-mixture controls with composition tracking. [Derivations](/docs/guides/features/derivations/) track how specimens are processed and transformed. Collection movement helps you reorganize your storage as your lab grows.
-
-**Reference Data** management guides show you how to configure the system-wide settings that define what types of information SampleDB can store. You'll learn how to manage specimen types, units, storage types, locations, and other foundational data.
-
-**Advanced Topics** cover power user features that can make your work more efficient. Barcode export lets you quickly export data for scanned containers. Statistics and reporting give you insights into your inventory. Search and navigation shortcuts help you move through the system quickly. Settings let you customize export configurations and other preferences.
-
-**Troubleshooting** provides solutions to common problems you might encounter. Whether you're dealing with import errors, container issues, or CSV formatting questions, these guides help you resolve issues quickly. Best practices recommendations help you avoid problems before they occur, and CSV guidelines ensure your import files are formatted correctly.
+- **Getting started.** Setup wizard, dashboard, and a TUT01 walkthrough you can delete.
+- **Core workflows.** Studies, subjects, specimens, containers, and locations.
+- **Bulk operations.** CSV import, multi-study export, and container moves.
+- **Specialized features.** Blood controls, derivations, Move Collections, plate-scan validation, and qPCR experiments.
+- **Reference data.** Specimen types, tags, storage types, strains, and units. Locations live under Core workflows.
+- **Advanced topics.** Search, statistics, Micronix Barcode Export, and [Application Settings](/docs/guides/advanced/settings/).
+- **Troubleshooting.** Import errors, CSV rules, and common issues.
 
 ## About EPPIcenter
 
-SampleDB is developed by **EPPIcenter** (Experimental & Population-based Pathogen Investigation Center) at the University of California, San Francisco. EPPIcenter brings a systems epidemiology approach to understanding complex infectious disease dynamics by integrating state-of-the-art data collection, molecular technologies, and computational analysis.
+SampleDB is developed by **EPPIcenter** (Experimental and Population-based Pathogen Investigation Center) at UCSF. More about the group is on [eppicenter.ucsf.edu](https://eppicenter.ucsf.edu).
 
-The center believes that the greatest success in the fight against infectious diseases comes through a highly interdisciplinary approach, connecting traditionally siloed theoretical work, technology development, generation and collection of empirical data, and analysis using statistical and mathematical modeling. This philosophy drives the development of tools like SampleDB, which bridge the gap between laboratory operations and data analysis.
+## Need help?
 
-EPPIcenter focuses on infectious disease research, including malaria, COVID-19, and other pathogens, working to advance public health through innovative research, data management solutions, and collaborative partnerships. SampleDB represents our commitment to providing laboratories with modern, efficient solutions for sample management that scale from small pilot studies to large multi-site research projects.
-
-Our team works closely with researchers and laboratory staff to understand their needs and develop software that truly supports their work. SampleDB is designed with input from wet lab teams to ensure it meets real-world requirements and integrates smoothly into existing workflows.
-
-To learn more about EPPIcenter and our research, visit [eppicenter.ucsf.edu](https://eppicenter.ucsf.edu).
-
-## Need Help?
-
-If you encounter issues not covered in this guide, please contact your system administrator or refer to the troubleshooting section for common problems and solutions. The guides are designed to be comprehensive, but every laboratory has unique workflows and requirements.
+If a step in this guide does not match what you see, contact your SampleDB administrator. See [Troubleshooting](/docs/guides/troubleshooting/common-issues/) for import and CSV problems.

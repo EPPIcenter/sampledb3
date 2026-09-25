@@ -1,11 +1,9 @@
 ---
-title: Validate Plate Scan
+title: Validate a plate scan
 description: Compare a scanned plate CSV to the database
 ---
 
-Validate plate scan lets you upload a CSV file from a plate scanner and compare it to a micronix plate in the database. You can confirm that the physical scan matches what SampleDB expects: which wells have tubes, which barcodes are in which positions, and whether any containers are marked exhausted or have tags.
-
-The feature is available under **Operations → Validate plate scan** in the sidebar. It uses the same "modern precision lab" theme as other storage and container pages.
+Validate plate scan compares a scanner CSV to a micronix plate in the database. It is read-only. Open **Operations → Validate Plate Scan**.
 
 ## When to use it
 
@@ -22,7 +20,7 @@ Validation is read-only: it does not change any data.
 ## Upload and configure
 
 1. **Scanner configuration**  
-   Choose the scanner configuration that matches your CSV format (column names for barcode and position, row/column vs single position column, how many header rows to skip, and optionally whether the **destination plate** is inferred from the **file name** or a **CSV column** that repeats the plate name). The same configurations are used for container move and qPCR plate upload. Manage them in **Settings → Scanner configurations**.
+   Choose the scanner configuration that matches your CSV format (column names for barcode and position, row/column vs single position column, how many header rows to skip, and optionally whether the **destination plate** is inferred from the **file name** or a **CSV column** that repeats the plate name). The same configurations are used for container move and qPCR plate upload. Manage them in **Application Settings → Data Management → Scanner Configurations**.
 
 2. **CSV file**  
    Upload the scanned plate CSV. The file should have a barcode column and a position column (or separate row and column columns), as defined by the selected scanner configuration.

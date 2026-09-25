@@ -1,5 +1,5 @@
 ---
-title: Generating a Demo Database
+title: Demo database
 description: Seed a database with sample data demonstrating all SampleDB capabilities
 ---
 
@@ -26,9 +26,10 @@ DATABASE_PATH=./my-demo.sqlite bun run demo:seed
 
 ## Docker
 
+There is no separate seed service in `docker-compose.yml`. Run the seed as a one-off command in the `sampledb3` image:
+
 ```bash
-docker compose build
-docker compose run --rm demo-seed
+docker compose run --rm sampledb3 bun /app/packages/api/dist/lib/demo-seed.js
 ```
 
 This seeds the main database file at `/data/sampledb.sqlite` (the default volume). Then start the app:
@@ -40,7 +41,7 @@ docker compose up -d
 To seed a different file:
 
 ```bash
-DATABASE_PATH=/data/sampledb_demo.sqlite docker compose run --rm demo-seed
+DATABASE_PATH=/data/sampledb_demo.sqlite docker compose run --rm sampledb3 bun /app/packages/api/dist/lib/demo-seed.js
 ```
 
 ## fly.io
