@@ -37,6 +37,7 @@ The API serves the frontend and uses SPA fallback: reloading or opening subpages
 | `PORT` | `3000` | Host port to expose. Use when 3000 is already in use. |
 | `DATABASE_PATH` | `/data/sampledb.sqlite` | Path to SQLite inside the container. Must match the mount path. |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | **Required in production.** Comma-separated CORS origins (e.g. `https://your-domain.com`). If unset, CORS rejects all cross-origin requests. |
+| `TRUST_PROXY` | `true` (compose, fly.toml); `false` otherwise | Rate limiting (login, registration, imports) keys on the last `X-Forwarded-For` hop, which your reverse proxy appends. Set to `false` only if clients reach SampleDB directly; then the socket address is used and forwarded headers are ignored. |
 | `ERROR_LOG_ENABLED` | `true` | Enable error logging to the database. Set to `false` or `0` to disable. If disabled, a startup warning is logged. |
 | `ERROR_LOG_LEVEL` | `error` | Minimum level: `info`, `warning`, `error`. |
 | `ERROR_LOG_RETENTION_DAYS` | — | Days to retain error logs before cleanup. |

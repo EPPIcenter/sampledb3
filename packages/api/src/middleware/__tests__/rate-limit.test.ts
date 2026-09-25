@@ -14,7 +14,15 @@ describe('rate-limit middleware', () => {
 
   afterEach(() => {
     process.env.NODE_ENV = originalNodeEnv
+    delete process.env.TRUST_PROXY
   })
+
+  function limitedApp(max: number) {
+    const app = new Hono()
+    app.use('*', rateLimit(max, 60_000))
+    app.get('/ok', (c) => c.json({ ok: true }))
+    return app
+  }
 
   it('allows requests under the limit', async () => {
     const app = new Hono()
@@ -44,5 +52,36 @@ describe('rate-limit middleware', () => {
     expect(body.error).toBe('Too many requests')
     expect(body.errorCode).toBe('RATE_LIMIT_EXCEEDED')
     expect(typeof body.retryAfter).toBe('number')
+  })
+
+  it('with TRUST_PROXY, keys on the last forwarded hop so a spoofed first hop does not bypass', async () => {
+    process.env.TRUST_PROXY = 'true'
+    const app = limitedApp(2)
+    const hit = (spoofed: string) =>
+      app.request('/ok', { headers: { 'x-forwarded-for': `${spoofed}, 203.0.113.7` } })
+
+    await hit('1.1.1.1')
+    await hit('2.2.2.2')
+    expect((await hit('3.3.3.3')).status).toBe(429)
+    expect((await app.request('/ok', { headers: { 'x-forwarded-for': '198.51.100.1' } })).status).toBe(200)
+  })
+
+  it('without TRUST_PROXY, ignores forwarded headers', async () => {
+    const app = limitedApp(2)
+    await app.request('/ok', { headers: { 'x-forwarded-for': '1.1.1.1' } })
+    await app.request('/ok', { headers: { 'x-forwarded-for': '2.2.2.2' } })
+    expect((await app.request('/ok', { headers: { 'x-forwarded-for': '3.3.3.3' } })).status).toBe(429)
+  })
+
+  it('keeps a separate count per limiter', async () => {
+    process.env.TRUST_PROXY = 'true'
+    const busy = limitedApp(2)
+    const login = limitedApp(2)
+    const opts = { headers: { 'x-forwarded-for': '203.0.113.9' } }
+
+    await busy.request('/ok', opts)
+    await busy.request('/ok', opts)
+    expect((await busy.request('/ok', opts)).status).toBe(429)
+    expect((await login.request('/ok', opts)).status).toBe(200)
   })
 })

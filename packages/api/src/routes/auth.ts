@@ -428,7 +428,8 @@ auth.get('/users', adminMiddleware, async (c) => {
 })
 
 // Switch user (for shared workstations - requires password confirmation and authentication)
-auth.post('/switch', authMiddleware, async (c) => {
+// Rate limited like login: it verifies another user's password.
+auth.post('/switch', rateLimit(10, 60 * 1000), authMiddleware, async (c) => {
   try {
     const currentUser = c.get('user')!
     const body = await c.req.json()
@@ -449,18 +450,15 @@ auth.post('/switch', authMiddleware, async (c) => {
       ))
       .get()
     
-    if (!targetUser) {
-      return c.json({ error: 'User not found' }, 404)
+    // Same response for a missing user and a wrong password, so the endpoint does not reveal
+    // which accounts exist; approval status is only reported after the password checks out.
+    const valid = targetUser ? await bcrypt.compare(password, targetUser.passwordHash) : false
+    if (!targetUser || !valid) {
+      return c.json({ error: 'Invalid password' }, 401)
     }
 
     if (!targetUser.approvedAt) {
       return c.json({ error: 'Account pending approval' }, 401)
-    }
-    
-    // Verify password for the target user
-    const valid = await bcrypt.compare(password, targetUser.passwordHash)
-    if (!valid) {
-      return c.json({ error: 'Invalid password' }, 401)
     }
     
     // Get session settings
