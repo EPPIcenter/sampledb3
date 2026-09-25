@@ -13,6 +13,7 @@ import { handleRouteError } from '../lib/error-handler'
 import {
   toPublicUser,
   verifyLoginCredentials,
+  verifyPasswordConstantTime,
   createUserSession,
   registerApprovedUser,
 } from '../lib/auth/auth-service'
@@ -460,7 +461,7 @@ auth.post('/switch', rateLimit(10, 60 * 1000), authMiddleware, async (c) => {
     
     // Same response for a missing user and a wrong password, so the endpoint does not reveal
     // which accounts exist; approval status is only reported after the password checks out.
-    const valid = targetUser ? await bcrypt.compare(password, targetUser.passwordHash) : false
+    const valid = await verifyPasswordConstantTime(password, targetUser?.passwordHash)
     if (!targetUser || !valid) {
       return c.json({ error: 'Invalid password' }, 401)
     }
