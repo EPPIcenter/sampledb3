@@ -1,6 +1,8 @@
 import type { Database } from '../db/client'
 import type { DatabaseOrTransaction } from './db-types'
 import {
+  bag,
+  box,
   containerDerivation,
   cryovialBox,
   cryovialTube,
@@ -24,6 +26,8 @@ import {
 import { createDerivation, type CreateDerivationInput } from './derivations'
 import { withWriteTransaction } from '../db/write-transaction'
 import { resolveParentContainerId } from './derivations/parent-container-resolver'
+import { normalizePosition } from './normalize-position'
+import { checkGridPositionOccupancy } from './container-occupancy'
 
 /**
  * Map technical DB/constraint errors to messages that are clear for non-technical users.
@@ -157,6 +161,23 @@ function parseBoolean(value?: string): boolean | undefined {
   return v === 'true' || v === '1' || v === 'yes' || v === 'y'
 }
 
+const BOOLEAN_WORDS = new Set(['true', 'false', '1', '0', 'yes', 'no', 'y', 'n'])
+
+/** First problem with a row's typed cells, so a bad value is reported instead of silently dropped. */
+function rowValueError(row: DerivationCsvRow): string | null {
+  for (const column of ['quantity', 'quantity_used'] as const) {
+    const raw = row[column]
+    if (raw != null && raw.trim() !== '' && parseNumber(raw) === undefined) {
+      return `${column} '${raw}' is not a number`
+    }
+  }
+  const flag = row.reduce_parent_quantity
+  if (flag != null && flag.trim() !== '' && !BOOLEAN_WORDS.has(flag.trim().toLowerCase())) {
+    return `reduce_parent_quantity '${flag}' must be true or false`
+  }
+  return null
+}
+
 function parseNumber(value?: string): number | undefined {
   if (value == null || value.trim() === '') return undefined
   const n = Number(value)
@@ -201,6 +222,11 @@ function buildChildSummary(row: DerivationCsvRow): string {
   }
   if (cb) return `Barcode ${cb}`
   return 'Child'
+}
+
+/** Paper rows name their parent with box_name or bag_name. */
+function paperParentTypeFor(row: DerivationCsvRow): 'box' | 'bag' {
+  return row.box_name ? 'box' : row.bag_name ? 'bag' : 'box'
 }
 
 function getCollectionNameForType(
@@ -248,11 +274,13 @@ function derivationCsvRowToContainerWrite(
  * skipped, matching the previous line-based parser.
  */
 export function parseCsv(text: string): DerivationCsvRow[] {
+  // Drop rows with no values at all (blank lines, or Excel's trailing ",,,," rows).
   const cells = parseCsvCells(text)
-    .filter(row => !(row.length === 1 && row[0].trim() === ''))
+    .filter(row => row.some(cell => cell.trim() !== ''))
   if (cells.length === 0) return []
 
-  const headers = cells[0].map(h => h.trim())
+  // Headers are matched case-insensitively ("Plate_Name" -> plate_name).
+  const headers = cells[0].map(h => h.trim().toLowerCase())
   const rows: DerivationCsvRow[] = []
 
   for (let i = 1; i < cells.length; i++) {
@@ -272,6 +300,7 @@ async function resolveCollectionId(
   containerType: DerivationCsvRow['container_type'],
   collectionName?: string,
   collectionBarcode?: string,
+  paperParentType: 'box' | 'bag' = 'box',
 ): Promise<{ id?: number; status: 'existing' | 'will_be_created' }> {
   if (!collectionName && !collectionBarcode) {
     return { status: 'will_be_created' }
@@ -318,12 +347,16 @@ async function resolveCollectionId(
   }
 
   if (containerType === 'paper') {
-    const sheetRec = await database
-      .select({ id: paper.sheetId })
-      .from(paper)
-      .limit(1)
+    // Paper goes on a sheet in the named box or bag; the sheet is created if missing,
+    // but the box or bag itself must already exist.
+    if (!collectionName) return { status: 'will_be_created' }
+    const parentTable = paperParentType === 'bag' ? bag : box
+    const parent = await database
+      .select({ id: parentTable.id })
+      .from(parentTable)
+      .where(eq(parentTable.name, collectionName.trim()))
       .get()
-    return { id: sheetRec?.id, status: sheetRec?.id ? 'existing' : 'will_be_created' }
+    return { id: parent?.id, status: parent ? 'existing' : 'will_be_created' }
   }
 
   return { status: 'will_be_created' }
@@ -388,6 +421,14 @@ export async function validateDerivationsCsv(
         }
       }
 
+      const valueError = rowValueError(row)
+      if (valueError) {
+        validationRow.error = valueError
+        validationRows.push(validationRow)
+        invalidCount++
+        continue
+      }
+
       const containerType = row.container_type || settings?.containerType || 'micronix_tube'
       const collectionName = getCollectionNameForType(row, containerType)
       if ((containerType === 'micronix_tube' || containerType === 'cryovial_tube') && !collectionName && !row.collection_barcode) {
@@ -429,10 +470,10 @@ export async function validateDerivationsCsv(
           if (parentSpecimen) {
             currentParentSpecimenTypeId = parentSpecimen.specimenTypeId
             
-            // Store first row's specimen type for comparison
-            if (i === 0) {
+            // Compare against the first row whose parent resolved
+            if (firstParentSpecimenTypeId === null) {
               firstParentSpecimenTypeId = currentParentSpecimenTypeId
-            } else if (firstParentSpecimenTypeId !== null && currentParentSpecimenTypeId !== firstParentSpecimenTypeId) {
+            } else if (currentParentSpecimenTypeId !== firstParentSpecimenTypeId) {
               validationRow.warnings = validationRow.warnings || []
               validationRow.warnings.push('Source specimen type does not match other rows')
               warningCount++
@@ -471,12 +512,22 @@ export async function validateDerivationsCsv(
         containerType,
         collectionName,
         row.collection_barcode,
+        paperParentTypeFor(row),
       )
       validationRow.collectionStatus = collectionInfo.status
 
+      if (containerType === 'paper' && collectionInfo.status !== 'existing') {
+        const kind = paperParentTypeFor(row)
+        validationRow.error = `${kind === 'bag' ? 'Bag' : 'Box'} '${collectionName ?? ''}' not found. Create it before importing paper derivations.`
+        validationRows.push(validationRow)
+        invalidCount++
+        continue
+      }
+
       // For tube types, validate position and check for duplicate (existing collection or within CSV)
       if (containerType === 'micronix_tube' || containerType === 'cryovial_tube') {
-        const position = (row.position ?? '').toString().trim()
+        // Normalize ("A2" -> "A02") so checks match what the import stores.
+        const position = normalizePosition(row.position) ?? ''
         if (!position) {
           validationRow.error = 'position is required for each row when deriving to a plate or box'
           validationRows.push(validationRow)
@@ -488,25 +539,21 @@ export async function validateDerivationsCsv(
 
         // Check if position is already used in an existing collection
         if (collectionInfo.id !== undefined) {
+          // Shared check: on a plate, tubes and static wells both occupy cells.
+          const occupancy = await checkGridPositionOccupancy(database as Database, {
+            collectionKind: containerType === 'micronix_tube' ? 'micronix_plate' : 'cryovial_box',
+            collectionId: collectionInfo.id,
+            position,
+          })
           if (containerType === 'micronix_tube') {
-            const existing = await database
-              .select({ id: micronixTube.id })
-              .from(micronixTube)
-              .where(and(eq(micronixTube.collectionId, collectionInfo.id), eq(micronixTube.position, position)))
-              .get()
-            if (existing) {
+            if (occupancy.occupied) {
               validationRow.error = 'That position is already used in that plate. Each position in a plate can only be used once. Use a different position or a different plate.'
               validationRows.push(validationRow)
               invalidCount++
               continue
             }
           } else {
-            const existing = await database
-              .select({ id: cryovialTube.id })
-              .from(cryovialTube)
-              .where(and(eq(cryovialTube.collectionId, collectionInfo.id), eq(cryovialTube.position, position)))
-              .get()
-            if (existing) {
+            if (occupancy.occupied) {
               validationRow.error = 'That position is already used in that box. Each position in a box can only be used once. Use a different position or a different box.'
               validationRows.push(validationRow)
               invalidCount++
@@ -649,6 +696,8 @@ export async function importDerivationsFromCsv(
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i]
           try {
+            const valueError = rowValueError(row)
+            if (valueError) throw new Error(valueError)
             const parentContainerId = await resolveParentContainerId(tx, row)
             const childContainerType = (settings?.containerType || row.container_type!) as 'micronix_tube' | 'cryovial_tube' | 'paper'
             const containerParsed = derivationCsvRowToContainerWrite(row, childContainerType)
@@ -660,6 +709,7 @@ export async function importDerivationsFromCsv(
               childContainerType,
               getCollectionNameForType(row, childContainerType),
               row.collection_barcode,
+              paperParentTypeFor(row),
             )
 
             const input: CreateDerivationInput = {
@@ -670,9 +720,8 @@ export async function importDerivationsFromCsv(
               quantity: row.quantity ? parseNumber(row.quantity) : settings?.quantity,
               unitSymbol: row.unit_symbol || settings?.unitSymbol,
               quantityUsed: row.quantity_used ? parseNumber(row.quantity_used) : settings?.quantityUsed,
-              reduceParentQuantity: row.reduce_parent_quantity !== undefined
-                ? parseBoolean(row.reduce_parent_quantity)
-                : settings?.reduceParentQuantity,
+              // A blank cell falls back to the shared setting rather than the library default.
+              reduceParentQuantity: parseBoolean(row.reduce_parent_quantity) ?? settings?.reduceParentQuantity,
               derivationDate: settings?.derivationDate || row.derivation_date!,
               protocol: settings?.protocol || row.protocol!,
               notes: row.notes,
@@ -752,6 +801,7 @@ export async function importDerivationsFromCsv(
           containerType,
           getCollectionNameForType(row, containerType),
           row.collection_barcode,
+          paperParentTypeFor(row),
         )
 
         results.push({
