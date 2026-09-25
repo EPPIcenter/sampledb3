@@ -1,6 +1,7 @@
 import { eq, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { box, bag, sheet } from '../../db/schema'
+import { withWriteTransaction } from '../../db/write-transaction'
 
 export class SheetMoveTargetNotFoundError extends Error {
   constructor(targetType: 'box' | 'bag') {
@@ -30,7 +31,7 @@ export async function moveSheetsToCollection(
     if (!exists) throw new SheetMoveTargetNotFoundError('bag')
   }
 
-  await database.transaction(async (tx) => {
+  await withWriteTransaction(database, async (tx) => {
     for (const sheetId of sheetIds) {
       const updated =
         targetCollectionType === 'box'

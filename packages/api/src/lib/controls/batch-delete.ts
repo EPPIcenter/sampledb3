@@ -12,6 +12,7 @@ import {
 } from '../../db/schema'
 import { eq, and, inArray } from 'drizzle-orm'
 import { NotFoundError } from '../error-handler'
+import { withWriteTransaction } from '../../db/write-transaction'
 
 /** Delete a blood control batch and all associated specimens and containers. */
 export async function deleteBloodControlBatch(database: Database, batchId: number): Promise<void> {
@@ -44,7 +45,7 @@ export async function deleteBloodControlBatch(database: Database, batchId: numbe
     containerIds = containers.map((c) => c.id)
   }
 
-  await database.transaction(async (tx) => {
+  await withWriteTransaction(database, async (tx) => {
     if (containerIds.length > 0) {
       tx.delete(storageContainerTag)
         .where(inArray(storageContainerTag.storageContainerId, containerIds))

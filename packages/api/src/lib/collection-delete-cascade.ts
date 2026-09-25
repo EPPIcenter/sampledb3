@@ -20,6 +20,7 @@ import {
 } from '../db/schema'
 import { and, eq, inArray, or, sql, isNotNull } from 'drizzle-orm'
 import { NotFoundError, CollectionDeleteBlockedError, type CollectionDeleteBlocker } from './error-handler'
+import { withWriteTransaction } from '../db/write-transaction'
 
 const SQLITE_BATCH = 500
 
@@ -348,7 +349,7 @@ export async function deleteCollectionWithContents(
   let sheetsDeleted = 0
   let subjectsDeleted = 0
 
-  await database.transaction(async (tx) => {
+  await withWriteTransaction(database, async (tx) => {
     const cids = [...containerIdSet]
     if (cids.length > 0) {
       runBatch(cids, (batch) => {

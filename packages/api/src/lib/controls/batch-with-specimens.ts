@@ -24,6 +24,7 @@ import {
   type ContainerType,
 } from '../container-creation'
 import type { BatchContainerInput } from './batch-schemas'
+import { withWriteTransaction } from '../../db/write-transaction'
 
 export interface CreateBatchWithSpecimensRequest {
   batch: {
@@ -216,7 +217,7 @@ export async function createBatchWithSpecimens(
 
   const preparedSpecimens = await prepareSpecimensForBatch(database, data.specimens)
 
-  return database.transaction(async (tx) => {
+  return withWriteTransaction(database, async (tx) => {
     const batchResult = await tx
       .insert(controlBatch)
       .values({
@@ -311,7 +312,7 @@ export async function addSpecimensToBatch(
   const collectionMap = new Map<string, number>()
   const preparedSpecimens = await prepareSpecimensForBatch(database, data.specimens)
 
-  return database.transaction(async (tx) => {
+  return withWriteTransaction(database, async (tx) => {
     const createdSpecimens: CreatedSpecimen[] = []
 
     for (const { specType, specData, preparedContainers } of preparedSpecimens) {

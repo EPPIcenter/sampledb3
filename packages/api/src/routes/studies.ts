@@ -22,6 +22,7 @@ import { getStudySummaries, listStudies } from '../lib/studies/study-read'
 import { createAuthMiddleware, createMemberMiddleware, createAdminMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
+import { withWriteTransaction } from '../db/write-transaction'
 
 /** Short code prefix for tutorial namespace. Any study whose short code starts with this (case-insensitive) may be deleted by any member. Only admins may rename a study into or out of this namespace. */
 const TUTORIAL_SHORT_CODE_PREFIX = 'TUT'
@@ -743,7 +744,7 @@ studies.delete('/:id', memberMiddleware, async (c) => {
       }
     }
 
-    await database.transaction(async (tx) => {
+    await withWriteTransaction(database, async (tx) => {
       if (containerIds.length > 0) {
         runBatch(containerIds, (batch) => {
           tx.delete(storageContainerTag)
