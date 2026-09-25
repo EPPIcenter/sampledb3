@@ -387,6 +387,38 @@ describe('Controls API', () => {
     })
   })
 
+  describe(`PATCH ${BASE}/:id`, () => {
+    it('ignores controlType so a definition cannot leave the blood routes', async () => {
+      const def = await createTestControlDefinition(ctx.db, { name: 'Blood A', controlType: 'blood' })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { controlType: 'antibody' } })
+
+      expect(res.status).toBe(200)
+      const data = (await res.json()) as { control: { controlType: string } }
+      expect(data.control.controlType).toBe('blood')
+    })
+
+    it('returns 409 when renaming to an existing definition name', async () => {
+      await createTestControlDefinition(ctx.db, { name: 'Taken' })
+      const def = await createTestControlDefinition(ctx.db, { name: 'Mine' })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { name: 'Taken' } })
+
+      expect(res.status).toBe(409)
+    })
+
+    it('returns 409 when changing density to match another definition', async () => {
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
+      await createTestControlDefinition(ctx.db, { name: 'D100', properties: { strains, targetDensity: 100 } })
+      const def = await createTestControlDefinition(ctx.db, { name: 'D200', properties: { strains, targetDensity: 200 } })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { targetDensity: 100 } })
+
+      expect(res.status).toBe(409)
+    })
+  })
+
   describe(`PATCH ${BASE}/batches/:id`, () => {
     it('returns 200 and updates batch name', async () => {
       const strain = await createTestStrain(ctx.db, { name: 'Strain Patch' })

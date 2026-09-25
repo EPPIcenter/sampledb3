@@ -21,11 +21,13 @@ import { validateControlBatchCsv } from '../lib/controls/batch-csv-validate'
 import {
   createBloodControlBatchSchema,
   createBatchWithSpecimensSchema,
+  createBatchesWithSpecimensSchema,
   addSpecimensToBatchSchema,
   validateControlBatchCsvSchema,
 } from '../lib/controls/batch-schemas'
 import {
   createBatchWithSpecimens,
+  createBatchesWithSpecimens,
   addSpecimensToBatch,
 } from '../lib/controls/batch-with-specimens'
 import { getBloodControlBatchSummary } from '../lib/controls/batch-summary'
@@ -548,9 +550,9 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     }
 
     const body = await c.req.json()
+    // controlType is fixed at creation: these routes only serve blood definitions.
     const schema = z.object({
       name: z.string().min(1).optional(),
-      controlType: z.enum(['blood', 'plasma_positive', 'plasma_negative', 'antibody', 'extraction', 'negative']).optional(),
       targetDensity: z.number().optional(),
       targetDensityUnitId: z.number().int().optional(),
       strains: z.array(strainCompositionEntrySchema).optional(),
@@ -582,6 +584,37 @@ controls.patch('/:id', memberMiddleware, async (c) => {
       const unitRecord = await dbInstance.select().from(unit).where(eq(unit.id, targetDensityUnitId)).get()
       if (unitRecord) {
         newProps.targetDensityUnitSymbol = unitRecord.symbol
+      }
+    }
+
+    if (baseData.name !== undefined && baseData.name !== existing.name) {
+      const existingByName = await dbInstance
+        .select({ id: controlDefinition.id })
+        .from(controlDefinition)
+        .where(eq(controlDefinition.name, baseData.name))
+        .get()
+      if (existingByName) {
+        return c.json({ error: 'A control definition with this name already exists' }, 409)
+      }
+    }
+
+    // Same rule as create: no two definitions with the same density and strain mix.
+    if (strains !== undefined || targetDensity !== undefined || targetDensityUnitId !== undefined) {
+      const storedStrains = (newProps.strains as Array<{ id: number; percentage: number }> | undefined) ?? []
+      const others = await dbInstance
+        .select()
+        .from(controlDefinition)
+        .where(and(eq(controlDefinition.controlType, 'blood'), sql`${controlDefinition.id} != ${id}`))
+      const duplicate = findMatchingDefinitionInList(others, {
+        strains: storedStrains.map((strain) => ({ strainId: strain.id, percentage: strain.percentage })),
+        targetDensity: newProps.targetDensity as number | undefined,
+        targetDensityUnitId: newProps.targetDensityUnitId as number | undefined,
+      })
+      if (duplicate) {
+        return c.json({
+          error: 'A control definition with this combination of density and strains already exists',
+          existingDefinition: duplicate.definition,
+        }, 409)
       }
     }
 
@@ -686,6 +719,18 @@ controls.post('/:id/batches', memberMiddleware, async (c) => {
 })
 
 // Create batch with specimens
+// Create several batches (one per density) all-or-nothing
+controls.post('/batches/create-many-with-specimens', memberMiddleware, async (c) => {
+  try {
+    const body = await c.req.json()
+    const data = createBatchesWithSpecimensSchema.parse(body)
+    const results = await createBatchesWithSpecimens(dbInstance, data.batches)
+    return c.json({ batches: results }, 201)
+  } catch (error) {
+    return handleRouteError(error, c)
+  }
+})
+
 controls.post('/batches/create-with-specimens', memberMiddleware, async (c) => {
   try {
     const body = await c.req.json()

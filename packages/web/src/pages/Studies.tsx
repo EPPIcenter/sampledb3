@@ -33,19 +33,55 @@ interface StudyWithSummary extends Study {
 
 const PAGE_LIMIT = 50
 
+const SORT_OPTIONS: SortOption[] = ['title', 'date', 'subjects', 'specimens', 'containers', 'lead']
+
+/** Names sort A-Z by default; dates and counts sort largest first. */
+function defaultSortDirection(sortBy: SortOption): 'asc' | 'desc' {
+  return sortBy === 'title' || sortBy === 'lead' ? 'asc' : 'desc'
+}
+
 export default function Studies() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { canWrite } = useUser()
   const showDeletedMessage = searchParams.get('deleted') === '1'
-  const [search, setSearch] = useState('')
+  // Search, sort, and filters live in the URL so links, back/forward, and the
+  // "Clear Filters" command all work. Defaults are left out of the URL.
+  const search = searchParams.get('q') ?? ''
+  const sortParam = searchParams.get('sort')
+  const sortBy: SortOption = SORT_OPTIONS.includes(sortParam as SortOption) ? (sortParam as SortOption) : 'date'
+  const sortDirection: 'asc' | 'desc' =
+    searchParams.get('dir') === 'asc' || searchParams.get('dir') === 'desc'
+      ? (searchParams.get('dir') as 'asc' | 'desc')
+      : defaultSortDirection(sortBy)
+  const typeParam = searchParams.get('type')
+  const filterType: FilterType = typeParam === 'longitudinal' || typeParam === 'cross-sectional' ? typeParam : 'all'
+  const filterLead = searchParams.get('lead') ?? ''
+
+  /** Apply several URL changes in one update ('' or null removes a key). */
+  const updateListParams = useCallback(
+    (changes: Record<string, string | null>) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          for (const [key, value] of Object.entries(changes)) {
+            if (value == null || value === '') next.delete(key)
+            else next.set(key, value)
+          }
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
+  const setSearch = (value: string) => updateListParams({ q: value })
+  const setFilterType = (value: FilterType) => updateListParams({ type: value === 'all' ? null : value })
+  const setFilterLead = (value: string) => updateListParams({ lead: value })
+
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem('studies-view-mode')
     return saved === 'grid' || saved === 'list' ? saved : 'grid'
   })
-  const [sortBy, setSortBy] = useState<SortOption>('date')
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
-  const [filterType, setFilterType] = useState<FilterType>('all')
-  const [filterLead, setFilterLead] = useState('')
   const { prefetch: prefetchSummaries, getCardState } = useStudySummaryCards()
   const summaryObserverRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
@@ -399,14 +435,8 @@ export default function Studies() {
                     value={sortBy}
                     onChange={(e) => {
                       const newSort = e.target.value as SortOption
-                      setSortBy(newSort)
-                      if (newSort === 'date') {
-                        setSortDirection('desc')
-                      } else if (newSort === 'title' || newSort === 'lead') {
-                        setSortDirection('asc')
-                      } else {
-                        setSortDirection('desc')
-                      }
+                      // New sort resets to its natural direction (dir omitted = default).
+                      updateListParams({ sort: newSort === 'date' ? null : newSort, dir: null })
                     }}
                     className="form-select text-sm rounded-lg border px-3 py-2"
                     style={{ borderColor: 'rgb(var(--app-border))' }}
@@ -420,7 +450,10 @@ export default function Studies() {
                   </select>
                   <button
                     type="button"
-                    onClick={() => setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                    onClick={() => {
+                      const flipped = sortDirection === 'asc' ? 'desc' : 'asc'
+                      updateListParams({ dir: flipped === defaultSortDirection(sortBy) ? null : flipped })
+                    }}
                     className="px-3 py-2 border rounded-lg text-sm flex items-center gap-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
                     style={{ borderColor: 'rgb(var(--app-border))' }}
                     title={`Sort ${sortDirection === 'asc' ? 'Ascending' : 'Descending'}`}
@@ -468,11 +501,7 @@ export default function Studies() {
                 {(filterType !== 'all' || filterLead || search) && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setFilterType('all')
-                      setFilterLead('')
-                      setSearch('')
-                    }}
+                    onClick={() => updateListParams({ type: null, lead: null, q: null })}
                     className="px-3 py-2 text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 rounded"
                     style={{ color: 'rgb(var(--app-accent))' }}
                   >

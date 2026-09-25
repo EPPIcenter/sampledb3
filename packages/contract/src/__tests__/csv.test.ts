@@ -119,4 +119,25 @@ describe('serializeCsv + parseCsv round trip', () => {
     const serialized = serializeCsv(columns, rows)
     expect(parseCsv(serialized)).toEqual([columns, ...rows])
   })
+
+  describe('delimiter and formula handling', () => {
+    it('quotes cells containing a non-comma delimiter so they round-trip', () => {
+      const csv = serializeCsv(['id', 'comment'], [[1, 'low; hemolyzed']], { delimiter: ';', bom: false, lineEnding: 'lf' })
+      expect(csv).toBe('id;comment\n1;"low; hemolyzed"')
+      expect(parseCsv(csv, { delimiter: ';' })[1]).toEqual(['1', 'low; hemolyzed'])
+    })
+
+    it('neutralizes formula-like text cells only when asked', () => {
+      const rows = [['=SUM(A1)', '+cmd', '@x', '-A1+1', '-131', '-2 in SubjID', -5, 'ok']]
+      const neutralized = serializeCsv(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], rows, {
+        bom: false,
+        lineEnding: 'lf',
+        neutralizeFormulas: true,
+      })
+      expect(neutralized.split('\n')[1]).toBe("'=SUM(A1),'+cmd,'@x,'-A1+1,-131,-2 in SubjID,-5,ok")
+
+      const plain = serializeCsv(['a'], [['=SUM(A1)']], { bom: false, lineEnding: 'lf' })
+      expect(plain.split('\n')[1]).toBe('=SUM(A1)')
+    })
+  })
 })

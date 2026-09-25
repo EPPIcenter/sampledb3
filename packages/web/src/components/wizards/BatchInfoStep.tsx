@@ -8,6 +8,7 @@ import { useStrains } from '../../hooks/useReferenceData'
 import { PageError, SectionMessage, getQueryErrorMessage } from '../../ui'
 import { Modal } from '../../ui'
 import ControlDefinitionForm from '../forms/ControlDefinitionForm'
+import { localToday } from '../../lib/date-utils'
 
 const STRAIN_BAR_COLORS = [
   'rgb(var(--app-accent))',
@@ -133,7 +134,7 @@ export default function BatchInfoStep({
         suggestedName = response.name
         setNameSuggestion(suggestedName)
       } catch {
-        const date = batchInfo.productionDate || new Date().toISOString().split('T')[0]
+        const date = batchInfo.productionDate || localToday()
         suggestedName = `${definition.name} ${date}`
         setNameSuggestion(null)
       }

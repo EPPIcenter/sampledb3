@@ -1,4 +1,4 @@
-import { eq, and, isNull, or } from 'drizzle-orm'
+import { eq, and, isNull } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { nanoid } from 'nanoid'
 import type { Database } from '../../db/client'
@@ -29,18 +29,33 @@ export async function findActiveUserByEmailOrUsername(
   database: Database,
   emailOrUsername: string
 ): Promise<typeof usersTable.$inferSelect | null> {
+  // Email first: a username must never shadow another user's email address.
+  const byEmail = await database
+    .select()
+    .from(users)
+    .where(and(eq(users.email, emailOrUsername), isNull(users.deletedAt)))
+    .get()
+  if (byEmail) return byEmail
   return (
     (await database
       .select()
       .from(users)
-      .where(
-        and(
-          or(eq(users.email, emailOrUsername), eq(users.username, emailOrUsername)),
-          isNull(users.deletedAt)
-        )
-      )
+      .where(and(eq(users.username, emailOrUsername), isNull(users.deletedAt)))
       .get()) ?? null
   )
+}
+
+let dummyPasswordHash: string | null = null
+
+/**
+ * Check a password against a user's hash, or against a throwaway hash when there is no such
+ * user, so a missing account takes as long to reject as a wrong password.
+ */
+export async function verifyPasswordConstantTime(password: string, passwordHash: string | undefined): Promise<boolean> {
+  if (passwordHash) return bcrypt.compare(password, passwordHash)
+  dummyPasswordHash ??= await bcrypt.hash('no-such-user', 10)
+  await bcrypt.compare(password, dummyPasswordHash)
+  return false
 }
 
 export async function verifyLoginCredentials(
@@ -49,11 +64,8 @@ export async function verifyLoginCredentials(
   password: string
 ): Promise<typeof usersTable.$inferSelect> {
   const user = await findActiveUserByEmailOrUsername(database, emailOrUsername)
-  if (!user) {
-    throw new UnauthorizedError('Invalid credentials')
-  }
-  const valid = await bcrypt.compare(password, user.passwordHash)
-  if (!valid) {
+  const valid = await verifyPasswordConstantTime(password, user?.passwordHash)
+  if (!user || !valid) {
     throw new UnauthorizedError('Invalid credentials')
   }
   if (!user.approvedAt) {

@@ -1,5 +1,6 @@
 import type { ScannerConfiguration } from './api/settings'
 import { normalizeWellPosition, validateFullPlatePositions } from './micronix-plate-positions'
+import { parseCsv } from '@sampledb/contract'
 
 export type ScannerPlateCsvRow = Record<string, string>
 
@@ -17,15 +18,14 @@ function buildPosition(config: ScannerConfiguration, row: ScannerPlateCsvRow): s
  * Parse a scanner plate CSV using column mapping from scanner configuration.
  */
 export function parseScannerPlateCsv(text: string, config: ScannerConfiguration): ScannerPlateCsvRow[] {
-  const lines = text.split('\n').filter((line) => line.trim())
+  const lines = parseCsv(text).filter((cells) => cells.some((cell) => cell.trim() !== ''))
   if (lines.length < 2 + config.skipRows) return []
 
-  const headerLine = lines[config.skipRows]
-  const headers = headerLine.split(',').map((h) => h.trim())
+  const headers = lines[config.skipRows].map((h) => h.trim())
   const rows: ScannerPlateCsvRow[] = []
 
   for (let i = config.skipRows + 1; i < lines.length; i++) {
-    const values = lines[i].split(',')
+    const values = lines[i]
     const row: ScannerPlateCsvRow = {}
     headers.forEach((header, j) => {
       row[header] = values[j]?.trim() || ''

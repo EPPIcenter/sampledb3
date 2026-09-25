@@ -9,6 +9,7 @@
 export {
   type ContainerExportData,
   type ExportFilters,
+  type SubjectDateFilter,
 } from './export'
 export {
   DEFAULT_EXPORT_COLUMN_KEYS,

@@ -30,6 +30,7 @@ import {
 } from '../lib/bulk-import-success-message'
 import LocationPicker from './LocationPicker'
 import '../styles/storage.css'
+import { parseCsv } from '@sampledb/contract'
 
 export type ImportType = LibImportType
 type Step = 'upload' | 'collections' | 'import'
@@ -136,14 +137,14 @@ export default function BulkImportFlow({ fixedStudyShortCode, backLink }: BulkIm
       const reader = new FileReader()
       reader.onload = (event) => {
         const text = event.target?.result as string
-        const lines = text.split('\n').filter(line => line.trim())
+        const lines = parseCsv(text).filter((cells) => cells.some((cell) => cell.trim() !== ''))
         if (lines.length === 0) return
 
-        const headers = lines[0].split(',').map(h => h.trim())
+        const headers = lines[0].map(h => h.trim())
         const previewRows: CSVRow[] = []
 
         for (let i = 1; i < Math.min(6, lines.length); i++) {
-          const values = lines[i].split(',')
+          const values = lines[i]
           const row: CSVRow = {}
           headers.forEach((header, j) => {
             row[header] = values[j]?.trim() || ''

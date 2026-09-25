@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { exportApi, type ExportFilters } from '../lib/api/export'
+import type { SubjectDateFilter } from '@sampledb/contract'
 import { parseExportModalCsv, type SingleStudyExportCsvRow } from '../lib/export-filter-csv'
 import { formatLocalDateTime } from '../lib/date-utils'
 import { toggleArrayFilterValue } from '../lib/filter-array-toggle'
@@ -16,18 +17,26 @@ export type SingleStudyExportSubmitParams = {
   columns: string[]
 }
 
-function buildSubjectDatesFromCsv(csvData: SingleStudyExportCsvRow[]) {
-  const subjectDates: { [key: string]: { exact?: string; from?: string; to?: string } } = {}
+/**
+ * Per-subject date filters from the uploaded CSV. A subject on several rows keeps every
+ * date (one per visit); a row without a date means all of that subject's dates.
+ */
+export function buildSubjectDatesFromCsv(csvData: SingleStudyExportCsvRow[]) {
+  const subjectDates: { [key: string]: SubjectDateFilter[] } = {}
+  const allDates = new Set<string>()
   for (const row of csvData) {
-    if (row.collection_date) {
-      subjectDates[row.subject_name] = { exact: row.collection_date }
-    } else if (row.date_from || row.date_to) {
-      subjectDates[row.subject_name] = {
-        from: row.date_from,
-        to: row.date_to,
-      }
+    const dateFilter: SubjectDateFilter | null = row.collection_date
+      ? { exact: row.collection_date }
+      : row.date_from || row.date_to
+        ? { from: row.date_from, to: row.date_to }
+        : null
+    if (!dateFilter) {
+      allDates.add(row.subject_name)
+      continue
     }
+    ;(subjectDates[row.subject_name] ??= []).push(dateFilter)
   }
+  for (const name of allDates) delete subjectDates[name]
   return Object.keys(subjectDates).length > 0 ? subjectDates : undefined
 }
 

@@ -122,6 +122,26 @@ export interface ControlDefinitionSummaryResponse {
   }
 }
 
+export type CreateBatchWithSpecimensRequest = {
+  batch: {
+    controlDefinitionId: number
+    name: string
+    productionDate?: string
+    properties?: ControlBatchProperties
+  }
+  specimens: Array<{
+    specimenTypeName: string
+    collectionDate?: string
+    containers: ControlBatchContainerWriteInput[]
+  }>
+}
+
+export type CreateBatchWithSpecimensResponse = {
+  batch: ControlBatch
+  specimens: Array<{ id: number; specimenTypeName: string; containerCount: number; containerIds: number[] }>
+  createdCollections: Array<{ type: string; id: number; name: string }>
+}
+
 export const controlsApi = {
   list: (type?: string) => api.get<{ controls: ControlDefinition[] }>('/blood-controls', { params: { type } }),
   get: (id: number) => api.get<{ control: ControlDefinition }>(`/blood-controls/${id}`),
@@ -143,19 +163,11 @@ export const controlsApi = {
     api.post<{ name: string }>('/blood-controls/batches/suggest-name', { definitionId, productionDate }),
   getBatch: (id: number) => api.get<{ batch: ControlBatch }>(`/blood-controls/batches/${id}`),
   getBatchSummary: (id: number) => api.get<ControlBatchSummaryResponse>(`/blood-controls/batches/${id}/summary`),
-  createBatchWithSpecimens: (data: {
-    batch: {
-      controlDefinitionId: number
-      name: string
-      productionDate?: string
-      properties?: ControlBatchProperties
-    }
-    specimens: Array<{
-      specimenTypeName: string
-      collectionDate?: string
-      containers: ControlBatchContainerWriteInput[]
-    }>
-  }) => api.post<{ batch: ControlBatch; specimens: Array<{ id: number; specimenTypeName: string; containerCount: number; containerIds: number[] }>; createdCollections: Array<{ type: string; id: number; name: string }> }>('/blood-controls/batches/create-with-specimens', data),
+  createBatchWithSpecimens: (data: CreateBatchWithSpecimensRequest) =>
+    api.post<CreateBatchWithSpecimensResponse>('/blood-controls/batches/create-with-specimens', data),
+  /** Create several batches (one per density) all-or-nothing. */
+  createBatchesWithSpecimens: (data: { batches: CreateBatchWithSpecimensRequest[] }) =>
+    api.post<{ batches: CreateBatchWithSpecimensResponse[] }>('/blood-controls/batches/create-many-with-specimens', data),
   addSpecimensToBatch: (batchId: number, data: {
     specimens: Array<{
       specimenTypeName: string

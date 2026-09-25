@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '../../__tests__/helpers/render'
+import { render, screen, waitFor, fireEvent } from '../../__tests__/helpers/render'
 
 vi.mock('../../lib/api/studies', async () => {
   const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
@@ -44,5 +44,18 @@ describe('Studies', () => {
     await waitFor(() => {
       expect(screen.getByText('No studies found')).toBeInTheDocument()
     })
+  })
+
+  it('reads search and filters from the URL and clears them', async () => {
+    const { default: Studies } = await import('../Studies')
+    await render(<Studies />, { initialEntries: ['/studies?q=malaria&type=longitudinal'] })
+
+    const searchBox = await screen.findByPlaceholderText(/Search by title/)
+    expect(searchBox).toHaveValue('malaria')
+    expect(screen.getByDisplayValue(/longitudinal/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /clear filters/i }))
+
+    await waitFor(() => expect(searchBox).toHaveValue(''))
   })
 })

@@ -5,6 +5,7 @@
 import type { ContainerType } from './container-types'
 import { getCollectionNameColumn } from './container-columns'
 import type { FlatBulkImportContainer } from './bulk-import-payload'
+import { parseCsv } from '@sampledb/contract'
 
 export interface CSVRow {
   [key: string]: string
@@ -81,15 +82,15 @@ function normalizeHeader(header: string): string {
 }
 
 export function parseBulkImportCSV(text: string): CSVRow[] {
-  const lines = text.split('\n').filter((line) => line.trim())
+  // Shared RFC 4180 parser: quoted commas ("low vol, hemolyzed"), quotes, CRLF, and BOM.
+  const lines = parseCsv(text).filter((cells) => cells.some((cell) => cell.trim() !== ''))
   if (lines.length < 2) return []
 
-  const rawHeaders = lines[0].split(',').map((h) => h.trim())
-  const headers = rawHeaders.map(normalizeHeader)
+  const headers = lines[0].map((h) => normalizeHeader(h.trim()))
   const rows: CSVRow[] = []
 
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',')
+    const values = lines[i]
     const row: CSVRow = {}
     headers.forEach((header, j) => {
       row[header] = values[j]?.trim() ?? ''

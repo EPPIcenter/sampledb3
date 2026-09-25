@@ -96,7 +96,8 @@ export default function SpecimenDetail() {
       }
       navigate('/specimens')
     },
-    { preventDefault: true }
+    // Not while the Add Container modal is open (focus may be on a button inside it).
+    { preventDefault: true, enabled: !addContainerModalOpen }
   )
 
   useModifierHotkey(

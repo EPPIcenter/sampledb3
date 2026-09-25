@@ -13,6 +13,7 @@ import CollectionSelectOrCreate from './CollectionSelectOrCreate'
 import { Modal } from '../ui'
 import { DERIVATION_TYPES } from '../lib/derivation-types'
 import '../styles/storage.css'
+import { localToday } from '../lib/date-utils'
 
 interface ContainerDerivationModalProps {
   isOpen: boolean
@@ -67,7 +68,7 @@ function ContainerDerivationModalContent({
     unitSymbol: '',
     quantityUsed: undefined as number | undefined,
     reduceParentQuantity: true,
-    derivationDate: new Date().toISOString().split('T')[0],
+    derivationDate: localToday(),
     protocol: '',
     notes: '',
     properties: undefined as Record<string, unknown> | undefined,

@@ -72,3 +72,22 @@ describe('date-utils', () => {
     })
   })
 })
+
+describe('calendar dates in local time', () => {
+  it('parseDisplayDate keeps a bare YYYY-MM-DD on its calendar day', async () => {
+    const { parseDisplayDate } = await import('../date-utils')
+    const d = parseDisplayDate('2024-01-15')
+    expect([d.getFullYear(), d.getMonth(), d.getDate()]).toEqual([2024, 0, 15])
+  })
+
+  it('formatDate shows a collection date on its own day', async () => {
+    const { formatDate } = await import('../date-utils')
+    expect(formatDate('2024-01-15')).toBe('Jan 15, 2024')
+  })
+
+  it('toLocalDateString uses the local date, not the UTC date', async () => {
+    const { toLocalDateString } = await import('../date-utils')
+    // 11pm local on Jan 15 is already Jan 16 in UTC for any zone west of UTC.
+    expect(toLocalDateString(new Date(2024, 0, 15, 23, 30))).toBe('2024-01-15')
+  })
+})

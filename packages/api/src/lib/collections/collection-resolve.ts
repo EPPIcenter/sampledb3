@@ -58,6 +58,27 @@ export async function resolveCollectionByName(
   }
 }
 
+/**
+ * Sheets with this name, optionally only those in the box or bag named parentName.
+ * Sheet names are not unique (default names like "Sheet-1" repeat in every box, and legacy
+ * bags hold many same-named sheets), so callers must handle several matches.
+ */
+export async function resolveSheetsByName(
+  database: Database,
+  name: string,
+  parentName?: string,
+): Promise<number[]> {
+  const rows = await database
+    .select({ id: sheet.id, boxName: box.name, bagName: bag.name })
+    .from(sheet)
+    .leftJoin(box, eq(sheet.boxId, box.id))
+    .leftJoin(bag, eq(sheet.bagId, bag.id))
+    .where(eq(sheet.name, name))
+  return rows
+    .filter((row) => parentName === undefined || row.boxName === parentName || row.bagName === parentName)
+    .map((row) => row.id)
+}
+
 /** Resolve collection by barcode (micronix plates and cryovial boxes only). */
 export async function resolveCollectionByBarcode(
   barcode: string,
@@ -225,6 +246,9 @@ export const moveContainersBodySchema = z.object({
     z.object({
       fromCollectionName: z.string().min(1),
       toCollectionName: z.string().min(1),
+      /** For sheets: box or bag holding the source / target sheet (sheet names repeat). */
+      fromParentName: z.string().min(1).optional(),
+      toParentName: z.string().min(1).optional(),
     }),
   ),
   moves: z.array(

@@ -17,6 +17,7 @@ import { getContainerTypeIcon, getContainerTypeName, getSpecimenTypeIcon } from 
 import { useUser } from '../contexts/UserContext'
 import { useToast } from '../contexts/ToastContext'
 import '../styles/qpcr.css'
+import { bytesToBase64 } from '../lib/base64'
 
 const PLATE_ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
 const PLATE_COLS = 12
@@ -204,23 +205,32 @@ export default function QpcrExperimentDetail() {
     const well = data.wells.find((w) => w.wellPosition === selectedWellPosition)
     const containerId = well?.storageContainerId
     setWellDetailsError(null)
+    // Ignore a response that arrives after the user picked another well.
+    let ignore = false
     if (containerId != null) {
       setWellDetailsLoading(true)
       setWellDetails(null)
       containersApi
         .get(containerId)
         .then((res) => {
+          if (ignore) return
           setWellDetails(res)
           setWellDetailsError(null)
         })
         .catch((err: { response?: { data?: { error?: string } } }) => {
+          if (ignore) return
           setWellDetailsError(err.response?.data?.error ?? 'Failed to load container details')
           setWellDetails(null)
         })
-        .finally(() => setWellDetailsLoading(false))
+        .finally(() => {
+          if (!ignore) setWellDetailsLoading(false)
+        })
     } else {
       setWellDetails(null)
       setWellDetailsLoading(false)
+    }
+    return () => {
+      ignore = true
     }
   }, [selectedWellPosition, data?.wells])
 
@@ -432,6 +442,8 @@ export default function QpcrExperimentDetail() {
     try {
       const res = await qpcrExperimentsApi.updateWells(parseInt(id), { wellPosition: selectedWellPosition, contentType })
       setData((prev) => (prev ? { ...prev, wells: res.wells } : null))
+      // Keep the cached experiment in step, or revisiting the page shows the old wells.
+      invalidateQpcrExperimentQueries(queryClient)
       showSuccess(contentType === 'negative' ? 'Well set as NTC' : 'Well set as empty')
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
@@ -449,6 +461,8 @@ export default function QpcrExperimentDetail() {
     try {
       const res = await qpcrExperimentsApi.updateWells(parseInt(id), { positions: emptyWellPositions, contentType: 'negative' })
       setData((prev) => (prev ? { ...prev, wells: res.wells } : null))
+      // Keep the cached experiment in step, or revisiting the page shows the old wells.
+      invalidateQpcrExperimentQueries(queryClient)
       showSuccess(`Set ${emptyWellPositions.length} well(s) to NTC`)
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
@@ -466,6 +480,8 @@ export default function QpcrExperimentDetail() {
     try {
       const res = await qpcrExperimentsApi.updateWells(parseInt(id), { positions: ntcWellPositions, contentType: 'empty' })
       setData((prev) => (prev ? { ...prev, wells: res.wells } : null))
+      // Keep the cached experiment in step, or revisiting the page shows the old wells.
+      invalidateQpcrExperimentQueries(queryClient)
       showSuccess(`Set ${ntcWellPositions.length} well(s) to empty`)
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err && typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error === 'string'
@@ -963,7 +979,7 @@ export default function QpcrExperimentDetail() {
                       setResultsUploading(true)
                       try {
                         const buf = await file.arrayBuffer()
-                        const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
+                        const base64 = bytesToBase64(new Uint8Array(buf))
                         const resultInstrument = (instrumentSelectRef.current?.value as 'Biorad_CFX' | 'QuantStudio' | undefined) ?? 'Biorad_CFX'
                         await qpcrExperimentsApi.uploadResults(parseInt(id), { fileContent: base64, fileName: file.name, instrumentType: resultInstrument })
                         invalidateQpcrExperimentQueries(queryClient)

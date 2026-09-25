@@ -247,8 +247,8 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
       })
     }
 
-    // Get all specimens for these subjects
-    const placeholders = subjectIds.map(() => '?').join(',')
+    // Get all specimens for these subjects. Subqueries (not id lists) keep large studies
+    // under SQLite's bound-parameter limit.
     const specimensQuery = `
       SELECT 
         s.id,
@@ -258,10 +258,10 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
         s.created,
         s.last_updated as lastUpdated
       FROM specimen s
-      WHERE s.study_subject_id IN (${placeholders})
+      WHERE s.study_subject_id IN (SELECT id FROM study_subject WHERE study_id = ?)
     `
     const stmt = sqliteDatabase.prepare(specimensQuery)
-    const specimens = stmt.all(...subjectIds) as Array<{
+    const specimens = stmt.all(id) as Array<{
       id: number
       studySubjectId: number
       specimenTypeId: number
@@ -307,7 +307,6 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
       })
     }
 
-    const specimenIds = specimens.map(s => s.id)
     const specimenTypeIds = [...new Set(specimens.map(s => s.specimenTypeId))]
 
     // Get specimen types
@@ -319,29 +318,30 @@ studies.get('/:id/summary', authMiddleware, async (c) => {
     const specimenTypeMap = new Map(specimenTypes.map(st => [st.id, st.name]))
 
     // Get all containers for these specimens
+    const studySpecimenIds = database
+      .select({ id: specimen.id })
+      .from(specimen)
+      .where(inArray(specimen.studySubjectId, database.select({ id: studySubject.id }).from(studySubject).where(eq(studySubject.studyId, id))))
     const containers = await database
       .select()
       .from(storageContainer)
-      .where(inArray(storageContainer.specimenId, specimenIds))
+      .where(inArray(storageContainer.specimenId, studySpecimenIds))
 
     const totalContainers = containers.length
-    const containerIds = containers.map(c => c.id)
+    const studyContainerIds = database
+      .select({ id: storageContainer.id })
+      .from(storageContainer)
+      .where(inArray(storageContainer.specimenId, studySpecimenIds))
 
     // Get container type information
-    const [micronixTubes, cryovialTubes, papers, staticWells] = await Promise.all([
-      containerIds.length > 0
-        ? database.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, containerIds))
-        : [],
-      containerIds.length > 0
-        ? database.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, containerIds))
-        : [],
-      containerIds.length > 0
-        ? database.select({ id: paper.id }).from(paper).where(inArray(paper.id, containerIds))
-        : [],
-      containerIds.length > 0
-        ? database.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, containerIds))
-        : [],
-    ])
+    const [micronixTubes, cryovialTubes, papers, staticWells] = totalContainers > 0
+      ? await Promise.all([
+          database.select({ id: micronixTube.id }).from(micronixTube).where(inArray(micronixTube.id, studyContainerIds)),
+          database.select({ id: cryovialTube.id }).from(cryovialTube).where(inArray(cryovialTube.id, studyContainerIds)),
+          database.select({ id: paper.id }).from(paper).where(inArray(paper.id, studyContainerIds)),
+          database.select({ id: staticWell.id }).from(staticWell).where(inArray(staticWell.id, studyContainerIds)),
+        ])
+      : [[], [], [], []]
 
     // Create container type map
     const containerTypeMap = new Map<number, string>()
@@ -720,23 +720,17 @@ studies.delete('/:id', memberMiddleware, async (c) => {
       .where(eq(studySubject.studyId, id))
 
     const subjectIds = subjects.map((s) => s.id)
-    let specimenIds: number[] = []
-    if (subjectIds.length > 0) {
-      const specimens = await database
-        .select({ id: specimen.id })
-        .from(specimen)
-        .where(inArray(specimen.studySubjectId, subjectIds))
-      specimenIds = specimens.map((s) => s.id)
-    }
-
-    let containerIds: number[] = []
-    if (specimenIds.length > 0) {
-      const containers = await database
+    // Subqueries, not id lists, so large studies stay under SQLite's parameter limit.
+    const studySubjectIds = database.select({ id: studySubject.id }).from(studySubject).where(eq(studySubject.studyId, id))
+    const specimenIds = (
+      await database.select({ id: specimen.id }).from(specimen).where(inArray(specimen.studySubjectId, studySubjectIds))
+    ).map((s) => s.id)
+    const containerIds = (
+      await database
         .select({ id: storageContainer.id })
         .from(storageContainer)
-        .where(inArray(storageContainer.specimenId, specimenIds))
-      containerIds = containers.map((c) => c.id)
-    }
+        .where(inArray(storageContainer.specimenId, database.select({ id: specimen.id }).from(specimen).where(inArray(specimen.studySubjectId, studySubjectIds))))
+    ).map((c) => c.id)
 
     await assertNotUsedInQpcr(database, { containerIds, specimenIds }, `study '${existingStudy.shortCode}'`)
 
