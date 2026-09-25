@@ -174,8 +174,8 @@ specimens.post('/', memberMiddleware, async (c) => {
       updatedBy: user?.id,
     }
     
-    if (data.collectionDate) {
-      insertData.collectionDate = data.collectionDate
+    if (validation.resolved.collectionDate) {
+      insertData.collectionDate = validation.resolved.collectionDate
     }
     
     const [newSpecimen] = await dbInstance

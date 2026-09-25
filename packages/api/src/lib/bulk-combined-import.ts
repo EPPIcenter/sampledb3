@@ -161,11 +161,11 @@ export async function prepareSubjectWithSpecimens(
     }
     const dateValidation = validateCollectionDate(spec.collectionDate)
     if (!dateValidation.valid) {
-      throw new ValidationError(dateValidation.error ?? 'Invalid collection date', { specimenIndex: i })
+      throw new ValidationError(dateValidation.error, { specimenIndex: i })
     }
     resolvedSpecimens.push({
       specimenTypeId,
-      collectionDate: spec.collectionDate,
+      collectionDate: dateValidation.normalized,
       container: spec.container,
     })
   }

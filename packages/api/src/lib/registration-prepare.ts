@@ -240,7 +240,8 @@ export async function prepareRegistrationBatchForSpecimens(
         continue
       }
 
-      prepared.push({ index, row, resolved: validation.resolved })
+      // Carry the normalized date so dedup keys and inserts use the same form.
+      prepared.push({ index, row: { ...row, collectionDate: validation.resolved.collectionDate }, resolved: validation.resolved })
 
       if (!row.container?.containerType) {
         continue

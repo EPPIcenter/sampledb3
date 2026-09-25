@@ -243,6 +243,44 @@ describe('bulk-combined-import', () => {
       })
     }
 
+    it('stores collection dates as YYYY-MM-DD and treats equivalent forms as one event', async () => {
+      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+
+      const result = await runBulkCombinedImport(
+        testDb,
+        {
+          studyShortCode: study.shortCode,
+          atomicMode: 'full_file',
+          subjects: [
+            { subjectName: 'D1', specimens: [{ specimenTypeName: specimenType.name, collectionDate: '1/5/2024' }] },
+            { subjectName: 'D1', specimens: [{ specimenTypeName: specimenType.name, collectionDate: '2024-01-05' }] },
+          ],
+        },
+        undefined
+      )
+
+      expect(result.summary.specimensCreated).toBe(1)
+      const specimens = await testDb.select().from(specimen).all()
+      expect(specimens.map((s) => s.collectionDate)).toEqual(['2024-01-05'])
+    })
+
+    it('rejects an impossible collection date', async () => {
+      const study = await createTestStudy(testDb, { title: 'Study 1', shortCode: 'ST1' })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      await expect(
+        runBulkCombinedImport(
+          testDb,
+          {
+            studyShortCode: study.shortCode,
+            atomicMode: 'full_file',
+            subjects: [{ subjectName: 'D1', specimens: [{ specimenTypeName: specimenType.name, collectionDate: '2024-02-30' }] }],
+          },
+          undefined
+        )
+      ).rejects.toThrow(/Invalid date/)
+    })
+
     it('uses the top-level study for subjects without their own study', async () => {
       const studyA = await createTestStudy(testDb, { title: 'Study A', shortCode: 'STA' })
       const studyB = await createTestStudy(testDb, { title: 'Study B', shortCode: 'STB' })
