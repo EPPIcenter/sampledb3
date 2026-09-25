@@ -150,6 +150,54 @@ describe('derivations', () => {
       expect(result.warnings).toEqual([])
     })
 
+    it('does not attach an undated parent\'s child to a dated specimen of the same subject', async () => {
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      await setContainerDefaults(testDb, {
+        micronix_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        cryovial_tube: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        paper: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+        static_well: { totalQuantity: 1, remainingQuantity: 1, defaultUnitSymbol: 'uL' },
+      })
+      const bloodType = await createTestSpecimenType(testDb, { name: 'Blood' })
+      const dnaType = await createTestSpecimenType(testDb, { name: 'DNA' })
+      const now = utcNow()
+      await testDb.insert(specimenTypeContainerType).values({ specimenTypeId: dnaType.id, containerType: 'micronix_tube', created: now })
+      await testDb.insert(containerTypeUnit).values({ containerType: 'micronix_tube', unitId: unit.id })
+      const parentSpecimen = await createTestSpecimen(testDb, bloodType.id)
+      const [datedDna] = await testDb
+        .insert(specimen)
+        .values({
+          specimenTypeId: dnaType.id,
+          studySubjectId: parentSpecimen.studySubjectId,
+          collectionDate: '2020-05-05',
+          created: now,
+          lastUpdated: now,
+        })
+        .returning()
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(testDb, { name: 'Plate1', locationId: location.id })
+      const [parentContainer] = await testDb
+        .insert(storageContainer)
+        .values({ specimenId: parentSpecimen.id, unitId: unit.id, totalQuantity: 1, remainingQuantity: 1, created: now, lastUpdated: now })
+        .returning()
+      await testDb.insert(micronixTube).values({ id: parentContainer!.id, collectionId: plate.id, barcode: 'MT-UNDATED', position: 'A01' })
+
+      const result = await createDerivation(testDb, {
+        parentContainerId: parentContainer!.id,
+        derivationType: 'extraction',
+        specimenTypeName: 'DNA',
+        container: {
+          containerType: 'micronix_tube',
+          barcode: 'MT-UNDATED-CHILD',
+          collection: { type: 'micronix_plate', id: plate.id, position: 'A02' },
+        },
+      })
+
+      expect(result.specimen.id).not.toBe(datedDna.id)
+      expect(result.specimen.collectionDate).toBeNull()
+    })
+
     it('rolls back the derived specimen when child container creation fails', async () => {
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
       await setContainerDefaults(testDb, {
