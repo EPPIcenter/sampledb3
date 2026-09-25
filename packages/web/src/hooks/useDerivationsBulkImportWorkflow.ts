@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateAfterBulkWrite } from '../lib/query-client'
 import type { BulkDerivationSettings } from '../lib/api/derivations'
 import {
   createDerivationsBulkGateway,
@@ -33,6 +35,7 @@ export interface UseDerivationsBulkImportWorkflowOptions {
  * the busy flag, and one-way step → URL mirroring.
  */
 export function useDerivationsBulkImportWorkflow(options: UseDerivationsBulkImportWorkflowOptions) {
+  const queryClient = useQueryClient()
   const gateway = useMemo(
     () => options.gateway ?? createDerivationsBulkGateway(),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gateway override is stable per page
@@ -125,8 +128,11 @@ export function useDerivationsBulkImportWorkflow(options: UseDerivationsBulkImpo
         options.settings,
       )
       events.forEach((e) => dispatch(e))
+      if (events.some((e) => e.type === 'IMPORTED')) {
+        void invalidateAfterBulkWrite(queryClient)
+      }
     })
-  }, [gateway, options.settings, runBusy, state])
+  }, [gateway, options.settings, runBusy, state, queryClient])
 
   const missingCollections = useMemo(() => selectMissingCollections(state), [state])
 

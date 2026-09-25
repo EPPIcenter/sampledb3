@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateAfterBulkWrite } from '../lib/query-client'
 import { collectionsApi } from '../lib/api/collections'
 import CollectionTreePicker from '../components/CollectionTreePicker'
 import { useUser } from '../contexts/UserContext'
@@ -39,6 +41,7 @@ type Step = 'select-source' | 'select-sheets' | 'select-destination' | 'confirm'
 
 export default function ContainerMovePapers() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { canWrite } = useUser()
   const [currentStep, setCurrentStep] = useState<Step>('select-source')
   const [mutating, setMutating] = useState(false)
@@ -125,6 +128,7 @@ export default function ContainerMovePapers() {
       })
 
       if (response.success) {
+        void invalidateAfterBulkWrite(queryClient)
         setMoveResult({
           success: true,
           moved: response.moved,
@@ -162,6 +166,7 @@ export default function ContainerMovePapers() {
       })
 
       if (response.success) {
+        void invalidateAfterBulkWrite(queryClient)
         // Reset to start over
         handleStartOver()
       } else {

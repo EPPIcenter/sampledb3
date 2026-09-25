@@ -92,7 +92,8 @@ export default function Locations() {
   const reloadLocations = useCallback(
     async (preserveState = true) => {
       preserveOnNextSync.current = preserveState
-      await queryClient.invalidateQueries({ queryKey: locationKeys.list() })
+      // Details too: a create, edit, or delete changes parent contents and hierarchy stats.
+      await queryClient.invalidateQueries({ queryKey: locationKeys.all })
     },
     [queryClient]
   )
@@ -237,12 +238,20 @@ export default function Locations() {
       return { mode: 'location' as const, ...cached, isLoading: false }
     }
 
-    if (detailQuery.isPending) {
-      return null
+    // The local cache is cleared after writes; fall back to the query so the panel
+    // does not wait on an effect that only runs when the query data changes.
+    if (detailQuery.data && selectedLocationId === selectedNode.locationId) {
+      return {
+        mode: 'location' as const,
+        location: detailQuery.data.location as Location,
+        contents: detailQuery.data.contents as LocationContents,
+        hierarchyStats: detailQuery.data.hierarchyStats as LocationHierarchyStats | undefined,
+        isLoading: false,
+      }
     }
 
     return null
-  }, [selectedNode, locationDetailsCache, detailQuery.isError, detailQuery.isPending])
+  }, [selectedNode, selectedLocationId, locationDetailsCache, detailQuery.isError, detailQuery.data])
 
   const handleSelectNode = (node: SelectedNode) => {
     setSelectedNode(node)

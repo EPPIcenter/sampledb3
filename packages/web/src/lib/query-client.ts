@@ -21,5 +21,11 @@ export const queryClient = new QueryClient({
   },
 })
 
-
-
+/**
+ * Mark every cached query stale after a write that touches many kinds of records
+ * (bulk import, move, cascade delete). Queries on screen refetch now; the rest
+ * refetch when next used, so no page shows pre-write data for the 5-minute staleTime.
+ */
+export function invalidateAfterBulkWrite(client: QueryClient): Promise<void> {
+  return client.invalidateQueries()
+}

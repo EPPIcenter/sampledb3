@@ -219,8 +219,8 @@ export function useCreateStudy(options?: { silent?: boolean }) {
       showError(message || 'Failed to create study')
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: studyKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: studyKeys.infinite() })
+      // Every studies query (lists, infinite pages, lead persons, summaries) can change.
+      void queryClient.invalidateQueries({ queryKey: studyKeys.all })
       void queryClient.invalidateQueries({ queryKey: dashboardKeys.all })
       success('Study created successfully')
     },
@@ -253,9 +253,7 @@ export function useUpdateStudy(options?: { silent?: boolean }) {
       showError(message || 'Failed to update study')
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: studyKeys.detail(data.id) })
-      queryClient.invalidateQueries({ queryKey: studyKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: studyKeys.infinite() })
+      void queryClient.invalidateQueries({ queryKey: studyKeys.all })
       void queryClient.invalidateQueries({ queryKey: dashboardKeys.all })
       success('Study updated successfully')
     },

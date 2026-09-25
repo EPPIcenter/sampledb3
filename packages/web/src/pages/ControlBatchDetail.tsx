@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useHotkey } from '../hooks/useHotkey'
 import { controlsApi } from '../lib/api/controls'
+import { invalidateAfterBulkWrite } from '../lib/query-client'
 import { controlKeys, useControlBatchSummary } from '../hooks/useControls'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import SimpleTimeline from '../components/SimpleTimeline'
@@ -29,8 +30,9 @@ export default function ControlBatchDetail() {
   const [editProductionDate, setEditProductionDate] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Batch names, counts, and specimens also appear in the overview and definition pages.
   const refreshSummary = () => {
-    void queryClient.invalidateQueries({ queryKey: controlKeys.batchSummary(batchId) })
+    void queryClient.invalidateQueries({ queryKey: controlKeys.all })
   }
 
   // Close modal on Escape
@@ -50,6 +52,8 @@ export default function ControlBatchDetail() {
     setDeleting(true)
     try {
       await controlsApi.deleteBatch(summaryData.batch.id)
+      // The cascade removes the batch's specimens and containers too.
+      void invalidateAfterBulkWrite(queryClient)
       navigate('/blood-controls?tab=batches')
     } catch (err: any) {
       console.error('Failed to delete batch:', err)
