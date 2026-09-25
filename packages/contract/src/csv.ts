@@ -4,6 +4,11 @@ export interface CSVExportOptions {
   delimiter?: string
   bom?: boolean
   lineEnding?: CsvLineEnding
+  /**
+   * Prefix text cells a spreadsheet would run as a formula with `'`.
+   * Use for exports of stored data; leave off for templates meant to be re-imported.
+   */
+  neutralizeFormulas?: boolean
 }
 
 export type CsvCellValue = string | number | null | undefined
@@ -12,10 +17,25 @@ const DEFAULT_DELIMITER = ','
 const DEFAULT_BOM = true
 const DEFAULT_LINE_ENDING: CsvLineEnding = 'crlf'
 
-export function escapeCsvCell(value: CsvCellValue): string {
+/**
+ * Text a spreadsheet would evaluate: leading =, +, @, tab, or CR, and "-" unless it starts a
+ * number or a phrase ("-131", "-2 in SubjID") so stored negative values export unchanged.
+ */
+function looksLikeFormula(s: string): boolean {
+  return /^[=+@\t\r]/.test(s) || /^-[^\d\s.]/.test(s)
+}
+
+export function escapeCsvCell(
+  value: CsvCellValue,
+  options: { delimiter?: string; neutralizeFormulas?: boolean } = {},
+): string {
   if (value === null || value === undefined) return ''
-  const s = String(value)
-  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+  const delimiter = options.delimiter ?? DEFAULT_DELIMITER
+  let s = String(value)
+  if (options.neutralizeFormulas && typeof value === 'string' && looksLikeFormula(s)) {
+    s = `'${s}`
+  }
+  if (s.includes(delimiter) || s.includes('"') || s.includes('\n') || s.includes('\r')) {
     return `"${s.replace(/"/g, '""')}"`
   }
   return s
@@ -31,10 +51,11 @@ export function serializeCsv(
   const lineEnding = options.lineEnding ?? DEFAULT_LINE_ENDING
   const eol = lineEnding === 'crlf' ? '\r\n' : '\n'
 
+  const cellOptions = { delimiter, neutralizeFormulas: options.neutralizeFormulas }
   const formatRow = (row: CsvCellValue[]) =>
-    row.map((cell) => escapeCsvCell(cell)).join(delimiter)
+    row.map((cell) => escapeCsvCell(cell, cellOptions)).join(delimiter)
 
-  const header = formatRow(columns)
+  const header = columns.map((cell) => escapeCsvCell(cell, { delimiter })).join(delimiter)
   const body = rows.map(formatRow).join(eol)
   const content = rows.length ? `${header}${eol}${body}` : header
   return bom ? `\uFEFF${content}` : content
