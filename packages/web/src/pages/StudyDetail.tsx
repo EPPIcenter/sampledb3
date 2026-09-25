@@ -258,7 +258,7 @@ export default function StudyDetail() {
   ]
 
   const canDelete =
-    isAdmin || study.shortCode.toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX)
+    isAdmin || (canWrite && study.shortCode.toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX))
 
   const showTimelineTab =
     study.isLongitudinal || (timelineStatus === 'ready' && timeline?.dateRange != null)

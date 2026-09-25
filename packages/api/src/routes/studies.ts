@@ -23,8 +23,12 @@ import { createAuthMiddleware, createMemberMiddleware, createAdminMiddleware } f
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
 
-/** Short code prefix for tutorial namespace. Any study whose short code starts with this (case-insensitive) may be deleted by any authenticated user. */
+/** Short code prefix for tutorial namespace. Any study whose short code starts with this (case-insensitive) may be deleted by any member. Only admins may rename a study into or out of this namespace. */
 const TUTORIAL_SHORT_CODE_PREFIX = 'TUT'
+
+function isTutorialShortCode(shortCode: string): boolean {
+  return shortCode.toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX)
+}
 
 /**
  * Create studies routes with database injection
@@ -622,6 +626,19 @@ studies.put('/:id', memberMiddleware, async (c) => {
     })
     
     const data = schema.parse(body)
+
+    // Renaming into or out of the tutorial namespace changes who may delete the study.
+    const user = c.get('user')
+    if (
+      data.shortCode !== undefined &&
+      isTutorialShortCode(data.shortCode) !== isTutorialShortCode(existingStudy.shortCode) &&
+      user?.role !== 'admin'
+    ) {
+      return c.json(
+        { error: `Only administrators can move a study into or out of the ${TUTORIAL_SHORT_CODE_PREFIX}* tutorial namespace.` },
+        403,
+      )
+    }
     
     // Check for duplicate title if title is being updated
     if (data.title && data.title !== existingStudy.title) {
@@ -650,7 +667,6 @@ studies.put('/:id', memberMiddleware, async (c) => {
     }
     
     // Update study (isLongitudinal cannot be changed after creation)
-    const user = c.get('user')
     const [updatedStudy] = await database
       .update(study)
       .set({
@@ -671,8 +687,8 @@ studies.put('/:id', memberMiddleware, async (c) => {
   }
 })
 
-// Delete study and all dependent data (cascade). Tutorial studies (short code in TUT* namespace) may be deleted by any user; others require admin.
-studies.delete('/:id', authMiddleware, async (c) => {
+// Delete study and all dependent data (cascade). Tutorial studies (short code in TUT* namespace) may be deleted by any member; others require admin.
+studies.delete('/:id', memberMiddleware, async (c) => {
   try {
     const id = parseInt(requireParam(c, 'id'))
     if (isNaN(id)) {
@@ -689,8 +705,7 @@ studies.delete('/:id', authMiddleware, async (c) => {
       throw new NotFoundError('Study', id)
     }
 
-    const isTutorialStudy = existingStudy.shortCode.toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX)
-    if (!isTutorialStudy) {
+    if (!isTutorialShortCode(existingStudy.shortCode)) {
       const user = c.get('user')
       if (!user || user.role !== 'admin') {
         return c.json({ error: 'Only administrators can delete non-tutorial studies.' }, 403)
