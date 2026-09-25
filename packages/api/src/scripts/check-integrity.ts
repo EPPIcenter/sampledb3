@@ -12,7 +12,8 @@
  *   DATABASE_PATH=path/to/database.sqlite bun src/scripts/check-integrity.ts --export-json
  */
 
-import { openOperationalDatabase } from '../db/client'
+import { Database } from 'bun:sqlite'
+import { resolveOperationalDatabasePath } from '../db/open'
 import { writeFileSync } from 'fs'
 import { join } from 'path'
 
@@ -59,7 +60,7 @@ function checkForeignKey(
   let query: string
   if (isSelfReference) {
     query = `
-      SELECT COUNT(*) as count, GROUP_CONCAT(t1.id) as ids
+      SELECT COUNT(*) as count, GROUP_CONCAT(t1.rowid) as ids
       FROM ${table} t1
       LEFT JOIN ${referencedTable} t2 ON t1.${column} = t2.${referencedColumn}
       WHERE t1.${column} IS NOT NULL
@@ -67,7 +68,7 @@ function checkForeignKey(
     `
   } else {
     query = `
-      SELECT COUNT(*) as count, GROUP_CONCAT(${table}.id) as ids
+      SELECT COUNT(*) as count, GROUP_CONCAT(${table}.rowid) as ids
       FROM ${table}
       LEFT JOIN ${referencedTable} ON ${table}.${column} = ${referencedTable}.${referencedColumn}
       WHERE ${table}.${column} IS NOT NULL
@@ -257,6 +258,15 @@ function checkDatabaseIntegrity(sqlite: any): IntegrityReport {
   ]
   issues.push(...derivationIssues.filter((issue): issue is IntegrityIssue => issue !== null))
 
+  // qPCR checks
+  console.log('Checking qPCR relationships...')
+  const qpcrIssues = [
+    checkForeignKey(sqlite, 'qpcr_experiment_well', 'qpcr_experiment_id', 'qpcr_experiment', 'id', 'qPCR wells with non-existent qpcr_experiment_id'),
+    checkForeignKey(sqlite, 'qpcr_experiment_well', 'storage_container_id', 'storage_container', 'id', 'qPCR wells with non-existent storage_container_id'),
+    checkForeignKey(sqlite, 'qpcr_experiment_well', 'specimen_id', 'specimen', 'id', 'qPCR wells with non-existent specimen_id'),
+  ]
+  issues.push(...qpcrIssues.filter((issue): issue is IntegrityIssue => issue !== null))
+
   // Other checks
   console.log('Checking other relationships...')
   const otherIssues = [
@@ -277,7 +287,7 @@ function checkDatabaseIntegrity(sqlite: any): IntegrityReport {
     entry.orphanedRecords += issue.orphanedCount
   }
 
-  const databasePath = process.env.DATABASE_PATH || 'sampledb_dev.sqlite'
+  const databasePath = sqlite.filename
 
   return {
     timestamp: startTime,
@@ -343,8 +353,9 @@ function main() {
   const exportJson = args.includes('--export-json')
 
   try {
-    // Connect to database
-    const { sqlite } = openOperationalDatabase()
+    // Open read-only and without schema evolution: checking a backup must not migrate it.
+    const dbArg = args.find((arg) => arg.startsWith('--db='))?.slice('--db='.length)
+    const sqlite = new Database(resolveOperationalDatabasePath(dbArg), { readonly: true })
 
     // Run integrity checks
     const report = checkDatabaseIntegrity(sqlite)
