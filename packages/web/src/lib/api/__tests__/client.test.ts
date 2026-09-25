@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { InternalAxiosRequestConfig } from 'axios'
 import {
   axiosApi,
   getLastResponseRequestId,
   resetRequestIdStateForTesting,
   REQUEST_ID_HEADER,
+  setSessionExpiredHandler,
 } from '../client'
 
 describe('axiosApi request correlation', () => {
@@ -89,3 +90,42 @@ function readHeader(headers: unknown, name: string): string | undefined {
   const record = headers as Record<string, string | undefined>
   return record[name] ?? record[name.toLowerCase()]
 }
+
+describe('session expiry', () => {
+  const originalAdapter = axiosApi.defaults.adapter
+
+  afterEach(() => {
+    axiosApi.defaults.adapter = originalAdapter
+    setSessionExpiredHandler(null)
+  })
+
+  function respond401() {
+    axiosApi.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+      const error = Object.assign(new Error('Unauthorized'), {
+        isAxiosError: true,
+        config,
+        response: { status: 401, headers: {}, config, data: { error: 'Invalid or expired session' } },
+      })
+      throw error
+    }
+  }
+
+  it('calls the handler when a data request gets 401', async () => {
+    const handler = vi.fn()
+    setSessionExpiredHandler(handler)
+    respond401()
+
+    await expect(axiosApi.get('/studies')).rejects.toThrow()
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not call the handler for auth endpoints (wrong password, not signed in)', async () => {
+    const handler = vi.fn()
+    setSessionExpiredHandler(handler)
+    respond401()
+
+    await expect(axiosApi.post('/auth/login', {})).rejects.toThrow()
+    await expect(axiosApi.get('/auth/me')).rejects.toThrow()
+    expect(handler).not.toHaveBeenCalled()
+  })
+})

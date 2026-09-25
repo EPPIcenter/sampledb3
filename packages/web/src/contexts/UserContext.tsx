@@ -1,5 +1,7 @@
-import { useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
+import { useContext, useState, useEffect, useMemo, useCallback, useRef, ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { authApi, type User } from '../lib/api/auth'
+import { setSessionExpiredHandler } from '../lib/api/client'
 import { addRecentUser } from '../lib/localUserHistory'
 import { UserContext } from './user-context-instance'
 
@@ -14,12 +16,28 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const queryClient = useQueryClient()
+  const currentUserId = useRef<number | null>(null)
+
   const setUser = useCallback((u: User | null) => {
+    // Cached queries include per-user data (personal export configs, settings); never show
+    // one user's cache to the next after a logout, login, or switch.
+    const nextId = u?.id ?? null
+    if (currentUserId.current !== null && currentUserId.current !== nextId) {
+      queryClient.clear()
+    }
+    currentUserId.current = nextId
     setUserState(u)
     userCachedUser = u
     userCachedLoading = false
     userCachedError = null
-  }, [])
+  }, [queryClient])
+
+  // A 401 from a data request means the session is gone: sign out so AuthGuard redirects.
+  useEffect(() => {
+    setSessionExpiredHandler(() => setUser(null))
+    return () => setSessionExpiredHandler(null)
+  }, [setUser])
 
   const refreshUser = useCallback(async () => {
     setLoading(true)
@@ -53,7 +71,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       userCachedLoading = false
     }
-  }, [])
+  }, [setUser])
 
   const switchUser = useCallback(async (userId: number, password: string) => {
     try {
@@ -101,7 +119,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       // Calling refreshUser() could fail and log the user out even though they're still logged in
       throw new Error(errorMessage)
     }
-  }, [])
+  }, [setUser])
 
   useEffect(() => {
     if (!userDidInit) {
