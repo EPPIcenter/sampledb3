@@ -325,7 +325,8 @@ locations.post('/', adminMiddleware, async (c) => {
       .values({
         parentId: data.parentId ?? null,
         name: data.name,
-        storageTypeId: data.parentId === null ? data.storageTypeId : null, // Only set for root locations
+        // Only set for root locations; an omitted parentId also means root.
+        storageTypeId: data.parentId == null ? data.storageTypeId : null,
         description: data.description,
         canContainCollections: data.canContainCollections,
         created: now,
@@ -430,6 +431,10 @@ locations.put('/:id', adminMiddleware, async (c) => {
         return c.json({ error: 'Storage type ID must be null for child locations' }, 400)
       }
     }
+    // A child moved to the root needs a storage type (the table CHECK requires it).
+    if (isRoot && existing.parentId !== null && !data.storageTypeId) {
+      return c.json({ error: 'Storage type ID is required when moving a location to the root' }, 400)
+    }
 
     // Check for duplicate name if name or parent is being changed
     if (data.name !== undefined || data.parentId !== undefined) {
@@ -459,8 +464,8 @@ locations.put('/:id', adminMiddleware, async (c) => {
     }
     if (data.parentId !== undefined) updateData.parentId = data.parentId ?? null
     if (data.name !== undefined) updateData.name = data.name
-    // Only set storageTypeId for root locations
-    if (data.storageTypeId !== undefined) {
+    // Only root locations have a storage type; moving a root under a parent clears it.
+    if (data.storageTypeId !== undefined || !isRoot) {
       updateData.storageTypeId = isRoot ? data.storageTypeId : null
     }
     if (data.description !== undefined) updateData.description = data.description ?? null
