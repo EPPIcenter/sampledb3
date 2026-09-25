@@ -10,8 +10,14 @@ import {
   createTestUnit,
 } from '../../../__tests__/helpers/factories'
 import type { Database } from '../../../db/client'
-import { storageContainerTag } from '../../../db/schema'
-import { buildContainerQuery, resolveMicronixBarcodesToContainers, buildContainerQueryByMicronixBarcodes } from '../query'
+import { storageContainerTag, specimen as specimenTable } from '../../../db/schema'
+import { utcNow } from '../../datetime'
+import {
+  buildContainerQuery,
+  buildMultiStudyContainerQuery,
+  resolveMicronixBarcodesToContainers,
+  buildContainerQueryByMicronixBarcodes,
+} from '../query'
 
 describe('buildContainerQuery', () => {
   let testDb: Database
@@ -170,3 +176,53 @@ describe('buildContainerQueryByMicronixBarcodes', () => {
   })
 })
 
+
+describe('buildMultiStudyContainerQuery subject dates', () => {
+  let testDb: Database
+  let sqlite: Awaited<ReturnType<typeof setupTestDatabase>>['sqlite']
+
+  beforeEach(async () => {
+    const setup = await setupTestDatabase()
+    testDb = setup.db
+    sqlite = setup.sqlite
+  })
+
+  afterEach(() => {
+    if (sqlite) cleanupTestDatabase(sqlite)
+  })
+
+  it('keeps every listed visit per subject and includes subjects listed without a date', async () => {
+    const study = await createTestStudy(testDb, { title: 'Visits', shortCode: 'VIS', leadPerson: 'L' })
+    const s01 = await createTestStudySubject(testDb, { studyId: study.id, name: 'S01' })
+    const s02 = await createTestStudySubject(testDb, { studyId: study.id, name: 'S02' })
+    const type = await createTestSpecimenType(testDb, { name: 'Blood' })
+    const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+    const now = utcNow()
+    const addSpecimen = async (subjectId: number, collectionDate: string) => {
+      const [row] = await testDb
+        .insert(specimenTable)
+        .values({ studySubjectId: subjectId, specimenTypeId: type.id, collectionDate, created: now, lastUpdated: now })
+        .returning()
+      await createTestStorageContainer(testDb, { specimenId: row.id, unitId: unit.id })
+      return row
+    }
+    const jan = await addSpecimen(s01.id, '2024-01-01')
+    const feb = await addSpecimen(s01.id, '2024-02-01')
+    await addSpecimen(s01.id, '2024-03-01')
+    const may = await addSpecimen(s02.id, '2024-05-05')
+
+    const result = await buildMultiStudyContainerQuery(
+      testDb,
+      [
+        { study_short_code: 'VIS', subject_name: 'S01', collection_date: '2024-01-01' },
+        { study_short_code: 'VIS', subject_name: 'S01', collection_date: '2024-02-01' },
+        { study_short_code: 'VIS', subject_name: 'S02' },
+      ],
+      {},
+    )
+
+    expect(result.containers.map((c) => c.specimen_id).sort((a, b) => a - b)).toEqual(
+      [jan.id, feb.id, may.id].sort((a, b) => a - b),
+    )
+  })
+})

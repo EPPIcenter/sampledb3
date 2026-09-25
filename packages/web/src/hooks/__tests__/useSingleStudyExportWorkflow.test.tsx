@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { exportApi } from '../../lib/api/export'
-import { useSingleStudyExportWorkflow } from '../useSingleStudyExportWorkflow'
+import { buildSubjectDatesFromCsv, useSingleStudyExportWorkflow } from '../useSingleStudyExportWorkflow'
 
 vi.mock('../../lib/export-filter-csv', () => ({
   parseExportModalCsv: vi.fn(),
@@ -146,5 +146,18 @@ describe('useSingleStudyExportWorkflow', () => {
     expect(exportApi.containersByNames).toHaveBeenCalled()
     expect(result.current.exportSummary?.total_containers).toBe(1)
     expect(exportApi.downloadEnvelope).toHaveBeenCalled()
+  })
+})
+
+describe('buildSubjectDatesFromCsv', () => {
+  it('keeps every visit per subject and drops subjects that have an undated row', () => {
+    expect(
+      buildSubjectDatesFromCsv([
+        { subject_name: 'S01', collection_date: '2024-01-01' },
+        { subject_name: 'S01', collection_date: '2024-02-01' },
+        { subject_name: 'S02', collection_date: '2024-03-01' },
+        { subject_name: 'S02' },
+      ]),
+    ).toEqual({ S01: [{ exact: '2024-01-01' }, { exact: '2024-02-01' }] })
   })
 })

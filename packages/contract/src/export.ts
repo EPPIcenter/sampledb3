@@ -16,12 +16,16 @@ export interface ExportFilters {
   subject_ids?: number[]
   /** Global tolerance for exact subject collection dates (defaults to 0). */
   date_tolerance?: number
+  /**
+   * Per-subject collection date filters. A subject may list several (one per visit);
+   * listed subjects without an entry match all their dates.
+   */
   subject_dates?: {
-    [subjectId: number]:
-      | { exact: string }
-      | { from?: string; to?: string }
+    [subjectId: number]: SubjectDateFilter | SubjectDateFilter[]
   }
 }
+
+export type SubjectDateFilter = { exact: string } | { from?: string; to?: string }
 
 export interface ContainerExportData {
   container_id: number
