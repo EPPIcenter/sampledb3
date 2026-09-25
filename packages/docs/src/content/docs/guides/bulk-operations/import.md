@@ -69,7 +69,7 @@ Column headers are case-insensitive. `Position`, `position`, `well_position`, an
 
 **Subjects Only:** `study_short_code`, `subject_name`.
 
-**Specimens Only or Combined, no containers:** `study_short_code`, `subject_name`, `specimen_type_name`. Optional `collection_date` as YYYY-MM-DD.
+**Specimens Only or Combined, no containers:** `study_short_code`, `subject_name`, `specimen_type_name`. Optional `collection_date` as YYYY-MM-DD. US-style M/D/YYYY and YYYY/MM/DD are also accepted and stored as YYYY-MM-DD; impossible dates such as 2024-02-30 are rejected.
 
 **With containers:** the same columns, plus container fields for the selected type. Optional `comment` is stored on each container. Collection identifier must use the column for that type (`plate_name`, `box_name`, or `bag_name`) so it matches the templates.
 

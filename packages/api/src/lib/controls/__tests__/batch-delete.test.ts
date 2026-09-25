@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import type { Database } from '../../../db/client'
-import { controlBatch, specimen, storageContainer, micronixTube } from '../../../db/schema'
+import {
+  controlBatch,
+  specimen,
+  storageContainer,
+  micronixTube,
+  containerDerivation,
+  qpcrExperiment,
+  qpcrExperimentWell,
+} from '../../../db/schema'
 import { setupTestDatabase, cleanupTestDatabase } from '../../../__tests__/helpers/db-setup'
 import {
   createTestControlBatch,
@@ -14,7 +22,7 @@ import {
   createTestStorageType,
   createTestUnit,
 } from '../../../__tests__/helpers/factories'
-import { NotFoundError } from '../../error-handler'
+import { NotFoundError, ConflictError } from '../../error-handler'
 import { utcNow } from '../../datetime'
 import { deleteBloodControlBatch, deleteSpecimenFromBatch } from '../batch-delete'
 
@@ -109,5 +117,52 @@ describe('batch-delete', () => {
     expect(await testDb.select().from(specimen).where(eq(specimen.id, remove.id)).get()).toBeUndefined()
     expect(await testDb.select().from(specimen).where(eq(specimen.id, keep.id)).get()).toBeDefined()
     expect(await testDb.select().from(controlBatch).where(eq(controlBatch.id, batch.id)).get()).toBeDefined()
+  })
+
+  async function addToQpcrExperiment(containerId: number, specimenId: number) {
+    const [exp] = await testDb
+      .insert(qpcrExperiment)
+      .values({ name: 'Run 1', templateFormat: 'biorad', status: 'setup' })
+      .returning()
+    await testDb.insert(qpcrExperimentWell).values({
+      qpcrExperimentId: exp.id,
+      wellPosition: 'A01',
+      barcode: 'DEL-001',
+      storageContainerId: containerId,
+      specimenId,
+    })
+    return exp
+  }
+
+  it('deleteBloodControlBatch refuses when a container is used in a qPCR experiment', async () => {
+    const { batch, spec, container } = await seedBloodBatchWithContainer()
+    await addToQpcrExperiment(container.id, spec.id)
+
+    await expect(deleteBloodControlBatch(testDb, batch.id)).rejects.toThrow(ConflictError)
+    await expect(deleteBloodControlBatch(testDb, batch.id)).rejects.toThrow(/'Run 1'/)
+    expect(await testDb.select().from(controlBatch).where(eq(controlBatch.id, batch.id)).get()).toBeDefined()
+  })
+
+  it('deleteSpecimenFromBatch refuses when the specimen is used in a qPCR experiment', async () => {
+    const { batch, spec, container } = await seedBloodBatchWithContainer()
+    await addToQpcrExperiment(container.id, spec.id)
+
+    await expect(deleteSpecimenFromBatch(testDb, batch.id, spec.id)).rejects.toThrow(ConflictError)
+    expect(await testDb.select().from(specimen).where(eq(specimen.id, spec.id)).get()).toBeDefined()
+  })
+
+  it('deleteBloodControlBatch removes derivation links to its containers', async () => {
+    const { batch, spec, container } = await seedBloodBatchWithContainer()
+    const child = await createTestStorageContainer(testDb, { specimenId: spec.id, unitId: container.unitId })
+    await testDb.insert(containerDerivation).values({
+      parentContainerId: container.id,
+      childContainerId: child.id,
+      derivationType: 'extraction',
+    })
+
+    await deleteBloodControlBatch(testDb, batch.id)
+
+    expect(await testDb.select().from(containerDerivation).all()).toHaveLength(0)
+    expect(await testDb.select().from(controlBatch).where(eq(controlBatch.id, batch.id)).get()).toBeUndefined()
   })
 })

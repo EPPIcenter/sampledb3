@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateAfterBulkWrite } from '../lib/query-client'
 import { collectionsApi } from '../lib/api/collections'
 import CollectionMoveTreePicker, { type Collection } from '../components/CollectionMoveTreePicker'
 import LocationTreePicker, { type LocationSelection } from '../components/LocationTreePicker'
@@ -24,6 +26,7 @@ function fromKey(key: string): { type: CollectionType; id: number } {
 
 export default function CollectionMove() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { canWrite } = useUser()
   const [currentStep, setCurrentStep] = useState<Step>('select-collections')
   
@@ -202,6 +205,7 @@ export default function CollectionMove() {
         }
       }
 
+      if (totalMoved > 0) void invalidateAfterBulkWrite(queryClient)
       setMoveResult({
         success: allSuccess,
         moved: totalMoved,

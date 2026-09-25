@@ -73,6 +73,33 @@ describe('Imports API', () => {
     })
   })
 
+  describe('derivation settings from the web defaults', () => {
+    // The web sends '' for every setting left on "In CSV (per row)".
+    const perRowSettings = {
+      derivationType: '',
+      specimenTypeName: '',
+      containerType: '',
+      protocol: '',
+      derivationDate: '',
+    }
+
+    it('accepts containerType "" (per row) on validate', async () => {
+      const res = await ctx.request('/api/imports/derivations-csv/validate', {
+        method: 'POST',
+        json: { csv: 'parent_container_id,container_type\n1,micronix_tube', settings: perRowSettings },
+      })
+      expect(res.status).toBe(200)
+    })
+
+    it('accepts containerType "" (per row) on import', async () => {
+      const res = await ctx.request('/api/imports/derivations-csv', {
+        method: 'POST',
+        json: { csv: 'parent_container_id,container_type\n1,micronix_tube', dryRun: true, settings: perRowSettings },
+      })
+      expect(res.status).toBe(200)
+    })
+  })
+
   describe('POST /api/imports/bulk-combined', () => {
     it('imports a mixed-study plate into each subject\'s own study', async () => {
       const studyA = await createTestStudy(ctx.db, { title: 'Mixed A', shortCode: 'MIXA' })

@@ -38,28 +38,53 @@ export async function validateSubjectName(
   return { valid: true }
 }
 
-/**
- * Validate collection date
- */
-export function validateCollectionDate(date: string | undefined): { valid: boolean; error?: string } {
-  if (!date) {
-    return { valid: true } // Optional field
-  }
-  
-  const dateObj = new Date(date)
-  
-  if (isNaN(dateObj.getTime())) {
-    return { valid: false, error: 'Invalid date format' }
-  }
-  
+function isoDate(year: number, month: number, day: number): string | null {
+  const d = new Date(Date.UTC(year, month - 1, day))
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+/** Today's calendar date on the server, as YYYY-MM-DD. */
+function localToday(): string {
   const now = new Date()
-  now.setHours(23, 59, 59, 999) // End of today
-  
-  if (dateObj > now) {
+  return isoDate(now.getFullYear(), now.getMonth() + 1, now.getDate())!
+}
+
+/**
+ * Parse a collection date into YYYY-MM-DD.
+ * Accepts YYYY-MM-DD, YYYY/MM/DD, US M/D/YYYY, and ISO timestamps (date part kept).
+ * Returns null for anything else, including impossible dates like 2024-02-30.
+ */
+export function parseCollectionDate(input: string): string | null {
+  const text = input.trim()
+  const ymd = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T ].*)?$/.exec(text)
+  if (ymd) return isoDate(Number(ymd[1]), Number(ymd[2]), Number(ymd[3]))
+  const mdy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text)
+  if (mdy) return isoDate(Number(mdy[3]), Number(mdy[1]), Number(mdy[2]))
+  return null
+}
+
+/**
+ * Validate a collection date and return it normalized to YYYY-MM-DD, so the same
+ * collection event is stored the same way however it was typed.
+ */
+export function validateCollectionDate(
+  date: string | null | undefined,
+): { valid: true; normalized: string | undefined } | { valid: false; error: string } {
+  if (date == null || date.trim() === '') {
+    return { valid: true, normalized: undefined } // Optional field
+  }
+
+  const normalized = parseCollectionDate(date)
+  if (!normalized) {
+    return { valid: false, error: `Invalid date '${date}'. Use YYYY-MM-DD (or M/D/YYYY).` }
+  }
+
+  if (normalized > localToday()) {
     return { valid: false, error: 'Collection date cannot be in the future' }
   }
-  
-  return { valid: true }
+
+  return { valid: true, normalized }
 }
 
 /**
@@ -248,6 +273,8 @@ export async function validateSpecimenData(data: {
     studyId?: number
     controlBatchId?: number; 
     specimenTypeId: number 
+    /** collectionDate normalized to YYYY-MM-DD */
+    collectionDate?: string
   } 
 }> {
   // Validate source
@@ -322,6 +349,7 @@ export async function validateSpecimenData(data: {
       studyId,
       controlBatchId,
       specimenTypeId: specimenTypeId!,
+      collectionDate: dateValidation.normalized,
     },
   }
 }

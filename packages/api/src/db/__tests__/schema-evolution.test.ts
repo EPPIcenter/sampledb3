@@ -12,7 +12,8 @@ import {
 import { openOperationalDatabase } from '../open'
 import { SchemaMigrationError, runSqlMigrationStatements } from '../migration-runner'
 
-function createGridPositionTables(sqlite: Database): void {
+/** Tables that migrations 004+ alter, so older-version fixtures can migrate to current. */
+function createTablesForLaterMigrations(sqlite: Database): void {
   sqlite.exec(`CREATE TABLE IF NOT EXISTS micronix_tube (
     id INTEGER PRIMARY KEY,
     collection_id INTEGER NOT NULL,
@@ -29,6 +30,11 @@ function createGridPositionTables(sqlite: Database): void {
     id INTEGER PRIMARY KEY,
     collection_id INTEGER NOT NULL,
     position TEXT
+  )`)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS study_subject (
+    id INTEGER PRIMARY KEY,
+    study_id INTEGER NOT NULL,
+    name TEXT NOT NULL
   )`)
 }
 
@@ -99,7 +105,7 @@ describe('schema evolution', () => {
       barcode TEXT,
       position TEXT
     )`)
-    createGridPositionTables(sqlite)
+    createTablesForLaterMigrations(sqlite)
     sqlite.close()
 
     const { sqlite: opened } = openOperationalDatabase(testDbPath)
@@ -124,7 +130,7 @@ describe('schema evolution', () => {
       barcode TEXT,
       position TEXT
     )`)
-    createGridPositionTables(sqlite)
+    createTablesForLaterMigrations(sqlite)
     evolveOperationalSchema(sqlite)
     expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
     sqlite.close()
@@ -142,7 +148,7 @@ describe('schema evolution', () => {
       barcode TEXT,
       position TEXT
     )`)
-    createGridPositionTables(sqlite)
+    createTablesForLaterMigrations(sqlite)
     evolveOperationalSchema(sqlite)
     expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
     const columns = sqlite
@@ -156,7 +162,7 @@ describe('schema evolution', () => {
     const sqlite = new Database(testDbPath)
     sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
     sqlite.exec('INSERT INTO schema_version (version) VALUES (2)')
-    createGridPositionTables(sqlite)
+    createTablesForLaterMigrations(sqlite)
     evolveOperationalSchema(sqlite)
     expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
     const paperTable = sqlite
@@ -195,7 +201,7 @@ describe('schema evolution', () => {
     const sqlite = new Database(testDbPath)
     sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
     sqlite.exec('INSERT INTO schema_version (version) VALUES (3)')
-    createGridPositionTables(sqlite)
+    createTablesForLaterMigrations(sqlite)
     evolveOperationalSchema(sqlite)
     expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
     const names = sqlite
@@ -215,12 +221,42 @@ describe('schema evolution', () => {
     const sqlite = new Database(testDbPath)
     sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
     sqlite.exec('INSERT INTO schema_version (version) VALUES (3)')
-    createGridPositionTables(sqlite)
+    createTablesForLaterMigrations(sqlite)
     sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES (1, 1, 'A', 'A01')`)
     sqlite.exec(`INSERT INTO micronix_tube (id, collection_id, barcode, position) VALUES (2, 1, 'B', 'A01')`)
 
     expect(() => evolveOperationalSchema(sqlite)).toThrow(SchemaMigrationError)
     expect(getRecordedSchemaVersion(sqlite)).toBe(3)
+    sqlite.close()
+  })
+
+  it('migration 005 trims subject names and adds a unique (study_id, name) index', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (4)')
+    createTablesForLaterMigrations(sqlite)
+    sqlite.exec(`INSERT INTO study_subject (id, study_id, name) VALUES (1, 1, ' S1 '), (2, 1, 's1'), (3, 2, 'S1')`)
+
+    evolveOperationalSchema(sqlite)
+
+    expect(getRecordedSchemaVersion(sqlite)).toBe(CURRENT_SCHEMA_VERSION)
+    const names = sqlite.prepare('SELECT name FROM study_subject ORDER BY id').all() as Array<{ name: string }>
+    expect(names.map((r) => r.name)).toEqual(['S1', 's1', 'S1'])
+    expect(() => sqlite.exec(`INSERT INTO study_subject (id, study_id, name) VALUES (4, 1, 'S1')`)).toThrow(/UNIQUE/)
+    sqlite.close()
+  })
+
+  it('migration 005 aborts when two subjects in a study match after trimming', () => {
+    const sqlite = new Database(testDbPath)
+    sqlite.exec('CREATE TABLE schema_version (version INTEGER NOT NULL)')
+    sqlite.exec('INSERT INTO schema_version (version) VALUES (4)')
+    createTablesForLaterMigrations(sqlite)
+    sqlite.exec(`INSERT INTO study_subject (id, study_id, name) VALUES (1, 1, 'S1'), (2, 1, 'S1 ')`)
+
+    expect(() => evolveOperationalSchema(sqlite)).toThrow(/Merge or rename them first/)
+    expect(getRecordedSchemaVersion(sqlite)).toBe(4)
+    const names = sqlite.prepare('SELECT name FROM study_subject ORDER BY id').all() as Array<{ name: string }>
+    expect(names.map((r) => r.name)).toEqual(['S1', 'S1 '])
     sqlite.close()
   })
 

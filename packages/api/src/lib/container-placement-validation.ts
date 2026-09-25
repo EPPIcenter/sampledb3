@@ -3,9 +3,10 @@
  * Shared by bulk specimen validate, bulk-combined validate/import, and POST /subjects/with-specimens.
  */
 import type { Database } from '../db/client'
-import { micronixTube, cryovialTube, staticWell } from '../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { micronixTube, cryovialTube } from '../db/schema'
+import { eq } from 'drizzle-orm'
 import { normalizePosition } from './normalize-position'
+import { checkGridPositionOccupancy, occupiedGridPositionMessage } from './container-occupancy'
 
 export type PlacementContainerType = 'micronix_tube' | 'cryovial_tube' | 'paper' | 'static_well'
 
@@ -110,38 +111,18 @@ export async function collectContainerPlacementErrors(
       (containerType === 'micronix_tube' || containerType === 'cryovial_tube' || containerType === 'static_well')
     ) {
       if (collectionId !== null) {
-        if (containerType === 'micronix_tube' || containerType === 'static_well') {
-          const existingTube = await database
-            .select({ id: micronixTube.id })
-            .from(micronixTube)
-            .where(and(eq(micronixTube.collectionId, collectionId), eq(micronixTube.position, normalizedPosition)))
-            .get()
-          const existingWell =
-            containerType === 'static_well'
-              ? await database
-                  .select({ id: staticWell.id })
-                  .from(staticWell)
-                  .where(and(eq(staticWell.collectionId, collectionId), eq(staticWell.position, normalizedPosition)))
-                  .get()
-              : null
-          if (existingTube || existingWell) {
-            errors.push({
-              rowIndex,
-              message: `Position ${normalizedPosition} is already used in this plate. Use a different position or plate.`,
-            })
-          }
-        } else {
-          const existing = await database
-            .select({ id: cryovialTube.id })
-            .from(cryovialTube)
-            .where(and(eq(cryovialTube.collectionId, collectionId), eq(cryovialTube.position, normalizedPosition)))
-            .get()
-          if (existing) {
-            errors.push({
-              rowIndex,
-              message: `Position ${normalizedPosition} is already used in this box. Use a different position or box.`,
-            })
-          }
+        // Same rule as the write path: tubes and static wells share plate cells.
+        const collectionKind = containerType === 'cryovial_tube' ? 'cryovial_box' : 'micronix_plate'
+        const occupancy = await checkGridPositionOccupancy(database, {
+          collectionKind,
+          collectionId,
+          position: normalizedPosition,
+        })
+        if (occupancy.occupied) {
+          errors.push({
+            rowIndex,
+            message: occupiedGridPositionMessage(normalizedPosition, collectionKind),
+          })
         }
       }
 

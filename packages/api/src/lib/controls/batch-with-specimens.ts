@@ -24,6 +24,9 @@ import {
   type ContainerType,
 } from '../container-creation'
 import type { BatchContainerInput } from './batch-schemas'
+import { withWriteTransaction } from '../../db/write-transaction'
+import { validateCollectionDate } from '../validation'
+import { ValidationError } from '../error-handler'
 
 export interface CreateBatchWithSpecimensRequest {
   batch: {
@@ -132,7 +135,15 @@ async function prepareSpecimensForBatch(
   database: Database,
   specimens: CreateBatchWithSpecimensRequest['specimens'],
 ) {
-  const specimensToCreate = mergeSpecimensByTypeAndDate(specimens)
+  // Normalize dates first so "1/5/2024" and "2024-01-05" merge as one collection event.
+  const normalizedSpecimens = specimens.map((spec, index) => {
+    const date = validateCollectionDate(spec.collectionDate)
+    if (!date.valid) {
+      throw new ValidationError(`Specimen ${index + 1}: ${date.error}`)
+    }
+    return { ...spec, collectionDate: date.normalized }
+  })
+  const specimensToCreate = mergeSpecimensByTypeAndDate(normalizedSpecimens)
   const preparedSpecimens: Array<{
     specType: { id: number; name: string }
     specData: (typeof specimensToCreate)[number]
@@ -216,7 +227,7 @@ export async function createBatchWithSpecimens(
 
   const preparedSpecimens = await prepareSpecimensForBatch(database, data.specimens)
 
-  return database.transaction(async (tx) => {
+  return withWriteTransaction(database, async (tx) => {
     const batchResult = await tx
       .insert(controlBatch)
       .values({
@@ -311,7 +322,7 @@ export async function addSpecimensToBatch(
   const collectionMap = new Map<string, number>()
   const preparedSpecimens = await prepareSpecimensForBatch(database, data.specimens)
 
-  return database.transaction(async (tx) => {
+  return withWriteTransaction(database, async (tx) => {
     const createdSpecimens: CreatedSpecimen[] = []
 
     for (const { specType, specData, preparedContainers } of preparedSpecimens) {

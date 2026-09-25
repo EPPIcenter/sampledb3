@@ -5,13 +5,16 @@ import {
   specimen,
   storageContainer,
   storageContainerTag,
+  containerDerivation,
   micronixTube,
   cryovialTube,
   paper,
   staticWell,
 } from '../../db/schema'
-import { eq, and, inArray } from 'drizzle-orm'
+import { eq, and, or, inArray } from 'drizzle-orm'
 import { NotFoundError } from '../error-handler'
+import { withWriteTransaction } from '../../db/write-transaction'
+import { assertNotUsedInQpcr } from '../qpcr-usage'
 
 /** Delete a blood control batch and all associated specimens and containers. */
 export async function deleteBloodControlBatch(database: Database, batchId: number): Promise<void> {
@@ -44,10 +47,20 @@ export async function deleteBloodControlBatch(database: Database, batchId: numbe
     containerIds = containers.map((c) => c.id)
   }
 
-  await database.transaction(async (tx) => {
+  await assertNotUsedInQpcr(database, { containerIds, specimenIds }, `batch '${batchWithDefinition.batch.name}'`)
+
+  await withWriteTransaction(database, async (tx) => {
     if (containerIds.length > 0) {
       tx.delete(storageContainerTag)
         .where(inArray(storageContainerTag.storageContainerId, containerIds))
+        .run()
+      tx.delete(containerDerivation)
+        .where(
+          or(
+            inArray(containerDerivation.parentContainerId, containerIds),
+            inArray(containerDerivation.childContainerId, containerIds)
+          )
+        )
         .run()
       tx.delete(paper).where(inArray(paper.id, containerIds)).run()
       tx.delete(micronixTube).where(inArray(micronixTube.id, containerIds)).run()
@@ -81,17 +94,21 @@ export async function deleteSpecimenFromBatch(
     throw new NotFoundError('Specimen in batch', specimenId)
   }
 
-  await database.transaction((tx) => {
-    const containerRows = tx
-      .select({ id: storageContainer.id })
-      .from(storageContainer)
-      .where(eq(storageContainer.specimenId, specimenId))
-      .all()
-    const containerIds = containerRows.map((r) => r.id)
+  const containerRows = await database
+    .select({ id: storageContainer.id })
+    .from(storageContainer)
+    .where(eq(storageContainer.specimenId, specimenId))
+  const containerIds = containerRows.map((r) => r.id)
 
+  await assertNotUsedInQpcr(database, { containerIds, specimenIds: [specimenId] }, 'this specimen')
+
+  database.transaction((tx) => {
     if (containerIds.length > 0) {
       for (const cId of containerIds) {
         tx.delete(storageContainerTag).where(eq(storageContainerTag.storageContainerId, cId)).run()
+        tx.delete(containerDerivation)
+          .where(or(eq(containerDerivation.parentContainerId, cId), eq(containerDerivation.childContainerId, cId)))
+          .run()
         tx.delete(micronixTube).where(eq(micronixTube.id, cId)).run()
         tx.delete(cryovialTube).where(eq(cryovialTube.id, cId)).run()
         tx.delete(paper).where(eq(paper.id, cId)).run()

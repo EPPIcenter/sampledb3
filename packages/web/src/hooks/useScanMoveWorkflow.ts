@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateAfterBulkWrite } from '../lib/query-client'
 import type { ScannerConfiguration } from '../lib/api/settings'
 import {
   createCollectionsScanMoveGateway,
@@ -45,6 +47,7 @@ function stepFromParams(params: URLSearchParams): ScanMoveStep {
  */
 export function useScanMoveWorkflow(options: UseScanMoveWorkflowOptions) {
   const { variant, collections, refreshCollections } = options
+  const queryClient = useQueryClient()
   const gateway = useMemo(
     () => options.gateway ?? createCollectionsScanMoveGateway(variant),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- variant and gateway override are stable per page
@@ -211,8 +214,10 @@ export function useScanMoveWorkflow(options: UseScanMoveWorkflowOptions) {
     () =>
       runBusy(async () => {
         dispatch(await executeScanMove(variant, state, gateway))
+        // Best-effort moves can succeed partially; refresh plate, box, and location views.
+        void invalidateAfterBulkWrite(queryClient)
       }),
-    [runBusy, variant, state, gateway],
+    [runBusy, variant, state, gateway, queryClient],
   )
 
   const reset = useCallback(() => {

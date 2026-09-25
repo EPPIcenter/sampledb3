@@ -9,7 +9,7 @@ These are constraints in the product, not optional style.
 
 - **Short code** must be unique. It appears in CSV import and export. Avoid characters that break CSV quoting.
 - **Longitudinal study** cannot be changed after create. If subjects need more than one collection date, select it now. If you are unsure, select it.
-- A study whose short code starts with **TUT** can be deleted by any user. The create form warns if you use that prefix on a real study.
+- A study whose short code starts with **TUT** can be deleted by any member (not viewers), and only an admin can rename a study into or out of the TUT prefix. The create form warns if you use that prefix on a real study.
 
 ## Subjects and specimens
 

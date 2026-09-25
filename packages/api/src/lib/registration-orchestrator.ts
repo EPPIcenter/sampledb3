@@ -4,6 +4,7 @@
  */
 import type { Database } from '../db/client'
 import { specimen } from '../db/schema'
+import { withWriteTransaction } from '../db/write-transaction'
 import { createContainerForSpecimen, pickContainerQuantity } from './container-creation'
 import { findExistingStudySpecimen, findExistingControlSpecimen } from './specimen-helpers'
 import { utcNow } from './datetime'
@@ -87,9 +88,9 @@ export async function createBulkSpecimenRows(
     indexToUniqueIndex.push(uniqueSpecimenOrder.indexOf(first))
   }
 
-  const specimenRecordsByUniqueIndex: Array<typeof specimen.$inferSelect> = []
-  const syncResult = database.transaction((tx) => {
-    const dbTx = tx as unknown as Database
+  // Specimens and their containers commit together: a container failure must not leave bare specimens.
+  return withWriteTransaction(database, async (dbTx) => {
+    const specimenRecordsByUniqueIndex: Array<typeof specimen.$inferSelect> = []
     let newCount = 0
     for (const uniqueIdx of uniqueSpecimenOrder) {
       const { row, resolved } = prepared[uniqueIdx]
@@ -103,7 +104,7 @@ export async function createBulkSpecimenRows(
       if (existing) {
         specimenRecordsByUniqueIndex.push(existing)
       } else {
-        const insertResult = tx
+        const insertResult = dbTx
           .insert(specimen)
           .values({
             studySubjectId: resolved.studySubjectId,
@@ -123,13 +124,9 @@ export async function createBulkSpecimenRows(
         newCount += 1
       }
     }
-    return { newCount }
-  })
 
-  const specimensOut = indexToUniqueIndex.map((ui) => specimenRecordsByUniqueIndex[ui])
-  let containersCount = 0
-  await database.transaction(async (tx) => {
-    const dbTx = tx as unknown as Database
+    const specimensOut = indexToUniqueIndex.map((ui) => specimenRecordsByUniqueIndex[ui])
+    let containersCount = 0
     for (let i = 0; i < prepared.length; i++) {
       const { row, index } = prepared[i]
       const specimenRecord = specimensOut[i]
@@ -145,14 +142,14 @@ export async function createBulkSpecimenRows(
       }
       containersCount += 1
     }
-  })
 
-  return {
-    success: true,
-    result: {
-      specimens: specimensOut,
-      created: syncResult.newCount,
-      containersCreated: containersCount,
-    },
-  }
+    return {
+      success: true as const,
+      result: {
+        specimens: specimensOut,
+        created: newCount,
+        containersCreated: containersCount,
+      },
+    }
+  })
 }

@@ -10,7 +10,7 @@ import {
   storageContainer,
   unit,
 } from '../db/schema'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, isNull, sql } from 'drizzle-orm'
 import { validateContainerTypeForSpecimenType } from '../lib/validation'
 import { getDefaultUnit } from './defaults'
 import { utcNow } from './datetime'
@@ -93,9 +93,13 @@ async function findOrCreateDerivedSpecimen(
     )!
   }
 
-  if (parentSpecimen.collectionDate) {
-    where = and(where, eq(specimen.collectionDate, parentSpecimen.collectionDate))!
-  }
+  // Same collection event as the parent; an undated parent must not match a dated specimen.
+  where = and(
+    where,
+    parentSpecimen.collectionDate
+      ? eq(specimen.collectionDate, parentSpecimen.collectionDate)
+      : isNull(specimen.collectionDate),
+  )!
 
   const existing = await database
     .select()

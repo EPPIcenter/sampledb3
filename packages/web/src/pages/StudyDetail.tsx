@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useHotkey } from '../hooks/useHotkey'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { studiesApi } from '../lib/api/studies'
+import { invalidateAfterBulkWrite } from '../lib/query-client'
 import type { StudySubject } from '../lib/api/types'
 import StudyDetailHeader from '../components/StudyDetailHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -208,6 +209,9 @@ export default function StudyDetail() {
     setDeleteInProgress(true)
     try {
       await studiesApi.delete(study.id)
+      queryClient.removeQueries({ queryKey: studyKeys.detail(study.id) })
+      // The cascade removes subjects, specimens, and containers across the app.
+      void invalidateAfterBulkWrite(queryClient)
       setDeleteModalOpen(false)
       setDeleteConfirmInput('')
       navigate('/studies?deleted=1')
@@ -258,7 +262,7 @@ export default function StudyDetail() {
   ]
 
   const canDelete =
-    isAdmin || study.shortCode.toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX)
+    isAdmin || (canWrite && study.shortCode.toUpperCase().startsWith(TUTORIAL_SHORT_CODE_PREFIX))
 
   const showTimelineTab =
     study.isLongitudinal || (timelineStatus === 'ready' && timeline?.dateRange != null)

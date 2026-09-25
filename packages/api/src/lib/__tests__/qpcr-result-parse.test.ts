@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { parseBioradCsv } from '../qpcr-result-parse'
+import * as XLSX from 'xlsx'
+import { parseBioradCsv, parseQuantStudioXls } from '../qpcr-result-parse'
 
 describe('qpcr-result-parse', () => {
   describe('parseBioradCsv', () => {
@@ -55,6 +56,25 @@ describe('qpcr-result-parse', () => {
       expect(byWell['A07']?.standardQuantity).toBeNull()
     })
 
+    it('maps the Content values our own template writes (NTC, Std, Unk) and Std-01 style', () => {
+      const csv = [
+        'Well,Content,Sample,Cq,Starting Quantity (SQ)',
+        'A1,NTC,,,',
+        'A2,Std,,14.0,250',
+        'A3,Std-01,,12.5,',
+        'A4,Unk,S1,20.0,',
+        'A5,Pos Ctrl,,18.0,',
+      ].join('\n')
+      const byWell = Object.fromEntries(parseBioradCsv(csv, 'test.csv').wellResults.map((r) => [r.wellPosition, r]))
+      expect(byWell['A01']?.task).toBe('NTC')
+      expect(byWell['A02']?.task).toBe('STANDARD')
+      expect(byWell['A02']?.standardQuantity).toBe(250)
+      expect(byWell['A03']?.task).toBe('STANDARD')
+      expect(byWell['A03']?.standardQuantity).toBe(10000)
+      expect(byWell['A04']?.task).toBe('UNKNOWN')
+      expect(byWell['A05']?.task).toBe('UNKNOWN')
+    })
+
     it('normalizes well position to A01 style', () => {
       const csv = [
         'Well,Content,Sample,Cq,Starting Quantity (SQ)',
@@ -86,6 +106,35 @@ describe('qpcr-result-parse', () => {
       expect(row.sampleBarcode).toBe('BARCODE-001')
       expect(row.cq).toBe(20.5)
       expect(row.quantity).toBe(3.2)
+    })
+  })
+
+  describe('parseQuantStudioXls', () => {
+    function xlsBuffer(sheets: Record<string, unknown[][]>): Buffer {
+      const wb = XLSX.utils.book_new()
+      for (const [name, rows] of Object.entries(sheets)) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name)
+      }
+      return XLSX.write(wb, { type: 'buffer', bookType: 'xls' }) as Buffer
+    }
+
+    it('reads Well Position, not the numeric Well column, in results and amplification sheets', async () => {
+      const buffer = xlsBuffer({
+        Results: [
+          ['Well', 'Well Position', 'Sample Name', 'Task', 'CT'],
+          [1, 'A1', 'S1', 'UNKNOWN', 22.1],
+          [13, 'B1', 'S2', 'NTC', 'Undetermined'],
+        ],
+        'Amplification Data': [
+          ['Well', 'Well Position', 'Cycle', 'Rn', 'Delta Rn'],
+          [1, 'A1', 1, 0.5, 0.01],
+        ],
+      })
+
+      const result = await parseQuantStudioXls(buffer, 'run.xls')
+
+      expect(result.wellResults.map((r) => r.wellPosition)).toEqual(['A01', 'B01'])
+      expect(result.amplificationData[0]?.wellPosition).toBe('A01')
     })
   })
 })

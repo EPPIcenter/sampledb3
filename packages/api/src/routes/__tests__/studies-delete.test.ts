@@ -14,7 +14,15 @@ import {
   createTestStorageContainer,
 } from '../../__tests__/helpers/factories'
 import { eq } from 'drizzle-orm'
-import { study, studySubject, specimen, storageContainer, specimenTypeContainerType } from '../../db/schema'
+import {
+  study,
+  studySubject,
+  specimen,
+  storageContainer,
+  specimenTypeContainerType,
+  qpcrExperiment,
+  qpcrExperimentWell,
+} from '../../db/schema'
 
 describe('Studies DELETE (cascade)', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -34,6 +42,13 @@ describe('Studies DELETE (cascade)', () => {
           name: 'Member',
           password: 'password123',
           role: 'member',
+        },
+        {
+          key: 'viewer',
+          email: 'viewer@test.com',
+          name: 'Viewer',
+          password: 'password123',
+          role: 'viewer',
         },
       ],
       mount: (app, { db, sqlite }) => {
@@ -109,6 +124,33 @@ describe('Studies DELETE (cascade)', () => {
 
     const remainingContainers = await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, testContainer.id))
     expect(remainingContainers.length).toBe(0)
+  })
+
+  it('returns 409 and keeps the study when its containers are used in a qPCR experiment', async () => {
+    const testSpecimenType = await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+    const testStudy = await createTestStudy(ctx.db, { title: 'Study In qPCR', shortCode: 'QPCR01' })
+    const testSubject = await createTestStudySubject(ctx.db, { studyId: testStudy.id, name: 'Subject A' })
+    const testSpecimen = await createTestSpecimen(ctx.db, testSpecimenType.id, { studySubjectId: testSubject.id })
+    const testUnit = await createTestUnit(ctx.db, { symbol: 'uL', name: 'microliter', category: 'volume' })
+    const testContainer = await createTestStorageContainer(ctx.db, { specimenId: testSpecimen.id, unitId: testUnit.id })
+    const [exp] = await ctx.db
+      .insert(qpcrExperiment)
+      .values({ name: 'Plate run', templateFormat: 'biorad', status: 'results_uploaded' })
+      .returning()
+    await ctx.db.insert(qpcrExperimentWell).values({
+      qpcrExperimentId: exp.id,
+      wellPosition: 'A01',
+      storageContainerId: testContainer.id,
+      specimenId: testSpecimen.id,
+    })
+
+    const res = await ctx.request(`/api/studies/${testStudy.id}`, { method: 'DELETE' })
+
+    expect(res.status).toBe(409)
+    const data = (await res.json()) as { error?: string }
+    expect(data.error).toContain("'Plate run'")
+    expect(await ctx.db.select().from(study).where(eq(study.id, testStudy.id))).toHaveLength(1)
+    expect(await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, testContainer.id))).toHaveLength(1)
   })
 
   it('returns 404 when study does not exist', async () => {
@@ -189,6 +231,74 @@ describe('Studies DELETE (cascade)', () => {
 
     const remaining = await ctx.db.select().from(study).where(eq(study.id, testStudy.id))
     expect(remaining.length).toBe(0)
+  })
+
+  it('returns 403 when viewer deletes tutorial study', async () => {
+    const testStudy = await createTestStudy(ctx.db, {
+      title: 'Viewer Tutorial Study',
+      shortCode: 'TUT02',
+    })
+
+    const res = await ctx.request(`/api/studies/${testStudy.id}`, {
+      method: 'DELETE',
+      cookie: ctx.cookies.viewer,
+    })
+
+    expect(res.status).toBe(403)
+    const remaining = await ctx.db.select().from(study).where(eq(study.id, testStudy.id))
+    expect(remaining.length).toBe(1)
+  })
+
+  it('returns 403 when member renames a study into the tutorial namespace', async () => {
+    const testStudy = await createTestStudy(ctx.db, {
+      title: 'Production Study',
+      shortCode: 'PROD01',
+    })
+
+    const res = await ctx.request(`/api/studies/${testStudy.id}`, {
+      method: 'PUT',
+      cookie: ctx.cookies.member,
+      json: { shortCode: 'TUTX' },
+    })
+
+    expect(res.status).toBe(403)
+    const [row] = await ctx.db.select().from(study).where(eq(study.id, testStudy.id))
+    expect(row.shortCode).toBe('PROD01')
+  })
+
+  it('returns 403 when member renames a tutorial study out of the tutorial namespace', async () => {
+    const testStudy = await createTestStudy(ctx.db, {
+      title: 'Tutorial To Keep',
+      shortCode: 'TUT03',
+    })
+
+    const res = await ctx.request(`/api/studies/${testStudy.id}`, {
+      method: 'PUT',
+      cookie: ctx.cookies.member,
+      json: { shortCode: 'KEEP03' },
+    })
+
+    expect(res.status).toBe(403)
+  })
+
+  it('allows member to rename within the same namespace and admin to cross it', async () => {
+    const testStudy = await createTestStudy(ctx.db, {
+      title: 'Rename Study',
+      shortCode: 'TUT04',
+    })
+
+    const memberRes = await ctx.request(`/api/studies/${testStudy.id}`, {
+      method: 'PUT',
+      cookie: ctx.cookies.member,
+      json: { shortCode: 'tut-04b' },
+    })
+    expect(memberRes.status).toBe(200)
+
+    const adminRes = await ctx.request(`/api/studies/${testStudy.id}`, {
+      method: 'PUT',
+      json: { shortCode: 'REAL04' },
+    })
+    expect(adminRes.status).toBe(200)
   })
 
   it('returns 400 when study ID is invalid', async () => {

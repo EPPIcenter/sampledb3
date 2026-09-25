@@ -10,6 +10,8 @@ services:
       PORT: 3000
       DATABASE_PATH: ${DATABASE_PATH:-/data/sampledb.sqlite}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      # Port is bound to 127.0.0.1, so only the reverse proxy (Caddy) can reach the app.
+      TRUST_PROXY: ${TRUST_PROXY:-true}
       ERROR_LOG_ENABLED: ${ERROR_LOG_ENABLED:-true}
       ERROR_LOG_LEVEL: ${ERROR_LOG_LEVEL:-error}
       ERROR_LOG_RETENTION_DAYS: ${ERROR_LOG_RETENTION_DAYS:-}

@@ -20,6 +20,7 @@ import {
 import {
   specimenTypeContainerType,
   containerTypeUnit,
+  unit,
   cryovialBox,
   micronixPlate,
   specimen,
@@ -419,6 +420,27 @@ describe('Specimens API', () => {
       expect(tubes).toHaveLength(1)
       expect(tubes[0].barcode).toBe('ADD-TUBE-001')
       expect(tubes[0].position).toBe('A01')
+    })
+
+    it('accepts unitId and quantities from container defaults (web payload)', async () => {
+      const [uL] = await ctx.db.select().from(unit).where(eq(unit.symbol, 'uL'))
+      const res = await ctx.request(`/api/specimens/${testSpecimen.id}/containers`, {
+        method: 'POST',
+        json: {
+          containerType: 'micronix_tube',
+          barcode: 'ADD-TUBE-QTY',
+          collection: { type: 'micronix_plate', name: 'ADD-PLATE', position: 'A02' },
+          unitId: uL.id,
+          totalQuantity: 5,
+          remainingQuantity: 4,
+        },
+      })
+      expect(res.status).toBe(201)
+      const data = (await res.json()) as { containerId: number }
+      const [container] = await ctx.db.select().from(storageContainer).where(eq(storageContainer.id, data.containerId))
+      expect(container.unitId).toBe(uL.id)
+      expect(container.totalQuantity).toBe(5)
+      expect(container.remainingQuantity).toBe(4)
     })
 
     it('returns 404 when specimen does not exist', async () => {

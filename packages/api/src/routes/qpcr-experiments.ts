@@ -660,7 +660,8 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
         deduped.set(key, row)
       }
       for (const row of deduped.values()) {
-        const targetKey = row.targetName
+        // Must match the amplification lookup below, which uses '' for a missing target.
+        const targetKey = row.targetName ?? ''
         const [inserted] = await database
           .insert(qpcrWellResult)
           .values({

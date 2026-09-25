@@ -134,7 +134,7 @@ export async function validateBulkCombinedPayload(
 
       const dateValidation = validateCollectionDate(spec.collectionDate)
       if (!dateValidation.valid) {
-        add(subjectIndex, specimenIndex, dateValidation.error ?? 'Invalid collection date', rowIndex)
+        add(subjectIndex, specimenIndex, dateValidation.error, rowIndex)
         continue
       }
 
@@ -153,7 +153,7 @@ export async function validateBulkCombinedPayload(
 
       resolvedForPrepare.push({
         specimenTypeId,
-        collectionDate: spec.collectionDate,
+        collectionDate: dateValidation.normalized,
         container: spec.container,
         specimenIndex,
         rowIndex,

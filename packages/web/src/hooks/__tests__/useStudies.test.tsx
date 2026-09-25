@@ -9,6 +9,7 @@ import {
   useStudySubjects,
   useCreateStudy,
   useUpdateStudy,
+  studyKeys,
 } from '../useStudies'
 import { studiesApi } from '../../lib/api/studies'
 
@@ -199,6 +200,25 @@ describe('useStudies Hooks', () => {
       expect(studiesApi.create).toHaveBeenCalled()
       expect(result.current.data).toEqual(mockCreated.study)
       expect(invalidateSpy).toHaveBeenCalled()
+    })
+
+    it('invalidates the Studies page infinite list (limit 50)', async () => {
+      vi.mocked(studiesApi.create).mockResolvedValue({
+        study: { id: 4, title: 'T', shortCode: 'T4', isLongitudinal: false, leadPerson: 'L', created: '2024-01-01', lastUpdated: '2024-01-01' },
+      })
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+      queryClient.setQueryData(studyKeys.infinite(50), { pages: [], pageParams: [] })
+      const wrapper = ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>
+          <ToastProvider>{children}</ToastProvider>
+        </QueryClientProvider>
+      )
+
+      const { result } = renderHook(() => useCreateStudy(), { wrapper })
+      result.current.mutate({ title: 'T', shortCode: 'T4', isLongitudinal: false, leadPerson: 'L' })
+      await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+      expect(queryClient.getQueryState(studyKeys.infinite(50))?.isInvalidated).toBe(true)
     })
   })
 

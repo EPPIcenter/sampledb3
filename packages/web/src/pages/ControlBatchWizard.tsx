@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useParams, useSearchParams, Navigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateAfterBulkWrite } from '../lib/query-client'
 import BatchInfoStep from '../components/wizards/BatchInfoStep'
 import SpecimenTypesStep from '../components/wizards/SpecimenTypesStep'
 import CSVUploadStep from '../components/wizards/CSVUploadStep'
@@ -103,6 +105,7 @@ export function canProceedToReview(
 
 export default function ControlBatchWizard() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { canWrite } = useUser()
   const { id: batchId, definitionId, compositionKey: compositionKeyParam } = useParams<{
     id?: string
@@ -520,6 +523,8 @@ export default function ControlBatchWizard() {
             onBack={() => setStep('containers')}
             onCancel={() => navigate(getCancelTarget())}
             onSuccess={(batchId) => {
+              // New batches, specimens, and containers.
+              void invalidateAfterBulkWrite(queryClient)
               navigate(`/blood-controls/batches/${batchId}`)
             }}
             isAddMode={isAddMode}

@@ -88,7 +88,7 @@ export default function StudyForm({ study, onSuccess, onCancel }: StudyFormProps
 
       {!study && formData.shortCode && isTutorialNamespace(formData.shortCode) && (
         <div className="bg-app-standard-muted border border-app-standard/50 text-app-standard px-4 py-3 rounded" role="alert">
-          Studies whose short code starts with &quot;{TUTORIAL_SHORT_CODE_PREFIX}&quot; can be deleted by any user. Consider using a different code for production data.
+          Studies whose short code starts with &quot;{TUTORIAL_SHORT_CODE_PREFIX}&quot; can be deleted by any member. Consider using a different code for production data.
         </div>
       )}
 

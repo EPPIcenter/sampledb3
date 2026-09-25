@@ -217,6 +217,37 @@ describe('Auth API', () => {
     })
   })
 
+  describe('POST /api/auth/switch', () => {
+    const switchTo = (json: { userId: number; password: string }) =>
+      authenticatedRequest(app, '/api/auth/switch', { method: 'POST', cookie: adminCookieHeader, json })
+
+    it('answers a missing user and a wrong password the same way', async () => {
+      const target = await createTestUser(testDb, { email: 'target@test.com', name: 'Target', password: 'password123' })
+
+      const missing = await switchTo({ userId: 99999, password: 'guess' })
+      const wrong = await switchTo({ userId: target.id, password: 'guess' })
+
+      expect(missing.status).toBe(401)
+      expect(wrong.status).toBe(401)
+      expect(await missing.json()).toEqual(await wrong.json())
+    })
+
+    it('reports pending approval only after the password is correct', async () => {
+      const pending = await createTestUser(testDb, {
+        email: 'pending-switch@test.com',
+        name: 'Pending',
+        password: 'password123',
+        approvedAt: null,
+      })
+
+      const wrong = (await (await switchTo({ userId: pending.id, password: 'guess' })).json()) as ErrorResponse
+      const right = (await (await switchTo({ userId: pending.id, password: 'password123' })).json()) as ErrorResponse
+
+      expect(wrong.error).toBe('Invalid password')
+      expect(right.error).toBe('Account pending approval')
+    })
+  })
+
   describe('POST /api/auth/self-register', () => {
     it('should create user with approvedAt null', async () => {
       const client = createTestClient(app)

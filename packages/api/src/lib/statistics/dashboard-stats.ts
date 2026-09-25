@@ -354,11 +354,8 @@ export async function getDashboardStatistics(
     const finalContainerIds = finalContainers.map((c) => c.id)
 
     if (containerType || tagFilteredContainerIds || hasLocationFilter) {
-      const filteredSpecimenIds = [...new Set(finalContainers.map(c => c.specimenId))]
-      const adjustedSpecimens =
-        filteredSpecimenIds.length > 0
-          ? filteredSpecimens.filter((s) => new Set(filteredSpecimenIds).has(s.id))
-          : []
+      const filteredSpecimenIds = new Set(finalContainers.map(c => c.specimenId))
+      const adjustedSpecimens = filteredSpecimens.filter((s) => filteredSpecimenIds.has(s.id))
 
       specimenAggregates = await computeSpecimenAggregates(database, adjustedSpecimens, {
         studyCode,

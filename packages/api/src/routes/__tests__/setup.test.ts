@@ -59,9 +59,14 @@ describe('Setup Route', () => {
         body: JSON.stringify(setupData),
       })
 
-      expect(res.status).toBe(500)
+      expect(res.status).toBe(400)
       const body = await res.json() as { error?: string }
       expect(body.error).toContain('unit')
+
+      // Nothing is written, so setup can be retried.
+      expect(await testDb.select().from(users).all()).toHaveLength(0)
+      const status = await app.request('/setup/status')
+      expect(await status.json()).toEqual({ initialized: false })
     })
 
     it('should validate all critical data was created', async () => {
@@ -118,7 +123,13 @@ describe('Setup Route', () => {
         adminPassword: 'password123',
         storageTypes: [{ name: 'Freezer' }],
         specimenTypes: [{ name: 'Blood' }],
-        units: [{ name: 'items', symbol: 'items', category: 'count' }],
+        units: [
+          { name: 'items', symbol: 'items', category: 'count' },
+          { name: 'spots', symbol: 'spots', category: 'count' },
+          { name: 'tubes', symbol: 'tubes', category: 'count' },
+          { name: 'microliter', symbol: 'µL', category: 'volume' },
+          { name: 'milliliter', symbol: 'mL', category: 'volume' },
+        ],
         locations: [
           {
             name: 'Location 1',
@@ -135,9 +146,10 @@ describe('Setup Route', () => {
       })
 
       // Should fail because storage type not found
-      expect(res.status).toBe(500)
+      expect(res.status).toBe(400)
       const body = await res.json() as { error?: string }
-      expect(body.error).toBeDefined()
+      expect(body.error).toContain('NonExistentStorageType')
+      expect(await testDb.select().from(users).all()).toHaveLength(0)
     })
 
     it('should succeed when all data is valid', async () => {

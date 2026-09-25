@@ -8,7 +8,7 @@ import {
   specimen,
   specimenType,
 } from '../db/schema'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { findExistingStudySpecimen } from './specimen-helpers'
 import {
   validateStudyShortCode,
@@ -32,6 +32,7 @@ import {
   toContainerWriteInput,
   type BulkCombinedContainerInput,
 } from './container-write-placement'
+import { withWriteTransaction } from '../db/write-transaction'
 
 export type { BulkCombinedContainerInput }
 
@@ -78,11 +79,10 @@ interface PreparedSubject {
 }
 
 async function revalidatePreparedSubjectInTx(
-  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+  tx: Database,
   prepared: PreparedSubject,
   subjectIndex: number
 ): Promise<void> {
-  const dbTx = tx as unknown as Database
   const subjectLabel = `subject ${subjectIndex + 1} ('${prepared.trimmedName}')`
 
   if (prepared.existingSubjectId) {
@@ -103,7 +103,7 @@ async function revalidatePreparedSubjectInTx(
     if (spec.container?.containerType) {
       const container = spec.container
       const containerTypeValidation = await validateContainerTypeForSpecimenType(
-        dbTx,
+        tx,
         spec.specimenTypeId,
         container.containerType
       )
@@ -111,7 +111,7 @@ async function revalidatePreparedSubjectInTx(
         throw new ValidationError(`${specimenLabel}: ${containerTypeValidation.error ?? 'invalid container type for specimen type'}`)
       }
       const unitValidation = await validateUnitForContainerType(
-        dbTx,
+        tx,
         container.containerType,
         prepared.preparedContainers[i].unitId
       )
@@ -125,7 +125,7 @@ async function revalidatePreparedSubjectInTx(
         throw new ValidationError(`${specimenLabel}: ${fieldValidation.error ?? 'Invalid container data'}`)
       }
       try {
-        await assertWriteInputPlacementResolvable(dbTx, writeInput, prepared.collectionMap)
+        await assertWriteInputPlacementResolvable(tx, writeInput, prepared.collectionMap)
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Invalid container placement'
         throw new ValidationError(`${specimenLabel}: ${message}`)
@@ -161,11 +161,11 @@ export async function prepareSubjectWithSpecimens(
     }
     const dateValidation = validateCollectionDate(spec.collectionDate)
     if (!dateValidation.valid) {
-      throw new ValidationError(dateValidation.error ?? 'Invalid collection date', { specimenIndex: i })
+      throw new ValidationError(dateValidation.error, { specimenIndex: i })
     }
     resolvedSpecimens.push({
       specimenTypeId,
-      collectionDate: spec.collectionDate,
+      collectionDate: dateValidation.normalized,
       container: spec.container,
     })
   }
@@ -213,18 +213,23 @@ export async function prepareSubjectWithSpecimens(
 }
 
 export async function createSubjectWithSpecimensInTx(
-  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+  tx: Database,
   prepared: PreparedSubject,
   userId: number | undefined,
   now: string
 ): Promise<OneSubjectResult> {
-  const dbTx = tx as unknown as Database
   const { studyId, existingSubjectId, trimmedName, resolvedSpecimens, preparedContainers, collectionMap } = prepared
 
   let subjectId: number
   let subject: typeof studySubject.$inferSelect
-  if (existingSubjectId) {
-    const existing = tx.select().from(studySubject).where(eq(studySubject.id, existingSubjectId)).get()
+  // A subject prepared as new may already exist by now: an earlier entry in the same file
+  // with the same trimmed name, or a concurrent import. Reuse it (names are unique per study).
+  const alreadyInStudy = existingSubjectId
+    ? undefined
+    : tx.select().from(studySubject).where(and(eq(studySubject.studyId, studyId), eq(studySubject.name, trimmedName))).get()
+  const reuseSubjectId = existingSubjectId ?? alreadyInStudy?.id ?? null
+  if (reuseSubjectId) {
+    const existing = alreadyInStudy ?? tx.select().from(studySubject).where(eq(studySubject.id, reuseSubjectId)).get()
     if (!existing) throw new Error('Subject not found')
     subject = existing
     subjectId = existing.id
@@ -253,7 +258,7 @@ export async function createSubjectWithSpecimensInTx(
   for (let i = 0; i < resolvedSpecimens.length; i++) {
     const spec = resolvedSpecimens[i]
     const preparedContainer = preparedContainers[i]
-    const existingSpecimen = findExistingStudySpecimen(dbTx, subjectId, spec.specimenTypeId, spec.collectionDate)
+    const existingSpecimen = findExistingStudySpecimen(tx, subjectId, spec.specimenTypeId, spec.collectionDate)
     let specimenRecord: typeof specimen.$inferSelect
     let specimenCreated: boolean
     if (existingSpecimen) {
@@ -306,7 +311,7 @@ export async function createSubjectWithSpecimensInTx(
     })
   }
 
-  const subjectCreated = !existingSubjectId
+  const subjectCreated = !reuseSubjectId
   return {
     subject,
     subjectCreated,
@@ -332,7 +337,7 @@ export async function runOneSubjectWithSpecimens(
     payload.specimens
   )
   const now = utcNow()
-  return database.transaction(async (tx) => {
+  return withWriteTransaction(database, async (tx) => {
     return createSubjectWithSpecimensInTx(tx, prepared, userId, now)
   })
 }
@@ -438,7 +443,7 @@ export async function runBulkCombinedImport(
   }
 
   const now = utcNow()
-  const fullResults = await database.transaction(async (tx) => {
+  const fullResults = await withWriteTransaction(database, async (tx) => {
     for (let i = 0; i < allPrepared.length; i++) {
       await revalidatePreparedSubjectInTx(tx, allPrepared[i], i)
     }

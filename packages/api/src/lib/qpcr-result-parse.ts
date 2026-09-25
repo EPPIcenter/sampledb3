@@ -56,17 +56,25 @@ function parseNum(v: string): number | null {
   return n
 }
 
-/** Map Biorad Content (Std-1, Std-2, ... Neg Ctrl-6, Unkn) to task and standard_quantity */
+/** Legacy Std-N dilution series, used only when the file has no Starting Quantity (SQ). */
+const BIORAD_STD_QUANTITY: Record<number, number> = { 1: 10000, 2: 1000, 3: 100, 4: 10, 5: 1 }
+
+/** Map Biorad Content (NTC, Neg Ctrl, Std, Std-01, Unkn, ...) to task and standard_quantity */
 function bioradContentToTask(content: string): { task: string; standardQuantity: number | null } {
   const c = (content || '').trim().toLowerCase()
-  if (c.includes('neg') || c.includes('ctrl')) return { task: 'NTC', standardQuantity: null }
-  if (c.includes('std-1') || c === 'std-1') return { task: 'STANDARD', standardQuantity: 10000 }
-  if (c.includes('std-2') || c === 'std-2') return { task: 'STANDARD', standardQuantity: 1000 }
-  if (c.includes('std-3') || c === 'std-3') return { task: 'STANDARD', standardQuantity: 100 }
-  if (c.includes('std-4') || c === 'std-4') return { task: 'STANDARD', standardQuantity: 10 }
-  if (c.includes('std-5') || c === 'std-5') return { task: 'STANDARD', standardQuantity: 1 }
-  if (c.includes('unkn')) return { task: 'UNKNOWN', standardQuantity: null }
+  if (c.startsWith('ntc') || c.startsWith('neg')) return { task: 'NTC', standardQuantity: null }
+  if (c.startsWith('std')) {
+    const n = c.match(/^std-0*(\d+)$/)
+    return { task: 'STANDARD', standardQuantity: n ? (BIORAD_STD_QUANTITY[Number(n[1])] ?? null) : null }
+  }
   return { task: 'UNKNOWN', standardQuantity: null }
+}
+
+/** QuantStudio exports both a numeric "Well" and a "Well Position" (A1) column; prefer the latter. */
+function findWellPositionColumn(headers: string[]): number {
+  const exact = headers.findIndex((h) => /^\s*well position\s*$/i.test(h))
+  if (exact >= 0) return exact
+  return headers.findIndex((h) => /well position|well/i.test(h))
 }
 
 /**
@@ -192,7 +200,7 @@ export async function parseQuantStudioXls(buffer: Buffer, fileName: string): Pro
       if (rowStr.includes('well') && (rowStr.includes('ct') || rowStr.includes('sample'))) {
         headerRowIdx = r
         const headers = row.map((c) => String(c))
-        wellPosIdx = headers.findIndex((h) => /well position|well/i.test(h))
+        wellPosIdx = findWellPositionColumn(headers)
         sampleIdx = headers.findIndex((h) => /sample name/i.test(h))
         taskIdx = headers.findIndex((h) => /task/i.test(h))
         ctIdx = headers.findIndex((h) => /^ct$|ct mean/i.test(h))
@@ -252,7 +260,7 @@ export async function parseQuantStudioXls(buffer: Buffer, fileName: string): Pro
       if (rowStr.includes('cycle') && (rowStr.includes('rn') || rowStr.includes('delta'))) {
         headerRowIdx = r
         const headers = row.map((c) => String(c))
-        wellPosIdx = headers.findIndex((h) => /well position|well/i.test(h))
+        wellPosIdx = findWellPositionColumn(headers)
         cycleIdx = headers.findIndex((h) => /cycle/i.test(h))
         targetIdx = headers.findIndex((h) => /target name/i.test(h))
         rnIdx = headers.findIndex((h) => /^rn$|^rn\s/i.test(h))

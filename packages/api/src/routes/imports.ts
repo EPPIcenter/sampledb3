@@ -23,7 +23,8 @@ export function createImportsRoutes(database: Database): Hono {
 const bulkDerivationSettingsSchema = z.object({
   derivationType: z.string(),
   specimenTypeName: z.string(),
-  containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper']),
+  // '' means the column comes from the CSV per row, like the other settings.
+  containerType: z.enum(['micronix_tube', 'cryovial_tube', 'paper', '']),
   protocol: z.string(),
   derivationDate: z.string(),
   quantity: z.number().optional(),

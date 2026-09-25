@@ -3,7 +3,6 @@ import {
   bulkCombinedContainerSchema,
   bulkCombinedRequestSchema,
   bulkCombinedValidateRequestSchema,
-  containerWriteInputSchema,
   optionalContainerInputSchema,
 } from '@sampledb/contract'
 
@@ -13,16 +12,10 @@ export {
 } from '@sampledb/contract'
 
 /**
- * Container schema for single specimen creation (POST /).
+ * Container schema for POST /specimens and POST /specimens/:id/containers.
  * Unified ContainerWriteInput shape (ADR 0006); resolves existing collections by id/name/barcode only.
  */
 export const containerSchema = optionalContainerInputSchema
-
-/**
- * Container schema for POST /specimens/:id/containers (add container to existing specimen).
- * Unified ContainerWriteInput shape (ADR 0006).
- */
-export const containerSchemaRequired = containerWriteInputSchema
 
 /**
  * Extended container schema for bulk endpoints (POST /bulk, imports).

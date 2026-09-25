@@ -17,8 +17,19 @@ import {
 import type { Database } from '../db/client'
 import { utcNow } from '../lib/datetime'
 import { handleRouteError } from '../lib/error-handler'
+import { withWriteTransaction } from '../db/write-transaction'
 // Note: Defaults are only used in the frontend Setup.tsx
 // Backend requires all data to be provided via the API
+
+/** Unit symbols the container type / unit relationships are seeded from. */
+const REQUIRED_UNIT_SYMBOLS = ['items', 'spots', 'tubes', 'µL', 'mL']
+
+class SetupRejectedError extends Error {
+  constructor(message: string, readonly status: 400 | 500, readonly details?: string) {
+    super(message)
+    this.name = 'SetupRejectedError'
+  }
+}
 
 export function createSetupRoutes(database: Database) {
   const setupRoutes = new Hono()
@@ -66,337 +77,362 @@ const initSchema = z.object({
         strains
       } = initSchema.parse(body)
 
-      // Double check initialization status to prevent overwrites
-      const userCount = await database.select({ count: sql<number>`count(*)` }).from(users).get()
-      if ((userCount?.count || 0) > 0) {
+      const existingUsers = await database.select({ count: sql<number>`count(*)` }).from(users).get()
+      if ((existingUsers?.count || 0) > 0) {
         return c.json({ error: 'System already initialized' }, 400)
       }
 
-      // 1. Create Admin User
-      const createdAt = utcNow()
-      const passwordHash = await bcrypt.hash(adminPassword, 10)
-      await database.insert(users).values({
-        id: 1,
-        name: adminName,
-        email: adminEmail,
-        passwordHash,
-        role: 'admin',
-        createdAt,
-        approvedAt: createdAt, // Setup admin is immediately approved
-      })
-
-      const now = utcNow()
-
-      // 2. Storage Types (must be created first for location references)
+      // Validate the whole payload before writing, so a bad request cannot leave an
+      // admin user behind (which marks the system initialized) without the rest of setup.
       if (!storageTypes || storageTypes.length === 0) {
         return c.json({ error: 'At least one storage type is required' }, 400)
       }
-      const storageTypesToInsert = storageTypes
-      const storageTypeMap = new Map<string, number>() // name -> id mapping
-      
-      if (storageTypesToInsert.length > 0) {
-        // Insert storage types and capture their IDs
-        for (const s of storageTypesToInsert) {
-          const existing = await database.select().from(storageType).where(eq(storageType.name, s.name)).get()
-          if (existing) {
-            storageTypeMap.set(s.name, existing.id)
-          } else {
-            const result = await database.insert(storageType).values({
-              name: s.name,
-              description: s.description
-            }).returning()
-            if (result.length > 0 && result[0]) {
-              storageTypeMap.set(s.name, result[0].id)
-            }
-          }
-        }
-      }
-      
-
-      // 3. Specimen Types
       if (!specimenTypes || specimenTypes.length === 0) {
         return c.json({ error: 'At least one specimen type is required' }, 400)
       }
-      const specimenTypesToInsert = specimenTypes
-      
-      await database.insert(specimenType).values(specimenTypesToInsert.map(s => ({
-        name: s.name,
-        created: now,
-        lastUpdated: now
-      }))).onConflictDoNothing()
-      console.log(`✅ Inserted ${specimenTypesToInsert.length} specimen types`)
-
-      // 4. Units
       if (!units || units.length === 0) {
         return c.json({ error: 'At least one unit is required' }, 400)
       }
-      const unitsToInsert = units
-      if (unitsToInsert.length > 0) {
-        await database.insert(unit).values(unitsToInsert.map(u => ({
-          name: u.name,
-          symbol: u.symbol,
-          category: u.category
-        }))).onConflictDoNothing()
-      }
-
-      // 5. Strains (Optional)
-      if (strains && strains.length > 0) {
-        for (const s of strains) {
-          const existing = await database.select().from(strain).where(eq(strain.name, s.name)).get()
-          if (!existing) {
-            await database.insert(strain).values({
-              name: s.name,
-              description: s.description
-            }).onConflictDoNothing()
-          }
-        }
-      }
-
-      // 6. Locations (Root) - must resolve storage type IDs
-      if (locations && locations.length > 0) {
-        const locationValues = locations.map((l, i) => {
-          // Create a copy of the location to avoid mutation issues
-          const location = { ...l }
-          let resolvedStorageTypeId: string | null = null
-          if (location.storageTypeId) {
-            // Frontend sends storage type name, look it up
-            const storageTypeId = storageTypeMap.get(location.storageTypeId)
-            if (storageTypeId) {
-              resolvedStorageTypeId = String(storageTypeId)
-            } else {
-              // Fail if storage type not found by name - don't fall back
-              throw new Error(`Storage type '${location.storageTypeId}' not found for location '${location.name}'. Please provide a valid storage type name.`)
-            }
-          } else if (storageTypeMap.size > 0) {
-            // Use first storage type as default if none specified
-            // This is a fallback - log a warning so user is aware
-            const firstStorageTypeId = Array.from(storageTypeMap.values())[0]
-            const firstStorageTypeName = Array.from(storageTypeMap.entries()).find(([_, id]) => id === firstStorageTypeId)?.[0] || 'unknown'
-            console.warn(`⚠️  Location '${location.name}' has no storage type specified. Using first available storage type '${firstStorageTypeName}' as default. Consider explicitly setting a storage type.`)
-            resolvedStorageTypeId = String(firstStorageTypeId)
-          } else {
-            throw new Error(`No storage types available for location '${location.name}'. At least one storage type must be created.`)
-          }
-          
-          return {
-            id: i + 1,
-            parentId: null,
-            name: location.name,
-            storageTypeId: resolvedStorageTypeId,
-            description: location.description,
-            canContainCollections: false, // Root locations typically don't hold collections directly
-            path: location.name, // Root location path is just its name
-            created: now,
-            lastUpdated: now
-          }
-        })
-        await database.insert(location).values(locationValues).onConflictDoNothing()
-      }
-
-      // 7. Seed constraint relationships - container type / unit relationships
-      // Get unit IDs for container type / unit relationships
-      const itemsUnit = await database.select().from(unit).where(eq(unit.symbol, 'items')).get()
-      const spotsUnit = await database.select().from(unit).where(eq(unit.symbol, 'spots')).get()
-      const tubesUnit = await database.select().from(unit).where(eq(unit.symbol, 'tubes')).get()
-      const ulUnit = await database.select().from(unit).where(eq(unit.symbol, 'µL')).get()
-      const mlUnit = await database.select().from(unit).where(eq(unit.symbol, 'mL')).get()
-      
-      // Validate all required units exist before creating relationships
-      const missingUnits: string[] = []
-      if (!itemsUnit) missingUnits.push('items')
-      if (!spotsUnit) missingUnits.push('spots')
-      if (!tubesUnit) missingUnits.push('tubes')
-      if (!ulUnit) missingUnits.push('µL')
-      if (!mlUnit) missingUnits.push('mL')
-      
+      const providedUnitSymbols = new Set(units.map((u) => u.symbol))
+      const missingUnits = REQUIRED_UNIT_SYMBOLS.filter((symbol) => !providedUnitSymbols.has(symbol))
       if (missingUnits.length > 0) {
-        return c.json({ 
-          error: `Required units not found: ${missingUnits.join(', ')}. Please ensure all required units are created during setup.` 
-        }, 500)
+        return c.json({
+          error: `Required units not found: ${missingUnits.join(', ')}. Please ensure all required units are created during setup.`
+        }, 400)
       }
-      
-      // TypeScript now knows all units are defined after the check above
-      // Insert container type / unit relationships
-      await database.insert(containerTypeUnit).values([
-        { containerType: 'paper', unitId: spotsUnit!.id as number },
-        { containerType: 'cryovial_tube', unitId: itemsUnit!.id as number },
-        { containerType: 'cryovial_tube', unitId: tubesUnit!.id as number },
-        { containerType: 'cryovial_tube', unitId: ulUnit!.id as number },
-        { containerType: 'cryovial_tube', unitId: mlUnit!.id as number },
-        { containerType: 'micronix_tube', unitId: itemsUnit!.id as number },
-        { containerType: 'micronix_tube', unitId: ulUnit!.id as number },
-        { containerType: 'micronix_tube', unitId: mlUnit!.id as number },
-        { containerType: 'static_well', unitId: spotsUnit!.id as number }
-      ]).onConflictDoNothing()
-
-      // 8. Create specimen type / container type relationships
-      const allSpecimenTypes = await database.select().from(specimenType).all()
-      const specimenTypeMap = new Map<string, number>()
-      allSpecimenTypes.forEach(st => {
-        specimenTypeMap.set(st.name, st.id)
-      })
-      
-      console.log(`📋 Found ${allSpecimenTypes.length} specimen types for container type relationships`)
-      
-      // Use container types from the provided specimen types
-      const relationships: Array<{ specimenTypeId: number; containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well' }> = []
-      
-      // Process specimen types that were provided from frontend
-      const typesToProcess = specimenTypes
-      console.log(`📦 Processing ${typesToProcess.length} specimen types`)
-      
-      for (const st of typesToProcess) {
-        const specimenTypeId = specimenTypeMap.get(st.name)
-        const hasContainerTypes = st.containerTypes && st.containerTypes.length > 0
-        
-        if (specimenTypeId && hasContainerTypes) {
-          for (const containerType of st.containerTypes!) {
-            relationships.push({
-              specimenTypeId,
-              containerType: containerType as 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well'
-            })
-          }
-          console.log(`   ✅ ${st.name}: ${st.containerTypes!.join(', ')}`)
-        } else if (specimenTypeId && !hasContainerTypes) {
-          console.log(`   ⚠️ ${st.name}: No container types specified`)
-        } else if (!specimenTypeId) {
-          console.log(`   ❌ ${st.name}: Specimen type not found in database`)
+      const storageTypeNames = new Set(storageTypes.map((s) => s.name))
+      for (const l of locations ?? []) {
+        if (l.storageTypeId && !storageTypeNames.has(l.storageTypeId)) {
+          return c.json({
+            error: `Storage type '${l.storageTypeId}' not found for location '${l.name}'. Please provide a valid storage type name.`
+          }, 400)
         }
       }
-      
-      // Create relationships - fail if this fails (don't silently continue)
-      if (relationships.length > 0) {
-        await database.insert(specimenTypeContainerType).values(relationships).onConflictDoNothing()
-        console.log(`✅ Created ${relationships.length} container type relationships`)
-      } else {
-        console.warn('⚠️ No container type relationships to create')
-        console.warn(`   Processed ${typesToProcess.length} specimen types, but none had containerTypes specified`)
-      }
 
-      // 9. Seed default settings
-      await setContainerDefaults(database, {
-        micronix_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'items' },
-        cryovial_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'items' },
-        paper: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'spots' },
-        static_well: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'spots' },
+      // Hash outside the transaction: bcrypt yields to the event loop.
+      const passwordHash = await bcrypt.hash(adminPassword, 10)
+
+      await withWriteTransaction(database, async (database) => {
+        // Re-check inside the transaction so concurrent setups cannot both proceed
+        const userCount = await database.select({ count: sql<number>`count(*)` }).from(users).get()
+        if ((userCount?.count || 0) > 0) {
+          throw new SetupRejectedError('System already initialized', 400)
+        }
+
+        // 1. Create Admin User
+        const createdAt = utcNow()
+        await database.insert(users).values({
+          id: 1,
+          name: adminName,
+          email: adminEmail,
+          passwordHash,
+          role: 'admin',
+          createdAt,
+          approvedAt: createdAt, // Setup admin is immediately approved
+        })
+
+        const now = utcNow()
+
+        // 2. Storage Types (must be created first for location references)
+        const storageTypesToInsert = storageTypes
+        const storageTypeMap = new Map<string, number>() // name -> id mapping
+      
+        if (storageTypesToInsert.length > 0) {
+          // Insert storage types and capture their IDs
+          for (const s of storageTypesToInsert) {
+            const existing = await database.select().from(storageType).where(eq(storageType.name, s.name)).get()
+            if (existing) {
+              storageTypeMap.set(s.name, existing.id)
+            } else {
+              const result = await database.insert(storageType).values({
+                name: s.name,
+                description: s.description
+              }).returning()
+              if (result.length > 0 && result[0]) {
+                storageTypeMap.set(s.name, result[0].id)
+              }
+            }
+          }
+        }
+      
+
+        // 3. Specimen Types
+        const specimenTypesToInsert = specimenTypes
+      
+        await database.insert(specimenType).values(specimenTypesToInsert.map(s => ({
+          name: s.name,
+          created: now,
+          lastUpdated: now
+        }))).onConflictDoNothing()
+        console.log(`✅ Inserted ${specimenTypesToInsert.length} specimen types`)
+
+        // 4. Units
+        const unitsToInsert = units
+        if (unitsToInsert.length > 0) {
+          await database.insert(unit).values(unitsToInsert.map(u => ({
+            name: u.name,
+            symbol: u.symbol,
+            category: u.category
+          }))).onConflictDoNothing()
+        }
+
+        // 5. Strains (Optional)
+        if (strains && strains.length > 0) {
+          for (const s of strains) {
+            const existing = await database.select().from(strain).where(eq(strain.name, s.name)).get()
+            if (!existing) {
+              await database.insert(strain).values({
+                name: s.name,
+                description: s.description
+              }).onConflictDoNothing()
+            }
+          }
+        }
+
+        // 6. Locations (Root) - must resolve storage type IDs
+        if (locations && locations.length > 0) {
+          const locationValues = locations.map((l, i) => {
+            // Create a copy of the location to avoid mutation issues
+            const location = { ...l }
+            let resolvedStorageTypeId: string | null = null
+            if (location.storageTypeId) {
+              // Frontend sends storage type name, look it up
+              const storageTypeId = storageTypeMap.get(location.storageTypeId)
+              if (storageTypeId) {
+                resolvedStorageTypeId = String(storageTypeId)
+              } else {
+                // Fail if storage type not found by name - don't fall back
+                throw new Error(`Storage type '${location.storageTypeId}' not found for location '${location.name}'. Please provide a valid storage type name.`)
+              }
+            } else if (storageTypeMap.size > 0) {
+              // Use first storage type as default if none specified
+              // This is a fallback - log a warning so user is aware
+              const firstStorageTypeId = Array.from(storageTypeMap.values())[0]
+              const firstStorageTypeName = Array.from(storageTypeMap.entries()).find(([_, id]) => id === firstStorageTypeId)?.[0] || 'unknown'
+              console.warn(`⚠️  Location '${location.name}' has no storage type specified. Using first available storage type '${firstStorageTypeName}' as default. Consider explicitly setting a storage type.`)
+              resolvedStorageTypeId = String(firstStorageTypeId)
+            } else {
+              throw new Error(`No storage types available for location '${location.name}'. At least one storage type must be created.`)
+            }
+          
+            return {
+              id: i + 1,
+              parentId: null,
+              name: location.name,
+              storageTypeId: resolvedStorageTypeId,
+              description: location.description,
+              canContainCollections: false, // Root locations typically don't hold collections directly
+              path: location.name, // Root location path is just its name
+              created: now,
+              lastUpdated: now
+            }
+          })
+          await database.insert(location).values(locationValues).onConflictDoNothing()
+        }
+
+        // 7. Seed constraint relationships - container type / unit relationships
+        // Get unit IDs for container type / unit relationships
+        const itemsUnit = await database.select().from(unit).where(eq(unit.symbol, 'items')).get()
+        const spotsUnit = await database.select().from(unit).where(eq(unit.symbol, 'spots')).get()
+        const tubesUnit = await database.select().from(unit).where(eq(unit.symbol, 'tubes')).get()
+        const ulUnit = await database.select().from(unit).where(eq(unit.symbol, 'µL')).get()
+        const mlUnit = await database.select().from(unit).where(eq(unit.symbol, 'mL')).get()
+      
+        // Payload was checked up front; this guards the lookups below.
+        const missingUnits: string[] = []
+        if (!itemsUnit) missingUnits.push('items')
+        if (!spotsUnit) missingUnits.push('spots')
+        if (!tubesUnit) missingUnits.push('tubes')
+        if (!ulUnit) missingUnits.push('µL')
+        if (!mlUnit) missingUnits.push('mL')
+      
+        if (missingUnits.length > 0) {
+          throw new SetupRejectedError(`Required units not found: ${missingUnits.join(', ')}.`, 500)
+        }
+      
+        // TypeScript now knows all units are defined after the check above
+        // Insert container type / unit relationships
+        await database.insert(containerTypeUnit).values([
+          { containerType: 'paper', unitId: spotsUnit!.id as number },
+          { containerType: 'cryovial_tube', unitId: itemsUnit!.id as number },
+          { containerType: 'cryovial_tube', unitId: tubesUnit!.id as number },
+          { containerType: 'cryovial_tube', unitId: ulUnit!.id as number },
+          { containerType: 'cryovial_tube', unitId: mlUnit!.id as number },
+          { containerType: 'micronix_tube', unitId: itemsUnit!.id as number },
+          { containerType: 'micronix_tube', unitId: ulUnit!.id as number },
+          { containerType: 'micronix_tube', unitId: mlUnit!.id as number },
+          { containerType: 'static_well', unitId: spotsUnit!.id as number }
+        ]).onConflictDoNothing()
+
+        // 8. Create specimen type / container type relationships
+        const allSpecimenTypes = await database.select().from(specimenType).all()
+        const specimenTypeMap = new Map<string, number>()
+        allSpecimenTypes.forEach(st => {
+          specimenTypeMap.set(st.name, st.id)
+        })
+      
+        console.log(`📋 Found ${allSpecimenTypes.length} specimen types for container type relationships`)
+      
+        // Use container types from the provided specimen types
+        const relationships: Array<{ specimenTypeId: number; containerType: 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well' }> = []
+      
+        // Process specimen types that were provided from frontend
+        const typesToProcess = specimenTypes
+        console.log(`📦 Processing ${typesToProcess.length} specimen types`)
+      
+        for (const st of typesToProcess) {
+          const specimenTypeId = specimenTypeMap.get(st.name)
+          const hasContainerTypes = st.containerTypes && st.containerTypes.length > 0
+        
+          if (specimenTypeId && hasContainerTypes) {
+            for (const containerType of st.containerTypes!) {
+              relationships.push({
+                specimenTypeId,
+                containerType: containerType as 'paper' | 'cryovial_tube' | 'micronix_tube' | 'static_well'
+              })
+            }
+            console.log(`   ✅ ${st.name}: ${st.containerTypes!.join(', ')}`)
+          } else if (specimenTypeId && !hasContainerTypes) {
+            console.log(`   ⚠️ ${st.name}: No container types specified`)
+          } else if (!specimenTypeId) {
+            console.log(`   ❌ ${st.name}: Specimen type not found in database`)
+          }
+        }
+      
+        // Create relationships - fail if this fails (don't silently continue)
+        if (relationships.length > 0) {
+          await database.insert(specimenTypeContainerType).values(relationships).onConflictDoNothing()
+          console.log(`✅ Created ${relationships.length} container type relationships`)
+        } else {
+          console.warn('⚠️ No container type relationships to create')
+          console.warn(`   Processed ${typesToProcess.length} specimen types, but none had containerTypes specified`)
+        }
+
+        // 9. Seed default settings
+        await setContainerDefaults(database, {
+          micronix_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'items' },
+          cryovial_tube: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'items' },
+          paper: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'spots' },
+          static_well: { totalQuantity: 1.0, remainingQuantity: 1.0, defaultUnitSymbol: 'spots' },
+        })
+        await setPaginationSettings(database, { defaultPageSize: 50, maxPageSize: 1000 })
+        await setPasswordRequirements(database, { minLength: 8 })
+        await setSessionSettings(database, { maxAgeSeconds: 604800 }) // 7 days
+      
+        // Create default export configuration with all available columns
+        await setExportConfigurations(database, {
+          configurations: [
+            {
+              name: 'All Columns',
+              columns: [
+                'container_id',
+                'container_type',
+                'barcode',
+                'position',
+                'label',
+                'collection_name',
+                'tags',
+                'status',
+                'comment',
+                'specimen_id',
+                'specimen_type',
+                'collection_date',
+                'subject_id',
+                'subject_name',
+                'control_batch_id',
+                'control_batch_name',
+                'control_definition_name',
+                'control_type',
+                'target_density',
+                'target_density_unit',
+                'study_id',
+                'study_code',
+                'study_title',
+                'study_lead_person',
+                'location_path',
+                'created',
+                'last_updated',
+              ],
+              isDefault: true,
+            },
+          ],
+        })
+
+        // Create default scanner configurations for different plate scanning devices
+        await setScannerConfigurations(database, {
+          configurations: [
+            {
+              id: 'traxcer',
+              name: 'Traxcer',
+              barcodeColumn: 'Tube ID',
+              positionType: 'single',
+              positionColumn: 'Position',
+              skipRows: 0,
+              isDefault: true,
+            },
+            {
+              id: 'visionmate',
+              name: 'VisionMate',
+              barcodeColumn: 'TubeCode',
+              positionType: 'combined',
+              rowColumn: 'LocationRow',
+              columnColumn: 'LocationColumn',
+              skipRows: 0,
+            },
+            {
+              id: 'general',
+              name: 'General',
+              barcodeColumn: 'Barcode',
+              positionType: 'combined',
+              rowColumn: 'Row',
+              columnColumn: 'Column',
+              skipRows: 0,
+            },
+          ],
+        })
+
+        await setTableViewConfigurations(database, DEFAULT_TABLE_VIEW_CONFIGURATIONS)
+
+        // Comprehensive validation - ensure all critical data was created
+        const specimenTypeCount = await database.select({ count: sql<number>`count(*)` }).from(specimenType).get()
+        const unitCount = await database.select({ count: sql<number>`count(*)` }).from(unit).get()
+        const storageTypeCount = await database.select({ count: sql<number>`count(*)` }).from(storageType).get()
+        const locationCount = await database.select({ count: sql<number>`count(*)` }).from(location).get()
+        const containerTypeUnitCount = await database.select({ count: sql<number>`count(*)` }).from(containerTypeUnit).get()
+        const specimenTypeContainerTypeCount = await database.select({ count: sql<number>`count(*)` }).from(specimenTypeContainerType).get()
+      
+        const validationErrors: string[] = []
+      
+        if (specimenTypeCount!.count === 0) {
+          validationErrors.push('No specimen types were created')
+        }
+        if ((unitCount?.count || 0) === 0) {
+          validationErrors.push('No units were created')
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- count can be undefined before first query
+        if (storageTypes && storageTypes.length > 0 && (storageTypeCount?.count || 0) === 0) {
+          validationErrors.push('No storage types were created')
+        }
+        if (locations && locations.length > 0 && (locationCount?.count || 0) === 0) {
+          validationErrors.push('No locations were created')
+        }
+        if ((containerTypeUnitCount?.count || 0) === 0) {
+          validationErrors.push('No container type/unit relationships were created')
+        }
+        if (relationships.length > 0 && (specimenTypeContainerTypeCount?.count || 0) === 0) {
+          validationErrors.push('No specimen type/container type relationships were created')
+        }
+      
+        if (validationErrors.length > 0) {
+          throw new SetupRejectedError('Setup validation failed', 500, validationErrors.join('; '))
+        }
       })
-      await setPaginationSettings(database, { defaultPageSize: 50, maxPageSize: 1000 })
-      await setPasswordRequirements(database, { minLength: 8 })
-      await setSessionSettings(database, { maxAgeSeconds: 604800 }) // 7 days
-      
-      // Create default export configuration with all available columns
-      await setExportConfigurations(database, {
-        configurations: [
-          {
-            name: 'All Columns',
-            columns: [
-              'container_id',
-              'container_type',
-              'barcode',
-              'position',
-              'label',
-              'collection_name',
-              'tags',
-              'status',
-              'comment',
-              'specimen_id',
-              'specimen_type',
-              'collection_date',
-              'subject_id',
-              'subject_name',
-              'control_batch_id',
-              'control_batch_name',
-              'control_definition_name',
-              'control_type',
-              'target_density',
-              'target_density_unit',
-              'study_id',
-              'study_code',
-              'study_title',
-              'study_lead_person',
-              'location_path',
-              'created',
-              'last_updated',
-            ],
-            isDefault: true,
-          },
-        ],
-      })
-
-      // Create default scanner configurations for different plate scanning devices
-      await setScannerConfigurations(database, {
-        configurations: [
-          {
-            id: 'traxcer',
-            name: 'Traxcer',
-            barcodeColumn: 'Tube ID',
-            positionType: 'single',
-            positionColumn: 'Position',
-            skipRows: 0,
-            isDefault: true,
-          },
-          {
-            id: 'visionmate',
-            name: 'VisionMate',
-            barcodeColumn: 'TubeCode',
-            positionType: 'combined',
-            rowColumn: 'LocationRow',
-            columnColumn: 'LocationColumn',
-            skipRows: 0,
-          },
-          {
-            id: 'general',
-            name: 'General',
-            barcodeColumn: 'Barcode',
-            positionType: 'combined',
-            rowColumn: 'Row',
-            columnColumn: 'Column',
-            skipRows: 0,
-          },
-        ],
-      })
-
-      await setTableViewConfigurations(database, DEFAULT_TABLE_VIEW_CONFIGURATIONS)
-
-      // Comprehensive validation - ensure all critical data was created
-      const specimenTypeCount = await database.select({ count: sql<number>`count(*)` }).from(specimenType).get()
-      const unitCount = await database.select({ count: sql<number>`count(*)` }).from(unit).get()
-      const storageTypeCount = await database.select({ count: sql<number>`count(*)` }).from(storageType).get()
-      const locationCount = await database.select({ count: sql<number>`count(*)` }).from(location).get()
-      const containerTypeUnitCount = await database.select({ count: sql<number>`count(*)` }).from(containerTypeUnit).get()
-      const specimenTypeContainerTypeCount = await database.select({ count: sql<number>`count(*)` }).from(specimenTypeContainerType).get()
-      
-      const validationErrors: string[] = []
-      
-      if (specimenTypeCount!.count === 0) {
-        validationErrors.push('No specimen types were created')
-      }
-      if ((unitCount?.count || 0) === 0) {
-        validationErrors.push('No units were created')
-      }
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- count can be undefined before first query
-      if (storageTypes && storageTypes.length > 0 && (storageTypeCount?.count || 0) === 0) {
-        validationErrors.push('No storage types were created')
-      }
-      if (locations && locations.length > 0 && (locationCount?.count || 0) === 0) {
-        validationErrors.push('No locations were created')
-      }
-      if ((containerTypeUnitCount?.count || 0) === 0) {
-        validationErrors.push('No container type/unit relationships were created')
-      }
-      if (relationships.length > 0 && (specimenTypeContainerTypeCount?.count || 0) === 0) {
-        validationErrors.push('No specimen type/container type relationships were created')
-      }
-      
-      if (validationErrors.length > 0) {
-        return c.json({ 
-          error: 'Setup validation failed', 
-          details: validationErrors.join('; ') 
-        }, 500)
-      }
 
       return c.json({ success: true, message: 'System initialized successfully' })
     } catch (error) {
+      if (error instanceof SetupRejectedError) {
+        return c.json(error.details ? { error: error.message, details: error.details } : { error: error.message }, error.status)
+      }
       return handleRouteError(error, c)
     }
   })

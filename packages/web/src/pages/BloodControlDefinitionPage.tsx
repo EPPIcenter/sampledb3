@@ -1,4 +1,6 @@
 import { useNavigate, useParams, Navigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import { controlKeys } from '../hooks/useControls'
 import EntityBreadcrumbs from '../components/EntityBreadcrumbs'
 import ControlDefinitionForm from '../components/forms/ControlDefinitionForm'
 import { useUser } from '../contexts/UserContext'
@@ -10,6 +12,7 @@ import '../styles/blood-controls.css'
  */
 export default function BloodControlDefinitionPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { id } = useParams<{ id?: string }>()
   const { canWrite } = useUser()
   const isEdit = !!id
@@ -42,6 +45,7 @@ export default function BloodControlDefinitionPage() {
           <ControlDefinitionForm
             onCancel={() => navigate('/blood-controls')}
             onSuccess={() => {
+              void queryClient.invalidateQueries({ queryKey: controlKeys.all })
               if (id) {
                 navigate(`/blood-controls/${id}`)
               } else {

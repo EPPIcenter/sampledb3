@@ -3,7 +3,7 @@ title: Tutorial walkthrough
 description: Create a TUT study, import subjects and specimens, then delete the data
 ---
 
-This walkthrough uses a study whose short code starts with **TUT** (for example **TUT01**). Any user can delete a TUT study, so you can practice without leaving production data behind. If you create a non-tutorial study with a TUT short code, the form warns that any user can delete it.
+This walkthrough uses a study whose short code starts with **TUT** (for example **TUT01**). Any member can delete a TUT study, so you can practice without leaving production data behind. If you create a non-tutorial study with a TUT short code, the form warns that any member can delete it.
 
 ## Prerequisites
 

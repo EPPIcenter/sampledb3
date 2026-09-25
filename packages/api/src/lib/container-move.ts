@@ -13,6 +13,7 @@ import {
 import { eq, and, isNull } from 'drizzle-orm'
 import { resolveCollection, type CollectionType } from './collections/collection-resolve'
 import { checkGridPositionOccupancy } from './container-occupancy'
+import { normalizePosition } from './normalize-position'
 
 /** Staging prefix for position updates so swaps on one plate do not violate UNIQUE(collection_id, position) mid-transaction. */
 const MOVE_STAGING_PREFIX = '__mv_'
@@ -68,8 +69,11 @@ export async function resolveContainerByPosition(
   database: Database,
   collectionName: string,
   collectionType: CollectionType,
-  position: string
+  rawPosition: string
 ): Promise<ContainerInfo | null> {
+  // Stored grid positions are normalized ("B1" -> "B01"); match that form.
+  const position = normalizePosition(rawPosition)
+  if (!position) return null
   const collectionId = await resolveCollection(collectionName, collectionType, database)
   if (!collectionId) return null
 
@@ -243,6 +247,17 @@ export async function resolveContainerByContainerId(database: Database, containe
     barcode: cryovial.barcode,
   }
 
+  const well = await database.select().from(staticWell).where(eq(staticWell.id, containerId)).get()
+  if (well) return {
+    containerId: well.id,
+    containerType: 'static_well',
+    currentCollectionId: well.collectionId,
+    currentCollectionName: (await database.select({ name: micronixPlate.name }).from(micronixPlate).where(eq(micronixPlate.id, well.collectionId)).get())?.name || null,
+    currentCollectionType: 'micronix_plate',
+    currentPosition: well.position,
+    barcode: null,
+  }
+
   const paperRec = await database.select().from(paper).where(eq(paper.id, containerId)).get()
   if (paperRec) return {
     containerId: paperRec.id,
@@ -305,7 +320,12 @@ export function inferCollectionTypeFromContainers(containers: ContainerInfo[]): 
 
 export async function executeMoves(database: Database, request: BatchMoveRequest): Promise<MoveResult> {
   try {
-    const { moves, mappings, atomicMode = 'all_or_nothing' } = request
+    const { mappings, atomicMode = 'all_or_nothing' } = request
+    // Normalize target positions ("b1" -> "B01") so writes, conflict keys, and occupancy checks agree.
+    const moves = request.moves.map((move) => ({
+      ...move,
+      targetPosition: normalizePosition(move.targetPosition) ?? '',
+    }))
     const errors: ValidationError[] = []
 
     const resolvedMoves = await Promise.all(moves.map(async (move, index) => ({
@@ -412,6 +432,7 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
       }
     }
 
+    const singleTargetMoves: typeof executableMoves = []
     for (const [positionKey, containers] of positionConflicts.entries()) {
       if (containers.length > 1) {
         const [, position] = positionKey.split(':')
@@ -423,18 +444,28 @@ export async function executeMoves(database: Database, request: BatchMoveRequest
           })
         }
       } else {
-        const container = containers[0]
-        const moveRec = executableMoves.find(m => m.info.containerId === container.containerId)
-        if (moveRec?.targetCollectionId) {
-          const excludeIds = executableMoves.map(m => m.info.containerId)
-          const availability = await checkPositionAvailability(database, moveRec.targetCollectionId, collectionType, moveRec.move.targetPosition || null, excludeIds)
+        const moveRec = executableMoves.find(m => m.info.containerId === containers[0].containerId)
+        if (moveRec?.targetCollectionId) singleTargetMoves.push(moveRec)
+      }
+    }
 
-          if (availability.occupied && availability.containerId && !excludeIds.includes(availability.containerId)) {
-            errors.push({
-              row: container.row,
-              error: `Target position ${moveRec.move.targetPosition} is already occupied by another container (ID: ${availability.containerId})`,
-            })
-          }
+    // A container's current cell only counts as free if that container really moves.
+    // Rejecting one move can block another, so re-check until the moving set is stable.
+    const blockedRows = new Set(errors.map(e => e.row).filter(r => r > 0))
+    let changed = true
+    while (changed) {
+      changed = false
+      const movingIds = executableMoves.filter(m => !blockedRows.has(m.row)).map(m => m.info.containerId)
+      for (const moveRec of singleTargetMoves) {
+        if (blockedRows.has(moveRec.row) || !moveRec.targetCollectionId) continue
+        const availability = await checkPositionAvailability(database, moveRec.targetCollectionId, collectionType, moveRec.move.targetPosition || null, movingIds)
+        if (availability.occupied && availability.containerId) {
+          errors.push({
+            row: moveRec.row,
+            error: `Target position ${moveRec.move.targetPosition} is already occupied by another container (ID: ${availability.containerId})`,
+          })
+          blockedRows.add(moveRec.row)
+          changed = true
         }
       }
     }
