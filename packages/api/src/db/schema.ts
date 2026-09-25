@@ -103,6 +103,7 @@ export const studySubject = sqliteTable('study_subject', {
 }, (table) => ({
   studyIdIdx: index('study_subject_study_id_idx').on(table.studyId),
   nameIdx: index('study_subject_name_idx').on(table.name),
+  studyNameUniq: uniqueIndex('study_subject_study_name_idx').on(table.studyId, table.name),
 }))
 
 // Control Production Hierarchy

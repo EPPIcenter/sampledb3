@@ -32,6 +32,7 @@ describe('Database Client', () => {
     db.exec(`CREATE TABLE micronix_tube (id INTEGER PRIMARY KEY, collection_id INTEGER NOT NULL, barcode TEXT, position TEXT)`)
     db.exec(`CREATE TABLE cryovial_tube (id INTEGER PRIMARY KEY, collection_id INTEGER NOT NULL, barcode TEXT, position TEXT)`)
     db.exec(`CREATE TABLE static_well (id INTEGER PRIMARY KEY, collection_id INTEGER NOT NULL, position TEXT)`)
+    db.exec(`CREATE TABLE study_subject (id INTEGER PRIMARY KEY, study_id INTEGER NOT NULL, name TEXT NOT NULL)`)
     // Intentionally omit paper — migration 003 preflight creates legacy stub
     // Intentionally do NOT create error_logs
     const before = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='error_logs'").get()

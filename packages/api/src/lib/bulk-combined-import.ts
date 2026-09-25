@@ -8,7 +8,7 @@ import {
   specimen,
   specimenType,
 } from '../db/schema'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { findExistingStudySpecimen } from './specimen-helpers'
 import {
   validateStudyShortCode,
@@ -222,8 +222,14 @@ export async function createSubjectWithSpecimensInTx(
 
   let subjectId: number
   let subject: typeof studySubject.$inferSelect
-  if (existingSubjectId) {
-    const existing = tx.select().from(studySubject).where(eq(studySubject.id, existingSubjectId)).get()
+  // A subject prepared as new may already exist by now: an earlier entry in the same file
+  // with the same trimmed name, or a concurrent import. Reuse it (names are unique per study).
+  const alreadyInStudy = existingSubjectId
+    ? undefined
+    : tx.select().from(studySubject).where(and(eq(studySubject.studyId, studyId), eq(studySubject.name, trimmedName))).get()
+  const reuseSubjectId = existingSubjectId ?? alreadyInStudy?.id ?? null
+  if (reuseSubjectId) {
+    const existing = alreadyInStudy ?? tx.select().from(studySubject).where(eq(studySubject.id, reuseSubjectId)).get()
     if (!existing) throw new Error('Subject not found')
     subject = existing
     subjectId = existing.id
@@ -305,7 +311,7 @@ export async function createSubjectWithSpecimensInTx(
     })
   }
 
-  const subjectCreated = !existingSubjectId
+  const subjectCreated = !reuseSubjectId
   return {
     subject,
     subjectCreated,

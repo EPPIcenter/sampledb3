@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS study_subject (
 );--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS study_subject_study_id_idx ON study_subject(study_id);--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS study_subject_name_idx ON study_subject(name);--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS study_subject_study_name_idx ON study_subject(study_id, name);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS control_definition (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE,
@@ -282,7 +283,7 @@ CREATE TABLE IF NOT EXISTS storage_type (
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );--> statement-breakpoint
-INSERT INTO schema_version (version) VALUES (4);--> statement-breakpoint
+INSERT INTO schema_version (version) VALUES (5);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT NOT NULL,
   user_id INTEGER REFERENCES users(id),
