@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import DataTable, { Column } from '../components/DataTable'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import SpecimenFilter, { type SpecimenFilters } from '../components/SpecimenFilter'
@@ -15,6 +15,7 @@ import {
   getQueryErrorMessage,
 } from '../ui'
 import '../styles/subject-specimen.css'
+import { parseDisplayDate } from '../lib/date-utils'
 
 type SpecimenListRow = Specimen & {
   study?: { shortCode?: string }
@@ -55,7 +56,12 @@ export default function Specimens() {
   const [page, setPage] = useState(1)
   const pageSize = 50
 
-  const [filters, setFilters] = useState<SpecimenFilters>(() => filtersFromSearchParams(searchParams))
+  // The URL is the source of truth, so "Clear Filters" and back/forward update the table.
+  const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams])
+  // Back to page 1 whenever the filters change, including from outside (Clear Filters).
+  useEffect(() => {
+    setPage(1)
+  }, [searchParams])
 
   const listParams = useMemo(() => filtersToParams(filters), [filters])
   const specimensQuery = useSpecimens(listParams)
@@ -65,8 +71,7 @@ export default function Specimens() {
     isEmpty: specimensQuery.isSuccess && specimens.length === 0,
   })
 
-  const handleFilterChange = (newFilters: SpecimenFilters) => {
-    setFilters(newFilters)
+  const handleFilterChange = (newFilters: SpecimenFilters, options?: { replace?: boolean }) => {
     setPage(1)
 
     const params: Record<string, string> = {}
@@ -79,12 +84,12 @@ export default function Specimens() {
     if (newFilters.createdTo) params.created_to = newFilters.createdTo
     if (newFilters.search) params.search = newFilters.search
 
-    setSearchParams(params)
+    setSearchParams(params, { replace: options?.replace })
   }
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '—'
-    return new Date(dateString).toLocaleDateString()
+    return parseDisplayDate(dateString).toLocaleDateString()
   }
 
   const columns: Column<SpecimenListRow>[] = [
@@ -172,7 +177,8 @@ export default function Specimens() {
         <div className="subject-specimen-reveal subject-specimen-reveal-3">
           <SpecimenFilter
             filters={filters}
-            onChange={setFilters}
+            // Live edits replace the history entry instead of adding one per keystroke.
+            onChange={(next) => handleFilterChange(next, { replace: true })}
             onSubmit={handleFilterChange}
             isLoading={specimensQuery.isPending}
           />

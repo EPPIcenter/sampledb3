@@ -17,6 +17,7 @@ import { getContainerTypeIcon, getContainerTypeName, getSpecimenTypeIcon } from 
 import { useUser } from '../contexts/UserContext'
 import { useToast } from '../contexts/ToastContext'
 import '../styles/qpcr.css'
+import { bytesToBase64 } from '../lib/base64'
 
 const PLATE_ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
 const PLATE_COLS = 12
@@ -978,7 +979,7 @@ export default function QpcrExperimentDetail() {
                       setResultsUploading(true)
                       try {
                         const buf = await file.arrayBuffer()
-                        const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
+                        const base64 = bytesToBase64(new Uint8Array(buf))
                         const resultInstrument = (instrumentSelectRef.current?.value as 'Biorad_CFX' | 'QuantStudio' | undefined) ?? 'Biorad_CFX'
                         await qpcrExperimentsApi.uploadResults(parseInt(id), { fileContent: base64, fileName: file.name, instrumentType: resultInstrument })
                         invalidateQpcrExperimentQueries(queryClient)
