@@ -27,6 +27,7 @@ import { resolveMicronixBarcodesToContainers } from '../lib/export/query'
 import { normalizeWellPosition, parsePlateCSV, validateWellPosition } from '../lib/plate-csv'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
+import { withWriteTransaction } from '../db/write-transaction'
 
 /**
  * Attach the Source (subject vs control provenance) to each well, resolving
@@ -289,25 +290,38 @@ export function createQpcrExperimentsRoutes(database: Database): Hono {
       if (data.standardLayout !== undefined) updates.standardLayout = data.standardLayout
       if (data.status !== undefined) updates.status = data.status
       if (data.instrumentType !== undefined) updates.instrumentType = data.instrumentType
-      if (data.targets !== undefined && (exp.status === 'setup' || exp.status === 'in_progress')) {
-        await database.delete(qpcrExperimentTarget).where(eq(qpcrExperimentTarget.qpcrExperimentId, id))
-        if (data.targets.length > 0) {
-          await database.insert(qpcrExperimentTarget).values(
-            data.targets.map((t, i) => ({
+      const newTargets =
+        data.targets !== undefined && (exp.status === 'setup' || exp.status === 'in_progress')
+          ? data.targets.map((t, i) => ({
               qpcrExperimentId: id,
               targetName: t.targetName.trim() || 'varATS',
               fluorophore: t.fluorophore ?? null,
               reporter: t.reporter ?? null,
               sortOrder: i,
             }))
-          )
+          : null
+      if (newTargets) {
+        const names = newTargets.map((t) => t.targetName)
+        const duplicate = names.find((name, i) => names.indexOf(name) !== i)
+        if (duplicate) {
+          return c.json({ error: `Target '${duplicate}' is listed more than once.` }, 400)
         }
       }
-      const [updated] = await database
-        .update(qpcrExperiment)
-        .set(updates)
-        .where(eq(qpcrExperiment.id, id))
-        .returning()
+      // Replace targets and update the experiment together, so a failure keeps the old targets.
+      const updated = await withWriteTransaction(database, async (tx) => {
+        if (newTargets) {
+          await tx.delete(qpcrExperimentTarget).where(eq(qpcrExperimentTarget.qpcrExperimentId, id))
+          if (newTargets.length > 0) {
+            await tx.insert(qpcrExperimentTarget).values(newTargets)
+          }
+        }
+        const [row] = await tx
+          .update(qpcrExperiment)
+          .set(updates)
+          .where(eq(qpcrExperiment.id, id))
+          .returning()
+        return row
+      })
       const targets = await database
         .select()
         .from(qpcrExperimentTarget)

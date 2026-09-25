@@ -47,6 +47,27 @@ describe('qPCR Experiments Template', () => {
     })
   })
 
+  describe('PATCH / targets', () => {
+    it('rejects duplicate target names and keeps the existing targets', async () => {
+      const createRes = await ctx.request('/api/qpcr-experiments', {
+        method: 'POST',
+        json: { name: 'Dup targets', templateFormat: 'biorad' },
+      })
+      const created = (await createRes.json()) as { id: number }
+
+      const res = await ctx.request(`/api/qpcr-experiments/${created.id}`, {
+        method: 'PATCH',
+        json: { targets: [{ targetName: '' }, { targetName: 'varATS' }] },
+      })
+
+      expect(res.status).toBe(400)
+      const detail = (await (await ctx.request(`/api/qpcr-experiments/${created.id}`)).json()) as {
+        experiment: { targets: Array<{ targetName: string }> }
+      }
+      expect(detail.experiment.targets.map((t) => t.targetName)).toEqual(['varATS'])
+    })
+  })
+
   describe('GET /:id/template', () => {
     it('includes only rows for wells that have a tube; skips positions with no tube', async () => {
       const [exp] = await ctx.db

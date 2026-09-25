@@ -21,6 +21,9 @@ import { handleRouteError } from '../lib/error-handler'
  * Create activity routes with database injection
  * @param database - Database instance (required)
  */
+/** Upper bound for GET /activity/recent?limit=. */
+const MAX_RECENT_ACTIVITY = 50
+
 export function createActivityRoutes(database: Database): Hono {
   const activity = new Hono()
   const authMiddleware = createAuthMiddleware(database)
@@ -28,7 +31,10 @@ export function createActivityRoutes(database: Database): Hono {
   // Get recent activity across all entity types
   activity.get('/recent', authMiddleware, async (c) => {
   try {
-    const limit = parseInt(c.req.query('limit') || '10')
+    // Each row is enriched with several queries, so keep the feed short (and never unbounded:
+    // SQLite treats LIMIT -1 as no limit).
+    const requested = parseInt(c.req.query('limit') || '10')
+    const limit = Number.isFinite(requested) ? Math.min(Math.max(requested, 1), MAX_RECENT_ACTIVITY) : 10
     
     // Get recent specimens with enriched data
     const recentSpecimens = await database
