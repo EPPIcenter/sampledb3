@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import type { Database } from '../db/client'
 import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { location, micronixPlate, cryovialBox, box, bag, storageType } from '../db/schema'
-import { eq, and, sql, or, like, desc, isNull, inArray } from 'drizzle-orm'
+import { eq, and, sql, or, desc, isNull, inArray } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../lib/constants'
 import { z } from 'zod'
 import {
@@ -19,6 +19,7 @@ import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-h
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
+import { likeContains } from '../lib/sql-like'
 
 /**
  * Create locations routes with database injection
@@ -51,12 +52,11 @@ locations.get('/', authMiddleware, async (c) => {
         // Build conditions for each word - each word must match at least one field
         // Note: storageTypeId is only on root locations, so we search it but it may be null
         const wordConditions = searchWords.map(word => {
-          const pattern = `%${word}%`
           return or(
-            like(location.name, pattern),
-            like(location.path, pattern),
-            sql`${location.storageTypeId} LIKE ${pattern}`, // Handle nullable storageTypeId
-            like(location.description, pattern)
+            likeContains(location.name, word),
+            likeContains(location.path, word),
+            likeContains(location.storageTypeId, word), // storageTypeId is null on child locations
+            likeContains(location.description, word)
           )!
         })
         

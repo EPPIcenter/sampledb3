@@ -1,9 +1,10 @@
 import type { Database } from '../../db/client'
 import { specimen, storageContainer, studySubject, study, specimenType, controlBatch } from '../../db/schema'
-import { eq, and, like, or, sql } from 'drizzle-orm'
+import { eq, and, or, sql } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../constants'
 import { resolveContainerByBarcode } from '../identifier-resolution'
 import { dateToUpperBound } from '../statistics/helpers'
+import { likeContains } from '../sql-like'
 
 export type ListSpecimensQuery = {
   sourceType?: string
@@ -174,9 +175,9 @@ export async function listSpecimens(database: Database, query: ListSpecimensQuer
 
   if (search) {
     conditions.push(or(
-      like(studySubject.name, `%${search}%`),
-      like(controlBatch.name, `%${search}%`),
-      like(specimenType.name, `%${search}%`),
+      likeContains(studySubject.name, search),
+      likeContains(controlBatch.name, search),
+      likeContains(specimenType.name, search),
     ))
   }
 
