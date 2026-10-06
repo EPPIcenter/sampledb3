@@ -21,7 +21,7 @@ We put **Specimen registration** (see [CONTEXT.md](../../CONTEXT.md)) behind one
 - **Collection identity**: every identifier given (id, barcode, name) must resolve to the same **Collection**. One that misses while another matches, or two that match different collections, is an error. A Collection is created only when nothing matches and a location is given. Sheets are created under their box or bag when missing.
 - **Placement**: one **Grid position** per container per collection, checked against the database and the rest of the request by resolved collection, after normalizing positions (`A2` → `A02`). Any number of Papers share a Sheet; a duplicate sublabel on one Sheet is an error.
 - **Units**: an omitted unit takes the configured default for the container type; an unknown or disallowed unit is an error. No hardcoded container-type default.
-- **Atomicity**: one call writes everything or nothing. Atomicity across calls is the caller's choice: bulk combined `per_subject` mode calls once per subject in its own savepoint.
+- **Atomicity**: one call writes everything or nothing. Atomicity across calls is the caller's choice: bulk combined `per_subject` mode registers each subject in its own `withWriteTransaction`, which becomes a savepoint when an outer transaction is open, so a failed subject leaves nothing behind, its Subject row included.
 - **Errors**: problems found while planning are a `SpecimenRegistrationError` with status 400 and the full error list. A constraint violation while writing is the same error with status 409.
 
 ## Considered options
