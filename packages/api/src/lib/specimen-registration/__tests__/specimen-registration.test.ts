@@ -306,4 +306,27 @@ describe('Specimen registration', () => {
     expect(error).toBeInstanceOf(SpecimenRegistrationError)
     expect(error).toMatchObject({ status: 409, errors: [{ entryIndex: 0, containerIndex: 0 }] })
   })
+
+  it('blames a constraint hit on a new collection on the row that asked for it', async () => {
+    // Rows 0 and 1 use the existing plate; row 2 creates P2. Another write creates P2 first.
+    const entries = [
+      entry([tube('T1', { name: 'P1', position: 'A01' })]),
+      entry([paperOn('Sheet-1'), tube('T2', { name: 'P2', locationId, position: 'A01' })], '2024-02-01'),
+    ]
+    const { plan, errors } = await planRegistration(db, entries)
+    expect(errors).toEqual([])
+    await createTestMicronixPlate(db, { name: 'P2', barcode: 'P2-BC', locationId })
+    sqlite.exec('CREATE UNIQUE INDEX test_plate_name ON micronix_plate(name)')
+
+    const error = await writeRegistration(db, plan, undefined).then(
+      () => null,
+      (e: unknown) => e,
+    )
+
+    expect(error).toBeInstanceOf(SpecimenRegistrationError)
+    expect(error).toMatchObject({ status: 409 })
+    expect((error as SpecimenRegistrationError).errors).toEqual([
+      { entryIndex: 1, containerIndex: 1, message: 'A record with this name already exists.' },
+    ])
+  })
 })

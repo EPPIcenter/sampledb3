@@ -16,7 +16,7 @@ import {
 } from '../../db/schema'
 import { utcNow } from '../datetime'
 import { sqliteConstraintConflict } from '../error-handler'
-import type { CollectionTarget } from './collections'
+import type { CollectionTarget, PlannedCollection } from './collections'
 import type { RegistrationPlan } from './plan'
 import {
   SpecimenRegistrationError,
@@ -31,6 +31,25 @@ function only<T>(rows: T[], what: string): T {
   return row
 }
 
+type ContainerRef = { entryIndex: number; containerIndex?: number }
+
+/** The first container that needs each planned Collection: directly, or as its Sheet's box or bag. */
+function collectionRequesters(plan: RegistrationPlan): ContainerRef[] {
+  const requesters: Array<ContainerRef | undefined> = plan.collections.map(() => undefined)
+  for (const { entryIndex, containerIndex, collection } of plan.containers) {
+    let target: CollectionTarget | null = collection
+    while (target && 'plannedIndex' in target) {
+      requesters[target.plannedIndex] ??= { entryIndex, containerIndex }
+      const planned: PlannedCollection = plan.collections[target.plannedIndex]
+      target = planned.type === 'sheet' ? planned.parent : null
+    }
+  }
+  return requesters.map((requester) => {
+    if (!requester) throw new Error('Planned collection is not used by any container')
+    return requester
+  })
+}
+
 export async function writeRegistration(
   database: Database,
   plan: RegistrationPlan,
@@ -38,7 +57,8 @@ export async function writeRegistration(
 ): Promise<RegistrationResult> {
   const now = utcNow()
   const audit = { created: now, lastUpdated: now, createdBy: userId, updatedBy: userId }
-  let current: { entryIndex: number; containerIndex?: number } = { entryIndex: 0 }
+  const requesters = collectionRequesters(plan)
+  let current: ContainerRef = { entryIndex: 0 }
 
   try {
     const collectionIds: number[] = []
@@ -46,7 +66,8 @@ export async function writeRegistration(
     const idOf = (target: CollectionTarget): number =>
       'existingId' in target ? target.existingId : collectionIds[target.plannedIndex]
 
-    for (const planned of plan.collections) {
+    for (const [plannedIndex, planned] of plan.collections.entries()) {
+      current = requesters[plannedIndex]
       let id: number
       switch (planned.type) {
         case 'micronix_plate':
