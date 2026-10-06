@@ -35,7 +35,7 @@ Migration `001` is **only** for legacy files; fresh installs from the snapshot s
 3. Add `packages/api/src/db/migrations/00N_short_name.sql` (statements separated with `--> statement-breakpoint`).
 4. Bump `CURRENT_SCHEMA_VERSION` in `schema-evolution.ts`.
 5. Run `bun run build` in `packages/api` — `scripts/runtime-assets.ts` copies migrations into `dist/db/migrations` and verifies the dist layout. If you add other on-disk runtime assets, register them in `RUNTIME_ASSETS` in that script.
-6. Refresh `initial_schema.sql` so **new** empty databases match the latest shape (merge generated SQL; keep `INSERT INTO schema_version` at `CURRENT_SCHEMA_VERSION`). `__tests__/initial-schema-snapshot.test.ts` fails until the snapshot holds every table and column in `schema.ts`.
+6. Refresh `initial_schema.sql` so **new** empty databases match the latest shape (merge generated SQL; keep `INSERT INTO schema_version` at `CURRENT_SCHEMA_VERSION`). `__tests__/initial-schema-snapshot.test.ts` fails until the snapshot holds every table and column in `schema.ts`, and until its columns, declared types, NOT NULL, indexes and foreign keys match a version 1 install (`__tests__/fixtures/initial_schema_v1.sql`, never edited) brought forward by the migrations.
 7. Extend the legacy fixtures if the migration touches a table they don't create. Older-version tests in `__tests__/schema-evolution.test.ts` build minimal databases through `createTablesForLaterMigrations`, and `__tests__/client.test.ts` creates its own tables inline; both must contain every table and column a later migration alters.
 
 Do **not** add inline DDL to `open.ts` or connection code.
