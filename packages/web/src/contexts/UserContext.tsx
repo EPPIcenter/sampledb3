@@ -138,7 +138,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setLoading(userCachedLoading)
       setError(userCachedError)
     }
-  }, [refreshUser])
+  }, [refreshUser, setUser])
 
   // Permission helpers
   const canWrite = useMemo(() => user?.role === 'admin' || user?.role === 'member', [user])

@@ -26,20 +26,25 @@ function fromKey(key: string): { type: CollectionType; id: number } {
 
 export default function CollectionMove() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const { canWrite } = useUser()
-  const [currentStep, setCurrentStep] = useState<Step>('select-collections')
-  
+
   // Redirect if user doesn't have write permissions
   useEffect(() => {
     if (!canWrite) {
       navigate('/', { replace: true })
     }
   }, [canWrite, navigate])
-  
+
   if (!canWrite) {
     return null
   }
+  return <CollectionMoveContent />
+}
+
+/** Split out so its hooks run on every render, whatever canWrite is. */
+function CollectionMoveContent() {
+  const queryClient = useQueryClient()
+  const [currentStep, setCurrentStep] = useState<Step>('select-collections')
   const [mutating, setMutating] = useState(false)
   const locationsQuery = useLocationsList()
   const collectionsQuery = useAllCollections()

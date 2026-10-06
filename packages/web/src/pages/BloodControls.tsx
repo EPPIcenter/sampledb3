@@ -26,8 +26,8 @@ export default function BloodControls() {
   const navigate = useNavigate()
   const { canWrite } = useUser()
   const overviewQuery = useBloodControlsOverview()
-  const definitions = overviewQuery.data?.definitions ?? []
-  const batches = overviewQuery.data?.batches ?? []
+  const definitions = useMemo(() => overviewQuery.data?.definitions ?? [], [overviewQuery.data])
+  const batches = useMemo(() => overviewQuery.data?.batches ?? [], [overviewQuery.data])
   const strains = overviewQuery.data?.strains ?? []
   const overviewStatus = fromQuery(overviewQuery)
   const [searchParams, setSearchParams] = useSearchParams()

@@ -143,12 +143,14 @@ function ContainerDerivationModalContent({
         const containerTypes = response.containerTypes
         setAllowedContainerTypes(containerTypes)
 
-        if (!containerTypes.includes(formData.containerType)) {
-          setFormData(prev => ({
-            ...prev,
-            containerType: containerTypes.length > 0 ? (containerTypes[0] as FlatDerivationContainerForm['containerType']) : 'micronix_tube',
-          }))
-        }
+        setFormData(prev =>
+          containerTypes.includes(prev.containerType)
+            ? prev
+            : {
+                ...prev,
+                containerType: containerTypes.length > 0 ? (containerTypes[0] as FlatDerivationContainerForm['containerType']) : 'micronix_tube',
+              },
+        )
       } catch (err: unknown) {
         if (!ignore) {
           console.error('Failed to fetch allowed container types:', err)

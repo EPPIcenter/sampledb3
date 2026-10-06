@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api/client'
@@ -137,7 +137,7 @@ export default function QpcrExperimentDetail() {
   const experimentQuery = useQpcrExperiment(experimentId)
   const experimentStatus = fromQuery(experimentQuery)
   const scannerConfigsQuery = useQpcrScannerConfigurations()
-  const scannerConfigs = scannerConfigsQuery.data ?? []
+  const scannerConfigs = useMemo(() => scannerConfigsQuery.data ?? [], [scannerConfigsQuery.data])
   const [data, setData] = useState<QpcrExperimentDetailResponse | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null)

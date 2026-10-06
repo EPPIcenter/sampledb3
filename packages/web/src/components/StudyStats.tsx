@@ -16,6 +16,69 @@ interface StudyStatsProps {
 
 type BinSize = 'day' | 'week' | 'month' | 'quarter' | 'year'
 
+// Helper function to get ISO week number for a date
+function getISOWeek(date: Date): { year: number; week: number } {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+  return { year: d.getUTCFullYear(), week: weekNo }
+}
+
+// Helper function to get bin key for a date based on bin size
+const getBinKey = (dateString: string, size: BinSize): string => {
+  const date = new Date(dateString)
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  
+  switch (size) {
+    case 'day':
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    case 'week': {
+      // Get ISO week number
+      const { year: weekYear, week } = getISOWeek(date)
+      return `${weekYear}-W${String(week).padStart(2, '0')}`
+    }
+    case 'month':
+      return `${year}-${String(month).padStart(2, '0')}`
+    case 'quarter': {
+      const quarter = Math.floor((month - 1) / 3) + 1
+      return `${year}-Q${quarter}`
+    }
+    case 'year':
+      return String(year)
+    default:
+      return dateString.split('T')[0]
+  }
+}
+
+// Helper function to format bin key for display
+const formatBinKey = (key: string, size: BinSize): string => {
+  switch (size) {
+    case 'day': {
+      const date = new Date(key)
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    }
+    case 'week': {
+      const [year, week] = key.split('-W')
+      return `${year} Week ${week}`
+    }
+    case 'month': {
+      const [year, month] = key.split('-')
+      const date = new Date(parseInt(year), parseInt(month) - 1, 1)
+      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    }
+    case 'quarter':
+      return key.replace('-Q', ' Q')
+    case 'year':
+      return key
+    default:
+      return key
+  }
+}
+
 export default function StudyStats({ summary, timelineData, statCardClassName, cardClassName }: StudyStatsProps) {
   const { settings } = useDateFilter()
   const { minDate, maxDate } = settings
@@ -53,69 +116,6 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
 
     return filteredSpecimens
   }, [timelineData, minDate, maxDate])
-
-  // Helper function to get ISO week number for a date
-  const getISOWeek = (date: Date): { year: number; week: number } => {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-    const dayNum = d.getUTCDay() || 7
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum)
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-    const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
-    return { year: d.getUTCFullYear(), week: weekNo }
-  }
-
-  // Helper function to get bin key for a date based on bin size
-  const getBinKey = (dateString: string, size: BinSize): string => {
-    const date = new Date(dateString)
-    const year = date.getFullYear()
-    const month = date.getMonth() + 1
-    const day = date.getDate()
-    
-    switch (size) {
-      case 'day':
-        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-      case 'week': {
-        // Get ISO week number
-        const { year: weekYear, week } = getISOWeek(date)
-        return `${weekYear}-W${String(week).padStart(2, '0')}`
-      }
-      case 'month':
-        return `${year}-${String(month).padStart(2, '0')}`
-      case 'quarter': {
-        const quarter = Math.floor((month - 1) / 3) + 1
-        return `${year}-Q${quarter}`
-      }
-      case 'year':
-        return String(year)
-      default:
-        return dateString.split('T')[0]
-    }
-  }
-
-  // Helper function to format bin key for display
-  const formatBinKey = (key: string, size: BinSize): string => {
-    switch (size) {
-      case 'day': {
-        const date = new Date(key)
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      }
-      case 'week': {
-        const [year, week] = key.split('-W')
-        return `${year} Week ${week}`
-      }
-      case 'month': {
-        const [year, month] = key.split('-')
-        const date = new Date(parseInt(year), parseInt(month) - 1, 1)
-        return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-      }
-      case 'quarter':
-        return key.replace('-Q', ' Q')
-      case 'year':
-        return key
-      default:
-        return key
-    }
-  }
 
   // Check if date filtering is reducing the specimen count
   const isFilteringSpecimens = useMemo(() => {
@@ -213,7 +213,7 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
       // Keep enrollment timeline from original summary (it's based on subject creation dates, not filtered)
       enrollmentTimeline: summary.enrollmentTimeline,
     }
-  }, [summary, filteredData, timelineData, minDate, maxDate, binSize])
+  }, [summary, filteredData, timelineData, minDate, maxDate])
   // Transform data for charts using filtered summary
   const specimenTypeChartData = useMemo(() => {
     return displaySummary.specimenTypes.map((type) => ({

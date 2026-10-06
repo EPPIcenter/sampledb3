@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useEffectEvent } from 'react'
 import { controlsApi } from '../../lib/api/controls';
 import type { ControlDefinition } from '../../lib/api/controls';
 import { strainsApi, unitsApi } from '../../lib/api/reference-data';
@@ -81,7 +81,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
   }
 
   // Sync form when controlDefinition is set from fetch (in loadControlDefinition)
-  const loadControlDefinition = async () => {
+  const loadControlDefinition = useEffectEvent(async () => {
     if (!id) return
     try {
       const res = await controlsApi.getDefinitionSummary(parseInt(id))
@@ -111,7 +111,7 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
       console.error('Failed to load control definition:', err)
       setError('Failed to load control definition')
     }
-  }
+  })
 
   const loadStrains = async () => {
     try {
@@ -148,15 +148,16 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
     strainInputs.length > 0 &&
     Math.abs(strainInputs.reduce((sum, s) => sum + s.percentage, 0) - 100) < 0.01
 
-  useEffect(() => {
-    if (!canSuggestNames) {
-      setDefinitionNames([])
-      return
-    }
-    let cancelled = false
+  // Refetch only when the values behind the names change, not on every new array.
+  const targetDensitiesKey = targetDensitiesForNames.join(',')
+  const strainsKey = strainInputs
+    .map((s) => `${s.strainId}:${s.percentage}`)
+    .sort()
+    .join(',')
+  const fetchSuggestedNames = useEffectEvent(() => {
     const unitId = formData.targetDensityUnitId ? parseInt(formData.targetDensityUnitId) : undefined
     const strainsPayload = strainInputs.map((s) => ({ strainId: s.strainId, percentage: s.percentage }))
-    Promise.all(
+    return Promise.all(
       targetDensitiesForNames.map((d) =>
         controlsApi
           .suggestName({
@@ -167,21 +168,21 @@ export default function ControlDefinitionForm({ controlDefinition: propControlDe
           })
           .then((r) => r.suggestedName)
       )
-    ).then((names) => {
+    )
+  })
+  useEffect(() => {
+    if (!canSuggestNames) {
+      setDefinitionNames([])
+      return
+    }
+    let cancelled = false
+    void fetchSuggestedNames().then((names) => {
       if (!cancelled) setDefinitionNames(names)
     })
     return () => {
       cancelled = true
     }
-  }, [
-    canSuggestNames,
-    formData.targetDensityUnitId,
-    targetDensitiesForNames.join(','),
-    strainInputs
-      .map((s) => `${s.strainId}:${s.percentage}`)
-      .sort()
-      .join(','),
-  ])
+  }, [canSuggestNames, formData.targetDensityUnitId, targetDensitiesKey, strainsKey])
 
   const handleAddStrain = () => {
     const availableStrains = strains.filter((s) => !strainInputs.some((si) => si.strainId === s.id))

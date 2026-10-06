@@ -49,7 +49,7 @@ export default function AdminDataIntegrityEmptyCollections() {
   const queryClient = useQueryClient()
   const reportQuery = useAdminIntegrityReport()
   const reportStatus = fromQuery(reportQuery)
-  const collections = reportQuery.data?.emptyCollections ?? []
+  const collections = useMemo(() => reportQuery.data?.emptyCollections ?? [], [reportQuery.data])
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<SelectionKey>>(new Set())
   const [showDeleteModal, setShowDeleteModal] = useState(false)

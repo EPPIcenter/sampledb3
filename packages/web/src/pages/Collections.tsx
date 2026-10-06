@@ -66,7 +66,7 @@ export default function Collections() {
   )
 
   const collectionsQuery = useAllCollections()
-  const collections = collectionsQuery.data ?? []
+  const collections = useMemo(() => collectionsQuery.data ?? [], [collectionsQuery.data])
   const listStatus = fromQuery(collectionsQuery, {
     isEmpty: collectionsQuery.isSuccess && collections.length === 0,
   })

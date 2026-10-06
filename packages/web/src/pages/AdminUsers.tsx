@@ -48,7 +48,7 @@ export default function AdminUsers() {
   const [showPassword, setShowPassword] = useState(false)
 
   const usersQuery = useAdminUsers(showDeleted)
-  const users = usersQuery.data ?? []
+  const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data])
   const listStatus = fromQuery(usersQuery, {
     isEmpty: usersQuery.isSuccess && users.length === 0,
   })

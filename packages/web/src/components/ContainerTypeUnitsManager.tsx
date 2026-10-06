@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useEffectEvent } from 'react'
 import { settingsApi } from '../lib/api/settings';
 import { unitsApi } from '../lib/api/reference-data';
 import type { ContainerDefaults } from '../lib/api/settings';
@@ -52,8 +52,12 @@ export default function ContainerTypeUnitsManager({
   // All available units
   const [allUnits, setAllUnits] = useState<Unit[]>([])
 
+  // loadData is also called from handlers, so the mount effect goes through an Effect Event.
+  const loadInitialData = useEffectEvent(() => {
+    void loadData()
+  })
   useEffect(() => {
-    loadData()
+    loadInitialData()
   }, [])
 
   const loadData = async () => {

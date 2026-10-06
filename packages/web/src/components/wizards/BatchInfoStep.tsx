@@ -79,7 +79,7 @@ export default function BatchInfoStep({
     if (def && batchInfo.controlDefinitionId && !batchInfo.controlDefinition) {
       onChange({ ...batchInfo, controlDefinition: def })
     }
-  }, [definitionDetailQuery.data, batchInfo.controlDefinitionId, batchInfo.controlDefinition, onChange])
+  }, [definitionDetailQuery.data, batchInfo, onChange])
 
   // Client-side filter by search, strains, and density
   const filteredDefinitions = useMemo(() => {

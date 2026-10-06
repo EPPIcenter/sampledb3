@@ -47,7 +47,10 @@ export default function LocationDetail() {
   const location = (detailQuery.data?.location as Location | undefined) ?? null
   const contents = (detailQuery.data?.contents as LocationContents | undefined) ?? null
   const hierarchyStats = (detailQuery.data?.hierarchyStats as LocationHierarchyStats | undefined) ?? null
-  const allLocations = (detailQuery.data?.allLocations as Location[] | undefined) ?? []
+  const allLocations = useMemo(
+    () => (detailQuery.data?.allLocations as Location[] | undefined) ?? [],
+    [detailQuery.data],
+  )
   const pagination = detailQuery.data?.pagination ?? null
 
   const pathLabel = useMemo(() => {
