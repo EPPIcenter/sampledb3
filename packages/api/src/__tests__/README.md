@@ -1,10 +1,8 @@
 # Backend testing guide
 
-The rules for API tests are under Tests in `CODING_STANDARDS.md`. This guide covers the helpers.
+API tests run on Bun's runner because route and integration tests need `bun:sqlite`. Test files import `describe`, `it`, and `expect` from `'vitest'`; Bun maps that import to `bun:test`. `bun run test:ui` starts Vitest, which only runs tests that never touch `bun:sqlite`.
 
-## Runner
-
-Tests run on Bun's runner because route and integration tests need `bun:sqlite`. Test files import `describe`, `it`, and `expect` from `'vitest'`; Bun maps that import to `bun:test`. `bun run test:ui` starts Vitest, which only runs tests that never touch `bun:sqlite`.
+This guide covers the helpers. The rules are under API tests in `CODING_STANDARDS.md`.
 
 ## Test database
 

@@ -45,7 +45,7 @@ bun run build
 bun run start
 ```
 
-Before pushing, run `bun run ci:verify` (typecheck + build) to match the Docker CI step. Install git pre-commit hooks with `bun run setup:hooks` to catch TypeScript errors on commit.
+Before pushing, run `bun run ci:verify`, the same checks the `Checks` workflow runs on every PR. Install the pre-commit hook with `bun run setup:hooks`; it typechecks the packages your staged files touch and lints the staged API and web files.
 
 ## Project Structure
 
@@ -72,8 +72,8 @@ Put local overrides in **`.env.local`** (gitignored) at the repo root. Bun’s a
 
 - **Unit tests (API + web)**: `bun run test`
 - **End-to-end (Playwright)**: `bun run test:e2e`
-- **API**: `bun --filter @sampledb/api test` (Bun). Coverage: `bun --filter @sampledb/api test:coverage` (report in `packages/api/coverage/`). Target 90% lines; see `packages/api/src/__tests__/README.md`.
-- **Web**: `bun --filter @sampledb/web test` (Vitest). Coverage: `bun --filter @sampledb/web test:coverage`. Coverage excludes `src/lib/api/**` and `src/**/*.css` so the 90% target applies to testable code. Thresholds in `packages/web/vitest.config.ts` can be raised in steps toward 90%.
+- **API**: `bun --filter @sampledb/api test` (Bun). Coverage: `bun --filter @sampledb/api test:coverage` (report in `packages/api/coverage/`). Target 90% lines. Test helpers: `packages/api/src/__tests__/README.md`.
+- **Web**: `bun --filter @sampledb/web test` (Vitest). Coverage: `bun --filter @sampledb/web test:coverage`. Coverage excludes `src/lib/api/**` and `src/**/*.css` so the 90% target applies to testable code. Thresholds in `packages/web/vitest.config.ts` can be raised in steps toward 90%. Test helpers: `packages/web/src/__tests__/README.md`.
 
 ## Database Configuration
 

@@ -1,8 +1,8 @@
 # Frontend testing guide
 
-Tests run on Vitest with jsdom and React Testing Library. The rules for web tests are under Tests in `CODING_STANDARDS.md`. This guide covers the helpers.
+Web tests run on Vitest with jsdom and React Testing Library. `src/__tests__/setup.ts` runs before every file. It stubs `IntersectionObserver` and `localStorage` and mocks the `auth` and `settings` domain modules; override those per file as needed.
 
-`__tests__/setup.ts` runs before every file. It stubs `IntersectionObserver` and `localStorage` and mocks the `auth` and `settings` domain modules; override those per file as needed.
+This guide covers the helpers. The rules are under Web tests in `CODING_STANDARDS.md`.
 
 ## Rendering
 
@@ -23,7 +23,7 @@ it('handles a click', async () => {
 
 ## Mocking the API
 
-Production code and tests import from the domain modules under `src/lib/api/`; there is no barrel. `createMockedDomainModule(domain, overrides)` in `helpers/mock-api.ts` loads the real module and swaps in the `*Api` objects you pass:
+Code calls the API through domain modules under `src/lib/api/`, so a test mocks the module the code imports. `createMockedDomainModule(domain, overrides)` in `helpers/mock-api.ts` loads the real module and swaps in the `*Api` objects you pass:
 
 ```typescript
 import { studiesApi } from '../../lib/api/studies'
@@ -56,10 +56,6 @@ vi.mock('../../lib/api/statistics', async () => {
 ```
 
 `helpers/settings-mocks.ts` builds settings values and `settingsApi.getValue` mocks.
-
-### Response shapes
-
-`api` methods resolve to the response body, not an `AxiosResponse` ([ADR 0002](../../../docs/adr/0002-http-client-response-unwrap.md)). Mocks return body shapes directly, such as `{ user }` or `{ studies: [] }`. Reference-data list helpers such as `specimenTypesApi.list()` are the exception: they return `{ data: T[], meta? }`, so their mocks keep that envelope.
 
 ## React Query hooks
 

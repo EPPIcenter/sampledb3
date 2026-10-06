@@ -38,7 +38,7 @@ export default defineConfig({
         'src/lib/api/**',
         'dist/**',
       ],
-      // Baseline; raise in steps (e.g. 50 → 65 → 80 → 90) as coverage improves (see test coverage plan). CSS and api.ts are excluded.
+      // Baseline; raise in steps toward 90% as coverage improves.
       thresholds: {
         statements: 35,
         branches: 26,
