@@ -154,7 +154,7 @@ function getOrphanedIds(
 /**
  * Main integrity check function
  */
-function checkDatabaseIntegrity(sqlite: any): IntegrityReport {
+export function checkDatabaseIntegrity(sqlite: any): IntegrityReport {
   const issues: IntegrityIssue[] = []
   const startTime = new Date().toISOString()
 
