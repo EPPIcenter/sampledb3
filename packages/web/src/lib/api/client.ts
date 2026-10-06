@@ -35,7 +35,7 @@ type SessionExpiredHandler = () => void
 let sessionExpiredHandler: SessionExpiredHandler | null = null
 
 /**
- * Called when a non-auth request gets 401 (session expired or revoked). The user context
+ * Called when a data request gets 401 (session expired or revoked). The user context
  * registers a handler that signs the user out, so the app redirects to login instead of
  * showing "Could not load" everywhere.
  */
@@ -43,8 +43,25 @@ export function setSessionExpiredHandler(handler: SessionExpiredHandler | null):
   sessionExpiredHandler = handler
 }
 
-function isAuthEndpoint(url: string | undefined): boolean {
-  return !!url && /^\/?auth\//.test(url.replace(/^\/api/, ''))
+/**
+ * Auth requests whose 401 is an answer, not an expired session: bad credentials, a wrong
+ * current password, not signed in yet, or a session check. Other /auth/* requests (user
+ * and session admin, profile updates) are data requests.
+ */
+const SELF_REPORTING_AUTH_REQUESTS = new Set([
+  'POST /auth/login',
+  'POST /auth/self-register',
+  'POST /auth/logout',
+  'POST /auth/switch',
+  'GET /auth/me',
+  'GET /auth/current',
+  'PATCH /auth/me/password',
+])
+
+function reportsOwn401(method: string | undefined, url: string | undefined): boolean {
+  if (!url) return false
+  const path = url.split('?')[0].replace(/^\/?api(?=\/)/, '').replace(/^\/?/, '/').replace(/\/$/, '')
+  return SELF_REPORTING_AUTH_REQUESTS.has(`${(method ?? 'get').toUpperCase()} ${path}`)
 }
 
 function attachRequestIdInterceptor(instance: AxiosInstance): void {
@@ -68,8 +85,7 @@ function attachRequestIdInterceptor(instance: AxiosInstance): void {
       if (axios.isAxiosError(error)) {
         const id = readRequestIdHeader(error.response?.headers)
         if (id) lastResponseRequestId = id
-        // Auth endpoints report their own 401s (wrong password, not logged in yet).
-        if (error.response?.status === 401 && !isAuthEndpoint(error.config?.url)) {
+        if (error.response?.status === 401 && !reportsOwn401(error.config?.method, error.config?.url)) {
           sessionExpiredHandler?.()
         }
       }
