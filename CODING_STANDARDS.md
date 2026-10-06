@@ -24,7 +24,7 @@ Paths are relative to `packages/api/`.
 
 - Give each test its own database from `setupTestDatabase()`, and close it with `cleanupTestDatabase()` in `afterEach`.
 - Seed rows with the factories in `src/__tests__/helpers/factories.ts`.
-- Test a route behind session auth through `setupAuthenticatedRouteTest`.
+- Test a route behind session auth through `setupAuthenticatedRouteTest`. Log in by hand with `loginAndGetCookie` only when the login flow is under test, as in the auth route and middleware tests.
 - For a CRUD route with `checkInUse`, write a delete test for both the in-use and the free case.
 
 ## Web
