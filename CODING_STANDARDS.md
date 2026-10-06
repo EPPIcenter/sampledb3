@@ -26,6 +26,7 @@ Paths are relative to `packages/api/`.
 - Seed rows with the factories in `src/__tests__/helpers/factories.ts`.
 - Test a route behind session auth through `setupAuthenticatedRouteTest`. Log in by hand with `loginAndGetCookie` only when the login flow is under test, as in the auth route and middleware tests.
 - For a CRUD route with `checkInUse`, write a delete test for both the in-use and the free case.
+- Test a route's error cases as well as its success: validation errors, 404s, and duplicates.
 
 ## Web
 
@@ -38,4 +39,6 @@ Paths are relative to `packages/web/`.
 - Render components with `await render(...)` from `src/__tests__/helpers/render`.
 - Mock the domain module the code imports with `createMockedDomainModule`. Make each override replace a whole `*Api` object and resolve to the same body the real module returns.
 - Query elements by role or label (`getByRole`, `getByLabelText`), and drive interactions with `@testing-library/user-event`.
+- Wait for async results with `findBy*` queries or `waitFor`.
+- Test a component's loading and error states, not only its loaded state.
 - In a mutation hook's test, assert which queries it invalidates.
