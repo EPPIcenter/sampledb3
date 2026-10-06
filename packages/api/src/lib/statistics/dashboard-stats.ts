@@ -12,7 +12,7 @@ import {
 import { eq, and, sql, inArray } from 'drizzle-orm'
 import { resolveContainerTypes } from '../container-placement'
 import { buildDateFilter } from './helpers'
-import { chunkArray } from '../sql-helpers'
+import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 import { computeContainerAggregates } from './container-aggregates'
 import {
   resolveContainerIdsAtLocations,
@@ -203,7 +203,7 @@ export async function getDashboardStatistics(
 
       // Batch query if too many specimen IDs to avoid SQLite variable limit
       // Use Promise.all to parallelize queries for better performance
-      const specimenChunks = chunkArray(specimenIds, 500)
+      const specimenChunks = chunkArray(specimenIds, SQL_IN_CHUNK_SIZE)
       
       const chunkResults = await Promise.all(
         specimenChunks.map(async (specimenChunk, chunkIndex) => {
@@ -250,7 +250,7 @@ export async function getDashboardStatistics(
         } else {
           // Fetch containers matching location and other filters
           // Use Promise.all to parallelize queries
-          const containerIdChunks = chunkArray(locationFilteredContainerIds, 500)
+          const containerIdChunks = chunkArray(locationFilteredContainerIds, SQL_IN_CHUNK_SIZE)
           const chunkResults = await Promise.all(
             containerIdChunks.map(async (containerIdChunk) => {
               // Tag filter is already intersected into locationFilteredContainerIds.
@@ -265,7 +265,7 @@ export async function getDashboardStatistics(
       } else {
         // No location filter
         if (tagFilteredContainerIds) {
-          const tagIdChunks = chunkArray(tagFilteredContainerIds, 500)
+          const tagIdChunks = chunkArray(tagFilteredContainerIds, SQL_IN_CHUNK_SIZE)
           const chunkResults = await Promise.all(
             tagIdChunks.map((idChunk) =>
               database.select().from(storageContainer).where(inArray(storageContainer.id, idChunk)),

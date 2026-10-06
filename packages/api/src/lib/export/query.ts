@@ -21,7 +21,7 @@ import type {
   StudyRecord,
 } from './types'
 import { buildExportSummary, validateStudyCodes } from './validate'
-import { chunkArray, dateToUpperBound } from '../sql-helpers'
+import { chunkArray, dateToUpperBound, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 import { shiftCalendarDate } from '../datetime'
 
 export async function buildContainerQuery(database: Database, filters: ExportFilters) {
@@ -154,7 +154,7 @@ export async function buildContainerQuery(database: Database, filters: ExportFil
 
   // Get matching containers, chunking specimen ids to stay under SQLite's parameter limit
   let containers: Array<typeof storageContainer.$inferSelect> = []
-  for (const idChunk of chunkArray(specimenIds, 5000)) {
+  for (const idChunk of chunkArray(specimenIds, SQL_IN_CHUNK_SIZE)) {
     containers.push(
       ...(await database
         .select()

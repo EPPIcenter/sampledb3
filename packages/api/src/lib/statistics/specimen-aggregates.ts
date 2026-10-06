@@ -2,7 +2,7 @@ import type { Database } from '../../db/client'
 import { specimen, specimenType, study, studySubject } from '../../db/schema'
 import { inArray } from 'drizzle-orm'
 import { cache, cacheKeys } from '../cache'
-import { chunkArray } from '../sql-helpers'
+import { chunkArray, SQL_IN_CHUNK_SIZE } from '../sql-helpers'
 
 export type SpecimenAggregates = {
   total: number
@@ -92,7 +92,7 @@ export async function computeSpecimenAggregates(
     const uniqueSubjectIds = [...new Set(subjectSpecimens.map((s) => s.studySubjectId!))]
 
     if (uniqueSubjectIds.length > 0) {
-      const subjectChunks = chunkArray(uniqueSubjectIds, 500)
+      const subjectChunks = chunkArray(uniqueSubjectIds, SQL_IN_CHUNK_SIZE)
       const allSubjects: Array<{ id: number; studyId: number }> = []
 
       for (const chunk of subjectChunks) {

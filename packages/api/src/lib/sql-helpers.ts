@@ -11,6 +11,13 @@ export function dateToUpperBound(column: SQLiteColumn, dateTo: string) {
   return next ? lt(column, next) : lte(column, dateTo)
 }
 
+/**
+ * Ids per `IN (...)` list when a list is chunked. SQLite caps bound parameters per statement
+ * (32766 today, 999 before 3.32); 500 stays far under either cap, leaving room for the
+ * query's other parameters, while keeping the number of round trips low.
+ */
+export const SQL_IN_CHUNK_SIZE = 500
+
 /** Batch an array into chunks for SQLite variable limits. */
 export function chunkArray<T>(array: T[], chunkSize: number): T[][] {
   const chunks: T[][] = []
