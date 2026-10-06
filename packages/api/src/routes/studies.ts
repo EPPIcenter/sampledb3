@@ -722,14 +722,13 @@ studies.delete('/:id', memberMiddleware, async (c) => {
     const subjectIds = subjects.map((s) => s.id)
     // Subqueries, not id lists, so large studies stay under SQLite's parameter limit.
     const studySubjectIds = database.select({ id: studySubject.id }).from(studySubject).where(eq(studySubject.studyId, id))
-    const specimenIds = (
-      await database.select({ id: specimen.id }).from(specimen).where(inArray(specimen.studySubjectId, studySubjectIds))
-    ).map((s) => s.id)
+    const studySpecimenIds = database.select({ id: specimen.id }).from(specimen).where(inArray(specimen.studySubjectId, studySubjectIds))
+    const specimenIds = (await studySpecimenIds).map((s) => s.id)
     const containerIds = (
       await database
         .select({ id: storageContainer.id })
         .from(storageContainer)
-        .where(inArray(storageContainer.specimenId, database.select({ id: specimen.id }).from(specimen).where(inArray(specimen.studySubjectId, studySubjectIds))))
+        .where(inArray(storageContainer.specimenId, studySpecimenIds))
     ).map((c) => c.id)
 
     await assertNotUsedInQpcr(database, { containerIds, specimenIds }, `study '${existingStudy.shortCode}'`)

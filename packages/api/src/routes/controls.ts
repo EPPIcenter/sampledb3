@@ -601,19 +601,19 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     // Same rule as create: no two definitions with the same density and strain mix.
     if (strains !== undefined || targetDensity !== undefined || targetDensityUnitId !== undefined) {
       const storedStrains = (newProps.strains as Array<{ id: number; percentage: number }> | undefined) ?? []
-      const others = await dbInstance
-        .select()
-        .from(controlDefinition)
-        .where(and(eq(controlDefinition.controlType, 'blood'), sql`${controlDefinition.id} != ${id}`))
-      const duplicate = findMatchingDefinitionInList(others, {
-        strains: storedStrains.map((strain) => ({ strainId: strain.id, percentage: strain.percentage })),
-        targetDensity: newProps.targetDensity as number | undefined,
-        targetDensityUnitId: newProps.targetDensityUnitId as number | undefined,
-      })
+      const duplicate = await findBloodControlDefinitionByComposition(
+        dbInstance,
+        {
+          strains: storedStrains.map((strain) => ({ strainId: strain.id, percentage: strain.percentage })),
+          targetDensity: newProps.targetDensity as number | undefined,
+          targetDensityUnitId: newProps.targetDensityUnitId as number | undefined,
+        },
+        { excludeId: id },
+      )
       if (duplicate) {
         return c.json({
           error: 'A control definition with this combination of density and strains already exists',
-          existingDefinition: duplicate.definition,
+          existingDefinition: duplicate,
         }, 409)
       }
     }

@@ -417,6 +417,16 @@ describe('Controls API', () => {
 
       expect(res.status).toBe(409)
     })
+
+    it('does not count the definition being edited as a duplicate', async () => {
+      const strain = await createTestStrain(ctx.db, { name: '3D7' })
+      const strains = [{ id: strain.id, name: '3D7', percentage: 100 }]
+      const def = await createTestControlDefinition(ctx.db, { name: 'D200', properties: { strains, targetDensity: 200 } })
+
+      const res = await ctx.request(`${BASE}/${def.id}`, { method: 'PATCH', json: { targetDensity: 200 } })
+
+      expect(res.status).toBe(200)
+    })
   })
 
   describe(`PATCH ${BASE}/batches/:id`, () => {
