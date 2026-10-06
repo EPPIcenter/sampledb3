@@ -8,9 +8,35 @@ See [ADR-0003: SQLite schema evolution](../../../docs/adr/0003-sqlite-schema-evo
 
 Use `openOperationalDatabase(optionalPath?)` from the client module. It resolves the file path, enables WAL, turns on foreign keys, runs schema evolution, and returns Drizzle + raw `bun:sqlite` handles. Importing the client module does **not** open a connection.
 
-Multi-statement writes that `await` must use `withWriteTransaction` from `write-transaction.ts`. Drizzle's bun-sqlite `db.transaction(async () => …)` commits when the callback first yields; it does not await the returned Promise. ESLint rejects an `async` callback passed to `.transaction(...)`.
-
 Tests should use the same entry point (e.g. `openOperationalDatabase(':memory:')` via `setupTestDatabase()`).
+
+## Transactions
+
+The API shares one `bun:sqlite` connection across all requests, so a transaction that stays open across `await` is visible to every request that runs while it is open. Use the helpers in `write-transaction.ts`:
+
+| Helper | Use it to | Ends with |
+|--------|-----------|-----------|
+| `withWriteTransaction(db, fn)` | Run multi-statement writes that `await` | `COMMIT`, or `ROLLBACK` if `fn` throws |
+| `withRolledBackTransaction(db, fn)` | Check that a write would succeed by performing it (validate routes) | `ROLLBACK`, always |
+
+Drizzle's bun-sqlite `db.transaction(async () => …)` commits when the callback first yields; it does not await the returned Promise. ESLint rejects an `async` callback passed to `.transaction(...)`.
+
+### Concurrency model
+
+- **One transaction at a time per connection.** A process-wide lock per connection serializes the helpers. A call from another async context, such as another request, waits for the lock and then runs its own `BEGIN`.
+- **Nesting follows the async context.** The open transaction is kept in an `AsyncLocalStorage`. A helper called from inside another helper's `fn` runs in a `SAVEPOINT` of the open transaction instead of waiting. If the nested `fn` throws, only its own writes roll back. A nested `withRolledBackTransaction` always rolls back to its savepoint and leaves the outer transaction's earlier writes in place.
+- **A transaction opened outside the helpers** (a raw `sqlite.exec('BEGIN')`, as some tests do) is not the helpers' to commit: a helper called while one is open runs in a savepoint inside it.
+
+### What the lock does not cover
+
+The lock only orders the helpers. A write made outside them runs immediately and synchronously, and if another context has a helper's transaction open at that moment the write lands in that transaction:
+
+- If that transaction commits, the write commits with it.
+- If it rolls back (a failed import, or any `withRolledBackTransaction` validate), the write is lost, though the request that made it has already reported success.
+
+Writes outside the helpers include plain `db.insert/update/delete` calls (about 220 in 38 files under `routes/`, `lib/`, and `middleware/`, among them session writes on login, rate-limit counters, and the error log that `handleRouteError` writes) and Drizzle's synchronous `db.transaction((tx) => …)`, which bun:sqlite turns into a savepoint inside the open transaction. Routing them through the lock would mean making every write in the API wait on an async lock; it has not been done. The exposure lasts as long as a helper's transaction stays open across `await`.
+
+When you add a multi-statement write, use `withWriteTransaction` instead of adding to that list.
 
 ## Schema version
 
