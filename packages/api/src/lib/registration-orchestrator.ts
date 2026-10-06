@@ -38,6 +38,7 @@ export {
   prepareCombinedSubjectContainerBatch,
   validateSpecimenContainerRegistration,
 } from './registration-prepare'
+import { insertedRow } from './inserted-row'
 
 /**
  * Validate bulk specimen rows without creating records.
@@ -117,10 +118,8 @@ export async function createBulkSpecimenRows(
             updatedBy: userId,
           })
           .returning()
-          .get()
-        const inserted = Array.isArray(insertResult) ? insertResult[0] : insertResult
-        if (!inserted) throw new Error('Insert did not return specimen row')
-        specimenRecordsByUniqueIndex.push(inserted as typeof specimen.$inferSelect)
+          .all()
+        specimenRecordsByUniqueIndex.push(insertedRow(insertResult, 'specimen'))
         newCount += 1
       }
     }

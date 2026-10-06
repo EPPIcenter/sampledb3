@@ -46,6 +46,7 @@ import {
   findMatchingDefinitionInList,
   buildBloodControlPropertiesPayload,
 } from '../lib/controls/strain-composition'
+import { insertedRow } from '../lib/inserted-row'
 
 /**
  * Create controls routes with database injection
@@ -519,10 +520,7 @@ controls.post('/', memberMiddleware, async (c) => {
       })
       .returning()
 
-    const newControl = result.at(0)
-    if (!newControl) {
-      throw new Error('Insert did not return control definition row')
-    }
+    const newControl = insertedRow(result, 'control definition')
     return c.json({ control: newControl }, 201)
   } catch (error) {
     return handleRouteError(error, c)
