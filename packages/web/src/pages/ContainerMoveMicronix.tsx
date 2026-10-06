@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useMicronixMoveBootstrap, moveWorkflowKeys } from '../hooks/useMoveWorkflow'
 import { useScanMoveWorkflow } from '../hooks/useScanMoveWorkflow'
@@ -12,6 +12,7 @@ import { MICRONIX_SCAN_MOVE_COPY } from '../components/scan-move/copy'
 import MicronixMoveInstructions from '../components/scan-move/MicronixMoveInstructions'
 import MicronixScannerConfigPanel from '../components/scan-move/MicronixScannerConfigPanel'
 import '../styles/storage.css'
+import { EMPTY_LIST } from '../lib/empty-list'
 
 export default function ContainerMoveMicronix() {
   const { canWrite } = useUser()
@@ -20,10 +21,7 @@ export default function ContainerMoveMicronix() {
   const bootstrapStatus = fromQuery(bootstrapQuery)
   const availablePlates = (bootstrapQuery.data?.plates ?? []) as MicronixPlate[]
   const locations = bootstrapQuery.data?.locations ?? []
-  const scannerConfigurations = useMemo(
-    () => bootstrapQuery.data?.scannerConfigurations ?? [],
-    [bootstrapQuery.data],
-  )
+  const scannerConfigurations = bootstrapQuery.data?.scannerConfigurations ?? EMPTY_LIST
 
   const refreshCollections = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: moveWorkflowKeys.micronixBootstrap() })
