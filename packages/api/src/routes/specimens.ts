@@ -10,7 +10,7 @@ import {
   toContainerWriteInput,
   type BulkCombinedContainerInput,
 } from '../lib/container-write-placement'
-import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
+import { ConflictError, handleRouteError, NotFoundError, ValidationError } from '../lib/error-handler'
 import { containerSchema, containerSchemaWithLocation } from '../lib/schemas'
 import { createAuthMiddleware, createMemberMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
@@ -206,7 +206,8 @@ specimens.post('/', memberMiddleware, async (c) => {
       } catch (err) {
         await dbInstance.delete(storageContainer).where(eq(storageContainer.specimenId, newSpecimen.id))
         await dbInstance.delete(specimen).where(eq(specimen.id, newSpecimen.id))
-        throw err instanceof ValidationError ? err : new ValidationError(err instanceof Error ? err.message : 'Failed to create container')
+        if (err instanceof ValidationError || err instanceof ConflictError) throw err
+        throw new ValidationError(err instanceof Error ? err.message : 'Failed to create container')
       }
     }
     
