@@ -22,16 +22,26 @@ Paths are relative to `packages/api/`.
 
 ### Domain modules
 
-- Create a Specimen or Container through `registerSpecimens` in `src/lib/specimen-registration/`. Validate a request with `checkSpecimenRegistration`, which is the same write rolled back (ADR 0010).
-- A request that carries a container validates it with `containerWriteInputSchema` from `@sampledb/contract` (ADR 0006).
-- Resolve a Specimen's Source with `resolveSpecimenSource` or `resolveSpecimenSources` from `src/lib/specimens/provenance.ts`, and hand every caller the full `SpecimenSource` shape (ADR 0007).
-- Build a container payload (placement, Tags, Specimen, Source) from `loadContainerReadViews` in `src/lib/container-read-view.ts`, then project it (ADR 0009).
+- In a new write path, create Specimens and Containers with `registerSpecimens` from `src/lib/specimen-registration/` (ADR 0010). Bulk combined import and `/subjects/with-specimens` have migrated. These paths still insert Specimens directly until their slice in ADR 0010 lands: `POST /specimens`, add-container and `/specimens/bulk`, which validate with `validateSpecimenData` or `validateBulkSpecimenRows` (`src/routes/specimens.ts`, `src/lib/registration-orchestrator.ts`); derivations (`src/lib/derivations.ts`); and control batches (`src/lib/controls/batch-with-specimens.ts`).
+- In a new write path, validate a registration with `checkSpecimenRegistration`, or wrap the whole write in `withRolledBackTransaction` when the caller writes its own records first (ADR 0010).
+- Validate an inbound container with a `@sampledb/contract` schema (`containerWriteInputSchema`, `bulkCombinedContainerSchema` or `optionalContainerInputSchema`), not an endpoint-specific container Zod schema (ADR 0006).
+- Map a CSV row to `ContainerWriteInput` with `csvRowToContainerWriteInput` from `@sampledb/contract` (ADR 0006). The web bulk import and control-batch CSVs still map through `flatBulkContainerToWriteInput` and `flatControlBatchContainerToWriteInput` in `packages/web/src/lib/`.
+- In a `ContainerWriteInput`, place a paper container on a `collection` of type `sheet`, not on a box or bag `collection` with a sibling `sheetName` (ADR 0006).
+- Resolve a Specimen's Source with `resolveSpecimenSource` or `resolveSpecimenSources` from `src/lib/specimens/provenance.ts` (ADR 0007).
+- Return the full `SpecimenSource` shape to every caller, not a per-endpoint subset (ADR 0007).
+- Load a container read payload (placement, Tags, Specimen, Source) with `loadContainerReadViews` or `loadContainerReadViewsByIds` from `src/lib/container-read-view.ts` (ADR 0009).
+- Project the loaded view to its read path's type: `EnrichedContainerApi` for list, derivations and PATCH, `EnrichedStorageContainer` for collection detail, and CSV row fields for Container export (ADR 0009).
 
 ### Routes
 
-- A route maps Drizzle rows to a wire DTO before `c.json` wherever the shape matters. `omitOnWireMiddleware` drops null keys from every response, so null omission stays with it (ADR 0005).
-- A route reports an error by throwing a typed error from `src/lib/error-handler.ts` or returning `handleRouteError(error, c)` (ADR 0004).
-- Structured stdout goes through `src/lib/observability.ts`. A failure meant for Admin Error Logs goes through `src/lib/error-logger.ts` (ADR 0004).
+- In new or changed route code, report an error by throwing a typed error from `src/lib/error-handler.ts` or returning `handleRouteError(error, c)`, not with `return c.json({ error }, 4xx)` (ADR 0004).
+- Throw `ExpectedNotFoundError` for a 404 caused by user input, such as an export preflight miss or a user-supplied lookup, and `NotFoundError` for a missing resource on a direct GET or a stale link (ADR 0004).
+- Write no route-level `catch` block that calls `console.error`; return `handleRouteError(error, c)` from it instead (ADR 0004).
+- In new code, write log lines to stdout with `logDebug`, `logInfo`, `logWarn` or `logError` from `src/lib/observability.ts`, not `console.*`. Startup banners and schema-evolution CLI output stay plain `console.log` (ADR 0004). The `console.warn` in `logTemplateError` in `src/routes/qpcr-experiments.ts` predates this rule.
+- Persist a failure to the `error_logs` table with `src/lib/error-logger.ts`, not `observability.ts`. Both export `logError`, so check the import path (ADR 0004).
+- In a new or changed route handler, do not spread a Drizzle row into a `c.json` payload (ADR 0005). `...newSpecimen` in `src/routes/specimens.ts` and `...locationRecord` in `src/routes/locations.ts` predate this rule.
+- Map a response that has a schema in `@sampledb/contract/wire` (containers today) to that wire DTO before `c.json` (ADR 0005).
+- Leave null omission to `omitOnWireMiddleware`: do not call `toWireJson()` in a route handler (ADR 0005).
 
 ### API tests
 
@@ -45,11 +55,15 @@ Paths are relative to `packages/api/`.
 Paths are relative to `packages/web/`.
 
 - Call the API through its domain module, `src/lib/api/<domain>`. Its methods resolve to the response body, so read `res.study`. Reference-data `list()` helpers are the exception: their body is `{ data, meta? }` (ADR 0002).
-- Read and write settings with `settingsApi.getValue` and `settingsApi.putValue` (ADR 0002).
-- A Zod schema for a response marks an unset field `.optional()`, because the wire omits it (ADR 0005).
-- Show a query's read error inline with `PageError` or `SectionMessage` from `src/ui/`. Toasts are for mutation errors (ADR 0001).
-- A mutation goes through a domain hook that invalidates every query it affects, `dashboardKeys` included (ADR 0001).
-- Scan move behaviour lands in the `src/lib/scan-move/` core with plain-data unit tests. The move pages only wire it up (ADR 0008).
+- Read a setting with `settingsApi.getValue(key)` or `settingsApi.get(key).value`, never `api.get` on `/settings/:key` (ADR 0002).
+- Write a setting with `settingsApi.putValue`, `settingsApi.update`, or the bulk wrappers `exportConfigurationsApi.update`, `scannerConfigurationsApi.update` and `tableViewConfigurationsApi.update`, never `api.put` on `/settings/:key` (ADR 0002).
+- In a Zod parser for a container response, mark an unset field `.optional()`, not `.nullish()` (ADR 0005). Other response parsers are out of scope, such as `parseSettingsEnvelope` in `src/lib/api/parse-response.ts`.
+- On a screen ADR 0001 lists as migrated, show a query's read error inline with `PageError` or `SectionMessage` from `src/ui/`, not a toast (ADR 0001). Workflow local state (CSV parse, server validate, submits) keeps its inline or toast errors.
+- Prefer to send a new mutation through a domain hook, such as `useCreateStudy`, that invalidates the queries the mutation changes, including `dashboardKeys` when it changes dashboard data (ADR 0001). Direct `*Api.create`, `update` and `delete` calls in `Locations.tsx`, `QpcrExperimentDetail.tsx`, `StudyDetail.tsx`, `SubjectForm.tsx` and `ControlDefinitionForm.tsx` predate this rule.
+- Put new Scan move behaviour in the `src/lib/scan-move/` core with plain-data unit tests, not in `ContainerMoveMicronix.tsx` or `ContainerMoveCryovial.tsx` (ADR 0008). The paper move page, `ContainerMovePapers.tsx`, is not a Scan move.
+- Pass a Scan move effect a `ScanMoveGateway` instead of importing `collectionsApi` into it (ADR 0008).
+- Test Scan move effects with plain stub gateway functions, not `vi.mock` (ADR 0008).
+- Open a modal with `Modal` from `src/ui/`, not `ModalPortal` (ADR 0001). `CommandPalette` and `SearchModal` still use `ModalPortal` directly.
 
 ### Web tests
 
