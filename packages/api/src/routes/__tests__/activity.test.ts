@@ -71,7 +71,9 @@ describe('Activity API', () => {
 
       const res = await ctx.request('/api/activity/recent', { method: 'GET' })
       expect(res.status).toBe(200)
-      const data = (await res.json()) as { activity?: Array<{ id: number; type: string; label: string }> }
+      const data = (await res.json()) as {
+        activity?: Array<{ id: number; type: string; label: string; context?: string }>
+      }
       expect(Array.isArray(data.activity)).toBe(true)
 
       const specimenActivity = data.activity!.find(
@@ -81,6 +83,10 @@ describe('Activity API', () => {
       expect(specimenActivity!.label).not.toMatch(/#\d+/)
       expect(specimenActivity!.label).toContain('HPV18 DBS Control')
       expect(specimenActivity!.label).toContain('HPV18-2024-001')
+      expect(specimenActivity).toMatchObject({
+        label: 'DBS • HPV18 DBS Control (HPV18-2024-001)',
+        context: '2024-01-15',
+      })
     })
 
     it('labels subject specimens and their containers with subject and study', async () => {

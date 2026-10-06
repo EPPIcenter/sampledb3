@@ -1,13 +1,10 @@
 import { Hono } from 'hono'
 import type { Database } from '../db/client'
-import { 
-  specimen, 
-  study, 
-  storageContainer, 
-  studySubject, 
+import {
+  specimen,
+  study,
+  storageContainer,
   specimenType,
-  controlBatch,
-  controlDefinition,
   micronixTube,
   cryovialTube,
   paper,
@@ -16,14 +13,15 @@ import {
 import { sql, eq } from 'drizzle-orm'
 import { createAuthMiddleware } from '../middleware/auth'
 import { handleRouteError } from '../lib/error-handler'
+import { resolveSpecimenSources } from '../lib/specimens/provenance'
+
+/** Upper bound for GET /activity/recent?limit=. */
+const MAX_RECENT_ACTIVITY = 50
 
 /**
  * Create activity routes with database injection
  * @param database - Database instance (required)
  */
-/** Upper bound for GET /activity/recent?limit=. */
-const MAX_RECENT_ACTIVITY = 50
-
 export function createActivityRoutes(database: Database): Hono {
   const activity = new Hono()
   const authMiddleware = createAuthMiddleware(database)
@@ -35,8 +33,8 @@ export function createActivityRoutes(database: Database): Hono {
     const requested = parseInt(c.req.query('limit') || '10')
     const limit = Number.isFinite(requested) ? Math.min(Math.max(requested, 1), MAX_RECENT_ACTIVITY) : 10
     
-    // Recent specimens, joined to their subject/study or batch/definition in one query
-    // (never expose DB IDs in labels)
+    // Recent specimens with their type; the Source comes from the shared resolver (ADR 0007).
+    // Labels never expose DB IDs.
     const recentSpecimens = await database
       .select({
         id: specimen.id,
@@ -45,53 +43,12 @@ export function createActivityRoutes(database: Database): Hono {
         specimenTypeName: specimenType.name,
         collectionDate: specimen.collectionDate,
         controlBatchId: specimen.controlBatchId,
-        studySubjectId: specimen.studySubjectId,
-        batchName: controlBatch.name,
-        productionDate: controlBatch.productionDate,
-        definitionName: controlDefinition.name,
-        subjectName: studySubject.name,
-        studyTitle: study.title,
-        studyShortCode: study.shortCode,
       })
       .from(specimen)
       .leftJoin(specimenType, eq(specimen.specimenTypeId, specimenType.id))
-      .leftJoin(controlBatch, eq(specimen.controlBatchId, controlBatch.id))
-      .leftJoin(controlDefinition, eq(controlBatch.controlDefinitionId, controlDefinition.id))
-      .leftJoin(studySubject, eq(specimen.studySubjectId, studySubject.id))
-      .leftJoin(study, eq(studySubject.studyId, study.id))
       .orderBy(sql`COALESCE(${specimen.lastUpdated}, ${specimen.created}) DESC`)
       .limit(limit)
 
-    const enrichedSpecimens = recentSpecimens.map((spec) => {
-      const specimenTypeName = spec.specimenTypeName || 'Specimen'
-      let label: string = specimenTypeName
-      let context: string | undefined = undefined
-
-      if (spec.controlBatchId) {
-        if (spec.batchName && spec.definitionName) {
-          label = `${specimenTypeName} • ${spec.definitionName} (${spec.batchName})`
-          context = spec.collectionDate || spec.productionDate || undefined
-        } else {
-          label = `${specimenTypeName} • Control batch`
-        }
-      } else if (spec.studySubjectId && spec.subjectName) {
-        if (spec.studyShortCode) {
-          label = `${specimenTypeName} • ${spec.subjectName} (${spec.studyShortCode})`
-          context = spec.studyTitle ?? undefined
-        } else {
-          label = `${specimenTypeName} • ${spec.subjectName}`
-        }
-      }
-
-      return {
-        id: spec.id,
-        type: 'specimen' as const,
-        timestamp: spec.lastUpdated || spec.created || '',
-        label,
-        context,
-      }
-    })
-    
     // Get recent studies with enriched data
     const recentStudies = await database
       .select({
@@ -115,7 +72,7 @@ export function createActivityRoutes(database: Database): Hono {
         }))
       )
     
-    // Recent containers, joined to their subtype row and specimen/subject/study in one query
+    // Recent containers, joined to their subtype row and specimen type in one query
     const recentContainers = await database
       .select({
         id: storageContainer.id,
@@ -131,9 +88,8 @@ export function createActivityRoutes(database: Database): Hono {
         paperSublabel: paper.sublabel,
         wellId: staticWell.id,
         wellPosition: staticWell.position,
+        specimenId: storageContainer.specimenId,
         specimenTypeName: specimenType.name,
-        subjectName: studySubject.name,
-        studyShortCode: study.shortCode,
       })
       .from(storageContainer)
       .leftJoin(micronixTube, eq(micronixTube.id, storageContainer.id))
@@ -142,10 +98,41 @@ export function createActivityRoutes(database: Database): Hono {
       .leftJoin(staticWell, eq(staticWell.id, storageContainer.id))
       .leftJoin(specimen, eq(storageContainer.specimenId, specimen.id))
       .leftJoin(specimenType, eq(specimen.specimenTypeId, specimenType.id))
-      .leftJoin(studySubject, eq(specimen.studySubjectId, studySubject.id))
-      .leftJoin(study, eq(studySubject.studyId, study.id))
       .orderBy(sql`COALESCE(${storageContainer.lastUpdated}, ${storageContainer.created}) DESC`)
       .limit(limit)
+
+    // One batched Source lookup for every specimen in the feed: a fixed number of queries.
+    const sources = await resolveSpecimenSources(database, [
+      ...recentSpecimens.map((s) => s.id),
+      ...recentContainers.flatMap((c) => (c.specimenId != null ? [c.specimenId] : [])),
+    ])
+
+    const enrichedSpecimens = recentSpecimens.map((spec) => {
+      const specimenTypeName = spec.specimenTypeName || 'Specimen'
+      const source = sources.get(spec.id) ?? null
+      let label: string = specimenTypeName
+      let context: string | undefined = undefined
+
+      if (spec.controlBatchId) {
+        if (source?.type === 'control' && source.definitionName) {
+          label = `${specimenTypeName} • ${source.definitionName} (${source.name})`
+          context = spec.collectionDate || source.productionDate || undefined
+        } else {
+          label = `${specimenTypeName} • Control batch`
+        }
+      } else if (source?.type === 'subject') {
+        label = `${specimenTypeName} • ${source.name} (${source.study.code})`
+        context = source.study.title
+      }
+
+      return {
+        id: spec.id,
+        type: 'specimen' as const,
+        timestamp: spec.lastUpdated || spec.created || '',
+        label,
+        context,
+      }
+    })
 
     const enrichedContainers = recentContainers.map((container) => {
       let containerType = 'container'
@@ -184,11 +171,9 @@ export function createActivityRoutes(database: Database): Hono {
       }
 
       let context: string | undefined = container.specimenTypeName ?? undefined
-      if (container.subjectName) {
-        const subject = container.studyShortCode
-          ? `${container.subjectName} (${container.studyShortCode})`
-          : container.subjectName
-        context = `${container.specimenTypeName || ''} • ${subject}`.trim()
+      const source = container.specimenId != null ? sources.get(container.specimenId) : null
+      if (source?.type === 'subject') {
+        context = `${container.specimenTypeName || ''} • ${source.name} (${source.study.code})`.trim()
       }
 
       return {
