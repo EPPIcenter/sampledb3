@@ -4,7 +4,7 @@
 - **Triage labels**: each of the five triage roles is a GitHub label with the role's name: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`.
 - **Domain docs**: `CONTEXT.md` is the glossary, `docs/adr/` holds the decisions, and `packages/docs/` is the user guide.
 
-## Checks
+## Running tests and checks
 
 - Web tests: `cd packages/web && bun run test -- <files>`. Bun's own runner (`bun test`) hangs on React component tests; Vitest exits on its own, so piping it to `tail` or `grep` is safe.
 - API tests: `cd packages/api && bun test src/...`.
