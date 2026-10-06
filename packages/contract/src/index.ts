@@ -27,6 +27,7 @@ export {
   parseBarcodeExportFilterCsv,
   parseMultiStudyExportFilterCsv,
   parseSingleStudyExportFilterCsv,
+  subjectDateSelections,
   type ExportFilterColumnSpec,
   type MultiStudyExportFilterRow,
   type SingleStudyExportFilterRow,
