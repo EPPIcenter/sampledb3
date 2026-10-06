@@ -12,6 +12,12 @@ Canonical triage roles mapped to GitHub labels; see `docs/agents/triage-labels.m
 
 Single-context layout — `CONTEXT.md` and `docs/adr/` at repo root when present. See `docs/agents/domain.md`.
 
+### Package docs
+
+- Writing an API test (test database, factories, authenticated routes): `packages/api/src/__tests__/README.md`
+- Writing a web test (render helper, API mocks, React Query hooks): `packages/web/src/__tests__/README.md`
+- Changing the schema, a migration, or a transaction: `packages/api/src/db/README.md`
+
 ### Tests
 
 | Package | Command | Runner |
@@ -28,9 +34,9 @@ Example (completes in ~1s):
 cd packages/web && bun run test -- src/components/__tests__/BulkImportFlow.test.tsx
 ```
 
-### Pre-commit hooks
+### Pre-commit hooks and CI
 
-CI builds the Docker image with `bun run build`, which runs `tsc` on API and web. Type errors that tests miss will fail the nightly build.
+The `Checks` workflow runs `bun run ci:verify` on every PR: typecheck, lint, build, unit tests, and the docs stale-claims check. Lint is clean, so any lint error is yours.
 
 Install repo hooks once per clone:
 
@@ -38,8 +44,8 @@ Install repo hooks once per clone:
 bun run setup:hooks
 ```
 
-The pre-commit hook runs `typecheck` on `@sampledb/contract`, `@sampledb/api`, and/or `@sampledb/web` when staged files touch those packages (or Docker/build config). To mirror CI fully before pushing:
+The pre-commit hook runs `typecheck` on `@sampledb/contract`, `@sampledb/api`, and/or `@sampledb/web` when staged files touch those packages (or Docker/build config), and lints the staged API/web source files. To mirror CI fully before pushing:
 
 ```bash
-bun run ci:verify   # typecheck + build all packages
+bun run ci:verify
 ```

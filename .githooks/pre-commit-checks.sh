@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Pre-commit checks mirroring CI compile steps. Runs typecheck on packages
-# touched by staged files so Docker `bun run build` (tsc) failures are caught locally.
+# Pre-commit checks mirroring CI. Typechecks packages touched by staged files
+# and lints the staged API/web source files.
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -10,6 +10,8 @@ needs_contract=false
 needs_api=false
 needs_web=false
 has_staged=false
+api_lint_files=()
+web_lint_files=()
 
 while IFS= read -r file; do
   [[ -z "$file" ]] && continue
@@ -22,9 +24,11 @@ while IFS= read -r file; do
       ;;
     packages/api/*)
       needs_api=true
+      [[ "$file" == packages/api/src/*.ts ]] && api_lint_files+=("${file#packages/api/}")
       ;;
     packages/web/*)
       needs_web=true
+      [[ "$file" == packages/web/src/*.ts || "$file" == packages/web/src/*.tsx ]] && web_lint_files+=("${file#packages/web/}")
       ;;
     Dockerfile|.dockerignore|package.json|bun.lock|packages/*/package.json|packages/*/tsconfig*.json)
       needs_contract=true
@@ -51,3 +55,12 @@ if $needs_web; then
 fi
 
 echo "pre-commit: typecheck passed."
+
+if (( ${#api_lint_files[@]} > 0 )); then
+  echo "pre-commit: linting staged API files..."
+  (cd packages/api && bunx eslint --no-warn-ignored "${api_lint_files[@]}")
+fi
+if (( ${#web_lint_files[@]} > 0 )); then
+  echo "pre-commit: linting staged web files..."
+  (cd packages/web && bunx eslint --no-warn-ignored "${web_lint_files[@]}")
+fi
