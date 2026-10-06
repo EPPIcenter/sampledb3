@@ -10,7 +10,7 @@ Use `openOperationalDatabase(optionalPath?)` from the client module. It resolves
 
 Multi-statement writes that `await` must use `withWriteTransaction` from `write-transaction.ts`. Drizzle's bun-sqlite `db.transaction(async () => …)` commits when the callback first yields; it does not await the returned Promise. ESLint rejects an `async` callback passed to `.transaction(...)`.
 
-Tests should use the same entry point (e.g. `openOperationalDatabase(':memory:')` via `setupTestDatabase()`).
+Tests should use the same entry point (e.g. `openOperationalDatabase(':memory:')` via `setupTestDatabase()`), except a test that checks the snapshot itself: `__tests__/initial-schema-snapshot.test.ts` applies `initial_schema.sql` alone, because the entry point would run pending migrations on top and hide a stale snapshot.
 
 ## Schema version
 

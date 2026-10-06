@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterAll } from 'vitest'
 import { Database } from 'bun:sqlite'
 import { is } from 'drizzle-orm'
 import { SQLiteTable, getTableConfig } from 'drizzle-orm/sqlite-core'
@@ -13,6 +13,7 @@ import { CURRENT_SCHEMA_VERSION, getRecordedSchemaVersion } from '../schema-evol
 describe('initial_schema.sql snapshot', () => {
   const sqlite = new Database(':memory:')
   applyInitialSchema(sqlite)
+  afterAll(() => sqlite.close())
 
   const drizzleTables = Object.values(schema)
     .filter((value): value is SQLiteTable => is(value, SQLiteTable))
