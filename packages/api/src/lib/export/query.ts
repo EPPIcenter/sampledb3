@@ -11,7 +11,7 @@ import { resolveSubjectsByStudyGrouped } from '../identifier-resolution'
 import { resolveContainerIdsWithAllTags } from '../container-tag-filter'
 import { enrichContainerData } from './enrich'
 import { filterContainerIdsByType } from './filter'
-import type { SubjectDateFilter } from '@sampledb/contract'
+import type { SubjectDateFilter, SubjectDateSelection } from '@sampledb/contract'
 import type {
   ContainerExportData,
   ExportFilters,
@@ -345,20 +345,23 @@ export async function buildMultiStudyContainerQuery(
   // Build subject dates map (by study and subject name)
   // A subject may appear on several rows (one per visit); keep every date. A row without
   // a date means all of that subject's dates, so it wins over dated rows.
-  const subjectDatesByStudy = new Map<number, Map<string, SubjectDateFilter[] | 'all'>>()
+  const subjectDatesByStudy = new Map<number, Map<string, SubjectDateSelection>>()
   for (const [studyId, studyEntries] of entriesByStudy.entries()) {
-    const datesMap = new Map<string, SubjectDateFilter[] | 'all'>()
+    const datesMap = new Map<string, SubjectDateSelection>()
     for (const entry of studyEntries) {
       const existing = datesMap.get(entry.subject_name)
-      if (existing === 'all') continue
+      if (existing?.kind === 'all') continue
       const dateFilter: SubjectDateFilter | null = entry.collection_date
         ? { exact: entry.collection_date }
         : entry.date_from || entry.date_to
           ? { from: entry.date_from, to: entry.date_to }
           : null
-      datesMap.set(entry.subject_name, dateFilter ? [...(existing ?? []), dateFilter] : 'all')
+      datesMap.set(
+        entry.subject_name,
+        dateFilter ? { kind: 'dates', filters: [...(existing?.filters ?? []), dateFilter] } : { kind: 'all' },
+      )
     }
-    if ([...datesMap.values()].some((v) => v !== 'all')) {
+    if ([...datesMap.values()].some((selection) => selection.kind === 'dates')) {
       subjectDatesByStudy.set(studyId, datesMap)
     }
   }
@@ -399,10 +402,11 @@ export async function buildMultiStudyContainerQuery(
     const studySubjectDates = subjectDatesByStudy.get(studyId)
     if (studySubjectDates && studySubjectDates.size > 0) {
       studyFilters.subject_dates = {}
-      for (const [subjectName, dateFilters] of studySubjectDates.entries()) {
+      for (const [subjectName, selection] of studySubjectDates.entries()) {
         const subjectId = subjectMap.get(subjectName)
-        if (subjectId && dateFilters !== 'all') {
-          studyFilters.subject_dates[subjectId] = dateFilters
+        // Subjects with no entry match every date.
+        if (subjectId && selection.kind === 'dates') {
+          studyFilters.subject_dates[subjectId] = selection.filters
         }
       }
     }
