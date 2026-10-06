@@ -128,13 +128,15 @@ describe('serializeCsv + parseCsv round trip', () => {
     })
 
     it('neutralizes formula-like text cells only when asked', () => {
-      const rows = [['=SUM(A1)', '+cmd', '@x', '-A1+1', '-131', '-2 in SubjID', -5, 'ok']]
-      const neutralized = serializeCsv(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], rows, {
+      const rows = [['=SUM(A1)', '+cmd', '@x', '-A1+1', "-1+cmd|'/C calc'!A0", '-131', '-0.5', '-2 in SubjID', -5, 'ok']]
+      const neutralized = serializeCsv(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'], rows, {
         bom: false,
         lineEnding: 'lf',
         neutralizeFormulas: true,
       })
-      expect(neutralized.split('\n')[1]).toBe("'=SUM(A1),'+cmd,'@x,'-A1+1,-131,-2 in SubjID,-5,ok")
+      expect(neutralized.split('\n')[1]).toBe(
+        "'=SUM(A1),'+cmd,'@x,'-A1+1,'-1+cmd|'/C calc'!A0,-131,-0.5,'-2 in SubjID,-5,ok",
+      )
 
       const plain = serializeCsv(['a'], [['=SUM(A1)']], { bom: false, lineEnding: 'lf' })
       expect(plain.split('\n')[1]).toBe('=SUM(A1)')

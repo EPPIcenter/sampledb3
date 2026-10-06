@@ -17,12 +17,15 @@ const DEFAULT_DELIMITER = ','
 const DEFAULT_BOM = true
 const DEFAULT_LINE_ENDING: CsvLineEnding = 'crlf'
 
+/** A whole negative number such as "-131", "-0.5", or "-1e3". */
+const NEGATIVE_NUMBER = /^-(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i
+
 /**
- * Text a spreadsheet would evaluate: leading =, +, @, tab, or CR, and "-" unless it starts a
- * number or a phrase ("-131", "-2 in SubjID") so stored negative values export unchanged.
+ * Text a spreadsheet would evaluate: leading =, +, @, tab, or CR, and "-" unless the whole cell
+ * is a number, so stored negative values export unchanged. "-1+cmd|..." is a formula, not a number.
  */
 function looksLikeFormula(s: string): boolean {
-  return /^[=+@\t\r]/.test(s) || /^-[^\d\s.]/.test(s)
+  return /^[=+@\t\r]/.test(s) || (s.startsWith('-') && !NEGATIVE_NUMBER.test(s))
 }
 
 export function escapeCsvCell(

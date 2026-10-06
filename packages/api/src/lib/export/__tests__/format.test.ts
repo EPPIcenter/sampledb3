@@ -208,9 +208,10 @@ describe('formatSimpleCSV', () => {
       expect(result).toBe("formula\n'=SUM(A1:A10)")
     })
 
-    it('leaves negative numbers and "-" phrases unchanged', () => {
+    it('leaves negative numbers unchanged but neutralizes other "-" text', () => {
       const result = formatSimpleCSV(['subject', 'comment'], [['-131', '-2 in SubjID']], lfNoBom)
-      expect(result).toBe('subject,comment\n-131,-2 in SubjID')
+      // Only whole numbers are spared; text after a leading "-" could be a formula.
+      expect(result).toBe("subject,comment\n-131,'-2 in SubjID")
     })
   })
 })
