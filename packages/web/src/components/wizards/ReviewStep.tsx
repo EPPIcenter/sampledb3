@@ -221,7 +221,7 @@ export default function ReviewStep({
       else setError('No control batches were created')
     } catch (err: unknown) {
       console.error('Multi-batch submit failed:', err)
-      setError(getQueryErrorMessage(err, 'Failed to create batches'))
+      setError(getQueryErrorMessage(err, 'Failed to create control batches'))
     } finally {
       setSubmitting(false)
     }
