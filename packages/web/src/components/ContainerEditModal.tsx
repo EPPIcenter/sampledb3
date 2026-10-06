@@ -105,7 +105,8 @@ function ContainerEditModalForm({
 
       // Only include fields that have changed
       if (formData.comment !== (container.comment || '')) {
-        updateData.comment = formData.comment || undefined
+        // Send '' rather than undefined, which JSON drops, so clearing the comment is saved.
+        updateData.comment = formData.comment
       }
 
       // Check if remainingQuantity changed

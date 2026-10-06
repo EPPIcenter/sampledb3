@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { getSpecimenTypeIcon, getContainerTypeIcon, getContainerTypeName } from '../lib/icons'
+import { parseDisplayDate } from '../lib/date-utils'
 import type { SubjectSummarySpecimen } from '../lib/api/subjects';interface SpecimenCardProps {
   specimen: SubjectSummarySpecimen
 }
@@ -7,7 +8,7 @@ import type { SubjectSummarySpecimen } from '../lib/api/subjects';interface Spec
 export default function SpecimenCard({ specimen }: SpecimenCardProps) {
   const formatDate = (dateString?: string) => {
     if (!dateString) return null
-    return new Date(dateString).toLocaleDateString()
+    return parseDisplayDate(dateString).toLocaleDateString()
   }
 
   const formatContainerBreakdown = () => {

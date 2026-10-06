@@ -259,6 +259,9 @@ const tableViewConfigurationsSchema = z.object({
     // Admins can specify userId in body to set for specific user, or omit for system-wide
     // Non-admins can only set user-specific settings for themselves
     const targetUserId = body.userId !== undefined ? body.userId : (isAdmin ? null : userId)
+    if (targetUserId !== null && targetUserId !== undefined && !(Number.isInteger(targetUserId) && targetUserId > 0)) {
+      return c.json({ error: 'userId must be a positive integer or null' }, 400)
+    }
     const actualBody = { ...body }
     delete actualBody.userId // Remove userId from body before validation
 

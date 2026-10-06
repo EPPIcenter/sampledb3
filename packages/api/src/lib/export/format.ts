@@ -22,7 +22,7 @@ export function formatSimpleCSV(
   }
 
   const formattedRows = rows.map((row) => formatExportRow(headers, row))
-  return serializeCsv(headers, formattedRows, options)
+  return serializeCsv(headers, formattedRows, { ...options, neutralizeFormulas: true })
 }
 
 export async function formatAsCSV(
@@ -41,7 +41,7 @@ export async function formatAsCSV(
     columnKeys.map((header) => formatExportCellValue(header, (row as any)[header]))
   )
 
-  return serializeCsv(columnKeys, rows, options)
+  return serializeCsv(columnKeys, rows, { ...options, neutralizeFormulas: true })
 }
 
 export async function formatAsJSON(

@@ -17,7 +17,7 @@ import {
   type ContainerInfo,
 } from '../container-move'
 import { storageContainer } from '../../db/schema'
-import { micronixTube, staticWell } from '../../db/schema'
+import { micronixTube, staticWell, box, sheet, paper } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../datetime'
 
@@ -558,6 +558,41 @@ describe('container-move', () => {
       const info = await resolveContainerByIdentifier(testDb, { type: 'container_id', containerId: wellId })
       expect(info?.containerType).toBe('static_well')
       expect(info?.currentCollectionName).toBe(plate.name)
+    })
+  })
+
+  describe('paper moves between same-named sheets', () => {
+    it('moves papers from Sheet-1 of one box to Sheet-1 of another using parent names', async () => {
+      const storageType = await createTestStorageType(testDb, { name: 'Freezer' })
+      const location = await createTestLocation(testDb, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
+      const specimen = await createTestSpecimen(testDb, specimenType.id)
+      const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
+      const now = utcNow()
+      const [boxA] = await testDb.insert(box).values({ name: 'BA', locationId: location.id, created: now, lastUpdated: now }).returning()
+      const [boxB] = await testDb.insert(box).values({ name: 'BB', locationId: location.id, created: now, lastUpdated: now }).returning()
+      const [sheetA] = await testDb.insert(sheet).values({ name: 'Sheet-1', boxId: boxA.id }).returning()
+      const [sheetB] = await testDb.insert(sheet).values({ name: 'Sheet-1', boxId: boxB.id }).returning()
+      const [container] = await testDb
+        .insert(storageContainer)
+        .values({ specimenId: specimen.id, unitId: unit.id, totalQuantity: 1, remainingQuantity: 1, created: now, lastUpdated: now })
+        .returning()
+      await testDb.insert(paper).values({ id: container!.id, sheetId: sheetB.id })
+
+      const ambiguous = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: 'Sheet-1', toCollectionName: 'Sheet-1' }],
+        moves: [{ identifier: { type: 'container_id', containerId: container!.id }, targetPosition: '' }],
+      })
+      expect(ambiguous.success).toBe(false)
+      expect(ambiguous.errors?.[0].error).toMatch(/set toParentName/)
+
+      const result = await executeMoves(testDb, {
+        mappings: [{ fromCollectionName: 'Sheet-1', fromParentName: 'BB', toCollectionName: 'Sheet-1', toParentName: 'BA' }],
+        moves: [{ identifier: { type: 'container_id', containerId: container!.id }, targetPosition: '' }],
+      })
+      expect(result.success).toBe(true)
+      const [moved] = await testDb.select().from(paper).all()
+      expect(moved.sheetId).toBe(sheetA.id)
     })
   })
 })

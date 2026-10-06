@@ -1,4 +1,27 @@
 /**
+ * Parse a date for display. A bare YYYY-MM-DD is a calendar date, so it is built in local
+ * time: new Date('2024-01-15') is UTC midnight, which renders as Jan 14 in the Americas.
+ */
+export function parseDisplayDate(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  return new Date(value)
+}
+
+/** A Date as a local YYYY-MM-DD calendar date (toISOString() gives the UTC date). */
+export function toLocalDateString(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+/** Today's local calendar date as YYYY-MM-DD, for date input defaults. */
+export function localToday(): string {
+  return toLocalDateString(new Date())
+}
+
+/**
  * Formats a date string with relative time for recent dates and absolute dates for older items
  * @param dateString - ISO date string
  * @returns Formatted date string (e.g., "2 days ago" or "Jan 15, 2024")
@@ -6,7 +29,7 @@
 export function formatDateWithRelativeTime(dateString: string | null | undefined): string {
   if (!dateString) return 'N/A'
   
-  const date = new Date(dateString)
+  const date = parseDisplayDate(dateString)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffSeconds = Math.floor(diffMs / 1000)
@@ -40,7 +63,7 @@ export function formatDateWithRelativeTime(dateString: string | null | undefined
 export function formatDate(dateString: string | null | undefined): string {
   if (!dateString) return 'N/A'
   
-  const date = new Date(dateString)
+  const date = parseDisplayDate(dateString)
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',

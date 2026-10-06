@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { parseDisplayDate } from '../lib/date-utils'
 import type { Study, StudySummaryBasic } from '../lib/api/studies';interface StudySummaryData extends StudySummaryBasic {
   averageSpecimensPerSubject?: number
   studyDurationDays?: number | null
@@ -59,7 +60,7 @@ export default function StudyCard({ study, summary, loading, onLoadSummary, vari
   const [expanded, setExpanded] = useState(false)
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', { 
+    return parseDisplayDate(dateString).toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric', 
       year: 'numeric' 

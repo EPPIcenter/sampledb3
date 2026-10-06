@@ -9,7 +9,14 @@ import {
   createTestControlBatch,
   createTestSpecimenType,
   createTestSpecimen,
+  createTestStudy,
+  createTestStudySubject,
+  createTestStorageContainer,
+  createTestStorageType,
+  createTestLocation,
+  createTestMicronixPlate,
 } from '../../__tests__/helpers/factories'
+import { micronixTube } from '../../db/schema'
 import { createActivityRoutes } from '../activity'
 
 describe('Activity API', () => {
@@ -74,6 +81,30 @@ describe('Activity API', () => {
       expect(specimenActivity!.label).not.toMatch(/#\d+/)
       expect(specimenActivity!.label).toContain('HPV18 DBS Control')
       expect(specimenActivity!.label).toContain('HPV18-2024-001')
+    })
+
+    it('labels subject specimens and their containers with subject and study', async () => {
+      const studyRecord = await createTestStudy(ctx.db, { title: 'Malaria Cohort', shortCode: 'MAL' })
+      const subject = await createTestStudySubject(ctx.db, { studyId: studyRecord.id, name: 'P-001' })
+      const type = await createTestSpecimenType(ctx.db, { name: 'Whole Blood' })
+      const spec = await createTestSpecimen(ctx.db, type.id, { studySubjectId: subject.id })
+      const container = await createTestStorageContainer(ctx.db, { specimenId: spec.id })
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const loc = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
+      const plate = await createTestMicronixPlate(ctx.db, { name: 'P1', locationId: loc.id })
+      await ctx.db.insert(micronixTube).values({ id: container.id, collectionId: plate.id, barcode: 'MT-9', position: 'A01' })
+
+      const res = await ctx.request('/api/activity/recent', { method: 'GET' })
+      const data = (await res.json()) as { activity: Array<{ id: number; type: string; label: string; context?: string }> }
+
+      expect(data.activity.find((a) => a.type === 'specimen' && a.id === spec.id)).toMatchObject({
+        label: 'Whole Blood • P-001 (MAL)',
+        context: 'Malaria Cohort',
+      })
+      expect(data.activity.find((a) => a.type === 'container' && a.id === container.id)).toMatchObject({
+        label: 'Micronix Tube (MT-9)',
+        context: 'Whole Blood • P-001 (MAL)',
+      })
     })
   })
 })

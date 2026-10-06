@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import type { Database } from '../db/client'
 import type { Database as SQLiteDatabase } from 'bun:sqlite'
 import { location, micronixPlate, cryovialBox, box, bag, storageType } from '../db/schema'
-import { eq, and, sql, or, like, desc, isNull, inArray } from 'drizzle-orm'
+import { eq, and, sql, or, desc, isNull, inArray } from 'drizzle-orm'
 import { validatePage, validateLimit } from '../lib/constants'
 import { z } from 'zod'
 import {
@@ -19,6 +19,7 @@ import { handleRouteError, NotFoundError, ValidationError } from '../lib/error-h
 import { createAdminMiddleware, createAuthMiddleware } from '../middleware/auth'
 import { utcNow } from '../lib/datetime'
 import { requireParam } from '../lib/common-validators'
+import { likeContains } from '../lib/sql-like'
 
 /**
  * Create locations routes with database injection
@@ -51,12 +52,11 @@ locations.get('/', authMiddleware, async (c) => {
         // Build conditions for each word - each word must match at least one field
         // Note: storageTypeId is only on root locations, so we search it but it may be null
         const wordConditions = searchWords.map(word => {
-          const pattern = `%${word}%`
           return or(
-            like(location.name, pattern),
-            like(location.path, pattern),
-            sql`${location.storageTypeId} LIKE ${pattern}`, // Handle nullable storageTypeId
-            like(location.description, pattern)
+            likeContains(location.name, word),
+            likeContains(location.path, word),
+            likeContains(location.storageTypeId, word), // storageTypeId is null on child locations
+            likeContains(location.description, word)
           )!
         })
         
@@ -325,7 +325,8 @@ locations.post('/', adminMiddleware, async (c) => {
       .values({
         parentId: data.parentId ?? null,
         name: data.name,
-        storageTypeId: data.parentId === null ? data.storageTypeId : null, // Only set for root locations
+        // Only set for root locations; an omitted parentId also means root.
+        storageTypeId: data.parentId == null ? data.storageTypeId : null,
         description: data.description,
         canContainCollections: data.canContainCollections,
         created: now,
@@ -430,6 +431,10 @@ locations.put('/:id', adminMiddleware, async (c) => {
         return c.json({ error: 'Storage type ID must be null for child locations' }, 400)
       }
     }
+    // A child moved to the root needs a storage type (the table CHECK requires it).
+    if (isRoot && existing.parentId !== null && !data.storageTypeId) {
+      return c.json({ error: 'Storage type ID is required when moving a location to the root' }, 400)
+    }
 
     // Check for duplicate name if name or parent is being changed
     if (data.name !== undefined || data.parentId !== undefined) {
@@ -459,8 +464,8 @@ locations.put('/:id', adminMiddleware, async (c) => {
     }
     if (data.parentId !== undefined) updateData.parentId = data.parentId ?? null
     if (data.name !== undefined) updateData.name = data.name
-    // Only set storageTypeId for root locations
-    if (data.storageTypeId !== undefined) {
+    // Only root locations have a storage type; moving a root under a parent clears it.
+    if (data.storageTypeId !== undefined || !isRoot) {
       updateData.storageTypeId = isRoot ? data.storageTypeId : null
     }
     if (data.description !== undefined) updateData.description = data.description ?? null

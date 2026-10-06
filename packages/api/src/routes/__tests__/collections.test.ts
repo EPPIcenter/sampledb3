@@ -120,6 +120,14 @@ describe('Collections API', () => {
       expect(data.results[0].exists).toBe(false)
     })
 
+    it('rejects sheets, whose names only identify a record within a box or bag', async () => {
+      const res = await ctx.request('/api/collections/check', {
+        method: 'POST',
+        json: { collections: [{ identifier: 'Sheet-1', type: 'sheet' }] },
+      })
+      expect(res.status).toBe(400)
+    })
+
     it('returns 400 for invalid body', async () => {
       const res = await ctx.request('/api/collections/check', {
         method: 'POST',

@@ -46,4 +46,16 @@ describe('Settings API', () => {
     })
   })
 
+  describe('PUT /api/settings/:key', () => {
+    for (const userId of ['abc', -1, 1.5]) {
+      it(`rejects userId ${JSON.stringify(userId)} with 400`, async () => {
+        const res = await ctx.request('/api/settings/session_settings', {
+          method: 'PUT',
+          json: { userId, timeoutMinutes: 60 },
+        })
+        expect(res.status).toBe(400)
+        expect(((await res.json()) as { error: string }).error).toMatch(/userId must be a positive integer or null/)
+      })
+    }
+  })
 })

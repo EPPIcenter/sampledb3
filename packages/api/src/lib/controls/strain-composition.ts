@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, ne } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { controlDefinition, strain } from '../../db/schema'
 
@@ -175,12 +175,13 @@ export async function resolveStrainComposition(
 export async function findBloodControlDefinitionByComposition(
   database: Database,
   criteria: CompositionCriteria,
-  options?: CompositionMatchOptions,
+  options?: CompositionMatchOptions & { /** Skip this definition, e.g. the one being edited. */ excludeId?: number },
 ): Promise<(typeof controlDefinition.$inferSelect) | null> {
+  const isBlood = eq(controlDefinition.controlType, 'blood')
   const definitions = await database
     .select()
     .from(controlDefinition)
-    .where(eq(controlDefinition.controlType, 'blood'))
+    .where(options?.excludeId === undefined ? isBlood : and(isBlood, ne(controlDefinition.id, options.excludeId)))
 
   for (const definition of definitions) {
     if (definitionCompositionMatches(definition.properties, criteria, options)) {

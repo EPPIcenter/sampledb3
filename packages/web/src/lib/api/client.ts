@@ -31,6 +31,22 @@ function readRequestIdHeader(headers: unknown): string | undefined {
   return undefined
 }
 
+type SessionExpiredHandler = () => void
+let sessionExpiredHandler: SessionExpiredHandler | null = null
+
+/**
+ * Called when a non-auth request gets 401 (session expired or revoked). The user context
+ * registers a handler that signs the user out, so the app redirects to login instead of
+ * showing "Could not load" everywhere.
+ */
+export function setSessionExpiredHandler(handler: SessionExpiredHandler | null): void {
+  sessionExpiredHandler = handler
+}
+
+function isAuthEndpoint(url: string | undefined): boolean {
+  return !!url && /^\/?auth\//.test(url.replace(/^\/api/, ''))
+}
+
 function attachRequestIdInterceptor(instance: AxiosInstance): void {
   instance.interceptors.request.use((config) => {
     const headers = config.headers ?? {}
@@ -52,6 +68,10 @@ function attachRequestIdInterceptor(instance: AxiosInstance): void {
       if (axios.isAxiosError(error)) {
         const id = readRequestIdHeader(error.response?.headers)
         if (id) lastResponseRequestId = id
+        // Auth endpoints report their own 401s (wrong password, not logged in yet).
+        if (error.response?.status === 401 && !isAuthEndpoint(error.config?.url)) {
+          sessionExpiredHandler?.()
+        }
       }
       return Promise.reject(error)
     },

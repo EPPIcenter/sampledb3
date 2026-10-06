@@ -1,5 +1,6 @@
-import { gte, lte } from 'drizzle-orm'
+import { gte, lt, lte } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
+import { shiftCalendarDate } from '../datetime'
 
 /** Build date filter conditions for specimen date columns. */
 export function buildDateFilter(column: SQLiteColumn, dateFrom?: string, dateTo?: string) {
@@ -8,9 +9,18 @@ export function buildDateFilter(column: SQLiteColumn, dateFrom?: string, dateTo?
     conditions.push(gte(column, dateFrom))
   }
   if (dateTo) {
-    conditions.push(lte(column, dateTo))
+    conditions.push(dateToUpperBound(column, dateTo))
   }
   return conditions
+}
+
+/**
+ * Upper bound for a "to" date filter. A bare YYYY-MM-DD includes that whole day, so a
+ * timestamp column ('2026-05-26 22:28:26') is compared with "< next day", not "<= date".
+ */
+export function dateToUpperBound(column: SQLiteColumn, dateTo: string) {
+  const next = /^\d{4}-\d{2}-\d{2}$/.test(dateTo) ? shiftCalendarDate(dateTo, 1) : null
+  return next ? lt(column, next) : lte(column, dateTo)
 }
 
 /** Batch an array into chunks for SQLite variable limits. */

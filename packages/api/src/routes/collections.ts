@@ -41,7 +41,12 @@ import {
   deleteWithContentsBodySchema,
 } from '../lib/collections/collection-resolve'
 import { collectionDeletePreflightSchema } from '@sampledb/contract'
-import { moveSheetsToCollection, SheetMoveTargetNotFoundError, SheetNotFoundError } from '../lib/collections/sheet-move'
+import {
+  moveSheetsToCollection,
+  SheetMoveTargetNotFoundError,
+  SheetNameConflictError,
+  SheetNotFoundError,
+} from '../lib/collections/sheet-move'
 import type { CollectionType } from '../lib/collections/types'
 
 function mapCreateCollectionError(error: unknown, c: { json: (body: unknown, status?: number) => Response }) {
@@ -286,6 +291,9 @@ export function createCollectionsRoutes(database: Database): Hono {
     } catch (error) {
       if (error instanceof SheetMoveTargetNotFoundError || error instanceof SheetNotFoundError) {
         return c.json({ error: error.message }, 404)
+      }
+      if (error instanceof SheetNameConflictError) {
+        return c.json({ error: error.message }, 409)
       }
       return handleRouteError(error, c)
     }

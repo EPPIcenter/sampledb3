@@ -13,6 +13,7 @@ import { handleRouteError } from '../lib/error-handler'
 import {
   toPublicUser,
   verifyLoginCredentials,
+  verifyPasswordConstantTime,
   createUserSession,
   registerApprovedUser,
 } from '../lib/auth/auth-service'
@@ -49,6 +50,14 @@ const loginSchema = z.object({
   password: z.string().min(1),
 })
 
+/** Usernames cannot contain "@", so a username can never be confused with an email at login. */
+const usernameSchema = z
+  .string()
+  .min(1)
+  .refine((value) => !value.includes('@'), { message: 'Username cannot contain "@"' })
+  .optional()
+  .nullable()
+
 // Dynamic register schema - password min length will be set based on settings
 const createRegisterSchema = async () => {
   const passwordRequirements = await getPasswordRequirementsFromDb()
@@ -59,7 +68,7 @@ const createRegisterSchema = async () => {
   return z.object({
     email: z.string().email(),
     name: z.string().min(1),
-    username: z.string().min(1).optional().nullable(),
+    username: usernameSchema,
     password: z.string().min(minLength),
     role: z.enum(['admin', 'member', 'viewer']).default('member'),
   })
@@ -113,7 +122,7 @@ const createSelfRegisterSchema = async () => {
   return z.object({
     email: z.string().email(),
     name: z.string().min(1),
-    username: z.string().min(1).optional().nullable(),
+    username: usernameSchema,
     password: z.string().min(minLength),
   })
 }
@@ -245,7 +254,7 @@ auth.patch('/me', authMiddleware, async (c) => {
     const updateSchema = z.object({
       name: z.string().min(1).optional(),
       email: z.string().email().optional(),
-      username: z.string().min(1).optional().nullable(),
+      username: usernameSchema,
     })
     const data = updateSchema.parse(body)
 
@@ -452,7 +461,7 @@ auth.post('/switch', rateLimit(10, 60 * 1000), authMiddleware, async (c) => {
     
     // Same response for a missing user and a wrong password, so the endpoint does not reveal
     // which accounts exist; approval status is only reported after the password checks out.
-    const valid = targetUser ? await bcrypt.compare(password, targetUser.passwordHash) : false
+    const valid = await verifyPasswordConstantTime(password, targetUser?.passwordHash)
     if (!targetUser || !valid) {
       return c.json({ error: 'Invalid password' }, 401)
     }
@@ -527,7 +536,7 @@ auth.put('/users/:id', adminMiddleware, async (c) => {
     const updateSchema = z.object({
       name: z.string().min(1).optional(),
       email: z.string().email().optional(),
-      username: z.string().min(1).optional().nullable(),
+      username: usernameSchema,
       role: z.enum(['admin', 'member', 'viewer']).optional(),
     })
     const data = updateSchema.parse(body)

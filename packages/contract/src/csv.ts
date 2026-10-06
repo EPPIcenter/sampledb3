@@ -4,6 +4,11 @@ export interface CSVExportOptions {
   delimiter?: string
   bom?: boolean
   lineEnding?: CsvLineEnding
+  /**
+   * Prefix text cells a spreadsheet would run as a formula with `'`.
+   * Use for exports of stored data; leave off for templates meant to be re-imported.
+   */
+  neutralizeFormulas?: boolean
 }
 
 export type CsvCellValue = string | number | null | undefined
@@ -12,10 +17,28 @@ const DEFAULT_DELIMITER = ','
 const DEFAULT_BOM = true
 const DEFAULT_LINE_ENDING: CsvLineEnding = 'crlf'
 
-export function escapeCsvCell(value: CsvCellValue): string {
+/** A whole negative number such as "-131", "-0.5", or "-1e3". */
+const NEGATIVE_NUMBER = /^-(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i
+
+/**
+ * Text a spreadsheet would evaluate: leading =, +, @, tab, or CR, and "-" unless the whole cell
+ * is a number, so stored negative values export unchanged. "-1+cmd|..." is a formula, not a number.
+ */
+function looksLikeFormula(s: string): boolean {
+  return /^[=+@\t\r]/.test(s) || (s.startsWith('-') && !NEGATIVE_NUMBER.test(s))
+}
+
+export function escapeCsvCell(
+  value: CsvCellValue,
+  options: { delimiter?: string; neutralizeFormulas?: boolean } = {},
+): string {
   if (value === null || value === undefined) return ''
-  const s = String(value)
-  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+  const delimiter = options.delimiter ?? DEFAULT_DELIMITER
+  let s = String(value)
+  if (options.neutralizeFormulas && typeof value === 'string' && looksLikeFormula(s)) {
+    s = `'${s}`
+  }
+  if (s.includes(delimiter) || s.includes('"') || s.includes('\n') || s.includes('\r')) {
     return `"${s.replace(/"/g, '""')}"`
   }
   return s
@@ -31,16 +54,24 @@ export function serializeCsv(
   const lineEnding = options.lineEnding ?? DEFAULT_LINE_ENDING
   const eol = lineEnding === 'crlf' ? '\r\n' : '\n'
 
+  const cellOptions = { delimiter, neutralizeFormulas: options.neutralizeFormulas }
   const formatRow = (row: CsvCellValue[]) =>
-    row.map((cell) => escapeCsvCell(cell)).join(delimiter)
+    row.map((cell) => escapeCsvCell(cell, cellOptions)).join(delimiter)
 
-  const header = formatRow(columns)
+  const header = columns.map((cell) => escapeCsvCell(cell, { delimiter })).join(delimiter)
   const body = rows.map(formatRow).join(eol)
   const content = rows.length ? `${header}${eol}${body}` : header
   return bom ? `\uFEFF${content}` : content
 }
 
-export function parseCsv(input: string, options: { delimiter?: string } = {}): string[][] {
+/** Parse CSV text into rows of cells. skipBlankRows drops rows whose cells are all empty or whitespace. */
+export function parseCsv(
+  input: string,
+  options: { delimiter?: string; skipBlankRows?: boolean } = {},
+): string[][] {
+  if (options.skipBlankRows) {
+    return parseCsv(input, { delimiter: options.delimiter }).filter((cells) => cells.some((cell) => cell.trim() !== ''))
+  }
   const delimiter = options.delimiter ?? DEFAULT_DELIMITER
   let text = input
   if (text.charCodeAt(0) === 0xfeff) {

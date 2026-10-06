@@ -6,6 +6,8 @@ import {
 } from '../../__tests__/helpers/authenticated-route-test'
 import { createLocationsRoutes } from '../locations'
 import { createTestStorageType, createTestLocation } from '../../__tests__/helpers/factories'
+import { location } from '../../db/schema'
+import { eq } from 'drizzle-orm'
 
 describe('Locations API', () => {
   let ctx: AuthenticatedRouteTestContext
@@ -18,6 +20,9 @@ describe('Locations API', () => {
         password: 'password123',
         role: 'member',
       },
+      additionalUsers: [
+        { key: 'admin', email: 'admin@test.com', name: 'Admin', password: 'password123', role: 'admin' },
+      ],
       settings: { pagination: true },
       mount: (app, { db, sqlite }) => {
         app.route('/api/locations', createLocationsRoutes(db, sqlite))
@@ -77,6 +82,35 @@ describe('Locations API', () => {
     it('returns 401 when not authenticated', async () => {
       const res = await authenticatedRequest(ctx.createRequestApp(), '/api/locations/1', { method: 'GET' })
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('storage type on root and child locations', () => {
+    it('creates a root location when parentId is omitted', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const res = await ctx.request('/api/locations', {
+        method: 'POST',
+        cookie: ctx.cookies.admin,
+        json: { name: 'Root A', storageTypeId: String(storageType.id), canContainCollections: false },
+      })
+      expect(res.status).toBe(201)
+    })
+
+    it('moves a root location under a parent without sending storageTypeId', async () => {
+      const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
+      const parent = await createTestLocation(ctx.db, { name: 'Parent', storageTypeId: String(storageType.id) })
+      const root = await createTestLocation(ctx.db, { name: 'Other Root', storageTypeId: String(storageType.id) })
+
+      const res = await ctx.request(`/api/locations/${root.id}`, {
+        method: 'PUT',
+        cookie: ctx.cookies.admin,
+        json: { parentId: parent.id },
+      })
+
+      expect(res.status).toBe(200)
+      const [row] = await ctx.db.select().from(location).where(eq(location.id, root.id))
+      expect(row.parentId).toBe(parent.id)
+      expect(row.storageTypeId).toBeNull()
     })
   })
 })

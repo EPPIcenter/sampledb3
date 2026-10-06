@@ -80,6 +80,13 @@ function resolveDatabaseFilePath(relativeOrAbsolute: string): string {
   return isAbsolute(relativeOrAbsolute) ? relativeOrAbsolute : resolve(getMonorepoRoot(), relativeOrAbsolute)
 }
 
+/** Path openOperationalDatabase would use: explicit path, then DATABASE_PATH, then the dev default. */
+export function resolveOperationalDatabasePath(dbPath?: string): string {
+  if (dbPath) return resolveDatabaseFilePath(dbPath)
+  if (process.env.DATABASE_PATH) return resolveDatabaseFilePath(process.env.DATABASE_PATH)
+  return resolve(getMonorepoRoot(), 'sampledb_dev.sqlite')
+}
+
 export type OperationalDatabase = ReturnType<typeof drizzle<typeof schema>>
 
 /**
@@ -89,15 +96,7 @@ export function openOperationalDatabase(dbPath?: string): {
   db: OperationalDatabase
   sqlite: SQLiteDatabase
 } {
-  let resolvedPath: string
-
-  if (dbPath) {
-    resolvedPath = resolveDatabaseFilePath(dbPath)
-  } else if (process.env.DATABASE_PATH) {
-    resolvedPath = resolveDatabaseFilePath(process.env.DATABASE_PATH)
-  } else {
-    resolvedPath = resolve(getMonorepoRoot(), 'sampledb_dev.sqlite')
-  }
+  const resolvedPath = resolveOperationalDatabasePath(dbPath)
 
   if (process.env.NODE_ENV !== 'production') {
     console.log(`📁 Monorepo root: ${getMonorepoRoot()}`)

@@ -109,11 +109,23 @@ export default function CollectionSpecimenEntry({
 
     try {
       const validEntries: Array<SpecimenEntry & { position: string }> = []
-      
+      const incompletePositions: string[] = []
+
       for (const [position, entry] of entries.entries()) {
         if (entry.studyShortCode && entry.subjectName && entry.specimenTypeName) {
           validEntries.push({ ...entry, position })
+        } else if (entry.subjectName || entry.barcode || entry.collectionDate) {
+          // Started but missing study, subject, or specimen type: say so instead of skipping it.
+          incompletePositions.push(position)
         }
+      }
+
+      if (incompletePositions.length > 0) {
+        setWorkflowError(
+          `Complete or clear these positions (study, subject, and specimen type are required): ${incompletePositions.join(', ')}`,
+        )
+        setSubmitting(false)
+        return
       }
 
       if (validEntries.length === 0) {
@@ -144,7 +156,19 @@ export default function CollectionSpecimenEntry({
         onSuccess?.()
       }
     } catch (err: unknown) {
-      setWorkflowError(getQueryErrorMessage(err, 'Failed to create specimens'))
+      // A 400 carries per-row errors; show them against their positions.
+      const rowErrors = (err as { response?: { data?: { errors?: Array<{ index: number; error: string }> } } })
+        .response?.data?.errors
+      if (rowErrors && rowErrors.length > 0) {
+        const positionsByIndex = [...entries.entries()]
+          .filter(([, entry]) => entry.studyShortCode && entry.subjectName && entry.specimenTypeName)
+          .map(([position]) => position)
+        setWorkflowError(
+          rowErrors.map((e) => `${positionsByIndex[e.index] ?? `Row ${e.index + 1}`}: ${e.error}`).join('; '),
+        )
+      } else {
+        setWorkflowError(getQueryErrorMessage(err, 'Failed to create specimens'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -178,7 +202,14 @@ export default function CollectionSpecimenEntry({
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form
+        onSubmit={handleSubmit}
+        // Barcode scanners end each scan with Enter; that must not submit a half-filled grid.
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault()
+        }}
+        className="space-y-4"
+      >
         <div className="max-h-96 overflow-y-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-app-surface sticky top-0">

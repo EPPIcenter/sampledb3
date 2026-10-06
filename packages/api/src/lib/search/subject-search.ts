@@ -1,7 +1,8 @@
 import type { Database } from '../../db/client'
 import { study, studySubject } from '../../db/schema'
-import { eq, like } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { SearchResult } from './types'
+import { likeContains } from '../sql-like'
 
 /** Search subjects by name. */
 export async function searchSubjects(database: Database, query: string): Promise<SearchResult[]> {
@@ -14,7 +15,7 @@ export async function searchSubjects(database: Database, query: string): Promise
     })
     .from(studySubject)
     .leftJoin(study, eq(studySubject.studyId, study.id))
-    .where(like(studySubject.name, `%${query}%`))
+    .where(likeContains(studySubject.name, query))
     .limit(10)
 
   return subjects.map((subject) => ({

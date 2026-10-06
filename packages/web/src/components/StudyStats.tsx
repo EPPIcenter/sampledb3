@@ -3,6 +3,7 @@ import type { StudySummary, StudyTimelineData } from '../lib/api/studies';
 import StatCard from './StatCard'
 import StatChart from './StatChart'
 import { useDateFilter, defaultMinDate } from '../contexts/DateFilterContext'
+import { parseDisplayDate } from '../lib/date-utils'
 
 interface StudyStatsProps {
   summary: StudySummary['summary']
@@ -359,13 +360,13 @@ export default function StudyStats({ summary, timelineData, statCardClassName, c
               <div>
                 <p className="text-sm dashboard-stat-muted mb-1">Collection Date Range</p>
                 <p className="dashboard-stat-value font-medium">
-                  {new Date(displaySummary.collectionDateRange.earliest).toLocaleDateString('en-US', {
+                  {parseDisplayDate(displaySummary.collectionDateRange.earliest).toLocaleDateString('en-US', {
                     month: 'long',
                     day: 'numeric',
                     year: 'numeric',
                   })}{' '}
                   -{' '}
-                  {new Date(displaySummary.collectionDateRange.latest).toLocaleDateString('en-US', {
+                  {parseDisplayDate(displaySummary.collectionDateRange.latest).toLocaleDateString('en-US', {
                     month: 'long',
                     day: 'numeric',
                     year: 'numeric',
