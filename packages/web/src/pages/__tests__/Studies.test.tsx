@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { useNavigate } from 'react-router-dom'
 import { render, screen, waitFor, fireEvent } from '../../__tests__/helpers/render'
 
 vi.mock('../../lib/api/studies', async () => {
@@ -24,6 +25,11 @@ function installIntersectionObserver() {
   const C = MockIntersectionObserver as unknown as typeof IntersectionObserver
   if (typeof globalThis !== 'undefined') (globalThis as { IntersectionObserver: typeof C }).IntersectionObserver = C
   if (typeof window !== 'undefined') (window as { IntersectionObserver: typeof C }).IntersectionObserver = C
+}
+
+function BackButton() {
+  const navigate = useNavigate()
+  return <button onClick={() => void navigate(-1)}>Back</button>
 }
 
 describe('Studies', () => {
@@ -57,5 +63,23 @@ describe('Studies', () => {
     fireEvent.click(screen.getByRole('button', { name: /clear filters/i }))
 
     await waitFor(() => expect(searchBox).toHaveValue(''))
+  })
+
+  it('undoes a filter change with Back', async () => {
+    const { default: Studies } = await import('../Studies')
+    await render(
+      <>
+        <Studies />
+        <BackButton />
+      </>,
+      { initialEntries: ['/studies'] },
+    )
+    const typeFilter = await screen.findByDisplayValue(/all types/i)
+
+    fireEvent.change(typeFilter, { target: { value: 'longitudinal' } })
+    await waitFor(() => expect(typeFilter).toHaveValue('longitudinal'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(typeFilter).toHaveValue('all'))
   })
 })

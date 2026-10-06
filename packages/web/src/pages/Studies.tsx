@@ -57,9 +57,12 @@ export default function Studies() {
   const filterType: FilterType = typeParam === 'longitudinal' || typeParam === 'cross-sectional' ? typeParam : 'all'
   const filterLead = searchParams.get('lead') ?? ''
 
-  /** Apply several URL changes in one update ('' or null removes a key). */
+  /**
+   * Apply several URL changes in one update ('' or null removes a key). Each change is a
+   * history entry so Back undoes it; pass replace for per-keystroke changes.
+   */
   const updateListParams = useCallback(
-    (changes: Record<string, string | null>) => {
+    (changes: Record<string, string | null>, options?: { replace?: boolean }) => {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev)
@@ -69,12 +72,12 @@ export default function Studies() {
           }
           return next
         },
-        { replace: true },
+        { replace: options?.replace ?? false },
       )
     },
     [setSearchParams],
   )
-  const setSearch = (value: string) => updateListParams({ q: value })
+  const setSearch = (value: string) => updateListParams({ q: value }, { replace: true })
   const setFilterType = (value: FilterType) => updateListParams({ type: value === 'all' ? null : value })
   const setFilterLead = (value: string) => updateListParams({ lead: value })
 
