@@ -174,7 +174,7 @@ export async function validateBulkCombinedPayload(
       { messages: bulkCombinedCollectionMessages }
     )
     if (!containerPrep.valid) {
-      const failed = resolvedForPrepare[containerPrep.specimenIndex]
+      const failed = resolvedForPrepare.at(containerPrep.specimenIndex)
       add(
         subjectIndex,
         failed?.specimenIndex ?? containerPrep.specimenIndex,
@@ -187,7 +187,7 @@ export async function validateBulkCombinedPayload(
     let placementRowIndex = 0
     for (const resolvedRow of resolvedForPrepare) {
       if (!resolvedRow.container?.containerType) continue
-      const prepRow = containerPrep.result.placementRows[placementRowIndex]
+      const prepRow = containerPrep.result.placementRows.at(placementRowIndex)
       if (!prepRow) break
 
       const c = resolvedRow.container.collection
@@ -210,7 +210,7 @@ export async function validateBulkCombinedPayload(
 
   const placementErrors = await collectContainerPlacementErrors(database, placementRows)
   for (const placementError of placementErrors) {
-    const context = placementContexts[placementError.rowIndex]
+    const context = placementContexts.at(placementError.rowIndex)
     if (context) {
       add(context.subjectIndex, context.specimenIndex, placementError.message, context.rowIndex)
     }

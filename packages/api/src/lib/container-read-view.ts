@@ -72,7 +72,7 @@ export async function loadContainerReadViews(
   ])
 
   const specimenTypeIds = [
-    ...new Set(specimens.map((row) => row.specimenTypeId).filter((id): id is number => id != null)),
+    ...new Set(specimens.map((row) => row.specimenTypeId)),
   ]
   const specimenTypes =
     specimenTypeIds.length > 0

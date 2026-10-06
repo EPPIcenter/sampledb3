@@ -269,7 +269,7 @@ export async function prepareRegistrationBatchForSpecimens(
 
   const placementErrors = await collectContainerPlacementErrors(database, placementRows)
   for (const placementError of placementErrors) {
-    const originalIndex = placementIndexToRowIndex[placementError.rowIndex]
+    const originalIndex = placementIndexToRowIndex.at(placementError.rowIndex)
     if (originalIndex !== undefined) {
       errors.push({ index: originalIndex, message: placementError.message })
     }

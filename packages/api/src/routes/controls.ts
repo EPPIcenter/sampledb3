@@ -519,7 +519,7 @@ controls.post('/', memberMiddleware, async (c) => {
       })
       .returning()
 
-    const newControl = result[0]
+    const newControl = result.at(0)
     if (!newControl) {
       throw new Error('Insert did not return control definition row')
     }
@@ -562,7 +562,7 @@ controls.patch('/:id', memberMiddleware, async (c) => {
     const data = schema.parse(body)
     const { strains, targetDensity, targetDensityUnitId, properties, ...baseData } = data
 
-    const existingProps = (existing.properties as Record<string, unknown>) || {}
+    const existingProps = (existing.properties as Record<string, unknown> | null) ?? {}
     const newProps: Record<string, unknown> = { ...existingProps, ...(properties || {}) }
 
     if (strains !== undefined) {

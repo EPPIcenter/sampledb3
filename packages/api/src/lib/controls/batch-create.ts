@@ -42,7 +42,7 @@ export async function createBloodControlBatch(
   }
 
   try {
-    const [newBatch] = await database
+    const inserted = await database
       .insert(controlBatch)
       .values({
         controlDefinitionId: definitionId,
@@ -53,7 +53,7 @@ export async function createBloodControlBatch(
         updatedBy: userId,
       })
       .returning()
-
+    const newBatch = inserted.at(0)
     if (!newBatch) {
       throw new Error('Insert did not return control batch row')
     }

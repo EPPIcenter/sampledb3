@@ -28,7 +28,7 @@ export async function createMicronixPlate(database: Database, input: CreateColle
   if (existing) throw new CollectionNameExistsError('Plate with this name already exists')
 
   const now = utcNow()
-  const [newPlate] = await database
+  const inserted = await database
     .insert(micronixPlate)
     .values({
       name: input.name,
@@ -40,7 +40,7 @@ export async function createMicronixPlate(database: Database, input: CreateColle
       updatedBy: input.userId,
     })
     .returning()
-
+  const newPlate = inserted.at(0)
   if (!newPlate) throw new Error('Insert did not return plate row')
   return { plate: { ...newPlate, locationPath: formatLocationPath(loc) } }
 }
@@ -51,7 +51,7 @@ export async function createCryovialBox(database: Database, input: CreateCollect
   if (existing) throw new CollectionNameExistsError('Cryovial box with this name already exists')
 
   const now = utcNow()
-  const [newBox] = await database
+  const inserted = await database
     .insert(cryovialBox)
     .values({
       name: input.name,
@@ -63,7 +63,7 @@ export async function createCryovialBox(database: Database, input: CreateCollect
       updatedBy: input.userId,
     })
     .returning()
-
+  const newBox = inserted.at(0)
   if (!newBox) throw new Error('Insert did not return cryovial box row')
   return { box: { ...newBox, locationPath: formatLocationPath(loc) } }
 }
@@ -74,7 +74,7 @@ export async function createGenericBox(database: Database, input: CreateCollecti
   if (existing) throw new CollectionNameExistsError('Box with this name already exists')
 
   const now = utcNow()
-  const [newBox] = await database
+  const inserted = await database
     .insert(box)
     .values({
       name: input.name,
@@ -85,7 +85,7 @@ export async function createGenericBox(database: Database, input: CreateCollecti
       updatedBy: input.userId,
     })
     .returning()
-
+  const newBox = inserted.at(0)
   if (!newBox) throw new Error('Insert did not return box row')
   return { box: { ...newBox, locationPath: formatLocationPath(loc) } }
 }
@@ -96,7 +96,7 @@ export async function createBag(database: Database, input: CreateCollectionInput
   if (existing) throw new CollectionNameExistsError('Bag with this name already exists')
 
   const now = utcNow()
-  const [newBag] = await database
+  const inserted = await database
     .insert(bag)
     .values({
       name: input.name,
@@ -107,7 +107,7 @@ export async function createBag(database: Database, input: CreateCollectionInput
       updatedBy: input.userId,
     })
     .returning()
-
+  const newBag = inserted.at(0)
   if (!newBag) throw new Error('Insert did not return bag row')
   return { bag: { ...newBag, locationPath: formatLocationPath(loc) } }
 }

@@ -111,7 +111,7 @@ async function findOrCreateDerivedSpecimen(
     return existing.id
   }
 
-  const [created] = await database
+  const inserted = await database
     .insert(specimen)
     .values({
       studySubjectId: parentSpecimen.studySubjectId,
@@ -122,7 +122,7 @@ async function findOrCreateDerivedSpecimen(
       lastUpdated: utcNow(),
     })
     .returning()
-
+  const created = inserted.at(0)
   if (!created) throw new Error('Insert did not return specimen row')
   return created.id
 }
