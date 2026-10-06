@@ -21,6 +21,7 @@ import {
   getQueryErrorMessage,
 } from '../ui'
 import '../styles/subject-specimen.css'
+import { parseDisplayDate } from '../lib/date-utils'
 
 interface Container {
   id: number
@@ -220,7 +221,7 @@ export default function SpecimenDetail() {
                 <div>
                   <dt className="text-xs font-medium text-[rgb(var(--app-text-muted))]">Collection Date</dt>
                   <dd className="text-sm text-[rgb(var(--app-text))]">
-                    {new Date(specimen.collectionDate).toLocaleDateString()}
+                    {parseDisplayDate(specimen.collectionDate).toLocaleDateString()}
                   </dd>
                 </div>
               )}

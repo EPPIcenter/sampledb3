@@ -23,6 +23,7 @@ import {
   hasContainerDisplayIdentifier,
 } from '../lib/container-display'
 import '../styles/storage.css'
+import { parseDisplayDate } from '../lib/date-utils'
 
 function statusColor(name: string): string {
   const key = name.toLowerCase()
@@ -375,7 +376,7 @@ export default function ContainerDetail() {
                       <div>
                         <dt className="storage-detail-dt text-xs">Collection date</dt>
                         <dd className="storage-detail-dd mt-0.5">
-                          {new Date(specimen.collectionDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                          {parseDisplayDate(specimen.collectionDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
                         </dd>
                       </div>
                     )}
@@ -494,7 +495,7 @@ export default function ContainerDetail() {
                   <div>
                     <dt className="storage-detail-dt mb-1">Derivation Date</dt>
                     <dd className="storage-detail-dd">
-                      {new Date(sourceDerivation.derivation.derivationDate).toLocaleDateString('en-US', {
+                      {parseDisplayDate(sourceDerivation.derivation.derivationDate).toLocaleDateString('en-US', {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric'
@@ -622,7 +623,7 @@ export default function ContainerDetail() {
                                 <div className="flex items-start gap-2">
                                   <span className="storage-detail-dt whitespace-nowrap">Derived:</span>
                                   <span className="storage-detail-dd">
-                                    {new Date(derivation.derivationDate).toLocaleDateString('en-US', {
+                                    {parseDisplayDate(derivation.derivationDate).toLocaleDateString('en-US', {
                                       month: 'short',
                                       day: 'numeric',
                                       year: 'numeric'
