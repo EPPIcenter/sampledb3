@@ -22,7 +22,7 @@ import { computeSpecimenAggregates } from './specimen-aggregates'
 import { computeStorageStatistics } from './storage-aggregates'
 import type { DashboardStatistics, StatisticsFilters } from './types'
 
-/** Filtered dashboard statistics for specimens, containers, and storage. */
+/** Statistics with every count zero, for filters that match nothing. */
 function emptyDashboardStatistics(): DashboardStatistics {
   return {
     specimens: {
@@ -47,6 +47,7 @@ function emptyDashboardStatistics(): DashboardStatistics {
   }
 }
 
+/** Filtered dashboard statistics for specimens, containers, and storage. */
 export async function getDashboardStatistics(
   database: Database,
   sqliteDatabase: SQLiteDatabase,
