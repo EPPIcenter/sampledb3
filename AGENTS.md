@@ -18,19 +18,15 @@ When writing code, tests, issues, or proposals, or reviewing a change, follow `C
 
 ### Package docs
 
-- Writing an API test (test database, factories, authenticated routes): `packages/api/src/__tests__/README.md`
-- Writing a web test (render helper, API mocks, React Query hooks): `packages/web/src/__tests__/README.md`
-- Changing the schema, a migration, or a transaction: `packages/api/src/db/README.md`
+- Writing an API test (runner, test database, factories, authenticated routes): `packages/api/src/__tests__/README.md`
+- Writing a web test (render helper, API mocks, response shapes, React Query hooks): `packages/web/src/__tests__/README.md`
+- Changing the schema or adding a migration: `packages/api/src/db/README.md`
 - Finding the code behind a UI label: `packages/web/src/components/Sidebar.tsx` (label → path) → `packages/web/src/App.tsx` (path → page) → the page's hooks and `lib/` → `packages/api/src/routes` → `packages/api/src/lib`
 
 ### Tests
 
-| Package | Command | Runner |
-|---------|---------|--------|
-| `@sampledb/web` | `cd packages/web && bun run test -- <files>` | **Vitest** (jsdom, `vi.mock`) |
-| `@sampledb/api` | `cd packages/api && bun test src/...` | **Bun** (needs `bun:sqlite`) |
-
-Run web tests with `bun run test`, never `bun test`: Bun's own runner hangs on React component tests. `vitest run` exits on its own, so piping it to `tail` or `grep` is safe.
+- Web: `cd packages/web && bun run test -- <files>`. Use `bun run test`, never `bun test`: Bun's own runner hangs on React component tests. Vitest exits on its own, so piping it to `tail` or `grep` is safe.
+- API: `cd packages/api && bun test src/...`.
 
 ### Pre-commit hooks and CI
 
