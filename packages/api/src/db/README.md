@@ -27,6 +27,7 @@ Migration `001` is **only** for legacy files; fresh installs from the snapshot s
 ## Schema version
 
 - Table: `schema_version` with a single row (`version INTEGER NOT NULL`).
+- Constant: `CURRENT_SCHEMA_VERSION` in `schema-evolution.ts`, the version the code expects. "How evolution works" calls it `CURRENT`.
 - Inspect in support: `SELECT version FROM schema_version;`
 
 ## Opening a database
