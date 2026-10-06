@@ -20,6 +20,7 @@ import {
   createTestStorageType,
   createTestLocation,
   createTestMicronixPlate,
+  createTestMicronixTube,
 } from '../../__tests__/helpers/factories'
 import { setContainerDefaults } from '../settings'
 import { utcNow } from '../datetime'
@@ -338,7 +339,7 @@ describe('derivations-csv', () => {
           .insert(storageContainer)
           .values({ specimenId: parentSpecimen.id, unitId: unit.id, totalQuantity: quantity, remainingQuantity: quantity, created: now, lastUpdated: now })
           .returning()
-        await testDb.insert(micronixTube).values({ id: sc.id, collectionId: plate.id, position, barcode })
+        await createTestMicronixTube(testDb, { containerId: sc.id, collectionId: plate.id, position, barcode })
         return sc
       }
       const parent = await addTube('MT-PARENT', 'A01', 10)

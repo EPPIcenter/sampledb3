@@ -15,8 +15,8 @@ import {
   createTestStorageType,
   createTestLocation,
   createTestMicronixPlate,
+  createTestMicronixTube,
 } from '../../__tests__/helpers/factories'
-import { micronixTube } from '../../db/schema'
 import { createActivityRoutes } from '../activity'
 
 describe('Activity API', () => {
@@ -98,7 +98,12 @@ describe('Activity API', () => {
       const storageType = await createTestStorageType(ctx.db, { name: 'Freezer' })
       const loc = await createTestLocation(ctx.db, { name: 'Loc', storageTypeId: String(storageType.id) })
       const plate = await createTestMicronixPlate(ctx.db, { name: 'P1', locationId: loc.id })
-      await ctx.db.insert(micronixTube).values({ id: container.id, collectionId: plate.id, barcode: 'MT-9', position: 'A01' })
+      await createTestMicronixTube(ctx.db, {
+        containerId: container.id,
+        collectionId: plate.id,
+        barcode: 'MT-9',
+        position: 'A01',
+      })
 
       const res = await ctx.request('/api/activity/recent', { method: 'GET' })
       const data = (await res.json()) as { activity: Array<{ id: number; type: string; label: string; context?: string }> }

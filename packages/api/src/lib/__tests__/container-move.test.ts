@@ -7,6 +7,10 @@ import {
   createTestSpecimenType,
   createTestSpecimen,
   createTestUnit,
+  createTestBox,
+  createTestSheet,
+  createTestStorageContainer,
+  createTestPaper,
 } from '../../__tests__/helpers/factories'
 import {
   resolveContainerByPosition,
@@ -17,7 +21,7 @@ import {
   type ContainerInfo,
 } from '../container-move'
 import { storageContainer } from '../../db/schema'
-import { micronixTube, staticWell, box, sheet, paper } from '../../db/schema'
+import { micronixTube, staticWell, paper } from '../../db/schema'
 import type { Database } from '../../db/client'
 import { utcNow } from '../datetime'
 
@@ -568,16 +572,12 @@ describe('container-move', () => {
       const specimenType = await createTestSpecimenType(testDb, { name: 'Blood' })
       const specimen = await createTestSpecimen(testDb, specimenType.id)
       const unit = await createTestUnit(testDb, { symbol: 'uL', name: 'microliter', category: 'volume' })
-      const now = utcNow()
-      const [boxA] = await testDb.insert(box).values({ name: 'BA', locationId: location.id, created: now, lastUpdated: now }).returning()
-      const [boxB] = await testDb.insert(box).values({ name: 'BB', locationId: location.id, created: now, lastUpdated: now }).returning()
-      const [sheetA] = await testDb.insert(sheet).values({ name: 'Sheet-1', boxId: boxA.id }).returning()
-      const [sheetB] = await testDb.insert(sheet).values({ name: 'Sheet-1', boxId: boxB.id }).returning()
-      const [container] = await testDb
-        .insert(storageContainer)
-        .values({ specimenId: specimen.id, unitId: unit.id, totalQuantity: 1, remainingQuantity: 1, created: now, lastUpdated: now })
-        .returning()
-      await testDb.insert(paper).values({ id: container!.id, sheetId: sheetB.id })
+      const boxA = await createTestBox(testDb, { name: 'BA', locationId: location.id })
+      const boxB = await createTestBox(testDb, { name: 'BB', locationId: location.id })
+      const sheetA = await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxA.id })
+      const sheetB = await createTestSheet(testDb, { name: 'Sheet-1', boxId: boxB.id })
+      const container = await createTestStorageContainer(testDb, { specimenId: specimen.id, unitId: unit.id })
+      await createTestPaper(testDb, { containerId: container.id, sheetId: sheetB.id })
 
       const ambiguous = await executeMoves(testDb, {
         mappings: [{ fromCollectionName: 'Sheet-1', toCollectionName: 'Sheet-1' }],
