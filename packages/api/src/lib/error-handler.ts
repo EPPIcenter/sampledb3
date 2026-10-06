@@ -124,7 +124,8 @@ export function handleRouteError(error: unknown, c: Context): Response {
       logBackendError(database, error, errorContext).catch(logPersistFailure)
       return c.json({
         error: error.message,
-        errorCode: 'CONFLICT'
+        errorCode: 'CONFLICT',
+        ...(error.details !== undefined && { details: error.details }),
       }, 409)
     }
 
@@ -203,7 +204,7 @@ export class NotFoundError extends Error {
 }
 
 export class ConflictError extends Error {
-  constructor(message: string) {
+  constructor(message: string, public details?: unknown) {
     super(message)
     this.name = 'ConflictError'
   }

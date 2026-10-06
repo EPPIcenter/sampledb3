@@ -250,8 +250,9 @@ export async function runOneSubjectWithSpecimens(
     return result
   } catch (error) {
     if (!(error instanceof BulkCombinedRejected)) throw error
-    if (error.status === 409) throw new ConflictError(error.message)
-    throw new ValidationError(error.message, { specimenIndex: error.errors[0]?.specimenIndex, errors: error.errors })
+    const details = { specimenIndex: error.errors[0]?.specimenIndex, errors: error.errors }
+    if (error.status === 409) throw new ConflictError(error.message, details)
+    throw new ValidationError(error.message, details)
   }
 }
 
@@ -297,7 +298,7 @@ export async function runBulkCombinedImport(
     if (!(error instanceof BulkCombinedRejected)) throw error
     const first = error.errors.at(0)
     const where = first ? `Subject '${subjects[first.subjectIndex].subjectName.trim()}' (index ${first.subjectIndex + 1}) failed: ` : ''
-    if (error.status === 409) throw new ConflictError(`${where}${error.message}`)
+    if (error.status === 409) throw new ConflictError(`${where}${error.message}`, { errors: error.errors })
     throw new ValidationError(`${where}${error.message}`, { errors: error.errors })
   }
 }
