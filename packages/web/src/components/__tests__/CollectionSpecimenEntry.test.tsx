@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { render, screen } from '../../__tests__/helpers/render'
 import CollectionSpecimenEntry from '../CollectionSpecimenEntry'
 import { specimensApi } from '../../lib/api/specimens'
 
@@ -13,12 +14,13 @@ vi.mock('../../hooks/useStudies', () => ({
 vi.mock('../../hooks/useReferenceData', () => ({
   useSpecimenTypes: () => ({ data: [{ id: 1, name: 'DNA' }], isLoading: false, isError: false }),
 }))
-vi.mock('../../lib/api/specimens', () => ({
-  specimensApi: { createBulk: vi.fn() },
-}))
+vi.mock('../../lib/api/specimens', async () => {
+  const { createMockedDomainModule } = await import('../../__tests__/helpers/mock-api')
+  return createMockedDomainModule('specimens', { specimensApi: { createBulk: vi.fn() } })
+})
 
-function renderEntry() {
-  return render(
+async function renderEntry() {
+  await render(
     <CollectionSpecimenEntry
       collectionType="micronix_plate"
       collectionId={7}
@@ -34,22 +36,23 @@ describe('CollectionSpecimenEntry', () => {
     vi.clearAllMocks()
   })
 
-  it('does not submit when a barcode scanner sends Enter', () => {
-    renderEntry()
-    const barcode = screen.getAllByPlaceholderText('Barcode')[0]
-    fireEvent.change(barcode, { target: { value: 'MT001' } })
+  it('does not submit when a barcode scanner sends Enter', async () => {
+    const user = userEvent.setup()
+    await renderEntry()
 
-    const notPrevented = fireEvent.keyDown(barcode, { key: 'Enter' })
+    await user.type(screen.getAllByPlaceholderText('Barcode')[0], 'MT001{Enter}')
 
-    expect(notPrevented).toBe(false)
+    // A submit would validate the half-filled row and show this message.
+    expect(screen.queryByText(/Complete or clear these positions/)).not.toBeInTheDocument()
     expect(specimensApi.createBulk).not.toHaveBeenCalled()
   })
 
   it('reports partly filled positions instead of skipping them', async () => {
-    renderEntry()
-    fireEvent.change(screen.getAllByPlaceholderText('Subject name')[1], { target: { value: 'S2' } })
+    const user = userEvent.setup()
+    await renderEntry()
+    await user.type(screen.getAllByPlaceholderText('Subject name')[1], 'S2')
 
-    fireEvent.click(screen.getByRole('button', { name: /create|add|save/i }))
+    await user.click(screen.getByRole('button', { name: /create|add|save/i }))
 
     expect(await screen.findByText(/Complete or clear these positions.*A02/)).toBeInTheDocument()
     expect(specimensApi.createBulk).not.toHaveBeenCalled()
