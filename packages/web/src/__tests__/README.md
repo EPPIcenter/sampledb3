@@ -23,7 +23,7 @@ it('handles a click', async () => {
 
 ## Mocking the API
 
-Code calls the API through domain modules under `src/lib/api/`, so a test mocks the module the code imports. `createMockedDomainModule(domain, overrides)` in `helpers/mock-api.ts` loads the real module and swaps in the `*Api` objects you pass:
+`createMockedDomainModule(domain, overrides)` in `helpers/mock-api.ts` loads the real module with `vi.importActual` and replaces each export named in `overrides`. What to pass is under Web tests in `CODING_STANDARDS.md`:
 
 ```typescript
 import { studiesApi } from '../../lib/api/studies'
